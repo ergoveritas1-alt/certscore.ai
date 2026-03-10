@@ -17,3 +17,4 @@ coverage
 apps/web/.next
 apps/worker/dist
 packages/*/dist
+supabase/.temp
