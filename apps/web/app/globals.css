@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-sand text-ink antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+a {
+  @apply transition-colors;
+}
+
+.status-sheen-label {
+  position: relative;
+  display: inline-block;
+  color: #334155;
+}
+
+.status-sheen-label::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0) 34%,
+    rgba(255, 255, 255, 0.98) 46%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.98) 54%,
+    rgba(255, 255, 255, 0) 66%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: status-sheen-overlay 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes status-sheen-overlay {
+  0% {
+    background-position: 240% 50%;
+  }
+
+  100% {
+    background-position: -240% 50%;
+  }
+}

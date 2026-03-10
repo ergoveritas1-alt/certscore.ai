@@ -1,0 +1,27 @@
+{
+  "name": "website-signal-risk-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.6.3",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check-env": "pnpm --filter @website-signal-risk-scanner/web check-env && pnpm --filter @website-signal-risk-scanner/worker check-env",
+    "check-runtime": "pnpm --filter @website-signal-risk-scanner/worker check-runtime",
+    "dev": "turbo run dev --parallel",
+    "supabase:login": "npx supabase@latest login",
+    "supabase:link": "npx supabase@latest link --project-ref wgfhzyrysztmtrjbcsgy",
+    "supabase:push": "npx supabase@latest db push",
+    "supabase:status": "npx supabase@latest status",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.2"
+  }
+}

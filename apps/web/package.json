@@ -1,0 +1,31 @@
+{
+  "name": "@website-signal-risk-scanner/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "check-env": "node --enable-source-maps ./scripts/check-env.ts",
+    "dev": "next dev",
+    "typecheck": "next typegen . && tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "@website-signal-risk-scanner/db": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*",
+    "@website-signal-risk-scanner/ui": "workspace:*",
+    "bullmq": "^5.43.0",
+    "next": "^15.2.0",
+    "nodemailer": "^6.10.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17"
+  }
+}

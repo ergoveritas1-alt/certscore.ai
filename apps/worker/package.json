@@ -1,0 +1,29 @@
+{
+  "name": "@website-signal-risk-scanner/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-env": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-env.ts",
+    "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
+    "dev": "node --env-file=.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
+    "start": "node --enable-source-maps ./dist/apps/worker/src/index.js",
+    "start:scheduler": "node --enable-source-maps ./dist/apps/worker/src/scheduling/run-scheduler.js",
+    "playwright:install": "playwright install chromium",
+    "smoke:scheduler": "node --env-file=.env.local --enable-source-maps --import tsx ./src/scheduling/run-scheduler.ts",
+    "scheduler:sweep": "node --env-file=.env.local --enable-source-maps --import tsx ./src/scheduling/run-scheduler.ts",
+    "test": "node --import tsx --test ./src/**/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@website-signal-risk-scanner/db": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*",
+    "axe-core": "^4.10.3",
+    "bullmq": "^5.43.0",
+    "ioredis": "^5.4.2",
+    "playwright": "^1.51.1",
+    "puppeteer-core": "^24.7.1",
+    "zod": "^3.24.2"
+  }
+}

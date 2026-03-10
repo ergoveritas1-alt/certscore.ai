@@ -1,0 +1,270 @@
+"use server";
+
+import { buildAgencyMappings, type AgencyMapping } from "@website-signal-risk-scanner/shared";
+import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { requirePlatformAdminContext } from "./platform-admin";
+
+export type AdminScanDetail = {
+  accessibilityRuleCounts: Array<{
+    instanceCount: number;
+    ruleCode: string;
+    ruleGroup: string;
+    severity: string;
+  }>;
+  changes: Array<{
+    eventGroup: string;
+    eventTimestamp: string;
+    eventType: string;
+    fieldName: string | null;
+    newValueText: string | null;
+    oldValueText: string | null;
+    severity: string;
+  }>;
+  domainHostname: string | null;
+  organizationName: string | null;
+  agencyMappings: AgencyMapping[];
+  policyEnrichment: Array<Record<string, unknown>>;
+  policyReviewQueue: Array<Record<string, unknown>>;
+  pages: Array<{
+    fetchStatus: string;
+    fetchedVia: string;
+    normalizedContentHash: string | null;
+    pageLanguage: string | null;
+    pageType: string;
+    pageUrl: string;
+    titleHash: string | null;
+  }>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  scan: {
+    completedAt: string | null;
+    createdAt: string;
+    id: string;
+    pagesRequested: number;
+    pagesScanned: number;
+    scanConfigJson: Record<string, unknown> | null;
+    scanType: string;
+    status: string;
+  };
+  snapshot: Record<string, unknown> | null;
+  trackerVendors: Array<{
+    beforeConsent: boolean;
+    confidence: number;
+    detectionSource: string;
+    firstPartyOrThirdParty: string;
+    matchedSignatureId: string | null;
+    scriptHost: string | null;
+    vendorCategory: string;
+    vendorName: string;
+  }>;
+};
+
+function stripRecord<T extends Record<string, unknown>>(record: T) {
+  const next = { ...record };
+  delete next.id;
+  delete next.created_at;
+  delete next.updated_at;
+  return next;
+}
+
+function stripTimestampFields<T extends Record<string, unknown>>(record: T) {
+  const next = { ...record };
+  delete next.created_at;
+  delete next.updated_at;
+  return next;
+}
+
+function nullifyEmptySnapshotHashes(snapshot: Record<string, unknown>) {
+  const next = { ...snapshot };
+
+  const trackerCountTotal = Number(next.tracker_count_total ?? 0);
+  const formCountTotal = Number(next.form_count_total ?? 0);
+  const pagesScanned = Number(next.pages_scanned ?? 0);
+  const cookieBannerPresent = next.cookie_banner_present === true;
+  const cmpVendorName = typeof next.cmp_vendor_name === "string" && next.cmp_vendor_name.length > 0;
+  const legalPagePresenceCount = [
+    "privacy_policy_present",
+    "terms_of_service_present",
+    "cookie_policy_present",
+    "accessibility_statement_present",
+    "refund_policy_present",
+    "shipping_policy_present",
+    "subscription_terms_present",
+    "affiliate_disclosure_present",
+    "advertising_disclosure_present",
+    "contact_page_present"
+  ].filter((field) => next[field] === true).length;
+  const accessibilitySignalCount = Number(next.accessibility_signal_count ?? 0);
+
+  if (trackerCountTotal === 0) {
+    next.tracker_vendor_set_hash = null;
+    next.tracker_category_set_hash = null;
+  }
+
+  if (!cookieBannerPresent && !cmpVendorName) {
+    next.consent_signature_hash = null;
+  }
+
+  if (formCountTotal === 0) {
+    next.forms_signature_hash = null;
+  }
+
+  if (accessibilitySignalCount === 0) {
+    next.accessibility_signature_hash = null;
+  }
+
+  if (legalPagePresenceCount === 0) {
+    next.legal_pages_presence_hash = null;
+    next.privacy_policy_hash = null;
+    next.terms_policy_hash = null;
+    next.cookie_policy_hash = null;
+  } else {
+    if (next.privacy_policy_present !== true) {
+      next.privacy_policy_hash = null;
+    }
+
+    if (next.terms_of_service_present !== true) {
+      next.terms_policy_hash = null;
+    }
+
+    if (next.cookie_policy_present !== true) {
+      next.cookie_policy_hash = null;
+    }
+  }
+
+  if (pagesScanned === 0) {
+    next.homepage_structured_hash = null;
+  }
+
+  return next;
+}
+
+export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetail | null> {
+  await requirePlatformAdminContext();
+  const supabase = createAdminClient();
+  const { data: scan, error } = await supabase
+    .from("scans")
+    .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json")
+    .eq("id", scanId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load scan: ${error.message}`);
+  }
+
+  if (!scan) {
+    return null;
+  }
+
+  const scanRow = scan as {
+    completed_at: string | null;
+    created_at: string;
+    domain_id: string | null;
+    id: string;
+    organization_id: string | null;
+    pages_requested: number;
+    pages_scanned: number;
+    scan_config_json: Record<string, unknown> | null;
+    scan_type: string;
+    status: string;
+  };
+
+  const [
+    { data: snapshot },
+    { data: trackerVendors },
+    { data: accessibilityRuleCounts },
+    { data: pages },
+    { data: changes },
+    { data: domain },
+    { data: organization },
+    { data: runtimeArtifacts },
+    { data: policyEnrichment },
+    { data: policyReviewQueue }
+  ] =
+    await Promise.all([
+      supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+      supabase
+        .from("scan_tracker_vendors")
+        .select("vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id")
+        .eq("scan_id", scanId)
+        .order("vendor_name", { ascending: true }),
+      supabase
+        .from("scan_accessibility_rule_counts")
+        .select("rule_code, rule_group, severity, instance_count")
+        .eq("scan_id", scanId)
+        .order("instance_count", { ascending: false }),
+      supabase
+        .from("scan_pages")
+        .select("page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language")
+        .eq("scan_id", scanId)
+        .order("page_type", { ascending: true }),
+      supabase
+        .from("compliance_change_events")
+        .select("event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
+        .eq("scan_id_current", scanId)
+        .order("event_timestamp", { ascending: false }),
+      scanRow.domain_id ? supabase.from("domains").select("hostname").eq("id", scanRow.domain_id).maybeSingle() : Promise.resolve({ data: null }),
+      scanRow.organization_id
+        ? supabase.from("organizations").select("name").eq("id", scanRow.organization_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+      supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+      supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+    ]);
+
+  return {
+    scan: {
+      id: scanRow.id,
+      scanType: scanRow.scan_type,
+      status: scanRow.status,
+      createdAt: scanRow.created_at,
+      completedAt: scanRow.completed_at,
+      pagesRequested: scanRow.pages_requested,
+      pagesScanned: scanRow.pages_scanned,
+      scanConfigJson: scanRow.scan_config_json
+    },
+    domainHostname: (domain as { hostname: string } | null)?.hostname ?? null,
+    organizationName: (organization as { name: string } | null)?.name ?? null,
+    snapshot: snapshot ? nullifyEmptySnapshotHashes(stripRecord(snapshot as Record<string, unknown>)) : null,
+    agencyMappings: snapshot
+      ? buildAgencyMappings(buildAgencyMappingSource(stripRecord(snapshot as Record<string, unknown>)))
+      : [],
+    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)),
+    policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)),
+    runtimeArtifacts: runtimeArtifacts ? stripRecord(runtimeArtifacts as Record<string, unknown>) : null,
+    trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>).map((tracker) => ({
+      vendorName: String(tracker.vendor_name),
+      vendorCategory: String(tracker.vendor_category),
+      detectionSource: String(tracker.detection_source),
+      confidence: Number(tracker.confidence),
+      firstPartyOrThirdParty: String(tracker.first_party_or_third_party),
+      beforeConsent: Boolean(tracker.before_consent),
+      scriptHost: (tracker.script_host as string | null) ?? null,
+      matchedSignatureId: (tracker.matched_signature_id as string | null) ?? null
+    })),
+    accessibilityRuleCounts: ((accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>).map((rule) => ({
+      ruleCode: String(rule.rule_code),
+      ruleGroup: String(rule.rule_group),
+      severity: String(rule.severity),
+      instanceCount: Number(rule.instance_count)
+    })),
+    pages: ((pages ?? []) as Array<Record<string, unknown>>).map((page) => ({
+      pageType: String(page.page_type),
+      pageUrl: String(page.page_url),
+      fetchStatus: String(page.fetch_status),
+      fetchedVia: String(page.fetched_via),
+      normalizedContentHash: (page.normalized_content_hash as string | null) ?? null,
+      titleHash: (page.title_hash as string | null) ?? null,
+      pageLanguage: (page.page_language as string | null) ?? null
+    })),
+    changes: ((changes ?? []) as Array<Record<string, unknown>>).map((event) => ({
+      eventType: String(event.event_type),
+      fieldName: (event.field_name as string | null) ?? null,
+      oldValueText: (event.old_value_text as string | null) ?? null,
+      newValueText: (event.new_value_text as string | null) ?? null,
+      severity: String(event.severity),
+      eventGroup: String(event.event_group),
+      eventTimestamp: String(event.event_timestamp)
+    }))
+  };
+}

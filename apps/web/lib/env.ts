@@ -1,0 +1,82 @@
+import { getSupabaseAdminEnv, type SupabaseAdminEnv } from "@website-signal-risk-scanner/db";
+import { parseEnvironment } from "@website-signal-risk-scanner/shared";
+import { z } from "zod";
+
+const webEnvSchema = z.object({
+  NEXT_PUBLIC_APP_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1)
+});
+
+const webServerEnvSchema = z.object({
+  NEXT_PUBLIC_APP_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  UPSTASH_REDIS_URL: z.string().url().optional(),
+  REDIS_URL: z.string().url().optional()
+});
+
+export type WebEnv = z.infer<typeof webEnvSchema>;
+export type WebServerEnv = z.infer<typeof webServerEnvSchema> & SupabaseAdminEnv;
+
+export function getConfiguredRedisUrl(env: NodeJS.ProcessEnv = process.env) {
+  return env.REDIS_URL?.trim() || env.UPSTASH_REDIS_URL?.trim() || "";
+}
+
+export function getWebEnv(env: NodeJS.ProcessEnv = process.env): WebEnv {
+  return parseEnvironment({
+    env,
+    schema: webEnvSchema,
+    scope: "web-env"
+  });
+}
+
+export function getWebServerEnv(env: NodeJS.ProcessEnv = process.env): WebServerEnv {
+  const values = parseEnvironment({
+    env,
+    schema: webServerEnvSchema,
+    scope: "web-server-env"
+  });
+
+  return {
+    ...values,
+    ...getSupabaseAdminEnv(env)
+  };
+}
+
+export function getQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
+  const redisUrl = getConfiguredRedisUrl(env);
+
+  if (!redisUrl) {
+    return {
+      enabled: false,
+      reason: "Queueing is unavailable until REDIS_URL is configured."
+    } as const;
+  }
+
+  try {
+    const host = new URL(redisUrl).host;
+
+    if (host === "your-upstash-redis.upstash.io") {
+      return {
+        enabled: false,
+        reason: "Queueing is unavailable until a real Redis URL is configured."
+      } as const;
+    }
+  } catch {
+    return {
+      enabled: false,
+      reason: "Queueing is unavailable because REDIS_URL is invalid."
+    } as const;
+  }
+
+  return {
+    enabled: true,
+    reason: null
+  } as const;
+}
+
+export function isGoogleAuthEnabled(env: NodeJS.ProcessEnv = process.env) {
+  return env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
+}

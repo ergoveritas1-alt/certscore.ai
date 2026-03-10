@@ -1,0 +1,44 @@
+# Architecture Notes
+
+## Product
+
+- Product name: `CertScore`
+- Product domain: `certscore.ai`
+
+## Core system shape
+
+- Monorepo managed with `pnpm` workspaces and Turbo
+- One Next.js web app for marketing, auth, dashboard, reports, and download routes
+- One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
+- Supabase for auth, Postgres, and storage
+- Upstash Redis plus BullMQ for queueing
+
+## Execution model
+
+- Web app responsibilities:
+  - auth and organization bootstrap
+  - domain management
+  - preview funnel
+  - enqueue manual scans
+  - render authenticated reports
+- Worker responsibilities:
+  - claim scan jobs
+  - run crawl and page audits
+  - persist findings, scores, reports, and regressions
+  - generate and upload PDFs
+  - enqueue scheduled rescans
+
+## Data model highlights
+
+- `organizations` own `domains`
+- `domains` optionally belong to `clients`
+- `scans` belong to `domains` and `organizations`
+- `findings`, `risk_scores`, `reports`, and `scan_regressions` are all keyed to scans
+- one canonical `report_payload_json` drives both web and PDF rendering
+
+## Hardening notes
+
+- critical env vars are validated at runtime
+- scan execution keeps page-level failures isolated where practical
+- PDF and regression failures do not invalidate the rest of the scan result
+- forward migrations are used for schema cleanup instead of rewriting history

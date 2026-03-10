@@ -1,0 +1,532 @@
+export type CrawlSource = "manual" | "scheduled" | "preview" | "rescan";
+export type CrawlTier = "quick" | "standard" | "deep";
+export type FetchStatus =
+  | "ok"
+  | "redirected"
+  | "blocked"
+  | "timeout"
+  | "not_found"
+  | "forbidden"
+  | "error"
+  | "skipped";
+export type RenderModeUsed = "http_only" | "browser_only" | "http_then_browser";
+export type ScanConfidence = "low" | "medium" | "high";
+export type ConsentMechanismType = "none" | "banner" | "modal" | "inline" | "cmp";
+export type AgeVerificationMechanismType = "none" | "checkbox" | "date_of_birth" | "self_attestation" | "hard_gate";
+export type PrivacyContactChannelType = "email" | "form" | "portal" | "none";
+export type ThirdPartyDisclosureSpecificity = "none" | "generic" | "named_vendors";
+export type ConsentBannerLayoutType = "modal" | "bottom_bar" | "top_bar" | "sidebar" | "full_screen" | "inline" | "unknown";
+export type ConsentBannerPosition = "top" | "bottom" | "modal" | "sidebar" | "inline" | "other" | "unknown";
+export type DefaultTrackingState = "tracking_disabled" | "tracking_enabled" | "unknown";
+export type WcagLevelClaimed = "A" | "AA" | "AAA" | "unknown";
+export type ComplianceMaturityTier = "basic" | "structured" | "mature" | "enterprise";
+export type TrafficTierEstimate = "low" | "medium" | "high" | "very_high" | "unknown";
+export type PolicyDsarMechanism = "present" | "partial" | "absent" | "unknown";
+export type PolicyDoNotSell = "present_link" | "present_text" | "absent" | "unknown";
+export type PolicyChildrenReference = "under_13" | "under_16" | "none" | "unknown";
+export type PolicyRetentionDisclosure = "none" | "vague" | "specific";
+export type VendorCategory =
+  | "analytics"
+  | "advertising"
+  | "social"
+  | "session_replay"
+  | "tag_manager"
+  | "cmp"
+  | "accessibility_widget"
+  | "payment"
+  | "chat_support"
+  | "marketing"
+  | "fingerprinting"
+  | "hosting"
+  | "other";
+export type DetectionSource = "html" | "headers" | "request" | "dom" | "text" | "url_guess" | "script_signature";
+export type PartyType = "first_party" | "third_party" | "unknown";
+export type PageType =
+  | "homepage"
+  | "privacy_policy"
+  | "terms_of_service"
+  | "cookie_policy"
+  | "accessibility_statement"
+  | "refund_policy"
+  | "shipping_policy"
+  | "subscription_terms"
+  | "affiliate_disclosure"
+  | "advertising_disclosure"
+  | "contact"
+  | "product"
+  | "pricing"
+  | "signup"
+  | "login"
+  | "checkout"
+  | "blog"
+  | "about"
+  | "support"
+  | "other";
+export type ChangeEventSeverity = "info" | "low" | "medium" | "high";
+export type ChangeEventGroup =
+  | "added"
+  | "removed"
+  | "changed"
+  | "policy"
+  | "consent"
+  | "tracker"
+  | "forms"
+  | "accessibility"
+  | "security"
+  | "enrichment"
+  | "score";
+export type ComplianceChangeEventType =
+  | "field_added"
+  | "field_removed"
+  | "field_changed"
+  | "privacy_policy_added"
+  | "privacy_policy_removed"
+  | "privacy_policy_hash_changed"
+  | "cookie_banner_added"
+  | "cookie_banner_removed"
+  | "cmp_vendor_changed"
+  | "reject_all_added"
+  | "tracker_vendor_added"
+  | "tracker_vendor_removed"
+  | "session_replay_tracker_added"
+  | "wcag_missing_alt_count_increased"
+  | "wcag_missing_alt_count_decreased"
+  | "accessibility_widget_added"
+  | "age_gate_added"
+  | "do_not_sell_link_added"
+  | "dsar_mechanism_added"
+  | "subprocessor_list_added"
+  | "security_txt_added"
+  | "request_domain_set_changed"
+  | "script_domain_set_changed"
+  | "security_header_posture_changed"
+  | "request_domain_set_resolved"
+  | "script_domain_set_resolved"
+  | "security_header_posture_resolved";
+
+export type ScanSnapshot = {
+  scanId: string;
+  scannerSchemaVersion: number;
+  detectionEngineVersion: string;
+  organizationId: string | null;
+  domainId: string;
+  domain: string;
+  pagesRequested: number;
+  pagesScanned: number;
+  totalSignals: number;
+  accessibilitySignalCount: number;
+  privacySignalCount: number;
+  disclosureSignalCount: number;
+  highSeverityCount: number;
+  mediumSeverityCount: number;
+  lowSeverityCount: number;
+  trackerVendorCount: number;
+  registeredDomain: string | null;
+  scanTimestamp: string;
+  crawlSource: CrawlSource;
+  crawlTier: CrawlTier;
+  robotsAllowed: boolean;
+  robotsFetchStatus: FetchStatus;
+  robotsFetchHttpStatus: number | null;
+  robotsTxtHash: string | null;
+  robotsCrawlDelayMs: number | null;
+  robotsRulesLoaded: boolean | null;
+  robotsGroupCount: number | null;
+  robotsDirectiveCount: number | null;
+  robotsHasAllowRules: boolean | null;
+  robotsHasDisallowRules: boolean | null;
+  robotsTxtFetchedAt: string | null;
+  robotsTxtUrl: string | null;
+  authWallDetected: boolean;
+  homepageFetchStatus: FetchStatus;
+  homepageFetchHttpStatus: number | null;
+  finalUrl: string | null;
+  finalUrlScheme: "http" | "https" | null;
+  redirectCount: number;
+  renderModeUsed: RenderModeUsed;
+  scanConfidence: ScanConfidence;
+  partialScan: boolean;
+  timeoutFlag: boolean;
+  blockedFlag: boolean;
+  captchaFlag: boolean;
+  siteLanguagePrimary: string | null;
+  countryInferred: string | null;
+  regionStateInferred: string | null;
+  jurisdictionGuess: string | null;
+  euExposureLikely: boolean;
+  californiaExposureLikely: boolean;
+  childrenAudienceLikely: boolean;
+  kidDirectedContentDetected: boolean | null;
+  healthcareSiteLikely: boolean;
+  financialServicesSiteLikely: boolean;
+  ecommerceSiteLikely: boolean;
+  saasSiteLikely: boolean;
+  educationSiteLikely: boolean;
+  multilingualSite: boolean;
+  mobileAppLinksDetected: boolean | null;
+  privacyPolicyPresent: boolean;
+  termsOfServicePresent: boolean;
+  cookiePolicyPresent: boolean;
+  accessibilityStatementPresent: boolean;
+  refundPolicyPresent: boolean;
+  shippingPolicyPresent: boolean;
+  subscriptionTermsPresent: boolean;
+  affiliateDisclosurePresent: boolean;
+  advertisingDisclosurePresent: boolean;
+  contactPagePresent: boolean;
+  privacyContactMethodPresent: boolean;
+  doNotSellLinkPresent: boolean;
+  dsarRequestMechanismPresent: boolean;
+  subprocessorListPresent: boolean;
+  legalEntityNameDetected: boolean;
+  physicalBusinessAddressPresent: boolean;
+  emailContactPublicPresent: boolean;
+  phoneNumberPublicPresent: boolean;
+  privacyEmailSpecificPresent: boolean;
+  dpoReferencePresent: boolean;
+  dpoEmailDetected: boolean | null;
+  entityJurisdictionDetected: string | null;
+  supervisoryAuthorityReferencePresent: boolean | null;
+  privacyPolicyHash: string | null;
+  termsPolicyHash: string | null;
+  cookiePolicyHash: string | null;
+  legalPagesPresenceHash: string | null;
+  privacyPolicyLastUpdatedFound: string | null;
+  privacyPolicyLastUpdatedDate: string | null;
+  privacyPolicyWordCount: number | null;
+  privacyPolicyComplexityScore: number | null;
+  privacyLanguageReadabilityScore: number | null;
+  policyChangeFrequencyScore: number | null;
+  policyUpdateLagDays: number | null;
+  mentionsGdpr: boolean;
+  mentionsCcpaOrCpra: boolean;
+  mentionsCoppa: boolean;
+  mentionsUnder13: boolean;
+  mentionsUnder16: boolean;
+  mentionsSensitiveData: boolean;
+  mentionsBiometricData: boolean;
+  mentionsHealthData: boolean;
+  mentionsFinancialData: boolean;
+  mentionsLocationData: boolean;
+  mentionsDataRetention: boolean;
+  dataRetentionSpecificPeriodDetected: boolean | null;
+  mentionsDataSaleOrSharing: boolean;
+  mentionsCrossBorderTransfer: boolean;
+  crossBorderTransferMechanismDetected: boolean | null;
+  mentionsSubprocessorsOrVendors: boolean;
+  mentionsAutomatedDecisioning: boolean;
+  mentionsAiUsage: boolean;
+  doubleOptInReferencePresent: boolean | null;
+  thirdPartyDisclosureSpecificity: ThirdPartyDisclosureSpecificity | null;
+  cookieBannerPresent: boolean;
+  consentMechanismType: ConsentMechanismType;
+  cmpVendorName: string | null;
+  cmpVendorConfidence: number | null;
+  rejectAllPresent: boolean;
+  acceptAllPresent: boolean;
+  granularPreferencesPresent: boolean;
+  preconsentTrackingDetected: boolean;
+  cookiePolicyLinkedFromBanner: boolean;
+  consentModeDetected: boolean;
+  darkPatternAcceptEmphasis: boolean;
+  darkPatternRejectHidden: boolean;
+  precheckedConsentBoxes: boolean;
+  consentSignatureHash: string | null;
+  consentPersistenceMechanismDetected: boolean | null;
+  consentBannerLayoutType: ConsentBannerLayoutType | null;
+  consentBannerPosition: ConsentBannerPosition | null;
+  defaultTrackingState: DefaultTrackingState | null;
+  cookieCategoryCount: number | null;
+  consentMaturityScore: number | null;
+  trackerCountTotal: number;
+  analyticsTrackerCount: number;
+  advertisingTrackerCount: number;
+  socialTrackerCount: number;
+  sessionReplayTrackerCount: number;
+  tagManagerPresent: boolean;
+  firstPartyAnalyticsOnly: boolean;
+  adtechStackComplexityScore: number;
+  fingerprintingOrIdentityVendorDetected: boolean;
+  trackerVendorSetHash: string | null;
+  trackerCategorySetHash: string | null;
+  trackerVendorConcentrationScore: number | null;
+  trackerDiversityScore: number | null;
+  thirdPartyScriptDomainCount: number | null;
+  thirdPartyScriptRiskScore: number | null;
+  thirdPartyDataFlowRiskScore: number | null;
+  trackerRegulatoryRiskScore: number | null;
+  trackerAdoptionChangeDetected: boolean | null;
+  cookieCountTotal: number | null;
+  thirdPartyCookieCount: number | null;
+  firstPartyCookieSetBeforeConsent: boolean | null;
+  thirdPartyCookieSetBeforeConsent: boolean | null;
+  trackingBeforeConsentDetected: boolean | null;
+  formCountTotal: number;
+  contactFormPresent: boolean;
+  newsletterSignupPresent: boolean;
+  accountSignupPresent: boolean;
+  loginPagePresent: boolean;
+  passwordResetPresent: boolean;
+  checkoutOrPaymentFormPresent: boolean;
+  fileUploadFieldPresent: boolean;
+  emailInputPresent: boolean;
+  phoneInputPresent: boolean;
+  addressInputPresent: boolean;
+  paymentCardInputPresent: boolean;
+  dateOfBirthInputPresent: boolean;
+  ageGatePresent: boolean;
+  ageVerificationMechanismType: AgeVerificationMechanismType;
+  parentalConsentReferencePresent: boolean;
+  sensitiveDataFormHintsPresent: boolean;
+  formsSignatureHash: string | null;
+  piiCollectionRiskScore: number;
+  formDataSensitivityScore: number | null;
+  dataMinimizationScore: number | null;
+  highSensitivityDataCollectionDetected: boolean | null;
+  privacyRequestFormPresent: boolean | null;
+  dataAccessRequestPresent: boolean | null;
+  dataDeletionRequestPresent: boolean | null;
+  privacyContactChannelType: PrivacyContactChannelType | null;
+  consentWithdrawalMechanismPresent: boolean | null;
+  userRightsFrictionScore: number | null;
+  wcagErrorCountTotal: number;
+  wcagWarningCountTotal: number;
+  wcagContrastFailuresCount: number;
+  wcagMissingAltCount: number;
+  wcagFormLabelErrorCount: number;
+  wcagAriaErrorCount: number;
+  wcagHeadingStructureErrorCount: number;
+  wcagLinkNameErrorCount: number;
+  wcagKeyboardNavigationIssueCount: number;
+  wcagFocusIndicatorIssueCount: number;
+  wcagLandmarkIssueCount: number;
+  accessibilityWidgetPresent: boolean;
+  accessibilityWidgetVendor: string | null;
+  vpatOrAccessibilityConformanceDocPresent: boolean;
+  accessibilityContactMethodPresent: boolean;
+  accessibilitySignatureHash: string | null;
+  accessibilityScoreAutomated: number;
+  wcagLevelClaimed: WcagLevelClaimed | null;
+  accessibilityRemediationLikely: boolean | null;
+  accessibilityClaimAccuracyScore: number | null;
+  accessibilityClaimMismatchDetected: boolean | null;
+  accessibilityLitigationRiskScore: number | null;
+  adaDemandLetterProbability: number | null;
+  subscriptionOfferDetected: boolean;
+  autoRenewalDisclosurePresent: boolean;
+  cancellationPolicyPresent: boolean;
+  unsubscribeMechanismPresent: boolean;
+  freeTrialDetected: boolean;
+  refundOrReturnWindowDetected: boolean;
+  shippingTermsDetected: boolean;
+  disputeResolutionOrArbitrationPresent: boolean;
+  testimonialOrReviewDisclosurePresent: boolean;
+  securityTxtPresent: boolean;
+  responsibleDisclosurePresent: boolean;
+  bugBountyProgramPresent: boolean;
+  hstsEnabled: boolean;
+  httpsEnforced: boolean;
+  mixedContentDetected: boolean;
+  lawEnforcementRequestPolicyPresent: boolean;
+  transparencyReportPresent: boolean;
+  transparencyScore: number;
+  cspHeaderPresent: boolean | null;
+  xFrameOptionsPresent: boolean | null;
+  referrerPolicyPresent: boolean | null;
+  permissionsPolicyPresent: boolean | null;
+  cspReportEndpointPresent: boolean | null;
+  securityHeadersScore: number | null;
+  tlsVersionMinSupported: string | null;
+  certificateAuthority: string | null;
+  certificateValidDaysRemaining: number | null;
+  certificateAutoRenewLikely: boolean | null;
+  dnssecEnabled: boolean | null;
+  spfRecordPresent: boolean | null;
+  dmarcRecordPresent: boolean | null;
+  dkimRecordDetected: boolean | null;
+  cmsPlatform: string | null;
+  ecommercePlatform: string | null;
+  frontendFramework: string | null;
+  hostingOrCdnProvider: string | null;
+  cdnProvider: string | null;
+  edgeSecurityProvider: string | null;
+  tagManagerVendor: string | null;
+  paymentProcessorHints: string[];
+  chatSupportVendor: string | null;
+  serviceWorkerDetected: boolean | null;
+  publicApiEndpointDetected: boolean | null;
+  siteSizeHint: string | null;
+  homepageStructuredHash: string | null;
+  digitalMaturityScore: number | null;
+  domainRegistrationYear: number | null;
+  domainAgeYears: number | null;
+  domainPrivacyProtectionEnabled: boolean | null;
+  trafficTierEstimate: TrafficTierEstimate | null;
+  requestDomainSetChanged: boolean | null;
+  scriptDomainSetChanged: boolean | null;
+  securityHeaderPostureChanged: boolean | null;
+  infrastructureChangeDetected: boolean | null;
+  policyBehaviorConflictDetected: boolean | null;
+  sessionReplayWithoutDisclosureDetected: boolean | null;
+  accessibilityClaimVsRealityGapDetected: boolean | null;
+  complianceTrendScore: number | null;
+  policyEnrichmentId: string | null;
+  certscoreOverall: number;
+  privacyScore: number;
+  consentScore: number;
+  trackerRiskScore: number;
+  accessibilityScore: number;
+  dataCollectionRiskScore: number;
+  consumerProtectionScore: number;
+  childrenPrivacyRiskScore: number;
+  legalCoverageScore: number | null;
+  complianceMaturityTier: ComplianceMaturityTier | null;
+  regulatoryExposureScore: number;
+};
+
+export type ScanTrackerVendor = {
+  scanId: string;
+  vendorName: string;
+  vendorCategory: VendorCategory;
+  detectionSource: DetectionSource;
+  confidence: number;
+  firstPartyOrThirdParty: PartyType;
+  beforeConsent: boolean | null;
+  scriptHost: string | null;
+  matchedSignatureId: string | null;
+};
+
+export type ScanAccessibilityRuleCount = {
+  scanId: string;
+  ruleCode: string;
+  ruleGroup: string;
+  severity: ChangeEventSeverity;
+  instanceCount: number;
+};
+
+export type ScanPage = {
+  scanId: string;
+  pageType: PageType;
+  pageUrl: string;
+  fetchStatus: FetchStatus;
+  fetchedVia: "http" | "browser";
+  normalizedContentHash: string | null;
+  titleHash: string | null;
+  pageLanguage: string | null;
+};
+
+export type ScanRuntimeArtifact = {
+  scanId: string;
+  thirdPartyRequestDomains: string[];
+  thirdPartyRequestCount: number;
+  initialCookieNames: string[];
+  initialCookieDomains: string[];
+  initialCookieCount: number;
+  scriptSrcDomains: string[];
+  scriptTagCount: number;
+  responseHeaders: Record<string, string>;
+  domStructureHash: string | null;
+  domNodeCount: number | null;
+};
+
+export type PolicyMention = {
+  confidence: number;
+  topic: string;
+};
+
+export type PolicyRetentionPeriod = {
+  category: string;
+  confidence: number;
+  periodText: string;
+  snippetHash: string | null;
+};
+
+export type PolicyTransferMechanism = {
+  confidence: number;
+  mechanism: string;
+  snippetHash: string | null;
+};
+
+export type PolicyEnrichment = {
+  id: string;
+  scanId: string;
+  pageType: string | null;
+  pageUrl: string;
+  normalizedPolicyHash: string;
+  policySummaryShort: string | null;
+  privacyContactChannelType: PrivacyContactChannelType | null;
+  policyRetentionDisclosure: PolicyRetentionDisclosure | null;
+  policyClaimNoSale: boolean | null;
+  policyClaimNoTracking: boolean | null;
+  policyClaimPrivacyProtective: boolean | null;
+  policyMentions: PolicyMention[];
+  policyDataCategories: string[];
+  policyRetentionPeriods: PolicyRetentionPeriod[];
+  policyDsarMechanism: PolicyDsarMechanism;
+  policyDsarConfidence: number | null;
+  policyDoNotSell: PolicyDoNotSell;
+  policyDoNotSellConfidence: number | null;
+  policySubprocessorsListed: boolean | null;
+  policyTransferMechanisms: PolicyTransferMechanism[];
+  policyChildrenReference: PolicyChildrenReference;
+  policyAmbiguityScore: number | null;
+  policyBehaviorConflictCandidate: boolean | null;
+  policyActionableFlags: string[];
+  policyEvidenceSnippets: Record<string, string | string[] | null>;
+  policySemanticConfidence: number | null;
+  policyAiModel: string | null;
+  policyAiModelVersion: string | null;
+  policyAiPromptVersion: string | null;
+  policyAiRunAt: string | null;
+  archiveSource: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type PolicyEvidence = {
+  evidenceHash: string;
+  snippet: string;
+  sourcePageUrl: string | null;
+  snippetLocation: string | null;
+  createdAt?: string;
+};
+
+export type PolicyReviewQueueStatus = "pending" | "in_review" | "resolved" | "dismissed";
+export type PolicyReviewVerdict = "confirmed" | "dismissed" | "needs_followup" | "needs_legal_review" | "unknown";
+
+export type PolicyReviewQueueItem = {
+  id: string;
+  policyEnrichmentId: string;
+  scanId: string;
+  reason: string;
+  createdAt?: string;
+  assignedTo: string | null;
+  reviewStatus: PolicyReviewQueueStatus;
+  reviewerNotes: string | null;
+  reviewedAt: string | null;
+  reviewVerdict: PolicyReviewVerdict | null;
+};
+
+export type ComplianceChangeEvent = {
+  eventId?: string;
+  organizationId?: string;
+  domainId?: string;
+  domain: string;
+  scanIdCurrent: string;
+  scanIdPrevious: string | null;
+  eventTimestamp: string;
+  eventType: ComplianceChangeEventType;
+  fieldName: string | null;
+  oldValueText: string | null;
+  newValueText: string | null;
+  severity: ChangeEventSeverity;
+  confidence: number;
+  eventGroup: ChangeEventGroup;
+};
+
+export type SnapshotSignalItem = {
+  category: "accessibility" | "privacy" | "disclosure" | "security" | "commerce" | "context";
+  key: string;
+  label: string;
+  value: boolean | number | string | string[];
+};

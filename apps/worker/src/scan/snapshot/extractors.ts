@@ -1,0 +1,1172 @@
+import type {
+  AgeVerificationMechanismType,
+  FetchStatus,
+  PageType,
+  ScanAccessibilityRuleCount,
+  ScanPage,
+  ScanSnapshot,
+  ScanTrackerVendor
+} from "@website-signal-risk-scanner/shared";
+import {
+  ACCESSIBILITY_WIDGET_SIGNATURES,
+  CHAT_VENDOR_SIGNATURES,
+  CMS_SIGNATURES,
+  CMP_VENDOR_SIGNATURES,
+  FRONTEND_FRAMEWORK_SIGNATURES,
+  HOSTING_SIGNATURES,
+  PAYMENT_VENDOR_SIGNATURES,
+  TRACKER_VENDOR_SIGNATURES,
+  type VendorSignature
+} from "./signature-registry";
+import { normalizeTextForHash, stableHash } from "./hash";
+import type { ExtractedForm, ExtractedInput, ExtractedLink, ExtractedScript, StaticPageResult } from "./types";
+import type { RobotsPolicy } from "../robots/policy";
+import { isUrlAllowedByRobots, recordDomainBackoff, waitForDomainRequestSlot } from "../robots/policy";
+
+const POLICY_PATH_GUESSES: Record<PageType, string[]> = {
+  homepage: ["/"],
+  privacy_policy: ["/privacy", "/privacy-policy", "/legal/privacy"],
+  terms_of_service: ["/terms", "/terms-of-service", "/terms-and-conditions", "/legal/terms"],
+  cookie_policy: ["/cookies", "/cookie-policy", "/legal/cookies"],
+  accessibility_statement: ["/accessibility", "/accessibility-statement"],
+  refund_policy: ["/refund-policy", "/returns", "/refunds", "/return-policy"],
+  shipping_policy: ["/shipping", "/shipping-policy"],
+  subscription_terms: ["/subscription-terms", "/subscriptions", "/billing-terms"],
+  affiliate_disclosure: ["/affiliate-disclosure", "/affiliate"],
+  advertising_disclosure: ["/advertising-disclosure", "/sponsored-content"],
+  contact: ["/contact", "/contact-us"],
+  product: ["/product", "/products", "/shop"],
+  pricing: ["/pricing", "/plans"],
+  signup: ["/signup", "/register"],
+  login: ["/login", "/sign-in"],
+  checkout: ["/checkout", "/cart"],
+  blog: ["/blog", "/articles"],
+  about: ["/about"],
+  support: ["/support", "/help"],
+  other: []
+};
+
+const FIELD_LABEL_PATTERNS: Array<{ key: string; patterns: RegExp[] }> = [
+  { key: "email", patterns: [/email/i, /e-mail/i] },
+  { key: "phone", patterns: [/phone/i, /tel/i, /mobile/i] },
+  { key: "address", patterns: [/address/i, /street/i, /zip/i, /postal/i] },
+  { key: "payment_card", patterns: [/card/i, /cvv/i, /expiry/i, /payment/i] },
+  { key: "date_of_birth", patterns: [/date of birth/i, /\bdob\b/i, /birth/i] },
+  { key: "file_upload", patterns: [/upload/i, /attachment/i, /resume/i] },
+  { key: "password", patterns: [/password/i] },
+  { key: "age", patterns: [/\bage\b/i, /over 13/i, /over 16/i] }
+];
+
+type RedirectFetchResult = {
+  body: string;
+  blockedByPolicy: boolean;
+  finalUrl: string | null;
+  headers: Record<string, string>;
+  redirectCount: number;
+  status: number | null;
+  timedOut: boolean;
+};
+
+const HTTP_FETCH_TIMEOUT_MS = 8_000;
+const CROSS_DOMAIN_POLICY_PAGE_TYPES = new Set<PageType>([
+  "privacy_policy",
+  "terms_of_service",
+  "cookie_policy",
+  "accessibility_statement",
+  "refund_policy",
+  "shipping_policy",
+  "subscription_terms",
+  "affiliate_disclosure",
+  "advertising_disclosure"
+]);
+
+function toAbsoluteUrl(candidate: string, baseUrl: string) {
+  try {
+    return new URL(candidate, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseHeaders(headers: Headers): Record<string, string> {
+  const values: Record<string, string> = {};
+
+  headers.forEach((value, key) => {
+    values[key.toLowerCase()] = value;
+  });
+
+  return values;
+}
+
+function parseRetryAfterMs(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const seconds = Number.parseFloat(value);
+
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+
+  const timestamp = Date.parse(value);
+
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return Math.max(0, timestamp - Date.now());
+}
+
+function classifyPageType(url: string): PageType {
+  const pathname = new URL(url).pathname.toLowerCase();
+
+  if (pathname === "/") {
+    return "homepage";
+  }
+
+  if (pathname.includes("privacy")) {
+    return "privacy_policy";
+  }
+
+  if (pathname.includes("terms") || pathname.includes("conditions")) {
+    return "terms_of_service";
+  }
+
+  if (pathname.includes("cookie")) {
+    return "cookie_policy";
+  }
+
+  if (pathname.includes("accessibility")) {
+    return "accessibility_statement";
+  }
+
+  if (pathname.includes("refund") || pathname.includes("return")) {
+    return "refund_policy";
+  }
+
+  if (pathname.includes("shipping")) {
+    return "shipping_policy";
+  }
+
+  if (pathname.includes("subscription") || pathname.includes("billing")) {
+    return "subscription_terms";
+  }
+
+  if (pathname.includes("affiliate")) {
+    return "affiliate_disclosure";
+  }
+
+  if (pathname.includes("advertis") || pathname.includes("sponsor")) {
+    return "advertising_disclosure";
+  }
+
+  if (pathname.includes("contact")) {
+    return "contact";
+  }
+
+  if (pathname.includes("product") || pathname.includes("shop")) {
+    return "product";
+  }
+
+  if (pathname.includes("pricing") || pathname.includes("plan")) {
+    return "pricing";
+  }
+
+  if (pathname.includes("signup") || pathname.includes("register")) {
+    return "signup";
+  }
+
+  if (pathname.includes("login") || pathname.includes("sign-in")) {
+    return "login";
+  }
+
+  if (pathname.includes("checkout") || pathname.includes("cart")) {
+    return "checkout";
+  }
+
+  if (pathname.includes("blog") || pathname.includes("article")) {
+    return "blog";
+  }
+
+  if (pathname.includes("about")) {
+    return "about";
+  }
+
+  if (pathname.includes("support") || pathname.includes("help")) {
+    return "support";
+  }
+
+  return "other";
+}
+
+export function getRegisteredDomain(hostname: string) {
+  const parts = hostname.split(".").filter(Boolean);
+
+  if (parts.length <= 2) {
+    return hostname;
+  }
+
+  const secondLevelTlds = new Set(["co.uk", "org.uk", "com.au"]);
+  const tail = parts.slice(-2).join(".");
+  const lastThree = parts.slice(-3).join(".");
+
+  if (secondLevelTlds.has(tail) && parts.length >= 3) {
+    return lastThree;
+  }
+
+  return tail;
+}
+
+export async function fetchTextPage(
+  url: string,
+  maxRedirects = 5,
+  options?: { bypassRobots?: boolean; robotsPolicy?: RobotsPolicy | null }
+): Promise<RedirectFetchResult> {
+  let currentUrl = url;
+  let redirectCount = 0;
+  let attempt = 1;
+
+  while (redirectCount <= maxRedirects) {
+    if (!options?.bypassRobots && !isUrlAllowedByRobots(currentUrl, options?.robotsPolicy)) {
+      return {
+        body: "",
+        blockedByPolicy: true,
+        finalUrl: currentUrl,
+        headers: {},
+        redirectCount,
+        status: null,
+        timedOut: false
+      };
+    }
+
+    const crawlDelayMs = options?.robotsPolicy?.crawlDelayMs();
+    await waitForDomainRequestSlot(currentUrl, {
+      minDelayMs: crawlDelayMs
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), HTTP_FETCH_TIMEOUT_MS);
+    let response: Response;
+
+    try {
+      response = await fetch(currentUrl, {
+        redirect: "manual",
+        headers: {
+          "user-agent": "CertScoreBot/1.0 (+https://certscore.ai)"
+        },
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+
+      if (error instanceof Error && error.name === "AbortError") {
+        return {
+          body: "",
+          blockedByPolicy: false,
+          finalUrl: currentUrl,
+          headers: {},
+          redirectCount,
+          status: -1,
+          timedOut: true
+        };
+      }
+
+      throw error;
+    }
+
+    clearTimeout(timeout);
+
+    if (response.status === 429) {
+      recordDomainBackoff(currentUrl, {
+        attempt,
+        retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after"))
+      });
+      attempt += 1;
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+
+      if (!location) {
+        return {
+          body: "",
+          blockedByPolicy: false,
+          finalUrl: currentUrl,
+          headers: parseHeaders(response.headers),
+          redirectCount,
+          status: response.status,
+          timedOut: false
+        };
+      }
+
+      const nextUrl = toAbsoluteUrl(location, currentUrl);
+
+      if (!nextUrl) {
+        return {
+          body: "",
+          blockedByPolicy: false,
+          finalUrl: currentUrl,
+          headers: parseHeaders(response.headers),
+          redirectCount,
+          status: response.status,
+          timedOut: false
+        };
+      }
+
+      currentUrl = nextUrl;
+      redirectCount += 1;
+      continue;
+    }
+
+    return {
+      body: await response.text(),
+      blockedByPolicy: false,
+      finalUrl: response.url || currentUrl,
+      headers: parseHeaders(response.headers),
+      redirectCount,
+      status: response.status,
+      timedOut: false
+    };
+  }
+
+  return {
+    body: "",
+    blockedByPolicy: false,
+    finalUrl: currentUrl,
+    headers: {},
+    redirectCount,
+    status: null,
+    timedOut: false
+  };
+}
+
+function toFetchStatus(status: number | null): FetchStatus {
+  if (status === null) {
+    return "error";
+  }
+
+  if (status === -1) {
+    return "timeout";
+  }
+
+  if (status >= 200 && status < 300) {
+    return "ok";
+  }
+
+  if (status === 401 || status === 403) {
+    return "forbidden";
+  }
+
+  if (status === 404) {
+    return "not_found";
+  }
+
+  return "error";
+}
+
+function stripTags(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTitle(html: string) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match?.[1]?.replace(/\s+/g, " ").trim() ?? null;
+}
+
+function extractLanguage(html: string) {
+  const match = html.match(/<html[^>]*\slang=["']?([^"'\s>]+)["']?/i);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function extractLinks(html: string, baseUrl: string): ExtractedLink[] {
+  const matches = html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+  const results: ExtractedLink[] = [];
+
+  for (const match of matches) {
+    const href = toAbsoluteUrl(match[1] ?? "", baseUrl);
+
+    if (!href) {
+      continue;
+    }
+
+    results.push({
+      href,
+      text: stripTags(match[2] ?? "").slice(0, 200)
+    });
+  }
+
+  return results;
+}
+
+function extractScripts(html: string, baseUrl: string): ExtractedScript[] {
+  const matches = html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi);
+  const results: ExtractedScript[] = [];
+
+  for (const match of matches) {
+    const attributes = match[1] ?? "";
+    const srcMatch = attributes.match(/\ssrc=["']([^"']+)["']/i);
+    const src = srcMatch?.[1] ? toAbsoluteUrl(srcMatch[1], baseUrl) : null;
+    const host = src ? new URL(src).hostname : null;
+    const contentSample = (match[2] ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || null;
+    results.push({
+      src,
+      host,
+      contentSample
+    });
+  }
+
+  return results;
+}
+
+function parseAttributes(input: string) {
+  const attributes: Record<string, string> = {};
+
+  for (const match of input.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*["']([^"']*)["']/g)) {
+    const key = match[1];
+    const value = match[2];
+
+    if (!key || value === undefined) {
+      continue;
+    }
+
+    attributes[key.toLowerCase()] = value;
+  }
+
+  return attributes;
+}
+
+function extractInputLabel(formHtml: string, attributes: Record<string, string>) {
+  const id = attributes.id;
+
+  if (id) {
+    const labelMatch = formHtml.match(new RegExp(`<label[^>]*for=["']${id}["'][^>]*>([\\s\\S]*?)<\\/label>`, "i"));
+    if (labelMatch?.[1]) {
+      return stripTags(labelMatch[1]).slice(0, 120);
+    }
+  }
+
+  return null;
+}
+
+function extractInputs(formHtml: string): ExtractedInput[] {
+  const matches = formHtml.matchAll(/<(input|textarea|select)\b([^>]*)>/gi);
+  const inputs: ExtractedInput[] = [];
+
+  for (const match of matches) {
+    const attributes = parseAttributes(match[2] ?? "");
+    const fieldType = attributes.type ?? match[1]?.toLowerCase() ?? null;
+
+    inputs.push({
+      type: fieldType,
+      name: attributes.name ?? null,
+      autocomplete: attributes.autocomplete ?? null,
+      labelText: extractInputLabel(formHtml, attributes)
+    });
+  }
+
+  return inputs;
+}
+
+function extractForms(html: string): ExtractedForm[] {
+  const matches = html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi);
+  const forms: ExtractedForm[] = [];
+
+  for (const match of matches) {
+    const attributes = parseAttributes(match[1] ?? "");
+    const body = match[2] ?? "";
+    const inputs = extractInputs(body);
+    forms.push({
+      action: attributes.action ?? null,
+      inputs,
+      hasPasswordField: inputs.some((input) => input.type === "password"),
+      textSample: stripTags(body).slice(0, 220)
+    });
+  }
+
+  return forms;
+}
+
+export async function fetchStaticPage(input: { pageType?: PageType; robotsPolicy?: RobotsPolicy | null; url: string }): Promise<StaticPageResult> {
+  const fetched = await fetchTextPage(input.url, 5, {
+    robotsPolicy: input.robotsPolicy
+  });
+  const finalUrl = fetched.finalUrl ?? input.url;
+  const language = extractLanguage(fetched.body);
+
+  return {
+    blockedByPolicy: fetched.blockedByPolicy,
+    pageUrl: finalUrl,
+    pageType: input.pageType ?? classifyPageType(finalUrl),
+    fetchStatus: fetched.blockedByPolicy
+      ? "blocked"
+      : fetched.timedOut
+        ? "timeout"
+      : fetched.redirectCount > 0 && fetched.status && fetched.status >= 200 && fetched.status < 300
+        ? "redirected"
+        : toFetchStatus(fetched.status),
+    finalUrl,
+    headers: fetched.headers,
+    html: fetched.body,
+    language,
+    links: extractLinks(fetched.body, finalUrl),
+    redirectCount: fetched.redirectCount,
+    redirected: fetched.redirectCount > 0,
+    scripts: extractScripts(fetched.body, finalUrl),
+    statusCode: fetched.status,
+    textContent: stripTags(fetched.body),
+    title: extractTitle(fetched.body),
+    forms: extractForms(fetched.body)
+  };
+}
+
+function urlMatchesPageType(url: string, pageType: PageType) {
+  const pathname = new URL(url).pathname.toLowerCase();
+
+  return POLICY_PATH_GUESSES[pageType].some((guess) => pathname === guess || pathname.startsWith(`${guess}/`) || pathname.includes(guess));
+}
+
+function classifyPageTypeFromLink(link: ExtractedLink): PageType {
+  const byUrl = classifyPageType(link.href);
+
+  if (byUrl !== "other") {
+    return byUrl;
+  }
+
+  const text = link.text.toLowerCase();
+
+  if (/privacy/.test(text)) {
+    return "privacy_policy";
+  }
+
+  if (/terms|conditions/.test(text)) {
+    return "terms_of_service";
+  }
+
+  if (/cookie/.test(text)) {
+    return "cookie_policy";
+  }
+
+  if (/accessibility/.test(text)) {
+    return "accessibility_statement";
+  }
+
+  if (/refund|return/.test(text)) {
+    return "refund_policy";
+  }
+
+  if (/shipping|delivery/.test(text)) {
+    return "shipping_policy";
+  }
+
+  if (/subscription|billing/.test(text)) {
+    return "subscription_terms";
+  }
+
+  if (/affiliate/.test(text)) {
+    return "affiliate_disclosure";
+  }
+
+  if (/advertis|sponsor/.test(text)) {
+    return "advertising_disclosure";
+  }
+
+  if (/contact/.test(text)) {
+    return "contact";
+  }
+
+  if (/pricing|plans/.test(text)) {
+    return "pricing";
+  }
+
+  if (/shop|product/.test(text)) {
+    return "product";
+  }
+
+  if (/sign up|register/.test(text)) {
+    return "signup";
+  }
+
+  if (/sign in|log in|login/.test(text)) {
+    return "login";
+  }
+
+  if (/checkout|cart/.test(text)) {
+    return "checkout";
+  }
+
+  if (/support|help/.test(text)) {
+    return "support";
+  }
+
+  return "other";
+}
+
+export function discoverCandidatePages(homepageUrl: string, links: ExtractedLink[]) {
+  const homepageHostname = new URL(homepageUrl).hostname;
+  const discovered = new Map<string, PageType>();
+
+  discovered.set(homepageUrl, "homepage");
+
+  for (const link of links) {
+    const pageType = classifyPageTypeFromLink(link);
+    const hostname = new URL(link.href).hostname;
+
+    if (hostname !== homepageHostname && !CROSS_DOMAIN_POLICY_PAGE_TYPES.has(pageType)) {
+      continue;
+    }
+
+    const existing = discovered.get(link.href);
+
+    if (!existing || existing === "other") {
+      discovered.set(link.href, pageType);
+    }
+  }
+
+  for (const [pageType, guesses] of Object.entries(POLICY_PATH_GUESSES) as Array<[PageType, string[]]>) {
+    for (const guess of guesses) {
+      const guessedUrl = toAbsoluteUrl(guess, homepageUrl);
+
+      if (!guessedUrl || discovered.has(guessedUrl)) {
+        continue;
+      }
+
+      discovered.set(guessedUrl, pageType);
+    }
+  }
+
+  return [...discovered.entries()].map(([url, pageType]) => ({
+    url,
+    pageType,
+    priority: pageType === "homepage" ? 1000 : pageType === "privacy_policy" ? 990 : pageType === "terms_of_service" ? 980 : 100
+  }));
+}
+
+function matchSignature(content: string, scripts: ExtractedScript[], signature: VendorSignature) {
+  const lowerContent = content.toLowerCase();
+
+  if (signature.htmlPatterns?.some((entry) => entry.test(content))) {
+    return true;
+  }
+
+  if (signature.textPatterns?.some((entry) => entry.test(content))) {
+    return true;
+  }
+
+  if (signature.hostnamePatterns?.length) {
+    for (const script of scripts) {
+      const host = script.host;
+      const hostMatches = host
+        ? signature.hostnamePatterns.some((pattern) => host === pattern || host.endsWith(`.${pattern}`))
+        : false;
+
+      if (hostMatches && !signature.pathFragments?.length) {
+        return true;
+      }
+
+      if (
+        hostMatches &&
+        script.src &&
+        signature.pathFragments?.some((fragment) => {
+          const src = script.src;
+          return src ? src.toLowerCase().includes(fragment.toLowerCase()) : false;
+        })
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return signature.domMarkers?.some((marker) => lowerContent.includes(marker.toLowerCase())) ?? false;
+}
+
+function vendorParty(host: string | null, pageHostname: string) {
+  if (!host) {
+    return "unknown" as const;
+  }
+
+  return host === pageHostname || host.endsWith(`.${pageHostname}`) ? "first_party" : "third_party";
+}
+
+export function detectTrackerVendorsFromStaticPage(input: {
+  pageHostname: string;
+  pageText: string;
+  scanId: string;
+  scripts: ExtractedScript[];
+}): ScanTrackerVendor[] {
+  const content = `${input.pageText}\n${input.scripts.map((script) => `${script.src ?? ""} ${script.contentSample ?? ""}`).join("\n")}`;
+  const detected: ScanTrackerVendor[] = [];
+
+  for (const signature of TRACKER_VENDOR_SIGNATURES) {
+    if (!matchSignature(content, input.scripts, signature)) {
+      continue;
+    }
+
+    const scriptHost =
+      input.scripts.find(
+        (script) =>
+          Boolean(script.host) &&
+          (signature.hostnamePatterns?.some((pattern) => {
+            const host = script.host;
+            return host ? host === pattern || host.endsWith(`.${pattern}`) : false;
+          }) ?? false)
+      )?.host ?? null;
+
+    detected.push({
+      scanId: input.scanId,
+      vendorName: signature.name,
+      vendorCategory: signature.category,
+      detectionSource: signature.detectionSource,
+      confidence: signature.confidence,
+      firstPartyOrThirdParty: vendorParty(scriptHost, input.pageHostname),
+      // Static detections cannot reliably establish consent timing.
+      beforeConsent: null,
+      scriptHost,
+      matchedSignatureId: signature.id
+    });
+  }
+
+  return detected;
+}
+
+export function detectNamedVendor(content: string, scripts: ExtractedScript[], signatures: VendorSignature[]) {
+  for (const signature of signatures) {
+    if (matchSignature(content, scripts, signature)) {
+      return signature;
+    }
+  }
+
+  return null;
+}
+
+function findTechByPatterns(content: string, patterns: Array<{ name: string; patterns: RegExp[] }>) {
+  const match = patterns.find((entry) => entry.patterns.some((pattern) => pattern.test(content)));
+  return match?.name ?? null;
+}
+
+export function deriveTechSignals(pages: StaticPageResult[]) {
+  const combinedContent = pages
+    .map((page) => `${page.html}\n${JSON.stringify(page.headers)}\n${page.scripts.map((script) => `${script.src ?? ""} ${script.contentSample ?? ""}`).join("\n")}`)
+    .join("\n");
+  const lowerContent = combinedContent.toLowerCase();
+  const scriptHosts = new Set(
+    pages.flatMap((page) =>
+      page.scripts
+        .map((script) => script.host)
+        .filter((host): host is string => typeof host === "string" && host.length > 0)
+    )
+  );
+
+  const paymentSignature = detectNamedVendor(
+    combinedContent,
+    pages.flatMap((page) => page.scripts),
+    PAYMENT_VENDOR_SIGNATURES
+  );
+  const chatSignature = detectNamedVendor(combinedContent, pages.flatMap((page) => page.scripts), CHAT_VENDOR_SIGNATURES);
+  const widgetSignature = detectNamedVendor(
+    combinedContent,
+    pages.flatMap((page) => page.scripts),
+    ACCESSIBILITY_WIDGET_SIGNATURES
+  );
+
+  return {
+    cmsPlatform: findTechByPatterns(combinedContent, CMS_SIGNATURES),
+    ecommercePlatform: /shopify|woocommerce|bigcommerce/i.test(combinedContent)
+      ? /shopify/i.test(combinedContent)
+        ? "Shopify"
+        : /woocommerce/i.test(combinedContent)
+          ? "WooCommerce"
+          : "BigCommerce"
+      : null,
+    frontendFramework: findTechByPatterns(combinedContent, FRONTEND_FRAMEWORK_SIGNATURES),
+    hostingOrCdnProvider: findTechByPatterns(combinedContent, HOSTING_SIGNATURES),
+    cdnProvider: /cloudflare/i.test(lowerContent)
+      ? "Cloudflare"
+      : /fastly/i.test(lowerContent)
+        ? "Fastly"
+        : /akamai/i.test(lowerContent)
+          ? "Akamai"
+          : /cloudfront/i.test(lowerContent)
+            ? "CloudFront"
+            : null,
+    edgeSecurityProvider: /cloudflare/i.test(lowerContent)
+      ? "Cloudflare"
+      : /akamai/i.test(lowerContent)
+        ? "Akamai"
+        : /imperva|incapsula/i.test(lowerContent)
+          ? "Imperva"
+          : /sucuri/i.test(lowerContent)
+            ? "Sucuri"
+            : null,
+    paymentProcessorHints: paymentSignature ? [paymentSignature.name] : [],
+    chatSupportVendor: chatSignature?.name ?? null,
+    accessibilityWidgetVendor: widgetSignature?.name ?? null,
+    serviceWorkerDetected: /serviceworker|navigator\.serviceworker|workbox/i.test(lowerContent),
+    publicApiEndpointDetected: /\/api\/|graphql|rest api|api\./i.test(lowerContent),
+    thirdPartyScriptDomainCount: scriptHosts.size
+  };
+}
+
+function hasText(content: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(content));
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function estimateReadingScore(text: string) {
+  const words = text.match(/\b[\w'-]+\b/g) ?? [];
+  const sentences = text.split(/[.!?]+/).filter((segment) => segment.trim().length > 0);
+  const syllables = words.reduce((total, word) => total + Math.max(1, (word.toLowerCase().match(/[aeiouy]+/g) ?? []).length), 0);
+
+  if (words.length === 0 || sentences.length === 0) {
+    return null;
+  }
+
+  const flesch = 206.835 - 1.015 * (words.length / sentences.length) - 84.6 * (syllables / words.length);
+  return clampScore(flesch);
+}
+
+function parseLooseDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return new Date(parsed).toISOString().slice(0, 10);
+}
+
+function extractPolicyDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const explicitDateMatch =
+    normalized.match(/\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+\d{1,2},\s+\d{4}\b/i) ??
+    normalized.match(/\b\d{4}-\d{2}-\d{2}\b/) ??
+    normalized.match(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/);
+
+  return parseLooseDate(explicitDateMatch?.[0] ?? null);
+}
+
+export function derivePolicySignals(policyPages: StaticPageResult[]) {
+  const combinedPolicyText = policyPages.map((page) => page.textContent).join("\n").toLowerCase();
+  const privacyPolicy = policyPages.find((page) => page.pageType === "privacy_policy");
+  const termsPolicy = policyPages.find((page) => page.pageType === "terms_of_service");
+  const cookiePolicy = policyPages.find((page) => page.pageType === "cookie_policy");
+  const privacyPolicyLastUpdatedMatch =
+    privacyPolicy?.textContent.match(/(last updated|effective date)[:\s]+([a-z0-9,\-/ ]{4,80})/i)?.[2]?.trim() ?? null;
+  const privacyPolicyLastUpdatedDate = extractPolicyDate(privacyPolicyLastUpdatedMatch);
+  const privacyPolicyWordCount = privacyPolicy?.textContent.match(/\b[\w'-]+\b/g)?.length ?? null;
+  const readability = privacyPolicy ? estimateReadingScore(privacyPolicy.textContent) : null;
+  const namedVendorCount = (privacyPolicy?.textContent.match(/\b(google|meta|facebook|stripe|shopify|hubspot|salesforce|zendesk|mailchimp)\b/gi) ?? []).length;
+
+  return {
+    privacyPolicyHash: privacyPolicy ? stableHash(normalizeTextForHash(privacyPolicy.textContent)) : null,
+    termsPolicyHash: termsPolicy ? stableHash(normalizeTextForHash(termsPolicy.textContent)) : null,
+    cookiePolicyHash: cookiePolicy ? stableHash(normalizeTextForHash(cookiePolicy.textContent)) : null,
+    privacyPolicyLastUpdatedFound: privacyPolicyLastUpdatedDate,
+    privacyPolicyLastUpdatedDate,
+    privacyPolicyWordCount,
+    privacyPolicyComplexityScore: readability === null ? null : clampScore(100 - readability),
+    privacyLanguageReadabilityScore: readability,
+    mentionsGdpr: hasText(combinedPolicyText, [/\bgdpr\b/i, /general data protection regulation/i]),
+    mentionsCcpaOrCpra: hasText(combinedPolicyText, [/\bccpa\b/i, /\bcpra\b/i, /california consumer privacy/i]),
+    mentionsCoppa: hasText(combinedPolicyText, [/\bcoppa\b/i, /children'?s online privacy/i]),
+    mentionsUnder13: hasText(combinedPolicyText, [/under 13/i, /children under the age of 13/i]),
+    mentionsUnder16: hasText(combinedPolicyText, [/under 16/i, /children under the age of 16/i]),
+    mentionsSensitiveData: hasText(combinedPolicyText, [/sensitive personal/i, /sensitive data/i]),
+    mentionsBiometricData: hasText(combinedPolicyText, [/biometric/i]),
+    mentionsHealthData: hasText(combinedPolicyText, [/health data/i, /health information/i, /\bphi\b/i]),
+    mentionsFinancialData: hasText(combinedPolicyText, [/financial information/i, /payment information/i]),
+    mentionsLocationData: hasText(combinedPolicyText, [/location data/i, /geolocation/i]),
+    mentionsDataRetention: hasText(combinedPolicyText, [/retain/i, /retention/i, /keep your data/i]),
+    dataRetentionSpecificPeriodDetected: hasText(combinedPolicyText, [/\b\d+\s+(day|days|month|months|year|years)\b/i]),
+    mentionsDataSaleOrSharing: hasText(combinedPolicyText, [/sell your personal/i, /share your personal/i, /sale of personal/i]),
+    mentionsCrossBorderTransfer: hasText(combinedPolicyText, [/cross-border/i, /international transfer/i, /transfer.*outside/i]),
+    crossBorderTransferMechanismDetected: hasText(combinedPolicyText, [/\bsccs?\b/i, /standard contractual clauses/i, /\bdpf\b/i, /data privacy framework/i, /adequacy decision/i]),
+    mentionsSubprocessorsOrVendors: hasText(combinedPolicyText, [/subprocessor/i, /service provider/i, /vendor/i]),
+    mentionsAutomatedDecisioning: hasText(combinedPolicyText, [/automated decision/i, /profiling/i]),
+    mentionsAiUsage: hasText(combinedPolicyText, [/\bai\b/i, /artificial intelligence/i, /machine learning/i]),
+    privacyContactMethodPresent: hasText(combinedPolicyText, [/privacy@/i, /contact us/i, /reach us/i]),
+    dsarRequestMechanismPresent: hasText(combinedPolicyText, [/request access/i, /delete your data/i, /data subject request/i]),
+    privacyRequestFormPresent: hasText(combinedPolicyText, [/privacy request form/i, /request form/i, /submit.*request/i]),
+    dataAccessRequestPresent: hasText(combinedPolicyText, [/request access/i, /access your data/i, /right to know/i]),
+    dataDeletionRequestPresent: hasText(combinedPolicyText, [/delete your data/i, /request deletion/i, /erase your data/i]),
+    subprocessorListPresent: hasText(combinedPolicyText, [/subprocessor list/i, /list of subprocessors/i]),
+    privacyEmailSpecificPresent: hasText(combinedPolicyText, [/privacy@/i, /dpo@/i]),
+    dpoReferencePresent: hasText(combinedPolicyText, [/\bdpo\b/i, /data protection officer/i]),
+    dpoEmailDetected: hasText(combinedPolicyText, [/dpo@/i]),
+    doNotSellLinkPresent: hasText(combinedPolicyText, [/do not sell/i, /do not share/i]),
+    lawEnforcementRequestPolicyPresent: hasText(combinedPolicyText, [/law enforcement request/i, /government request/i]),
+    transparencyReportPresent: hasText(combinedPolicyText, [/transparency report/i]),
+    doubleOptInReferencePresent: hasText(combinedPolicyText, [/double opt-?in/i, /confirm your subscription/i]),
+    thirdPartyDisclosureSpecificity: namedVendorCount > 0 ? "named_vendors" : hasText(combinedPolicyText, [/third parties|service providers|vendors/i]) ? "generic" : "none",
+    entityJurisdictionDetected:
+      privacyPolicy?.textContent.match(/(organized under the laws of|incorporated in|registered in)\s+([A-Za-z ,.-]{2,80})/i)?.[2]?.trim() ?? null,
+    supervisoryAuthorityReferencePresent: hasText(combinedPolicyText, [/supervisory authority/i, /lodge a complaint/i, /data protection authority/i])
+  };
+}
+
+function inputMatches(input: ExtractedInput, fieldKey: string) {
+  const haystack = [input.type, input.name, input.labelText, input.autocomplete].filter(Boolean).join(" ");
+  const config = FIELD_LABEL_PATTERNS.find((entry) => entry.key === fieldKey);
+  return config?.patterns.some((pattern) => pattern.test(haystack)) ?? false;
+}
+
+export function deriveFormSignals(pages: StaticPageResult[]) {
+  const forms = pages.flatMap((page) => page.forms);
+  const allInputs = forms.flatMap((form) => form.inputs);
+  const pageText = pages.map((page) => page.textContent).join("\n");
+
+  const ageVerificationMechanismType: AgeVerificationMechanismType = allInputs.some((input) => inputMatches(input, "date_of_birth"))
+    ? "date_of_birth"
+    : /i am over 13|i am over 16|confirm your age/i.test(pageText)
+      ? "checkbox"
+      : /enter your birthday|birth date/i.test(pageText)
+        ? "date_of_birth"
+        : /verify your age|age gate/i.test(pageText)
+          ? "hard_gate"
+          : "none";
+
+  return {
+    formCountTotal: forms.length,
+    contactFormPresent: forms.some((form) => /contact|message|send us/i.test(form.textSample)),
+    newsletterSignupPresent: forms.some((form) => /newsletter|subscribe/i.test(form.textSample)),
+    accountSignupPresent: forms.some((form) => /sign up|create account|register/i.test(form.textSample)),
+    loginPagePresent: pages.some((page) => page.pageType === "login") || forms.some((form) => form.hasPasswordField),
+    passwordResetPresent: /forgot password|reset password/i.test(pageText),
+    checkoutOrPaymentFormPresent: pages.some((page) => page.pageType === "checkout") || allInputs.some((input) => inputMatches(input, "payment_card")),
+    fileUploadFieldPresent: allInputs.some((input) => input.type === "file" || inputMatches(input, "file_upload")),
+    emailInputPresent: allInputs.some((input) => input.type === "email" || inputMatches(input, "email")),
+    phoneInputPresent: allInputs.some((input) => input.type === "tel" || inputMatches(input, "phone")),
+    addressInputPresent: allInputs.some((input) => inputMatches(input, "address")),
+    paymentCardInputPresent: allInputs.some((input) => inputMatches(input, "payment_card")),
+    dateOfBirthInputPresent: allInputs.some((input) => inputMatches(input, "date_of_birth")),
+    ageGatePresent: /age gate|must be 13|must be 16|confirm your age/i.test(pageText),
+    ageVerificationMechanismType,
+    parentalConsentReferencePresent: /parental consent|parent or guardian/i.test(pageText),
+    sensitiveDataFormHintsPresent: /health|medical|biometric|social security|ssn/i.test(pageText),
+    highSensitivityDataCollectionDetected:
+      /health|medical|biometric|social security|ssn/i.test(pageText) ||
+      allInputs.some((input) => /\b(ssn|medical|insurance)\b/i.test([input.name, input.labelText].filter(Boolean).join(" "))),
+    privacyContactChannelType: forms.some((form) => /privacy|data subject|data request/i.test(form.textSample))
+      ? "form"
+      : /privacy portal|request portal/i.test(pageText)
+        ? "portal"
+        : /privacy@|dpo@/i.test(pageText)
+          ? "email"
+          : "none",
+    consentWithdrawalMechanismPresent: /cookie settings|manage cookies|privacy choices|withdraw consent/i.test(pageText),
+    formsSignatureHash: stableHash(
+      forms.map((form) => ({
+        action: form.action,
+        inputs: form.inputs.map((input) => ({
+          type: input.type,
+          name: input.name,
+          autocomplete: input.autocomplete
+        }))
+      }))
+    )
+  };
+}
+
+export function deriveContactSignals(pages: StaticPageResult[]) {
+  const combinedText = pages.map((page) => page.textContent).join("\n");
+
+  return {
+    legalEntityNameDetected: /\b(llc|inc\.|incorporated|corp\.|corporation|limited)\b/i.test(combinedText),
+    physicalBusinessAddressPresent: /\b\d{1,6}\s+[A-Za-z0-9.\- ]+\s+(street|st|road|rd|avenue|ave|boulevard|blvd)\b/i.test(combinedText),
+    emailContactPublicPresent: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(combinedText),
+    phoneNumberPublicPresent: /(\+?1[\s.-]?)?(\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}/.test(combinedText),
+    accessibilityContactMethodPresent: /accessibility@|accessibility feedback|request accommodation/i.test(combinedText),
+    privacyRequestFormPresent: /privacy request|data request|subject access request/i.test(combinedText)
+  };
+}
+
+export function deriveJurisdictionAndIndustry(pages: StaticPageResult[], domain: string) {
+  const combinedText = pages.map((page) => page.textContent).join("\n");
+  const lowerText = combinedText.toLowerCase();
+
+  return {
+    countryInferred: /\.ca$/.test(domain) ? "CA" : /\.uk$/.test(domain) ? "GB" : "US",
+    regionStateInferred: /\bcalifornia\b/i.test(combinedText) ? "CA" : null,
+    jurisdictionGuess: /\beuropean union\b|\bgdpr\b/i.test(combinedText)
+      ? "eu"
+      : /\bcalifornia\b|\bccpa\b|\bcpra\b/i.test(combinedText)
+        ? "us-ca"
+        : "us",
+    euExposureLikely: /\bgdpr\b|european union|eea/i.test(combinedText),
+    californiaExposureLikely: /\bccpa\b|\bcpra\b|california resident/i.test(combinedText),
+    childrenAudienceLikely: /kids|children|students|young learners|parents/i.test(lowerText),
+    kidDirectedContentDetected: /cartoon|kids club|for ages \d+|children's|young learners/i.test(lowerText),
+    healthcareSiteLikely: /patient|hipaa|health care|medical/i.test(lowerText),
+    financialServicesSiteLikely: /loan|insurance|investment|bank|fintech/i.test(lowerText),
+    ecommerceSiteLikely: /add to cart|checkout|shipping|returns/i.test(lowerText),
+    saasSiteLikely: /book a demo|start free trial|request demo|pricing plan/i.test(lowerText),
+    educationSiteLikely: /curriculum|course catalog|student portal|faculty/i.test(lowerText),
+    multilingualSite: pages.some((page) => /hreflang|lang="/i.test(page.html)),
+    mobileAppLinksDetected: pages.some((page) => /apps\.apple\.com|play\.google\.com/i.test(page.html))
+  };
+}
+
+export function buildPageMetadata(scanId: string, page: StaticPageResult): ScanPage {
+  return {
+    scanId,
+    pageType: page.pageType,
+    pageUrl: page.pageUrl,
+    fetchStatus: page.fetchStatus,
+    fetchedVia: "http",
+    normalizedContentHash: page.textContent ? stableHash(normalizeTextForHash(page.textContent)) : null,
+    titleHash: page.title ? stableHash(normalizeTextForHash(page.title)) : null,
+    pageLanguage: page.language
+  };
+}
+
+export function buildAccessibilitySummary(ruleCounts: ScanAccessibilityRuleCount[]) {
+  const countFor = (pattern: RegExp) =>
+    ruleCounts.filter((rule) => pattern.test(rule.ruleCode) || pattern.test(rule.ruleGroup)).reduce((sum, rule) => sum + rule.instanceCount, 0);
+
+  return {
+    wcagErrorCountTotal: ruleCounts.reduce((sum, rule) => sum + rule.instanceCount, 0),
+    wcagWarningCountTotal: ruleCounts
+      .filter((rule) => rule.severity === "low" || rule.severity === "info")
+      .reduce((sum, rule) => sum + rule.instanceCount, 0),
+    wcagContrastFailuresCount: countFor(/contrast/i),
+    wcagMissingAltCount: countFor(/alt/i),
+    wcagFormLabelErrorCount: countFor(/label/i),
+    wcagAriaErrorCount: countFor(/aria/i),
+    wcagHeadingStructureErrorCount: countFor(/heading/i),
+    wcagLinkNameErrorCount: countFor(/link/i),
+    wcagKeyboardNavigationIssueCount: countFor(/keyboard/i),
+    wcagFocusIndicatorIssueCount: countFor(/focus/i),
+    wcagLandmarkIssueCount: countFor(/landmark|region/i),
+    accessibilitySignatureHash: stableHash(
+      ruleCounts
+        .map((rule) => ({
+          code: rule.ruleCode,
+          count: rule.instanceCount
+        }))
+        .sort((left, right) => left.code.localeCompare(right.code))
+    )
+  };
+}
+
+export function summarizeTrackers(trackers: ScanTrackerVendor[]) {
+  const countByCategory = (category: ScanTrackerVendor["vendorCategory"]) =>
+    trackers.filter((tracker) => tracker.vendorCategory === category).length;
+  const onlyAnalytics = trackers.length > 0 && trackers.every((tracker) => tracker.vendorCategory === "analytics");
+  const uniqueVendors = [...new Set(trackers.map((tracker) => tracker.vendorName))];
+  const uniqueCategories = [...new Set(trackers.map((tracker) => tracker.vendorCategory))];
+  const largestVendorShare =
+    uniqueVendors.length === 0 ? null : Math.max(...uniqueVendors.map((vendor) => trackers.filter((tracker) => tracker.vendorName === vendor).length)) / trackers.length;
+
+  return {
+    trackerCountTotal: trackers.length,
+    analyticsTrackerCount: countByCategory("analytics"),
+    advertisingTrackerCount: countByCategory("advertising"),
+    socialTrackerCount: countByCategory("social"),
+    sessionReplayTrackerCount: countByCategory("session_replay"),
+    tagManagerPresent: trackers.some((tracker) => tracker.vendorCategory === "tag_manager"),
+    firstPartyAnalyticsOnly: onlyAnalytics && trackers.every((tracker) => tracker.firstPartyOrThirdParty !== "third_party"),
+    adtechStackComplexityScore: Math.min(100, trackers.length * 8 + countByCategory("advertising") * 6 + countByCategory("session_replay") * 10),
+    fingerprintingOrIdentityVendorDetected: trackers.some((tracker) => tracker.vendorCategory === "fingerprinting"),
+    trackerVendorSetHash: stableHash(uniqueVendors.sort()),
+    trackerCategorySetHash: stableHash(uniqueCategories.sort()),
+    trackerVendorConcentrationScore: largestVendorShare === null ? null : clampScore(largestVendorShare * 100),
+    trackerDiversityScore: uniqueCategories.length === 0 ? null : clampScore((uniqueCategories.length / 8) * 100)
+  };
+}
+
+export function policyPresenceHash(snapshot: Pick<
+  ScanSnapshot,
+  | "privacyPolicyPresent"
+  | "termsOfServicePresent"
+  | "cookiePolicyPresent"
+  | "accessibilityStatementPresent"
+  | "refundPolicyPresent"
+  | "shippingPolicyPresent"
+  | "subscriptionTermsPresent"
+  | "affiliateDisclosurePresent"
+  | "advertisingDisclosurePresent"
+  | "contactPagePresent"
+>) {
+  return stableHash(snapshot);
+}
+
+export function consentSignatureHash(input: {
+  acceptAllPresent: boolean;
+  cmpVendorName: string | null;
+  cookieBannerPresent: boolean;
+  cookiePolicyLinkedFromBanner: boolean;
+  granularPreferencesPresent: boolean;
+  rejectAllPresent: boolean;
+}) {
+  return stableHash(input);
+}
+
+export function homepageStructuredHash(page: StaticPageResult) {
+  return stableHash({
+    links: page.links.slice(0, 40).map((link) => ({ href: new URL(link.href).pathname, text: link.text })),
+    scripts: page.scripts.slice(0, 20).map((script) => ({ host: script.host, src: script.src ? new URL(script.src).pathname : null })),
+    forms: page.forms.map((form) => form.inputs.map((input) => input.type ?? "unknown"))
+  });
+}
+
+export function detectCmpVendorFromPage(page: StaticPageResult) {
+  const combinedContent = `${page.html}\n${page.scripts.map((script) => `${script.src ?? ""} ${script.contentSample ?? ""}`).join("\n")}`;
+  return detectNamedVendor(combinedContent, page.scripts, CMP_VENDOR_SIGNATURES);
+}
+
+export function detectAccessibilityWidgetFromPages(pages: StaticPageResult[]) {
+  const combinedContent = pages.map((page) => `${page.html}\n${page.scripts.map((script) => `${script.src ?? ""} ${script.contentSample ?? ""}`).join("\n")}`).join("\n");
+  return detectNamedVendor(combinedContent, pages.flatMap((page) => page.scripts), ACCESSIBILITY_WIDGET_SIGNATURES);
+}
+
+export function inferSiteSizeHint(pageCount: number) {
+  if (pageCount <= 3) {
+    return "small";
+  }
+
+  if (pageCount <= 10) {
+    return "medium";
+  }
+
+  return "large";
+}
+
+export function policyPagesFromFetchedPages(pages: StaticPageResult[]) {
+  return pages.filter((page) =>
+    [
+      "privacy_policy",
+      "terms_of_service",
+      "cookie_policy",
+      "accessibility_statement",
+      "refund_policy",
+      "shipping_policy",
+      "subscription_terms",
+      "affiliate_disclosure",
+      "advertising_disclosure"
+    ].includes(page.pageType)
+  );
+}
+
+export function isLikelyPolicyPage(page: StaticPageResult) {
+  return page.pageType !== "other" && page.pageType !== "homepage" && urlMatchesPageType(page.pageUrl, page.pageType);
+}
