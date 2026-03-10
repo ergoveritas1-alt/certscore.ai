@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "./lib/supabase/server";
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname !== "/auth/callback" && request.nextUrl.searchParams.has("code")) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/auth/callback";
+
+    return NextResponse.redirect(callbackUrl);
+  }
+
   let response = NextResponse.next({
     request
   });
@@ -44,5 +51,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*"]
+  matcher: ["/", "/login", "/app/:path*"]
 };

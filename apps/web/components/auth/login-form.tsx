@@ -47,6 +47,9 @@ export function LoginForm() {
   const nextPath = getSafeRedirectPath(searchParams.get("next"));
   const supabase = createBrowserSupabaseClient();
   const googleEnabled = process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
+  const introCopy = googleEnabled
+    ? "Continue with Google or request a magic link. Access is scoped to one workspace per user for the MVP."
+    : "Request a magic link to sign in. Access is scoped to one workspace per user for the MVP.";
 
   async function handleGoogleSignIn() {
     setErrorMessage(null);
@@ -110,6 +113,8 @@ export function LoginForm() {
         </Button>
       ) : null}
 
+      <p className="text-sm text-slate-600">{introCopy}</p>
+
       <form className="space-y-3" onSubmit={(event) => void handleMagicLink(event)}>
         <label className="space-y-2 text-sm font-medium text-slate-700">
           Email address
@@ -129,7 +134,6 @@ export function LoginForm() {
 
       {status ? <p className="text-sm text-emerald-700">{status}</p> : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-
     </div>
   );
 }
