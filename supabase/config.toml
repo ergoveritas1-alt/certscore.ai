@@ -238,7 +238,7 @@ otp_expiry = 3600
 #
 # Uncomment to customize magic link emails
 # [auth.email.template.magic_link]
-# subject = "Your CertScore.ai sign-in code"
+# subject = "Sign in to CertScore.ai"
 # content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize notification email template
