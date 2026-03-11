@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "../../../lib/supabase/server";
 import { bootstrapUserFromSession } from "../../../server/bootstrap-user";
 
+type SupportedEmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
+
 function getSafeRedirectPath(nextParam: string | null) {
   if (nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")) {
     return nextParam;
@@ -11,12 +13,29 @@ function getSafeRedirectPath(nextParam: string | null) {
   return "/app";
 }
 
+function getOtpType(typeParam: string | null): SupportedEmailOtpType | null {
+  if (
+    typeParam === "signup" ||
+    typeParam === "invite" ||
+    typeParam === "magiclink" ||
+    typeParam === "recovery" ||
+    typeParam === "email_change" ||
+    typeParam === "email"
+  ) {
+    return typeParam;
+  }
+
+  return null;
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
+  const tokenHash = requestUrl.searchParams.get("token_hash");
+  const otpType = getOtpType(requestUrl.searchParams.get("type"));
   const nextPath = getSafeRedirectPath(requestUrl.searchParams.get("next"));
 
-  if (!code) {
+  if (!code && !(tokenHash && otpType)) {
     return NextResponse.redirect(new URL("/login?error=missing_code", requestUrl.origin));
   }
 
@@ -34,7 +53,13 @@ export async function GET(request: Request) {
     }
   });
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { error } =
+    tokenHash && otpType
+      ? await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: otpType
+        })
+      : await supabase.auth.exchangeCodeForSession(code as string);
 
   if (error) {
     return NextResponse.redirect(new URL("/login?error=auth_callback_failed", requestUrl.origin));
