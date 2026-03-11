@@ -43,7 +43,19 @@ website-signal-risk-scanner/
 
 ## Environment variables
 
-Copy [.env.example](/Users/benmasek/WC01/.env.example) to your local env file and fill in the required values.
+This monorepo should use separate environment files per app in local development:
+
+- copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
+- copy [apps/worker/.env.example](/Users/benmasek/WC01/apps/worker/.env.example) to [apps/worker/.env.local](/Users/benmasek/WC01/apps/worker/.env.local)
+
+Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a single root `.env.local` for app runtime configuration.
+
+Recommended environment split:
+
+- local web + local worker: dedicated dev Supabase project
+- production web + production worker: dedicated prod Supabase project
+
+Do not point localhost at the production Supabase auth project unless you are intentionally testing production auth behavior.
 
 Required for the web app:
 
@@ -51,7 +63,7 @@ Required for the web app:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `UPSTASH_REDIS_URL`
+- `REDIS_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
 Required for the worker:
@@ -59,7 +71,7 @@ Required for the worker:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `UPSTASH_REDIS_URL`
+- `REDIS_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
 Optional but recommended:
@@ -78,24 +90,30 @@ Compatibility note:
 1. Install dependencies:
    - `pnpm install`
 2. Copy the environment template:
-   - `cp .env.example .env.local`
-3. Create a Supabase project.
+   - `cp apps/web/.env.example apps/web/.env.local`
+   - `cp apps/worker/.env.example apps/worker/.env.local`
+3. Create a dedicated Supabase dev project.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
 5. In Supabase Auth, enable:
    - Google OAuth
    - Email magic links
 6. Configure auth redirect URLs:
    - `http://localhost:3000/auth/callback`
+   - `http://127.0.0.1:3000/auth/callback`
    - `https://certscore.ai/auth/callback`
-7. Create the storage bucket referenced by `SUPABASE_STORAGE_BUCKET`.
-8. Create an Upstash Redis instance and set `UPSTASH_REDIS_URL`.
-9. Install Playwright Chromium for the worker:
+7. Keep local and production auth isolated:
+   - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
+   - local Supabase keys should come from the dev project
+   - production Supabase keys should exist only in Vercel / worker deployment settings
+8. Create the storage bucket referenced by `SUPABASE_STORAGE_BUCKET`.
+9. Provision a Redis instance and set `REDIS_URL`.
+10. Install Playwright Chromium for the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
-10. Start the web app:
+11. Start the web app:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-11. Start the worker:
+12. Start the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker dev`
-12. Run a scheduler sweep manually when needed:
+13. Run a scheduler sweep manually when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification
@@ -126,26 +144,30 @@ The full runtime QA sequence is documented in [docs/runtime-validation.md](/User
 
 - deploy `apps/web`
 - configure the web environment variables from the shared list above
+- use only production Supabase URL and keys in Vercel
 - ensure Supabase Auth redirects include the production callback on `certscore.ai`
 
-### Railway worker
+### GCP worker pool
 
 - deploy `apps/worker`
 - configure the worker environment variables from the list above
+- use only production Supabase URL and keys in the worker host
 - install Playwright Chromium in the deploy image or build step
-- run the worker process continuously
+- deploy the worker as a Cloud Run Worker Pool or use [`deploy.sh`](/Users/benmasek/WC01/deploy.sh)
+- run exactly one production worker instance unless you intentionally scale concurrency
 
 ### Supabase
 
-- create the project
+- create a production project separate from local development
 - apply all migrations in order
 - enable Google OAuth and email magic links
+- configure the production site URL and production redirect URLs only
 - create the report storage bucket referenced by `SUPABASE_STORAGE_BUCKET`
 
-### Upstash Redis
+### Redis
 
 - create a Redis database
-- set `UPSTASH_REDIS_URL` in both web and worker environments
+- set `REDIS_URL` in both web and worker environments
 
 ### Scheduler
 
@@ -157,7 +179,7 @@ Command:
 
 - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
-This can be invoked by a Railway cron job or any equivalent scheduler.
+This can be invoked by a Cloud Run Job or any equivalent scheduler.
 
 ## Deployment readiness checklist
 

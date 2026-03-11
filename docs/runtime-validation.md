@@ -22,7 +22,7 @@ Expected result:
 If a check fails:
 
 - missing env var: update `.env.local` or deployment settings
-- Redis failure: verify `UPSTASH_REDIS_URL` and network access
+- Redis failure: verify `REDIS_URL` and network access
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install`

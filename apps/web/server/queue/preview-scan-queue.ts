@@ -29,7 +29,7 @@ function getRedisConnection() {
   }
 
   const env = getWebServerEnv();
-  const redisUrl = env.REDIS_URL ?? env.UPSTASH_REDIS_URL;
+  const redisUrl = env.REDIS_URL;
 
   if (!redisUrl) {
     throw new Error("REDIS_URL is not configured.");

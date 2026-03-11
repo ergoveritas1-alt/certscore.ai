@@ -6,7 +6,7 @@ import { z } from "zod";
 const runtimeSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  UPSTASH_REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
   SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET_REPORTS: z.string().min(1).optional(),
   PLAYWRIGHT_BROWSERS_PATH: z.string().optional()
@@ -35,7 +35,7 @@ async function checkRedis(redisUrl: string) {
     const response = await redis.ping();
     pass("redis", `Connected to ${new URL(redisUrl).host} and received ${response}.`);
   } catch (error) {
-    fail("redis", `Unable to connect. Verify UPSTASH_REDIS_URL and network access. ${error instanceof Error ? error.message : "Unknown error"}`);
+    fail("redis", `Unable to connect. Verify REDIS_URL and network access. ${error instanceof Error ? error.message : "Unknown error"}`);
     return false;
   } finally {
     redis.disconnect();
@@ -127,7 +127,7 @@ async function main() {
   console.info("INFO runtime: Starting CertScore worker runtime checks.");
 
   const checks = await Promise.all([
-    checkRedis(result.data.UPSTASH_REDIS_URL),
+    checkRedis(result.data.REDIS_URL),
     checkSupabase(result.data.NEXT_PUBLIC_SUPABASE_URL, storageBucket),
     checkChromium()
   ]);

@@ -5,7 +5,7 @@ const webCheckSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  UPSTASH_REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
   SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET_REPORTS: z.string().min(1).optional()
 });
@@ -48,10 +48,10 @@ function main() {
   }
 
   pass("web env", "All required CertScore web environment variables are present.");
-  info("expected services", "Supabase Auth, Supabase Postgres, Upstash Redis, and Supabase Storage should be reachable.");
+  info("expected services", "Supabase Auth, Supabase Postgres, Redis, and Supabase Storage should be reachable.");
   info("app url", new URL(values.NEXT_PUBLIC_APP_URL).origin);
   info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
-  info("redis host", new URL(values.UPSTASH_REDIS_URL).host);
+  info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);
 }
 

@@ -13,7 +13,6 @@ const webServerEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  UPSTASH_REDIS_URL: z.string().url().optional(),
   REDIS_URL: z.string().url().optional()
 });
 
@@ -21,7 +20,7 @@ export type WebEnv = z.infer<typeof webEnvSchema>;
 export type WebServerEnv = z.infer<typeof webServerEnvSchema> & SupabaseAdminEnv;
 
 export function getConfiguredRedisUrl(env: NodeJS.ProcessEnv = process.env) {
-  return env.REDIS_URL?.trim() || env.UPSTASH_REDIS_URL?.trim() || "";
+  return env.REDIS_URL?.trim() || "";
 }
 
 export function getWebEnv(env: NodeJS.ProcessEnv = process.env): WebEnv {
@@ -56,14 +55,7 @@ export function getQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
   }
 
   try {
-    const host = new URL(redisUrl).host;
-
-    if (host === "your-upstash-redis.upstash.io") {
-      return {
-        enabled: false,
-        reason: "Queueing is unavailable until a real Redis URL is configured."
-      } as const;
-    }
+    new URL(redisUrl);
   } catch {
     return {
       enabled: false,

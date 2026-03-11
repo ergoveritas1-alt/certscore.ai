@@ -4,7 +4,7 @@ import { createQueueWorkers } from "./queue/workers";
 
 function bootstrapWorker() {
   const env = getWorkerEnv();
-  const redisUrl = env.REDIS_URL ?? env.UPSTASH_REDIS_URL;
+  const redisUrl = env.REDIS_URL;
 
   if (!redisUrl) {
     throw new Error("REDIS_URL is not configured.");

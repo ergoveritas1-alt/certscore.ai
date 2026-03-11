@@ -4,7 +4,7 @@ const workerCheckSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  UPSTASH_REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
   WORKER_CONCURRENCY: z.string().optional(),
   PLAYWRIGHT_BROWSERS_PATH: z.string().optional(),
   SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
@@ -49,9 +49,9 @@ function main() {
   }
 
   pass("worker env", "All required CertScore worker environment variables are present.");
-  info("expected services", "Supabase service-role access, Upstash Redis, Supabase Storage, and Playwright Chromium should be available.");
+  info("expected services", "Supabase service-role access, Redis, Supabase Storage, and Playwright Chromium should be available.");
   info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
-  info("redis host", new URL(values.UPSTASH_REDIS_URL).host);
+  info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);
   info("worker concurrency", values.WORKER_CONCURRENCY ?? "2");
   info("playwright browsers path", values.PLAYWRIGHT_BROWSERS_PATH ?? "default cache");

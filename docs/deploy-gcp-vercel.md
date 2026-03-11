@@ -38,34 +38,38 @@ Set the production environment variables in Vercel:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `UPSTASH_REDIS_URL`
+- `REDIS_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
 Optional variables depend on the features you intend to enable.
 
-## 3. Build and push the worker image
+## 3. Build and deploy the worker
 
-Build from the repo root using the worker Dockerfile:
+The repo includes a helper script that:
+
+- creates the Artifact Registry repository if needed
+- builds the worker image from the monorepo root
+- deploys the worker to a Cloud Run Worker Pool
+- refuses to run if `REDIS_URL` still points at `localhost` or the old Upstash host
 
 ```bash
-gcloud builds submit --tag us-central1-docker.pkg.dev/<project-id>/certscore/worker:latest -f apps/worker/Dockerfile .
+set -a
+source .env.local
+set +a
+PROJECT_ID=<project-id> REGION=us-central1 ./deploy.sh
 ```
 
-## 4. Deploy the worker to Cloud Run Worker Pools
+Optional values the script forwards if present:
+
+- `SUPABASE_STORAGE_BUCKET_SCREENSHOTS`
+- `SUPABASE_STORAGE_BUCKET_ARTIFACTS`
+- `OPENAI_API_KEY`
+- `RESEND_API_KEY`
+- `SERVICE_ACCOUNT`
 
 Cloud Run Worker Pools are intended for continuous background work and do not expose a public URL. At the time of writing, Google documents this feature as Preview.
 
-```bash
-gcloud beta run worker-pools deploy certscore-worker \
-  --image us-central1-docker.pkg.dev/<project-id>/certscore/worker:latest \
-  --region us-central1 \
-  --set-env-vars NODE_ENV=production \
-  --set-secrets NEXT_PUBLIC_SUPABASE_URL=NEXT_PUBLIC_SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,NEXT_PUBLIC_SUPABASE_ANON_KEY=NEXT_PUBLIC_SUPABASE_ANON_KEY:latest,UPSTASH_REDIS_URL=UPSTASH_REDIS_URL:latest,SUPABASE_STORAGE_BUCKET=SUPABASE_STORAGE_BUCKET:latest
-```
-
-Add any optional worker secrets you need, such as `OPENAI_API_KEY` or `RESEND_API_KEY`.
-
-## 5. Run the scheduler hourly
+## 4. Run the scheduler hourly
 
 The scheduler entrypoint is:
 
@@ -75,7 +79,7 @@ pnpm --filter @website-signal-risk-scanner/worker start:scheduler
 
 Use a Cloud Run Job or a separate scheduled container target that runs this command once per execution.
 
-## 6. Point the production domain to Vercel
+## 5. Point the production domain to Vercel
 
 Add the new domain in the Vercel project, apply the DNS records Vercel gives you, then update:
 
@@ -83,14 +87,14 @@ Add the new domain in the Vercel project, apply the DNS records Vercel gives you
 - Supabase redirect URLs such as `https://<domain>/auth/callback`
 - Google OAuth redirect settings if Google login is enabled
 
-## 7. Validate production
+## 6. Validate production
 
 Validate in this order:
 
 1. web app loads on the Vercel domain
 2. login and callback flow work
-3. preview scan works
-4. full scan reaches the worker
+3. preview scan enqueues onto the shared Redis backend
+4. the Cloud Run Worker Pool consumes preview and full scans
 5. report data persists in Supabase
 6. PDFs generate
 7. the hourly scheduler path runs successfully
