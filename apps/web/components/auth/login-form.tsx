@@ -36,6 +36,13 @@ function getSafeRedirectPath(nextPath: string | null) {
   return "/app";
 }
 
+function getAuthCallbackUrl(nextPath: string) {
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const baseUrl = configuredAppUrl && configuredAppUrl.length > 0 ? configuredAppUrl : window.location.origin;
+
+  return `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+}
+
 export function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -56,7 +63,7 @@ export function LoginForm() {
     setStatus(null);
     setIsSubmitting(true);
 
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    const redirectTo = getAuthCallbackUrl(nextPath);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -76,7 +83,7 @@ export function LoginForm() {
     setStatus(null);
     setIsSubmitting(true);
 
-    const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    const emailRedirectTo = getAuthCallbackUrl(nextPath);
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
