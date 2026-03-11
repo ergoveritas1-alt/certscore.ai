@@ -7,6 +7,17 @@ import {
 } from "./preview-scan-repository";
 import { enqueuePreviewScanJob } from "../queue/preview-scan-queue";
 
+const QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
+
+function withQueueHandoffTimeout<T>(promise: Promise<T>) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Preview scan queue handoff timed out.")), QUEUE_HANDOFF_TIMEOUT_MS);
+    })
+  ]);
+}
+
 export async function createPreviewScan(input: { hostname: string; normalizedUrl: string }) {
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const scan = await createPreviewScanRecord({
@@ -15,7 +26,9 @@ export async function createPreviewScan(input: { hostname: string; normalizedUrl
     normalizedUrl: domain.normalized_url
   });
 
-  void enqueuePreviewScanJob(scan.id).catch(async (queueError) => {
+  try {
+    await withQueueHandoffTimeout(enqueuePreviewScanJob(scan.id));
+  } catch (queueError) {
     const message = queueError instanceof Error ? queueError.message : "Unknown preview queue error";
 
     await updatePreviewScan(scan.id, {
@@ -33,7 +46,9 @@ export async function createPreviewScan(input: { hostname: string; normalizedUrl
       organizationId: null,
       scanId: scan.id
     });
-  });
+
+    throw new Error(message);
+  }
 
   return {
     domain,

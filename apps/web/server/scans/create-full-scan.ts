@@ -39,6 +39,17 @@ type QueueFullScanInput = {
   source?: string;
 };
 
+const QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
+
+function withQueueHandoffTimeout<T>(promise: Promise<T>) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Full scan queue handoff timed out.")), QUEUE_HANDOFF_TIMEOUT_MS);
+    })
+  ]);
+}
+
 function getCurrentMonthWindow(now = new Date()) {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth();
@@ -235,7 +246,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  void enqueueFullScanJob(scan.id).catch(async (queueError) => {
+  try {
+    await withQueueHandoffTimeout(enqueueFullScanJob(scan.id));
+  } catch (queueError) {
     const message = queueError instanceof Error ? queueError.message : "Unknown queue error";
 
     await supabase
@@ -257,7 +270,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         error: message
       }
     });
-  });
+
+    return {
+      error: `Scan queue handoff failed: ${message}`,
+      scanId: null
+    };
+  }
 
   return {
     error: null,
