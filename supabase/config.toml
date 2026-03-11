@@ -235,6 +235,11 @@ otp_expiry = 3600
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
+#
+# Uncomment to customize magic link emails
+# [auth.email.template.magic_link]
+# subject = "Your CertScore.ai sign-in code"
+# content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

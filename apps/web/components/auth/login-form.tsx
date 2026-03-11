@@ -46,6 +46,8 @@ function getAuthCallbackUrl(nextPath: string) {
 export function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
   const initialMessage = searchParams.get("message");
   const [status, setStatus] = useState<string | null>(initialMessage === "signed_out" ? null : initialMessage);
   const [errorMessage, setErrorMessage] = useState<string | null>(searchParams.get("error"));
@@ -55,8 +57,8 @@ export function LoginForm() {
   const supabase = createBrowserSupabaseClient();
   const googleEnabled = process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
   const introCopy = googleEnabled
-    ? "Continue with Google or request a magic link. Access is scoped to one workspace per user for the MVP."
-    : "Request a magic link to sign in. Access is scoped to one workspace per user for the MVP.";
+    ? "Continue with Google or request a sign-in code. Access is scoped to one workspace per user for the MVP."
+    : "Request a sign-in code. Access is scoped to one workspace per user for the MVP.";
 
   async function handleGoogleSignIn() {
     setErrorMessage(null);
@@ -77,17 +79,16 @@ export function LoginForm() {
     }
   }
 
-  async function handleMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function handleSendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
     setStatus(null);
     setIsSubmitting(true);
 
-    const emailRedirectTo = getAuthCallbackUrl(nextPath);
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo
+        shouldCreateUser: true
       }
     });
 
@@ -97,7 +98,31 @@ export function LoginForm() {
       return;
     }
 
-    setStatus("Magic link sent. Check your inbox to finish signing in.");
+    setCodeSent(true);
+    setOtpCode("");
+    setStatus("Sign-in code sent. Enter the 6-digit code from your email.");
+    setIsSubmitting(false);
+  }
+
+  async function handleVerifyCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage(null);
+    setStatus(null);
+    setIsSubmitting(true);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode,
+      type: "email"
+    });
+
+    if (error) {
+      setErrorMessage(error.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    window.location.assign(nextPath);
     setIsSubmitting(false);
   }
 
@@ -122,11 +147,12 @@ export function LoginForm() {
 
       <p className="text-sm text-slate-600">{introCopy}</p>
 
-      <form className="space-y-3" onSubmit={(event) => void handleMagicLink(event)}>
+      <form className="space-y-3" onSubmit={(event) => void handleSendCode(event)}>
         <label className="space-y-2 text-sm font-medium text-slate-700">
           Email address
           <Input
             autoComplete="email"
+            disabled={codeSent}
             name="email"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="name@example.com"
@@ -135,9 +161,30 @@ export function LoginForm() {
           />
         </label>
         <Button className="w-full" disabled={isSubmitting || email.length === 0} type="submit" variant="secondary">
-          Send magic link
+          {codeSent ? "Resend code" : "Send sign-in code"}
         </Button>
       </form>
+
+      {codeSent ? (
+        <form className="space-y-3" onSubmit={(event) => void handleVerifyCode(event)}>
+          <label className="space-y-2 text-sm font-medium text-slate-700">
+            Sign-in code
+            <Input
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              maxLength={6}
+              name="otp"
+              onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              type="text"
+              value={otpCode}
+            />
+          </label>
+          <Button className="w-full" disabled={isSubmitting || otpCode.length < 6} type="submit">
+            Verify code
+          </Button>
+        </form>
+      ) : null}
 
       {status ? <p className="text-sm text-emerald-700">{status}</p> : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
