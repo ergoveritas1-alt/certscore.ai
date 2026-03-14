@@ -1,34 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import nodemailer from "nodemailer";
+import { createGmailTransport, getGmailConfig } from "../email/gmail";
 
 export type SendContactSalesActionState = {
   error: string | null;
 };
-
-type GmailContactSalesConfig = {
-  appUrl: string;
-  fromEmail: string;
-  toEmail: string;
-  appPassword: string;
-};
-
-function getGmailContactSalesConfig(): GmailContactSalesConfig | null {
-  const fromEmail = process.env.GMAIL_SMTP_USER?.trim();
-  const appPassword = process.env.GMAIL_SMTP_APP_PASSWORD?.trim();
-
-  if (!fromEmail || !appPassword || appPassword === "your-gmail-app-password") {
-    return null;
-  }
-
-  return {
-    appUrl: process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000",
-    fromEmail,
-    toEmail: process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@ergoveritas.com",
-    appPassword
-  };
-}
 
 export async function sendContactSalesAction(
   _: SendContactSalesActionState,
@@ -56,7 +33,8 @@ export async function sendContactSalesAction(
     return { error: "Tell us what you want to discuss." };
   }
 
-  const gmailConfig = getGmailContactSalesConfig();
+  const gmailConfig = getGmailConfig();
+  const toEmail = process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@ergoveritas.com";
 
   if (!gmailConfig) {
     return {
@@ -64,18 +42,12 @@ export async function sendContactSalesAction(
     };
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: gmailConfig.fromEmail,
-      pass: gmailConfig.appPassword
-    }
-  });
+  const transporter = createGmailTransport(gmailConfig);
 
   try {
     await transporter.sendMail({
       from: `"CertScore.ai Contact Sales" <${gmailConfig.fromEmail}>`,
-      to: gmailConfig.toEmail,
+      to: toEmail,
       replyTo: workEmail,
       subject: `[CertScore.ai Contact Sales] ${company} inquiry`,
       text: [

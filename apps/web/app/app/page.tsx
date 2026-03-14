@@ -194,10 +194,10 @@ export default async function DashboardPage() {
                               <p className="text-[13px] text-slate-500">
                                 Signals {scan.totalSignals ?? 0}
                               </p>
-                              <p className="text-[13px] text-slate-600">Overall score: {formatMetric(scan.certscoreOverall)}</p>
+                              <p className="text-[13px] text-slate-600">Overall rating score: {formatMetric(scan.certscoreOverall)}</p>
                             </div>
                             <div className="text-[13px] text-slate-600 sm:min-w-[160px]">
-                              <p>Regulatory score: {formatMetric(scan.regulatoryScore)}</p>
+                              <p>Regulatory overlay risk: {formatMetric(scan.regulatoryScore)}</p>
                               <p>Privacy score: {formatMetric(scan.privacyScore)}</p>
                               <p>Accessibility score: {formatMetric(scan.accessibilityScore)}</p>
                             </div>
@@ -233,6 +233,7 @@ export default async function DashboardPage() {
                   {latestCompletedSignalSet.signals.slice(0, 5).map((signal) => (
                     <div key={signal.key} className="rounded-2xl bg-slate-50 px-4 py-3">
                       <p className="font-medium text-slate-900">{signal.label}</p>
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{signal.categoryLabel}</p>
                       <p className="text-slate-500">{Array.isArray(signal.value) ? signal.value.join(", ") : String(signal.value)}</p>
                     </div>
                   ))}

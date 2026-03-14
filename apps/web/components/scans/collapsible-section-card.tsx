@@ -12,6 +12,14 @@ type CollapsibleSectionCardProps = {
   summaryClassName?: string;
 };
 
+function ChevronIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 export function CollapsibleSectionCard({
   title,
   children,
@@ -23,8 +31,8 @@ export function CollapsibleSectionCard({
   summaryClassName
 }: CollapsibleSectionCardProps) {
   return (
-    <Card className={cn("overflow-hidden border border-slate-200 bg-white", className)}>
-      <details className="group" open={defaultOpen}>
+    <Card className={cn("border border-slate-200 bg-white", className)}>
+      <details className="group/section" open={defaultOpen}>
         <summary
           className={cn(
             "flex cursor-pointer list-none items-start gap-3 px-6 py-5 marker:hidden [&::-webkit-details-marker]:hidden",
@@ -32,8 +40,8 @@ export function CollapsibleSectionCard({
           )}
         >
           {showChevron ? (
-            <span className="mt-0.5 inline-block text-sm font-semibold text-slate-400 transition-transform duration-150 group-open:rotate-90">
-              {">"}
+            <span className="mt-0.5 inline-flex text-slate-400 transition-transform duration-150 group-open/section:rotate-90">
+              <ChevronIcon />
             </span>
           ) : null}
           <div className="min-w-0 flex-1">

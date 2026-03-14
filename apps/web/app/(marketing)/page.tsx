@@ -125,30 +125,30 @@ export default function MarketingHomePage() {
       <SiteHeader />
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="space-y-5">
             <h1
-              className="max-w-3xl bg-clip-text text-5xl font-semibold tracking-tight text-transparent"
+              className="max-w-3xl bg-clip-text text-4xl font-semibold leading-[0.95] tracking-tight text-transparent sm:text-5xl lg:text-6xl"
               style={{
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
               Detect compliance, privacy, trust, and accessibility signals across your website.
             </h1>
-            <p className="max-w-2xl text-lg text-slate-600">
+            <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
               Automatically track disclosures, policies, and tracking infrastructure as they change over time.
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button
                 asChild
-                className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+                className="w-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04] sm:w-auto"
               >
                 <Link href="/pricing">View pricing</Link>
               </Button>
               <Button
                 asChild
                 variant="secondary"
-                className="border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50"
+                className="w-full border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50 sm:w-auto"
               >
                 <Link href="/how-it-works">How it works</Link>
               </Button>

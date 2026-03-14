@@ -9,8 +9,9 @@
   "scripts": {
     "build": "turbo run build",
     "check-env": "pnpm --filter @website-signal-risk-scanner/web check-env && pnpm --filter @website-signal-risk-scanner/worker check-env",
-    "check-runtime": "pnpm --filter @website-signal-risk-scanner/worker check-runtime",
+    "check-runtime": "pnpm --filter @website-signal-risk-scanner/web check-runtime && pnpm --filter @website-signal-risk-scanner/worker check-runtime",
     "dev": "turbo run dev --parallel",
+    "restart:localhost": "bash ./scripts/restart-localhost.sh",
     "supabase:login": "npx supabase@latest login",
     "supabase:link": "npx supabase@latest link --project-ref wgfhzyrysztmtrjbcsgy",
     "supabase:push": "npx supabase@latest db push",

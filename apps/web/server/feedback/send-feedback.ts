@@ -1,34 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import nodemailer from "nodemailer";
+import { createGmailTransport, getGmailConfig } from "../email/gmail";
 
 export type SendFeedbackActionState = {
   error: string | null;
 };
-
-type GmailFeedbackConfig = {
-  appUrl: string;
-  fromEmail: string;
-  toEmail: string;
-  appPassword: string;
-};
-
-function getGmailFeedbackConfig(): GmailFeedbackConfig | null {
-  const fromEmail = process.env.GMAIL_SMTP_USER?.trim();
-  const appPassword = process.env.GMAIL_SMTP_APP_PASSWORD?.trim();
-
-  if (!fromEmail || !appPassword || appPassword === "your-gmail-app-password") {
-    return null;
-  }
-
-  return {
-    appUrl: process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000",
-    fromEmail,
-    toEmail: process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@ergoveritas.com",
-    appPassword
-  };
-}
 
 export async function sendFeedbackAction(
   _: SendFeedbackActionState,
@@ -46,7 +23,8 @@ export async function sendFeedbackAction(
     return { error: "Feedback is required." };
   }
 
-  const gmailConfig = getGmailFeedbackConfig();
+  const gmailConfig = getGmailConfig();
+  const toEmail = process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@ergoveritas.com";
 
   if (!gmailConfig) {
     return {
@@ -54,18 +32,12 @@ export async function sendFeedbackAction(
     };
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: gmailConfig.fromEmail,
-      pass: gmailConfig.appPassword
-    }
-  });
+  const transporter = createGmailTransport(gmailConfig);
 
   try {
     await transporter.sendMail({
       from: `"CertScore.ai Feedback" <${gmailConfig.fromEmail}>`,
-      to: gmailConfig.toEmail,
+      to: toEmail,
       replyTo: userEmail || gmailConfig.fromEmail,
       subject: `[CertScore.ai Feedback] ${subject}`,
       text: [

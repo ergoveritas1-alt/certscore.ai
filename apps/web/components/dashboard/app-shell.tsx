@@ -89,6 +89,22 @@ function PlanIcon(props: NavIconProps) {
   );
 }
 
+function MenuIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
@@ -132,6 +148,7 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
   const displayPlan = plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "ULTRA";
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scopedNavItems = isPlatformAdmin
     ? [...navItems, { href: "/app/admin", label: "Admin", icon: ShieldIcon }]
     : navItems;
@@ -139,6 +156,7 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
   useEffect(() => {
     setAccountMenuOpen(false);
     setNavExpanded(false);
+    setMobileNavOpen(false);
   }, [pathname]);
 
   function closeNav() {
@@ -151,6 +169,15 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
         <header className="border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                aria-expanded={mobileNavOpen}
+                onClick={() => setMobileNavOpen(true)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white lg:hidden"
+              >
+                <MenuIcon className="h-5 w-5" />
+              </button>
               <div className="flex h-[33px] items-center overflow-hidden">
                 <Image
                   src="/certscore_blk_logo.png"
@@ -177,7 +204,7 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
                 className="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-700 hover:bg-slate-900 hover:text-white"
               >
                 <FeedbackIcon className="h-4 w-4" />
-                <span>Feedback</span>
+                <span className="hidden sm:inline">Feedback</span>
               </Link>
 
               <div className="relative">
@@ -222,6 +249,65 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
+          {mobileNavOpen ? (
+            <div className="fixed inset-0 z-40 lg:hidden" aria-hidden="true">
+              <button
+                type="button"
+                aria-label="Close navigation"
+                onClick={() => setMobileNavOpen(false)}
+                className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
+              />
+            </div>
+          ) : null}
+
+          <div
+            className={[
+              "fixed inset-y-0 left-0 z-50 w-[min(20rem,calc(100vw-2rem))] transform border-r border-slate-800 bg-slate-900 transition duration-200 lg:hidden",
+              mobileNavOpen ? "translate-x-0" : "-translate-x-[110%]"
+            ].join(" ")}
+          >
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-slate-800 px-4 py-4">
+                <div>
+                  <p className="text-sm font-semibold text-white">Navigation</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{displayPlan} plan</p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close navigation"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-950 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white"
+                >
+                  <CloseIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-5">
+                {scopedNavItems.map((item) => {
+                  const active = isItemActive(pathname, item.href);
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileNavOpen(false)}
+                      className={[
+                        "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
+                        active
+                          ? "border-slate-700 bg-slate-800 text-white"
+                          : "border-transparent text-slate-300 hover:border-slate-800 hover:bg-slate-800 hover:text-white"
+                      ].join(" ")}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          </div>
+
           <aside
             className={["border-b border-slate-800 bg-slate-900 lg:relative lg:-mr-px lg:overflow-visible lg:border-b-0 lg:border-r", COLLAPSED_NAV_WIDTH].join(" ")}
             onMouseEnter={() => setNavExpanded(true)}
@@ -276,32 +362,10 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
               </div>
             </div>
 
-            <div className="border-b border-slate-800 p-6 lg:hidden">
-              <nav className="space-y-2">
-                {scopedNavItems.map((item) => {
-                  const active = isItemActive(pathname, item.href);
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={[
-                        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
-                        active ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                      ].join(" ")}
-                    >
-                      <Icon className="h-[20px] w-[20px] shrink-0" />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
           </aside>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-slate-50">
-            <main className="min-w-0 flex-1 overflow-x-hidden px-6 py-8 text-ink">{children}</main>
+            <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 text-ink sm:px-6 sm:py-8">{children}</main>
             <footer className="border-t border-slate-200 px-6 py-4 text-xs text-slate-400">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p>Copyright © 2026 CertScore.ai. All rights reserved.</p>
