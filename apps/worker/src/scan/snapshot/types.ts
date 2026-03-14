@@ -7,7 +7,8 @@ import type {
   ScanPage,
   ScanRuntimeArtifact,
   ScanSnapshot,
-  ScanTrackerVendor
+  ScanTrackerVendor,
+  SnapshotSignalItem
 } from "@website-signal-risk-scanner/shared";
 import type { ScanPlan } from "./scan-planner";
 
@@ -24,8 +25,11 @@ export type ExtractedScript = {
 
 export type ExtractedInput = {
   autocomplete: string | null;
+  ariaLabel: string | null;
+  id: string | null;
   labelText: string | null;
   name: string | null;
+  placeholder: string | null;
   type: string | null;
 };
 
@@ -62,6 +66,13 @@ export type BrowserPageResult = {
   cookiePolicyLinkedFromBanner: boolean;
   darkPatternAcceptEmphasis: boolean;
   darkPatternRejectHidden: boolean;
+  darkPatternRejectButtonMissing: boolean;
+  darkPatternAcceptButtonProminence: boolean;
+  darkPatternForcedConsentWall: boolean;
+  darkPatternAcceptOnlyBanner: boolean;
+  darkPatternDismissWithoutReject: boolean;
+  darkPatternCountdownTimerPresent: boolean;
+  darkPatternFakeScarcityLanguage: boolean;
   granularPreferencesPresent: boolean;
   mixedContentDetected: boolean;
   pageUrl: string;
@@ -75,12 +86,7 @@ export type BrowserPageResult = {
 
 export type SnapshotBundle = {
   accessibilityRuleCounts: ScanAccessibilityRuleCount[];
-  compatibilitySignals: Array<{
-    category: "accessibility" | "privacy" | "disclosure" | "security" | "commerce" | "context";
-    key: string;
-    label: string;
-    value: boolean | number | string | string[];
-  }>;
+  compatibilitySignals: SnapshotSignalItem[];
   changeEvents?: ComplianceChangeEvent[];
   pages: ScanPage[];
   policyEnrichments: PolicyEnrichment[];

@@ -17,8 +17,12 @@ import {
   buildAccessibilitySummary,
   buildPageMetadata,
   consentSignatureHash,
+  deriveAdvertisingClassification,
+  deriveAiInfrastructureSignals,
   deriveContactSignals,
+  deriveExpandedCommercialSignals,
   deriveFormSignals,
+  deriveGovernanceSignals,
   deriveJurisdictionAndIndustry,
   derivePolicySignals,
   deriveTechSignals,
@@ -88,6 +92,13 @@ type BrowserPassResult = {
   defaultTrackingState: ScanSnapshot["defaultTrackingState"];
   darkPatternAcceptEmphasis: boolean;
   darkPatternRejectHidden: boolean;
+  darkPatternRejectButtonMissing: boolean;
+  darkPatternAcceptButtonProminence: boolean;
+  darkPatternForcedConsentWall: boolean;
+  darkPatternAcceptOnlyBanner: boolean;
+  darkPatternDismissWithoutReject: boolean;
+  darkPatternCountdownTimerPresent: boolean;
+  darkPatternFakeScarcityLanguage: boolean;
   firstPartyCookieSetBeforeConsent: boolean | null;
   granularPreferencesPresent: boolean;
   mixedContentDetected: boolean;
@@ -129,6 +140,49 @@ type FetchedRobotsState = {
   robotsTxtUrl: string;
   robotsRulesLoaded: boolean | null;
 };
+
+type ConsentButtonMeta = {
+  prominenceScore: number;
+  text: string;
+};
+
+export function inferConsentDarkPatternFlags(input: {
+  acceptButtons: ConsentButtonMeta[];
+  bannerHeightRatio: number;
+  bodyOverflowHidden: boolean;
+  bodyText: string;
+  dismissButtons: ConsentButtonMeta[];
+  isFixedBanner: boolean;
+  layoutType: ScanSnapshot["consentBannerLayoutType"];
+  preferencesButtons: ConsentButtonMeta[];
+  rejectButtons: ConsentButtonMeta[];
+  visibleBanner: boolean;
+}) {
+  const maxAcceptProminence = input.acceptButtons.reduce((max, button) => Math.max(max, button.prominenceScore), 0);
+  const maxRejectProminence = input.rejectButtons.reduce((max, button) => Math.max(max, button.prominenceScore), 0);
+
+  return {
+    darkPatternRejectButtonMissing: input.visibleBanner && input.acceptButtons.length > 0 && input.rejectButtons.length === 0,
+    darkPatternAcceptButtonProminence:
+      input.visibleBanner &&
+      input.acceptButtons.length > 0 &&
+      input.rejectButtons.length > 0 &&
+      maxAcceptProminence > maxRejectProminence * 1.2,
+    // Prominence is inferred from deterministic DOM heuristics: element area, filled styling, and primary-vs-secondary class hints.
+    darkPatternForcedConsentWall:
+      input.visibleBanner &&
+      input.acceptButtons.length > 0 &&
+      Boolean(
+        (input.layoutType === "full_screen" || input.layoutType === "modal") &&
+          (input.bodyOverflowHidden || (input.isFixedBanner && input.bannerHeightRatio > 0.45))
+      ),
+    darkPatternAcceptOnlyBanner:
+      input.visibleBanner && input.acceptButtons.length > 0 && input.rejectButtons.length === 0 && input.preferencesButtons.length === 0,
+    darkPatternDismissWithoutReject: input.visibleBanner && input.dismissButtons.length > 0 && input.rejectButtons.length === 0,
+    darkPatternCountdownTimerPresent: /(countdown|timer|offer ends in|\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2})/.test(input.bodyText),
+    darkPatternFakeScarcityLanguage: /(limited time|only \d+ left|ends soon|offer expires|sale ends)/.test(input.bodyText)
+  };
+}
 
 function priorityForPage(pageType: StaticPageResult["pageType"]) {
   switch (pageType) {
@@ -366,19 +420,60 @@ async function evaluateConsentState(page: Page) {
   return page.evaluate(() => {
     const candidates = Array.from(document.querySelectorAll("button, a, [role='button'], input[type='button'], input[type='submit']"));
     const bodyText = document.body?.innerText?.replace(/\s+/g, " ").toLowerCase() ?? "";
-    const buttonTexts = candidates
-      .map((element) => (element.textContent ?? element.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim().toLowerCase())
-      .filter(Boolean);
-    const acceptTexts = buttonTexts.filter((text) => /accept|allow all|agree/.test(text));
-    const rejectTexts = buttonTexts.filter((text) => /reject|decline|deny/.test(text));
-    const preferencesTexts = buttonTexts.filter((text) => /preferences|settings|manage|customize/.test(text));
+    const buttonMeta = candidates
+      .map((element) => {
+        const text = (element.textContent ?? element.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        const classText = `${element.className ?? ""} ${element.getAttribute("data-testid") ?? ""} ${element.id ?? ""}`.toLowerCase();
+        const isVisible =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          style.opacity !== "0";
+
+        if (!text || !isVisible) {
+          return null;
+        }
+
+        const filledButton = style.backgroundColor !== "rgba(0, 0, 0, 0)" && style.backgroundColor !== "transparent";
+        const primaryClass = /(primary|accept|allow|agree|confirm|solid|filled)/.test(classText);
+        const secondaryClass = /(secondary|ghost|outline|link|subtle|reject|decline|deny)/.test(classText);
+        const fontWeight = Number.parseInt(style.fontWeight, 10);
+
+        return {
+          prominenceScore:
+            rect.width * rect.height +
+            (filledButton ? 5000 : 0) +
+            (primaryClass ? 3000 : 0) -
+            (secondaryClass ? 1500 : 0) +
+            (Number.isFinite(fontWeight) ? fontWeight : 0),
+          text
+        };
+      })
+      .filter((entry): entry is { prominenceScore: number; text: string } => Boolean(entry));
+    const acceptButtons = buttonMeta.filter((button) => /accept|allow all|agree/.test(button.text));
+    const rejectButtons = buttonMeta.filter((button) => /reject|decline|deny/.test(button.text));
+    const preferencesButtons = buttonMeta.filter((button) => /preferences|settings|manage|customize/.test(button.text));
+    const dismissButtons = buttonMeta.filter((button) => /close|dismiss|not now|continue without accepting/.test(button.text));
+    const acceptTexts = acceptButtons.map((button) => button.text);
+    const rejectTexts = rejectButtons.map((button) => button.text);
+    const preferencesTexts = preferencesButtons.map((button) => button.text);
     const cookiePolicyLinks = Array.from(document.querySelectorAll("a[href]")).some((element) =>
       /cookie/i.test((element as HTMLAnchorElement).href) || /cookie/i.test((element.textContent ?? "").toLowerCase())
     );
     const visibleBanner = /cookie|consent|privacy choices|your privacy/.test(bodyText);
-    const precheckedBoxes = Array.from(document.querySelectorAll("input[type='checkbox']")).some((element) =>
-      (element as HTMLInputElement).checked
-    );
+    const precheckedBoxes = Array.from(document.querySelectorAll("input[type='checkbox']")).some((element) => {
+      const input = element as HTMLInputElement;
+
+      if (!input.checked) {
+        return false;
+      }
+
+      const contextualText = `${input.name ?? ""} ${input.id ?? ""} ${input.getAttribute("aria-label") ?? ""} ${input.closest("label,fieldset,form,div")?.textContent ?? ""}`.toLowerCase();
+      return /consent|marketing|newsletter|email updates|sms|advertising|promotional|privacy/.test(contextualText);
+    });
     const bannerElement =
       document.querySelector("[id*='cookie'],[class*='cookie'],[id*='consent'],[class*='consent'],[aria-label*='privacy' i]") ??
       document.querySelector("dialog,[role='dialog'],aside,footer,header");
@@ -396,6 +491,7 @@ async function evaluateConsentState(page: Page) {
     const trackingEnabledByDefault =
       /analytics_storage.{0,10}granted|ad_storage.{0,10}granted|marketing.{0,10}enabled/.test(bodyText) ||
       document.cookie.split(";").some((item) => /_ga=|_fbp=|_gid=/.test(item));
+    const bodyOverflowHidden = window.getComputedStyle(document.body).overflow === "hidden";
     let layoutType: "modal" | "bottom_bar" | "top_bar" | "sidebar" | "full_screen" | "inline" | "unknown" = "unknown";
     let position: "top" | "bottom" | "modal" | "sidebar" | "inline" | "other" | "unknown" = "unknown";
 
@@ -429,6 +525,27 @@ async function evaluateConsentState(page: Page) {
       }
     }
 
+    const darkPatternFlags = {
+      darkPatternRejectButtonMissing: visibleBanner && acceptButtons.length > 0 && rejectButtons.length === 0,
+      darkPatternAcceptButtonProminence:
+        visibleBanner &&
+        acceptButtons.length > 0 &&
+        rejectButtons.length > 0 &&
+        acceptButtons.reduce((max, button) => Math.max(max, button.prominenceScore), 0) >
+          rejectButtons.reduce((max, button) => Math.max(max, button.prominenceScore), 0) * 1.2,
+      darkPatternForcedConsentWall:
+        visibleBanner &&
+        acceptButtons.length > 0 &&
+        Boolean(
+          (layoutType === "full_screen" || layoutType === "modal") &&
+            (bodyOverflowHidden || (style?.position === "fixed" && (bannerRect?.height ?? 0) > viewportHeight * 0.45))
+        ),
+      darkPatternAcceptOnlyBanner: visibleBanner && acceptButtons.length > 0 && rejectButtons.length === 0 && preferencesButtons.length === 0,
+      darkPatternDismissWithoutReject: visibleBanner && dismissButtons.length > 0 && rejectButtons.length === 0,
+      darkPatternCountdownTimerPresent: /(countdown|timer|offer ends in|\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2})/.test(bodyText),
+      darkPatternFakeScarcityLanguage: /(limited time|only \d+ left|ends soon|offer expires|sale ends)/.test(bodyText)
+    };
+
     return {
       cookieBannerPresent: visibleBanner,
       acceptAllPresent: acceptTexts.length > 0,
@@ -438,6 +555,7 @@ async function evaluateConsentState(page: Page) {
       darkPatternAcceptEmphasis: acceptTexts.length > 0 && rejectTexts.length === 0,
       darkPatternRejectHidden: visibleBanner && rejectTexts.length === 0,
       precheckedConsentBoxes: precheckedBoxes,
+      ...darkPatternFlags,
       consentModeDetected: /consent mode|ad_storage|analytics_storage/.test(bodyText),
       consentBannerLayoutType: layoutType,
       consentBannerPosition: position,
@@ -601,6 +719,13 @@ async function runBrowserPass(input: {
         defaultTrackingState: "unknown",
         darkPatternAcceptEmphasis: false,
         darkPatternRejectHidden: false,
+        darkPatternRejectButtonMissing: false,
+        darkPatternAcceptButtonProminence: false,
+        darkPatternForcedConsentWall: false,
+        darkPatternAcceptOnlyBanner: false,
+        darkPatternDismissWithoutReject: false,
+        darkPatternCountdownTimerPresent: false,
+        darkPatternFakeScarcityLanguage: false,
         firstPartyCookieSetBeforeConsent: null,
         granularPreferencesPresent: false,
         mixedContentDetected: false,
@@ -683,6 +808,13 @@ async function runBrowserPass(input: {
     cookiePolicyLinkedFromBanner: false,
     darkPatternAcceptEmphasis: false,
     darkPatternRejectHidden: false,
+    darkPatternRejectButtonMissing: false,
+    darkPatternAcceptButtonProminence: false,
+    darkPatternForcedConsentWall: false,
+    darkPatternAcceptOnlyBanner: false,
+    darkPatternDismissWithoutReject: false,
+    darkPatternCountdownTimerPresent: false,
+    darkPatternFakeScarcityLanguage: false,
     precheckedConsentBoxes: false,
     consentModeDetected: false,
     consentBannerLayoutType: "unknown" as const,
@@ -980,6 +1112,13 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         defaultTrackingState: "unknown",
         darkPatternAcceptEmphasis: false,
         darkPatternRejectHidden: false,
+        darkPatternRejectButtonMissing: false,
+        darkPatternAcceptButtonProminence: false,
+        darkPatternForcedConsentWall: false,
+        darkPatternAcceptOnlyBanner: false,
+        darkPatternDismissWithoutReject: false,
+        darkPatternCountdownTimerPresent: false,
+        darkPatternFakeScarcityLanguage: false,
         firstPartyCookieSetBeforeConsent: null,
         granularPreferencesPresent: false,
         mixedContentDetected: false,
@@ -1043,6 +1182,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   const jurisdictionSignals = deriveJurisdictionAndIndustry(successfulPages, new URL(homepageUrl).hostname);
   const formSignals = deriveFormSignals(successfulPages);
   const techSignals = deriveTechSignals(successfulPages);
+  const governanceSignals = deriveGovernanceSignals(successfulPages);
   const policySignals = derivePolicySignals(policyPages);
   const staticTrackers = dedupeTrackers(
     successfulPages.flatMap((page) =>
@@ -1056,6 +1196,12 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   );
 
   const allTrackers = dedupeTrackers([...staticTrackers, ...browserPass.trackerVendors]);
+  const advertisingSignals = deriveAdvertisingClassification(allTrackers);
+  const aiSignals = deriveAiInfrastructureSignals({
+    pages: successfulPages,
+    chatSupportVendor: techSignals.chatSupportVendor
+  });
+  const commercialSignals = deriveExpandedCommercialSignals(successfulPages);
   const trackerSummary = summarizeTrackers(allTrackers);
   const policyEnrichmentBundle = await enrichPolicyPages({
     scanId: input.scanId,
@@ -1298,7 +1444,14 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     consentModeDetected: browserPass.consentModeDetected,
     darkPatternAcceptEmphasis: browserPass.darkPatternAcceptEmphasis,
     darkPatternRejectHidden: browserPass.darkPatternRejectHidden,
+    darkPatternRejectButtonMissing: browserPass.darkPatternRejectButtonMissing,
+    darkPatternAcceptButtonProminence: browserPass.darkPatternAcceptButtonProminence,
     precheckedConsentBoxes: browserPass.precheckedConsentBoxes,
+    darkPatternForcedConsentWall: browserPass.darkPatternForcedConsentWall,
+    darkPatternAcceptOnlyBanner: browserPass.darkPatternAcceptOnlyBanner,
+    darkPatternDismissWithoutReject: browserPass.darkPatternDismissWithoutReject,
+    darkPatternCountdownTimerPresent: browserPass.darkPatternCountdownTimerPresent,
+    darkPatternFakeScarcityLanguage: browserPass.darkPatternFakeScarcityLanguage,
     consentSignatureHash: "",
     consentPersistenceMechanismDetected: browserPass.consentPersistenceMechanismDetected,
     consentBannerLayoutType: browserPass.consentBannerLayoutType,
@@ -1342,6 +1495,12 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     addressInputPresent: formSignals.addressInputPresent,
     paymentCardInputPresent: formSignals.paymentCardInputPresent,
     dateOfBirthInputPresent: formSignals.dateOfBirthInputPresent,
+    formCollectsSsn: formSignals.formCollectsSsn,
+    formCollectsGovernmentId: formSignals.formCollectsGovernmentId,
+    formCollectsHealthInformation: formSignals.formCollectsHealthInformation,
+    formCollectsFinancialInformation: formSignals.formCollectsFinancialInformation,
+    formCollectsBirthdate: formSignals.formCollectsBirthdate,
+    formCollectsGeolocation: formSignals.formCollectsGeolocation,
     ageGatePresent: formSignals.ageGatePresent,
     ageVerificationMechanismType: formSignals.ageVerificationMechanismType,
     parentalConsentReferencePresent: formSignals.parentalConsentReferencePresent,
@@ -1372,16 +1531,33 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     vpatOrAccessibilityConformanceDocPresent: /vpat|accessibility conformance report/i.test(allText),
     accessibilityContactMethodPresent: contactSignals.accessibilityContactMethodPresent,
     accessibilitySignatureHash: accessibilitySummary.accessibilitySignatureHash,
-    subscriptionOfferDetected: /subscription|membership|recurring billing/i.test(allText),
-    autoRenewalDisclosurePresent: /auto.?renew|automatically renew/i.test(allText),
-    cancellationPolicyPresent: /cancellation policy|cancel anytime|cancel your subscription/i.test(allText),
+    subscriptionOfferDetected: commercialSignals.subscriptionTermsPresent,
+    autoRenewDisclosurePresent: commercialSignals.autoRenewDisclosurePresent,
+    autoRenewalDisclosurePresent: commercialSignals.autoRenewDisclosurePresent,
+    subscriptionCancellationPolicyPresent: commercialSignals.subscriptionCancellationPolicyPresent,
+    cancellationPolicyPresent: commercialSignals.subscriptionCancellationPolicyPresent,
     unsubscribeMechanismPresent: /unsubscribe|manage preferences|opt out/i.test(allText),
-    freeTrialDetected: /free trial|try for free/i.test(allText),
+    freeTrialDetected: commercialSignals.freeTrialDetected,
     refundOrReturnWindowDetected: /\b\d{1,3}\s*(day|days)\b.{0,20}(refund|return)/i.test(allText),
     shippingTermsDetected: /shipping policy|delivery times|shipping rates/i.test(allText),
     disputeResolutionOrArbitrationPresent: /arbitration|dispute resolution/i.test(allText),
     testimonialOrReviewDisclosurePresent: /results may vary|sponsored|paid testimonial/i.test(allText),
+    adNetworkGoogleAds: advertisingSignals.adNetworkGoogleAds,
+    adNetworkMetaAds: advertisingSignals.adNetworkMetaAds,
+    retargetingPixelDetected: advertisingSignals.retargetingPixelDetected,
+    sessionReplayToolDetected: advertisingSignals.sessionReplayToolDetected,
+    aiChatbotPresent: aiSignals.aiChatbotPresent,
+    aiChatbotVendor: aiSignals.aiChatbotVendor,
+    aiAssistantWidgetDetected: aiSignals.aiAssistantWidgetDetected,
+    aiDisclosureTextPresent: aiSignals.aiDisclosureTextPresent,
+    aiTermsOrPolicyAiReference: aiSignals.aiTermsOrPolicyAiReference,
+    aiHelpCenterAiReference: aiSignals.aiHelpCenterAiReference,
+    aiSearchOrAnswerExperienceDetected: aiSignals.aiSearchOrAnswerExperienceDetected,
+    aiHiringAutomationSignalDetected: aiSignals.aiHiringAutomationSignalDetected,
     securityTxtPresent: Boolean(securityTxt?.status && securityTxt.status >= 200 && securityTxt.status < 300),
+    vulnerabilityDisclosurePagePresent: governanceSignals.vulnerabilityDisclosurePagePresent,
+    trustCenterPresent: governanceSignals.trustCenterPresent,
+    incidentStatusPagePresent: governanceSignals.incidentStatusPagePresent,
     responsibleDisclosurePresent: /responsible disclosure|security contact/i.test(`${securityTxt?.body ?? ""}\n${allText}`),
     bugBountyProgramPresent: /bug bounty|hackerone|bugcrowd/i.test(`${securityTxt?.body ?? ""}\n${allText}`),
     hstsEnabled: "strict-transport-security" in homepage.headers ? Boolean(homepage.headers["strict-transport-security"]) : false,

@@ -328,6 +328,15 @@ export const PAYMENT_VENDOR_SIGNATURES: VendorSignature[] = [
 
 export const CHAT_VENDOR_SIGNATURES: VendorSignature[] = [
   {
+    id: "ada",
+    name: "Ada",
+    category: "chat_support",
+    confidence: 0.95,
+    hostnamePatterns: ["ada.support", "ada.cx"],
+    htmlPatterns: [pattern("\\bask ada\\b"), pattern("ada support"), pattern("ada-widget")],
+    detectionSource: "script_signature"
+  },
+  {
     id: "intercom",
     name: "Intercom",
     category: "chat_support",
@@ -352,6 +361,15 @@ export const CHAT_VENDOR_SIGNATURES: VendorSignature[] = [
     confidence: 0.92,
     hostnamePatterns: ["driftt.com", "drift.com"],
     htmlPatterns: [pattern("drift")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "forethought",
+    name: "Forethought",
+    category: "chat_support",
+    confidence: 0.93,
+    hostnamePatterns: ["forethought.ai"],
+    htmlPatterns: [pattern("forethought"), pattern("solve widget"), pattern("agatha")],
     detectionSource: "script_signature"
   }
 ];

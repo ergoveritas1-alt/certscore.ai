@@ -2,15 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAgencyMappings, buildRegulatoryRiskAssessment, type ScanSnapshot } from "@website-signal-risk-scanner/shared";
 import {
+  deriveAdvertisingClassification,
+  deriveAiInfrastructureSignals,
   buildAccessibilitySummary,
   buildPageMetadata,
   consentSignatureHash,
   deriveFormSignals,
+  deriveExpandedCommercialSignals,
+  deriveGovernanceSignals,
   derivePolicySignals,
   detectTrackerVendorsFromStaticPage,
   discoverCandidatePages,
   policyPresenceHash
 } from "./extractors";
+import { inferConsentDarkPatternFlags } from "./build-snapshot-bundle";
 import { diffSnapshots } from "./diff-snapshots";
 import {
   deriveInfrastructureChangeSignals,
@@ -177,7 +182,14 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     consentModeDetected: false,
     darkPatternAcceptEmphasis: false,
     darkPatternRejectHidden: false,
+    darkPatternRejectButtonMissing: false,
+    darkPatternAcceptButtonProminence: false,
     precheckedConsentBoxes: false,
+    darkPatternForcedConsentWall: false,
+    darkPatternAcceptOnlyBanner: false,
+    darkPatternDismissWithoutReject: false,
+    darkPatternCountdownTimerPresent: false,
+    darkPatternFakeScarcityLanguage: false,
     consentSignatureHash: "consent-a",
     consentPersistenceMechanismDetected: true,
     consentBannerLayoutType: "modal",
@@ -221,6 +233,12 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     addressInputPresent: false,
     paymentCardInputPresent: false,
     dateOfBirthInputPresent: false,
+    formCollectsSsn: false,
+    formCollectsGovernmentId: false,
+    formCollectsHealthInformation: false,
+    formCollectsFinancialInformation: false,
+    formCollectsBirthdate: false,
+    formCollectsGeolocation: false,
     ageGatePresent: false,
     ageVerificationMechanismType: "none",
     parentalConsentReferencePresent: false,
@@ -260,7 +278,9 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     accessibilityLitigationRiskScore: 18,
     adaDemandLetterProbability: 18,
     subscriptionOfferDetected: false,
+    autoRenewDisclosurePresent: false,
     autoRenewalDisclosurePresent: false,
+    subscriptionCancellationPolicyPresent: false,
     cancellationPolicyPresent: false,
     unsubscribeMechanismPresent: false,
     freeTrialDetected: false,
@@ -268,7 +288,22 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     shippingTermsDetected: false,
     disputeResolutionOrArbitrationPresent: false,
     testimonialOrReviewDisclosurePresent: false,
+    adNetworkGoogleAds: false,
+    adNetworkMetaAds: false,
+    retargetingPixelDetected: false,
+    sessionReplayToolDetected: false,
+    aiChatbotPresent: false,
+    aiChatbotVendor: null,
+    aiAssistantWidgetDetected: false,
+    aiDisclosureTextPresent: false,
+    aiTermsOrPolicyAiReference: false,
+    aiHelpCenterAiReference: false,
+    aiSearchOrAnswerExperienceDetected: false,
+    aiHiringAutomationSignalDetected: false,
     securityTxtPresent: false,
+    vulnerabilityDisclosurePagePresent: false,
+    trustCenterPresent: false,
+    incidentStatusPagePresent: false,
     responsibleDisclosurePresent: false,
     bugBountyProgramPresent: false,
     hstsEnabled: true,
@@ -790,9 +825,9 @@ test("deriveFormSignals classifies PII-heavy forms", () => {
           hasPasswordField: true,
           textSample: "Create account",
           inputs: [
-            { type: "email", name: "email", autocomplete: "email", labelText: "Email" },
-            { type: "password", name: "password", autocomplete: "new-password", labelText: "Password" },
-            { type: "text", name: "dob", autocomplete: "bday", labelText: "Date of birth" }
+            { type: "email", name: "email", autocomplete: "email", ariaLabel: null, id: null, labelText: "Email", placeholder: null },
+            { type: "password", name: "password", autocomplete: "new-password", ariaLabel: null, id: null, labelText: "Password", placeholder: null },
+            { type: "text", name: "dob", autocomplete: "bday", ariaLabel: null, id: null, labelText: "Date of birth", placeholder: null }
           ]
         }
       ]
@@ -802,7 +837,75 @@ test("deriveFormSignals classifies PII-heavy forms", () => {
   assert.equal(formSignals.accountSignupPresent, true);
   assert.equal(formSignals.emailInputPresent, true);
   assert.equal(formSignals.dateOfBirthInputPresent, true);
+  assert.equal(formSignals.formCollectsBirthdate, true);
   assert.equal(formSignals.ageVerificationMechanismType, "date_of_birth");
+});
+
+test("inferConsentDarkPatternFlags captures consent dark-pattern heuristics", () => {
+  const flags = inferConsentDarkPatternFlags({
+    visibleBanner: true,
+    bodyText: "limited time offer ends in 00:45",
+    bodyOverflowHidden: true,
+    bannerHeightRatio: 0.8,
+    isFixedBanner: true,
+    layoutType: "modal",
+    acceptButtons: [{ text: "accept all", prominenceScore: 12000 }],
+    rejectButtons: [{ text: "reject", prominenceScore: 2000 }],
+    preferencesButtons: [],
+    dismissButtons: [{ text: "close", prominenceScore: 1000 }]
+  });
+
+  assert.equal(flags.darkPatternAcceptButtonProminence, true);
+  assert.equal(flags.darkPatternForcedConsentWall, true);
+  assert.equal(flags.darkPatternDismissWithoutReject, false);
+  assert.equal(flags.darkPatternCountdownTimerPresent, true);
+  assert.equal(flags.darkPatternFakeScarcityLanguage, true);
+});
+
+test("deriveFormSignals detects sensitive-data collection categories", () => {
+  const formSignals = deriveFormSignals([
+    makePage({
+      pageType: "checkout",
+      textContent: "Provide your bank account, routing number, passport number, and current location coordinates.",
+      forms: [
+        {
+          action: "/apply",
+          hasPasswordField: false,
+          textSample: "Insurance intake form",
+          inputs: [
+            { type: "text", name: "ssn", autocomplete: null, ariaLabel: null, id: "ssn", labelText: "SSN", placeholder: null },
+            { type: "text", name: "passport_number", autocomplete: null, ariaLabel: null, id: null, labelText: "Passport Number", placeholder: null },
+            { type: "text", name: "medical_history", autocomplete: null, ariaLabel: null, id: null, labelText: "Medical history", placeholder: null },
+            { type: "text", name: "bank_account", autocomplete: null, ariaLabel: null, id: null, labelText: "Bank account", placeholder: null },
+            { type: "text", name: "latitude", autocomplete: null, ariaLabel: null, id: null, labelText: "Latitude", placeholder: null }
+          ]
+        }
+      ]
+    })
+  ]);
+
+  assert.equal(formSignals.formCollectsSsn, true);
+  assert.equal(formSignals.formCollectsGovernmentId, true);
+  assert.equal(formSignals.formCollectsHealthInformation, true);
+  assert.equal(formSignals.formCollectsFinancialInformation, true);
+  assert.equal(formSignals.formCollectsGeolocation, true);
+  assert.equal(formSignals.highSensitivityDataCollectionDetected, true);
+});
+
+test("deriveExpandedCommercialSignals detects subscription and refund language", () => {
+  const commercialSignals = deriveExpandedCommercialSignals([
+    makePage({
+      pageType: "subscription_terms",
+      title: "Membership terms",
+      textContent: "Your subscription renews automatically after the free trial. See our cancellation policy and refund policy."
+    })
+  ]);
+
+  assert.equal(commercialSignals.subscriptionTermsPresent, true);
+  assert.equal(commercialSignals.autoRenewDisclosurePresent, true);
+  assert.equal(commercialSignals.subscriptionCancellationPolicyPresent, true);
+  assert.equal(commercialSignals.freeTrialDetected, true);
+  assert.equal(commercialSignals.refundPolicyPresent, true);
 });
 
 test("detectTrackerVendorsFromStaticPage maps real vendor names", () => {
@@ -828,6 +931,115 @@ test("detectTrackerVendorsFromStaticPage maps real vendor names", () => {
     trackers.map((tracker) => tracker.vendorName).sort(),
     ["Google Analytics", "Google Tag Manager"]
   );
+});
+
+test("deriveAdvertisingClassification maps ad and replay vendors", () => {
+  const signals = deriveAdvertisingClassification([
+    {
+      scanId: "scan-1",
+      vendorName: "Google Ads",
+      vendorCategory: "advertising",
+      detectionSource: "request",
+      confidence: 0.9,
+      firstPartyOrThirdParty: "third_party",
+      beforeConsent: true,
+      scriptHost: "doubleclick.net",
+      matchedSignatureId: "google_ads"
+    },
+    {
+      scanId: "scan-1",
+      vendorName: "FullStory",
+      vendorCategory: "session_replay",
+      detectionSource: "script_signature",
+      confidence: 0.95,
+      firstPartyOrThirdParty: "third_party",
+      beforeConsent: null,
+      scriptHost: "fullstory.com",
+      matchedSignatureId: "fullstory"
+    }
+  ]);
+
+  assert.equal(signals.adNetworkGoogleAds, true);
+  assert.equal(signals.adNetworkMetaAds, false);
+  assert.equal(signals.retargetingPixelDetected, true);
+  assert.equal(signals.sessionReplayToolDetected, true);
+});
+
+test("deriveAiInfrastructureSignals uses explicit vendor hits and AI phrasing", () => {
+  const signals = deriveAiInfrastructureSignals({
+    chatSupportVendor: "Intercom",
+    pages: [makePage({ textContent: "Ask AI to summarize your account. Chat with AI for help." })]
+  });
+
+  assert.equal(signals.aiChatbotPresent, true);
+  assert.equal(signals.aiChatbotVendor, "Intercom");
+  assert.equal(signals.aiAssistantWidgetDetected, true);
+  assert.equal(signals.aiSearchOrAnswerExperienceDetected, false);
+});
+
+test("deriveAiInfrastructureSignals detects disclosure and policy/help references", () => {
+  const signals = deriveAiInfrastructureSignals({
+    chatSupportVendor: null,
+    pages: [
+      makePage({ textContent: "Powered by AI. Responses may be generated by AI." }),
+      makePage({
+        pageType: "privacy_policy",
+        title: "Privacy Policy",
+        textContent: "We use artificial intelligence and machine learning features, including automated processing."
+      }),
+      makePage({
+        pageType: "support",
+        title: "Help Center",
+        textContent: "How to use our AI assistant in the help center."
+      })
+    ]
+  });
+
+  assert.equal(signals.aiDisclosureTextPresent, true);
+  assert.equal(signals.aiTermsOrPolicyAiReference, true);
+  assert.equal(signals.aiHelpCenterAiReference, true);
+});
+
+test("deriveAiInfrastructureSignals detects explicit AI search and hiring automation", () => {
+  const signals = deriveAiInfrastructureSignals({
+    chatSupportVendor: null,
+    pages: [
+      makePage({
+        textContent:
+          "Ask a question to get instant AI answers. Careers notice: we use automated screening and candidate ranking during hiring."
+      })
+    ]
+  });
+
+  assert.equal(signals.aiSearchOrAnswerExperienceDetected, true);
+  assert.equal(signals.aiHiringAutomationSignalDetected, true);
+});
+
+test("deriveAiInfrastructureSignals avoids flagging generic search and help copy", () => {
+  const signals = deriveAiInfrastructureSignals({
+    chatSupportVendor: null,
+    pages: [makePage({ textContent: "Search our help center to find answers fast." })]
+  });
+
+  assert.equal(signals.aiChatbotPresent, false);
+  assert.equal(signals.aiAssistantWidgetDetected, false);
+  assert.equal(signals.aiSearchOrAnswerExperienceDetected, false);
+});
+
+test("deriveGovernanceSignals detects disclosure, trust, and status links", () => {
+  const governanceSignals = deriveGovernanceSignals([
+    makePage({
+      links: [
+        { href: "https://example.com/security", text: "Security" },
+        { href: "https://trust.example.com", text: "Trust Center" },
+        { href: "https://status.example.com", text: "Status" }
+      ]
+    })
+  ]);
+
+  assert.equal(governanceSignals.vulnerabilityDisclosurePagePresent, true);
+  assert.equal(governanceSignals.trustCenterPresent, true);
+  assert.equal(governanceSignals.incidentStatusPagePresent, true);
 });
 
 test("hash helpers are stable for presence and consent signatures", () => {

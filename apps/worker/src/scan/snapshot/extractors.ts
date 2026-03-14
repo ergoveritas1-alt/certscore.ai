@@ -471,7 +471,10 @@ function extractInputs(formHtml: string): ExtractedInput[] {
       type: fieldType,
       name: attributes.name ?? null,
       autocomplete: attributes.autocomplete ?? null,
-      labelText: extractInputLabel(formHtml, attributes)
+      ariaLabel: attributes["aria-label"] ?? null,
+      id: attributes.id ?? null,
+      labelText: extractInputLabel(formHtml, attributes),
+      placeholder: attributes.placeholder ?? null
     });
   }
 
@@ -821,6 +824,212 @@ function hasText(content: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(content));
 }
 
+function normalizeMatchingText(...parts: Array<string | null | undefined>) {
+  return parts
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function matchesKeywordSet(haystack: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(haystack));
+}
+
+function deriveGovernanceLinkSignals(pages: StaticPageResult[]) {
+  const normalizedLinks = pages.flatMap((page) =>
+    page.links.map((link) => {
+      const href = link.href.toLowerCase();
+      const text = link.text.toLowerCase();
+      return { href, text, combined: `${href} ${text}` };
+    })
+  );
+
+  // Governance hits are driven by public link discovery, not deep browsing.
+  return {
+    vulnerabilityDisclosurePagePresent: normalizedLinks.some(({ combined }) =>
+      /(vulnerability|responsible|security)\s*-?\s*(disclosure|report|researcher|contact)|\/security(?:\/|$)|\/responsible-disclosure|\/vulnerability-disclosure|\bsecurity\b/.test(
+        combined
+      )
+    ),
+    trustCenterPresent: normalizedLinks.some(({ combined }) => /\btrust center\b|\/trust(?:-center)?(?:\/|$)|security trust/.test(combined)),
+    incidentStatusPagePresent: normalizedLinks.some(({ href, combined, text }) =>
+      /^https?:\/\/status\./.test(href) || /statuspage\.io|system status|service status|\bstatus\b/.test(combined) || text === "status"
+    )
+  };
+}
+
+type SensitiveFormSignals = {
+  formCollectsBirthdate: boolean;
+  formCollectsFinancialInformation: boolean;
+  formCollectsGeolocation: boolean;
+  formCollectsGovernmentId: boolean;
+  formCollectsHealthInformation: boolean;
+  formCollectsSsn: boolean;
+};
+
+function deriveSensitiveCollectionSignals(forms: ExtractedForm[], pageText: string): SensitiveFormSignals {
+  const formHaystack = forms
+    .map((form) =>
+      normalizeMatchingText(
+        form.textSample,
+        ...form.inputs.flatMap((input) => [
+          input.type,
+          input.name,
+          input.labelText,
+          input.autocomplete,
+          input.placeholder,
+          input.ariaLabel,
+          input.id
+        ])
+      )
+    )
+    .join("\n");
+  const combinedText = normalizeMatchingText(pageText, formHaystack);
+
+  return {
+    formCollectsSsn: matchesKeywordSet(combinedText, [/\bssn\b/i, /social security/i, /taxpayer identification/i]),
+    formCollectsGovernmentId: matchesKeywordSet(combinedText, [/\bpassport\b/i, /driver'?s?\s*licen[sc]e/i, /national id/i, /government id/i]),
+    formCollectsHealthInformation: matchesKeywordSet(combinedText, [/\bmedical\b/i, /\bhealth\b/i, /\bpatient\b/i, /diagnosis/i, /insurance member/i, /prescription/i]),
+    formCollectsFinancialInformation: matchesKeywordSet(combinedText, [/\bbank account\b/i, /\brouting\b/i, /\biban\b/i, /\bincome\b/i, /\bsalary\b/i, /\bcard number\b/i, /\bpayment card\b/i]),
+    formCollectsBirthdate: matchesKeywordSet(combinedText, [/\bdate of birth\b/i, /\bdob\b/i, /\bbirthdate\b/i, /\bbirthday\b/i]),
+    // Geolocation intentionally excludes plain address collection to stay conservative.
+    formCollectsGeolocation: matchesKeywordSet(combinedText, [/\bgeolocation\b/i, /\bgps\b/i, /\bcurrent location\b/i, /\blatitude\b/i, /\blongitude\b/i, /\bcoordinates\b/i])
+  };
+}
+
+function deriveCommercialSignals(pages: StaticPageResult[]) {
+  const combinedText = normalizeMatchingText(...pages.map((page) => `${page.title ?? ""} ${page.textContent}`));
+
+  return {
+    subscriptionTermsPresent: /subscription|membership|recurring billing|billing terms/.test(combinedText),
+    autoRenewDisclosurePresent: /auto.?renew|automatically renew|renews automatically|recurring charge|renews unless cancelled/.test(combinedText),
+    subscriptionCancellationPolicyPresent: /cancellation policy|cancel anytime|how to cancel|cancel your subscription/.test(combinedText),
+    freeTrialDetected: /free trial|trial period|try for free/.test(combinedText),
+    refundPolicyPresent: /refund policy|money-back|money back guarantee|return policy|refunds/.test(combinedText)
+  };
+}
+
+function deriveAiSignals(input: { chatSupportVendor: string | null; pages: StaticPageResult[] }) {
+  const allPagesContent = normalizeMatchingText(...input.pages.map((page) => `${page.title ?? ""} ${page.textContent} ${page.html}`));
+  const allScripts = input.pages.flatMap((page) => page.scripts);
+  const vendorSignals = CHAT_VENDOR_SIGNATURES.filter((signature) => matchSignature(allPagesContent, allScripts, signature))
+    .sort((left, right) => right.confidence - left.confidence);
+  const primaryVendor = vendorSignals[0]?.name ?? input.chatSupportVendor ?? null;
+  const visibleAiWidgetLanguage = [
+    /\bask ai\b/,
+    /\bai assistant\b/,
+    /\bchat with ai\b/,
+    /\bai help\b/,
+    /\bvirtual assistant\b/,
+    /\bour ai assistant\b/,
+    /\bautomated assistant\b/
+  ];
+  const chatbotMarkers = [
+    /\blive chat\b/,
+    /\bchat with us\b/,
+    /\bmessage us\b/,
+    /\bhelp widget\b/,
+    /data-testid=["'][^"']*(assistant|chatbot|launcher)[^"']*["']/,
+    /aria-label=["'][^"']*(chat|assistant|support)[^"']*["']/
+  ];
+  const disclosurePatterns = [
+    /\bpowered by ai\b/,
+    /\bai-generated\b/,
+    /\bresponses may be generated by ai\b/,
+    /\bour ai assistant\b/,
+    /\bgenerative ai\b/,
+    /\bautomated assistant\b/
+  ];
+  const policyPatterns = [
+    /\bartificial intelligence\b/,
+    /(^|[^a-z])ai([^a-z]|$)/,
+    /\bmachine learning\b/,
+    /\bgenerative ai\b/,
+    /\bautomated decision(?:-making)?\b/,
+    /\bautomated processing\b/
+  ];
+  const helpPatterns = [
+    /\bhow to use (?:our )?ai assistant\b/,
+    /\bai support article\b/,
+    /\bhelp center\b.{0,40}\bai\b/,
+    /\bchatbot\b.{0,40}\bhelp\b/,
+    /\bassistant\b.{0,40}\bhelp\b/
+  ];
+  const searchPatterns = [
+    /\bask a question\b.{0,40}\b(ai|assistant|answers?)\b/,
+    /\bget instant answers\b/,
+    /\bai answers\b/,
+    /\banswer assistant\b/,
+    /\bsearch with ai\b/,
+    /\bask anything\b/
+  ];
+  const hiringPatterns = [
+    /\bautomated screening\b/,
+    /\bai screening\b/,
+    /\bautomated decision(?:-making)?\b.{0,40}\b(candidate|applicant|hiring)\b/,
+    /\bcandidate ranking\b/,
+    /\bmachine learning\b.{0,40}\b(hiring|recruit|applicant)\b/,
+    /\bautomated applicant review\b/
+  ];
+
+  const policyPages = input.pages.filter((page) =>
+    page.pageType === "privacy_policy" ||
+    page.pageType === "terms_of_service" ||
+    page.pageType === "subscription_terms" ||
+    /acceptable use|responsible ai|usage policy|privacy/i.test(`${page.title ?? ""} ${page.pageUrl}`)
+  );
+  const helpPages = input.pages.filter((page) =>
+    page.pageType === "support" ||
+    /help|support|docs|knowledge base|faq/i.test(`${page.title ?? ""} ${page.pageUrl}`)
+  );
+  const aiAssistantWidgetDetected =
+    matchesKeywordSet(allPagesContent, visibleAiWidgetLanguage) &&
+    (Boolean(primaryVendor) || matchesKeywordSet(allPagesContent, chatbotMarkers));
+  const aiDisclosureTextPresent = matchesKeywordSet(allPagesContent, disclosurePatterns);
+  const aiTermsOrPolicyAiReference = policyPages.length > 0
+    ? matchesKeywordSet(normalizeMatchingText(...policyPages.map((page) => `${page.title ?? ""} ${page.textContent}`)), policyPatterns)
+    : null;
+  const aiHelpCenterAiReference = helpPages.length > 0
+    ? matchesKeywordSet(normalizeMatchingText(...helpPages.map((page) => `${page.title ?? ""} ${page.textContent}`)), [...policyPatterns, ...helpPatterns])
+    : null;
+  const aiSearchOrAnswerExperienceDetected = matchesKeywordSet(allPagesContent, searchPatterns)
+    ? matchesKeywordSet(allPagesContent, [/\bai\b/, /\bassistant\b/, /\banswers?\b/])
+    : false;
+  const aiHiringAutomationSignalDetected = matchesKeywordSet(allPagesContent, hiringPatterns)
+    ? matchesKeywordSet(allPagesContent, [/\bcareer|careers|job|jobs|candidate|applicant|recruit/i])
+    : false;
+  const aiChatbotPresent =
+    primaryVendor !== null ||
+    (matchesKeywordSet(allPagesContent, chatbotMarkers) && (aiAssistantWidgetDetected || aiDisclosureTextPresent));
+
+  // If multiple vendors are present, select the highest-confidence signature hit as the primary visible provider.
+  return {
+    aiAssistantWidgetDetected,
+    aiChatbotVendor: primaryVendor,
+    aiChatbotPresent,
+    aiDisclosureTextPresent,
+    aiTermsOrPolicyAiReference,
+    aiHelpCenterAiReference,
+    aiSearchOrAnswerExperienceDetected,
+    aiHiringAutomationSignalDetected
+  };
+}
+
+function deriveAdvertisingSignals(trackers: ScanTrackerVendor[]) {
+  const trackerIds = new Set(trackers.map((tracker) => tracker.matchedSignatureId));
+  const retargetingIds = ["google_ads", "meta_pixel", "linkedin_insight", "tiktok_pixel", "pinterest_tag", "reddit_pixel"];
+
+  // Advertising and replay classifications are vendor-signature driven so they remain deterministic.
+  return {
+    adNetworkGoogleAds: trackerIds.has("google_ads"),
+    adNetworkMetaAds: trackerIds.has("meta_pixel"),
+    retargetingPixelDetected: retargetingIds.some((id) => trackerIds.has(id)),
+    sessionReplayToolDetected: trackers.some((tracker) => tracker.vendorCategory === "session_replay")
+  };
+}
+
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -925,7 +1134,9 @@ export function derivePolicySignals(policyPages: StaticPageResult[]) {
 }
 
 function inputMatches(input: ExtractedInput, fieldKey: string) {
-  const haystack = [input.type, input.name, input.labelText, input.autocomplete].filter(Boolean).join(" ");
+  const haystack = [input.type, input.name, input.labelText, input.autocomplete, input.placeholder, input.ariaLabel, input.id]
+    .filter(Boolean)
+    .join(" ");
   const config = FIELD_LABEL_PATTERNS.find((entry) => entry.key === fieldKey);
   return config?.patterns.some((pattern) => pattern.test(haystack)) ?? false;
 }
@@ -934,6 +1145,7 @@ export function deriveFormSignals(pages: StaticPageResult[]) {
   const forms = pages.flatMap((page) => page.forms);
   const allInputs = forms.flatMap((form) => form.inputs);
   const pageText = pages.map((page) => page.textContent).join("\n");
+  const sensitiveCollectionSignals = deriveSensitiveCollectionSignals(forms, pageText);
 
   const ageVerificationMechanismType: AgeVerificationMechanismType = allInputs.some((input) => inputMatches(input, "date_of_birth"))
     ? "date_of_birth"
@@ -959,13 +1171,18 @@ export function deriveFormSignals(pages: StaticPageResult[]) {
     addressInputPresent: allInputs.some((input) => inputMatches(input, "address")),
     paymentCardInputPresent: allInputs.some((input) => inputMatches(input, "payment_card")),
     dateOfBirthInputPresent: allInputs.some((input) => inputMatches(input, "date_of_birth")),
+    ...sensitiveCollectionSignals,
     ageGatePresent: /age gate|must be 13|must be 16|confirm your age/i.test(pageText),
     ageVerificationMechanismType,
     parentalConsentReferencePresent: /parental consent|parent or guardian/i.test(pageText),
     sensitiveDataFormHintsPresent: /health|medical|biometric|social security|ssn/i.test(pageText),
     highSensitivityDataCollectionDetected:
       /health|medical|biometric|social security|ssn/i.test(pageText) ||
-      allInputs.some((input) => /\b(ssn|medical|insurance)\b/i.test([input.name, input.labelText].filter(Boolean).join(" "))),
+      sensitiveCollectionSignals.formCollectsSsn ||
+      sensitiveCollectionSignals.formCollectsGovernmentId ||
+      sensitiveCollectionSignals.formCollectsHealthInformation ||
+      sensitiveCollectionSignals.formCollectsFinancialInformation ||
+      allInputs.some((input) => /\b(ssn|medical|insurance)\b/i.test([input.name, input.labelText, input.placeholder].filter(Boolean).join(" "))),
     privacyContactChannelType: forms.some((form) => /privacy|data subject|data request/i.test(form.textSample))
       ? "form"
       : /privacy portal|request portal/i.test(pageText)
@@ -1024,6 +1241,22 @@ export function deriveJurisdictionAndIndustry(pages: StaticPageResult[], domain:
     multilingualSite: pages.some((page) => /hreflang|lang="/i.test(page.html)),
     mobileAppLinksDetected: pages.some((page) => /apps\.apple\.com|play\.google\.com/i.test(page.html))
   };
+}
+
+export function deriveGovernanceSignals(pages: StaticPageResult[]) {
+  return deriveGovernanceLinkSignals(pages);
+}
+
+export function deriveExpandedCommercialSignals(pages: StaticPageResult[]) {
+  return deriveCommercialSignals(pages);
+}
+
+export function deriveAdvertisingClassification(trackers: ScanTrackerVendor[]) {
+  return deriveAdvertisingSignals(trackers);
+}
+
+export function deriveAiInfrastructureSignals(input: { chatSupportVendor: string | null; pages: StaticPageResult[] }) {
+  return deriveAiSignals(input);
 }
 
 export function buildPageMetadata(scanId: string, page: StaticPageResult): ScanPage {

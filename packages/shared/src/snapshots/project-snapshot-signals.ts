@@ -1,8 +1,25 @@
+import { getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../taxonomy/signal-taxonomy";
 import type { ScanSnapshot, ScanTrackerVendor, SnapshotSignalItem } from "../types/snapshots";
 
 export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: ScanTrackerVendor[]): SnapshotSignalItem[] {
   const vendors = [...new Set(trackerVendors.map((vendor) => vendor.vendorName))].sort();
   const activeSignals: SnapshotSignalItem[] = [];
+
+  const toTaxonomySignal = (input: Omit<SnapshotSignalItem, "primaryCategory" | "primaryCategoryLabel" | "subcategory" | "regulatoryTags">) => {
+    const taxonomy = mapSignalKeyToTaxonomy({
+      category: input.category,
+      key: input.key,
+      label: input.label
+    });
+
+    return {
+      ...input,
+      primaryCategory: taxonomy.primaryCategory,
+      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+      subcategory: taxonomy.subcategory ?? null,
+      regulatoryTags: taxonomy.regulatoryTags ?? []
+    } satisfies SnapshotSignalItem;
+  };
 
   const pushBoolean = (
     category: SnapshotSignalItem["category"],
@@ -11,7 +28,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     value: boolean
   ) => {
     if (value) {
-      activeSignals.push({ category, key, label, value });
+      activeSignals.push(toTaxonomySignal({ category, key, label, value }));
     }
   };
 
@@ -22,7 +39,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     value: number
   ) => {
     if (value > 0) {
-      activeSignals.push({ category, key, label, value });
+      activeSignals.push(toTaxonomySignal({ category, key, label, value }));
     }
   };
 
@@ -35,6 +52,28 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushBoolean("privacy", "privacy.data_deletion_request_present", "Deletion request flow present", snapshot.dataDeletionRequestPresent === true);
   pushBoolean("privacy", "privacy.do_not_sell_link_present", "Do-not-sell link present", snapshot.doNotSellLinkPresent);
   pushBoolean("privacy", "privacy.preconsent_tracking_detected", "Pre-consent tracking detected", snapshot.preconsentTrackingDetected);
+  pushBoolean(
+    "privacy",
+    "privacy.dark_pattern_reject_button_missing",
+    "Reject button missing on consent surface",
+    snapshot.darkPatternRejectButtonMissing
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.dark_pattern_accept_button_prominence",
+    "Accept button more prominent than reject",
+    snapshot.darkPatternAcceptButtonProminence
+  );
+  pushBoolean("privacy", "privacy.dark_pattern_forced_consent_wall", "Forced consent wall detected", snapshot.darkPatternForcedConsentWall);
+  pushBoolean("privacy", "privacy.dark_pattern_accept_only_banner", "Accept-only banner detected", snapshot.darkPatternAcceptOnlyBanner);
+  pushBoolean(
+    "privacy",
+    "privacy.dark_pattern_dismiss_without_reject",
+    "Dismiss-without-reject pattern detected",
+    snapshot.darkPatternDismissWithoutReject
+  );
+  pushBoolean("privacy", "privacy.dark_pattern_countdown_timer_present", "Countdown timer language detected", snapshot.darkPatternCountdownTimerPresent);
+  pushBoolean("privacy", "privacy.dark_pattern_fake_scarcity_language", "Scarcity language detected", snapshot.darkPatternFakeScarcityLanguage);
   pushBoolean(
     "privacy",
     "privacy.consent_withdrawal_mechanism_present",
@@ -53,12 +92,12 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushNumber("privacy", "privacy.third_party_cookie_count", "Third-party cookies", snapshot.thirdPartyCookieCount ?? 0);
 
   if (vendors.length > 0) {
-    activeSignals.push({
+    activeSignals.push(toTaxonomySignal({
       category: "privacy",
       key: "privacy.tracker_vendors",
       label: "Tracker vendors",
       value: vendors
-    });
+    }));
   }
 
   pushBoolean(
@@ -131,6 +170,75 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "High-sensitivity data collection detected",
     snapshot.highSensitivityDataCollectionDetected === true
   );
+  pushBoolean("commerce", "commerce.form_collects_ssn", "SSN collection detected", snapshot.formCollectsSsn);
+  pushBoolean(
+    "commerce",
+    "commerce.form_collects_government_id",
+    "Government ID collection detected",
+    snapshot.formCollectsGovernmentId
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.form_collects_health_information",
+    "Health information collection detected",
+    snapshot.formCollectsHealthInformation
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.form_collects_financial_information",
+    "Financial information collection detected",
+    snapshot.formCollectsFinancialInformation
+  );
+  pushBoolean("commerce", "commerce.form_collects_birthdate", "Birthdate collection detected", snapshot.formCollectsBirthdate);
+  pushBoolean("commerce", "commerce.form_collects_geolocation", "Geolocation collection detected", snapshot.formCollectsGeolocation);
+  pushBoolean("commerce", "commerce.auto_renew_disclosure_present", "Auto-renew disclosure detected", snapshot.autoRenewDisclosurePresent);
+  pushBoolean(
+    "commerce",
+    "commerce.subscription_cancellation_policy_present",
+    "Subscription cancellation policy detected",
+    snapshot.subscriptionCancellationPolicyPresent
+  );
+  pushBoolean("commerce", "commerce.ad_network_google_ads", "Google Ads detected", snapshot.adNetworkGoogleAds);
+  pushBoolean("commerce", "commerce.ad_network_meta_ads", "Meta Ads detected", snapshot.adNetworkMetaAds);
+  pushBoolean("commerce", "commerce.retargeting_pixel_detected", "Retargeting pixel detected", snapshot.retargetingPixelDetected);
+  pushBoolean("commerce", "commerce.session_replay_tool_detected", "Session replay tool detected", snapshot.sessionReplayToolDetected);
+  pushBoolean("commerce", "commerce.ai_chatbot_present", "AI chatbot detected", snapshot.aiChatbotPresent === true);
+  pushBoolean(
+    "commerce",
+    "commerce.ai_assistant_widget_detected",
+    "AI assistant widget detected",
+    snapshot.aiAssistantWidgetDetected === true
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.ai_disclosure_text_present",
+    "AI disclosure text detected",
+    snapshot.aiDisclosureTextPresent === true
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.ai_terms_or_policy_ai_reference",
+    "AI policy or terms reference detected",
+    snapshot.aiTermsOrPolicyAiReference === true
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.ai_help_center_ai_reference",
+    "AI help-center reference detected",
+    snapshot.aiHelpCenterAiReference === true
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.ai_search_or_answer_experience_detected",
+    "AI search or answer experience detected",
+    snapshot.aiSearchOrAnswerExperienceDetected === true
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.ai_hiring_automation_signal_detected",
+    "AI hiring automation disclosure detected",
+    snapshot.aiHiringAutomationSignalDetected === true
+  );
   pushNumber(
     "commerce",
     "commerce.form_data_sensitivity_score",
@@ -143,6 +251,14 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "security.txt detected",
     snapshot.securityTxtPresent
   );
+  pushBoolean(
+    "security",
+    "security.vulnerability_disclosure_page_present",
+    "Vulnerability disclosure page detected",
+    snapshot.vulnerabilityDisclosurePagePresent
+  );
+  pushBoolean("security", "security.trust_center_present", "Trust center detected", snapshot.trustCenterPresent);
+  pushBoolean("security", "security.incident_status_page_present", "Incident status page detected", snapshot.incidentStatusPagePresent);
   pushBoolean("security", "security.hsts_enabled", "HSTS enabled", snapshot.hstsEnabled);
   pushBoolean("security", "security.https_enforced", "HTTPS enforced", snapshot.httpsEnforced);
   pushBoolean("security", "security.mixed_content_detected", "Mixed content detected", snapshot.mixedContentDetected);
