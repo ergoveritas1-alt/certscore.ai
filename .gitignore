@@ -7,11 +7,15 @@ dist
 .DS_Store
 coverage
 *.log
+*.tsbuildinfo
 .env
 .env.local
 .env.*.local
 .env.*
 !.env.example
+.codex/
+.vscode/
+tmp/
 apps/web/.next
 apps/worker/dist
 packages/*/dist
