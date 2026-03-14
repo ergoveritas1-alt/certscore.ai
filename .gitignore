@@ -16,6 +16,7 @@ coverage
 .codex/
 .vscode/
 tmp/
+tools/generate-recovery-link.mts
 apps/web/.next
 apps/worker/dist
 packages/*/dist
