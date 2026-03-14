@@ -1,17 +1,19 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../lib/scans/signal-taxonomy";
 
 export type DomainSignalOverview = {
   domainId: string;
   hostname: string;
   latestCompletedAt: string | null;
   totalSignals: number | null;
-  signals: Array<{
-    category: string;
-    key: string;
-    label: string;
-    value: boolean | number | string | string[];
+      signals: Array<{
+        category: string;
+        categoryLabel: string;
+        key: string;
+        label: string;
+        value: boolean | number | string | string[];
   }>;
 };
 
@@ -110,12 +112,21 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
               return typeof value === "boolean" ? value : typeof value === "number" ? value > 0 : Array.isArray(value) ? value.length > 0 : value.length > 0;
             })
             .slice(0, 8)
-            .map((signal) => ({
-              category: signal.category,
-              key: signal.signal_key,
-              label: signal.signal_label,
-              value: signal.signal_value_json
-            }))
+            .map((signal) => {
+              const taxonomy = mapSignalKeyToTaxonomy({
+                category: signal.category,
+                key: signal.signal_key,
+                label: signal.signal_label
+              });
+
+              return {
+                category: taxonomy.primaryCategory,
+                categoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+                key: signal.signal_key,
+                label: signal.signal_label,
+                value: signal.signal_value_json
+              };
+            })
         : []
     };
   });

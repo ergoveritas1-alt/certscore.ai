@@ -13,3 +13,4 @@ export * from "./utils/scheduling";
 export * from "./snapshots/project-snapshot-signals";
 export * from "./scoring/agency-mapping";
 export * from "./scoring/regulatory-risk";
+export * from "./taxonomy/signal-taxonomy";

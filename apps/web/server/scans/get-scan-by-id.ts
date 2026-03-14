@@ -4,6 +4,7 @@ import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping,
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
+import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 
 export type ScanDetailRecord = {
   id: string;
@@ -30,8 +31,12 @@ export type ScanEventRecord = {
 
 export type ScanSignalRecord = {
   category: string;
+  primaryCategory: PrimaryScanCategoryId;
+  primaryCategoryDescription: string;
+  primaryCategoryLabel: string;
   key: string;
   label: string;
+  subcategory: string | null;
   value: boolean | number | string | string[];
   valueType: string;
 };
@@ -320,14 +325,25 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       ? buildAgencyMappings(buildAgencyMappingSource(regulatorySnapshot as Record<string, unknown>), regulatoryRisk)
       : ([] satisfies AgencyMapping[]),
     signals: ((signals ?? []) as SignalRow[]).map(
-      (signal) =>
-        ({
+      (signal) => {
+        const taxonomy = mapSignalKeyToTaxonomy({
           category: signal.category,
           key: signal.signal_key,
+          label: signal.signal_label
+        });
+
+        return {
+          category: signal.category,
+          primaryCategory: taxonomy.primaryCategory,
+          primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+          primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+          key: signal.signal_key,
           label: signal.signal_label,
+          subcategory: taxonomy.subcategory ?? null,
           value: signal.signal_value_json,
           valueType: signal.value_type
-        }) satisfies ScanSignalRecord
+        } satisfies ScanSignalRecord;
+      }
     ),
     events: ((events ?? []) as ScanEventRow[]).map(
       (event) =>

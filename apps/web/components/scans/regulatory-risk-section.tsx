@@ -15,22 +15,22 @@ function scoreTone(level: RegulatoryRiskAssessment["riskLevel"]) {
 
 function getSubscoreHelpText(label: string) {
   if (label === "Privacy") {
-    return "A weighted privacy-risk subscore for privacy-rights, notice, and data-handling concerns. Higher means more privacy-related risk indicators surfaced in the scan.";
+    return "A 0 to 100 privacy-risk subscore for privacy-rights, notice, and data-handling concerns. Lower is better; higher means more privacy-related risk indicators surfaced in the scan.";
   }
 
   if (label === "Consent") {
-    return "A weighted consent-risk subscore for consent controls, cookie handling, and pre-consent tracking behavior. Higher means more consent-related gaps surfaced in the scan.";
+    return "A 0 to 100 consent-risk subscore for consent controls, cookie handling, and pre-consent tracking behavior. Lower is better; higher means more consent-related gaps surfaced in the scan.";
   }
 
   if (label === "Consumer Protection") {
-    return "A weighted consumer-protection risk subscore for disclosures, marketing practices, refund or cancellation clarity, and policy-to-behavior consistency. Higher means more consumer-protection concerns surfaced in the scan.";
+    return "A 0 to 100 consumer-protection risk subscore for disclosures, marketing practices, refund or cancellation clarity, and policy-to-behavior consistency. Lower is better; higher means more consumer-protection concerns surfaced in the scan.";
   }
 
   if (label === "Accessibility") {
-    return "A weighted accessibility-risk subscore for automated accessibility issues and related public-facing accessibility signals. Higher means more accessibility-related barriers surfaced in the scan.";
+    return "A 0 to 100 accessibility-risk subscore for automated accessibility issues and related public-facing accessibility signals. Lower is better; higher means more accessibility-related barriers surfaced in the scan.";
   }
 
-  return "A weighted data-exposure risk subscore for tracker footprint and related third-party data-flow indicators. Higher means more data-exposure concerns surfaced in the scan.";
+  return "A 0 to 100 data-exposure risk subscore for tracker footprint and related third-party data-flow indicators. Lower is better; higher means more data-exposure concerns surfaced in the scan.";
 }
 
 export function RegulatoryRiskSection(input: {
@@ -51,22 +51,22 @@ export function RegulatoryRiskSection(input: {
     <CollapsibleSectionCard
       title={
         <span className="flex items-center gap-1.5">
-          <span>Regulatory</span>
-          <InfoTip text="Weighted regulator-relevant scoring and agency mapping derived from the scan’s privacy, consent, disclosure, accessibility, and data-exposure signals." />
+          <span>Regulatory overlay</span>
+          <InfoTip text="This overlay maps observed website signals to regulator-relevant risk lenses and agency context. It is a secondary interpretation layer, not the primary taxonomy for the raw scan data." />
         </span>
       }
       defaultOpen
       contentClassName="space-y-6"
     >
         <p className="max-w-3xl text-sm text-slate-600">
-          These signals represent automated analysis of website behavior and disclosures. They do not constitute legal advice.
+          These scores reflect automated analysis of website behavior and disclosures through regulatory and oversight lenses. Lower is better in this section. They do not constitute legal advice.
         </p>
 
         <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <div className="flex items-center gap-1.5">
               <p className="text-sm text-slate-500">Overall risk</p>
-              <InfoTip text="A weighted regulatory risk score from 0 to 100. Higher means more regulator-relevant risk indicators surfaced overall." />
+              <InfoTip text="A weighted regulatory risk score from 0 to 100. Lower is better; higher means more regulator-relevant risk indicators surfaced overall." />
             </div>
             <div className="mt-2 flex items-end justify-between gap-4">
               <p className="text-4xl font-semibold text-slate-950">{input.risk.overallScore}</p>

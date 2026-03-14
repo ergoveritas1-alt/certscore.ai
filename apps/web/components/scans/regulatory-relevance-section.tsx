@@ -27,6 +27,14 @@ type RegulatoryRelevanceSectionProps = {
   embedded?: boolean;
 };
 
+function ChevronIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] }) {
   if (mappings.length === 0) {
     return (
@@ -48,10 +56,10 @@ function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] })
 
       <div className="space-y-4">
         {mappings.map((mapping) => (
-          <details key={mapping.agencyKey} className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <details key={mapping.agencyKey} className="group/agency rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <summary className="flex cursor-pointer list-none items-start gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-              <span className="mt-0.5 inline-block text-sm font-semibold text-slate-400 transition-transform duration-150 group-open:rotate-90">
-                {">"}
+              <span className="mt-0.5 inline-flex text-slate-400 transition-transform duration-150 group-open/agency:rotate-90">
+                <ChevronIcon />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-slate-900">{mapping.agencyLabel}</p>
@@ -70,7 +78,7 @@ function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] })
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="font-medium text-slate-800">Contributing subscores</p>
-                    <InfoTip text="These are risk-oriented subscores. Higher values mean more regulator-relevant concerns surfaced in that category." />
+                    <InfoTip text="These are 0 to 100 risk-oriented subscores. Lower is better; higher values mean more regulator-relevant concerns surfaced in that category." />
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {mapping.contributingSubscores.map((subscore) => (
@@ -116,8 +124,8 @@ export function RegulatoryRelevanceSection({ mappings, embedded = false }: Regul
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium text-slate-900">Agency regulatory summary</p>
-          <InfoTip text="Groups observed flags by the regulators or oversight domains they most closely relate to. This is signal context, not a legal determination." />
+          <p className="text-sm font-medium text-slate-900">Regulatory crosswalk</p>
+          <InfoTip text="Groups observed flags by the regulators or oversight domains they most closely relate to. This is a contextual overlay, not the primary category system and not a legal determination." />
         </div>
         <RegulatoryRelevanceContent mappings={mappings} />
       </div>
@@ -128,8 +136,8 @@ export function RegulatoryRelevanceSection({ mappings, embedded = false }: Regul
     <CollapsibleSectionCard
       title={
         <span className="flex items-center gap-1.5">
-          <span>Agency regulatory summary</span>
-          <InfoTip text="Groups observed flags by the regulators or oversight domains they most closely relate to. This is signal context, not a legal determination." />
+          <span>Regulatory crosswalk</span>
+          <InfoTip text="Groups observed flags by the regulators or oversight domains they most closely relate to. This is a contextual overlay, not the primary category system and not a legal determination." />
         </span>
       }
       defaultOpen
