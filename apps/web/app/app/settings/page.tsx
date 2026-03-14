@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { BrandingSettingsForm } from "../../../components/settings/branding-settings-form";
 import { getDashboardContext } from "../../../server/auth";
 import { getSystemHealth } from "../../../server/health/get-system-health";
+import { getPasswordAuthVerificationStatus } from "../../../server/password-auth/user";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
@@ -16,8 +18,12 @@ function formatDateTime(value: string | null) {
 }
 
 export default async function SettingsPage() {
-  const { organization } = await getDashboardContext();
-  const [settings, systemHealth] = await Promise.all([getOrganizationSettings(organization.id), getSystemHealth()]);
+  const { organization, user } = await getDashboardContext();
+  const [settings, systemHealth, verificationStatus] = await Promise.all([
+    getOrganizationSettings(organization.id),
+    getSystemHealth(),
+    user.authProvider === "password" ? getPasswordAuthVerificationStatus(user.id) : Promise.resolve(null)
+  ]);
 
   return (
     <div className="space-y-8">
@@ -40,6 +46,17 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+
+      {verificationStatus ? (
+        <Card className="border border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Email verification</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EmailVerificationCard email={verificationStatus.email} verifiedAt={verificationStatus.verifiedAt} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border border-slate-200 bg-white">
         <CardHeader>

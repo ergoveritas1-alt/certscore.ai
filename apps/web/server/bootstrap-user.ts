@@ -1,5 +1,6 @@
 import { createAdminClient, type User } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import type { AuthenticatedAppUser } from "./password-auth/types";
 
 export type UserRecord = {
   id: string;
@@ -29,11 +30,13 @@ export type OrganizationMemberRecord = {
 };
 
 export type BootstrapResult = {
-  user: User;
+  user: AuthenticatedAppUser;
   profile: UserRecord;
   organization: OrganizationRecord;
   membership: OrganizationMemberRecord;
 };
+
+export type BootstrapSessionUser = AuthenticatedAppUser;
 
 function slugify(input: string) {
   return input
@@ -43,11 +46,11 @@ function slugify(input: string) {
     .slice(0, 40);
 }
 
-function getWorkspaceName(user: User) {
+function getWorkspaceName(user: BootstrapSessionUser) {
   return `${user.email ?? "New user"} workspace`;
 }
 
-function getWorkspaceSlug(user: User) {
+function getWorkspaceSlug(user: BootstrapSessionUser) {
   const emailPart = user.email?.split("@")[0] ?? "workspace";
   return `${slugify(emailPart)}-${user.id.slice(0, 8)}`;
 }
@@ -77,6 +80,17 @@ function getAuthProvider(user: User) {
   return "magic_link";
 }
 
+function mergeAuthProviders(existingProvider: string | null | undefined, nextProvider: string) {
+  const providers = new Set(
+    [existingProvider, nextProvider]
+      .flatMap((value) => (typeof value === "string" ? value.split(",") : []))
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+
+  return Array.from(providers).sort().join(",");
+}
+
 function mapOrganizationRow(row: {
   id: string;
   name: string;
@@ -97,12 +111,20 @@ function mapOrganizationRow(row: {
   };
 }
 
-export async function bootstrapUserFromSession(user: User): Promise<BootstrapResult> {
-  if (!user.email) {
-    throw new Error("Authenticated user is missing an email address.");
+export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
+  const supabase = createAdminClient();
+  const { data: existingProfileRow, error: existingProfileError } = await supabase
+    .from("users")
+    .select("id, email, full_name, auth_provider, created_at, updated_at")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    throw new Error(`Failed to load existing user profile: ${existingProfileError.message}`);
   }
 
-  const supabase = createAdminClient();
+  const existingProfile = (existingProfileRow as UserRecord | null) ?? null;
+  const mergedProvider = mergeAuthProviders(existingProfile?.auth_provider, user.authProvider);
 
   const { data: profileRow, error: upsertProfileError } = await supabase
     .from("users")
@@ -110,8 +132,8 @@ export async function bootstrapUserFromSession(user: User): Promise<BootstrapRes
       {
         id: user.id,
         email: user.email,
-        full_name: getFullName(user),
-        auth_provider: getAuthProvider(user)
+        full_name: user.fullName ?? existingProfile?.full_name ?? null,
+        auth_provider: mergedProvider
       },
       {
         onConflict: "id"
@@ -150,9 +172,7 @@ export async function bootstrapUserFromSession(user: User): Promise<BootstrapRes
       .single();
 
     if (createOrganizationError || !createdOrganizationRow) {
-      throw new Error(
-        `Failed to create organization: ${createOrganizationError?.message ?? "Unknown error"}`
-      );
+      throw new Error(`Failed to create organization: ${createOrganizationError?.message ?? "Unknown error"}`);
     }
 
     organization = mapOrganizationRow(
@@ -171,8 +191,8 @@ export async function bootstrapUserFromSession(user: User): Promise<BootstrapRes
       .from("organization_members")
       .insert({
         organization_id: organization.id,
-        user_id: user.id,
-        role: "admin"
+        role: "admin",
+        user_id: user.id
       })
       .select("id, organization_id, user_id, role, created_at")
       .single();
@@ -216,4 +236,17 @@ export async function bootstrapUserFromSession(user: User): Promise<BootstrapRes
       ),
     membership
   };
+}
+
+export async function bootstrapUserFromSession(user: User): Promise<BootstrapResult> {
+  if (!user.email) {
+    throw new Error("Authenticated user is missing an email address.");
+  }
+
+  return bootstrapAppUserSession({
+    authProvider: getAuthProvider(user),
+    email: user.email,
+    fullName: getFullName(user),
+    id: user.id
+  });
 }
