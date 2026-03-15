@@ -1,4 +1,4 @@
-import type { PolicyChunkExtraction, PolicyRulePreprocessResult, MergedPolicyExtraction } from "./types";
+import type { MergedPolicyExtraction, PolicyChunkExtraction, PolicyPageType, PolicyRulePreprocessResult } from "./types";
 
 function clampSummary(text: string | null, maxLength = 280) {
   if (!text) {
@@ -98,8 +98,29 @@ export function mergePolicyChunkExtractions(input: {
   chunkExtractions: PolicyChunkExtraction[];
   highThreshold: number;
   moderateThreshold: number;
+  pageType?: PolicyPageType;
   ruleResult: PolicyRulePreprocessResult;
 }): MergedPolicyExtraction {
+  const pageType = input.pageType ?? "privacy_policy";
+  const isTermsPage = pageType === "terms_of_service";
+  const effectiveDate = mergeEnumField({
+    chunks: input.chunkExtractions.map((chunk) => chunk.effectiveDate),
+    defaultValue: input.ruleResult.updateDate,
+    highThreshold: input.highThreshold,
+    moderateThreshold: input.moderateThreshold
+  });
+  const governingLaw = mergeEnumField({
+    chunks: input.chunkExtractions.map((chunk) => chunk.governingLaw),
+    defaultValue: input.ruleResult.governingLaw,
+    highThreshold: input.highThreshold,
+    moderateThreshold: input.moderateThreshold
+  });
+  const arbitrationPresent = mergeEnumField({
+    chunks: input.chunkExtractions.map((chunk) => chunk.arbitrationPresent),
+    defaultValue: input.ruleResult.arbitrationPresent,
+    highThreshold: input.highThreshold,
+    moderateThreshold: input.moderateThreshold
+  });
   const mentionsGdpr = mergeEnumField({
     chunks: input.chunkExtractions.map((chunk) => chunk.mentionsGdpr),
     defaultValue: null,
@@ -193,11 +214,14 @@ export function mergePolicyChunkExtractions(input: {
       ? clampSummary(`${summaryCandidates[0].summary.text} — ${summaryCandidates[1].summary.text}`)
       : clampSummary(summaryCandidates[0].summary.text)
     : clampSummary(input.ruleResult.summary);
-  const ambiguitySeed =
-    (input.ruleResult.actionableFlags.includes("vague_policy_language") ? 18 : 0) +
-    (dsarMechanism.confidence < input.moderateThreshold ? 16 : 0) +
-    (doNotSell.confidence < input.moderateThreshold ? 16 : 0) +
-    (retentionStatements.length === 0 && input.ruleResult.mentions.some((mention) => mention.topic === "data_retention") ? 18 : 0);
+  const ambiguitySeed = isTermsPage
+    ? (governingLaw.confidence < input.moderateThreshold ? 18 : 0) +
+      (arbitrationPresent.confidence < input.moderateThreshold ? 18 : 0) +
+      (effectiveDate.confidence < input.moderateThreshold ? 12 : 0)
+    : (input.ruleResult.actionableFlags.includes("vague_policy_language") ? 18 : 0) +
+      (dsarMechanism.confidence < input.moderateThreshold ? 16 : 0) +
+      (doNotSell.confidence < input.moderateThreshold ? 16 : 0) +
+      (retentionStatements.length === 0 && input.ruleResult.mentions.some((mention) => mention.topic === "data_retention") ? 18 : 0);
   const policyMentions = [
     ...input.ruleResult.mentions,
     ...(mentionsGdpr.value ? [{ topic: "gdpr", confidence: mentionsGdpr.confidence }] : []),
@@ -211,34 +235,49 @@ export function mergePolicyChunkExtractions(input: {
 
     return [...accumulator, item];
   }, []);
-  const policySemanticConfidence = median([
-    input.ruleResult.semanticConfidence,
-    mentionsGdpr.confidence,
-    dsarMechanism.confidence,
-    dataAccessRequestPresent.confidence,
-    dataDeletionRequestPresent.confidence,
-    privacyContactChannelType.confidence,
-    retentionDisclosure.confidence,
-    doNotSell.confidence,
-    policyClaimNoSale.confidence,
-    policyClaimNoTracking.confidence,
-    policyClaimPrivacyProtective.confidence,
-    childrenReference.confidence,
-    ...dataCategories.map((item) => item.confidence),
-    ...retentionStatements.map((item) => item.confidence),
-    ...transferMechanisms.map((item) => item.confidence)
-  ].filter((value) => value > 0));
+  const policySemanticConfidence = median(
+    (
+      isTermsPage
+        ? [
+            input.ruleResult.semanticConfidence,
+            effectiveDate.confidence,
+            governingLaw.confidence,
+            arbitrationPresent.confidence
+          ]
+        : [
+            input.ruleResult.semanticConfidence,
+            mentionsGdpr.confidence,
+            dsarMechanism.confidence,
+            dataAccessRequestPresent.confidence,
+            dataDeletionRequestPresent.confidence,
+            privacyContactChannelType.confidence,
+            retentionDisclosure.confidence,
+            doNotSell.confidence,
+            policyClaimNoSale.confidence,
+            policyClaimNoTracking.confidence,
+            policyClaimPrivacyProtective.confidence,
+            childrenReference.confidence,
+            ...dataCategories.map((item) => item.confidence),
+            ...retentionStatements.map((item) => item.confidence),
+            ...transferMechanisms.map((item) => item.confidence)
+          ]
+    ).filter((value) => value > 0)
+  );
 
   return {
     policyActionableFlags: Array.from(
       new Set([
-        ...input.ruleResult.actionableFlags,
+        ...input.ruleResult.actionableFlags.filter((flag) => flag !== "arbitration_clause_present"),
+        ...(arbitrationPresent.value ? ["arbitration_clause_present"] : []),
         ...(policySemanticConfidence < input.moderateThreshold ? ["low_confidence"] : []),
-        ...(dsarMechanism.value !== "present" ? ["missing_dsar"] : [])
+        ...(!isTermsPage && dsarMechanism.value !== "present" ? ["missing_dsar"] : [])
       ])
     ),
     policyAmbiguityScore: Math.max(0, Math.min(100, Math.round(ambiguitySeed))),
+    policyArbitrationPresent: arbitrationPresent.value,
     policyChildrenReference: childrenReference.value ?? input.ruleResult.childrenReference,
+    policyEffectiveDate: effectiveDate.value ?? input.ruleResult.updateDate,
+    policyGoverningLaw: governingLaw.value ?? input.ruleResult.governingLaw,
     privacyContactChannelType: privacyContactChannelType.value ?? input.ruleResult.privacyContactChannelType,
     policyRetentionDisclosure: retentionDisclosure.value ?? input.ruleResult.retentionDisclosure,
     policyClaimNoSale: policyClaimNoSale.value ?? input.ruleResult.policyClaimNoSale,

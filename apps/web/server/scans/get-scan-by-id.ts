@@ -53,12 +53,76 @@ export type RelatedPreviewSnapshotRecord = {
   [key: string]: unknown;
 } | null;
 
+export type PreviousSnapshotRecord = {
+  [key: string]: unknown;
+} | null;
+
 export type PolicyEnrichmentRecord = {
   [key: string]: unknown;
 };
 
 export type PolicyReviewQueueRecord = {
   [key: string]: unknown;
+};
+
+export type ScanTrackerVendorRecord = {
+  beforeConsent: boolean | null;
+  collectionEndpointType: string;
+  confidence: number;
+  detectionSource: string;
+  firstPartyOrThirdParty: string;
+  matchedSignatureId: string | null;
+  scriptHost: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
+export type TrackerChangeRecord = {
+  changeType: "added" | "removed";
+  confidence: number;
+  previousScanId: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
+export type PreconsentChangeRecord = {
+  changeType: "new" | "resolved";
+  confidence: number;
+  previousScanId: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
+export type PreconsentViolationRecord = {
+  collectionEndpointType: string;
+  confidence: number;
+  detectionSource: string;
+  evidenceUrls: string[];
+  firstPartyOrThirdParty: string;
+  matchedSignatureId: string | null;
+  scriptHost: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
+export type AccessibilityRuleCountRecord = {
+  instanceCount: number;
+  ruleCode: string;
+  ruleGroup: string;
+  severity: string;
+};
+
+export type AccessibilityRuleExampleRecord = {
+  description: string;
+  help: string;
+  helpUrl: string;
+  impact: string | null;
+  nodeCount: number;
+  pageUrl: string;
+  representativeSelectors: string[];
+  ruleCode: string;
+  ruleGroup: string;
+  severity: string;
 };
 
 type ScanRow = {
@@ -98,6 +162,38 @@ type SignalRow = {
   signal_label: string;
   signal_value_json: boolean | number | string | string[];
   value_type: string;
+};
+
+type PreconsentViolationRow = {
+  collection_endpoint_type: string;
+  confidence: number | null;
+  detection_source: string;
+  evidence_urls: string[] | null;
+  first_party_or_third_party: string;
+  matched_signature_id: string | null;
+  script_host: string | null;
+  vendor_category: string;
+  vendor_name: string;
+};
+
+type AccessibilityRuleCountRow = {
+  instance_count: number;
+  rule_code: string;
+  rule_group: string;
+  severity: string;
+};
+
+type AccessibilityRuleExampleRow = {
+  description: string;
+  help: string;
+  help_url: string;
+  impact: string | null;
+  node_count: number;
+  page_url: string;
+  representative_selectors: string[] | null;
+  rule_code: string;
+  rule_group: string;
+  severity: string;
 };
 
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
@@ -204,6 +300,10 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     { data: snapshot },
     { data: signals },
     { data: runtimeArtifacts },
+    { data: preconsentViolations },
+    { data: trackerVendors },
+    { data: accessibilityRuleCounts },
+    { data: accessibilityRuleExamples },
     { data: policyEnrichment },
     { data: policyReviewQueue },
     { data: previousScan }
@@ -230,6 +330,34 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       .eq("scan_id", input.scanId)
       .maybeSingle(),
     supabase
+      .from("scan_preconsent_violations")
+      .select(
+        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, script_host, matched_signature_id, evidence_urls"
+      )
+      .eq("scan_id", input.scanId)
+      .order("vendor_category", { ascending: true })
+      .order("vendor_name", { ascending: true }),
+    supabase
+      .from("scan_tracker_vendors")
+      .select(
+        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
+      )
+      .eq("scan_id", input.scanId)
+      .order("vendor_category", { ascending: true })
+      .order("vendor_name", { ascending: true }),
+    supabase
+      .from("scan_accessibility_rule_counts")
+      .select("rule_code, rule_group, severity, instance_count")
+      .eq("scan_id", input.scanId)
+      .order("instance_count", { ascending: false })
+      .order("rule_code", { ascending: true }),
+    supabase
+      .from("scan_accessibility_rule_examples")
+      .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
+      .eq("scan_id", input.scanId)
+      .order("node_count", { ascending: false })
+      .order("rule_code", { ascending: true }),
+    supabase
       .from("policy_enrichment")
       .select("*")
       .eq("scan_id", input.scanId)
@@ -251,6 +379,16 @@ export async function getScanById(input: { organizationId: string; scanId: strin
         await supabase.from("scan_snapshots").select("*").eq("scan_id", previousScan.id).maybeSingle()
       ).data
     : null;
+  const previousTrackerRows = previousScan?.id
+    ? (
+        await supabase
+          .from("scan_tracker_vendors")
+          .select(
+            "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
+          )
+          .eq("scan_id", previousScan.id)
+      ).data ?? []
+    : [];
   const relatedPreviewSnapshot =
     snapshot && typeof (snapshot as Record<string, unknown>).domain === "string"
       ? (
@@ -295,6 +433,136 @@ export async function getScanById(input: { organizationId: string; scanId: strin
           : null
       })
     : null;
+  const normalizedTrackerVendors = ((trackerVendors ?? []) as Array<Record<string, unknown>>).map(
+    (tracker) =>
+      ({
+        vendorName: String(tracker.vendor_name),
+        vendorCategory: String(tracker.vendor_category),
+        detectionSource: String(tracker.detection_source),
+        confidence: Number(tracker.confidence ?? 0),
+        firstPartyOrThirdParty: String(tracker.first_party_or_third_party),
+        collectionEndpointType: String(tracker.collection_endpoint_type ?? "unknown"),
+        beforeConsent: typeof tracker.before_consent === "boolean" ? tracker.before_consent : null,
+        scriptHost: (tracker.script_host as string | null) ?? null,
+        matchedSignatureId: (tracker.matched_signature_id as string | null) ?? null
+      }) satisfies ScanTrackerVendorRecord
+  );
+  const normalizedPreconsentViolations = ((preconsentViolations ?? []) as PreconsentViolationRow[]).map(
+    (violation) =>
+      ({
+        collectionEndpointType: violation.collection_endpoint_type ?? "unknown",
+        confidence: Number(violation.confidence ?? 0),
+        detectionSource: violation.detection_source,
+        evidenceUrls: violation.evidence_urls ?? [],
+        firstPartyOrThirdParty: violation.first_party_or_third_party,
+        matchedSignatureId: violation.matched_signature_id ?? null,
+        scriptHost: violation.script_host ?? null,
+        vendorCategory: violation.vendor_category,
+        vendorName: violation.vendor_name
+      }) satisfies PreconsentViolationRecord
+  );
+  const normalizedAccessibilityRuleCounts = ((accessibilityRuleCounts ?? []) as AccessibilityRuleCountRow[]).map(
+    (rule) =>
+      ({
+        instanceCount: Number(rule.instance_count ?? 0),
+        ruleCode: rule.rule_code,
+        ruleGroup: rule.rule_group,
+        severity: rule.severity
+      }) satisfies AccessibilityRuleCountRecord
+  );
+  const normalizedAccessibilityRuleExamples = ((accessibilityRuleExamples ?? []) as AccessibilityRuleExampleRow[]).map(
+    (example) =>
+      ({
+        description: example.description,
+        help: example.help,
+        helpUrl: example.help_url,
+        impact: example.impact,
+        nodeCount: Number(example.node_count ?? 0),
+        pageUrl: example.page_url,
+        representativeSelectors: example.representative_selectors ?? [],
+        ruleCode: example.rule_code,
+        ruleGroup: example.rule_group,
+        severity: example.severity
+      }) satisfies AccessibilityRuleExampleRecord
+  );
+  const previousTrackerVendorNames = new Set(
+    (previousTrackerRows as Array<Record<string, unknown>>).map((tracker) => String(tracker.vendor_name))
+  );
+  const currentTrackerVendorNames = new Set(normalizedTrackerVendors.map((tracker) => tracker.vendorName));
+  const previousPreconsentVendorMap = new Map(
+    (previousTrackerRows as Array<Record<string, unknown>>)
+      .filter((tracker) => tracker.before_consent === true)
+      .map((tracker) => [
+        String(tracker.vendor_name),
+        {
+          confidence: Number(tracker.confidence ?? 0),
+          vendorCategory: String(tracker.vendor_category)
+        }
+      ])
+  );
+  const currentPreconsentVendorMap = new Map(
+    normalizedTrackerVendors
+      .filter((tracker) => tracker.beforeConsent === true)
+      .map((tracker) => [
+        tracker.vendorName,
+        {
+          confidence: tracker.confidence,
+          vendorCategory: tracker.vendorCategory
+        }
+      ])
+  );
+  const trackerChanges: TrackerChangeRecord[] = [
+    ...normalizedTrackerVendors
+      .filter((tracker) => !previousTrackerVendorNames.has(tracker.vendorName))
+      .map(
+        (tracker) =>
+          ({
+            changeType: "added",
+            confidence: tracker.confidence,
+            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            vendorCategory: tracker.vendorCategory,
+            vendorName: tracker.vendorName
+          }) satisfies TrackerChangeRecord
+      ),
+    ...(previousTrackerRows as Array<Record<string, unknown>>)
+      .filter((tracker) => !currentTrackerVendorNames.has(String(tracker.vendor_name)))
+      .map(
+        (tracker) =>
+          ({
+            changeType: "removed",
+            confidence: Number(tracker.confidence ?? 0),
+            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            vendorCategory: String(tracker.vendor_category),
+            vendorName: String(tracker.vendor_name)
+          }) satisfies TrackerChangeRecord
+      )
+  ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
+  const preconsentChanges: PreconsentChangeRecord[] = [
+    ...[...currentPreconsentVendorMap.entries()]
+      .filter(([vendorName]) => !previousPreconsentVendorMap.has(vendorName))
+      .map(
+        ([vendorName, tracker]) =>
+          ({
+            changeType: "new",
+            confidence: tracker.confidence,
+            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            vendorCategory: tracker.vendorCategory,
+            vendorName
+          }) satisfies PreconsentChangeRecord
+      ),
+    ...[...previousPreconsentVendorMap.entries()]
+      .filter(([vendorName]) => !currentPreconsentVendorMap.has(vendorName))
+      .map(
+        ([vendorName, tracker]) =>
+          ({
+            changeType: "resolved",
+            confidence: tracker.confidence,
+            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            vendorCategory: tracker.vendorCategory,
+            vendorName
+          }) satisfies PreconsentChangeRecord
+      )
+  ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
 
   return {
     scan: {
@@ -315,6 +583,13 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     runtimeArtifacts: runtimeArtifacts
       ? (stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>) satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
+    preconsentViolations: normalizedPreconsentViolations,
+    accessibilityRuleCounts: normalizedAccessibilityRuleCounts,
+    accessibilityRuleExamples: normalizedAccessibilityRuleExamples,
+    preconsentChanges,
+    trackerChanges,
+    trackerVendors: normalizedTrackerVendors,
+    previousSnapshot: previousSnapshot ? (stripSnapshotRecord(previousSnapshot as Record<string, unknown>) satisfies Exclude<PreviousSnapshotRecord, null>) : null,
     relatedPreviewSnapshot: normalizedRelatedPreviewSnapshot
       ? (normalizedRelatedPreviewSnapshot satisfies Exclude<RelatedPreviewSnapshotRecord, null>)
       : null,

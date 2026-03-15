@@ -1,5 +1,5 @@
 import { extractSentenceSnippet, hashNormalizedPolicyText, normalizePolicyText } from "./normalize";
-import type { PolicyRulePreprocessResult, PolicyTopicKey, PolicyTransferMechanismItem } from "./types";
+import type { PolicyPageType, PolicyRulePreprocessResult, PolicyTopicKey, PolicyTransferMechanismItem } from "./types";
 
 const DATA_CATEGORY_PATTERNS = [
   { category: "email", pattern: /\bemail address(?:es)?\b/i },
@@ -66,9 +66,28 @@ function extractPolicyUpdateDate(value: string) {
   return toIsoDate(match?.[0] ?? null);
 }
 
-export function ruleBasedPolicyPreprocess(input: { html?: string; text: string }) {
+function extractGoverningLaw(text: string) {
+  const match =
+    text.match(/\bgoverned by (?:the )?laws of ([A-Za-z .-]{2,80})(?:,|\.)/i) ??
+    text.match(/\bthe laws of ([A-Za-z .-]{2,80}) shall govern\b/i) ??
+    text.match(/\bgoverning law[:\s]+([A-Za-z .-]{2,80})(?:,|\.)/i);
+
+  return match?.[1]?.replace(/\s+/g, " ").trim() ?? null;
+}
+
+function extractArbitrationPresent(text: string) {
+  if (!text) {
+    return null;
+  }
+
+  return /\barbitration\b|\bbinding arbitration\b|\bdispute resolution\b|\bclass action waiver\b/i.test(text);
+}
+
+export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: PolicyPageType; text: string }) {
   const normalizedText = normalizePolicyText(input.text);
   const lowerText = normalizedText.toLowerCase();
+  const pageType = input.pageType ?? "privacy_policy";
+  const isTermsPage = pageType === "terms_of_service";
   const evidenceSnippets: Record<string, string> = {};
   const actionableFlags: string[] = [];
 
@@ -196,14 +215,22 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; text: string }
 
   const privacyPolicyDateMatch = normalizedText.match(/(last updated|effective date)[:\s]+([a-z0-9,\-/ ]{4,80})/i)?.[2]?.trim() ?? null;
   const privacyPolicyDate = extractPolicyUpdateDate(privacyPolicyDateMatch ?? "");
-  if (dsarMechanism !== "present") {
+  const governingLaw = extractGoverningLaw(normalizedText);
+  const arbitrationPresent = extractArbitrationPresent(normalizedText);
+  addEvidence("effective_date", privacyPolicyDate ? getSnippetForPattern(normalizedText, /(last updated|effective date)[:\s]+([a-z0-9,\-/ ]{4,80})/i) : null);
+  addEvidence("governing_law", governingLaw ? getSnippetForPattern(normalizedText, /\bgoverned by (?:the )?laws of [A-Za-z .-]{2,80}(?:,|\.)|\bthe laws of [A-Za-z .-]{2,80} shall govern\b|\bgoverning law[:\s]+[A-Za-z .-]{2,80}(?:,|\.)/i) : null);
+  addEvidence("arbitration", arbitrationPresent ? getSnippetForPattern(normalizedText, /\barbitration\b|\bbinding arbitration\b|\bdispute resolution\b|\bclass action waiver\b/i) : null);
+  if (!isTermsPage && dsarMechanism !== "present") {
     actionableFlags.push("missing_dsar");
   }
-  if (policyMentions.some((mention) => mention.topic === "data_retention") && retentionStatements.length === 0) {
+  if (!isTermsPage && policyMentions.some((mention) => mention.topic === "data_retention") && retentionStatements.length === 0) {
     actionableFlags.push("vague_retention");
   }
-  if (/may |could |as necessary|from time to time|where appropriate/gi.test(lowerText)) {
+  if (!isTermsPage && /may |could |as necessary|from time to time|where appropriate/gi.test(lowerText)) {
     actionableFlags.push("vague_policy_language");
+  }
+  if (arbitrationPresent) {
+    actionableFlags.push("arbitration_clause_present");
   }
 
   const ambiguousSignals =
@@ -211,8 +238,26 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; text: string }
     (dsarMechanism === "partial" ? 2 : 0) +
     (retentionStatements.length === 0 && policyMentions.some((mention) => mention.topic === "data_retention") ? 2 : 0);
 
+  const semanticConfidence = isTermsPage
+    ? normalizedText.length === 0
+      ? 0
+      : Math.max(
+          0.45,
+          Math.min(
+            0.82,
+            0.52 +
+              (privacyPolicyDate ? 0.1 : 0) +
+              (governingLaw ? 0.12 : 0) +
+              (arbitrationPresent ? 0.12 : 0)
+          )
+        )
+    : normalizedText.length === 0
+      ? 0
+      : Math.max(0.35, Math.min(0.78, 0.5 + (policyMentions.length + retentionStatements.length) * 0.04));
+
   return {
     actionableFlags: Array.from(new Set(actionableFlags)),
+    arbitrationPresent,
     childrenReference,
     dataCategories: Array.from(new Set(dataCategories)),
     dataAccessRequestPresent,
@@ -220,6 +265,7 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; text: string }
     doNotSell,
     dsarMechanism,
     evidenceSnippets,
+    governingLaw,
     mentions: policyMentions,
     needLlm:
       normalizedText.length > 3500 ||
@@ -233,7 +279,7 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; text: string }
     privacyContactChannelType,
     retentionStatements,
     retentionDisclosure,
-    semanticConfidence: normalizedText.length === 0 ? 0 : Math.max(0.35, Math.min(0.78, 0.5 + (policyMentions.length + retentionStatements.length) * 0.04)),
+    semanticConfidence,
     summary: clampSummary(firstSentence(normalizedText)),
     transferMechanisms,
     updateDate: privacyPolicyDate

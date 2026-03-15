@@ -27,6 +27,7 @@ Full policy text is never persisted.
    - compute `needLlm`
 2. Optional chunked LLM extraction
    - defaults to the low-cost extraction configuration
+   - selects a small high-signal chunk subset for long policies
    - can be forced for live scans when higher semantic coverage is required
 3. Deterministic merge
    - high-confidence winner for enum fields
@@ -34,6 +35,7 @@ Full policy text is never persisted.
    - union + confidence filtering for lists
 4. Evidence persistence
    - short snippets only, keyed by hash
+   - page-level chunk diagnostics emitted to `scan_events` as `legal.policy_llm_chunk_diagnostic`
 5. Review queueing
    - low confidence
    - policy/behavior conflict candidates
@@ -45,6 +47,14 @@ Full policy text is never persisted.
   - enables the built-in mock client for local development and tests
 - `forceLlm`
   - worker-level switch to force chunk extraction even when heuristics are clear
+- `LLM_ENRICHMENT_MAX_ATTEMPTS`
+  - overrides per-chunk retry count for provider errors and timeouts
+- `LLM_ENRICHMENT_MAX_CHUNKS`
+  - caps selected LLM chunks per page type
+- `LLM_ENRICHMENT_FORCE_LAST_CHUNK`
+  - when set to `0`, disables mandatory tail-chunk selection for non-terms pages
+
+Long privacy policies now prefer high-signal interior chunks over the trailing boilerplate chunk once enough DSAR/retention/contact-style sections are present. That behavior is live by default and reduces timeout-driven partial coverage on sites like Atlassian without changing terms-page selection.
 Current thresholds in code:
 
 - high confidence: `0.80`
@@ -55,6 +65,7 @@ Current thresholds in code:
 - Reuse prior enrichment whenever `normalized_policy_hash` and model/prompt versions match.
 - Prefer rule-only fallback when semantic confidence is already high or no provider is configured.
 - Keep chunk size and overlap conservative; they are deterministic and easy to tune later.
+- Prefer selected high-signal chunks over sending every chunk of long policies.
 - Review `policy_actionable_flags` volume before enabling forced LLM broadly.
 
 ## Human review runbook

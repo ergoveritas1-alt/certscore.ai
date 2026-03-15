@@ -9,13 +9,15 @@ import type {
 } from "@website-signal-risk-scanner/shared";
 import {
   ACCESSIBILITY_WIDGET_SIGNATURES,
+  analyzeVendorRequestMatch,
   CHAT_VENDOR_SIGNATURES,
   CMS_SIGNATURES,
   CMP_VENDOR_SIGNATURES,
   FRONTEND_FRAMEWORK_SIGNATURES,
   HOSTING_SIGNATURES,
   PAYMENT_VENDOR_SIGNATURES,
-  TRACKER_VENDOR_SIGNATURES,
+  TRACKER_VENDOR_SIGNATURES
+  ,
   type VendorSignature
 } from "./signature-registry";
 import { normalizeTextForHash, stableHash } from "./hash";
@@ -25,9 +27,9 @@ import { isUrlAllowedByRobots, recordDomainBackoff, waitForDomainRequestSlot } f
 
 const POLICY_PATH_GUESSES: Record<PageType, string[]> = {
   homepage: ["/"],
-  privacy_policy: ["/privacy", "/privacy-policy", "/legal/privacy"],
-  terms_of_service: ["/terms", "/terms-of-service", "/terms-and-conditions", "/legal/terms"],
-  cookie_policy: ["/cookies", "/cookie-policy", "/legal/cookies"],
+  privacy_policy: ["/privacy", "/privacy-policy", "/legal/privacy", "/legal/privacy-policy"],
+  terms_of_service: ["/terms", "/terms-of-service", "/terms-and-conditions", "/legal/terms", "/legal/terms-of-service"],
+  cookie_policy: ["/cookies", "/cookie-policy", "/legal/cookies", "/legal/cookie-policy"],
   accessibility_statement: ["/accessibility", "/accessibility-statement"],
   refund_policy: ["/refund-policy", "/returns", "/refunds", "/return-policy"],
   shipping_policy: ["/shipping", "/shipping-policy"],
@@ -79,6 +81,21 @@ const CROSS_DOMAIN_POLICY_PAGE_TYPES = new Set<PageType>([
   "affiliate_disclosure",
   "advertising_disclosure"
 ]);
+
+const RENDER_FALLBACK_PAGE_TYPES = new Set<PageType>([
+  "privacy_policy",
+  "terms_of_service",
+  "cookie_policy",
+  "accessibility_statement",
+  "refund_policy",
+  "shipping_policy",
+  "subscription_terms",
+  "affiliate_disclosure",
+  "advertising_disclosure"
+]);
+
+const POLICY_RENDER_FALLBACK_MIN_TEXT_LENGTH = 800;
+const POLICY_RENDER_FALLBACK_MIN_WORD_COUNT = 120;
 
 function toAbsoluteUrl(candidate: string, baseUrl: string) {
   try {
@@ -379,6 +396,10 @@ function stripTags(html: string) {
     .trim();
 }
 
+function countWords(text: string) {
+  return text.match(/\b[\w'-]+\b/g)?.length ?? 0;
+}
+
 function extractTitle(html: string) {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return match?.[1]?.replace(/\s+/g, " ").trim() ?? null;
@@ -504,32 +525,78 @@ export async function fetchStaticPage(input: { pageType?: PageType; robotsPolicy
   const fetched = await fetchTextPage(input.url, 5, {
     robotsPolicy: input.robotsPolicy
   });
-  const finalUrl = fetched.finalUrl ?? input.url;
-  const language = extractLanguage(fetched.body);
-
-  return {
+  return buildStaticPageResult({
     blockedByPolicy: fetched.blockedByPolicy,
-    pageUrl: finalUrl,
-    pageType: input.pageType ?? classifyPageType(finalUrl),
-    fetchStatus: fetched.blockedByPolicy
-      ? "blocked"
-      : fetched.timedOut
-        ? "timeout"
-      : fetched.redirectCount > 0 && fetched.status && fetched.status >= 200 && fetched.status < 300
-        ? "redirected"
-        : toFetchStatus(fetched.status),
-    finalUrl,
+    finalUrl: fetched.finalUrl ?? input.url,
     headers: fetched.headers,
     html: fetched.body,
-    language,
-    links: extractLinks(fetched.body, finalUrl),
+    pageType: input.pageType,
+    pageUrl: input.url,
     redirectCount: fetched.redirectCount,
-    redirected: fetched.redirectCount > 0,
-    scripts: extractScripts(fetched.body, finalUrl),
     statusCode: fetched.status,
-    textContent: stripTags(fetched.body),
-    title: extractTitle(fetched.body),
-    forms: extractForms(fetched.body)
+    textContentOverride: null,
+    timedOut: fetched.timedOut
+  });
+}
+
+export function buildStaticPageResult(input: {
+  blockedByPolicy?: boolean;
+  finalUrl: string;
+  headers: Record<string, string>;
+  html: string;
+  pageType?: PageType;
+  pageUrl: string;
+  redirectCount?: number;
+  statusCode: number | null;
+  textContentOverride?: string | null;
+  timedOut?: boolean;
+}): StaticPageResult {
+  const finalUrl = input.finalUrl;
+  const textContent = input.textContentOverride?.trim() || stripTags(input.html);
+
+  return {
+    blockedByPolicy: input.blockedByPolicy,
+    pageUrl: finalUrl,
+    pageType: input.pageType ?? classifyPageType(finalUrl),
+    fetchStatus: input.blockedByPolicy
+      ? "blocked"
+      : input.timedOut
+        ? "timeout"
+        : (input.redirectCount ?? 0) > 0 && input.statusCode && input.statusCode >= 200 && input.statusCode < 300
+          ? "redirected"
+          : toFetchStatus(input.statusCode),
+    finalUrl,
+    headers: input.headers,
+    html: input.html,
+    language: extractLanguage(input.html),
+    links: extractLinks(input.html, finalUrl),
+    redirectCount: input.redirectCount,
+    redirected: (input.redirectCount ?? 0) > 0,
+    scripts: extractScripts(input.html, finalUrl),
+    statusCode: input.statusCode,
+    textContent,
+    title: extractTitle(input.html),
+    forms: extractForms(input.html)
+  };
+}
+
+export function assessPolicyPageContentQuality(page: Pick<StaticPageResult, "pageType" | "textContent" | "html">) {
+  const textLength = page.textContent.trim().length;
+  const wordCount = countWords(page.textContent);
+  const shellMarkerDetected =
+    /id=["'](?:root|app|__next|__nuxt)["']|data-reactroot|ng-version=|window\.__|<script[^>]+type=["']module["']/i.test(page.html) ||
+    /enable javascript|loading\.\.\.|please wait/i.test(page.textContent);
+  const eligibleForRenderedFallback = RENDER_FALLBACK_PAGE_TYPES.has(page.pageType);
+  const insufficientContent =
+    eligibleForRenderedFallback &&
+    (textLength < POLICY_RENDER_FALLBACK_MIN_TEXT_LENGTH || wordCount < POLICY_RENDER_FALLBACK_MIN_WORD_COUNT);
+
+  return {
+    eligibleForRenderedFallback,
+    insufficientContent,
+    shellMarkerDetected,
+    textLength,
+    wordCount
   };
 }
 
@@ -701,6 +768,69 @@ function vendorParty(host: string | null, pageHostname: string) {
   return host === pageHostname || host.endsWith(`.${pageHostname}`) ? "first_party" : "third_party";
 }
 
+function extractStaticTrackerSample(input: {
+  content: string;
+  pageHostname: string;
+  scripts: ExtractedScript[];
+  signature: VendorSignature;
+}) {
+  const matchedScript = input.scripts
+    .map((script) => ({ script, match: script.src ? analyzeVendorRequestMatch(script.src, input.signature, input.pageHostname) : null }))
+    .find((entry) => entry.match);
+
+  if (matchedScript?.script.src) {
+    return {
+      collectionEndpointType: matchedScript.match?.collectionEndpointType ?? "unknown",
+      sampleText: matchedScript.script.src.slice(0, 280),
+      sampleType: "script_src" as const,
+      scriptHost: matchedScript.match?.requestHost ?? matchedScript.script.host ?? null
+    };
+  }
+
+  const contentSample = input.scripts
+    .map((script) => script.contentSample)
+    .find((sample) => {
+      if (!sample) {
+        return false;
+      }
+
+      return (
+        input.signature.htmlPatterns?.some((pattern) => pattern.test(sample)) ||
+        input.signature.textPatterns?.some((pattern) => pattern.test(sample))
+      );
+    });
+
+  if (contentSample) {
+    return {
+      collectionEndpointType: "unknown" as const,
+      sampleText: contentSample.slice(0, 280),
+      sampleType: "script_content" as const,
+      scriptHost: null
+    };
+  }
+
+  const textPattern = input.signature.textPatterns?.find((pattern) => pattern.test(input.content));
+  const htmlPattern = input.signature.htmlPatterns?.find((pattern) => pattern.test(input.content));
+  const matchedPattern = textPattern ?? htmlPattern ?? null;
+
+  if (matchedPattern) {
+    const matchedText = input.content.match(matchedPattern)?.[0] ?? input.signature.name;
+    return {
+      collectionEndpointType: "unknown" as const,
+      sampleText: matchedText.slice(0, 280),
+      sampleType: "html_signature" as const,
+      scriptHost: null
+    };
+  }
+
+  return {
+    collectionEndpointType: "unknown" as const,
+    sampleText: input.signature.name,
+    sampleType: "vendor_name" as const,
+    scriptHost: null
+  };
+}
+
 export function detectTrackerVendorsFromStaticPage(input: {
   pageHostname: string;
   pageText: string;
@@ -715,7 +845,11 @@ export function detectTrackerVendorsFromStaticPage(input: {
       continue;
     }
 
+    const matchedScript = input.scripts
+      .map((script) => ({ script, match: script.src ? analyzeVendorRequestMatch(script.src, signature, input.pageHostname) : null }))
+      .find((entry) => entry.match);
     const scriptHost =
+      matchedScript?.match?.requestHost ??
       input.scripts.find(
         (script) =>
           Boolean(script.host) &&
@@ -723,7 +857,8 @@ export function detectTrackerVendorsFromStaticPage(input: {
             const host = script.host;
             return host ? host === pattern || host.endsWith(`.${pattern}`) : false;
           }) ?? false)
-      )?.host ?? null;
+      )?.host ??
+      null;
 
     detected.push({
       scanId: input.scanId,
@@ -732,6 +867,7 @@ export function detectTrackerVendorsFromStaticPage(input: {
       detectionSource: signature.detectionSource,
       confidence: signature.confidence,
       firstPartyOrThirdParty: vendorParty(scriptHost, input.pageHostname),
+      collectionEndpointType: matchedScript?.match?.collectionEndpointType ?? "unknown",
       // Static detections cannot reliably establish consent timing.
       beforeConsent: null,
       scriptHost,
@@ -740,6 +876,45 @@ export function detectTrackerVendorsFromStaticPage(input: {
   }
 
   return detected;
+}
+
+export function collectStaticTrackerDiagnostics(input: {
+  pageHostname: string;
+  pageText: string;
+  scripts: ExtractedScript[];
+}) {
+  const content = `${input.pageText}\n${input.scripts.map((script) => `${script.src ?? ""} ${script.contentSample ?? ""}`).join("\n")}`;
+
+  return TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
+    if (!matchSignature(content, input.scripts, signature)) {
+      return [];
+    }
+
+    const sample = extractStaticTrackerSample({
+      content,
+      pageHostname: input.pageHostname,
+      scripts: input.scripts,
+      signature
+    });
+
+    return [
+      {
+        collectionEndpointType: sample.collectionEndpointType,
+        detectionSource: "script_signature",
+        matchedSignatureId: signature.id,
+        sampleText: sample.sampleText,
+        sampleType: sample.sampleType,
+        sampleUrls: input.scripts
+          .map((script) => script.src)
+          .filter((src): src is string => Boolean(src))
+          .filter((src) => Boolean(analyzeVendorRequestMatch(src, signature, input.pageHostname)))
+          .slice(0, 3),
+        scriptHost: sample.scriptHost,
+        vendorCategory: signature.category,
+        vendorName: signature.name
+      }
+    ];
+  });
 }
 
 export function detectNamedVendor(content: string, scripts: ExtractedScript[], signatures: VendorSignature[]) {
@@ -1345,6 +1520,10 @@ export function policyPresenceHash(snapshot: Pick<
 
 export function consentSignatureHash(input: {
   acceptAllPresent: boolean;
+  consentAcceptButtonCount: number | null;
+  consentInteractionModel: string | null;
+  consentPreferencesButtonCount: number | null;
+  consentRejectButtonCount: number | null;
   cmpVendorName: string | null;
   cookieBannerPresent: boolean;
   cookiePolicyLinkedFromBanner: boolean;

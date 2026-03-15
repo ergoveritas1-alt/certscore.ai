@@ -23,7 +23,11 @@ export function QueueFullScanForm({ domainId, disabled = false, unavailableReaso
     <form action={action} className="space-y-3">
       <input name="domainId" type="hidden" value={domainId} />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
-      <Button disabled={isDisabled} type="submit">
+      <Button
+        className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+        disabled={isDisabled}
+        type="submit"
+      >
         {isPending ? "Queueing scan..." : disabled ? "Queue unavailable" : "Queue full scan"}
       </Button>
     </form>

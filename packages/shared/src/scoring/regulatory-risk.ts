@@ -165,7 +165,7 @@ function buildAccessibilityBucket(source: RegulatoryRiskSource): ScoredBucket {
   pushIf(numberOrZero(source.wcagMissingAltCount) >= 5, drivers, { key: "missing_alt", label: "Multiple missing alt issues", impact: 12 });
   pushIf(numberOrZero(source.wcagFormLabelErrorCount) >= 3, drivers, { key: "form_label_issues", label: "Form labeling issues", impact: 12 });
   pushIf(source.accessibilityClaimMismatchDetected === true, drivers, { key: "claim_mismatch", label: "Accessibility claim mismatch", impact: 18 });
-  pushIf(numberOrZero(source.accessibilityLitigationRiskScore) >= 60, drivers, { key: "litigation_proxy", label: "Elevated accessibility litigation proxy", impact: 18 });
+  pushIf(numberOrZero(source.accessibilityLitigationRiskScore) >= 60, drivers, { key: "litigation_proxy", label: "Elevated accessibility risk proxy", impact: 18 });
   pushIf(source.ecommerceSiteLikely === true, drivers, { key: "public_facing_commerce", label: "Public-facing commerce flow", impact: 8 });
 
   pushIf(source.accessibilityStatementPresent === true, mitigations, { key: "accessibility_statement", label: "Accessibility statement present", impact: 10 });

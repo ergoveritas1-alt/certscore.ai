@@ -150,6 +150,9 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
     regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra", "state_privacy"],
     fields: [
       "preconsent_tracking_detected",
+      "preconsent_violation_count",
+      "preconsent_tracker_vendors",
+      "preconsent_tracker_evidence_urls",
       "tracking_before_consent_detected",
       "first_party_cookie_set_before_consent",
       "third_party_cookie_set_before_consent",
@@ -483,6 +486,30 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "ai_automation_emerging_practices",
       subcategory: "Hiring / Automated Decision Signals"
     },
+    "privacy.consent_reject_persisted_tracker_vendors": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Consent Enforcement Evidence"
+    },
+    "privacy.consent_reject_new_tracker_vendors": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Consent Enforcement Evidence"
+    },
+    "privacy.consent_accept_new_tracker_vendors": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Consent Enforcement Evidence"
+    },
+    "privacy.preconsent_violation_count": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Pre-Consent Tracking"
+    },
+    "privacy.preconsent_tracker_vendors": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Pre-Consent Tracking"
+    },
+    "privacy.preconsent_tracker_evidence_urls": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Pre-Consent Tracking"
+    },
     "commerce.form_collects_ssn": {
       primaryCategory: "sensitive_data_identity_signals",
       subcategory: "Identity Inputs"
@@ -522,6 +549,26 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
     "commerce.free_trial_detected": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Subscription & Billing Transparency"
+    },
+    "context.access_blocked_by_robots": {
+      primaryCategory: "security_trust_governance",
+      subcategory: "Access & Crawl Coverage"
+    },
+    "context.access_http_forbidden": {
+      primaryCategory: "security_trust_governance",
+      subcategory: "Access & Crawl Coverage"
+    },
+    "context.access_bot_challenge_detected": {
+      primaryCategory: "security_trust_governance",
+      subcategory: "Access & Crawl Coverage"
+    },
+    "context.access_auth_wall_detected": {
+      primaryCategory: "security_trust_governance",
+      subcategory: "Access & Crawl Coverage"
+    },
+    "context.access_partial_scan": {
+      primaryCategory: "security_trust_governance",
+      subcategory: "Access & Crawl Coverage"
     },
     "privacy.dark_pattern_reject_button_missing": {
       primaryCategory: "privacy_consent_user_choice",

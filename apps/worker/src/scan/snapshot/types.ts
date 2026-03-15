@@ -3,6 +3,7 @@ import type {
   PolicyEnrichment,
   PolicyEvidence,
   PolicyReviewQueueItem,
+  ScanAccessibilityRuleExample,
   ScanAccessibilityRuleCount,
   ScanPage,
   ScanRuntimeArtifact,
@@ -60,8 +61,10 @@ export type StaticPageResult = {
 };
 
 export type BrowserPageResult = {
+  accessibilityRuleExamples: ScanAccessibilityRuleExample[];
   accessibilityRuleCounts: ScanAccessibilityRuleCount[];
   acceptAllPresent: boolean;
+  consentAcceptButtonCount: number | null;
   cookieBannerPresent: boolean;
   cookiePolicyLinkedFromBanner: boolean;
   darkPatternAcceptEmphasis: boolean;
@@ -73,6 +76,18 @@ export type BrowserPageResult = {
   darkPatternDismissWithoutReject: boolean;
   darkPatternCountdownTimerPresent: boolean;
   darkPatternFakeScarcityLanguage: boolean;
+  consentInteractionModel:
+    | "none"
+    | "accept_only"
+    | "accept_reject"
+    | "accept_preferences"
+    | "accept_reject_preferences"
+    | "preferences_only"
+    | "dismiss_only"
+    | "other"
+    | null;
+  consentPreferencesButtonCount: number | null;
+  consentRejectButtonCount: number | null;
   granularPreferencesPresent: boolean;
   mixedContentDetected: boolean;
   pageUrl: string;
@@ -85,6 +100,7 @@ export type BrowserPageResult = {
 };
 
 export type SnapshotBundle = {
+  accessibilityRuleExamples: ScanAccessibilityRuleExample[];
   accessibilityRuleCounts: ScanAccessibilityRuleCount[];
   compatibilitySignals: SnapshotSignalItem[];
   changeEvents?: ComplianceChangeEvent[];

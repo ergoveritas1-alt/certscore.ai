@@ -429,7 +429,7 @@ const AGENCY_DEFINITIONS: AgencyDefinition[] = [
       },
       {
         key: "accessibilityLitigationRiskScore",
-        label: "Elevated accessibility litigation risk",
+        label: "Elevated accessibility risk",
         points: 4,
         when: (s) => atLeast(s.accessibilityLitigationRiskScore, 45)
       },

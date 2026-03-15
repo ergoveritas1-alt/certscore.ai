@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getPlanDefinition } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { QueueFullScanForm } from "../../../../components/scans/queue-full-scan-form";
 import { getDashboardContext } from "../../../../server/auth";
@@ -93,7 +94,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
             <p>Plan profile: {planLimits.scanProfile}</p>
-            <p>Pages per scan: {domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan}</p>
+            <p>Coverage: {getPlanDefinition(planLimits.planCode).coverageLabel}</p>
             <p>Frequency target: {monitoringState?.effectiveFrequency ?? domainRecord.domain.scanFrequency ?? planLimits.scanFrequency}</p>
           </CardContent>
         </Card>
@@ -211,8 +212,18 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                       </td>
                       <td className="py-4 pr-4 text-slate-600">{formatDateTime(scan.createdAt)}</td>
                       <td className="py-4">
-                        <Button asChild size="sm" variant="secondary">
-                          <Link href={`/app/scans/${scan.id}`}>View scan</Link>
+                        <Button
+                          asChild
+                          className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+                          size="sm"
+                          variant="secondary"
+                        >
+                          <Link aria-label={`View scan for ${scan.scanType}`} href={`/app/scans/${scan.id}`}>
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 19V5" />
+                              <path d="m5 12 7-7 7 7" />
+                            </svg>
+                          </Link>
                         </Button>
                       </td>
                     </tr>

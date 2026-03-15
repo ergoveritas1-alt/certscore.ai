@@ -1,10 +1,23 @@
 import type { Page } from "playwright";
-import { projectSnapshotSignals, type ScanAccessibilityRuleCount, type ScanSnapshot, type ScanTrackerVendor } from "@website-signal-risk-scanner/shared";
+import { createAdminClient } from "@website-signal-risk-scanner/db";
+import {
+  getPrimaryCategoryLabel,
+  mapSignalKeyToTaxonomy,
+  projectSnapshotSignals,
+  SCAN_EVENT_TYPES,
+  type ScanAccessibilityRuleExample,
+  type ScanAccessibilityRuleCount,
+  type ScanSnapshot,
+  type ScanTrackerVendor,
+  type SnapshotSignalItem
+} from "@website-signal-risk-scanner/shared";
 import { createBrowser } from "../browser/create-browser";
 import { navigateWithPolicy } from "../browser/navigate-with-policy";
 import { mapAxeImpactToSeverity } from "../page-audit/map-axe-severity";
+import { normalizeAxeResults } from "../page-audit/normalize-axe-results";
 import { runAxe } from "../page-audit/run-axe";
 import { enrichPolicyPages } from "../policy-enrichment";
+import { derivePolicyLlmTriggerReasons } from "../policy-enrichment/semantic-triggers";
 import {
   createRobotsPolicy,
   getRobotsFetchStatus,
@@ -14,8 +27,11 @@ import {
   waitForDomainRequestSlot
 } from "../robots/policy";
 import {
+  assessPolicyPageContentQuality,
   buildAccessibilitySummary,
+  buildStaticPageResult,
   buildPageMetadata,
+  collectStaticTrackerDiagnostics,
   consentSignatureHash,
   deriveAdvertisingClassification,
   deriveAiInfrastructureSignals,
@@ -50,12 +66,15 @@ import {
   hasCoverageForTargetTypes,
   prioritizeUncoveredTargets
 } from "./scan-optimization";
+import { classifyConsentButtonRole } from "./consent-ui";
+import { runConsentInteractionAudit } from "./consent-interaction";
+import { getConsentProbeProfiles } from "./consent-profiles";
 import { buildScanPlan, type ScanPlan } from "./scan-planner";
 import {
   ACCESSIBILITY_WIDGET_SIGNATURES,
+  analyzeVendorRequestMatch,
   CMP_VENDOR_SIGNATURES,
-  TRACKER_VENDOR_SIGNATURES,
-  type VendorSignature
+  TRACKER_VENDOR_SIGNATURES
 } from "./signature-registry";
 import {
   deriveInfrastructureChangeSignals,
@@ -77,11 +96,50 @@ type BuildSnapshotBundleInput = {
   scanId: string;
 };
 
-type BrowserPassResult = {
+export type ConsentProbeResult = {
   acceptAllPresent: boolean;
+  consentAcceptButtonCount: number | null;
   consentBannerLayoutType: ScanSnapshot["consentBannerLayoutType"];
   consentBannerPosition: ScanSnapshot["consentBannerPosition"];
+  consentInteractionModel: ScanSnapshot["consentInteractionModel"];
+  consentMechanismType: ScanSnapshot["consentMechanismType"];
   consentPersistenceMechanismDetected: boolean | null;
+  consentPreferencesButtonCount: number | null;
+  consentRejectButtonCount: number | null;
+  consentScore: number;
+  cookieBannerPresent: boolean;
+  cookieCategoryCount: number | null;
+  cookiePolicyLinkedFromBanner: boolean;
+  cmpVendorConfidence: number | null;
+  cmpVendorName: string | null;
+  darkPatternAcceptButtonProminence: boolean;
+  darkPatternAcceptEmphasis: boolean;
+  darkPatternAcceptOnlyBanner: boolean;
+  darkPatternDismissWithoutReject: boolean;
+  darkPatternForcedConsentWall: boolean;
+  darkPatternRejectButtonMissing: boolean;
+  darkPatternRejectHidden: boolean;
+  defaultTrackingState: ScanSnapshot["defaultTrackingState"];
+  finalUrl: string | null;
+  granularPreferencesPresent: boolean;
+  preconsentTrackingDetected: boolean;
+  rejectAllPresent: boolean;
+  scanConfidence: ScanSnapshot["scanConfidence"];
+  attemptedProbeProfiles: string[];
+  trackerCountTotal: number;
+  winningProbeProfile: string | null;
+};
+
+type BrowserPassResult = {
+  ruleExamples: ScanAccessibilityRuleExample[];
+  acceptAllPresent: boolean;
+  consentAcceptButtonCount: number | null;
+  consentBannerLayoutType: ScanSnapshot["consentBannerLayoutType"];
+  consentBannerPosition: ScanSnapshot["consentBannerPosition"];
+  consentInteractionModel: ScanSnapshot["consentInteractionModel"];
+  consentPreferencesButtonCount: number | null;
+  consentPersistenceMechanismDetected: boolean | null;
+  consentRejectButtonCount: number | null;
   cookieCategoryCount: number | null;
   cookieCountTotal: number | null;
   cmpVendorConfidence: number | null;
@@ -123,6 +181,17 @@ type BrowserPassResult = {
   scriptTagCount: number;
   thirdPartyRequestCount: number;
   thirdPartyRequestDomains: string[];
+  trackerDiagnostics: Array<{
+    collectionEndpointType: string;
+    detectionSource: string;
+    matchedSignatureId: string | null;
+    sampleText?: string;
+    sampleType?: string;
+    sampleUrls: string[];
+    scriptHost?: string | null;
+    vendorCategory: string;
+    vendorName: string;
+  }>;
 };
 
 type FetchedRobotsState = {
@@ -140,6 +209,489 @@ type FetchedRobotsState = {
   robotsTxtUrl: string;
   robotsRulesLoaded: boolean | null;
 };
+
+function toTaxonomySignal(input: Omit<SnapshotSignalItem, "primaryCategory" | "primaryCategoryLabel" | "subcategory" | "regulatoryTags">): SnapshotSignalItem {
+  const taxonomy = mapSignalKeyToTaxonomy({
+    category: input.category,
+    key: input.key,
+    label: input.label
+  });
+
+  return {
+    ...input,
+    primaryCategory: taxonomy.primaryCategory,
+    primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+    subcategory: taxonomy.subcategory ?? null,
+    regulatoryTags: taxonomy.regulatoryTags ?? []
+  };
+}
+
+async function persistPolicyResolutionDiagnostic(input: {
+  scanId: string;
+  domainId: string;
+  organizationId: string | null;
+  message: string;
+  metadata: Record<string, unknown>;
+}) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("scan_events").insert({
+      scan_id: input.scanId,
+      domain_id: input.domainId,
+      organization_id: input.organizationId,
+      event_type: "legal.policy_resolution_diagnostic",
+      message: input.message,
+      metadata_json: input.metadata
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error("[policy-resolution] failed to persist diagnostic", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      scanId: input.scanId
+    });
+  }
+}
+
+async function persistPolicyLlmDiagnostic(input: {
+  scanId: string;
+  domainId: string;
+  organizationId: string | null;
+  message: string;
+  metadata: Record<string, unknown>;
+}) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("scan_events").insert({
+      scan_id: input.scanId,
+      domain_id: input.domainId,
+      organization_id: input.organizationId,
+      event_type: SCAN_EVENT_TYPES.policyLlmChunkDiagnostic,
+      message: input.message,
+      metadata_json: input.metadata
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error("[policy-llm] failed to persist chunk diagnostic", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      scanId: input.scanId
+    });
+  }
+}
+
+async function persistTrackerVendorDiagnostic(input: {
+  scanId: string;
+  domainId: string;
+  organizationId: string | null;
+  message: string;
+  metadata: Record<string, unknown>;
+}) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("scan_events").insert({
+      scan_id: input.scanId,
+      domain_id: input.domainId,
+      organization_id: input.organizationId,
+      event_type: SCAN_EVENT_TYPES.trackerVendorDiagnostic,
+      message: input.message,
+      metadata_json: input.metadata
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error("[tracker-diagnostic] failed to persist vendor diagnostic", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      scanId: input.scanId
+    });
+  }
+}
+
+type ResolvedPolicyCandidate = {
+  finalUrl: string;
+  headers: Record<string, string>;
+  html: string;
+  source: "rendered_page" | "iframe" | "network_html" | "network_json";
+  statusCode: number | null;
+  textContent: string;
+};
+
+function normalizeResolvedText(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function countResolvedWords(text: string) {
+  return text.match(/\b[\w'-]+\b/g)?.length ?? 0;
+}
+
+function stripHtmlToText(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasPolicyLikeUrl(url: string) {
+  return /(privacy|policy|notice|cookie|terms|legal|gdpr|ccpa)/i.test(url);
+}
+
+function hasPolicyLikeText(text: string) {
+  return /\bprivacy\b|\bpersonal information\b|\bdata subject\b|\bcollect\b|\bretain\b|\bcookies?\b|\bterms\b|\bconsumer privacy\b/i.test(text);
+}
+
+function extractPolicyTextFromJson(raw: string) {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const strings: string[] = [];
+
+    const visit = (value: unknown, depth: number) => {
+      if (depth > 6 || strings.length >= 200) {
+        return;
+      }
+
+      if (typeof value === "string") {
+        const normalized = normalizeResolvedText(value);
+        if (normalized.length >= 40 && hasPolicyLikeText(normalized)) {
+          strings.push(normalized);
+        }
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => visit(item, depth + 1));
+        return;
+      }
+
+      if (value && typeof value === "object") {
+        Object.values(value).forEach((item) => visit(item, depth + 1));
+      }
+    };
+
+    visit(parsed, 0);
+    return normalizeResolvedText(strings.join(" "));
+  } catch {
+    return "";
+  }
+}
+
+function scoreResolvedPolicyCandidate(candidate: ResolvedPolicyCandidate) {
+  const wordCount = countResolvedWords(candidate.textContent);
+  const textLength = candidate.textContent.length;
+  const policyTermBonus = hasPolicyLikeText(candidate.textContent) ? 120 : 0;
+  const urlBonus = hasPolicyLikeUrl(candidate.finalUrl) ? 80 : 0;
+  const sourceBonus =
+    candidate.source === "iframe" ? 50 : candidate.source === "network_html" ? 35 : candidate.source === "network_json" ? 25 : 0;
+
+  return textLength + wordCount * 4 + policyTermBonus + urlBonus + sourceBonus;
+}
+
+function toResolvedPolicyPage(input: {
+  candidate: ResolvedPolicyCandidate;
+  originalPage: StaticPageResult;
+}): StaticPageResult {
+  return buildStaticPageResult({
+    blockedByPolicy: false,
+    finalUrl: input.candidate.finalUrl,
+    headers: input.candidate.headers,
+    html: input.candidate.html,
+    pageType: input.originalPage.pageType,
+    pageUrl: input.originalPage.pageUrl,
+    redirectCount: input.candidate.finalUrl !== input.originalPage.pageUrl ? 1 : input.originalPage.redirectCount,
+    statusCode: input.candidate.statusCode ?? input.originalPage.statusCode,
+    textContentOverride: input.candidate.textContent,
+    timedOut: false
+  });
+}
+
+async function renderThinPolicyPage(input: {
+  domainId: string;
+  organizationId: string | null;
+  page: StaticPageResult;
+  plan: ScanPlan;
+  robotsPolicy?: RobotsPolicy | null;
+  scanId: string;
+}): Promise<StaticPageResult | null> {
+  const browserHandle = await createBrowser();
+  const browserPage = await browserHandle.context.newPage();
+  const networkCandidatePromises: Array<Promise<ResolvedPolicyCandidate | null>> = [];
+  const observedPolicyResponseUrls = new Set<string>();
+  const observedFrameUrls = new Set<string>();
+
+  try {
+    browserPage.on("response", (response) => {
+      const status = response.status();
+      if (status < 200 || status >= 300) {
+        return;
+      }
+
+      const request = response.request();
+      const resourceType = request.resourceType();
+      const responseUrl = response.url();
+      const headers = response.headers();
+      const contentType = (headers["content-type"] ?? "").toLowerCase();
+      const contentLength = Number.parseInt(headers["content-length"] ?? "", 10);
+
+      if (!["document", "fetch", "xhr", "iframe"].includes(resourceType)) {
+        return;
+      }
+
+      if (Number.isFinite(contentLength) && contentLength > 500_000) {
+        return;
+      }
+
+      if (!hasPolicyLikeUrl(responseUrl) && !contentType.includes("json") && !contentType.includes("html") && !contentType.startsWith("text/")) {
+        return;
+      }
+
+      if (hasPolicyLikeUrl(responseUrl)) {
+        observedPolicyResponseUrls.add(responseUrl);
+      }
+
+      networkCandidatePromises.push(
+        response
+          .text()
+          .then((body) => {
+            if (!body) {
+              return null;
+            }
+
+            const textContent = contentType.includes("json")
+              ? extractPolicyTextFromJson(body)
+              : normalizeResolvedText(stripHtmlToText(body));
+
+            if (countResolvedWords(textContent) < 80 || !hasPolicyLikeText(textContent)) {
+              return null;
+            }
+
+            return {
+              finalUrl: responseUrl,
+              headers,
+              html: contentType.includes("json") ? `<pre>${body}</pre>` : body,
+              source: contentType.includes("json") ? "network_json" : "network_html",
+              statusCode: status,
+              textContent
+            } satisfies ResolvedPolicyCandidate;
+          })
+          .catch(() => null)
+      );
+    });
+
+    browserPage.setDefaultNavigationTimeout(input.plan.browserNavigationTimeoutMs);
+    browserPage.setDefaultTimeout(input.plan.browserNavigationTimeoutMs);
+    const navigation = await navigateWithPolicy({
+      page: browserPage,
+      robotsPolicy: input.robotsPolicy,
+      url: input.page.pageUrl
+    });
+
+    if (navigation.blockedByPolicy) {
+      return null;
+    }
+
+    await browserPage.waitForTimeout(input.plan.browserPostLoadWaitMs);
+    const html = await browserPage.content().catch(() => "");
+    const textContent = normalizeResolvedText(
+      await browserPage
+        .evaluate(() => document.body?.innerText?.replace(/\s+/g, " ").trim() ?? document.documentElement?.innerText?.replace(/\s+/g, " ").trim() ?? "")
+        .catch(() => "")
+    );
+    const finalUrl = browserPage.url() || input.page.finalUrl || input.page.pageUrl;
+    const headers =
+      (await navigation.response?.allHeaders().catch(() => null)) ??
+      navigation.response?.headers() ??
+      input.page.headers;
+    const renderedCandidate: ResolvedPolicyCandidate = {
+      finalUrl,
+      headers,
+      html,
+      source: "rendered_page",
+      statusCode: navigation.response?.status() ?? input.page.statusCode,
+      textContent
+    };
+    const rendered = toResolvedPolicyPage({
+      candidate: renderedCandidate,
+      originalPage: input.page
+    });
+    const frameCandidates = await Promise.all(
+      browserPage.frames().slice(1).map(async (frame): Promise<ResolvedPolicyCandidate | null> => {
+        const frameUrl = frame.url();
+        if (!frameUrl) {
+          return null;
+        }
+
+        observedFrameUrls.add(frameUrl);
+
+        const frameHtml = await frame.content().catch(() => "");
+        const frameText = normalizeResolvedText(
+          await frame
+            .evaluate(() => document.body?.innerText?.replace(/\s+/g, " ").trim() ?? document.documentElement?.innerText?.replace(/\s+/g, " ").trim() ?? "")
+            .catch(() => "")
+        );
+
+        if (countResolvedWords(frameText) < 80 || (!hasPolicyLikeText(frameText) && !hasPolicyLikeUrl(frameUrl))) {
+          return null;
+        }
+
+        return {
+          finalUrl: frameUrl,
+          headers: {},
+          html: frameHtml,
+          source: "iframe",
+          statusCode: 200,
+          textContent: frameText
+        };
+      })
+    );
+    const networkCandidates = (await Promise.all(networkCandidatePromises)).filter(
+      (candidate): candidate is ResolvedPolicyCandidate => Boolean(candidate)
+    );
+    const existingQuality = assessPolicyPageContentQuality(input.page);
+    const iframeCandidates = frameCandidates.filter((candidate): candidate is ResolvedPolicyCandidate => Boolean(candidate));
+    const candidates = [renderedCandidate, ...iframeCandidates, ...networkCandidates];
+    const bestCandidate = candidates
+      .map((candidate) => ({
+        candidate,
+        score: scoreResolvedPolicyCandidate(candidate)
+      }))
+      .sort((left, right) => right.score - left.score)[0]?.candidate;
+
+    if (!bestCandidate) {
+      const diagnostic = {
+        bestCandidate: null,
+        existingWordCount: existingQuality.wordCount,
+        iframeUrls: [...observedFrameUrls].slice(0, 5),
+        networkUrls: [...observedPolicyResponseUrls].slice(0, 10),
+        pageUrl: input.page.pageUrl
+      };
+      console.info("[policy-resolution] unresolved thin legal page", diagnostic);
+      await persistPolicyResolutionDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        message: "Thin legal page unresolved after rendered, iframe, and network candidate inspection.",
+        metadata: diagnostic
+      });
+      return null;
+    }
+
+    const bestResolvedPage = toResolvedPolicyPage({
+      candidate: bestCandidate,
+      originalPage: input.page
+    });
+    const renderedQuality = assessPolicyPageContentQuality(bestResolvedPage);
+
+    if (
+      bestResolvedPage.textContent.trim().length <= input.page.textContent.trim().length &&
+      renderedQuality.wordCount <= existingQuality.wordCount
+    ) {
+      const diagnostic = {
+        bestCandidateSource: bestCandidate.source,
+        bestCandidateUrl: bestCandidate.finalUrl,
+        bestWordCount: renderedQuality.wordCount,
+        existingWordCount: existingQuality.wordCount,
+        iframeUrls: [...observedFrameUrls].slice(0, 5),
+        networkUrls: [...observedPolicyResponseUrls].slice(0, 10),
+        pageUrl: input.page.pageUrl
+      };
+      console.info("[policy-resolution] thin legal page not improved", diagnostic);
+      await persistPolicyResolutionDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        message: "Thin legal page produced candidate sources but none improved fetched policy content.",
+        metadata: diagnostic
+      });
+      return null;
+    }
+
+    const diagnostic = {
+      bestCandidateSource: bestCandidate.source,
+      bestCandidateUrl: bestCandidate.finalUrl,
+      bestWordCount: renderedQuality.wordCount,
+      existingWordCount: existingQuality.wordCount,
+      iframeUrls: [...observedFrameUrls].slice(0, 5),
+      networkUrls: [...observedPolicyResponseUrls].slice(0, 10),
+      pageUrl: input.page.pageUrl
+    };
+    console.info("[policy-resolution] thin legal page resolved", diagnostic);
+    await persistPolicyResolutionDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      message: "Thin legal page resolved to a richer rendered, iframe, or network candidate.",
+      metadata: diagnostic
+    });
+
+    return bestResolvedPage;
+  } finally {
+    await browserPage.close().catch(() => undefined);
+    await browserHandle.context.close().catch(() => undefined);
+    await browserHandle.browser.close().catch(() => undefined);
+  }
+}
+
+async function upgradeThinPolicyPages(input: {
+  domainId: string;
+  fetchedPagesByUrl: Map<string, StaticPageResult>;
+  organizationId: string | null;
+  plan: ScanPlan;
+  robotsPolicy?: RobotsPolicy | null;
+  scanId: string;
+}) {
+  const candidates = [...input.fetchedPagesByUrl.values()].filter((page) => {
+    if (!(page.fetchStatus === "ok" || page.fetchStatus === "redirected")) {
+      return false;
+    }
+
+    return assessPolicyPageContentQuality(page).insufficientContent;
+  });
+
+  for (const candidate of candidates) {
+    try {
+      const rendered = await renderThinPolicyPage({
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        page: candidate,
+        plan: input.plan,
+        robotsPolicy: input.robotsPolicy,
+        scanId: input.scanId
+      });
+
+      if (rendered) {
+        input.fetchedPagesByUrl.set(candidate.pageUrl, rendered);
+      }
+    } catch (error) {
+      console.error("[policy-resolution] thin legal page resolver failed", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        pageUrl: candidate.pageUrl
+      });
+      await persistPolicyResolutionDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        message: "Thin legal page resolver threw before candidate selection completed.",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          pageUrl: candidate.pageUrl
+        }
+      });
+      continue;
+    }
+  }
+}
 
 type ConsentButtonMeta = {
   prominenceScore: number;
@@ -355,27 +907,31 @@ function dedupeRuleCounts(ruleCounts: ScanAccessibilityRuleCount[]) {
   return [...byKey.values()].sort((left, right) => left.ruleCode.localeCompare(right.ruleCode));
 }
 
-function matchesRequestSignature(url: string, signature: VendorSignature) {
-  try {
-    const requestUrl = new URL(url);
-    const hostMatch =
-      signature.hostnamePatterns?.some(
-        (pattern) => requestUrl.hostname === pattern || requestUrl.hostname.endsWith(`.${pattern}`)
-      ) ?? false;
+function buildAccessibilityRuleExamples(input: {
+  pageUrl: string;
+  violations: Awaited<ReturnType<typeof normalizeAxeResults>>;
+  scanId: string;
+}) {
+  return input.violations.map(
+    (violation) =>
+      ({
+        scanId: input.scanId,
+        pageUrl: input.pageUrl,
+        ruleCode: violation.ruleId,
+        ruleGroup: violation.ruleId.split("-")[0] ?? violation.ruleId,
+        severity: mapAxeImpactToSeverity(violation.impact),
+        impact: violation.impact,
+        help: violation.help,
+        helpUrl: violation.helpUrl,
+        description: violation.description,
+        nodeCount: violation.nodeCount,
+        representativeSelectors: violation.representativeSelectors
+      }) satisfies ScanAccessibilityRuleExample
+  );
+}
 
-    if (!hostMatch) {
-      return false;
-    }
-
-    if (!signature.pathFragments?.length) {
-      return true;
-    }
-
-    const fullPath = `${requestUrl.pathname}${requestUrl.search}`.toLowerCase();
-    return signature.pathFragments.some((fragment) => fullPath.includes(fragment.toLowerCase()));
-  } catch {
-    return false;
-  }
+function isFirstPartyHost(host: string | null, pageDomain: string) {
+  return host === pageDomain || (host ? host.endsWith(`.${pageDomain}`) : false);
 }
 
 function browserScriptsToMatches(scriptUrls: string[]) {
@@ -394,6 +950,16 @@ function browserScriptsToMatches(scriptUrls: string[]) {
       };
     }
   });
+}
+
+function buildStaticTrackerDiagnostics(pages: StaticPageResult[]) {
+  return pages.flatMap((page) =>
+    collectStaticTrackerDiagnostics({
+      pageHostname: new URL(page.pageUrl).hostname,
+      pageText: `${page.textContent}\n${page.html}`,
+      scripts: page.scripts
+    })
+  );
 }
 
 function parseRetryAfterMs(value: string | null) {
@@ -453,13 +1019,22 @@ async function evaluateConsentState(page: Page) {
         };
       })
       .filter((entry): entry is { prominenceScore: number; text: string } => Boolean(entry));
-    const acceptButtons = buttonMeta.filter((button) => /accept|allow all|agree/.test(button.text));
-    const rejectButtons = buttonMeta.filter((button) => /reject|decline|deny/.test(button.text));
-    const preferencesButtons = buttonMeta.filter((button) => /preferences|settings|manage|customize/.test(button.text));
-    const dismissButtons = buttonMeta.filter((button) => /close|dismiss|not now|continue without accepting/.test(button.text));
+    const acceptButtons = buttonMeta.filter((button) => classifyConsentButtonRole(button.text) === "accept");
+    const rejectButtons = buttonMeta.filter((button) => classifyConsentButtonRole(button.text) === "reject");
+    const preferencesButtons = buttonMeta.filter((button) => classifyConsentButtonRole(button.text) === "preferences");
+    const dismissButtons = buttonMeta.filter((button) => classifyConsentButtonRole(button.text) === "dismiss");
     const acceptTexts = acceptButtons.map((button) => button.text);
     const rejectTexts = rejectButtons.map((button) => button.text);
     const preferencesTexts = preferencesButtons.map((button) => button.text);
+    let consentInteractionModel:
+      | "none"
+      | "accept_only"
+      | "accept_reject"
+      | "accept_preferences"
+      | "accept_reject_preferences"
+      | "preferences_only"
+      | "dismiss_only"
+      | "other" = "other";
     const cookiePolicyLinks = Array.from(document.querySelectorAll("a[href]")).some((element) =>
       /cookie/i.test((element as HTMLAnchorElement).href) || /cookie/i.test((element.textContent ?? "").toLowerCase())
     );
@@ -546,9 +1121,29 @@ async function evaluateConsentState(page: Page) {
       darkPatternFakeScarcityLanguage: /(limited time|only \d+ left|ends soon|offer expires|sale ends)/.test(bodyText)
     };
 
+    if (!visibleBanner) {
+      consentInteractionModel = "none";
+    } else if (acceptButtons.length > 0 && rejectButtons.length > 0 && preferencesButtons.length > 0) {
+      consentInteractionModel = "accept_reject_preferences";
+    } else if (acceptButtons.length > 0 && rejectButtons.length > 0) {
+      consentInteractionModel = "accept_reject";
+    } else if (acceptButtons.length > 0 && preferencesButtons.length > 0) {
+      consentInteractionModel = "accept_preferences";
+    } else if (acceptButtons.length > 0) {
+      consentInteractionModel = "accept_only";
+    } else if (preferencesButtons.length > 0) {
+      consentInteractionModel = "preferences_only";
+    } else if (dismissButtons.length > 0) {
+      consentInteractionModel = "dismiss_only";
+    }
+
     return {
       cookieBannerPresent: visibleBanner,
       acceptAllPresent: acceptTexts.length > 0,
+      consentAcceptButtonCount: acceptTexts.length,
+      consentInteractionModel,
+      consentPreferencesButtonCount: preferencesTexts.length,
+      consentRejectButtonCount: rejectTexts.length,
       rejectAllPresent: rejectTexts.length > 0,
       granularPreferencesPresent: preferencesTexts.length > 0,
       cookiePolicyLinkedFromBanner: cookiePolicyLinks,
@@ -617,6 +1212,7 @@ async function waitForBrowserRuntimeStability(input: {
 }
 
 async function runBrowserPass(input: {
+  browserContextOptions?: import("playwright").BrowserContextOptions;
   plan: ScanPlan;
   domain: string;
   homepageUrl: string;
@@ -624,7 +1220,9 @@ async function runBrowserPass(input: {
   robotsPolicy?: RobotsPolicy | null;
   scanId: string;
 }): Promise<BrowserPassResult> {
-  const browserHandle = await createBrowser();
+  const browserHandle = await createBrowser({
+    contextOptions: input.browserContextOptions
+  });
   const page = await browserHandle.context.newPage();
   const requestUrls = new Set<string>();
   let mixedContentDetected = false;
@@ -706,9 +1304,13 @@ async function runBrowserPass(input: {
       timedOut = false;
       return {
         acceptAllPresent: false,
+        consentAcceptButtonCount: null,
         consentBannerLayoutType: "unknown",
         consentBannerPosition: "unknown",
+        consentInteractionModel: null,
+        consentPreferencesButtonCount: null,
         consentPersistenceMechanismDetected: null,
+        consentRejectButtonCount: null,
         cookieCategoryCount: null,
         cookieCountTotal: null,
         cmpVendorConfidence: null,
@@ -740,6 +1342,7 @@ async function runBrowserPass(input: {
         trackerVendors: [],
         widgetVendor: null,
         ruleCounts: [],
+        ruleExamples: [],
         discoveredLinks: [],
         domNodeCount: null,
         domStructureHash: null,
@@ -749,7 +1352,8 @@ async function runBrowserPass(input: {
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
-        thirdPartyRequestDomains: []
+        thirdPartyRequestDomains: [],
+        trackerDiagnostics: []
       };
     }
 
@@ -803,6 +1407,10 @@ async function runBrowserPass(input: {
   const consentState = await evaluateConsentState(page).catch(() => ({
     cookieBannerPresent: false,
     acceptAllPresent: false,
+    consentAcceptButtonCount: null,
+    consentInteractionModel: null,
+    consentPreferencesButtonCount: null,
+    consentRejectButtonCount: null,
     rejectAllPresent: false,
     granularPreferencesPresent: false,
     cookiePolicyLinkedFromBanner: false,
@@ -826,28 +1434,55 @@ async function runBrowserPass(input: {
   const browserScripts = browserScriptsToMatches(scriptUrls);
   const cmpVendor = detectNamedVendor(content, browserScripts, CMP_VENDOR_SIGNATURES);
   const widgetVendor = detectNamedVendor(content, browserScripts, ACCESSIBILITY_WIDGET_SIGNATURES);
+  const trackerDiagnostics = TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
+    const matchedUrls = [...new Set([...requestUrls, ...scriptUrls])]
+      .map((url) => ({ url, match: analyzeVendorRequestMatch(url, signature, input.domain) }))
+      .filter((entry) => entry.match);
+
+    if (matchedUrls.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        collectionEndpointType: matchedUrls[0]!.match!.collectionEndpointType,
+        detectionSource: "request",
+        matchedSignatureId: signature.id,
+        sampleUrls: matchedUrls.map((entry) => entry.url).slice(0, 3),
+        vendorCategory: signature.category,
+        vendorName: signature.name
+      }
+    ];
+  });
   const trackerVendors = dedupeTrackers(
-    TRACKER_VENDOR_SIGNATURES.filter((signature) => [...requestUrls].some((url) => matchesRequestSignature(url, signature))).map(
-      (signature) => {
-        const matchingUrl = [...requestUrls].find((url) => matchesRequestSignature(url, signature)) ?? null;
-        const scriptHost = matchingUrl ? new URL(matchingUrl).hostname : null;
-        return {
+    TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
+      const matchedRequest = [...new Set([...requestUrls, ...scriptUrls])]
+        .map((url) => ({ url, match: analyzeVendorRequestMatch(url, signature, input.domain) }))
+        .find((entry) => entry.match);
+      if (!matchedRequest?.match) {
+        return [];
+      }
+
+      const scriptHost = matchedRequest.match.requestHost;
+      return [
+        {
           scanId: input.scanId,
           vendorName: signature.name,
           vendorCategory: signature.category,
           detectionSource: "request",
           confidence: signature.confidence,
-          firstPartyOrThirdParty:
-            scriptHost === input.domain || (scriptHost ? scriptHost.endsWith(`.${input.domain}`) : false) ? "first_party" : "third_party",
+          firstPartyOrThirdParty: isFirstPartyHost(scriptHost, input.domain) ? "first_party" : "third_party",
+          collectionEndpointType: matchedRequest.match.collectionEndpointType,
           beforeConsent: true,
           scriptHost,
           matchedSignatureId: signature.id
-        } satisfies ScanTrackerVendor;
-      }
-    )
+        } satisfies ScanTrackerVendor
+      ];
+    })
   );
 
   const axeResults = timedOut ? null : await runAxe(page).catch(() => null);
+  const normalizedViolations = axeResults ? normalizeAxeResults(axeResults) : [];
   const browserCookies = await browserHandle.context.cookies().catch(() => {
     browserSessionUsable = false;
     return [];
@@ -856,14 +1491,19 @@ async function runBrowserPass(input: {
     .evaluate(() => ("serviceWorker" in navigator ? navigator.serviceWorker.getRegistrations().then((registrations) => registrations.length > 0) : false))
     .catch(() => null);
   const ruleCounts = dedupeRuleCounts(
-    (axeResults?.violations ?? []).map((violation) => ({
+    normalizedViolations.map((violation) => ({
       scanId: input.scanId,
-      ruleCode: violation.id,
-      ruleGroup: violation.id.split("-")[0] ?? violation.id,
+      ruleCode: violation.ruleId,
+      ruleGroup: violation.ruleId.split("-")[0] ?? violation.ruleId,
       severity: mapAxeImpactToSeverity(violation.impact),
-      instanceCount: violation.nodes.length
+      instanceCount: violation.nodeCount
     }))
   );
+  const ruleExamples = buildAccessibilityRuleExamples({
+    pageUrl: page.url(),
+    scanId: input.scanId,
+    violations: normalizedViolations
+  });
 
   await page.close().catch(() => undefined);
   await browserHandle.context.close().catch(() => undefined);
@@ -892,6 +1532,7 @@ async function runBrowserPass(input: {
     trackerVendors,
     widgetVendor: widgetVendor?.name ?? null,
     ruleCounts,
+    ruleExamples,
     discoveredLinks,
     domNodeCount: domSummary?.domNodeCount ?? null,
     domStructureHash: domSummary ? stableHash(domSummary.domSignature) : null,
@@ -929,8 +1570,66 @@ async function runBrowserPass(input: {
         })
         .filter((hostname): hostname is string => Boolean(hostname))
         .filter((hostname) => !(hostname === input.domain || hostname.endsWith(`.${input.domain}`)))
-    ).values()].sort()
+    ).values()].sort(),
+    trackerDiagnostics
   };
+}
+
+async function runBestBrowserPass(input: {
+  domain: string;
+  homepageUrl: string;
+  organizationId: string | null;
+  plan: ScanPlan;
+  robotsPolicy?: RobotsPolicy | null;
+  scanId: string;
+  profileSweep?: boolean;
+}) {
+  const shouldSweepProfiles = input.profileSweep ?? true;
+  const probeProfiles = shouldSweepProfiles ? getConsentProbeProfiles() : [{ name: "desktop_default", contextOptions: {} }];
+  let browserPass = await runBrowserPass({
+    domain: input.domain,
+    homepageUrl: input.homepageUrl,
+    organizationId: input.organizationId,
+    plan: input.plan,
+    robotsPolicy: input.robotsPolicy,
+    scanId: input.scanId,
+    browserContextOptions: probeProfiles[0]?.contextOptions
+  });
+
+  if (!browserPass.cookieBannerPresent && shouldSweepProfiles) {
+    const shouldRetryForVisibility = browserPass.cmpVendorName || browserPass.trackerVendors.length > 0 || browserPass.cookieCountTotal;
+
+    if (shouldRetryForVisibility) {
+      for (const profile of probeProfiles.slice(1)) {
+        const candidatePass = await runBrowserPass({
+          domain: input.domain,
+          homepageUrl: input.homepageUrl,
+          organizationId: input.organizationId,
+          plan: input.plan,
+          robotsPolicy: input.robotsPolicy,
+          scanId: input.scanId,
+          browserContextOptions: profile.contextOptions
+        });
+
+        const candidateImprovesVisibility =
+          candidatePass.cookieBannerPresent ||
+          (!browserPass.cmpVendorName && Boolean(candidatePass.cmpVendorName)) ||
+          candidatePass.consentAcceptButtonCount !== browserPass.consentAcceptButtonCount ||
+          candidatePass.consentRejectButtonCount !== browserPass.consentRejectButtonCount ||
+          candidatePass.consentPreferencesButtonCount !== browserPass.consentPreferencesButtonCount;
+
+        if (candidateImprovesVisibility) {
+          browserPass = candidatePass;
+        }
+
+        if (candidatePass.cookieBannerPresent) {
+          break;
+        }
+      }
+    }
+  }
+
+  return browserPass;
 }
 
 async function fetchTargetsWithConcurrency(input: {
@@ -1088,7 +1787,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     homepage = prefetchedPages.find((page) => page.pageType === "homepage") ?? homepage;
   }
 
-  const browserPass = await runBrowserPass({
+  const browserPass = await runBestBrowserPass({
     domain: new URL(homepageUrl).hostname,
     homepageUrl,
     organizationId: input.organizationId,
@@ -1106,9 +1805,13 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         cookieCountTotal: null,
         cmpVendorConfidence: null,
         cmpVendorName: null,
+        consentAcceptButtonCount: null,
         consentModeDetected: false,
+        consentInteractionModel: null,
+        consentPreferencesButtonCount: null,
         cookieBannerPresent: false,
         cookiePolicyLinkedFromBanner: false,
+        consentRejectButtonCount: null,
         defaultTrackingState: "unknown",
         darkPatternAcceptEmphasis: false,
         darkPatternRejectHidden: false,
@@ -1133,6 +1836,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         trackerVendors: [],
         widgetVendor: null,
         ruleCounts: [],
+        ruleExamples: [],
         discoveredLinks: [],
         domNodeCount: null,
         domStructureHash: null,
@@ -1142,7 +1846,8 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
-        thirdPartyRequestDomains: []
+        thirdPartyRequestDomains: [],
+        trackerDiagnostics: []
       }) satisfies BrowserPassResult
   );
 
@@ -1170,6 +1875,17 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     });
   }
 
+  if (!isPreviewScan) {
+    await upgradeThinPolicyPages({
+      domainId: input.domainId,
+      fetchedPagesByUrl,
+      organizationId: input.organizationId,
+      plan: scanPlan,
+      robotsPolicy: robotsState.policy,
+      scanId: input.scanId
+    });
+  }
+
   const fetchedPages = [...fetchedPagesByUrl.values()];
   const successfulPages = fetchedPages.filter((page) => page.fetchStatus === "ok" || page.fetchStatus === "redirected");
   const browserDiscoveredPageTypes = new Set(
@@ -1194,6 +1910,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       })
     )
   );
+  const staticTrackerDiagnostics = buildStaticTrackerDiagnostics(successfulPages);
 
   const allTrackers = dedupeTrackers([...staticTrackers, ...browserPass.trackerVendors]);
   const advertisingSignals = deriveAdvertisingClassification(allTrackers);
@@ -1203,6 +1920,21 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   });
   const commercialSignals = deriveExpandedCommercialSignals(successfulPages);
   const trackerSummary = summarizeTrackers(allTrackers);
+  const sessionReplayDisclosurePresent = policyPages.some((page) =>
+    /\bsession replay\b|record your interactions|replay your session/i.test(`${page.title ?? ""} ${page.textContent}`)
+  );
+  const policyLlmTriggerReasons = isPreviewScan
+    ? []
+    : derivePolicyLlmTriggerReasons({
+        aiAssistantWidgetDetected: aiSignals.aiAssistantWidgetDetected,
+        aiDisclosureTextPresent: aiSignals.aiDisclosureTextPresent,
+        autoRenewDisclosurePresent: commercialSignals.autoRenewDisclosurePresent,
+        freeTrialDetected: commercialSignals.freeTrialDetected,
+        highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected,
+        policyBehaviorConflictCandidate: trackerSummary.advertisingTrackerCount > 0 && policySignals.doNotSellLinkPresent,
+        sessionReplayWithoutDisclosureCandidate: trackerSummary.sessionReplayTrackerCount > 0 && !sessionReplayDisclosurePresent,
+        subscriptionTermsPresent: commercialSignals.subscriptionTermsPresent
+      });
   const policyEnrichmentBundle = await enrichPolicyPages({
     scanId: input.scanId,
     organizationId: input.organizationId,
@@ -1212,9 +1944,29 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
     euExposureLikely: jurisdictionSignals.euExposureLikely,
     californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
+    allowLlm: !isPreviewScan,
     archiveSource: null,
-    forceLlm: !isPreviewScan
+    forceLlm: false,
+    llmTriggerReasons: policyLlmTriggerReasons
   });
+  for (const diagnostic of policyEnrichmentBundle.diagnostics) {
+    await persistPolicyLlmDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      message: "Policy LLM chunk selection and execution summary recorded.",
+      metadata: diagnostic
+    });
+  }
+  for (const diagnostic of [...browserPass.trackerDiagnostics, ...staticTrackerDiagnostics]) {
+    await persistTrackerVendorDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      message: `Tracker vendor ${diagnostic.vendorName} detection samples recorded.`,
+      metadata: diagnostic
+    });
+  }
   const accessibilitySummary = buildAccessibilitySummary(browserPass.ruleCounts);
   const accessibilityWidget = detectAccessibilityWidgetFromPages(successfulPages);
   const cmpVendor = browserPass.cmpVendorName ? { name: browserPass.cmpVendorName, confidence: browserPass.cmpVendorConfidence } : detectCmpVendorFromPage(homepage);
@@ -1224,6 +1976,33 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         robotsPolicy: robotsState.policy
       }).catch(() => null);
   const homepageHeaders: Record<string, string> = homepage.headers;
+  const consentInteractionAudit =
+    !isPreviewScan && (browserPass.cookieBannerPresent || cmpVendor?.name)
+      ? await runConsentInteractionAudit(homepageUrl).catch(() => null)
+      : null;
+  const consentSurfaceDetected =
+    browserPass.cookieBannerPresent ||
+    Boolean(consentInteractionAudit?.postReject.interactionSucceeded || consentInteractionAudit?.postAccept.interactionSucceeded);
+  const rejectAllPresent =
+    browserPass.rejectAllPresent || Boolean(consentInteractionAudit?.postReject.interactionSucceeded);
+  const acceptAllPresent =
+    browserPass.acceptAllPresent || Boolean(consentInteractionAudit?.postAccept.interactionSucceeded);
+  const consentInteractionModel =
+    browserPass.consentInteractionModel ??
+    (rejectAllPresent && acceptAllPresent
+      ? "accept_reject"
+      : rejectAllPresent
+        ? "other"
+        : acceptAllPresent
+          ? "accept_only"
+          : null);
+  const consentMechanismType: ScanSnapshot["consentMechanismType"] = consentSurfaceDetected
+    ? cmpVendor?.name
+      ? "cmp"
+      : browserPass.granularPreferencesPresent || rejectAllPresent
+        ? "modal"
+        : "banner"
+    : "none";
   const runtimeArtifacts = {
     scanId: input.scanId,
     thirdPartyRequestDomains: browserPass.thirdPartyRequestDomains,
@@ -1235,7 +2014,34 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     scriptTagCount: browserPass.scriptTagCount,
     responseHeaders: homepageHeaders,
     domStructureHash: browserPass.domStructureHash,
-    domNodeCount: browserPass.domNodeCount
+    domNodeCount: browserPass.domNodeCount,
+    consentAuditCompleted: consentInteractionAudit ? true : null,
+    consentRejectInteractionSucceeded: consentInteractionAudit?.postReject.interactionSucceeded ?? null,
+    consentAcceptInteractionSucceeded: consentInteractionAudit?.postAccept.interactionSucceeded ?? null,
+    consentRejectReducedTracking: consentInteractionAudit
+      ? consentInteractionAudit.postReject.trackerVendorNames.length < consentInteractionAudit.baseline.trackerVendorNames.length
+      : null,
+    consentRejectReducedThirdPartyCookies: consentInteractionAudit
+      ? consentInteractionAudit.postReject.thirdPartyCookieCount < consentInteractionAudit.baseline.thirdPartyCookieCount
+      : null,
+    consentBaselineCookieCount: consentInteractionAudit?.baseline.cookieCount ?? null,
+    consentBaselineThirdPartyCookieCount: consentInteractionAudit?.baseline.thirdPartyCookieCount ?? null,
+    consentPreconsentViolationCount: consentInteractionAudit?.baseline.trackerVendorNames.length ?? null,
+    consentBaselineTrackerEvidenceUrls: consentInteractionAudit?.baseline.trackerEvidenceUrls ?? [],
+    consentBaselineTrackerVendorNames: consentInteractionAudit?.baseline.trackerVendorNames ?? [],
+    consentRejectPersistedTrackerVendorNames: consentInteractionAudit?.rejectPersistedTrackerVendorNames ?? [],
+    consentRejectNewTrackerVendorNames: consentInteractionAudit?.rejectNewTrackerVendorNames ?? [],
+    consentRejectClickCount: consentInteractionAudit?.postReject.clickCount ?? null,
+    consentAcceptClickCount: consentInteractionAudit?.postAccept.clickCount ?? null,
+    consentPostRejectCookieCount: consentInteractionAudit?.postReject.cookieCount ?? null,
+    consentPostRejectThirdPartyCookieCount: consentInteractionAudit?.postReject.thirdPartyCookieCount ?? null,
+    consentPostRejectTrackerEvidenceUrls: consentInteractionAudit?.postReject.trackerEvidenceUrls ?? [],
+    consentPostRejectTrackerVendorNames: consentInteractionAudit?.postReject.trackerVendorNames ?? [],
+    consentAcceptNewTrackerVendorNames: consentInteractionAudit?.acceptNewTrackerVendorNames ?? [],
+    consentPostAcceptCookieCount: consentInteractionAudit?.postAccept.cookieCount ?? null,
+    consentPostAcceptThirdPartyCookieCount: consentInteractionAudit?.postAccept.thirdPartyCookieCount ?? null,
+    consentPostAcceptTrackerEvidenceUrls: consentInteractionAudit?.postAccept.trackerEvidenceUrls ?? [],
+    consentPostAcceptTrackerVendorNames: consentInteractionAudit?.postAccept.trackerVendorNames ?? []
   };
   const hostname = new URL(homepageUrl).hostname;
   const registeredDomain = getRegisteredDomain(hostname);
@@ -1426,25 +2232,23 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     mentionsAiUsage: policySignals.mentionsAiUsage,
     doubleOptInReferencePresent: policySignals.doubleOptInReferencePresent,
     thirdPartyDisclosureSpecificity: policySignals.thirdPartyDisclosureSpecificity as ScanSnapshot["thirdPartyDisclosureSpecificity"],
-    cookieBannerPresent: browserPass.cookieBannerPresent,
-    consentMechanismType: browserPass.cookieBannerPresent
-      ? cmpVendor?.name
-        ? "cmp"
-        : browserPass.granularPreferencesPresent
-          ? "modal"
-          : "banner"
-      : "none",
+    cookieBannerPresent: consentSurfaceDetected,
+    consentMechanismType,
     cmpVendorName: cmpVendor?.name ?? null,
     cmpVendorConfidence: cmpVendor?.confidence ?? null,
-    rejectAllPresent: browserPass.rejectAllPresent,
-    acceptAllPresent: browserPass.acceptAllPresent,
+    consentInteractionModel,
+    consentAcceptButtonCount: browserPass.consentAcceptButtonCount,
+    consentRejectButtonCount: browserPass.consentRejectButtonCount,
+    consentPreferencesButtonCount: browserPass.consentPreferencesButtonCount,
+    rejectAllPresent,
+    acceptAllPresent,
     granularPreferencesPresent: browserPass.granularPreferencesPresent,
     preconsentTrackingDetected: browserPass.preconsentTrackingDetected,
     cookiePolicyLinkedFromBanner: browserPass.cookiePolicyLinkedFromBanner,
     consentModeDetected: browserPass.consentModeDetected,
     darkPatternAcceptEmphasis: browserPass.darkPatternAcceptEmphasis,
-    darkPatternRejectHidden: browserPass.darkPatternRejectHidden,
-    darkPatternRejectButtonMissing: browserPass.darkPatternRejectButtonMissing,
+    darkPatternRejectHidden: rejectAllPresent ? false : browserPass.darkPatternRejectHidden,
+    darkPatternRejectButtonMissing: rejectAllPresent ? false : browserPass.darkPatternRejectButtonMissing,
     darkPatternAcceptButtonProminence: browserPass.darkPatternAcceptButtonProminence,
     precheckedConsentBoxes: browserPass.precheckedConsentBoxes,
     darkPatternForcedConsentWall: browserPass.darkPatternForcedConsentWall,
@@ -1649,6 +2453,10 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   partiallyBuiltSnapshot.legalPagesPresenceHash = policyPresenceHash(partiallyBuiltSnapshot);
   partiallyBuiltSnapshot.consentSignatureHash = consentSignatureHash({
     acceptAllPresent: partiallyBuiltSnapshot.acceptAllPresent,
+    consentAcceptButtonCount: partiallyBuiltSnapshot.consentAcceptButtonCount,
+    consentInteractionModel: partiallyBuiltSnapshot.consentInteractionModel,
+    consentPreferencesButtonCount: partiallyBuiltSnapshot.consentPreferencesButtonCount,
+    consentRejectButtonCount: partiallyBuiltSnapshot.consentRejectButtonCount,
     cmpVendorName: partiallyBuiltSnapshot.cmpVendorName,
     cookieBannerPresent: partiallyBuiltSnapshot.cookieBannerPresent,
     cookiePolicyLinkedFromBanner: partiallyBuiltSnapshot.cookiePolicyLinkedFromBanner,
@@ -1816,6 +2624,139 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       (snapshotWithScores.sessionReplayTrackerCount > 0 ? 10 : 0)
   );
   const compatibilitySignals = projectSnapshotSignals(snapshotWithScores, allTrackers);
+  if (runtimeArtifacts.consentAuditCompleted === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_audit_completed",
+        label: "Consent interaction audit completed",
+        value: true
+      })
+    );
+  }
+  if (runtimeArtifacts.consentRejectInteractionSucceeded === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_interaction_succeeded",
+        label: "Reject interaction succeeded",
+        value: true
+      })
+    );
+  }
+  if (runtimeArtifacts.consentAcceptInteractionSucceeded === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_interaction_succeeded",
+        label: "Accept interaction succeeded",
+        value: true
+      })
+    );
+  }
+  if (runtimeArtifacts.consentRejectReducedTracking === false && runtimeArtifacts.consentRejectInteractionSucceeded === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_failed_to_reduce_tracking",
+        label: "Reject did not reduce tracking",
+        value: true
+      })
+    );
+  }
+  if (runtimeArtifacts.consentRejectPersistedTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_persisted_tracker_vendors",
+        label: "Trackers still present after reject",
+        value: runtimeArtifacts.consentRejectPersistedTrackerVendorNames
+      })
+    );
+  }
+  if (runtimeArtifacts.consentRejectNewTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_new_tracker_vendors",
+        label: "New trackers appeared after reject",
+        value: runtimeArtifacts.consentRejectNewTrackerVendorNames
+      })
+    );
+  }
+  if (runtimeArtifacts.consentAcceptNewTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_new_tracker_vendors",
+        label: "New trackers appeared after accept",
+        value: runtimeArtifacts.consentAcceptNewTrackerVendorNames
+      })
+    );
+  }
+  if ((runtimeArtifacts.consentPreconsentViolationCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_violation_count",
+        label: "Pre-consent tracker violations",
+        value: runtimeArtifacts.consentPreconsentViolationCount ?? 0
+      })
+    );
+  }
+  if (runtimeArtifacts.consentBaselineTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_tracker_vendors",
+        label: "Pre-consent tracker vendors",
+        value: runtimeArtifacts.consentBaselineTrackerVendorNames
+      })
+    );
+  }
+  if (runtimeArtifacts.consentBaselineTrackerEvidenceUrls.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_tracker_evidence_urls",
+        label: "Pre-consent tracker evidence URLs",
+        value: runtimeArtifacts.consentBaselineTrackerEvidenceUrls
+      })
+    );
+  }
+  if (
+    runtimeArtifacts.consentRejectReducedThirdPartyCookies === false &&
+    runtimeArtifacts.consentRejectInteractionSucceeded === true
+  ) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_failed_to_reduce_third_party_cookies",
+        label: "Reject did not reduce third-party cookies",
+        value: true
+      })
+    );
+  }
+  if ((runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_click_count",
+        label: "Reject click count",
+        value: runtimeArtifacts.consentRejectClickCount ?? 0
+      })
+    );
+  }
+  if ((runtimeArtifacts.consentAcceptClickCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_click_count",
+        label: "Accept click count",
+        value: runtimeArtifacts.consentAcceptClickCount ?? 0
+      })
+    );
+  }
   const byCategory = compatibilitySignals.reduce<Record<string, number>>((accumulator, signal) => {
     accumulator[signal.category] = (accumulator[signal.category] ?? 0) + 1;
     return accumulator;
@@ -1841,8 +2782,170 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     policyEvidence: policyEnrichmentBundle.evidences,
     policyReviewQueueItems: policyEnrichmentBundle.reviewQueueItems,
     trackerVendors: allTrackers,
+    accessibilityRuleExamples: browserPass.ruleExamples,
     accessibilityRuleCounts: browserPass.ruleCounts,
     pages: fetchedPages.map((page) => buildPageMetadata(input.scanId, page)),
     compatibilitySignals
+  };
+}
+
+export async function runConsentProbe(input: {
+  domain: string;
+  domainId: string;
+  organizationId: string | null;
+  profileSweep?: boolean;
+  scanId: string;
+}) : Promise<ConsentProbeResult> {
+  const clamp = (value: number) => Math.max(0, Math.min(100, value));
+  const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
+  const robotsState = await fetchRobotsState({
+    startUrl,
+    scanId: input.scanId,
+    domainId: input.domainId
+  });
+  const homepage = await fetchStaticPage({
+    pageType: "homepage",
+    robotsPolicy: robotsState.policy,
+    url: startUrl
+  }).catch(
+    () =>
+      ({
+        blockedByPolicy: false,
+        pageUrl: startUrl,
+        pageType: "homepage",
+        fetchStatus: "error",
+        finalUrl: startUrl,
+        headers: {},
+        html: "",
+        language: null,
+        links: [],
+        redirected: false,
+        scripts: [],
+        statusCode: null,
+        textContent: "",
+        title: null,
+        forms: []
+      }) satisfies StaticPageResult
+  );
+  const plan = buildScanPlan({
+    homepage,
+    requestedPageCount: 1,
+    robotsCrawlDelayMs: robotsState.policy?.crawlDelayMs() ?? null
+  });
+  const homepageUrl = homepage.finalUrl ?? startUrl;
+  const shouldSweepProfiles = input.profileSweep ?? true;
+  const probeProfiles = shouldSweepProfiles ? getConsentProbeProfiles() : [{ name: "desktop_default", contextOptions: {} }];
+  const attemptedProbeProfiles: string[] = [];
+  let browserPass = await runBrowserPass({
+    plan,
+    domain: input.domain.replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+    homepageUrl,
+    organizationId: input.organizationId,
+    robotsPolicy: robotsState.policy,
+    scanId: input.scanId,
+    browserContextOptions: probeProfiles[0]?.contextOptions
+  });
+  let winningProbeProfile = probeProfiles[0]?.name ?? null;
+  if (probeProfiles[0]) {
+    attemptedProbeProfiles.push(probeProfiles[0].name);
+  }
+
+  if (!browserPass.cookieBannerPresent && shouldSweepProfiles) {
+    const shouldRetryForVisibility = browserPass.cmpVendorName || browserPass.trackerVendors.length > 0 || browserPass.cookieCountTotal;
+
+    if (shouldRetryForVisibility) {
+      for (const profile of probeProfiles.slice(1)) {
+        attemptedProbeProfiles.push(profile.name);
+        const candidatePass = await runBrowserPass({
+          plan,
+          domain: input.domain.replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+          homepageUrl,
+          organizationId: input.organizationId,
+          robotsPolicy: robotsState.policy,
+          scanId: input.scanId,
+          browserContextOptions: profile.contextOptions
+        });
+
+        const candidateImprovesVisibility =
+          candidatePass.cookieBannerPresent ||
+          (!browserPass.cmpVendorName && Boolean(candidatePass.cmpVendorName)) ||
+          candidatePass.consentAcceptButtonCount !== browserPass.consentAcceptButtonCount ||
+          candidatePass.consentRejectButtonCount !== browserPass.consentRejectButtonCount ||
+          candidatePass.consentPreferencesButtonCount !== browserPass.consentPreferencesButtonCount;
+
+        if (candidateImprovesVisibility) {
+          browserPass = candidatePass;
+          winningProbeProfile = profile.name;
+        }
+
+        if (candidatePass.cookieBannerPresent) {
+          break;
+        }
+      }
+    }
+  }
+
+  const cmpVendor = browserPass.cmpVendorName
+    ? { name: browserPass.cmpVendorName, confidence: browserPass.cmpVendorConfidence }
+    : detectCmpVendorFromPage(homepage);
+  const consentMechanismType: ScanSnapshot["consentMechanismType"] = browserPass.cookieBannerPresent
+    ? cmpVendor?.name
+      ? "cmp"
+      : browserPass.granularPreferencesPresent
+        ? "modal"
+        : "banner"
+    : "none";
+  const scanConfidence: ScanSnapshot["scanConfidence"] =
+    homepage.fetchStatus === "ok" || homepage.fetchStatus === "redirected"
+      ? browserPass.timedOut
+        ? "medium"
+        : "high"
+      : homepage.fetchStatus === "forbidden" || homepage.fetchStatus === "blocked"
+        ? "low"
+        : "medium";
+  const consentScore = clamp(
+    85 -
+      (browserPass.cookieBannerPresent ? 0 : browserPass.trackerVendors.length > 0 ? 25 : 0) -
+      (browserPass.rejectAllPresent ? 0 : browserPass.cookieBannerPresent ? 12 : 0) -
+      (browserPass.granularPreferencesPresent ? 0 : browserPass.cookieBannerPresent ? 8 : 0) -
+      (browserPass.consentInteractionModel === "accept_only" ? 10 : 0) -
+      (browserPass.consentInteractionModel === "dismiss_only" ? 8 : 0) -
+      (browserPass.preconsentTrackingDetected ? 20 : 0) -
+      (browserPass.darkPatternAcceptEmphasis ? 6 : 0) -
+      (browserPass.darkPatternRejectHidden ? 6 : 0)
+  );
+
+  return {
+    finalUrl: homepage.finalUrl ?? null,
+    scanConfidence,
+    cookieBannerPresent: browserPass.cookieBannerPresent,
+    consentMechanismType,
+    cmpVendorName: cmpVendor?.name ?? null,
+    cmpVendorConfidence: cmpVendor?.confidence ?? null,
+    consentInteractionModel: browserPass.consentInteractionModel,
+    consentAcceptButtonCount: browserPass.consentAcceptButtonCount,
+    consentRejectButtonCount: browserPass.consentRejectButtonCount,
+    consentPreferencesButtonCount: browserPass.consentPreferencesButtonCount,
+    acceptAllPresent: browserPass.acceptAllPresent,
+    rejectAllPresent: browserPass.rejectAllPresent,
+    granularPreferencesPresent: browserPass.granularPreferencesPresent,
+    consentBannerLayoutType: browserPass.consentBannerLayoutType,
+    consentBannerPosition: browserPass.consentBannerPosition,
+    consentPersistenceMechanismDetected: browserPass.consentPersistenceMechanismDetected,
+    preconsentTrackingDetected: browserPass.preconsentTrackingDetected,
+    defaultTrackingState: browserPass.defaultTrackingState,
+    cookieCategoryCount: browserPass.cookieCategoryCount,
+    cookiePolicyLinkedFromBanner: browserPass.cookiePolicyLinkedFromBanner,
+    darkPatternAcceptEmphasis: browserPass.darkPatternAcceptEmphasis,
+    darkPatternRejectHidden: browserPass.darkPatternRejectHidden,
+    darkPatternRejectButtonMissing: browserPass.darkPatternRejectButtonMissing,
+    darkPatternAcceptButtonProminence: browserPass.darkPatternAcceptButtonProminence,
+    darkPatternForcedConsentWall: browserPass.darkPatternForcedConsentWall,
+    darkPatternAcceptOnlyBanner: browserPass.darkPatternAcceptOnlyBanner,
+    darkPatternDismissWithoutReject: browserPass.darkPatternDismissWithoutReject,
+    consentScore,
+    trackerCountTotal: browserPass.trackerVendors.length,
+    attemptedProbeProfiles,
+    winningProbeProfile
   };
 }

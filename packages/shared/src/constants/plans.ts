@@ -7,6 +7,7 @@ export type PlanDefinition = {
   label: string;
   priceLabel: string;
   description: string;
+  coverageLabel: string;
   maxDomains: number;
   maxPagesPerScan: number;
   scanFrequency: ScanFrequency;
@@ -21,7 +22,8 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     code: "free",
     label: "Free",
     priceLabel: "$0",
-    description: "One website with lightweight scans and one scan each month.",
+    description: "Homepage-only preview",
+    coverageLabel: "Homepage-only preview",
     maxDomains: 1,
     maxPagesPerScan: 3,
     scanFrequency: "manual",
@@ -34,7 +36,8 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     code: "pro",
     label: "Pro",
     priceLabel: "$79/mo",
-    description: "Up to three websites with on-demand scans up to hourly.",
+    description: "Expanded domain coverage",
+    coverageLabel: "Expanded domain coverage",
     maxDomains: 3,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
@@ -47,8 +50,9 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     code: "team",
     label: "Ultra",
     priceLabel: "$149/mo",
-    description: "Up to fifty websites with scan history, API access, and scans up to hourly.",
-    maxDomains: 50,
+    description: "Expanded domain coverage",
+    coverageLabel: "Expanded domain coverage",
+    maxDomains: 200,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "team",

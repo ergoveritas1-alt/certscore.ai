@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SnapshotBundle } from "../snapshot/types";
-import { buildRuntimeArtifactRow, buildSnapshotInsert } from "./save-snapshot-bundle";
+import {
+  buildAccessibilityRuleExampleRows,
+  buildPreconsentViolationRows,
+  buildRuntimeArtifactRow,
+  buildSnapshotInsert
+} from "./save-snapshot-bundle";
 
 test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", () => {
   const bundle = {
@@ -37,7 +42,30 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
         "strict-transport-security": "max-age=31536000"
       },
       domStructureHash: "hash-1",
-      domNodeCount: 42
+      domNodeCount: 42,
+      consentAuditCompleted: true,
+      consentRejectInteractionSucceeded: true,
+      consentAcceptInteractionSucceeded: false,
+      consentRejectReducedTracking: true,
+      consentRejectReducedThirdPartyCookies: true,
+      consentBaselineCookieCount: 8,
+      consentBaselineThirdPartyCookieCount: 7,
+      consentPreconsentViolationCount: 2,
+      consentBaselineTrackerEvidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
+      consentBaselineTrackerVendorNames: ["LinkedIn Insight Tag", "Marketo"],
+      consentRejectPersistedTrackerVendorNames: ["LinkedIn Insight Tag"],
+      consentRejectNewTrackerVendorNames: [],
+      consentRejectClickCount: 1,
+      consentAcceptClickCount: 0,
+      consentPostRejectCookieCount: 3,
+      consentPostRejectThirdPartyCookieCount: 1,
+      consentPostRejectTrackerEvidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
+      consentPostRejectTrackerVendorNames: ["LinkedIn Insight Tag"],
+      consentAcceptNewTrackerVendorNames: ["Google Ads"],
+      consentPostAcceptCookieCount: 10,
+      consentPostAcceptThirdPartyCookieCount: 8,
+      consentPostAcceptTrackerEvidenceUrls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
+      consentPostAcceptTrackerVendorNames: ["Google Ads", "LinkedIn Insight Tag"]
     }
   } as unknown as SnapshotBundle;
 
@@ -57,7 +85,30 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       "strict-transport-security": "max-age=31536000"
     },
     dom_structure_hash: "hash-1",
-    dom_node_count: 42
+    dom_node_count: 42,
+    consent_audit_completed: true,
+    consent_reject_interaction_succeeded: true,
+    consent_accept_interaction_succeeded: false,
+    consent_reject_reduced_tracking: true,
+    consent_reject_reduced_third_party_cookies: true,
+    consent_baseline_cookie_count: 8,
+    consent_baseline_third_party_cookie_count: 7,
+    consent_preconsent_violation_count: 2,
+    consent_baseline_tracker_evidence_urls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
+    consent_baseline_tracker_vendor_names: ["LinkedIn Insight Tag", "Marketo"],
+    consent_reject_persisted_tracker_vendor_names: ["LinkedIn Insight Tag"],
+    consent_reject_new_tracker_vendor_names: [],
+    consent_reject_click_count: 1,
+    consent_accept_click_count: 0,
+    consent_post_reject_cookie_count: 3,
+    consent_post_reject_third_party_cookie_count: 1,
+    consent_post_reject_tracker_evidence_urls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
+    consent_post_reject_tracker_vendor_names: ["LinkedIn Insight Tag"],
+    consent_accept_new_tracker_vendor_names: ["Google Ads"],
+    consent_post_accept_cookie_count: 10,
+    consent_post_accept_third_party_cookie_count: 8,
+    consent_post_accept_tracker_evidence_urls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
+    consent_post_accept_tracker_vendor_names: ["Google Ads", "LinkedIn Insight Tag"]
   });
 });
 
@@ -78,4 +129,163 @@ test("buildSnapshotInsert omits policy enrichment id until policy rows exist", (
     scan_id: "scan-1",
     policy_enrichment_id: "policy-1"
   });
+});
+
+test("buildPreconsentViolationRows persists vendor-level pre-consent evidence", () => {
+  const bundle = {
+    snapshot: {
+      scanId: "scan-1",
+      organizationId: "org-1",
+      domainId: "domain-1"
+    },
+    runtimeArtifacts: {
+      consentBaselineTrackerVendorNames: ["LinkedIn Insight Tag", "Marketo"],
+      consentBaselineTrackerEvidenceUrls: [
+        "https://snap.licdn.com/li.lms-analytics/insight.min.js",
+        "https://px.ads.linkedin.com/collect?v=2",
+        "https://munchkin.marketo.net/munchkin.js"
+      ]
+    },
+    trackerVendors: [
+      {
+        scanId: "scan-1",
+        vendorName: "LinkedIn Insight Tag",
+        vendorCategory: "advertising",
+        detectionSource: "runtime_request",
+        confidence: 0.92,
+        firstPartyOrThirdParty: "third_party",
+        collectionEndpointType: "direct_third_party",
+        beforeConsent: true,
+        scriptHost: "snap.licdn.com",
+        matchedSignatureId: "linkedin-insight"
+      },
+      {
+        scanId: "scan-1",
+        vendorName: "Marketo",
+        vendorCategory: "analytics",
+        detectionSource: "runtime_request",
+        confidence: 0.85,
+        firstPartyOrThirdParty: "third_party",
+        collectionEndpointType: "direct_third_party",
+        beforeConsent: true,
+        scriptHost: "munchkin.marketo.net",
+        matchedSignatureId: "marketo-munchkin"
+      }
+    ]
+  } as unknown as SnapshotBundle;
+
+  assert.deepEqual(buildPreconsentViolationRows(bundle), [
+    {
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      vendor_name: "LinkedIn Insight Tag",
+      vendor_category: "advertising",
+      detection_source: "runtime_request",
+      confidence: 0.92,
+      first_party_or_third_party: "third_party",
+      collection_endpoint_type: "direct_third_party",
+      script_host: "snap.licdn.com",
+      matched_signature_id: "linkedin-insight",
+      evidence_urls: [
+        "https://snap.licdn.com/li.lms-analytics/insight.min.js",
+        "https://px.ads.linkedin.com/collect?v=2"
+      ]
+    },
+    {
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      vendor_name: "Marketo",
+      vendor_category: "analytics",
+      detection_source: "runtime_request",
+      confidence: 0.85,
+      first_party_or_third_party: "third_party",
+      collection_endpoint_type: "direct_third_party",
+      script_host: "munchkin.marketo.net",
+      matched_signature_id: "marketo-munchkin",
+      evidence_urls: ["https://munchkin.marketo.net/munchkin.js"]
+    }
+  ]);
+});
+
+test("buildPreconsentViolationRows infers vendor metadata from evidence URLs when tracker inventory is missing", () => {
+  const bundle = {
+    snapshot: {
+      scanId: "scan-1",
+      organizationId: "org-1",
+      domainId: "domain-1"
+    },
+    runtimeArtifacts: {
+      consentBaselineTrackerVendorNames: ["LinkedIn Insight Tag"],
+      consentBaselineTrackerEvidenceUrls: [
+        "https://snap.licdn.com/li.lms-analytics/insight.min.js",
+        "https://px.ads.linkedin.com/collect?v=2"
+      ]
+    },
+    trackerVendors: []
+  } as unknown as SnapshotBundle;
+
+  assert.deepEqual(buildPreconsentViolationRows(bundle), [
+    {
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      vendor_name: "LinkedIn Insight Tag",
+      vendor_category: "advertising",
+      detection_source: "script_signature",
+      confidence: 0.9,
+      first_party_or_third_party: "unknown",
+      collection_endpoint_type: "direct_third_party",
+      script_host: null,
+      matched_signature_id: "linkedin_insight",
+      evidence_urls: [
+        "https://snap.licdn.com/li.lms-analytics/insight.min.js",
+        "https://px.ads.linkedin.com/collect?v=2"
+      ]
+    }
+  ]);
+});
+
+test("buildAccessibilityRuleExampleRows persists representative selectors and help metadata", () => {
+  const bundle = {
+    snapshot: {
+      scanId: "scan-1",
+      organizationId: "org-1",
+      domainId: "domain-1"
+    },
+    accessibilityRuleExamples: [
+      {
+        scanId: "scan-1",
+        pageUrl: "https://example.com/",
+        ruleCode: "color-contrast",
+        ruleGroup: "color",
+        severity: "medium",
+        impact: "serious",
+        help: "Elements must meet minimum color contrast ratio thresholds",
+        helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+        description: "Ensures the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+        nodeCount: 3,
+        representativeSelectors: ["button.primary", "a.hero-link"]
+      }
+    ]
+  } as unknown as SnapshotBundle;
+
+  assert.deepEqual(buildAccessibilityRuleExampleRows(bundle), [
+    {
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      page_url: "https://example.com/",
+      rule_code: "color-contrast",
+      rule_group: "color",
+      severity: "medium",
+      impact: "serious",
+      help: "Elements must meet minimum color contrast ratio thresholds",
+      help_url: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+      description: "Ensures the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      node_count: 3,
+      representative_selectors: ["button.primary", "a.hero-link"]
+    }
+  ]);
 });

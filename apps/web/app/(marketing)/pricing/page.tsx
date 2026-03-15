@@ -9,13 +9,13 @@ import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Pricing",
-  description: "Compare CertScore.ai plans for website signal scanning, scan cadence, and scan history.",
+  description: "Compare CertScore.ai plans for domain signal scanning, scan cadence, and scan history.",
   path: "/pricing"
 });
 
 const comparisonRows = [
-  { label: "Websites", values: { free: "1", pro: "3", team: "20" } },
-  { label: "Pages per website", values: { free: "Up to 3", pro: "Up to 5", team: "Up to 5" } },
+  { label: "Domains", values: { free: "1", pro: "3", team: "200" } },
+  { label: "Coverage", values: { free: "Homepage-only preview", pro: "Expanded domain coverage", team: "Expanded domain coverage" } },
   { label: "Scan cadence", values: { free: "1 per month", pro: "On-demand, up to hourly", team: "On-demand, up to hourly" } },
   { label: "Scan history", values: { free: "Not included", pro: "Included", team: "Included" } }
 ];
@@ -29,7 +29,7 @@ export default function PricingPage() {
           <Badge tone="neutral">Simple limits, aligned with the product.</Badge>
           <h1 className="text-4xl font-semibold tracking-tight">Pricing</h1>
           <p className="text-lg text-slate-600">
-            Plans scale by website count, page coverage, scan cadence, and scan history.
+            Plans scale by domain count, page coverage, scan cadence, and scan history.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button
@@ -69,8 +69,8 @@ export default function PricingPage() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-slate-700">
                 <p>{plan.description}</p>
-                <p>Websites: {plan.maxDomains}</p>
-                <p>Pages per website: {plan.maxPagesPerScan}</p>
+                <p>Domains: {plan.maxDomains}</p>
+                <p>Coverage: {plan.coverageLabel}</p>
                 <p>Scan cadence: {plan.scanFrequency === "manual" ? "Monthly" : "On-demand, up to hourly"}</p>
                 <p>Scan history: {plan.code === "pro" || plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
               </CardContent>

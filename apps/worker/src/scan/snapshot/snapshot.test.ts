@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAgencyMappings, buildRegulatoryRiskAssessment, type ScanSnapshot } from "@website-signal-risk-scanner/shared";
+import { buildAgencyMappings, buildRegulatoryRiskAssessment, projectSnapshotSignals, type ScanSnapshot } from "@website-signal-risk-scanner/shared";
+import { classifyScanAccess } from "../access-classification";
 import {
+  assessPolicyPageContentQuality,
   deriveAdvertisingClassification,
   deriveAiInfrastructureSignals,
   buildAccessibilitySummary,
@@ -11,11 +13,13 @@ import {
   deriveExpandedCommercialSignals,
   deriveGovernanceSignals,
   derivePolicySignals,
+  detectCmpVendorFromPage,
   detectTrackerVendorsFromStaticPage,
   discoverCandidatePages,
   policyPresenceHash
 } from "./extractors";
 import { inferConsentDarkPatternFlags } from "./build-snapshot-bundle";
+import { classifyConsentButtonRole } from "./consent-ui";
 import { diffSnapshots } from "./diff-snapshots";
 import {
   deriveInfrastructureChangeSignals,
@@ -174,6 +178,10 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     consentMechanismType: "cmp",
     cmpVendorName: "OneTrust",
     cmpVendorConfidence: 0.95,
+    consentInteractionModel: "accept_preferences",
+    consentAcceptButtonCount: 1,
+    consentRejectButtonCount: 0,
+    consentPreferencesButtonCount: 1,
     rejectAllPresent: false,
     acceptAllPresent: true,
     granularPreferencesPresent: true,
@@ -421,6 +429,127 @@ test("derivePolicySignals sanitizes noisy policy update dates", () => {
 
   assert.equal(signals.privacyPolicyLastUpdatedFound, "2026-01-01");
   assert.equal(signals.privacyPolicyLastUpdatedDate, "2026-01-01");
+});
+
+test("assessPolicyPageContentQuality flags thin shell-like legal pages for rendered fallback", () => {
+  const quality = assessPolicyPageContentQuality(
+    makePage({
+      pageType: "privacy_policy",
+      html: '<html><body><div id="__next"></div><script type="module" src="/app.js"></script></body></html>',
+      textContent: "Loading..."
+    })
+  );
+
+  assert.equal(quality.eligibleForRenderedFallback, true);
+  assert.equal(quality.insufficientContent, true);
+  assert.equal(quality.shellMarkerDetected, true);
+});
+
+test("assessPolicyPageContentQuality does not flag substantive legal pages", () => {
+  const quality = assessPolicyPageContentQuality(
+    makePage({
+      pageType: "privacy_policy",
+      html: "<html><body>Privacy policy body</body></html>",
+      textContent: `${"We collect, use, retain, and disclose personal information as described in this privacy policy. ".repeat(20)}`
+    })
+  );
+
+  assert.equal(quality.insufficientContent, false);
+  assert.ok(quality.wordCount >= 120);
+});
+
+test("projectSnapshotSignals surfaces explicit access limitation signals", () => {
+  const signals = projectSnapshotSignals(
+    makeSnapshot({
+      robotsAllowed: false,
+      homepageFetchStatus: "forbidden",
+      homepageFetchHttpStatus: 403,
+      captchaFlag: true,
+      authWallDetected: true,
+      partialScan: true
+    }),
+    []
+  );
+
+  const keys = new Set(signals.map((signal) => signal.key));
+
+  assert.ok(keys.has("context.access_blocked_by_robots"));
+  assert.ok(keys.has("context.access_http_forbidden"));
+  assert.ok(keys.has("context.access_bot_challenge_detected"));
+  assert.ok(keys.has("context.access_auth_wall_detected"));
+  assert.ok(keys.has("context.access_partial_scan"));
+});
+
+test("classifyScanAccess reports blocked legal coverage without treating it as policy weakness", () => {
+  const classification = classifyScanAccess({
+    snapshot: makeSnapshot({
+      homepageFetchStatus: "forbidden",
+      homepageFetchHttpStatus: 403,
+      captchaFlag: true,
+      partialScan: true
+    }),
+    runtimeArtifacts: {
+      scanId: "scan-current",
+      thirdPartyRequestDomains: [],
+      thirdPartyRequestCount: 0,
+      initialCookieNames: [],
+      initialCookieDomains: [],
+      initialCookieCount: 0,
+      scriptSrcDomains: [],
+      scriptTagCount: 0,
+      responseHeaders: {
+        "cf-mitigated": "challenge",
+        server: "cloudflare"
+      },
+      domStructureHash: null,
+      domNodeCount: null,
+      consentAuditCompleted: null,
+      consentRejectInteractionSucceeded: null,
+      consentAcceptInteractionSucceeded: null,
+      consentRejectReducedTracking: null,
+      consentRejectReducedThirdPartyCookies: null,
+      consentBaselineCookieCount: null,
+      consentBaselineThirdPartyCookieCount: null,
+      consentPreconsentViolationCount: null,
+      consentBaselineTrackerEvidenceUrls: [],
+      consentBaselineTrackerVendorNames: [],
+      consentRejectPersistedTrackerVendorNames: [],
+      consentRejectNewTrackerVendorNames: [],
+      consentRejectClickCount: null,
+      consentAcceptClickCount: null,
+      consentPostRejectCookieCount: null,
+      consentPostRejectThirdPartyCookieCount: null,
+      consentPostRejectTrackerEvidenceUrls: [],
+      consentPostRejectTrackerVendorNames: [],
+      consentAcceptNewTrackerVendorNames: [],
+      consentPostAcceptCookieCount: null,
+      consentPostAcceptThirdPartyCookieCount: null,
+      consentPostAcceptTrackerEvidenceUrls: [],
+      consentPostAcceptTrackerVendorNames: []
+    },
+    pages: [
+      {
+        scanId: "scan-current",
+        pageType: "privacy_policy",
+        pageUrl: "https://example.com/privacy",
+        fetchStatus: "forbidden",
+        fetchedVia: "http",
+        normalizedContentHash: null,
+        titleHash: null,
+        pageLanguage: "en"
+      }
+    ]
+  });
+
+  assert.ok(classification);
+  assert.deepEqual(classification?.codes, [
+    "access.http_forbidden",
+    "access.bot_challenge_detected",
+    "access.legal_pages_limited",
+    "access.partial_scan"
+  ]);
+  const challengeHeaders = classification?.metadata.challengeHeaders as { cfMitigated?: string | null } | undefined;
+  assert.equal(challengeHeaders?.cfMitigated, "challenge");
 });
 
 test("deriveTrackingBeforeConsentDetected respects browser-session evidence", () => {
@@ -862,6 +991,15 @@ test("inferConsentDarkPatternFlags captures consent dark-pattern heuristics", ()
   assert.equal(flags.darkPatternFakeScarcityLanguage, true);
 });
 
+test("classifyConsentButtonRole recognizes broader CMP button labels", () => {
+  assert.equal(classifyConsentButtonRole("Accept all"), "accept");
+  assert.equal(classifyConsentButtonRole("Only necessary"), "reject");
+  assert.equal(classifyConsentButtonRole("Learn more"), "preferences");
+  assert.equal(classifyConsentButtonRole("Privacy choices"), "preferences");
+  assert.equal(classifyConsentButtonRole("Continue without accepting"), "reject");
+  assert.equal(classifyConsentButtonRole("Close"), "dismiss");
+});
+
 test("deriveFormSignals detects sensitive-data collection categories", () => {
   const formSignals = deriveFormSignals([
     makePage({
@@ -933,6 +1071,41 @@ test("detectTrackerVendorsFromStaticPage maps real vendor names", () => {
   );
 });
 
+test("detectTrackerVendorsFromStaticPage detects expanded analytics, CDP, and replay vendors", () => {
+  const trackers = detectTrackerVendorsFromStaticPage({
+    scanId: "scan-1",
+    pageHostname: "example.com",
+    pageText: "analytics.load('SEGMENT'); posthog.init('phc'); FS.identify('user-1'); s_gi('suite');",
+    scripts: [
+      {
+        src: "https://cdn.segment.com/analytics.js/v1/test/analytics.min.js",
+        host: "cdn.segment.com",
+        contentSample: null
+      },
+      {
+        src: "https://cdn.fsd2.com/fs.js",
+        host: "cdn.fsd2.com",
+        contentSample: null
+      },
+      {
+        src: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+        host: "www.googletagmanager.com",
+        contentSample: null
+      },
+      {
+        src: "https://example.sc.omtrdc.net/b/ss/example/1/JS-2.0.0/s1234567890",
+        host: "example.sc.omtrdc.net",
+        contentSample: null
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    trackers.map((tracker) => tracker.vendorName).sort(),
+    ["Adobe Analytics", "FullStory", "Google Tag Manager", "PostHog", "Segment"]
+  );
+});
+
 test("deriveAdvertisingClassification maps ad and replay vendors", () => {
   const signals = deriveAdvertisingClassification([
     {
@@ -942,6 +1115,7 @@ test("deriveAdvertisingClassification maps ad and replay vendors", () => {
       detectionSource: "request",
       confidence: 0.9,
       firstPartyOrThirdParty: "third_party",
+      collectionEndpointType: "direct_third_party",
       beforeConsent: true,
       scriptHost: "doubleclick.net",
       matchedSignatureId: "google_ads"
@@ -953,6 +1127,7 @@ test("deriveAdvertisingClassification maps ad and replay vendors", () => {
       detectionSource: "script_signature",
       confidence: 0.95,
       firstPartyOrThirdParty: "third_party",
+      collectionEndpointType: "direct_third_party",
       beforeConsent: null,
       scriptHost: "fullstory.com",
       matchedSignatureId: "fullstory"
@@ -1047,6 +1222,10 @@ test("hash helpers are stable for presence and consent signatures", () => {
   const presenceB = policyPresenceHash(makeSnapshot());
   const consentA = consentSignatureHash({
     acceptAllPresent: true,
+    consentAcceptButtonCount: 1,
+    consentInteractionModel: "accept_preferences",
+    consentPreferencesButtonCount: 1,
+    consentRejectButtonCount: 0,
     cmpVendorName: "OneTrust",
     cookieBannerPresent: true,
     cookiePolicyLinkedFromBanner: true,
@@ -1055,6 +1234,10 @@ test("hash helpers are stable for presence and consent signatures", () => {
   });
   const consentB = consentSignatureHash({
     acceptAllPresent: true,
+    consentAcceptButtonCount: 1,
+    consentInteractionModel: "accept_preferences",
+    consentPreferencesButtonCount: 1,
+    consentRejectButtonCount: 0,
     cmpVendorName: "OneTrust",
     cookieBannerPresent: true,
     cookiePolicyLinkedFromBanner: true,
@@ -1064,6 +1247,52 @@ test("hash helpers are stable for presence and consent signatures", () => {
 
   assert.equal(presenceA, presenceB);
   assert.equal(consentA, consentB);
+});
+
+test("consent signature changes when interaction model changes", () => {
+  const acceptOnly = consentSignatureHash({
+    acceptAllPresent: true,
+    consentAcceptButtonCount: 1,
+    consentInteractionModel: "accept_only",
+    consentPreferencesButtonCount: 0,
+    consentRejectButtonCount: 0,
+    cmpVendorName: "Iubenda",
+    cookieBannerPresent: true,
+    cookiePolicyLinkedFromBanner: true,
+    granularPreferencesPresent: false,
+    rejectAllPresent: false
+  });
+  const acceptRejectPreferences = consentSignatureHash({
+    acceptAllPresent: true,
+    consentAcceptButtonCount: 1,
+    consentInteractionModel: "accept_reject_preferences",
+    consentPreferencesButtonCount: 1,
+    consentRejectButtonCount: 1,
+    cmpVendorName: "Iubenda",
+    cookieBannerPresent: true,
+    cookiePolicyLinkedFromBanner: true,
+    granularPreferencesPresent: true,
+    rejectAllPresent: true
+  });
+
+  assert.notEqual(acceptOnly, acceptRejectPreferences);
+});
+
+test("detectCmpVendorFromPage detects Iubenda consent signatures", () => {
+  const vendor = detectCmpVendorFromPage(
+    makePage({
+      html: '<div id="iubenda-cs-banner"></div><script>var _iub = _iub || []; var iubenda_cs_configuration = {}</script>',
+      scripts: [
+        {
+          src: "https://cdn.iubenda.com/cs/iubenda_cs.js",
+          host: "cdn.iubenda.com",
+          contentSample: null
+        }
+      ]
+    })
+  );
+
+  assert.equal(vendor?.name, "Iubenda");
 });
 
 test("buildAccessibilitySummary aggregates normalized rule families", () => {
@@ -1110,6 +1339,7 @@ test("diffSnapshots emits semantic and generic change events", () => {
         detectionSource: "request",
         confidence: 0.95,
         firstPartyOrThirdParty: "third_party",
+        collectionEndpointType: "direct_third_party",
         beforeConsent: true,
         scriptHost: "static.hotjar.com",
         matchedSignatureId: "hotjar"

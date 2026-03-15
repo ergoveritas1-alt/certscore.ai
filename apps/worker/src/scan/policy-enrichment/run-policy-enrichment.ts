@@ -1,19 +1,61 @@
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { PolicyEnrichment, PolicyReviewQueueItem } from "@website-signal-risk-scanner/shared";
+import { assessPolicyPageContentQuality } from "../snapshot/extractors";
 import type { StaticPageResult } from "../snapshot/types";
-import { chunkPolicyText } from "./chunk";
+import { chunkPolicyText, selectPolicyChunksForLlm } from "./chunk";
 import { buildPolicyEvidenceRecords } from "./evidence";
-import { createPolicyLlmClient, loadPolicyPrompt, POLICY_EXTRACTION_CONFIG } from "./llm-client";
+import { createPolicyLlmClient, loadPolicyPrompt, POLICY_EXTRACTION_CONFIG, PolicyLlmError, resolvePolicyPromptName } from "./llm-client";
 import { mergePolicyChunkExtractions } from "./merge";
 import { ruleBasedPolicyPreprocess } from "./rules";
 import { validatePolicyChunkJson } from "./schema";
-import type { EnrichPolicyPagesInput, PolicyEnrichmentBundle, PolicyLlmClient } from "./types";
+import type { EnrichPolicyPagesInput, PolicyEnrichmentBundle, PolicyLlmChunkDiagnostic, PolicyLlmClient } from "./types";
 
 const CONFIDENCE_THRESHOLD_HIGH = 0.8;
 const CONFIDENCE_THRESHOLD_MODERATE = 0.6;
+const FAILURE_PREVIEW_MAX_CHARS = 600;
+const DEFAULT_LLM_ATTEMPTS = 3;
 
-async function getCachedPolicyEnrichment(input: { normalizedPolicyHash: string }) {
+function getMaxLlmAttempts(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_ATTEMPTS ?? String(DEFAULT_LLM_ATTEMPTS), 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : DEFAULT_LLM_ATTEMPTS;
+}
+
+function getMaxLlmChunks(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_CHUNKS ?? "5", 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : 5;
+}
+
+function getMaxLlmChunksForPageType(pageType: StaticPageResult["pageType"], env: NodeJS.ProcessEnv = process.env) {
+  const base = getMaxLlmChunks(env);
+  return pageType === "terms_of_service" ? Math.max(base, 5) : base;
+}
+
+function shouldPreferLastChunk(env: NodeJS.ProcessEnv = process.env) {
+  return env.LLM_ENRICHMENT_FORCE_LAST_CHUNK !== "0";
+}
+
+function summarizeFailureDetail(value: unknown) {
+  if (value instanceof Error) {
+    return value.message.slice(0, FAILURE_PREVIEW_MAX_CHARS);
+  }
+
+  return String(value).slice(0, FAILURE_PREVIEW_MAX_CHARS);
+}
+
+function buildFailurePreview(rawJson: unknown) {
+  if (typeof rawJson !== "string" || rawJson.length === 0) {
+    return null;
+  }
+
+  return rawJson.slice(0, FAILURE_PREVIEW_MAX_CHARS);
+}
+
+async function getCachedPolicyEnrichment(input: {
+  normalizedPolicyHash: string;
+  pageType: StaticPageResult["pageType"];
+  promptVersion: string;
+}) {
   let supabase;
   try {
     supabase = createAdminClient();
@@ -24,9 +66,10 @@ async function getCachedPolicyEnrichment(input: { normalizedPolicyHash: string }
     .from("policy_enrichment")
     .select("*")
     .eq("normalized_policy_hash", input.normalizedPolicyHash)
+    .eq("page_type", input.pageType)
     .eq("policy_ai_model", POLICY_EXTRACTION_CONFIG.model)
     .eq("policy_ai_model_version", POLICY_EXTRACTION_CONFIG.modelVersion)
-    .eq("policy_ai_prompt_version", POLICY_EXTRACTION_CONFIG.promptVersion)
+    .eq("policy_ai_prompt_version", input.promptVersion)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -35,11 +78,17 @@ async function getCachedPolicyEnrichment(input: { normalizedPolicyHash: string }
 }
 
 function shouldRunLlm(input: {
+  allowLlm?: boolean;
   forceLlm?: boolean;
   hasClient: boolean;
   isArchive: boolean;
+  llmTriggerReasons?: string[];
   needLlm: boolean;
 }) {
+  if (input.allowLlm === false) {
+    return false;
+  }
+
   if (!input.hasClient) {
     return false;
   }
@@ -48,7 +97,7 @@ function shouldRunLlm(input: {
     return true;
   }
 
-  if (!input.isArchive) {
+  if ((input.llmTriggerReasons?.length ?? 0) > 0) {
     return true;
   }
 
@@ -78,6 +127,9 @@ function buildPolicyEvidenceSnippetMap(input: {
 
 function buildChunkSnippetMap(chunkExtraction: ReturnType<typeof validatePolicyChunkJson>) {
   return {
+    effective_date: chunkExtraction.effectiveDate.snippet,
+    governing_law: chunkExtraction.governingLaw.snippet,
+    arbitration: chunkExtraction.arbitrationPresent.snippet,
     dsar: chunkExtraction.dsarMechanism.snippet,
     do_not_sell: chunkExtraction.doNotSell.snippet,
     gdpr: chunkExtraction.mentionsGdpr.snippet,
@@ -85,6 +137,10 @@ function buildChunkSnippetMap(chunkExtraction: ReturnType<typeof validatePolicyC
     retention: chunkExtraction.retentionStatements[0]?.snippet ?? null,
     transfer: chunkExtraction.transferMechanisms[0]?.snippet ?? null
   };
+}
+
+function allowTermsOnlyLegalClauses(pageType: StaticPageResult["pageType"]) {
+  return pageType === "terms_of_service";
 }
 
 function maybeQueueReview(input: {
@@ -131,8 +187,10 @@ async function extractChunkWithLlm(input: {
   chunkText: string;
   chunkId: string;
   llmClient: PolicyLlmClient;
+  pageType: StaticPageResult["pageType"];
 }) {
-  const promptText = loadPolicyPrompt("policy_extraction_v1.txt");
+  const promptName = resolvePolicyPromptName(input.pageType);
+  const promptText = loadPolicyPrompt(promptName);
   const response = await input.llmClient.extractPolicyChunk({
     chunk: {
       chunkId: input.chunkId,
@@ -140,17 +198,63 @@ async function extractChunkWithLlm(input: {
       offsetEnd: input.chunkText.length,
       text: input.chunkText
     },
-    promptName: "policy_extraction_v1.txt",
+    promptName,
     promptText
   });
 
   return {
-    extraction: validatePolicyChunkJson({
-      chunkText: input.chunkText,
-      rawJson: response.rawJson
-    }),
+    extraction: (() => {
+      try {
+        return validatePolicyChunkJson({
+          chunkText: input.chunkText,
+          rawJson: response.rawJson
+        });
+      } catch (error) {
+        throw Object.assign(
+          new PolicyLlmError("invalid_json", error instanceof Error ? error.message : "Invalid policy chunk JSON."),
+          {
+            rawJson: response.rawJson,
+            validationMessage: summarizeFailureDetail(error)
+          }
+        );
+      }
+    })(),
     meta: response
   };
+}
+
+async function extractChunkWithRetry(input: {
+  chunkText: string;
+  chunkId: string;
+  llmClient: PolicyLlmClient;
+  pageType: StaticPageResult["pageType"];
+}) {
+  let lastError: unknown = null;
+  const maxAttempts = getMaxLlmAttempts();
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const result = await extractChunkWithLlm(input);
+      return {
+        ...result,
+        attemptCount: attempt + 1
+      };
+    } catch (error) {
+      lastError = error;
+
+      const retryable =
+        error instanceof PolicyLlmError &&
+        (error.code === "timeout" || error.code === "provider_error" || error.code === "empty_response");
+
+      if (!retryable || attempt === maxAttempts - 1) {
+        throw Object.assign(error instanceof Error ? error : new Error("Unknown policy chunk extraction failure."), {
+          attemptCount: attempt + 1
+        });
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Unknown policy chunk extraction failure.");
 }
 
 function buildPolicyMentionsFromRuleResult(pageType: StaticPageResult["pageType"], topics: ReturnType<typeof ruleBasedPolicyPreprocess>["mentions"]) {
@@ -172,6 +276,9 @@ function toCachedEnrichment(input: {
     pageUrl: input.page.pageUrl,
     normalizedPolicyHash: String(input.cached.normalized_policy_hash ?? ""),
     policySummaryShort: (input.cached.policy_summary_short as string | null) ?? null,
+    policyEffectiveDate: (input.cached.policy_effective_date as string | null) ?? null,
+    policyGoverningLaw: (input.cached.policy_governing_law as string | null) ?? null,
+    policyArbitrationPresent: (input.cached.policy_arbitration_present as boolean | null) ?? null,
     privacyContactChannelType: (input.cached.privacy_contact_channel_type as PolicyEnrichment["privacyContactChannelType"]) ?? null,
     policyRetentionDisclosure: (input.cached.policy_retention_disclosure as PolicyEnrichment["policyRetentionDisclosure"]) ?? null,
     policyClaimNoSale: (input.cached.policy_claim_no_sale as boolean | null) ?? null,
@@ -209,6 +316,7 @@ function toCachedEnrichment(input: {
 
 export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<PolicyEnrichmentBundle> {
   const llmClient = createPolicyLlmClient();
+  const diagnostics: PolicyEnrichmentBundle["diagnostics"] = [];
   const evidences = new Map<string, ReturnType<typeof buildPolicyEvidenceRecords>["evidences"][number]>();
   const enrichments: PolicyEnrichment[] = [];
   const reviewQueueItems: PolicyReviewQueueItem[] = [];
@@ -218,12 +326,22 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
   for (const page of input.pages.filter((candidate) =>
     ["privacy_policy", "terms_of_service", "cookie_policy"].includes(candidate.pageType)
   )) {
+    const allowTermsClauses = allowTermsOnlyLegalClauses(page.pageType);
+    const promptName = resolvePolicyPromptName(page.pageType);
+    const promptVersion = promptName.replace(".txt", "");
     const ruleResult = ruleBasedPolicyPreprocess({
       html: page.html,
+      pageType: page.pageType,
       text: page.textContent
     });
+    const contentQuality = assessPolicyPageContentQuality(page);
+    const insufficientContentFlags = contentQuality.insufficientContent
+      ? ["policy_fetch_insufficient_content", "low_confidence"]
+      : [];
     const cachedEnrichment = await getCachedPolicyEnrichment({
-      normalizedPolicyHash: ruleResult.normalizedPolicyHash
+      normalizedPolicyHash: ruleResult.normalizedPolicyHash,
+      pageType: page.pageType,
+      promptVersion
     });
     if (cachedEnrichment) {
       const explicitSessionReplayDisclosure = Array.isArray(cachedEnrichment.policy_mentions)
@@ -240,13 +358,20 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         Boolean(cached.policyClaimNoSale) && input.advertisingTrackerCount > 0;
       const cachedSessionReplayWithoutDisclosure = input.sessionReplayTrackerCount > 0 && !explicitSessionReplayDisclosure;
       cached.policyBehaviorConflictCandidate = cachedConflict;
+      if (!allowTermsClauses) {
+        cached.policyGoverningLaw = null;
+        cached.policyArbitrationPresent = null;
+      }
       cached.policyActionableFlags = Array.from(
         new Set([
           ...cached.policyActionableFlags,
+          ...(input.llmTriggerReasons ?? []),
           ...(cachedConflict ? ["policy_behavior_conflict_candidate"] : []),
           ...(cachedSessionReplayWithoutDisclosure ? ["session_replay_undisclosed"] : [])
         ])
-      ).sort();
+      )
+        .filter((flag) => allowTermsClauses || flag !== "arbitration_clause_present")
+        .sort();
       enrichments.push(cached);
       reviewQueueItems.push(
         ...maybeQueueReview({
@@ -281,11 +406,13 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
     }
 
     const runLlm = shouldRunLlm({
+      allowLlm: input.allowLlm,
       forceLlm: input.forceLlm,
       hasClient: Boolean(llmClient),
       isArchive: false,
+      llmTriggerReasons: input.llmTriggerReasons,
       needLlm: ruleResult.needLlm
-    });
+    }) && !contentQuality.insufficientContent;
 
     let chunkExtractions: Array<ReturnType<typeof validatePolicyChunkJson>> = [];
     let modelMeta: { model: string | null; modelVersion: string | null; promptVersion: string | null } = {
@@ -294,19 +421,28 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       promptVersion: null
     };
     const llmChunkSnippetMaps: Array<Record<string, string | null>> = [];
-    let invalidJsonFallback = false;
+    let llmFailureFlags: string[] = [];
+    let llmPartialCoverage = false;
 
     if (runLlm && llmClient) {
       const chunks = chunkPolicyText({
         text: ruleResult.normalizedText
       });
+      const selectedChunks = selectPolicyChunksForLlm({
+        chunks,
+        maxChunks: getMaxLlmChunksForPageType(page.pageType),
+        pageType: page.pageType,
+        preferLastChunk: shouldPreferLastChunk()
+      });
+      const chunkDiagnostics: PolicyLlmChunkDiagnostic[] = [];
 
-      for (const chunk of chunks) {
+      for (const chunk of selectedChunks) {
         try {
-          const result = await extractChunkWithLlm({
+          const result = await extractChunkWithRetry({
             chunkId: chunk.chunkId,
             chunkText: chunk.text,
-            llmClient
+            llmClient,
+            pageType: page.pageType
           });
 
           chunkExtractions.push(result.extraction);
@@ -316,12 +452,78 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
             modelVersion: result.meta.modelVersion,
             promptVersion: result.meta.promptVersion
           };
-        } catch {
-          invalidJsonFallback = true;
-          chunkExtractions = [];
-          break;
+          chunkDiagnostics.push({
+            chunkId: chunk.chunkId,
+            selectedReason: chunk.reason,
+            score: chunk.score,
+            attemptCount: result.attemptCount,
+            success: true,
+            failureCode: null,
+            failureDetail: null,
+            rawPreview: null,
+            rawLength: result.meta.rawJson.length
+          });
+        } catch (error) {
+          const failureCode =
+            error instanceof PolicyLlmError
+              ? error.code
+              : "provider_error";
+          llmFailureFlags = Array.from(
+            new Set([
+              ...llmFailureFlags,
+              ...(error instanceof PolicyLlmError
+                ? [
+                    error.code === "invalid_json"
+                      ? "invalid_llm_json"
+                      : error.code === "timeout"
+                        ? "llm_timeout"
+                        : error.code === "empty_response"
+                          ? "llm_empty_response"
+                          : "llm_provider_error",
+                    "low_confidence"
+                  ]
+                : ["llm_provider_error", "low_confidence"])
+            ])
+          );
+          chunkDiagnostics.push({
+            chunkId: chunk.chunkId,
+            selectedReason: chunk.reason,
+            score: chunk.score,
+            attemptCount: typeof (error as { attemptCount?: unknown }).attemptCount === "number" ? (error as { attemptCount: number }).attemptCount : 1,
+            success: false,
+            failureCode,
+            failureDetail:
+              typeof (error as { validationMessage?: unknown }).validationMessage === "string"
+                ? summarizeFailureDetail((error as { validationMessage: string }).validationMessage)
+                : error instanceof Error
+                  ? summarizeFailureDetail(error)
+                  : "Unknown policy chunk extraction failure.",
+            rawPreview: buildFailurePreview((error as { rawJson?: unknown }).rawJson),
+            rawLength: null
+          });
+          llmPartialCoverage = chunkExtractions.length > 0;
+          continue;
         }
       }
+
+      diagnostics.push({
+        pageType: page.pageType,
+        pageUrl: page.pageUrl,
+        selectedChunkCount: selectedChunks.length,
+        totalChunkCount: chunks.length,
+        chunkDiagnostics
+      });
+    } else {
+      const totalChunks = chunkPolicyText({
+        text: ruleResult.normalizedText
+      }).length;
+      diagnostics.push({
+        pageType: page.pageType,
+        pageUrl: page.pageUrl,
+        selectedChunkCount: 0,
+        totalChunkCount: totalChunks,
+        chunkDiagnostics: []
+      });
     }
 
     const merged =
@@ -330,12 +532,22 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
             chunkExtractions,
             highThreshold: CONFIDENCE_THRESHOLD_HIGH,
             moderateThreshold: CONFIDENCE_THRESHOLD_MODERATE,
+            pageType: page.pageType,
             ruleResult
           })
         : {
-            policyActionableFlags: Array.from(new Set([...ruleResult.actionableFlags, ...(invalidJsonFallback ? ["invalid_llm_json", "low_confidence"] : [])])),
-            policyAmbiguityScore: ruleResult.needLlm ? 68 : 34,
+            policyActionableFlags: Array.from(
+              new Set([
+        ...ruleResult.actionableFlags,
+        ...insufficientContentFlags,
+        ...llmFailureFlags
+      ])
+    ),
+            policyAmbiguityScore: contentQuality.insufficientContent ? 90 : ruleResult.needLlm ? 68 : 34,
+            policyArbitrationPresent: allowTermsClauses ? ruleResult.arbitrationPresent : null,
             policyChildrenReference: ruleResult.childrenReference,
+            policyEffectiveDate: ruleResult.updateDate,
+            policyGoverningLaw: allowTermsClauses ? ruleResult.governingLaw : null,
             privacyContactChannelType: ruleResult.privacyContactChannelType,
             policyRetentionDisclosure: ruleResult.retentionDisclosure,
             policyClaimNoSale: ruleResult.policyClaimNoSale,
@@ -350,11 +562,21 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
             policyDsarMechanism: ruleResult.dsarMechanism,
             policyMentions: buildPolicyMentionsFromRuleResult(page.pageType, ruleResult.mentions),
             policyRetentionPeriods: ruleResult.retentionStatements,
-            policySemanticConfidence: ruleResult.semanticConfidence,
+            policySemanticConfidence: contentQuality.insufficientContent ? Math.min(ruleResult.semanticConfidence, 0.2) : ruleResult.semanticConfidence,
             policySubprocessorsListed: ruleResult.mentions.some((mention) => mention.topic === "cross_border_transfer") ? true : null,
-            policySummaryShort: ruleResult.summary,
+            policySummaryShort: contentQuality.insufficientContent
+              ? "Insufficient policy content fetched for semantic review."
+              : ruleResult.summary,
             policyTransferMechanisms: ruleResult.transferMechanisms
           };
+
+    const mergedActionableFlags = Array.from(
+      new Set([
+        ...merged.policyActionableFlags,
+        ...llmFailureFlags,
+        ...(llmPartialCoverage ? ["llm_partial_coverage"] : [])
+      ])
+    ).filter((flag) => allowTermsClauses || flag !== "arbitration_clause_present");
 
     const policyBehaviorConflictCandidate = Boolean(merged.policyClaimNoSale) && input.advertisingTrackerCount > 0;
     const explicitSessionReplayDisclosure = merged.policyMentions.some(
@@ -380,6 +602,9 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       pageUrl: page.pageUrl,
       normalizedPolicyHash: ruleResult.normalizedPolicyHash,
       policySummaryShort: merged.policySummaryShort,
+      policyEffectiveDate: merged.policyEffectiveDate,
+      policyGoverningLaw: allowTermsClauses ? merged.policyGoverningLaw : null,
+      policyArbitrationPresent: allowTermsClauses ? merged.policyArbitrationPresent : null,
       privacyContactChannelType: merged.privacyContactChannelType,
       policyRetentionDisclosure: merged.policyRetentionDisclosure,
       policyClaimNoSale: merged.policyClaimNoSale,
@@ -409,7 +634,8 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       policyBehaviorConflictCandidate,
       policyActionableFlags: Array.from(
         new Set([
-          ...merged.policyActionableFlags,
+          ...mergedActionableFlags,
+          ...(input.llmTriggerReasons ?? []),
           ...(policyBehaviorConflictCandidate ? ["policy_behavior_conflict_candidate"] : []),
           ...(input.sessionReplayTrackerCount > 0 && !explicitSessionReplayDisclosure ? ["session_replay_undisclosed"] : [])
         ])
@@ -465,6 +691,7 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
   }
 
   return {
+    diagnostics,
     enrichments,
     evidences: [...evidences.values()],
     reviewQueueItems,

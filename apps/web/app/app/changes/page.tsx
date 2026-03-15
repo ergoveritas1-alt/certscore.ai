@@ -40,8 +40,18 @@ export default async function ChangesPage() {
                   </p>
                 </div>
                 {change.scanId ? (
-                  <Button asChild size="sm" variant="secondary">
-                    <Link href={`/app/scans/${change.scanId}`}>View scan</Link>
+                  <Button
+                    asChild
+                    className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+                    size="sm"
+                    variant="secondary"
+                  >
+                    <Link aria-label={`View scan for ${change.domainHostname ?? "domain"} change`} href={`/app/scans/${change.scanId}`}>
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 19V5" />
+                        <path d="m5 12 7-7 7 7" />
+                      </svg>
+                    </Link>
                   </Button>
                 ) : null}
               </div>

@@ -33,7 +33,7 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
           />
           <Button
             aria-label="Start scanning"
-            className="absolute right-3 top-1/2 h-12 -translate-y-1/2 rounded-full px-5 text-sm font-medium"
+            className="absolute right-3 top-1/2 h-12 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] px-5 text-sm font-medium text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
             disabled={isPending}
             type="submit"
           >
@@ -43,12 +43,12 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
       </div>
 
       <p className="text-sm text-slate-600">
-        Your {planLabel} plan currently supports up to {maxDomains} connected website{maxDomains === 1 ? "" : "s"}.
+        Your {planLabel} plan currently supports up to {maxDomains} connected domain{maxDomains === 1 ? "" : "s"}.
       </p>
 
       {planCode === "free" ? (
         <p className="text-xs text-slate-500">
-          Free includes one website and one homepage scan each month.
+          Free includes one domain and one homepage scan each month.
         </p>
       ) : null}
 

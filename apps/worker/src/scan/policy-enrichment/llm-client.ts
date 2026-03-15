@@ -1,20 +1,102 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ruleBasedPolicyPreprocess } from "./rules";
 import type { PolicyChunk, PolicyLlmClient } from "./types";
 
 const PROMPT_DIR = path.join(__dirname, "prompts");
+const PROMPT_DIR_CANDIDATES = [
+  PROMPT_DIR,
+  path.resolve(__dirname, "../../../../src/scan/policy-enrichment/prompts"),
+  path.resolve(process.cwd(), "src/scan/policy-enrichment/prompts"),
+  path.resolve(process.cwd(), "apps/worker/src/scan/policy-enrichment/prompts")
+];
 
 export const POLICY_EXTRACTION_CONFIG = {
   model: "gpt-4o-mini",
   modelVersion: "v1",
   promptVersion: "policy_extraction_v1",
   temperature: 0,
-  maxTokens: 400
+  maxTokens: 1200
 } as const;
 
-export function loadPolicyPrompt(name: "policy_extraction_v1.txt" | "policy_extraction_v1_example.json") {
-  return readFileSync(path.join(PROMPT_DIR, name), "utf8");
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+export type PolicyPromptName =
+  | "policy_extraction_v1.txt"
+  | "policy_extraction_v1_example.json"
+  | "terms_extraction_v1.txt"
+  | "terms_extraction_v1_example.json";
+
+export type PolicyLlmFailureCode = "empty_response" | "invalid_json" | "provider_error" | "timeout";
+
+export class PolicyLlmError extends Error {
+  constructor(
+    readonly code: PolicyLlmFailureCode,
+    message: string
+  ) {
+    super(message);
+    this.name = "PolicyLlmError";
+  }
+}
+
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    const fenced = fencedMatch[1].trim();
+    if (fenced.startsWith("{") && fenced.endsWith("}")) {
+      return fenced;
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  return trimmed;
+}
+
+export function loadPolicyPrompt(name: PolicyPromptName) {
+  for (const promptDir of PROMPT_DIR_CANDIDATES) {
+    const candidatePath = path.join(promptDir, name);
+    if (existsSync(candidatePath)) {
+      return readFileSync(candidatePath, "utf8");
+    }
+  }
+
+  throw new Error(`Missing policy prompt asset: ${name}`);
+}
+
+export function resolvePolicyPromptName(pageType: string | null | undefined) {
+  return pageType === "terms_of_service" ? "terms_extraction_v1.txt" : "policy_extraction_v1.txt";
+}
+
+function resolvePolicyExampleName(promptName: PolicyPromptName) {
+  return promptName === "terms_extraction_v1.txt" ? "terms_extraction_v1_example.json" : "policy_extraction_v1_example.json";
+}
+
+type PolicyLlmEnv = NodeJS.ProcessEnv & {
+  LLM_ENRICHMENT_ENABLED?: string;
+  LLM_ENRICHMENT_TIMEOUT_MS?: string;
+  OPENAI_API_KEY?: string;
+  POLICY_ENRICHMENT_MOCK_LLM?: string;
+};
+
+function isLlmEnrichmentEnabled(env: PolicyLlmEnv) {
+  return env.LLM_ENRICHMENT_ENABLED === "1";
+}
+
+function getTimeoutMs(env: PolicyLlmEnv) {
+  const parsed = Number(env.LLM_ENRICHMENT_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
+  return Number.isFinite(parsed) ? Math.max(1_000, parsed) : DEFAULT_TIMEOUT_MS;
 }
 
 class MockPolicyLlmClient implements PolicyLlmClient {
@@ -25,6 +107,21 @@ class MockPolicyLlmClient implements PolicyLlmClient {
         value: quick.mentions.some((mention) => mention.topic === "gdpr") || null,
         confidence: quick.mentions.some((mention) => mention.topic === "gdpr") ? 0.84 : 0,
         snippet: quick.evidenceSnippets["topic:gdpr"] ?? null
+      },
+      effective_date: {
+        value: quick.updateDate,
+        confidence: quick.updateDate ? 0.82 : 0,
+        snippet: quick.evidenceSnippets.effective_date ?? null
+      },
+      governing_law: {
+        value: quick.governingLaw,
+        confidence: quick.governingLaw ? 0.8 : 0,
+        snippet: quick.evidenceSnippets.governing_law ?? null
+      },
+      arbitration_present: {
+        value: quick.arbitrationPresent,
+        confidence: quick.arbitrationPresent ? 0.84 : 0.3,
+        snippet: quick.evidenceSnippets.arbitration ?? null
       },
       do_not_sell: {
         value: quick.doNotSell,
@@ -107,10 +204,121 @@ class MockPolicyLlmClient implements PolicyLlmClient {
   }
 }
 
-export function createPolicyLlmClient() {
-  if (process.env.POLICY_ENRICHMENT_MOCK_LLM === "1") {
+class OpenAiPolicyLlmClient implements PolicyLlmClient {
+  constructor(
+    private readonly apiKey: string,
+    private readonly timeoutMs: number
+  ) {}
+
+  async extractPolicyChunk(input: { chunk: PolicyChunk; promptName: string; promptText: string }) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const exampleJson = loadPolicyPrompt(resolvePolicyExampleName(input.promptName as PolicyPromptName));
+
+    try {
+      const response = await fetch(OPENAI_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: POLICY_EXTRACTION_CONFIG.model,
+          temperature: POLICY_EXTRACTION_CONFIG.temperature,
+          max_completion_tokens: POLICY_EXTRACTION_CONFIG.maxTokens,
+          response_format: {
+            type: "json_object"
+          },
+          messages: [
+            {
+              role: "system",
+              content: input.promptText
+            },
+            {
+              role: "assistant",
+              content: exampleJson
+            },
+            {
+              role: "user",
+              content: `CHUNK_ID: ${input.chunk.chunkId}\nTEXT:\n${input.chunk.text}`
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        throw new PolicyLlmError(
+          "provider_error",
+          `OpenAI policy extraction failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`
+        );
+      }
+
+      const payload = (await response.json()) as {
+        model?: string;
+        choices?: Array<{
+          message?: {
+            content?: string | Array<{ text?: string; type?: string }>;
+          };
+        }>;
+      };
+      const content = payload.choices?.[0]?.message?.content;
+      const rawContent =
+        typeof content === "string"
+          ? content
+          : Array.isArray(content)
+            ? content
+                .map((item) => (item && typeof item.text === "string" ? item.text : ""))
+                .join("")
+                .trim()
+            : "";
+
+      if (!rawContent) {
+        throw new PolicyLlmError("empty_response", "OpenAI policy extraction returned an empty response.");
+      }
+
+      const rawJson = extractJsonObject(rawContent);
+
+      return {
+        model: payload.model ?? POLICY_EXTRACTION_CONFIG.model,
+        modelVersion: POLICY_EXTRACTION_CONFIG.modelVersion,
+        promptVersion: input.promptName.replace(".txt", ""),
+        rawJson
+      };
+    } catch (error) {
+      if (error instanceof PolicyLlmError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new PolicyLlmError("timeout", `OpenAI policy extraction timed out after ${this.timeoutMs}ms.`);
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export function createPolicyLlmClient(env: PolicyLlmEnv = process.env) {
+  if (env.POLICY_ENRICHMENT_MOCK_LLM === "1") {
     return new MockPolicyLlmClient();
   }
 
-  return null;
+  if (!isLlmEnrichmentEnabled(env) || !env.OPENAI_API_KEY) {
+    return null;
+  }
+
+  return new OpenAiPolicyLlmClient(env.OPENAI_API_KEY, getTimeoutMs(env));
+}
+
+export function getPolicyLlmAvailability(env: PolicyLlmEnv = process.env) {
+  return {
+    enabled: isLlmEnrichmentEnabled(env),
+    hasApiKey: Boolean(env.OPENAI_API_KEY),
+    mock: env.POLICY_ENRICHMENT_MOCK_LLM === "1",
+    timeoutMs: getTimeoutMs(env)
+  };
 }

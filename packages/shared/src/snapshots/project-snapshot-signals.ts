@@ -45,6 +45,26 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
 
   pushBoolean("privacy", "privacy.privacy_policy_present", "Privacy policy detected", snapshot.privacyPolicyPresent);
   pushBoolean("privacy", "privacy.cookie_banner_present", "Cookie banner present", snapshot.cookieBannerPresent);
+  if (snapshot.cmpVendorName) {
+    activeSignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.cmp_vendor_detected",
+        label: "CMP vendor detected",
+        value: snapshot.cmpVendorName
+      })
+    );
+  }
+  if (snapshot.consentInteractionModel && snapshot.consentInteractionModel !== "none") {
+    activeSignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_interaction_model",
+        label: "Consent interaction model",
+        value: snapshot.consentInteractionModel
+      })
+    );
+  }
   pushBoolean("privacy", "privacy.reject_all_present", "Reject-all control present", snapshot.rejectAllPresent);
   pushBoolean("privacy", "privacy.dsar_request_mechanism_present", "DSAR request mechanism present", snapshot.dsarRequestMechanismPresent);
   pushBoolean("privacy", "privacy.privacy_request_form_present", "Privacy request form present", snapshot.privacyRequestFormPresent === true);
@@ -157,7 +177,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushNumber(
     "accessibility",
     "accessibility.accessibility_litigation_risk_score",
-    "Accessibility litigation risk score",
+    "Accessibility risk score",
     snapshot.accessibilityLitigationRiskScore ?? 0
   );
 
@@ -299,6 +319,16 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "Session replay without disclosure detected",
     snapshot.sessionReplayWithoutDisclosureDetected === true
   );
+  pushBoolean("context", "context.access_blocked_by_robots", "Robots policy blocked homepage crawl", !snapshot.robotsAllowed);
+  pushBoolean(
+    "context",
+    "context.access_http_forbidden",
+    "Homepage returned forbidden",
+    snapshot.homepageFetchStatus === "forbidden" || snapshot.homepageFetchHttpStatus === 403
+  );
+  pushBoolean("context", "context.access_bot_challenge_detected", "Bot challenge detected", snapshot.captchaFlag === true);
+  pushBoolean("context", "context.access_auth_wall_detected", "Authentication wall detected", snapshot.authWallDetected === true);
+  pushBoolean("context", "context.access_partial_scan", "Scan coverage limited", snapshot.partialScan === true);
   pushNumber(
     "context",
     "context.digital_maturity_score",

@@ -4,17 +4,28 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
+  blockedFlag: boolean | null;
+  captchaFlag: boolean | null;
   certscoreOverall: number | null;
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
   domainId: string | null;
+  homepageFetchHttpStatus: number | null;
   organizationName: string | null;
   pagesScanned: number;
+  robotsFetchHttpStatus: number | null;
   scanId: string;
   scanType: string;
   status: string;
   totalSignals: number | null;
+};
+
+export type AdminScanOverviewMetrics = {
+  blockedOrCaptchaCount: number;
+  http403Count: number;
+  http429Count: number;
+  totalScans: number;
 };
 
 type ScanRow = {
@@ -39,7 +50,11 @@ type OrganizationRow = {
 };
 
 type SnapshotRow = {
+  blocked_flag: boolean | null;
+  captcha_flag: boolean | null;
   certscore_overall: number;
+  homepage_fetch_http_status: number | null;
+  robots_fetch_http_status: number | null;
   scan_id: string;
   total_signals: number;
 };
@@ -68,7 +83,10 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       ? supabase.from("organizations").select("id, name").in("id", organizationIds)
       : Promise.resolve({ data: [] as OrganizationRow[] }),
     scanIds.length
-      ? supabase.from("scan_snapshots").select("scan_id, total_signals, certscore_overall").in("scan_id", scanIds)
+      ? supabase
+          .from("scan_snapshots")
+          .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
+          .in("scan_id", scanIds)
       : Promise.resolve({ data: [] as SnapshotRow[] })
   ]);
 
@@ -87,6 +105,56 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     completedAt: scan.completed_at,
     pagesScanned: scan.pages_scanned,
     totalSignals: snapshotMap.get(scan.id)?.total_signals ?? null,
-    certscoreOverall: snapshotMap.get(scan.id)?.certscore_overall ?? null
+    certscoreOverall: snapshotMap.get(scan.id)?.certscore_overall ?? null,
+    homepageFetchHttpStatus: snapshotMap.get(scan.id)?.homepage_fetch_http_status ?? null,
+    robotsFetchHttpStatus: snapshotMap.get(scan.id)?.robots_fetch_http_status ?? null,
+    blockedFlag: snapshotMap.get(scan.id)?.blocked_flag ?? null,
+    captchaFlag: snapshotMap.get(scan.id)?.captcha_flag ?? null
   }));
+}
+
+export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
+  await requirePlatformAdminContext();
+  const supabase = createAdminClient();
+
+  const [
+    { count: totalScans, error: totalScansError },
+    { count: http403Count, error: http403Error },
+    { count: http429Count, error: http429Error },
+    { count: blockedOrCaptchaCount, error: blockedOrCaptchaError },
+  ] = await Promise.all([
+    supabase.from("scans").select("id", { count: "exact", head: true }),
+    supabase
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("homepage_fetch_http_status.eq.403,robots_fetch_http_status.eq.403"),
+    supabase
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("homepage_fetch_http_status.eq.429,robots_fetch_http_status.eq.429"),
+    supabase
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("blocked_flag.eq.true,captcha_flag.eq.true"),
+  ]);
+
+  if (totalScansError) {
+    throw new Error(`Failed to load scan count: ${totalScansError.message}`);
+  }
+  if (http403Error) {
+    throw new Error(`Failed to load 403 scan count: ${http403Error.message}`);
+  }
+  if (http429Error) {
+    throw new Error(`Failed to load 429 scan count: ${http429Error.message}`);
+  }
+  if (blockedOrCaptchaError) {
+    throw new Error(`Failed to load blocked scan count: ${blockedOrCaptchaError.message}`);
+  }
+
+  return {
+    totalScans: totalScans ?? 0,
+    http403Count: http403Count ?? 0,
+    http429Count: http429Count ?? 0,
+    blockedOrCaptchaCount: blockedOrCaptchaCount ?? 0,
+  };
 }

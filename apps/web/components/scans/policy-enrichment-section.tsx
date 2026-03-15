@@ -39,9 +39,116 @@ function formatConfidence(value: unknown) {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatPageType(value: unknown) {
+  const raw = formatValue(value);
+  if (raw === "Not observed") {
+    return raw;
+  }
+
+  return raw
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatTopicList(value: unknown, field: "topic" | "mechanism" | "periodText") {
+  const items = (value as Array<Record<string, unknown>> | null) ?? [];
+  const picked = items
+    .map((item) => item[field])
+    .filter((item): item is string => typeof item === "string" && item.length > 0);
+
+  return formatValue(picked);
+}
+
+function compactSummary(value: unknown, maxLength = 180) {
+  const text = formatValue(value);
+  if (text === "Not observed" || text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength).trimEnd()}...`;
+}
+
+function renderInlineFact(label: string, value: unknown) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="text-sm text-slate-800">{formatValue(value)}</p>
+    </div>
+  );
+}
+
+function renderPolicyRecord(
+  enrichment: Record<string, unknown>,
+  review: Record<string, unknown> | null,
+  enrichmentKey: string,
+) {
+  const pageUrl = formatValue(getField(enrichment, "pageUrl", "page_url"));
+  const pageType = formatPageType(getField(enrichment, "pageType", "page_type"));
+  const confidence = formatConfidence(getField(enrichment, "policySemanticConfidence", "policy_semantic_confidence"));
+  const summary = compactSummary(getField(enrichment, "policySummaryShort", "policy_summary_short"));
+  const reviewState = review
+    ? `${formatValue(review.reviewStatus ?? review.review_status)}${review.reason ? ` · ${formatValue(review.reason)}` : ""}`
+    : "No review item queued";
+  const model = formatValue(getField(enrichment, "policyAiModel", "policy_ai_model"));
+  const promptVersion = formatValue(getField(enrichment, "policyAiPromptVersion", "policy_ai_prompt_version"));
+
+  return (
+    <details key={enrichmentKey} className="rounded-xl border border-slate-200 bg-white px-3 py-3" open>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-slate-950">{pageType}</p>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-700">
+              confidence {confidence}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-700">
+              <span>Clarity risk {formatValue(getField(enrichment, "policyAmbiguityScore", "policy_ambiguity_score"))}</span>
+              <InfoTip
+                align="start"
+                text="Higher clarity-risk values mean the policy language appears more vague, non-specific, or harder to interpret cleanly. Lower values indicate clearer and more direct disclosure language."
+              />
+            </span>
+            {review ? (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-800">
+                review queued
+              </span>
+            ) : null}
+          </div>
+          <p className="break-all text-sm text-slate-600">{pageUrl}</p>
+          <p className="text-sm text-slate-700">{summary}</p>
+        </div>
+      </summary>
+
+      <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          {renderInlineFact("DSAR", getField(enrichment, "policyDsarMechanism", "policy_dsar_mechanism"))}
+          {renderInlineFact("Do not sell", getField(enrichment, "policyDoNotSell", "policy_do_not_sell"))}
+          {renderInlineFact("Data categories", getField(enrichment, "policyDataCategories", "policy_data_categories"))}
+          {renderInlineFact("Transfer mechanisms", formatTopicList(getField(enrichment, "policyTransferMechanisms", "policy_transfer_mechanisms"), "mechanism"))}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {renderInlineFact("Actionable flags", getField(enrichment, "policyActionableFlags", "policy_actionable_flags"))}
+          {renderInlineFact("Policy mentions", formatTopicList(getField(enrichment, "policyMentions", "policy_mentions"), "topic"))}
+          {renderInlineFact("Retention periods", compactSummary(formatTopicList(getField(enrichment, "policyRetentionPeriods", "policy_retention_periods"), "periodText"), 120))}
+          {renderInlineFact("Review queue", reviewState)}
+        </div>
+
+        {(model !== "Not observed" || promptVersion !== "Not observed") ? (
+          <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+            {model !== "Not observed" ? <span>Model: {model}</span> : null}
+            {promptVersion !== "Not observed" ? <span>Prompt: {promptVersion}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 export function PolicyEnrichmentSection(input: {
   enrichments: Array<Record<string, unknown>>;
   reviewQueue: Array<Record<string, unknown>>;
+  embedded?: boolean;
 }) {
   const visibleEnrichments = input.enrichments.filter((enrichment) => {
     const pageUrl = getField(enrichment, "pageUrl", "page_url");
@@ -52,6 +159,23 @@ export function PolicyEnrichmentSection(input: {
   });
 
   if (visibleEnrichments.length === 0) {
+    if (input.embedded) {
+      return (
+        <CollapsibleSectionCard
+          title={
+            <span className="flex items-center gap-1.5">
+              <span>Policy document analysis</span>
+              <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
+            </span>
+          }
+          defaultOpen
+          contentClassName="space-y-4"
+        >
+          <p className="text-sm text-slate-600">No structured policy-enrichment record is available for this scan yet.</p>
+        </CollapsibleSectionCard>
+      );
+    }
+
     return (
       <CollapsibleSectionCard
         title={
@@ -71,6 +195,53 @@ export function PolicyEnrichmentSection(input: {
     input.reviewQueue.map((row) => [String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? ""), row])
   );
 
+  if (input.embedded) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-slate-900">Policy document analysis</p>
+            <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Analyzed policy pages</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{visibleEnrichments.length}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Review items</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{input.reviewQueue.length}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Model-backed rows</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">
+              {visibleEnrichments.filter((enrichment) => Boolean(getField(enrichment, "policyAiModel", "policy_ai_model"))).length}
+            </p>
+          </div>
+        </div>
+        <CollapsibleSectionCard title="Policy page records" defaultOpen={false} contentClassName="space-y-4">
+          <div className="space-y-4">
+            {visibleEnrichments.map((enrichment, index) => {
+              const enrichmentId = String(enrichment.id ?? "");
+              const review = latestReviewByEnrichmentId.get(enrichmentId) ?? null;
+              const enrichmentKey =
+                enrichmentId ||
+                [
+                  String(enrichment.pageType ?? enrichment.page_type ?? "unknown"),
+                  String(enrichment.pageUrl ?? enrichment.page_url ?? "unknown"),
+                  String(enrichment.normalizedPolicyHash ?? enrichment.normalized_policy_hash ?? "nohash"),
+                  String(index)
+                ].join(":");
+
+              return renderPolicyRecord(enrichment, review, enrichmentKey);
+            })}
+          </div>
+        </CollapsibleSectionCard>
+      </div>
+    );
+  }
+
   return (
     <CollapsibleSectionCard
       title={
@@ -81,10 +252,6 @@ export function PolicyEnrichmentSection(input: {
       }
       contentClassName="space-y-4"
     >
-        <p className="max-w-3xl text-sm text-slate-600">
-          Structured policy extraction is derived from detected legal pages using deterministic rules first and model-assisted
-          extraction only when needed. Raw policy bodies are not stored.
-        </p>
         <div className="space-y-4">
           {visibleEnrichments.map((enrichment, index) => {
             const enrichmentId = String(enrichment.id ?? "");
@@ -98,65 +265,7 @@ export function PolicyEnrichmentSection(input: {
                 String(index)
               ].join(":");
 
-            return (
-              <details key={enrichmentKey} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4" open>
-                <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-slate-900">{formatValue(getField(enrichment, "pageUrl", "page_url"))}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Semantic confidence {formatConfidence(getField(enrichment, "policySemanticConfidence", "policy_semantic_confidence"))} · DSAR{" "}
-                      {formatValue(getField(enrichment, "policyDsarMechanism", "policy_dsar_mechanism"))} · Do not sell{" "}
-                      {formatValue(getField(enrichment, "policyDoNotSell", "policy_do_not_sell"))}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
-                    ambiguity {formatValue(getField(enrichment, "policyAmbiguityScore", "policy_ambiguity_score"))}
-                  </span>
-                </summary>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-3 text-sm text-slate-600">
-                    <p>{formatValue(getField(enrichment, "policySummaryShort", "policy_summary_short"))}</p>
-                    <p>Data categories: {formatValue(getField(enrichment, "policyDataCategories", "policy_data_categories"))}</p>
-                    <p>Children reference: {formatValue(getField(enrichment, "policyChildrenReference", "policy_children_reference"))}</p>
-                    <p>
-                      Transfer mechanisms:{" "}
-                      {formatValue(
-                        ((getField(enrichment, "policyTransferMechanisms", "policy_transfer_mechanisms") as Array<Record<string, unknown>> | null) ?? []).map(
-                          (item) => item.mechanism
-                        )
-                      )}
-                    </p>
-                    <p>Actionable flags: {formatValue(getField(enrichment, "policyActionableFlags", "policy_actionable_flags"))}</p>
-                  </div>
-                  <div className="space-y-3 text-sm text-slate-600">
-                    <p>
-                      Policy mentions:{" "}
-                      {formatValue(
-                        ((getField(enrichment, "policyMentions", "policy_mentions") as Array<Record<string, unknown>> | null) ?? []).map(
-                          (item) => item.topic
-                        )
-                      )}
-                    </p>
-                    <p>
-                      Retention periods:{" "}
-                      {formatValue(
-                        ((getField(enrichment, "policyRetentionPeriods", "policy_retention_periods") as Array<Record<string, unknown>> | null) ?? []).map(
-                          (item) => item.periodText
-                        )
-                      )}
-                    </p>
-                    <p>Model: {formatValue(getField(enrichment, "policyAiModel", "policy_ai_model"))}</p>
-                    <p>Prompt version: {formatValue(getField(enrichment, "policyAiPromptVersion", "policy_ai_prompt_version"))}</p>
-                    <p>
-                      Review queue:{" "}
-                      {review
-                        ? `${formatValue(review.reviewStatus ?? review.review_status)} · ${formatValue(review.reason)}`
-                        : "No review item queued"}
-                    </p>
-                  </div>
-                </div>
-              </details>
-            );
+            return renderPolicyRecord(enrichment, review, enrichmentKey);
           })}
         </div>
     </CollapsibleSectionCard>

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { FULL_SCAN_EVENT_TYPES, PREVIEW_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { classifyScanAccess } from "./access-classification";
 import { getPreviousCompletedScan } from "./history/get-previous-scan";
 import { getSnapshotBundle, replaceScanSignals, saveComplianceChangeEvents, saveSnapshotBundle } from "./persistence";
 import { buildSnapshotBundle, diffSnapshots } from "./snapshot";
@@ -305,6 +306,23 @@ export async function runFullScanJob(scanId: string) {
         thirdPartyCookieCount: bundle.snapshot.thirdPartyCookieCount
       }
     });
+
+    const accessClassification = classifyScanAccess({
+      snapshot: bundle.snapshot,
+      pages: bundle.pages,
+      runtimeArtifacts: bundle.runtimeArtifacts
+    });
+
+    if (accessClassification) {
+      await insertScanEvent({
+        scanId,
+        domainId: domainRow.id,
+        organizationId: scanRow.organization_id,
+        eventType: SCAN_EVENT_TYPES.accessLimitationsDetected,
+        message: accessClassification.message,
+        metadata: accessClassification.metadata
+      });
+    }
 
     const updatedScanConfig = buildExecutionScanConfig(scanRow.scan_config_json, {
       pagesRequested: requestedPageCount,

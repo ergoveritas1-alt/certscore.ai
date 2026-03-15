@@ -58,30 +58,26 @@ export function RegulatoryRiskSection(input: {
       defaultOpen
       contentClassName="space-y-6"
     >
-        <p className="max-w-3xl text-sm text-slate-600">
-          These scores reflect automated analysis of website behavior and disclosures through regulatory and oversight lenses. Lower is better in this section. They do not constitute legal advice.
-        </p>
-
-        <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+        <div className="grid gap-2 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
             <div className="flex items-center gap-1.5">
-              <p className="text-sm text-slate-500">Overall risk</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Overall risk</p>
               <InfoTip text="A weighted regulatory risk score from 0 to 100. Lower is better; higher means more regulator-relevant risk indicators surfaced overall." />
             </div>
-            <div className="mt-2 flex items-end justify-between gap-4">
-              <p className="text-4xl font-semibold text-slate-950">{input.risk.overallScore}</p>
-              <span className={`rounded-full px-3 py-1 text-xs font-medium ${scoreTone(input.risk.riskLevel)}`}>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-950">{input.risk.overallScore}</p>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${scoreTone(input.risk.riskLevel)}`}>
                 {input.risk.riskLevel} risk
               </span>
             </div>
-            <p className="mt-3 text-sm text-slate-600">Confidence {Math.round(input.risk.confidence * 100)}%</p>
+            <p className="mt-2 text-sm text-slate-600">Confidence {Math.round(input.risk.confidence * 100)}%</p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {subscores.map(([label, score]) => (
-              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
                   <span className="group/tooltip relative inline-flex">
                     <span className="inline-flex h-[11px] w-[11px] items-center justify-center rounded-full border border-slate-300 text-[7px] font-semibold leading-none text-slate-500">
                       i
@@ -91,7 +87,7 @@ export function RegulatoryRiskSection(input: {
                     </span>
                   </span>
                 </div>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{score}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-950">{score}</p>
               </div>
             ))}
           </div>

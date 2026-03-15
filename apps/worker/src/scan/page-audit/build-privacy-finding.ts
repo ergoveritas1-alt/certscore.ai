@@ -45,6 +45,29 @@ function createPrivacyFinding(input: {
   };
 }
 
+function describeTrackerCategory(category: NormalizedTracker["category"]) {
+  if (category === "analytics") {
+    return "analytics";
+  }
+  if (category === "advertising") {
+    return "advertising or retargeting";
+  }
+  if (category === "session_replay") {
+    return "session replay or behavior analytics";
+  }
+  if (category === "tag_manager") {
+    return "tag management";
+  }
+  if (category === "marketing") {
+    return "marketing automation";
+  }
+  if (category === "fingerprinting") {
+    return "fingerprinting or identity infrastructure";
+  }
+
+  return "third-party tracking";
+}
+
 export function buildTrackerFinding(input: {
   pageUrl: string;
   scanId: string;
@@ -57,12 +80,15 @@ export function buildTrackerFinding(input: {
     subtype: "tracker",
     ruleKey: `privacy.tracker.${input.tracker.key}`,
     title: `${input.tracker.name} observed`,
-    description: `${input.tracker.name} requests were observed during the initial page load. This is informational only and may indicate analytics or advertising technology is active on the page.`,
+    description: `${input.tracker.name} requests were observed during the initial page load. This appears to be ${describeTrackerCategory(
+      input.tracker.category
+    )} infrastructure active on the page.`,
     severity: input.tracker.severity,
     evidence: {
       page_url: input.pageUrl,
       tracker_key: input.tracker.key,
       tracker_name: input.tracker.name,
+      tracker_category: input.tracker.category,
       first_seen_hostname: input.tracker.firstSeenHostname,
       matched_count: input.tracker.matchedCount
     },

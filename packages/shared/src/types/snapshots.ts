@@ -12,6 +12,15 @@ export type FetchStatus =
 export type RenderModeUsed = "http_only" | "browser_only" | "http_then_browser";
 export type ScanConfidence = "low" | "medium" | "high";
 export type ConsentMechanismType = "none" | "banner" | "modal" | "inline" | "cmp";
+export type ConsentInteractionModel =
+  | "none"
+  | "accept_only"
+  | "accept_reject"
+  | "accept_preferences"
+  | "accept_reject_preferences"
+  | "preferences_only"
+  | "dismiss_only"
+  | "other";
 export type AgeVerificationMechanismType = "none" | "checkbox" | "date_of_birth" | "self_attestation" | "hard_gate";
 export type PrivacyContactChannelType = "email" | "form" | "portal" | "none";
 export type ThirdPartyDisclosureSpecificity = "none" | "generic" | "named_vendors";
@@ -41,6 +50,11 @@ export type VendorCategory =
   | "other";
 export type DetectionSource = "html" | "headers" | "request" | "dom" | "text" | "url_guess" | "script_signature";
 export type PartyType = "first_party" | "third_party" | "unknown";
+export type CollectionEndpointType =
+  | "direct_third_party"
+  | "first_party_subdomain"
+  | "first_party_collection_proxy"
+  | "unknown";
 export type PageType =
   | "homepage"
   | "privacy_policy"
@@ -222,6 +236,10 @@ export type ScanSnapshot = {
   consentMechanismType: ConsentMechanismType;
   cmpVendorName: string | null;
   cmpVendorConfidence: number | null;
+  consentInteractionModel: ConsentInteractionModel | null;
+  consentAcceptButtonCount: number | null;
+  consentRejectButtonCount: number | null;
+  consentPreferencesButtonCount: number | null;
   rejectAllPresent: boolean;
   acceptAllPresent: boolean;
   granularPreferencesPresent: boolean;
@@ -421,6 +439,7 @@ export type ScanTrackerVendor = {
   detectionSource: DetectionSource;
   confidence: number;
   firstPartyOrThirdParty: PartyType;
+  collectionEndpointType: CollectionEndpointType;
   beforeConsent: boolean | null;
   scriptHost: string | null;
   matchedSignatureId: string | null;
@@ -432,6 +451,20 @@ export type ScanAccessibilityRuleCount = {
   ruleGroup: string;
   severity: ChangeEventSeverity;
   instanceCount: number;
+};
+
+export type ScanAccessibilityRuleExample = {
+  scanId: string;
+  pageUrl: string;
+  ruleCode: string;
+  ruleGroup: string;
+  severity: ChangeEventSeverity;
+  impact: string | null;
+  help: string;
+  helpUrl: string;
+  description: string;
+  nodeCount: number;
+  representativeSelectors: string[];
 };
 
 export type ScanPage = {
@@ -457,6 +490,29 @@ export type ScanRuntimeArtifact = {
   responseHeaders: Record<string, string>;
   domStructureHash: string | null;
   domNodeCount: number | null;
+  consentAuditCompleted: boolean | null;
+  consentRejectInteractionSucceeded: boolean | null;
+  consentAcceptInteractionSucceeded: boolean | null;
+  consentRejectReducedTracking: boolean | null;
+  consentRejectReducedThirdPartyCookies: boolean | null;
+  consentBaselineCookieCount: number | null;
+  consentBaselineThirdPartyCookieCount: number | null;
+  consentPreconsentViolationCount: number | null;
+  consentBaselineTrackerEvidenceUrls: string[];
+  consentBaselineTrackerVendorNames: string[];
+  consentRejectPersistedTrackerVendorNames: string[];
+  consentRejectNewTrackerVendorNames: string[];
+  consentRejectClickCount: number | null;
+  consentAcceptClickCount: number | null;
+  consentPostRejectCookieCount: number | null;
+  consentPostRejectThirdPartyCookieCount: number | null;
+  consentPostRejectTrackerEvidenceUrls: string[];
+  consentPostRejectTrackerVendorNames: string[];
+  consentAcceptNewTrackerVendorNames: string[];
+  consentPostAcceptCookieCount: number | null;
+  consentPostAcceptThirdPartyCookieCount: number | null;
+  consentPostAcceptTrackerEvidenceUrls: string[];
+  consentPostAcceptTrackerVendorNames: string[];
 };
 
 export type PolicyMention = {
@@ -484,6 +540,9 @@ export type PolicyEnrichment = {
   pageUrl: string;
   normalizedPolicyHash: string;
   policySummaryShort: string | null;
+  policyEffectiveDate: string | null;
+  policyGoverningLaw: string | null;
+  policyArbitrationPresent: boolean | null;
   privacyContactChannelType: PrivacyContactChannelType | null;
   policyRetentionDisclosure: PolicyRetentionDisclosure | null;
   policyClaimNoSale: boolean | null;

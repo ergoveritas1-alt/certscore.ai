@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import { getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
 import { RescanDomainForm } from "../../components/scans/rescan-domain-form";
@@ -24,16 +24,54 @@ function formatDateTime(value: string | null) {
 
 function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
   if (!value) {
-    return "This website cannot be re-scanned yet.";
+    return "This domain cannot be re-scanned yet.";
   }
 
   return `Next re-scan available ${formatDateTime(value)} for this ${
     planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
-  } plan website.`;
+  } plan domain.`;
 }
 
 function formatMetric(value: number | null) {
   return value ?? "—";
+}
+
+function formatBooleanBadge(value: boolean | null) {
+  if (value === null) {
+    return "—";
+  }
+
+  return value ? "Yes" : "No";
+}
+
+function getConsentSummary(scan: Awaited<ReturnType<typeof getOrganizationScans>>[number]) {
+  if (scan.consentAuditCompleted) {
+    if (scan.consentRejectInteractionSucceeded && scan.consentRejectReducedTracking === false) {
+      return "Consent audit: reject did not reduce tracking";
+    }
+
+    if (scan.consentRejectInteractionSucceeded && scan.consentRejectReducedThirdPartyCookies === false) {
+      return "Consent audit: reject did not reduce third-party cookies";
+    }
+
+    if (scan.consentRejectInteractionSucceeded) {
+      return "Consent audit: reject interaction succeeded";
+    }
+  }
+
+  if (scan.cookieBannerPresent === true && scan.cmpVendorName) {
+    return `Consent surface visible · ${scan.cmpVendorName}`;
+  }
+
+  if (scan.cookieBannerPresent === true) {
+    return "Consent surface visible";
+  }
+
+  if (scan.cmpVendorName) {
+    return `CMP detected · ${scan.cmpVendorName}`;
+  }
+
+  return "No consent evidence surfaced";
 }
 
 export default async function DashboardPage() {
@@ -87,22 +125,22 @@ export default async function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-4">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Websites</CardTitle>
+            <CardTitle>Domains</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
             <p className="text-2xl font-semibold text-slate-900">
               {domains.length}/{planLimits.maxDomains}
             </p>
-            <p>Tracked websites in this workspace.</p>
+            <p>Tracked domains in this workspace.</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Pages per scan</CardTitle>
+            <CardTitle>Coverage</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
-            <p className="text-2xl font-semibold text-slate-900">{planLimits.maxPagesPerScan}</p>
-            <p>Current page cap for each website scan.</p>
+            <p className="text-2xl font-semibold text-slate-900">{getPlanDefinition(planLimits.planCode).coverageLabel}</p>
+            <p>Current coverage tier for this workspace.</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
@@ -127,7 +165,7 @@ export default async function DashboardPage() {
 
       <Card className="border-slate-200 bg-white">
         <CardHeader>
-          <CardTitle>Add a new website to scan</CardTitle>
+          <CardTitle>Add a new domain to scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <AddDomainForm maxDomains={planLimits.maxDomains} planCode={organization.plan} />
@@ -179,7 +217,11 @@ export default async function DashboardPage() {
                     </div>
 
                     <div
-                      className={group.scans.length >= 4 ? "max-h-[320px] space-y-2 overflow-y-auto pt-3 pr-1" : "space-y-2 pt-3"}
+                      className={
+                        group.scans.length > 1
+                          ? "max-h-[176px] space-y-2 overflow-y-auto pt-3 pr-1"
+                          : "space-y-2 pt-3"
+                      }
                     >
                       {group.scans.map((scan) => (
                         <div
@@ -195,16 +237,29 @@ export default async function DashboardPage() {
                                 Signals {scan.totalSignals ?? 0}
                               </p>
                               <p className="text-[13px] text-slate-600">Overall rating score: {formatMetric(scan.certscoreOverall)}</p>
+                              <p className="text-[13px] text-slate-600">{getConsentSummary(scan)}</p>
                             </div>
                             <div className="text-[13px] text-slate-600 sm:min-w-[160px]">
                               <p>Regulatory overlay risk: {formatMetric(scan.regulatoryScore)}</p>
                               <p>Privacy score: {formatMetric(scan.privacyScore)}</p>
+                              <p>Consent score: {formatMetric(scan.consentScore)}</p>
                               <p>Accessibility score: {formatMetric(scan.accessibilityScore)}</p>
+                              <p>Banner visible: {formatBooleanBadge(scan.cookieBannerPresent)}</p>
                             </div>
                           </div>
                           <div className="self-start sm:self-start">
-                            <Button asChild size="sm" variant="secondary">
-                              <Link href={`/app/scans/${scan.id}`}>View scan</Link>
+                            <Button
+                              asChild
+                              className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+                              size="sm"
+                              variant="secondary"
+                            >
+                              <Link aria-label={`View scan for ${scan.scanType} on ${scan.domainHostname ?? "domain"}`} href={`/app/scans/${scan.id}`}>
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 19V5" />
+                                  <path d="m5 12 7-7 7 7" />
+                                </svg>
+                              </Link>
                             </Button>
                           </div>
                         </div>
@@ -218,59 +273,6 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Latest signal set</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            {latestCompletedSignalSet ? (
-              <>
-                <p>Website: {latestCompletedSignalSet.hostname}</p>
-                <p>Latest completed scan: {formatDateTime(latestCompletedSignalSet.latestCompletedAt)}</p>
-                <p>Active signals: {latestCompletedSignalSet.totalSignals ?? 0}</p>
-                <div className="space-y-2 pt-2">
-                  {latestCompletedSignalSet.signals.slice(0, 5).map((signal) => (
-                    <div key={signal.key} className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="font-medium text-slate-900">{signal.label}</p>
-                      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{signal.categoryLabel}</p>
-                      <p className="text-slate-500">{Array.isArray(signal.value) ? signal.value.join(", ") : String(signal.value)}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <p>No completed scans yet.</p>
-                <p>Add a website and run the first scan to populate the latest signal summary.</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Recent changes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            {recentChanges.length === 0 ? (
-              <>
-                <p>No change events yet.</p>
-                <p>After a website has at least two completed scans, added and changed signals will appear here.</p>
-              </>
-            ) : (
-              recentChanges.map((change) => (
-                <div key={change.id} className="rounded-2xl border border-slate-200 p-4">
-                  <p className="font-medium text-slate-900">{change.message}</p>
-                  <p className="text-slate-500">
-                    {change.domainHostname ?? "Unknown website"} · {formatDateTime(change.createdAt)}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

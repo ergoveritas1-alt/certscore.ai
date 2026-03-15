@@ -18,8 +18,15 @@ export type OrganizationScanListItem = {
   certscoreOverall: number | null;
   regulatoryScore: number | null;
   privacyScore: number | null;
+  consentScore: number | null;
   accessibilityScore: number | null;
   totalSignals: number | null;
+  cookieBannerPresent: boolean | null;
+  cmpVendorName: string | null;
+  consentAuditCompleted: boolean | null;
+  consentRejectInteractionSucceeded: boolean | null;
+  consentRejectReducedTracking: boolean | null;
+  consentRejectReducedThirdPartyCookies: boolean | null;
   addedCount: number;
   removedCount: number;
   changedCount: number;
@@ -65,10 +72,21 @@ type DomainCompletedScanRow = {
 type SnapshotRow = {
   accessibility_score: number | null;
   certscore_overall: number | null;
+  cmp_vendor_name: string | null;
+  consent_score: number | null;
+  cookie_banner_present: boolean | null;
   privacy_score: number | null;
   regulatory_exposure_score: number | null;
   scan_id: string;
   total_signals: number;
+};
+
+type RuntimeArtifactRow = {
+  consent_audit_completed: boolean | null;
+  consent_reject_interaction_succeeded: boolean | null;
+  consent_reject_reduced_third_party_cookies: boolean | null;
+  consent_reject_reduced_tracking: boolean | null;
+  scan_id: string;
 };
 
 type ChangeSummaryRow = {
@@ -117,14 +135,24 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
         .in("id", domainIds)
     : Promise.resolve({ data: [] as DomainRow[], error: null });
 
-  const [{ data: domainsWithLastScannedAt, error: domainsError }, { data: snapshots }] = await Promise.all([
+  const [{ data: domainsWithLastScannedAt, error: domainsError }, { data: snapshots }, { data: runtimeArtifacts }] = await Promise.all([
     domainsWithLastScannedAtPromise,
     scanIds.length
       ? supabase
           .from("scan_snapshots")
-          .select("scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, accessibility_score")
+          .select(
+            "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name"
+          )
           .in("scan_id", scanIds)
-      : Promise.resolve({ data: [] as SnapshotRow[] })
+      : Promise.resolve({ data: [] as SnapshotRow[] }),
+    scanIds.length
+      ? supabase
+          .from("scan_runtime_artifacts")
+          .select(
+            "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies"
+          )
+          .in("scan_id", scanIds)
+      : Promise.resolve({ data: [] as RuntimeArtifactRow[] })
   ]);
   let domains = domainsWithLastScannedAt;
   if (domainsError && isMissingLastScannedAtColumn(domainsError)) {
@@ -181,6 +209,9 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
     ((latestDomainScans ?? []) as LatestDomainScanRow[]).map((scan) => [scan.id, scan])
   );
   const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
+  const runtimeArtifactMap = new Map(
+    ((runtimeArtifacts ?? []) as RuntimeArtifactRow[]).map((artifact) => [artifact.scan_id, artifact])
+  );
   const changeMap = new Map<
     string,
     {
@@ -254,8 +285,17 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
         certscoreOverall: snapshotMap.get(scan.id)?.certscore_overall ?? null,
         regulatoryScore: snapshotMap.get(scan.id)?.regulatory_exposure_score ?? null,
         privacyScore: snapshotMap.get(scan.id)?.privacy_score ?? null,
+        consentScore: snapshotMap.get(scan.id)?.consent_score ?? null,
         accessibilityScore: snapshotMap.get(scan.id)?.accessibility_score ?? null,
         totalSignals: snapshotMap.get(scan.id)?.total_signals ?? null,
+        cookieBannerPresent: snapshotMap.get(scan.id)?.cookie_banner_present ?? null,
+        cmpVendorName: snapshotMap.get(scan.id)?.cmp_vendor_name ?? null,
+        consentAuditCompleted: runtimeArtifactMap.get(scan.id)?.consent_audit_completed ?? null,
+        consentRejectInteractionSucceeded:
+          runtimeArtifactMap.get(scan.id)?.consent_reject_interaction_succeeded ?? null,
+        consentRejectReducedTracking: runtimeArtifactMap.get(scan.id)?.consent_reject_reduced_tracking ?? null,
+        consentRejectReducedThirdPartyCookies:
+          runtimeArtifactMap.get(scan.id)?.consent_reject_reduced_third_party_cookies ?? null,
         addedCount: changeMap.get(scan.id)?.addedCount ?? 0,
         removedCount: changeMap.get(scan.id)?.removedCount ?? 0,
         changedCount: changeMap.get(scan.id)?.changedCount ?? 0,

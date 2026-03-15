@@ -36,6 +36,38 @@ async function resolveDomain() {
     if (matchedDomain) {
       return matchedDomain as DomainRow;
     }
+
+    const { data: organization, error: orgError } = await supabase
+      .from("organizations")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (orgError) {
+      throw new Error(`Failed to load an organization for requested domain ${requestedHostname}: ${orgError.message}`);
+    }
+
+    if (!organization) {
+      throw new Error(`No organization found. Cannot create requested smoke-scan domain ${requestedHostname}.`);
+    }
+
+    const { data: insertedRequestedDomain, error: insertRequestedError } = await supabase
+      .from("domains")
+      .insert({
+        organization_id: (organization as OrganizationRow).id,
+        hostname: requestedHostname.replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+        normalized_url: requestedNormalizedUrl,
+        scan_frequency: "manual"
+      })
+      .select("id, organization_id, hostname, normalized_url")
+      .single();
+
+    if (insertRequestedError || !insertedRequestedDomain) {
+      throw new Error(`Failed to create requested smoke-scan domain ${requestedHostname}: ${insertRequestedError?.message ?? "unknown error"}`);
+    }
+
+    return insertedRequestedDomain as DomainRow;
   }
 
   const { data: existingDomain, error: domainError } = await supabase

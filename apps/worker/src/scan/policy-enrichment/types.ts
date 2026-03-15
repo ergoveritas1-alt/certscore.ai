@@ -48,12 +48,15 @@ export type PolicySummaryValue = {
 };
 
 export type PolicyChunkExtraction = {
+  arbitrationPresent: PolicyFieldValue<boolean | null>;
   childrenReference: PolicyFieldValue<PolicyChildrenReference | null>;
   dataCategories: Array<PolicyFieldValue<PolicyDataCategory>>;
   dataAccessRequestPresent: PolicyFieldValue<boolean | null>;
   dataDeletionRequestPresent: PolicyFieldValue<boolean | null>;
   doNotSell: PolicyFieldValue<PolicyDoNotSell>;
   dsarMechanism: PolicyFieldValue<PolicyDsarMechanism>;
+  effectiveDate: PolicyFieldValue<string | null>;
+  governingLaw: PolicyFieldValue<string | null>;
   mentionsGdpr: PolicyFieldValue<boolean | null>;
   policyClaimNoSale: PolicyFieldValue<boolean | null>;
   policyClaimNoTracking: PolicyFieldValue<boolean | null>;
@@ -72,8 +75,26 @@ export type PolicyChunk = {
   text: string;
 };
 
+export type PolicyChunkSelection = {
+  reason: string;
+  score: number;
+} & PolicyChunk;
+
+export type PolicyLlmChunkDiagnostic = {
+  attemptCount: number;
+  chunkId: string;
+  failureCode: "empty_response" | "invalid_json" | "provider_error" | "timeout" | null;
+  failureDetail: string | null;
+  rawPreview: string | null;
+  rawLength: number | null;
+  score: number;
+  selectedReason: string;
+  success: boolean;
+};
+
 export type PolicyRulePreprocessResult = {
   actionableFlags: string[];
+  arbitrationPresent: boolean | null;
   childrenReference: PolicyChildrenReference;
   dataCategories: string[];
   dataAccessRequestPresent: boolean;
@@ -81,6 +102,7 @@ export type PolicyRulePreprocessResult = {
   doNotSell: PolicyDoNotSell;
   dsarMechanism: PolicyDsarMechanism;
   evidenceSnippets: Record<string, string>;
+  governingLaw: string | null;
   mentions: Array<{ confidence: number; topic: PolicyTopicKey }>;
   needLlm: boolean;
   normalizedPolicyHash: string;
@@ -112,11 +134,13 @@ export type PolicyLlmClient = {
 
 export type EnrichPolicyPagesInput = {
   advertisingTrackerCount: number;
+  allowLlm?: boolean;
   archiveSource?: string | null;
   californiaExposureLikely: boolean;
   domainId: string;
   euExposureLikely: boolean;
   forceLlm?: boolean;
+  llmTriggerReasons?: string[];
   organizationId: string | null;
   pages: StaticPageResult[];
   scanId: string;
@@ -124,6 +148,13 @@ export type EnrichPolicyPagesInput = {
 };
 
 export type PolicyEnrichmentBundle = {
+  diagnostics: Array<{
+    chunkDiagnostics: PolicyLlmChunkDiagnostic[];
+    pageType: StaticPageResult["pageType"];
+    pageUrl: string;
+    selectedChunkCount: number;
+    totalChunkCount: number;
+  }>;
   evidences: PolicyEvidence[];
   enrichments: PolicyEnrichment[];
   primaryPolicyEnrichmentId: string | null;
@@ -155,7 +186,10 @@ export type PolicyEnrichmentBundle = {
 export type MergedPolicyExtraction = {
   policyActionableFlags: string[];
   policyAmbiguityScore: number | null;
+  policyArbitrationPresent: boolean | null;
   policyChildrenReference: PolicyChildrenReference;
+  policyEffectiveDate: string | null;
+  policyGoverningLaw: string | null;
   privacyContactChannelType: PrivacyContactChannelType | null;
   policyRetentionDisclosure: PolicyRetentionDisclosure | null;
   policyClaimNoSale: boolean | null;
@@ -175,3 +209,5 @@ export type MergedPolicyExtraction = {
   policySummaryShort: string | null;
   policyTransferMechanisms: Array<{ confidence: number; mechanism: string; snippetHash: string | null }>;
 };
+
+export type PolicyPageType = StaticPageResult["pageType"];

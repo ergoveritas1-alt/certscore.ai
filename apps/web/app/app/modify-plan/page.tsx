@@ -34,8 +34,8 @@ export default async function ModifyPlanPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-slate-700">
                 <p>{plan.description}</p>
-                <p>Websites: {plan.maxDomains}</p>
-                <p>Pages per website: {plan.maxPagesPerScan}</p>
+                <p>Domains: {plan.maxDomains}</p>
+                <p>Coverage: {plan.coverageLabel}</p>
                 <p>Scan cadence: {plan.scanFrequency === "manual" ? "Monthly" : "On-demand, up to hourly"}</p>
                 <p>Scan history: {plan.code === "pro" || plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
                 <div className="pt-2">

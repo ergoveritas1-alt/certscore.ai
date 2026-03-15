@@ -1,0 +1,17 @@
+alter table public.scan_runtime_artifacts
+  add column if not exists consent_audit_completed boolean,
+  add column if not exists consent_reject_interaction_succeeded boolean,
+  add column if not exists consent_accept_interaction_succeeded boolean,
+  add column if not exists consent_reject_reduced_tracking boolean,
+  add column if not exists consent_reject_reduced_third_party_cookies boolean,
+  add column if not exists consent_baseline_cookie_count integer,
+  add column if not exists consent_baseline_third_party_cookie_count integer,
+  add column if not exists consent_baseline_tracker_vendor_names text[] not null default '{}',
+  add column if not exists consent_reject_click_count integer,
+  add column if not exists consent_accept_click_count integer,
+  add column if not exists consent_post_reject_cookie_count integer,
+  add column if not exists consent_post_reject_third_party_cookie_count integer,
+  add column if not exists consent_post_reject_tracker_vendor_names text[] not null default '{}',
+  add column if not exists consent_post_accept_cookie_count integer,
+  add column if not exists consent_post_accept_third_party_cookie_count integer,
+  add column if not exists consent_post_accept_tracker_vendor_names text[] not null default '{}';

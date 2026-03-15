@@ -129,6 +129,8 @@ export function scoreSnapshot(snapshot: ScanSnapshot) {
       (snapshot.cookieBannerPresent ? 0 : snapshot.trackerCountTotal > 0 ? 25 : 0) -
       (snapshot.rejectAllPresent ? 0 : snapshot.cookieBannerPresent ? 12 : 0) -
       (snapshot.granularPreferencesPresent ? 0 : snapshot.cookieBannerPresent ? 8 : 0) -
+      (snapshot.consentInteractionModel === "accept_only" ? 10 : 0) -
+      (snapshot.consentInteractionModel === "dismiss_only" ? 8 : 0) -
       (snapshot.preconsentTrackingDetected ? 20 : 0) -
       (snapshot.darkPatternAcceptEmphasis ? 6 : 0) -
       (snapshot.darkPatternRejectHidden ? 6 : 0)

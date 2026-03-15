@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { listAdminScans } from "../../../server/admin/list-admin-scans";
+import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
 import { listAdminUsers } from "../../../server/admin/list-admin-users";
 
 function formatDateTime(value: string | null) {
@@ -15,7 +15,7 @@ function formatDateTime(value: string | null) {
 }
 
 export default async function AdminOverviewPage() {
-  const [users, scans] = await Promise.all([listAdminUsers(), listAdminScans(10)]);
+  const [users, scans, scanMetrics] = await Promise.all([listAdminUsers(), listAdminScans(10), getAdminScanOverviewMetrics()]);
   const organizations = new Set(users.flatMap((user) => (user.organizationId ? [user.organizationId] : [])));
   const activePlans = users.reduce<Record<string, number>>((accumulator, user) => {
     if (!user.plan) {
@@ -28,7 +28,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-6 lg:grid-cols-4">
+      <div className="grid gap-6 lg:grid-cols-5">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
             <CardTitle>Users</CardTitle>
@@ -49,11 +49,11 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Recent Scans</CardTitle>
+            <CardTitle>Scans</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold text-slate-900">{scans.length}</p>
-            <p className="text-sm text-slate-600">Most recent scans across all workspaces.</p>
+            <p className="text-2xl font-semibold text-slate-900">{scanMetrics.totalScans}</p>
+            <p className="text-sm text-slate-600">All recorded scans across all workspaces.</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
@@ -64,6 +64,16 @@ export default async function AdminOverviewPage() {
             <p>Free: {activePlans.free ?? 0}</p>
             <p>Pro: {activePlans.pro ?? 0}</p>
             <p>Ultra: {activePlans.team ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Access Frictions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-slate-600">
+            <p>403: {scanMetrics.http403Count}</p>
+            <p>429: {scanMetrics.http429Count}</p>
+            <p>Blocked/CAPTCHA: {scanMetrics.blockedOrCaptchaCount}</p>
           </CardContent>
         </Card>
       </div>

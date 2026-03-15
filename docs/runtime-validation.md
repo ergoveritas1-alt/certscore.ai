@@ -9,6 +9,7 @@ Run these first:
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`
 - `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
+- `pnpm --filter @website-signal-risk-scanner/worker exec node --enable-source-maps --import tsx ./scripts/check-consent-schema-cache.ts`
 
 Expected result:
 
@@ -18,6 +19,7 @@ Expected result:
 - Supabase service-role DB access passes
 - Supabase storage bucket access passes
 - Playwright Chromium launch passes
+- Supabase REST recognizes the new consent snapshot/runtime columns
 
 If a check fails:
 
@@ -26,6 +28,7 @@ If a check fails:
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
+- schema cache failure: in the correct Supabase project, run `NOTIFY pgrst, 'reload schema';` and restart the project/API if the REST layer is still stale
 
 ## 2. Auth validation
 

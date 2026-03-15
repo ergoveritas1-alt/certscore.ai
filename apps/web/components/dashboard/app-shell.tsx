@@ -167,7 +167,7 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
         <header className="border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -198,7 +198,7 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-end lg:self-auto">
+            <div className="flex items-center gap-2">
               <Link
                 href="/app/feedback"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-700 hover:bg-slate-900 hover:text-white"

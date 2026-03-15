@@ -5,6 +5,7 @@ export type VendorSignature = {
   name: string;
   category: VendorCategory;
   confidence: number;
+  allowFirstPartyProxy?: boolean;
   hostnamePatterns?: string[];
   pathFragments?: string[];
   htmlPatterns?: RegExp[];
@@ -12,6 +13,47 @@ export type VendorSignature = {
   domMarkers?: string[];
   detectionSource: DetectionSource;
 };
+
+export function isFirstPartyHost(host: string | null, pageDomain: string) {
+  return host === pageDomain || (host ? host.endsWith(`.${pageDomain}`) : false);
+}
+
+export function analyzeVendorRequestMatch(url: string, signature: VendorSignature, pageDomain: string) {
+  try {
+    const requestUrl = new URL(url);
+    const isFirstParty = isFirstPartyHost(requestUrl.hostname, pageDomain);
+    const hostMatch =
+      signature.hostnamePatterns?.some(
+        (pattern) => requestUrl.hostname === pattern || requestUrl.hostname.endsWith(`.${pattern}`)
+      ) ?? false;
+
+    const fullPath = `${requestUrl.pathname}${requestUrl.search}`.toLowerCase();
+    const pathMatches =
+      signature.pathFragments?.some((fragment) => fullPath.includes(fragment.toLowerCase())) ?? false;
+
+    if (hostMatch) {
+      if (signature.pathFragments?.length && !pathMatches) {
+        return null;
+      }
+
+      return {
+        collectionEndpointType: isFirstParty ? ("first_party_subdomain" as const) : ("direct_third_party" as const),
+        requestHost: requestUrl.hostname
+      };
+    }
+
+    if (isFirstParty && signature.allowFirstPartyProxy && pathMatches) {
+      return {
+        collectionEndpointType: "first_party_collection_proxy" as const,
+        requestHost: requestUrl.hostname
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function pattern(source: string) {
   return new RegExp(source, "i");
@@ -23,9 +65,21 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Google Analytics",
     category: "analytics",
     confidence: 0.95,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["google-analytics.com", "analytics.google.com"],
     pathFragments: ["/g/collect", "/collect", "gtag/js"],
     htmlPatterns: [pattern("google-analytics"), pattern("gtag\\("), pattern("ga\\(")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "adobe_analytics",
+    name: "Adobe Analytics",
+    category: "analytics",
+    confidence: 0.94,
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["omtrdc.net", "2o7.net", "adobedc.net", "demdex.net"],
+    pathFragments: ["/b/ss/", "/id", "/event", "/s-code"],
+    htmlPatterns: [pattern("s_gi\\("), pattern("adobe analytics"), pattern("adobedc"), pattern("demdex")],
     detectionSource: "script_signature"
   },
   {
@@ -43,6 +97,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Google Ads",
     category: "advertising",
     confidence: 0.9,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["googleadservices.com", "doubleclick.net"],
     pathFragments: ["/pagead/", "/conversion"],
     htmlPatterns: [pattern("googleads"), pattern("doubleclick")],
@@ -53,6 +108,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Meta Pixel",
     category: "advertising",
     confidence: 0.95,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["facebook.net", "facebook.com"],
     pathFragments: ["/tr", "/fbevents.js"],
     htmlPatterns: [pattern("fbq\\("), pattern("fbevents")],
@@ -63,6 +119,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "LinkedIn Insight Tag",
     category: "advertising",
     confidence: 0.9,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["snap.licdn.com", "linkedin.com"],
     pathFragments: ["insight.min.js", "/collect"],
     htmlPatterns: [pattern("_linkedin_data_partner_ids"), pattern("licdn")],
@@ -73,6 +130,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "TikTok Pixel",
     category: "advertising",
     confidence: 0.9,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["analytics.tiktok.com", "tiktok.com"],
     pathFragments: ["/pixel", "/i18n/pixel"],
     htmlPatterns: [pattern("ttq\\.")],
@@ -101,6 +159,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Hotjar",
     category: "session_replay",
     confidence: 0.95,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["hotjar.com", "hotjar.io"],
     pathFragments: ["/hotjar-", "/modules."],
     htmlPatterns: [pattern("hj\\("), pattern("hotjar")],
@@ -111,7 +170,9 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "FullStory",
     category: "session_replay",
     confidence: 0.95,
-    hostnamePatterns: ["fullstory.com", "fsd2.com"],
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["fullstory.com", "fsd2.com", "fullstoryedge.com"],
+    pathFragments: ["/rec/page", "/fs.js", "/edge", "/v1/web"],
     htmlPatterns: [pattern("FS\\.identify"), pattern("fullstory")],
     detectionSource: "script_signature"
   },
@@ -120,6 +181,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Microsoft Clarity",
     category: "session_replay",
     confidence: 0.95,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["clarity.ms"],
     htmlPatterns: [pattern("clarity\\("), pattern("clarity.ms")],
     detectionSource: "script_signature"
@@ -129,7 +191,9 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Segment",
     category: "analytics",
     confidence: 0.9,
-    hostnamePatterns: ["segment.com", "segment.io"],
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["segment.com", "segment.io", "cdn.segment.com", "api.segment.io"],
+    pathFragments: ["/analytics.js", "/v1/p", "/v1/t", "/next-integrations"],
     htmlPatterns: [pattern("analytics\\.load"), pattern("segment")],
     detectionSource: "script_signature"
   },
@@ -138,6 +202,7 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Mixpanel",
     category: "analytics",
     confidence: 0.9,
+    allowFirstPartyProxy: true,
     hostnamePatterns: ["mixpanel.com"],
     htmlPatterns: [pattern("mixpanel")],
     detectionSource: "script_signature"
@@ -147,8 +212,52 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     name: "Amplitude",
     category: "analytics",
     confidence: 0.9,
-    hostnamePatterns: ["amplitude.com"],
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["amplitude.com", "amplitudeusercontent.com"],
+    pathFragments: ["/2/httpapi", "/batch", "/analytics-browser"],
     htmlPatterns: [pattern("amplitude")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "heap",
+    name: "Heap",
+    category: "analytics",
+    confidence: 0.9,
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["heapanalytics.com", "heap.io"],
+    pathFragments: ["/js/heap-", "/api/track", "/api/add_event_props"],
+    htmlPatterns: [pattern("heap\\.load"), pattern("heapanalytics")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "posthog",
+    name: "PostHog",
+    category: "analytics",
+    confidence: 0.9,
+    allowFirstPartyProxy: true,
+    hostnamePatterns: ["posthog.com", "posthog.net", "i.posthog.com", "us.i.posthog.com", "eu.i.posthog.com"],
+    pathFragments: ["/static/array.js", "/e/", "/decide/"],
+    htmlPatterns: [pattern("posthog"), pattern("posthog\\.init")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "rudderstack",
+    name: "RudderStack",
+    category: "analytics",
+    confidence: 0.9,
+    hostnamePatterns: ["rudderstack.com", "rsinsights.com"],
+    pathFragments: ["/v1/batch", "/v1/track", "/v1/page", "/rsa.min.js"],
+    htmlPatterns: [pattern("rudderanalytics"), pattern("rudderstack")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "tealium",
+    name: "Tealium",
+    category: "tag_manager",
+    confidence: 0.9,
+    hostnamePatterns: ["tiqcdn.com", "tealiumiq.com", "tealium.com"],
+    pathFragments: ["/utag/", "/utag.js", "/utag.sync.js"],
+    htmlPatterns: [pattern("utag"), pattern("tealium")],
     detectionSource: "script_signature"
   },
   {
@@ -176,6 +285,16 @@ export const TRACKER_VENDOR_SIGNATURES: VendorSignature[] = [
     confidence: 0.85,
     hostnamePatterns: ["klaviyo.com"],
     htmlPatterns: [pattern("klaviyo")],
+    detectionSource: "script_signature"
+  },
+  {
+    id: "braze",
+    name: "Braze",
+    category: "marketing",
+    confidence: 0.88,
+    hostnamePatterns: ["braze.com", "braze.eu", "appboycdn.com", "appboy.com"],
+    pathFragments: ["/web-sdk/", "/api/v3/data", "/api/v3/track"],
+    htmlPatterns: [pattern("braze"), pattern("appboy")],
     detectionSource: "script_signature"
   }
 ];
@@ -225,7 +344,18 @@ export const CMP_VENDOR_SIGNATURES: VendorSignature[] = [
     category: "cmp",
     confidence: 0.94,
     hostnamePatterns: ["usercentrics.eu", "usercentrics.com"],
-    htmlPatterns: [pattern("usercentrics")],
+    htmlPatterns: [pattern("usercentrics"), pattern("uc-consent"), pattern("__ucCmp")],
+    detectionSource: "dom"
+  },
+  {
+    id: "iubenda",
+    name: "Iubenda",
+    category: "cmp",
+    confidence: 0.94,
+    hostnamePatterns: ["iubenda.com", "iubenda.net"],
+    pathFragments: ["/cs/", "/cookie_solution/", "/consent_solution/"],
+    htmlPatterns: [pattern("iubenda"), pattern("_iub"), pattern("iubenda_cs_configuration")],
+    domMarkers: ["iubenda-cs-banner", "iubenda-cs-container", "iubenda-cs"],
     detectionSource: "dom"
   },
   {

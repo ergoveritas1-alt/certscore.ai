@@ -34,9 +34,9 @@ const faqs = [
       "Homepage previews return quickly. Larger scans usually take a few minutes depending on site responsiveness, page count, and the selected scan scope."
   },
   {
-    question: "How many websites can I monitor?",
+    question: "How many domains can I monitor?",
     answer:
-      "Free includes 1 website. Pro includes 3 websites. Ultra includes 50 websites."
+      "Free includes 1 domain. Pro includes 3 domains. Ultra includes 200 domains."
   },
   {
     question: "What do I get after the preview scan?",
@@ -51,7 +51,7 @@ const faqs = [
   {
     question: "How often can my site be rescanned?",
     answer:
-      "That depends on your plan. Free includes 1 scan per month. Pro and Ultra support on-demand re-scans every 5 minutes per website."
+      "That depends on your plan. Free includes 1 scan per month. Pro and Ultra support on-demand re-scans every 5 minutes per domain."
   },
   {
     question: "What happens if my site changes after the scan?",
@@ -119,7 +119,7 @@ export default function FaqPage() {
           <div className="max-w-3xl space-y-3">
             <h2 className="text-2xl font-semibold tracking-tight text-slate-900">What to do next</h2>
             <p className="text-sm text-slate-600">
-              Start with a free homepage preview, then create an account to save websites, run larger scans, and track signal changes over time.
+              Start with a free homepage preview, then create an account to save domains, run larger scans, and track signal changes over time.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
