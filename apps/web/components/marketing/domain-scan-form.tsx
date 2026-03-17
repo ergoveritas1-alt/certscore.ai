@@ -90,7 +90,7 @@ export function DomainScanForm({
             ) : (
               <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
                 <path
-                  d="M12 5v14M12 5l-6 6M12 5l6 6"
+                  d="M5 12h14M13 6l6 6-6 6"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.2"

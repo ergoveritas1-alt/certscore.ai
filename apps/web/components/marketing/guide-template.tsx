@@ -21,6 +21,7 @@ type GuideTemplateProps = {
   examples: string[];
   automatedScanningHelp: string[];
   certScoreHelp: string[];
+  certScoreFlagExample: string;
   relatedGuides: RelatedLink[];
 };
 
@@ -49,6 +50,7 @@ export function GuideTemplate({
   examples,
   automatedScanningHelp,
   certScoreHelp,
+  certScoreFlagExample,
   relatedGuides
 }: GuideTemplateProps) {
   const articleSchema = {
@@ -100,12 +102,22 @@ export function GuideTemplate({
             {certScoreHelp.map((item) => (
               <p key={item}>{item}</p>
             ))}
+            <div className="rounded-2xl border border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Use this guide as a checklist</p>
+                <p className="text-sm text-slate-600">Read the guide, then run a scan to see whether these signals show up on a live site.</p>
+              </div>
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">What CertScore would flag here</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{certScoreFlagExample}</p>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-3 pt-3">
-              <Button asChild>
-                <Link href="/">Start free scan</Link>
-              </Button>
-              <Button asChild variant="secondary">
-                <Link href="/how-it-works">How it works</Link>
+              <Button
+                asChild
+                className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+              >
+                <Link href="/preview">Use this guide, run a scan</Link>
               </Button>
             </div>
           </CardContent>

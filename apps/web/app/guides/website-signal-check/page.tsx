@@ -37,10 +37,11 @@ export default function WebsiteLegalComplianceChecklistGuidePage() {
         "It is especially helpful when the real need is monitoring drift over time rather than performing one perfect one-off review."
       ]}
       certScoreHelp={[
-        "CertScore.ai combines accessibility, privacy, and disclosure-focused checks in one workflow so the checklist is easier to operationalize.",
-        "It stores structured signals, snapshots, and historical comparisons from the same scan pipeline.",
+        "CertScore.ai combines accessibility, privacy, and disclosure-focused checks in one scan flow so the checklist is easier to operationalize.",
+        "It stores structured signals and change comparisons from the same scan pipeline.",
         "It helps teams turn a loose checklist into a repeatable monitoring process for public websites."
       ]}
+      certScoreFlagExample="The scan could flag a mix of missing policy pages, weak consent controls, recurring accessibility issues, and tracker-related contradictions in one pass."
       relatedGuides={[
         { href: "/guides/ada-website-compliance", label: "ADA accessibility guide" },
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },

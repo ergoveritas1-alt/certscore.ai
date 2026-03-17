@@ -38,10 +38,11 @@ export default function CookieBannerRequirementsPage() {
         "That combination helps teams decide when the banner experience needs a closer review."
       ]}
       certScoreHelp={[
-        "CertScore.ai detects cookie banner and consent-control signals using bounded heuristics.",
-        "It also identifies common tracker requests so privacy findings connect the interface to observed behavior.",
+        "CertScore.ai detects cookie banner and consent-control signals using bounded DOM and text heuristics.",
+        "It also surfaces common tracker requests so visible consent controls can be compared against observed behavior.",
         "That makes it easier to prioritize which pages or templates deserve the next round of manual review."
       ]}
+      certScoreFlagExample="The scan could flag a visible banner with no reject control, or trackers that appear to load before any consent choice."
       relatedGuides={[
         { href: "/guides/cookie-consent-laws", label: "Cookie consent laws" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },

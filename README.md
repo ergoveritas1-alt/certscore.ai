@@ -123,6 +123,22 @@ Use these commands before shipping changes:
 - `pnpm turbo run typecheck`
 - `pnpm turbo run build`
 
+Accessibility-specific validation:
+
+- `pnpm --filter @website-signal-risk-scanner/worker typecheck`
+- `node --import tsx --test /Users/benmasek/WC01/apps/worker/src/scan/accessibility-validation.test.ts`
+- `pnpm --filter @website-signal-risk-scanner/worker benchmark:accessibility:assert`
+
+The live benchmark assertion command requires `apps/worker/.env.local` with the worker runtime variables and will execute real scans against the demo workspace.
+
+## CI accessibility validation
+
+GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
+
+- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks the worker, and runs the deterministic accessibility validation tests.
+- `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `SUPABASE_STORAGE_BUCKET`.
+- If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
+
 ## Runtime validation tooling
 
 Use these lightweight checks before first deployment validation:
@@ -142,7 +158,9 @@ The full runtime QA sequence is documented in [docs/runtime-validation.md](/User
 
 ### Vercel web app
 
-- deploy `apps/web`
+- deploy production only from the repo root: `/Users/benmasek/WC01`
+- do not deploy from `apps/web`
+- use `npx vercel deploy --prod` from the repo root
 - configure the web environment variables from the shared list above
 - use only production Supabase URL and keys in Vercel
 - ensure Supabase Auth redirects include the production callback on `certscore.ai`

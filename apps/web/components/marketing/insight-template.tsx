@@ -80,7 +80,10 @@ export function InsightTemplate({
               signals CertScore.ai can detect.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild>
+              <Button
+                asChild
+                className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+              >
                 <Link href="/">Start free scan</Link>
               </Button>
               {relatedLinks.map((link) => (

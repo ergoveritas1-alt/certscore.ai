@@ -37,10 +37,11 @@ export default function WebsiteDisclosureRequirementsPage() {
         "This kind of analysis is useful for triage because it points teams to the pages most likely to need closer review."
       ]}
       certScoreHelp={[
-        "CertScore.ai evaluates selected pages for testimonial, review, affiliate, and promotional signals.",
-        "It records scan findings and disclosure-related observations in a compact in-app view.",
-        "That helps teams prioritize which pages or campaigns should be checked more carefully."
+        "CertScore.ai checks selected public pages for testimonial, review, affiliate, and promotional signals.",
+        "It records disclosure-related observations in scan output that can be reviewed alongside other site signals.",
+        "That helps teams prioritize which pages or site areas should be checked more carefully."
       ]}
+      certScoreFlagExample="The scan could flag testimonial or affiliate-style language on a page where obvious disclosure wording is not detected."
       relatedGuides={[
         { href: "/guides/website-signal-check", label: "Website signal review checklist" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },

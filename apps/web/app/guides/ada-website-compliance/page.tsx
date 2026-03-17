@@ -37,10 +37,11 @@ export default function AdaWebsiteComplianceGuidePage() {
         "Automated analysis does not replace manual testing, but it is a strong first pass for triage, monitoring, and documentation."
       ]}
       certScoreHelp={[
-        "CertScore.ai runs automated accessibility checks across selected public pages and groups the findings into structured issue summaries.",
-        "It highlights which issue types recur and which pages appear to need attention first.",
+        "CertScore.ai runs automated accessibility checks across selected public pages and surfaces recurring issue patterns in structured scan output.",
+        "It helps show which issue types recur and which pages appear to need attention first.",
         "It also preserves scan history so teams can see whether accessibility-related signals improved, persisted, or worsened over time."
       ]}
+      certScoreFlagExample="The scan could flag repeated missing form labels, low-contrast buttons, or image-alt gaps across key public pages."
       relatedGuides={[
         { href: "/guides/wcag-website-checklist", label: "WCAG website checklist" },
         { href: "/guides/website-signal-check", label: "Website signal review checklist" },

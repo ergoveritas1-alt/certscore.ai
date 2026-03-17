@@ -7,7 +7,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Terms of Service",
   description:
-    "Read the CertScore.ai Terms of Service, including scan authorization, no legal advice language, acceptable use, and service limitations.",
+    "Read the CertScore.ai Terms of Service, including lawful use, no legal advice language, acceptable use, and service limitations.",
   path: "/terms"
 });
 
@@ -15,17 +15,17 @@ const sections = [
   {
     title: "1. Introduction",
     body:
-      "These Terms of Service govern your use of CertScore.ai. By using the service, you agree to these terms and to use CertScore.ai only for lawful, authorized purposes."
+      "These Terms of Service govern your use of CertScore.ai. By using the service, you agree to these terms and to use CertScore.ai only for lawful purposes."
   },
   {
     title: "2. Use of the Service",
     body:
-      "CertScore.ai provides automated website scanning for observable accessibility, privacy, and disclosure-related signals. The service is intended for informational and operational use."
+      "CertScore.ai provides automated website scanning for observable accessibility, privacy, and disclosure-related signals on publicly accessible website content. The service is intended for informational and operational use."
   },
   {
-    title: "3. Authorization to Scan Websites",
+    title: "3. Public Website Scanning",
     body:
-      "By submitting a domain to CertScore.ai, you represent that you have authorization to analyze that website. You are responsible for ensuring that your use of the service is permitted."
+      "CertScore.ai is designed to analyze publicly accessible website content using automated systems. You are responsible for ensuring that your use of the service complies with applicable laws and does not interfere with or abuse third-party websites or services."
   },
   {
     title: "4. No Legal Advice Disclaimer",
@@ -40,7 +40,7 @@ const sections = [
   {
     title: "6. Acceptable Use",
     body:
-      "You may not use CertScore.ai to analyze websites you are not authorized to review, interfere with service operations, attempt unauthorized access, or use the service for unlawful activity."
+      "You may not use CertScore.ai to interfere with service operations, attempt unauthorized access, disrupt or degrade third-party websites or services, or use the service for unlawful activity."
   },
   {
     title: "7. Limitation of Liability",
@@ -73,8 +73,8 @@ export default function TermsPage() {
           <Badge tone="warning">Automated scanning only. Not legal advice.</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Terms of Service</h1>
           <p className="text-lg text-slate-600">
-            These terms explain how CertScore.ai may be used and set expectations around scan
-            authorization, service limitations, and acceptable use.
+            These terms explain how CertScore.ai may be used and set expectations around lawful use,
+            service limitations, and acceptable use.
           </p>
         </div>
 

@@ -30,7 +30,7 @@ const sections = [
   {
     title: "4. Website Scan Data",
     body:
-      "CertScore.ai analyzes publicly accessible website content using automated systems and rule-based checks. We store derived scan signals, counts, booleans, timestamps, usage records, and change events. We do not store raw HTML, screenshots, policy text bodies, or other archival copies of page content."
+      "CertScore.ai analyzes publicly accessible website content using automated systems and rule-based checks. We store derived scan signals, counts, booleans, timestamps, usage records, change events, evidence URLs, and limited policy or disclosure excerpts when needed to support analysis, review, and evidence context. We do not position the service as an archive of entire pages or complete policy text bodies."
   },
   {
     title: "5. Third-Party Services",
@@ -43,24 +43,29 @@ const sections = [
       "We retain account data and derived scan metadata for as long as needed to operate the service, subject to plan limits and operational needs."
   },
   {
-    title: "7. Cookies and Tracking",
+    title: "7. Your Privacy Rights",
+    body:
+      "Depending on where you live, you may have rights to request access to personal data, deletion, correction, portability, restriction, objection, or certain opt-outs. CertScore.ai provides a public privacy request form at certscore.ai/privacy-request and also accepts requests sent to privacy@certscore.ai."
+  },
+  {
+    title: "8. Cookies and Tracking",
     body:
       "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, and understand usage. We may also rely on standard hosting or analytics-related tools needed for service delivery."
   },
   {
-    title: "8. Security",
+    title: "9. Security",
     body:
       "We use reasonable technical and operational measures to protect account and scan data, but no system can guarantee absolute security."
   },
   {
-    title: "9. Changes to This Policy",
+    title: "10. Changes to This Policy",
     body:
       "We may update this Privacy Policy from time to time. Material changes will be reflected on this page with updated content."
   },
   {
-    title: "10. Contact",
+    title: "11. Contact",
     body:
-      "If you have privacy-related questions, contact CertScore.ai through the contact information or support channel listed on certscore.ai."
+      "If you have privacy-related questions, email privacy@certscore.ai or use the privacy request form linked from this policy and the site footer."
   }
 ];
 
@@ -70,11 +75,22 @@ export default function PrivacyPage() {
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-16">
         <div className="space-y-4">
-          <Badge tone="neutral">Derived signals only</Badge>
+          <Badge tone="neutral">Derived signals and limited excerpts</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Privacy Policy</h1>
           <p className="text-lg text-slate-600">
             This page explains how CertScore.ai handles account information, public website scan data,
-            cookies, and the third-party infrastructure used to operate the service.
+            limited evidence context, cookies, and the third-party infrastructure used to operate the service.
+          </p>
+          <p className="text-sm text-slate-600">
+            To exercise privacy rights, use{" "}
+            <a className="font-medium text-sky-700 hover:text-sky-800" href="/privacy-request">
+              the CertScore.ai privacy request form
+            </a>{" "}
+            or email{" "}
+            <a className="font-medium text-sky-700 hover:text-sky-800" href="mailto:privacy@certscore.ai">
+              privacy@certscore.ai
+            </a>
+            .
           </p>
         </div>
 

@@ -39,8 +39,9 @@ export default function PrivacyPolicyExamplesPage() {
       certScoreHelp={[
         "CertScore.ai surfaces policy-page detection and limited-content findings alongside tracker and cookie observations.",
         "It helps teams see whether the site appears to disclose what its public behavior suggests.",
-        "That makes privacy-policy examples easier to use as a review reference instead of generic filler."
+        "That makes privacy-policy examples easier to use as a review reference instead of generic template filler."
       ]}
+      certScoreFlagExample="The scan could flag a detected privacy policy with limited cookie or third-party disclosures despite observable tracking on the site."
       relatedGuides={[
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },
         { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" },

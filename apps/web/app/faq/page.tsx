@@ -29,6 +29,11 @@ const faqs = [
       "No. The MVP scans public websites only. Logged-in, private, or staging-only pages are outside the current scan scope."
   },
   {
+    question: "What scan data does CertScore.ai store?",
+    answer:
+      "CertScore.ai stores structured scan metadata, derived signals, timestamps, change history, evidence URLs, and limited policy or disclosure excerpts when needed to support analysis and review. It is not positioned as a full-page archive of raw site content."
+  },
+  {
     question: "How long does a scan take?",
     answer:
       "Homepage previews return quickly. Larger scans usually take a few minutes depending on site responsiveness, page count, and the selected scan scope."
@@ -36,7 +41,7 @@ const faqs = [
   {
     question: "How many domains can I monitor?",
     answer:
-      "Free includes 1 domain. Pro includes 3 domains. Ultra includes 200 domains."
+      "Free includes 1 domain. Pro includes 5 domains. Ultra includes 50 domains."
   },
   {
     question: "What do I get after the preview scan?",
@@ -51,7 +56,7 @@ const faqs = [
   {
     question: "How often can my site be rescanned?",
     answer:
-      "That depends on your plan. Free includes 1 scan per month. Pro and Ultra support on-demand re-scans every 5 minutes per domain."
+      "That depends on your plan. Legacy Free workspaces include 1 scan per month. Individual, Pro, and Ultra support recurring scans up to hourly, plus on-demand re-scans every 5 minutes per domain."
   },
   {
     question: "What happens if my site changes after the scan?",

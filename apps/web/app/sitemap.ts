@@ -9,6 +9,7 @@ const staticPaths = [
   "/faq",
   "/terms",
   "/privacy",
+  "/privacy-request",
   "/guides/ada-website-compliance",
   "/guides/cookie-consent-laws",
   "/guides/wcag-website-checklist",

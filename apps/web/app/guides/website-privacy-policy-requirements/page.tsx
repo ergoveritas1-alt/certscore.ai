@@ -37,10 +37,11 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
         "This kind of analysis helps teams decide whether a policy review should move higher on the remediation list."
       ]}
       certScoreHelp={[
-        "CertScore.ai detects likely privacy policy pages and checks whether common topic signals appear to be present.",
+        "CertScore.ai detects likely privacy policy pages and checks whether common topic signals appear in the detected content.",
         "It surfaces scan findings when key policy pages are not detected or when observed content signals appear limited.",
         "It also connects privacy-policy gaps to the rest of the scan so teams can compare disclosure coverage against tracker and cookie findings."
       ]}
+      certScoreFlagExample="The scan could flag a missing privacy policy link, thin policy-topic coverage, or tracking signals that outpace the site’s disclosures."
       relatedGuides={[
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
         { href: "/guides/cookie-consent-laws", label: "Cookie consent laws" },

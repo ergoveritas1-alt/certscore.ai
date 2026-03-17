@@ -37,10 +37,11 @@ export default function CookieConsentLawsGuidePage() {
         "This type of analysis is useful for triage because it creates a concrete list of observed privacy signals without claiming legal certainty."
       ]}
       certScoreHelp={[
-        "CertScore.ai detects common trackers during real page loads and groups them into privacy findings by tracker type.",
-        "It checks for consent UI signals such as banners, reject options, and preferences controls using bounded heuristics.",
-        "It uses neutral language focused on observed issues so teams can decide what needs deeper review."
+        "CertScore.ai detects common trackers during real page loads and surfaces them as privacy-relevant findings by tracker type.",
+        "It checks for consent UI signals such as banners, reject options, and preferences controls using bounded DOM and text heuristics.",
+        "It uses observed-signal language so teams can decide what needs deeper review."
       ]}
+      certScoreFlagExample="The scan could flag pre-consent tracker activity, weak visible consent controls, or a reject path that does not reduce tracking."
       relatedGuides={[
         { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" },
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },

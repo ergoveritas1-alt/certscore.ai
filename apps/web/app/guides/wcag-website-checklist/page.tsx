@@ -38,9 +38,10 @@ export default function WcagWebsiteChecklistPage() {
       ]}
       certScoreHelp={[
         "CertScore.ai uses automated accessibility checks to surface repeatable WCAG-related issue patterns.",
-        "It groups those findings into structured signal summaries with severity and remediation guidance.",
+        "It groups those findings into structured signal summaries with issue counts and recurring categories.",
         "That makes the checklist easier to operationalize across one site or a set of websites."
       ]}
+      certScoreFlagExample="The scan could flag repeated contrast issues, missing alt text, or unlabeled form inputs across public templates."
       relatedGuides={[
         { href: "/guides/ada-website-compliance", label: "ADA accessibility guide" },
         { href: "/guides/website-signal-check", label: "Website signal review checklist" },

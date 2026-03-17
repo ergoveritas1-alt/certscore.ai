@@ -11,9 +11,9 @@ export const metadata: Metadata = createPageMetadata({
 
 const guides = [
   {
-    href: "/guides/wcag-website-checklist",
-    title: "WCAG website checklist",
-    description: "Review the most common public-facing accessibility signals that automated scans can surface."
+    href: "/guides/website-privacy-policy-requirements",
+    title: "Privacy policy signals",
+    description: "See which privacy-rights, retention, and disclosure cues commonly appear in policy scans."
   },
   {
     href: "/guides/cookie-banner-requirements",
@@ -21,14 +21,14 @@ const guides = [
     description: "Understand the banner controls, consent patterns, and cookie signals the scanner looks for."
   },
   {
-    href: "/guides/website-privacy-policy-requirements",
-    title: "Privacy policy signals",
-    description: "See which privacy-rights, retention, and disclosure cues commonly appear in policy scans."
-  },
-  {
     href: "/guides/website-disclosure-requirements",
     title: "Disclosure signals",
     description: "Learn how policy, terms, and disclosure pages contribute to structured website monitoring."
+  },
+  {
+    href: "/guides/wcag-website-checklist",
+    title: "WCAG website checklist",
+    description: "Review the most common public-facing accessibility signals that automated scans can surface."
   }
 ];
 
