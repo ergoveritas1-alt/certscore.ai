@@ -162,12 +162,65 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     snapshot.wcagContrastFailuresCount
   );
   pushNumber("accessibility", "accessibility.wcag_missing_alt_count", "Missing alt text", snapshot.wcagMissingAltCount);
+  pushNumber(
+    "accessibility",
+    "accessibility.wcag_form_label_error_count",
+    "Form label issues",
+    snapshot.wcagFormLabelErrorCount
+  );
+  pushNumber("accessibility", "accessibility.wcag_aria_error_count", "ARIA issues", snapshot.wcagAriaErrorCount);
+  pushNumber(
+    "accessibility",
+    "accessibility.wcag_link_name_error_count",
+    "Link name issues",
+    snapshot.wcagLinkNameErrorCount
+  );
+  pushNumber(
+    "accessibility",
+    "accessibility.wcag_keyboard_navigation_issue_count",
+    "Keyboard navigation issues",
+    snapshot.wcagKeyboardNavigationIssueCount
+  );
+  pushNumber(
+    "accessibility",
+    "accessibility.wcag_focus_indicator_issue_count",
+    "Focus indicator issues",
+    snapshot.wcagFocusIndicatorIssueCount
+  );
+  pushNumber(
+    "accessibility",
+    "accessibility.wcag_landmark_issue_count",
+    "Landmark issues",
+    snapshot.wcagLandmarkIssueCount
+  );
   pushBoolean(
     "accessibility",
     "accessibility.accessibility_widget_present",
     "Accessibility widget detected",
     snapshot.accessibilityWidgetPresent
   );
+  pushBoolean(
+    "accessibility",
+    "accessibility.vpat_or_accessibility_conformance_doc_present",
+    "VPAT or accessibility conformance document detected",
+    snapshot.vpatOrAccessibilityConformanceDocPresent
+  );
+  pushBoolean(
+    "accessibility",
+    "accessibility.accessibility_contact_method_present",
+    "Accessibility contact method detected",
+    snapshot.accessibilityContactMethodPresent
+  );
+  if (snapshot.wcagLevelClaimed && snapshot.wcagLevelClaimed !== "unknown") {
+    activeSignals.push(
+      toTaxonomySignal({
+        category: "accessibility",
+        key: "accessibility.wcag_level_claimed",
+        label: "WCAG conformance level claimed",
+        value: snapshot.wcagLevelClaimed
+      })
+    );
+  }
   pushBoolean(
     "accessibility",
     "accessibility.accessibility_claim_mismatch_detected",
@@ -184,6 +237,19 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushNumber("commerce", "commerce.form_count_total", "Forms detected", snapshot.formCountTotal);
   pushBoolean("commerce", "commerce.checkout_or_payment_form_present", "Checkout flow detected", snapshot.checkoutOrPaymentFormPresent);
   pushBoolean("commerce", "commerce.free_trial_detected", "Free trial detected", snapshot.freeTrialDetected);
+  pushBoolean("commerce", "commerce.discount_claim_present", "Discount claim detected", snapshot.discountClaimPresent);
+  pushBoolean(
+    "commerce",
+    "commerce.original_price_comparison_present",
+    "Original price comparison detected",
+    snapshot.originalPriceComparisonPresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.limited_time_offer_language_present",
+    "Limited-time offer language detected",
+    snapshot.limitedTimeOfferLanguagePresent
+  );
   pushBoolean(
     "commerce",
     "commerce.high_sensitivity_data_collection_detected",
@@ -217,6 +283,55 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "commerce.subscription_cancellation_policy_present",
     "Subscription cancellation policy detected",
     snapshot.subscriptionCancellationPolicyPresent
+  );
+  pushNumber(
+    "commerce",
+    "commerce.refund_policy_window_days",
+    "Refund policy window days",
+    snapshot.refundPolicyWindowDays ?? 0
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.refund_policy_conditions_present",
+    "Refund policy conditions detected",
+    snapshot.refundPolicyConditionsPresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.refund_request_method_present",
+    "Refund request method detected",
+    snapshot.refundRequestMethodPresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.store_credit_only_policy_present",
+    "Store-credit-only policy detected",
+    snapshot.storeCreditOnlyPolicyPresent
+  );
+  pushBoolean("commerce", "commerce.exchange_policy_present", "Exchange policy detected", snapshot.exchangePolicyPresent);
+  pushBoolean(
+    "commerce",
+    "commerce.renewal_notice_period_present",
+    "Renewal notice period detected",
+    snapshot.renewalNoticePeriodPresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.termination_for_cause_clause_present",
+    "Termination-for-cause clause detected",
+    snapshot.terminationForCauseClausePresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.account_deletion_terms_present",
+    "Account deletion terms detected",
+    snapshot.accountDeletionTermsPresent
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.service_suspension_or_termination_terms_present",
+    "Service suspension or termination terms detected",
+    snapshot.serviceSuspensionOrTerminationTermsPresent
   );
   pushBoolean("commerce", "commerce.ad_network_google_ads", "Google Ads detected", snapshot.adNetworkGoogleAds);
   pushBoolean("commerce", "commerce.ad_network_meta_ads", "Meta Ads detected", snapshot.adNetworkMetaAds);
@@ -312,6 +427,18 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "context.policy_behavior_conflict_detected",
     "Policy/behavior conflict detected",
     snapshot.policyBehaviorConflictDetected === true
+  );
+  pushBoolean(
+    "context",
+    "context.policy_terms_conflict_detected",
+    "Policy/terms conflict detected",
+    snapshot.policyTermsConflictDetected === true
+  );
+  pushBoolean(
+    "context",
+    "context.privacy_cookie_policy_conflict_detected",
+    "Privacy/cookie policy conflict detected",
+    snapshot.privacyCookiePolicyConflictDetected === true
   );
   pushBoolean(
     "context",

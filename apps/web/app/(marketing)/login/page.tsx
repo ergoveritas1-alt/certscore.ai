@@ -18,7 +18,10 @@ export default async function LoginPage() {
         <Card className="relative w-full overflow-hidden border-slate-200 bg-white shadow-none">
           <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
           <CardContent className="p-6 pb-0">
-            <LoginForm />
+            <LoginForm
+              footerMode="default"
+              title="Access your workspace"
+            />
           </CardContent>
         </Card>
       </section>

@@ -1,8 +1,12 @@
-import { fetchTextPage } from "../src/scan/snapshot/extractors";
-import { chunkPolicyText, selectPolicyChunksForLlm } from "../src/scan/policy-enrichment/chunk";
-import { ruleBasedPolicyPreprocess } from "../src/scan/policy-enrichment/rules";
-import { loadPolicyPrompt, POLICY_EXTRACTION_CONFIG } from "../src/scan/policy-enrichment/llm-client";
-import { validatePolicyChunkJson } from "../src/scan/policy-enrichment/schema";
+import {
+  chunkPolicyText,
+  fetchTextPage,
+  loadPolicyPrompt,
+  POLICY_EXTRACTION_CONFIG,
+  ruleBasedPolicyPreprocess,
+  selectPolicyChunksForLlm,
+  validatePolicyChunkJson
+} from "@website-signal-risk-scanner/scan-core";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 

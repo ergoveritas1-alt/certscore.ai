@@ -1,0 +1,931 @@
+import { createAdminClient } from "@website-signal-risk-scanner/db";
+import {
+  VALIDATION_INTERNAL_ORG_SLUG,
+  VALIDATION_INTERVAL_OPTIONS,
+  VALIDATION_RANK_BANDS,
+  type ValidationAgreementScore,
+  type ValidationRunMode
+} from "@website-signal-risk-scanner/validation-shared";
+import { getCrawlerProductToken, getCrawlerPublicUrl, getCrawlerUserAgent } from "@website-signal-risk-scanner/scan-core";
+import { extractHostname, getPlanDefinition, normalizeUrl } from "@website-signal-risk-scanner/shared";
+import { getWorkerEnv } from "../env";
+
+type ValidationTargetRow = {
+  active: boolean;
+  backoff_until: string | null;
+  cooldown_until: string | null;
+  deny_reason: string | null;
+  denylisted: boolean;
+  failure_count: number;
+  hostname: string;
+  id: string;
+  last_completed_at: string | null;
+  last_error: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  normalized_url: string;
+  rank_band: string | null;
+  source: string;
+  tranco_rank: number | null;
+};
+
+type ValidationSettingsRow = {
+  automatic_interval_minutes: number;
+  last_scheduled_at: string | null;
+  last_tranco_sync_at: string | null;
+  next_due_at: string | null;
+  operator_note: string | null;
+  pipeline_enabled: boolean;
+  run_mode: ValidationRunMode;
+  updated_at: string;
+  updated_by_user_id: string | null;
+};
+
+type ValidationRunRow = {
+  created_at: string;
+  error_message: string | null;
+  hostname: string;
+  id: string;
+  normalized_url: string;
+  rank_band: string | null;
+  scan_id: string | null;
+  status: "queued" | "collecting" | "ranking" | "validating" | "completed" | "failed";
+  tranco_rank: number | null;
+  trigger_mode: ValidationRunMode;
+  validation_target_id: string | null;
+};
+
+const ACTIVE_RUN_STATUSES = ["queued", "collecting", "ranking", "validating"] as const;
+const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+
+function rankBandForRank(rank: number | null) {
+  if (!rank) {
+    return null;
+  }
+
+  const match = VALIDATION_RANK_BANDS.find((band) => rank >= band.min && rank <= band.max);
+  return match?.key ?? null;
+}
+
+function addMinutes(base: Date, minutes: number) {
+  return new Date(base.getTime() + minutes * 60_000);
+}
+
+function addDays(base: Date, days: number) {
+  return new Date(base.getTime() + days * 86_400_000);
+}
+
+export async function ensureValidationSettings() {
+  const env = getWorkerEnv();
+  const supabase = createAdminClient();
+  const { data: existing, error } = await supabase
+    .from("validation_settings")
+    .select(
+      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
+    )
+    .eq("singleton", true)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load validation settings: ${error.message}`);
+  }
+
+  if (existing) {
+    return existing as ValidationSettingsRow;
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("validation_settings")
+    .insert({
+      singleton: true,
+      pipeline_enabled: true,
+      run_mode: env.VALIDATION_DEFAULT_RUN_MODE,
+      automatic_interval_minutes: env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES
+    })
+    .select(
+      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
+    )
+    .single();
+
+  if (insertError || !inserted) {
+    throw new Error(`Failed to initialize validation settings: ${insertError?.message ?? "Unknown error"}`);
+  }
+
+  return inserted as ValidationSettingsRow;
+}
+
+export async function getValidationPipelineState() {
+  const env = getWorkerEnv();
+  const settings = await ensureValidationSettings();
+
+  if (!env.VALIDATION_PIPELINE_ENABLED) {
+    return {
+      settings,
+      state: "paused_by_env" as const
+    };
+  }
+
+  if (!settings.pipeline_enabled) {
+    return {
+      settings,
+      state: "paused_by_admin" as const
+    };
+  }
+
+  return {
+    settings,
+    state: "running" as const
+  };
+}
+
+async function getValidationInternalOrganizationId() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("slug", VALIDATION_INTERNAL_ORG_SLUG)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load validation internal organization: ${error.message}`);
+  }
+
+  if (!data?.id) {
+    throw new Error("Validation internal organization is missing.");
+  }
+
+  return data.id as string;
+}
+
+export async function upsertValidationTarget(input: {
+  normalizedUrl: string;
+  source: string;
+  trancoRank?: number | null;
+}) {
+  const supabase = createAdminClient();
+  const hostname = extractHostname(input.normalizedUrl);
+  const trancoRank = input.trancoRank ?? null;
+  const rankBand = rankBandForRank(trancoRank);
+
+  const { data, error } = await supabase
+    .from("validation_targets")
+    .upsert(
+      {
+        hostname,
+        normalized_url: input.normalizedUrl,
+        source: input.source,
+        tranco_rank: trancoRank,
+        rank_band: rankBand,
+        active: true
+      },
+      {
+        onConflict: "hostname"
+      }
+    )
+    .select(
+      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
+    )
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to upsert validation target ${hostname}: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return data as ValidationTargetRow;
+}
+
+export async function listValidationTargets(limit = 50) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_targets")
+    .select(
+      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
+    )
+    .order("last_run_at", { ascending: false, nullsFirst: false })
+    .order("tranco_rank", { ascending: true, nullsFirst: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to list validation targets: ${error.message}`);
+  }
+
+  return (data ?? []) as ValidationTargetRow[];
+}
+
+export async function syncTrancoTargets(force = false) {
+  const env = getWorkerEnv();
+  const settings = await ensureValidationSettings();
+  const lastSyncAt = settings.last_tranco_sync_at ? new Date(settings.last_tranco_sync_at) : null;
+  const now = new Date();
+
+  if (!force && lastSyncAt && now.getTime() - lastSyncAt.getTime() < 24 * 60 * 60 * 1000) {
+    return { insertedCount: 0, skipped: true as const };
+  }
+
+  const response = await fetch(env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL, {
+    headers: {
+      "User-Agent": getCrawlerUserAgent()
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Tranco source: ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  let body = await response.text();
+
+  if (contentType.includes("text/html") || body.includes("/download/")) {
+    const match = body.match(/href="(\/download\/[^"]+\/1000000)"/i);
+
+    if (!match?.[1]) {
+      throw new Error("Failed to resolve Tranco CSV download URL.");
+    }
+
+    const csvUrl = new URL(match[1], "https://tranco-list.eu").toString();
+    const csvResponse = await fetch(csvUrl, {
+      headers: {
+        "User-Agent": getCrawlerUserAgent()
+      }
+    });
+
+    if (!csvResponse.ok) {
+      throw new Error(`Failed to fetch Tranco CSV: ${csvResponse.status}`);
+    }
+
+    body = await csvResponse.text();
+  }
+
+  const lines = body.split(/\r?\n/);
+  const rows: Array<{ active: boolean; hostname: string; normalized_url: string; rank_band: string | null; source: string; tranco_rank: number }> = [];
+
+  for (const line of lines) {
+    if (!line) {
+      continue;
+    }
+
+    const [rankText, hostText] = line.split(",");
+    const rank = Number(rankText);
+    const hostname = hostText?.trim().toLowerCase();
+    if (!Number.isFinite(rank) || !hostname) {
+      continue;
+    }
+    if (rank < env.VALIDATION_TRANCO_MIN_RANK || rank > env.VALIDATION_TRANCO_MAX_RANK) {
+      continue;
+    }
+
+    try {
+      rows.push({
+        active: true,
+        hostname,
+        normalized_url: normalizeUrl(hostname),
+        rank_band: rankBandForRank(rank),
+        source: "tranco",
+        tranco_rank: rank
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  const supabase = createAdminClient();
+  let insertedCount = 0;
+  const batchSize = 500;
+
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const batch = rows.slice(index, index + batchSize);
+    const { error } = await supabase.from("validation_targets").upsert(batch, {
+      onConflict: "hostname"
+    });
+
+    if (error) {
+      throw new Error(`Failed to upsert Tranco targets: ${error.message}`);
+    }
+
+    insertedCount += batch.length;
+  }
+
+  const { error: updateError } = await supabase
+    .from("validation_settings")
+    .update({
+      last_tranco_sync_at: now.toISOString()
+    })
+    .eq("singleton", true);
+
+  if (updateError) {
+    throw new Error(`Failed to update validation Tranco sync state: ${updateError.message}`);
+  }
+
+  return { insertedCount, skipped: false as const };
+}
+
+function pickWeightedBand() {
+  const roll = Math.random() * 100;
+  let threshold = 0;
+
+  for (const band of VALIDATION_RANK_BANDS) {
+    threshold += band.weight;
+    if (roll <= threshold) {
+      return band.key;
+    }
+  }
+
+  return VALIDATION_RANK_BANDS[0].key;
+}
+
+export async function claimNextAutomaticTarget(now = new Date()) {
+  const supabase = createAdminClient();
+  const nowIso = now.toISOString();
+  const attemptedBands = [pickWeightedBand(), ...VALIDATION_RANK_BANDS.map((band) => band.key)].filter(
+    (value, index, values) => values.indexOf(value) === index
+  );
+
+  for (const rankBand of attemptedBands) {
+    const { data, error } = await supabase
+      .from("validation_targets")
+      .select(
+        "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
+      )
+      .eq("active", true)
+      .eq("denylisted", false)
+      .eq("rank_band", rankBand)
+      .or(`cooldown_until.is.null,cooldown_until.lt.${nowIso}`)
+      .or(`backoff_until.is.null,backoff_until.lt.${nowIso}`)
+      .limit(250);
+
+    if (error) {
+      throw new Error(`Failed to load validation targets: ${error.message}`);
+    }
+
+    const rows = ((data ?? []) as ValidationTargetRow[]).filter((target) => {
+      const cooldownOk = !target.cooldown_until || new Date(target.cooldown_until) <= now;
+      const backoffOk = !target.backoff_until || new Date(target.backoff_until) <= now;
+      return cooldownOk && backoffOk;
+    });
+
+    if (rows.length === 0) {
+      continue;
+    }
+
+    const shuffled = [...rows].sort(() => Math.random() - 0.5);
+
+    for (const target of shuffled) {
+      const { data: activeRun, error: activeRunError } = await supabase
+        .from("validation_runs")
+        .select("id")
+        .eq("validation_target_id", target.id)
+        .in("status", [...ACTIVE_RUN_STATUSES])
+        .limit(1)
+        .maybeSingle();
+
+      if (activeRunError) {
+        throw new Error(`Failed to check active validation runs: ${activeRunError.message}`);
+      }
+
+      if (!activeRun) {
+        return target;
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function createValidationRun(input: {
+  hostname: string;
+  normalizedUrl: string;
+  rankBand?: string | null;
+  targetId?: string | null;
+  trancoRank?: number | null;
+  triggerMode: ValidationRunMode;
+}) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_runs")
+    .insert({
+      hostname: input.hostname,
+      normalized_url: input.normalizedUrl,
+      rank_band: input.rankBand ?? null,
+      tranco_rank: input.trancoRank ?? null,
+      trigger_mode: input.triggerMode,
+      status: "queued",
+      validation_target_id: input.targetId ?? null
+    })
+    .select(
+      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, status, tranco_rank, trigger_mode, validation_target_id"
+    )
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create validation run: ${error?.message ?? "Unknown error"}`);
+  }
+
+  if (input.targetId) {
+    await supabase
+      .from("validation_targets")
+      .update({
+        last_run_at: new Date().toISOString(),
+        last_status: "queued"
+      })
+      .eq("id", input.targetId);
+  }
+
+  return data as ValidationRunRow;
+}
+
+export async function getValidationRun(runId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_runs")
+    .select(
+      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, status, tranco_rank, trigger_mode, validation_target_id"
+    )
+    .eq("id", runId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load validation run ${runId}: ${error.message}`);
+  }
+
+  return (data as ValidationRunRow | null) ?? null;
+}
+
+export async function updateValidationRun(
+  runId: string,
+  patch: Record<string, unknown>
+) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("validation_runs").update(patch).eq("id", runId);
+  if (error) {
+    throw new Error(`Failed to update validation run ${runId}: ${error.message}`);
+  }
+}
+
+export async function createScanForValidationRun(runId: string) {
+  const supabase = createAdminClient();
+  const run = await getValidationRun(runId);
+  const teamPlan = getPlanDefinition("team");
+
+  if (!run) {
+    throw new Error(`Validation run ${runId} was not found.`);
+  }
+
+  if (run.scan_id) {
+    return run.scan_id;
+  }
+
+  const organizationId = await getValidationInternalOrganizationId();
+  const normalizedUrl = run.normalized_url;
+  const hostname = run.hostname;
+  const { data: domain } = await supabase
+    .from("domains")
+    .select("id, max_pages_override")
+    .eq("organization_id", organizationId)
+    .eq("hostname", hostname)
+    .maybeSingle();
+
+  let domainId = (domain as { id: string } | null)?.id ?? null;
+
+  if (!domainId) {
+    const { data: insertedDomain, error: domainError } = await supabase
+      .from("domains")
+      .insert({
+        organization_id: organizationId,
+        hostname,
+        normalized_url: normalizedUrl,
+        status: "active"
+      })
+      .select("id")
+      .single();
+
+    if (domainError || !insertedDomain) {
+      throw new Error(`Failed to create validation domain ${hostname}: ${domainError?.message ?? "Unknown error"}`);
+    }
+
+    domainId = insertedDomain.id as string;
+  } else {
+    await supabase
+      .from("domains")
+      .update({
+        normalized_url: normalizedUrl,
+        status: "active"
+      })
+      .eq("id", domainId);
+  }
+
+  const { data: scan, error: scanError } = await supabase
+    .from("scans")
+    .insert({
+      organization_id: organizationId,
+      domain_id: domainId,
+      submitted_by_user_id: null,
+      scan_type: "full",
+      status: "queued",
+      pages_requested: teamPlan.maxPagesPerScan,
+      pages_scanned: 0,
+      scan_config_json: {
+        processor: "queued-full-scan-v1",
+        profile: teamPlan.scanProfile,
+        maxPages: teamPlan.maxPagesPerScan,
+        source: "validation-canary",
+        triggerMode: run.trigger_mode,
+        crawlerIdentity: {
+          productToken: getCrawlerProductToken(),
+          publicUrl: getCrawlerPublicUrl()
+        }
+      }
+    })
+    .select("id")
+    .single();
+
+  if (scanError || !scan) {
+    throw new Error(`Failed to create validation scan for ${hostname}: ${scanError?.message ?? "Unknown error"}`);
+  }
+
+  await Promise.all([
+    supabase.from("domains").update({ latest_scan_id: scan.id }).eq("id", domainId),
+    supabase
+      .from("validation_runs")
+      .update({
+        scan_id: scan.id,
+        status: "collecting",
+        started_at: new Date().toISOString(),
+        error_message: null
+      })
+      .eq("id", runId),
+    run.validation_target_id
+      ? supabase
+          .from("validation_targets")
+          .update({
+            last_run_at: new Date().toISOString(),
+            last_status: "collecting"
+          })
+          .eq("id", run.validation_target_id)
+      : Promise.resolve()
+  ]);
+
+  return scan.id as string;
+}
+
+export async function loadCompletedScanArtifacts(scanId: string) {
+  const supabase = createAdminClient();
+  const [
+    { data: scan, error: scanError },
+    { data: snapshot, error: snapshotError },
+    { data: runtimeArtifacts, error: runtimeArtifactsError },
+    { data: trackerVendors, error: trackerError },
+    { data: pages, error: pagesError },
+    { data: policyEnrichments, error: policyEnrichmentError },
+    { data: policyReviewQueue, error: policyReviewQueueError },
+    { data: preconsentViolations, error: preconsentError }
+  ] = await Promise.all([
+    supabase
+      .from("scans")
+      .select("id, status, created_at, completed_at, error_message")
+      .eq("id", scanId)
+      .maybeSingle(),
+    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    supabase
+      .from("scan_tracker_vendors")
+      .select("vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id")
+      .eq("scan_id", scanId)
+      .order("vendor_name", { ascending: true }),
+    supabase
+      .from("scan_pages")
+      .select("page_type, page_url, fetch_status")
+      .eq("scan_id", scanId)
+      .order("page_type", { ascending: true }),
+    supabase
+      .from("policy_enrichment")
+      .select("id, page_type, page_url, policy_summary_short, policy_actionable_flags, policy_evidence_snippets, policy_mentions, policy_semantic_confidence, policy_ambiguity_score, policy_dsar_mechanism, policy_transfer_mechanisms, policy_retention_periods, policy_do_not_sell")
+      .eq("scan_id", scanId),
+    supabase
+      .from("policy_review_queue")
+      .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
+      .eq("scan_id", scanId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("scan_preconsent_violations")
+      .select("vendor_name, evidence_urls, collection_endpoint_type")
+      .eq("scan_id", scanId)
+  ]);
+
+  if (scanError) {
+    throw new Error(`Failed to load validation scan ${scanId}: ${scanError.message}`);
+  }
+  if (snapshotError) {
+    throw new Error(`Failed to load validation scan snapshot ${scanId}: ${snapshotError.message}`);
+  }
+  if (runtimeArtifactsError) {
+    throw new Error(`Failed to load validation runtime artifacts ${scanId}: ${runtimeArtifactsError.message}`);
+  }
+  if (trackerError) {
+    throw new Error(`Failed to load validation tracker vendors ${scanId}: ${trackerError.message}`);
+  }
+  if (pagesError) {
+    throw new Error(`Failed to load validation scan pages ${scanId}: ${pagesError.message}`);
+  }
+  if (policyEnrichmentError) {
+    throw new Error(`Failed to load policy enrichment ${scanId}: ${policyEnrichmentError.message}`);
+  }
+  if (policyReviewQueueError) {
+    throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
+  }
+  if (preconsentError) {
+    throw new Error(`Failed to load pre-consent violations ${scanId}: ${preconsentError.message}`);
+  }
+
+  return {
+    pages: (pages ?? []) as Array<Record<string, unknown>>,
+    policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    scan: (scan as Record<string, unknown> | null) ?? null,
+    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
+    trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>
+  };
+}
+
+export async function replaceValidationRunFindings(
+  runId: string,
+  findings: Array<{
+    category: string;
+    subtype: string | null;
+    findingFamily: string;
+    findingSource: string;
+    findingScope: string;
+    findingSubject: string;
+    ruleKey: string;
+    title: string;
+    description: string;
+    severity: string;
+    pageUrl: string | null;
+    rank: number;
+    evidence: Record<string, unknown>;
+  }>
+) {
+  const supabase = createAdminClient();
+  const { error: deleteError } = await supabase.from("validation_run_findings").delete().eq("validation_run_id", runId);
+
+  if (deleteError) {
+    throw new Error(`Failed to clear validation findings for run ${runId}: ${deleteError.message}`);
+  }
+
+  if (findings.length === 0) {
+    await updateValidationRun(runId, {
+      finding_count: 0,
+      reviewed_finding_count: 0
+    });
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("validation_run_findings")
+    .insert(
+      findings.map((finding) => ({
+        validation_run_id: runId,
+        category: finding.category,
+        subtype: finding.subtype,
+        finding_family: finding.findingFamily,
+        finding_source: finding.findingSource,
+        finding_scope: finding.findingScope,
+        finding_subject: finding.findingSubject,
+        rule_key: finding.ruleKey,
+        title: finding.title,
+        description: finding.description,
+        severity: finding.severity,
+        page_url: finding.pageUrl,
+        finding_rank: finding.rank,
+        evidence_json: finding.evidence
+      }))
+    )
+    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
+
+  if (error) {
+    throw new Error(`Failed to insert validation findings for run ${runId}: ${error.message}`);
+  }
+
+  await updateValidationRun(runId, {
+    finding_count: findings.length
+  });
+
+  return (data ?? []) as Array<Record<string, unknown>>;
+}
+
+export async function loadValidationRunFindings(runId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_run_findings")
+    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json")
+    .eq("validation_run_id", runId)
+    .order("finding_rank", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load validation findings for run ${runId}: ${error.message}`);
+  }
+
+  return (data ?? []) as Array<Record<string, unknown>>;
+}
+
+export async function upsertValidationVerdict(input: {
+  agreementScore: ValidationAgreementScore;
+  confidence: number;
+  evidence: Record<string, unknown>;
+  model: string;
+  promptVersion: string;
+  rationale: string;
+  validationRunFindingId: string;
+  verdict: "supported" | "inconclusive" | "not_supported";
+}) {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("validation_verdicts")
+    .upsert(
+      {
+        validation_run_finding_id: input.validationRunFindingId,
+        verdict: input.verdict,
+        confidence: input.confidence,
+        rationale: input.rationale,
+        agreement_score: input.agreementScore,
+        model: input.model,
+        prompt_version: input.promptVersion,
+        evidence_json: input.evidence
+      },
+      {
+        onConflict: "validation_run_finding_id"
+      }
+    );
+
+  if (error) {
+    throw new Error(`Failed to persist validation verdict ${input.validationRunFindingId}: ${error.message}`);
+  }
+}
+
+export async function finalizeValidationRun(runId: string) {
+  const supabase = createAdminClient();
+  const run = await getValidationRun(runId);
+
+  if (!run) {
+    throw new Error(`Validation run ${runId} was not found.`);
+  }
+
+  const { data: verdicts, error: verdictError } = await supabase
+    .from("validation_verdicts")
+    .select("agreement_score")
+    .in(
+      "validation_run_finding_id",
+      (
+        (
+          await supabase
+            .from("validation_run_findings")
+            .select("id")
+            .eq("validation_run_id", runId)
+        ).data ?? []
+      ).map((row) => row.id)
+    );
+
+  if (verdictError) {
+    throw new Error(`Failed to load validation verdicts for run ${runId}: ${verdictError.message}`);
+  }
+
+  const scores = ((verdicts ?? []) as Array<{ agreement_score: number }>).map((row) => row.agreement_score);
+  const averageAgreementScore =
+    scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
+  const completedAt = new Date();
+
+  await updateValidationRun(runId, {
+    average_agreement_score: averageAgreementScore,
+    completed_at: completedAt.toISOString(),
+    reviewed_finding_count: scores.length,
+    status: "completed"
+  });
+
+  if (!run.validation_target_id) {
+    return;
+  }
+
+  const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
+  const { data: snapshot } = await supabase
+    .from("scan_snapshots")
+    .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status")
+    .eq("scan_id", run.scan_id)
+    .maybeSingle();
+
+  const blocked =
+    snapshot?.blocked_flag === true ||
+    snapshot?.captcha_flag === true ||
+    snapshot?.homepage_fetch_http_status === 403 ||
+    snapshot?.homepage_fetch_http_status === 429 ||
+    snapshot?.robots_fetch_http_status === 403 ||
+    snapshot?.robots_fetch_http_status === 429;
+
+  await supabase
+    .from("validation_targets")
+    .update({
+      backoff_until: blocked ? addDays(completedAt, 90).toISOString() : null,
+      cooldown_until: addDays(completedAt, cooldownDays).toISOString(),
+      last_completed_at: completedAt.toISOString(),
+      last_error: null,
+      last_status: "completed"
+    })
+    .eq("id", run.validation_target_id);
+}
+
+export async function failValidationRun(runId: string, message: string) {
+  const supabase = createAdminClient();
+  const run = await getValidationRun(runId);
+  const failedAt = new Date();
+
+  await updateValidationRun(runId, {
+    completed_at: failedAt.toISOString(),
+    error_message: message,
+    status: "failed"
+  });
+
+  if (!run?.validation_target_id) {
+    return;
+  }
+
+  const target = await supabase
+    .from("validation_targets")
+    .select("failure_count")
+    .eq("id", run.validation_target_id)
+    .maybeSingle();
+  const failureCount = Number(target.data?.failure_count ?? 0) + 1;
+  const backoffDays = Math.min(30, 2 ** Math.min(failureCount - 1, 4));
+
+  await supabase
+    .from("validation_targets")
+    .update({
+      backoff_until: addDays(failedAt, backoffDays).toISOString(),
+      failure_count: failureCount,
+      last_error: message,
+      last_status: "failed"
+    })
+    .eq("id", run.validation_target_id);
+}
+
+export async function markValidationSchedule(input: {
+  nextDueAt: Date;
+  now: Date;
+}) {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("validation_settings")
+    .update({
+      last_scheduled_at: input.now.toISOString(),
+      next_due_at: input.nextDueAt.toISOString()
+    })
+    .eq("singleton", true);
+
+  if (error) {
+    throw new Error(`Failed to update validation scheduler state: ${error.message}`);
+  }
+}
+
+export function normalizeValidationTargetInput(value: string) {
+  return normalizeUrl(value);
+}
+
+export function isAllowedValidationInterval(minutes: number) {
+  return VALIDATION_INTERVAL_OPTIONS.includes(minutes as (typeof VALIDATION_INTERVAL_OPTIONS)[number]);
+}
+
+export async function addManualValidationTarget(hostnameOrUrl: string) {
+  const normalizedUrl = normalizeValidationTargetInput(hostnameOrUrl);
+  return upsertValidationTarget({
+    normalizedUrl,
+    source: "manual"
+  });
+}
+
+export async function listRecentValidationRuns(input?: { limit?: number; page?: number }) {
+  const limit = Math.max(1, Math.min(100, input?.limit ?? 50));
+  const page = Math.max(1, input?.page ?? 1);
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+  const supabase = createAdminClient();
+  const { data, error, count } = await supabase
+    .from("validation_runs")
+    .select(
+      "id, hostname, normalized_url, tranco_rank, rank_band, trigger_mode, status, scan_id, finding_count, reviewed_finding_count, average_agreement_score, error_message, created_at, started_at, completed_at",
+      {
+        count: "exact"
+      }
+    )
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw new Error(`Failed to list validation runs: ${error.message}`);
+  }
+
+  return {
+    page,
+    pageCount: Math.max(1, Math.ceil((count ?? 0) / limit)),
+    rows: (data ?? []) as Array<Record<string, unknown>>,
+    totalCount: count ?? 0
+  };
+}

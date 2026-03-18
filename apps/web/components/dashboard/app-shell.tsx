@@ -140,6 +140,10 @@ function isItemActive(pathname: string, href: string) {
 const COLLAPSED_NAV_WIDTH = "lg:w-[65px]";
 const COLLAPSED_NAV_PANEL_WIDTH = "w-[65px]";
 const EXPANDED_NAV_PANEL_WIDTH = "w-[248px]";
+const DEV_INSTANCE_LABEL = process.env.NEXT_PUBLIC_DEV_INSTANCE_LABEL;
+const DEV_INSTANCE_BRANCH = process.env.NEXT_PUBLIC_DEV_GIT_BRANCH;
+const DEV_INSTANCE_PATH = process.env.NEXT_PUBLIC_DEV_WORKTREE_PATH;
+const DEV_INSTANCE_PORT = process.env.NEXT_PUBLIC_DEV_PORT;
 
 export function AppShell({ children, organizationName, plan, userEmail, isPlatformAdmin = false }: AppShellProps) {
   const pathname = usePathname();
@@ -167,6 +171,16 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
         <header className="border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
+          {process.env.NODE_ENV === "development" && DEV_INSTANCE_LABEL ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-2 font-mono text-[11px] text-amber-100">
+              <span className="rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 uppercase tracking-[0.2em] text-amber-200">
+                {DEV_INSTANCE_LABEL}
+              </span>
+              <span>{DEV_INSTANCE_BRANCH ?? "unknown-branch"}</span>
+              <span>port {DEV_INSTANCE_PORT ?? "?"}</span>
+              {DEV_INSTANCE_PATH ? <span className="truncate text-amber-50/80">{DEV_INSTANCE_PATH}</span> : null}
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <button

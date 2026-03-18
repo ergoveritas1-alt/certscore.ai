@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { runConsentProbe } from "../src/scan/snapshot/build-snapshot-bundle";
+import { runConsentProbe } from "@website-signal-risk-scanner/scan-core";
 
 const CANARY_GROUPS = {
   vendor_homepages: [

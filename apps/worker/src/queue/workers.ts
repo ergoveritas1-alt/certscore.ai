@@ -1,8 +1,8 @@
 import { Worker } from "bullmq";
+import { runFullScanJob } from "@website-signal-risk-scanner/scan-core";
 import { FULL_SCAN_JOB, PREVIEW_SCAN_JOB, QUEUE_NAMES, SCHEDULED_SCAN_JOB, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { getWorkerEnv } from "../env";
-import { runFullScanJob } from "../scan/run-full-scan";
 import { enqueueScheduledScans } from "../scheduling/enqueue-scheduled-scans";
 import { getSharedRedisConnection } from "./connection";
 

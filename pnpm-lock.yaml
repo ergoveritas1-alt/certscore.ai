@@ -21,6 +21,85 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
+  apps/validation-web:
+    dependencies:
+      '@website-signal-risk-scanner/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@website-signal-risk-scanner/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      bcryptjs:
+        specifier: ^3.0.3
+        version: 3.0.3
+      bullmq:
+        specifier: ^5.43.0
+        version: 5.70.4
+      next:
+        specifier: ^15.2.0
+        version: 15.5.12(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      nodemailer:
+        specifier: ^6.10.1
+        version: 6.10.1
+      react:
+        specifier: ^19.0.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.4(react@19.2.4)
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+    devDependencies:
+      '@types/nodemailer':
+        specifier: ^6.4.17
+        version: 6.4.23
+      '@types/react':
+        specifier: ^19.0.10
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.4
+        version: 19.2.3(@types/react@19.2.14)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.27(postcss@8.5.8)
+      postcss:
+        specifier: ^8.5.3
+        version: 8.5.8
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19(tsx@4.21.0)
+
+  apps/validation-worker:
+    dependencies:
+      '@website-signal-risk-scanner/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@website-signal-risk-scanner/scan-core':
+        specifier: workspace:*
+        version: link:../../packages/scan-core
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@website-signal-risk-scanner/validation-shared':
+        specifier: workspace:*
+        version: link:../../packages/validation-shared
+      bullmq:
+        specifier: ^5.43.0
+        version: 5.70.4
+      ioredis:
+        specifier: ^5.4.2
+        version: 5.10.0
+      playwright:
+        specifier: ^1.51.1
+        version: 1.58.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
   apps/web:
     dependencies:
       '@website-signal-risk-scanner/db':
@@ -78,6 +157,9 @@ importers:
       '@website-signal-risk-scanner/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@website-signal-risk-scanner/scan-core':
+        specifier: workspace:*
+        version: link:../../packages/scan-core
       '@website-signal-risk-scanner/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -112,6 +194,24 @@ importers:
         specifier: ^3.24.2
         version: 3.25.76
 
+  packages/scan-core:
+    dependencies:
+      '@website-signal-risk-scanner/db':
+        specifier: workspace:*
+        version: link:../db
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../shared
+      axe-core:
+        specifier: ^4.10.3
+        version: 4.11.1
+      playwright:
+        specifier: ^1.51.1
+        version: 1.58.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
   packages/shared:
     dependencies:
       zod:
@@ -139,6 +239,8 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.4
         version: 19.2.3(@types/react@19.2.14)
+
+  packages/validation-shared: {}
 
 packages:
 

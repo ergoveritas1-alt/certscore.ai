@@ -1,6 +1,9 @@
 import Link from "next/link";
+import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
+import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationScans } from "../../../server/scans/get-organization-scans";
 
@@ -17,6 +20,16 @@ function formatDateTime(value: string | null) {
 
 function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
+  if (!value) {
+    return "This domain cannot be re-scanned yet.";
+  }
+
+  return `Next re-scan available ${formatDateTime(value)} for this ${
+    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
+  } plan domain.`;
 }
 
 type ScansPageProps = {
@@ -71,6 +84,22 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                 <tbody className="divide-y divide-slate-100">
                   {scans.map((scan) => {
                     const isFocusedScan = focusScanId === scan.id;
+                    const canRescan = scan.status === "completed" && Boolean(scan.domainId);
+                    const rescanAvailability = canRescan
+                      ? getRescanAvailability({
+                          activeScanExists: scan.domainActiveScanExists,
+                          lastScannedAt: scan.domainLastScannedAt,
+                          planCode: organization.plan
+                        })
+                      : null;
+                    const cooldownMessage =
+                      canRescan && rescanAvailability
+                        ? rescanAvailability.reason
+                          ? rescanAvailability.reason
+                          : !rescanAvailability.allowed
+                            ? formatRescanCooldownMessage(rescanAvailability.nextAllowedAt, organization.plan)
+                            : null
+                        : null;
 
                     return (
                     <tr
@@ -87,19 +116,28 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       </td>
                       <td className="py-4 pr-4 text-slate-600">{formatDateTime(scan.createdAt)}</td>
                       <td className="py-4">
-                        <Button
-                          asChild
-                          className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
-                          size="sm"
-                          variant="secondary"
-                        >
-                          <Link aria-label="View scan details" href="/app/signals">
-                            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M12 19V5" />
-                              <path d="m5 12 7-7 7 7" />
-                            </svg>
-                          </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            asChild
+                            className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+                            size="sm"
+                            variant="secondary"
+                          >
+                            <Link aria-label="View scan details" href={`/app/scans/${scan.id}`}>
+                              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 19V5" />
+                                <path d="m5 12 7-7 7 7" />
+                              </svg>
+                            </Link>
+                          </Button>
+                          {canRescan && scan.domainId && rescanAvailability ? (
+                            <RescanDomainForm
+                              cooldownMessage={cooldownMessage}
+                              disabled={!rescanAvailability.allowed}
+                              domainId={scan.domainId}
+                            />
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );

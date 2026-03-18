@@ -4,8 +4,6 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@websit
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
-import { ValidationPublicHome } from "../../components/validation/public-home";
-import { isValidationOpsApp } from "../../lib/app-flavor";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -215,11 +213,7 @@ const whatHappensNext = [
   }
 ];
 
-export default function MarketingHomePage() {
-  if (isValidationOpsApp()) {
-    return <ValidationPublicHome />;
-  }
-
+export default async function MarketingHomePage() {
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",

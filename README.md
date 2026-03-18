@@ -46,6 +46,7 @@ website-signal-risk-scanner/
 This monorepo should use separate environment files per app in local development:
 
 - copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
+- copy [apps/web/.env.validation.example](/Users/benmasek/WC01/apps/web/.env.validation.example) to [apps/web/.env.validation.local](/Users/benmasek/WC01/apps/web/.env.validation.local) for the validation-only web app
 - copy [apps/worker/.env.example](/Users/benmasek/WC01/apps/worker/.env.example) to [apps/worker/.env.local](/Users/benmasek/WC01/apps/worker/.env.local)
 
 Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a single root `.env.local` for app runtime configuration.
@@ -91,6 +92,7 @@ Compatibility note:
    - `pnpm install`
 2. Copy the environment template:
    - `cp apps/web/.env.example apps/web/.env.local`
+   - `cp apps/web/.env.validation.example apps/web/.env.validation.local`
    - `cp apps/worker/.env.example apps/worker/.env.local`
 3. Create a dedicated Supabase dev project.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
@@ -111,9 +113,11 @@ Compatibility note:
    - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
 11. Start the web app:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-12. Start the worker:
+12. Start the validation web app on a separate port when needed:
+   - `pnpm dev:validation:web`
+13. Start the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker dev`
-13. Run a scheduler sweep manually when needed:
+14. Run a scheduler sweep manually when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification
@@ -144,8 +148,11 @@ GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users
 Use these lightweight checks before first deployment validation:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
+- `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`
+- `pnpm --filter @website-signal-risk-scanner/worker check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
+- `pnpm --filter @website-signal-risk-scanner/worker check-runtime:validation`
 
 Use these runtime smoke helpers:
 
@@ -153,6 +160,8 @@ Use these runtime smoke helpers:
 - `pnpm --filter @website-signal-risk-scanner/worker smoke:scheduler`
 
 The full runtime QA sequence is documented in [docs/runtime-validation.md](/Users/benmasek/WC01/docs/runtime-validation.md).
+The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](/Users/benmasek/WC01/docs/validation-pipeline-plan.md).
+The validation crawler deployment and VM runbook is documented in [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md).
 
 ## Production deployment
 

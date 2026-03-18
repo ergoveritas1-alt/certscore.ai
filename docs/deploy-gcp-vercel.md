@@ -103,3 +103,14 @@ Validate in this order:
 5. report data persists in Supabase
 6. PDFs generate
 7. the hourly scheduler path runs successfully
+
+## Validation Ops sibling deploy
+
+The validation-only deployment uses a different topology:
+
+- Vercel deploy of `apps/web` with `APP_FLAVOR=validation_ops`
+- separate Redis via `VALIDATION_REDIS_URL`
+- separate VM for `start:validation` and `start:validation:scheduler`
+- optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
+
+See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.

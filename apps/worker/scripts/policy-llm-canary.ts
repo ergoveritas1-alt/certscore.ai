@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { assessPolicyPageContentQuality, discoverCandidatePages, fetchStaticPage } from "../src/scan/snapshot/extractors";
-import { chunkPolicyText } from "../src/scan/policy-enrichment/chunk";
-import { ruleBasedPolicyPreprocess } from "../src/scan/policy-enrichment/rules";
-import { enrichPolicyPages } from "../src/scan/policy-enrichment/run-policy-enrichment";
-import { upgradeThinPolicyPages } from "../src/scan/snapshot/policy-resolution";
-import { buildScanPlan } from "../src/scan/snapshot/scan-planner";
-import type { StaticPageResult } from "../src/scan/snapshot/types";
+import {
+  assessPolicyPageContentQuality,
+  buildScanPlan,
+  chunkPolicyText,
+  discoverCandidatePages,
+  enrichPolicyPages,
+  fetchStaticPage,
+  ruleBasedPolicyPreprocess,
+  upgradeThinPolicyPages,
+  type StaticPageResult
+} from "@website-signal-risk-scanner/scan-core";
 
 type CanaryRunResult = {
   completedAt: string;

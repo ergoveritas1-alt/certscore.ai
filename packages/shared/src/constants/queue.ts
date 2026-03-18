@@ -3,18 +3,27 @@ import type { ScanStatus } from "../types/entities";
 export const SCAN_JOB_TYPES = {
   previewScan: "preview_scan",
   fullScan: "full_scan",
-  scheduledScan: "scheduled_scan"
+  scheduledScan: "scheduled_scan",
+  validationCollect: "validation_collect",
+  validationRank: "validation_rank",
+  validationVerdict: "validation_verdict"
 } as const;
 
 export const QUEUE_NAMES = {
   previewScan: SCAN_JOB_TYPES.previewScan,
   fullScan: SCAN_JOB_TYPES.fullScan,
-  scheduledScan: SCAN_JOB_TYPES.scheduledScan
+  scheduledScan: SCAN_JOB_TYPES.scheduledScan,
+  validationCollect: SCAN_JOB_TYPES.validationCollect,
+  validationRank: SCAN_JOB_TYPES.validationRank,
+  validationVerdict: SCAN_JOB_TYPES.validationVerdict
 } as const;
 
 export const PREVIEW_SCAN_JOB = SCAN_JOB_TYPES.previewScan;
 export const FULL_SCAN_JOB = SCAN_JOB_TYPES.fullScan;
 export const SCHEDULED_SCAN_JOB = SCAN_JOB_TYPES.scheduledScan;
+export const VALIDATION_COLLECT_JOB = SCAN_JOB_TYPES.validationCollect;
+export const VALIDATION_RANK_JOB = SCAN_JOB_TYPES.validationRank;
+export const VALIDATION_VERDICT_JOB = SCAN_JOB_TYPES.validationVerdict;
 
 export const QUEUE_JOB_NAMES = Object.values(SCAN_JOB_TYPES);
 export const SCAN_STATUS = ["queued", "running", "completed", "failed"] as const satisfies readonly ScanStatus[];
@@ -60,5 +69,15 @@ export const SCAN_EVENT_TYPES = {
   scheduledScanEnqueued: "scheduled_scan.enqueued",
   scheduledScanSkippedExistingActiveScan: "scheduled_scan.skipped_existing_active_scan",
   scheduledQueued: "scheduled_scan.queued",
-  changesComputed: "signals.changes_computed"
+  changesComputed: "signals.changes_computed",
+  validationClaimed: "validation.claimed",
+  validationCollectQueued: "validation.collect_queued",
+  validationCollectStarted: "validation.collect_started",
+  validationCollectCompleted: "validation.collect_completed",
+  validationRankStarted: "validation.rank_started",
+  validationRankCompleted: "validation.rank_completed",
+  validationVerdictStarted: "validation.verdict_started",
+  validationVerdictCompleted: "validation.verdict_completed",
+  validationRunCompleted: "validation.run_completed",
+  validationRunFailed: "validation.run_failed"
 } as const;

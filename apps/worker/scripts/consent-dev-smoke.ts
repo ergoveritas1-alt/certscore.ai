@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { runConsentProbe } from "../src/scan/snapshot/build-snapshot-bundle";
+import { runConsentProbe } from "@website-signal-risk-scanner/scan-core";
 
 async function main() {
   const args = process.argv.slice(2).filter(Boolean);

@@ -10,7 +10,6 @@ import { findAppUserByEmail, findPasswordAuthUserByEmail, getSupabaseAuthProvide
 import { credentialsSchema, getAuthMode } from "./validators";
 import { bootstrapUserFromSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
-import type { AuthMode } from "./types";
 
 function getClientIp(headerStore: Headers) {
   const forwardedFor = headerStore.get("x-forwarded-for");
@@ -65,11 +64,13 @@ export async function submitCredentialsAction(
     }
 
     const values = parsed.data;
+    const normalizedEmail = normalizeEmail(values.email);
+
     const headerStore = await headers();
     const ipAddress = getClientIp(headerStore);
     const { enforcePasswordAuthRateLimit } = await import("./rate-limit");
     const rateLimitMessage = await enforcePasswordAuthRateLimit({
-      email: normalizeEmail(values.email),
+      email: normalizedEmail,
       ipAddress,
       mode
     });
