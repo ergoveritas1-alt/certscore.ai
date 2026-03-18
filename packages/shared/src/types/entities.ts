@@ -1,4 +1,4 @@
-export type PlanCode = "free" | "pro" | "team";
+export type PlanCode = "free" | "individual" | "pro" | "team";
 export type PlanStatus = "active" | "trialing" | "past_due" | "paused";
 export type ScanType = "preview" | "full" | "scheduled";
 export type ScanStatus = "queued" | "running" | "completed" | "failed";

@@ -214,7 +214,19 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "subscription_cancellation_policy_present",
       "cancellation_policy_present",
       "free_trial_detected",
+      "discount_claim_present",
+      "original_price_comparison_present",
+      "limited_time_offer_language_present",
       "refund_or_return_window_detected",
+      "refund_policy_window_days",
+      "refund_policy_conditions_present",
+      "refund_request_method_present",
+      "store_credit_only_policy_present",
+      "exchange_policy_present",
+      "renewal_notice_period_present",
+      "termination_for_cause_clause_present",
+      "account_deletion_terms_present",
+      "service_suspension_or_termination_terms_present",
       "unsubscribe_mechanism_present"
     ]
   },
@@ -223,6 +235,12 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
     subcategory: "Commercial Pressure / Scarcity Signals",
     regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"],
     fields: ["dark_pattern_countdown_timer_present", "dark_pattern_fake_scarcity_language", "testimonial_or_review_disclosure_present"]
+  },
+  {
+    primaryCategory: "consumer_transparency_disclosures",
+    subcategory: "Policy Consistency & Behavior",
+    regulatoryTags: ["ftc_consumer_protection", "gdpr_eu_privacy", "ccpa_cpra"],
+    fields: ["policy_behavior_conflict_detected", "policy_terms_conflict_detected", "privacy_cookie_policy_conflict_detected"]
   },
   {
     primaryCategory: "data_collection_third_party_ecosystem",
@@ -331,6 +349,8 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "accessibility_statement_present",
       "accessibility_contact_method_present",
       "accessibility_widget_present",
+      "vpat_or_accessibility_conformance_doc_present",
+      "wcag_level_claimed",
       "accessibility_claim_mismatch_detected",
       "accessibility_litigation_risk_score"
     ]
@@ -549,6 +569,91 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
     "commerce.free_trial_detected": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Subscription & Billing Transparency"
+    },
+    "commerce.discount_claim_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.original_price_comparison_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.limited_time_offer_language_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Commercial Pressure / Scarcity Signals",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.refund_policy_window_days": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.refund_policy_conditions_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.refund_request_method_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.store_credit_only_policy_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.exchange_policy_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.renewal_notice_period_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.termination_for_cause_clause_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.account_deletion_terms_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "commerce.service_suspension_or_termination_terms_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection", "auto_renew_subscription"]
+    },
+    "accessibility.vpat_or_accessibility_conformance_doc_present": {
+      primaryCategory: "accessibility",
+      subcategory: "Accessibility Claims & Statements",
+      regulatoryTags: ["accessibility_ada_wcag"]
+    },
+    "accessibility.wcag_level_claimed": {
+      primaryCategory: "accessibility",
+      subcategory: "Accessibility Claims & Statements",
+      regulatoryTags: ["accessibility_ada_wcag"]
+    },
+    "accessibility.accessibility_contact_method_present": {
+      primaryCategory: "accessibility",
+      subcategory: "Accessibility Claims & Statements",
+      regulatoryTags: ["accessibility_ada_wcag"]
+    },
+    "context.privacy_cookie_policy_conflict_detected": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Policy Consistency & Behavior",
+      regulatoryTags: ["ftc_consumer_protection", "gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "context.policy_terms_conflict_detected": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Policy Consistency & Behavior",
+      regulatoryTags: ["ftc_consumer_protection", "gdpr_eu_privacy", "ccpa_cpra"]
     },
     "context.access_blocked_by_robots": {
       primaryCategory: "security_trust_governance",

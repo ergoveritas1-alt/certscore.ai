@@ -1,6 +1,6 @@
 import type { PlanCode, ScanFrequency, ScanProfile } from "../types/entities";
 
-export const PLAN_CODES = ["free", "pro", "team"] as const satisfies readonly PlanCode[];
+export const PLAN_CODES = ["free", "individual", "pro", "team"] as const satisfies readonly PlanCode[];
 
 export type PlanDefinition = {
   code: PlanCode;
@@ -33,26 +33,40 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     apiAccess: false
   },
   {
-    code: "pro",
-    label: "Pro",
-    priceLabel: "$79/mo",
+    code: "individual",
+    label: "Individual",
+    priceLabel: "$29/mo",
     description: "Expanded domain coverage",
     coverageLabel: "Expanded domain coverage",
-    maxDomains: 3,
+    maxDomains: 1,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "standard",
     manualRescanLimitPerMonth: 90,
-    scanHistoryEnabled: false,
+    scanHistoryEnabled: true,
+    apiAccess: false
+  },
+  {
+    code: "pro",
+    label: "Pro",
+    priceLabel: "$129/mo",
+    description: "Expanded domain coverage",
+    coverageLabel: "Expanded domain coverage",
+    maxDomains: 20,
+    maxPagesPerScan: 5,
+    scanFrequency: "hourly",
+    scanProfile: "standard",
+    manualRescanLimitPerMonth: 90,
+    scanHistoryEnabled: true,
     apiAccess: false
   },
   {
     code: "team",
     label: "Ultra",
-    priceLabel: "$149/mo",
+    priceLabel: "$289/mo",
     description: "Expanded domain coverage",
     coverageLabel: "Expanded domain coverage",
-    maxDomains: 200,
+    maxDomains: 100,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "team",
