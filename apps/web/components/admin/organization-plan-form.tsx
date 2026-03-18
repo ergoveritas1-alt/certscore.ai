@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 
 type OrganizationPlanFormProps = {
   action: (formData: FormData) => Promise<void>;
-  defaultPlan: "free" | "pro" | "team";
+  defaultPlan: "free" | "individual" | "pro" | "team";
   defaultPlanStatus: "active" | "trialing" | "past_due" | "paused";
   organizationId: string;
 };
@@ -13,6 +13,7 @@ type OrganizationPlanFormProps = {
 const PLAN_STATUSES = ["active", "trialing", "past_due", "paused"] as const;
 const PLAN_LABELS: Record<(typeof PLAN_CODES)[number], string> = {
   free: "Free",
+  individual: "Individual",
   pro: "Pro",
   team: "Ultra",
 };
