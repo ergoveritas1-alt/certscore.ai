@@ -167,9 +167,11 @@ The validation crawler deployment and VM runbook is documented in [docs/validati
 
 ### Vercel web app
 
-- deploy production only from the repo root: `/Users/benmasek/WC01`
+- prefer Git-based deploys for production web changes
+- stage the intended files, commit them, and push the production branch to GitHub
+- treat the connected Vercel project as the primary production deploy path
 - do not deploy from `apps/web`
-- use `npx vercel deploy --prod` from the repo root
+- use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
 - configure the web environment variables from the shared list above
 - use only production Supabase URL and keys in Vercel
 - ensure Supabase Auth redirects include the production callback on `certscore.ai`
