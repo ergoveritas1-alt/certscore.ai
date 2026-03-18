@@ -1,29 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import type { FetchStatus, PreviewSampleFinding } from "@website-signal-risk-scanner/shared";
+import {
+  REPORT_PRIMARY_PILLARS,
+  getReportEvidenceCategoriesForSection,
+  getReportSectionsForPillar,
+  getReportSignalsForEvidenceCategory,
+  type PreviewSampleFinding,
+  type ReportSignalDefinition
+} from "@website-signal-risk-scanner/shared";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
 import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
-import { PolicyEnrichmentSection } from "../../../../components/scans/policy-enrichment-section";
-import { RegulatoryRiskSection } from "../../../../components/scans/regulatory-risk-section";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
-  getPrimaryCategoryDescription,
-  getPrimaryCategoryLabel,
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
 } from "../../../../lib/scans/signal-taxonomy";
 import {
   formatCollectionEndpointType,
-  formatTrackerRiskLabel,
-  formatTrackerSeverityLabel,
-  getTrackerRiskLabels,
-  getTrackerSeverity
 } from "../../../../lib/scans/tracker-risk";
 import { getDashboardContext } from "../../../../server/auth";
-import { buildPreviewPayloadFromSnapshot } from "../../../../server/preview-scan/build-preview-payload";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 
 function formatDateTime(value: string | null) {
@@ -164,14 +162,6 @@ function derivePreconsentSectionScore(input: {
   return Math.min(100, Math.max(0, score));
 }
 
-function formatConfidence(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "—";
-  }
-
-  return value.toFixed(2);
-}
-
 function getSnapshotNumber(snapshot: Record<string, unknown>, key: string) {
   const value = snapshot[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -179,24 +169,6 @@ function getSnapshotNumber(snapshot: Record<string, unknown>, key: string) {
 
 function getSnapshotBoolean(snapshot: Record<string, unknown>, key: string) {
   return snapshot[key] === true;
-}
-
-function getSnapshotFetchStatus(snapshot: Record<string, unknown>, key: string): FetchStatus | null {
-  const value = snapshot[key];
-  if (
-    value === "ok" ||
-    value === "redirected" ||
-    value === "blocked" ||
-    value === "timeout" ||
-    value === "not_found" ||
-    value === "forbidden" ||
-    value === "error" ||
-    value === "skipped"
-  ) {
-    return value;
-  }
-
-  return null;
 }
 
 function getRecordBoolean(record: Record<string, unknown> | null | undefined, key: string) {
@@ -797,73 +769,6 @@ function deriveAccessibilityRuleEvidenceRows(input: {
   });
 }
 
-function deriveAccessibilityIssueChangeRows(input: {
-  currentSnapshot: Record<string, unknown> | null;
-  previousSnapshot: Record<string, unknown> | null;
-}) {
-  if (!input.currentSnapshot || !input.previousSnapshot) {
-    return [];
-  }
-
-  const fields = [
-    { key: "contrast", label: "Contrast failures", field: "wcag_contrast_failures_count" },
-    { key: "alt", label: "Missing alt text", field: "wcag_missing_alt_count" },
-    { key: "navigation", label: "Keyboard issues", field: "wcag_keyboard_navigation_issue_count" },
-    { key: "aria", label: "ARIA problems", field: "wcag_aria_error_count" },
-    { key: "labels", label: "Form label issues", field: "wcag_form_label_error_count" }
-  ] as const;
-
-  return fields
-    .map((entry) => {
-      const current = getSnapshotNumber(input.currentSnapshot!, entry.field);
-      const previous = getSnapshotNumber(input.previousSnapshot!, entry.field);
-      const delta = current - previous;
-
-      if (delta === 0) {
-        return null;
-      }
-
-      return {
-        ...entry,
-        current,
-        delta,
-        previous
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => Boolean(row))
-    .sort((left, right) => Math.abs(right.delta) - Math.abs(left.delta));
-}
-
-function derivePreviewFindingsFromSnapshotRecord(
-  snapshot: Record<string, unknown>,
-  input: { hostname: string; normalizedUrl: string; pagesScanned: number }
-) {
-  return buildPreviewPayloadFromSnapshot({
-    hostname: input.hostname,
-    normalizedUrl: input.normalizedUrl,
-    snapshot: {
-      accessibilityScore: getSnapshotNumber(snapshot, "accessibility_score"),
-      certscoreOverall: getSnapshotNumber(snapshot, "certscore_overall"),
-      contactPagePresent: getSnapshotBoolean(snapshot, "contact_page_present"),
-      cookieBannerPresent: getSnapshotBoolean(snapshot, "cookie_banner_present"),
-      granularPreferencesPresent: getSnapshotBoolean(snapshot, "granular_preferences_present"),
-      homepageFetchStatus: getSnapshotFetchStatus(snapshot, "homepage_fetch_status"),
-      pagesScanned: input.pagesScanned,
-      partialScan: getSnapshotBoolean(snapshot, "partial_scan"),
-      privacyPolicyPresent: getSnapshotBoolean(snapshot, "privacy_policy_present"),
-      privacyScore: getSnapshotNumber(snapshot, "privacy_score"),
-      preconsentTrackingDetected: getSnapshotBoolean(snapshot, "preconsent_tracking_detected"),
-      rejectAllPresent: getSnapshotBoolean(snapshot, "reject_all_present"),
-      termsOfServicePresent: getSnapshotBoolean(snapshot, "terms_of_service_present"),
-      thirdPartyCookieSetBeforeConsent: getSnapshotBoolean(snapshot, "third_party_cookie_set_before_consent"),
-      totalSignals: getSnapshotNumber(snapshot, "total_signals"),
-      trackingBeforeConsentDetected: getSnapshotBoolean(snapshot, "tracking_before_consent_detected"),
-      wcagFormLabelErrorCount: getSnapshotNumber(snapshot, "wcag_form_label_error_count"),
-      wcagMissingAltCount: getSnapshotNumber(snapshot, "wcag_missing_alt_count")
-    }
-  }).sampleFindings;
-}
-
 function hasTruthySignal(
   signals: Array<{ key: string; value: boolean | number | string | string[] }>,
   key: string
@@ -1015,18 +920,932 @@ function StaticSubsection(input: {
   );
 }
 
-function TopLevelEvidenceSection(input: {
-  title: ReactNode;
+function PrimaryPillarGroup(input: {
+  title: string;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white px-6 py-5">
+    <section className="space-y-4">
       <div className="flex items-center gap-1.5">
-        <p className="text-base font-semibold text-slate-900">{input.title}</p>
+        <h2 className="text-lg font-semibold text-slate-950">{input.title}</h2>
       </div>
-      {input.children}
+      <div className="space-y-4">{input.children}</div>
     </section>
   );
+}
+
+type CanonicalReviewIssue = {
+  description: string;
+  evidence?: string[];
+  severity: "high" | "medium" | "low";
+  title: string;
+};
+
+type CanonicalReviewFinding = {
+  categoryId?: string;
+  description: string;
+  evidence?: string[];
+  id: string;
+  nextStep: string;
+  observedValue: string | null;
+  referenceLabel?: string;
+  referenceUrl?: string;
+  severity: "high" | "medium" | "low";
+  sourceLabel?: string;
+  sourceUrl?: string;
+  title: string;
+};
+
+type ScanRecordData = NonNullable<Awaited<ReturnType<typeof getScanById>>>;
+
+type CanonicalTaxonomyReviewProps = {
+  accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
+  consentAuditFindings: PreviewSampleFinding[];
+  policyBehaviorContradictions: PolicyBehaviorContradiction[];
+  preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
+  prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows>;
+  scanRecord: ScanRecordData;
+  scanReportReviewIssues: Array<{
+    description: string;
+    key: string;
+    pageType: string;
+    pageUrl: string | null;
+    reason: string;
+    reviewStatus: string;
+    reviewVerdict: unknown;
+    summary: unknown;
+  }>;
+  snapshot: Record<string, unknown>;
+};
+
+type CanonicalSignalItem = {
+  key: string;
+  label: string;
+  relation: "primary" | "secondary" | "overlay";
+  source: ReportSignalDefinition["source"];
+  value: unknown;
+};
+
+function toSnakeCase(value: string) {
+  return value.replace(/[A-Z]/g, (character) => `_${character.toLowerCase()}`);
+}
+
+function getSignalNamespaceKey(key: string) {
+  const separatorIndex = key.indexOf(".");
+  return separatorIndex >= 0 ? key.slice(separatorIndex + 1) : key;
+}
+
+function findPersistedSignalValue(
+  signals: Array<{ key: string; value: boolean | number | string | string[] }>,
+  key: string
+) {
+  return signals.find((signal) => signal.key === key)?.value ?? null;
+}
+
+function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
+  for (const row of policyEnrichment) {
+    const value = getPolicyField(row, key, toSnakeCase(key));
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getReportSignalValue(input: {
+  policyEnrichment: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  signals: Array<{ key: string; value: boolean | number | string | string[] }>;
+  snapshot: Record<string, unknown> | null;
+  signal: ReportSignalDefinition;
+}) {
+  if (input.signal.source === "snapshot_signal") {
+    const snapshotKey = getSignalNamespaceKey(input.signal.key);
+    return input.snapshot?.[snapshotKey] ?? findPersistedSignalValue(input.signals, input.signal.key);
+  }
+
+  if (input.signal.source === "runtime_artifact_signal") {
+    return input.runtimeArtifacts?.[input.signal.key] ?? findPersistedSignalValue(input.signals, input.signal.key);
+  }
+
+  return getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key);
+}
+
+function isSignalValuePopulated(key: string, value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+
+    if (/score|window_days|word_count|semantic_confidence/i.test(key)) {
+      return true;
+    }
+
+    return value > 0;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0 && value !== "unknown" && value !== "absent" && value !== "none";
+  }
+
+  return true;
+}
+
+function isConcerningSignal(key: string, value: unknown) {
+  if (!isSignalValuePopulated(key, value)) {
+    return false;
+  }
+
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return false;
+  }
+
+  const negativePatterns = [
+    /dark_pattern/,
+    /preconsent/,
+    /conflict/,
+    /mismatch/,
+    /litigation_risk_score/,
+    /error_count/,
+    /warning_count/,
+    /issue_count/,
+    /failures_count/,
+    /store_credit_only/,
+    /termination_for_cause/,
+    /service_suspension_or_termination/,
+    /retargeting_pixel/,
+    /session_replay/,
+    /high_sensitivity_data_collection_detected/,
+    /limited_time_offer_language_present/,
+    /discount_claim_present/,
+    /original_price_comparison_present/
+  ];
+
+  if (negativePatterns.some((pattern) => pattern.test(key))) {
+    return true;
+  }
+
+  if (typeof value === "number") {
+    if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
+      return value > 0;
+    }
+    if (/window_days/i.test(key)) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function getSignalConcernReason(key: string, value: unknown) {
+  if (!isConcerningSignal(key, value)) {
+    return null;
+  }
+
+  if (/preconsent|tracking_before_consent/i.test(key)) {
+    return "Observed before a clear user choice was made.";
+  }
+
+  if (/conflict|mismatch/i.test(key)) {
+    return "Signals a contradiction or mismatch that merits direct review.";
+  }
+
+  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
+    return "Promotional or choice architecture may need closer disclosure review.";
+  }
+
+  if (/store_credit_only/i.test(key)) {
+    return "Post-purchase remedy may be more restrictive than expected.";
+  }
+
+  if (/termination_for_cause|service_suspension_or_termination/i.test(key)) {
+    return "Terms reserve restrictive enforcement rights that should be read directly.";
+  }
+
+  if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
+    return "Scanner-derived risk indicator is elevated.";
+  }
+
+  if (/error_count|warning_count|issue_count|failures_count/i.test(key)) {
+    return "Automated issues were surfaced in this area.";
+  }
+
+  return "This signal is worth reviewer attention.";
+}
+
+function getSignalNextStep(key: string) {
+  if (/preconsent|tracking_before_consent/i.test(key)) {
+    return "Review the supporting runtime evidence and verify non-essential tracking is blocked until consent is given.";
+  }
+
+  if (/conflict|mismatch/i.test(key)) {
+    return "Compare the supporting evidence against the public-facing policy language and confirm whether the mismatch is real.";
+  }
+
+  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
+    return "Review the surrounding offer and disclosure context to confirm the presentation is clear and not misleading.";
+  }
+
+  if (/store_credit_only/i.test(key)) {
+    return "Review the refund and remedy language directly and confirm whether the limitation is acceptable.";
+  }
+
+  if (/termination_for_cause|service_suspension_or_termination/i.test(key)) {
+    return "Read the relevant terms language directly and assess whether the enforcement posture needs escalation.";
+  }
+
+  if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
+    return "Inspect the supporting signals in this section to determine what is driving the elevated scanner score.";
+  }
+
+  if (/error_count|warning_count|issue_count|failures_count/i.test(key)) {
+    return "Review the underlying findings in this section and confirm whether remediation or escalation is warranted.";
+  }
+
+  return "Review the flagged evidence in this section and confirm whether the signal needs follow-up.";
+}
+
+function partitionSignals(items: CanonicalSignalItem[]) {
+  const flagged: CanonicalSignalItem[] = [];
+  const normal: CanonicalSignalItem[] = [];
+
+  for (const item of items) {
+    if (item.relation === "primary" && isConcerningSignal(item.key, item.value)) {
+      flagged.push(item);
+    } else {
+      normal.push(item);
+    }
+  }
+
+  return { flagged, normal };
+}
+
+function getSectionStatus(input: { items: CanonicalSignalItem[]; reviewFindings: CanonicalReviewFinding[] }) {
+  if (input.reviewFindings.length > 0) {
+    return {
+      badgeClass: "rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-900",
+      description: `${input.reviewFindings.length} finding${input.reviewFindings.length === 1 ? "" : "s"}`,
+      label: "Needs review"
+    };
+  }
+
+  if (input.items.length > 0) {
+    return {
+      badgeClass: "rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-sky-900",
+      description: `Evidence present · ${input.items.length} signal${input.items.length === 1 ? "" : "s"}`,
+      label: "Evidence present"
+    };
+  }
+
+  return {
+    badgeClass: "rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700",
+    description: "No material evidence surfaced",
+    label: "No material evidence"
+  };
+}
+
+function buildSectionReviewIssues(input: {
+  accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
+  consentAuditFindings: PreviewSampleFinding[];
+  policyBehaviorContradictions: PolicyBehaviorContradiction[];
+  preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
+  scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"];
+  sectionId: string;
+  snapshot: Record<string, unknown>;
+}) {
+  const issues: CanonicalReviewIssue[] = [];
+
+  if (input.sectionId === "policy_clarity_consistency_review") {
+    issues.push(
+      ...input.policyBehaviorContradictions.map((row) => ({
+        description: row.observedBehavior,
+        evidence: row.evidence,
+        severity: row.severity,
+        title: row.title
+      }))
+    );
+
+    issues.push(
+      ...dedupeReviewIssues(
+        input.scanReportReviewIssues.map((row) => {
+          const reviewSeverity: CanonicalReviewIssue["severity"] =
+            row.reason === "policy_behavior_conflict_candidate" ? "high" : "medium";
+
+          return {
+            description: row.description,
+            evidence: row.pageUrl ? [row.pageUrl] : [],
+            severity: reviewSeverity,
+            title: formatReviewIssueReason(row.reason)
+          };
+        })
+      )
+    );
+  }
+
+  if (input.sectionId === "tracking_third_party_ecosystem" && input.preconsentViolationRows.length > 0) {
+    issues.push({
+      description: `Observed vendor activity before consent for ${input.preconsentViolationRows.length} vendor${input.preconsentViolationRows.length === 1 ? "" : "s"}.`,
+      evidence: input.preconsentViolationRows.flatMap((row) => row.evidenceUrls).slice(0, 3),
+      severity: "high",
+      title: "Pre-consent tracking incidents detected"
+    });
+  }
+
+  if (input.sectionId === "consent_controls_enforcement") {
+    issues.push(
+      ...input.consentAuditFindings.map((finding) => ({
+        description: finding.description,
+        severity: finding.severity === "info" ? "low" : finding.severity,
+        title: finding.title
+      }))
+    );
+  }
+
+  if (input.sectionId === "access_barriers_task_completion") {
+    issues.push(
+      ...input.accessibilityIssueRows
+        .filter((row) => row.count > 0)
+        .slice(0, 3)
+        .map((row) => {
+          const severity: CanonicalReviewIssue["severity"] = row.count >= 5 ? "high" : row.count >= 2 ? "medium" : "low";
+
+          return {
+            description: `${row.count} observed in the automated accessibility audit.`,
+            severity,
+            title: row.label
+          };
+        })
+    );
+  }
+
+  if (input.sectionId === "accessibility_commitments_conformance_support" && input.snapshot.accessibility_claim_mismatch_detected === true) {
+    issues.push({
+      description: "Public-facing accessibility claims appear to conflict with the automated issue profile captured during the scan.",
+      severity: "high",
+      title: "Accessibility claim mismatch detected"
+    });
+  }
+
+  if (input.sectionId === "billing_cancellation_post_purchase_rights" && input.snapshot.store_credit_only_policy_present === true) {
+    issues.push({
+      description: "The refund/remedy posture appears to lean on store credit only, which is worth direct reviewer attention.",
+      severity: "medium",
+      title: "Store-credit-only remedy detected"
+    });
+  }
+
+  return issues;
+}
+
+function dedupeReviewIssues(issues: CanonicalReviewIssue[]) {
+  const seen = new Set<string>();
+
+  return issues.filter((issue) => {
+    const key = [
+      issue.title.trim().toLowerCase(),
+      issue.description.trim().toLowerCase(),
+      issue.severity,
+      ...(issue.evidence ?? []).map((entry) => entry.trim().toLowerCase()).sort()
+    ].join("::");
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function severityRank(severity: CanonicalReviewFinding["severity"]) {
+  switch (severity) {
+    case "high":
+      return 0;
+    case "medium":
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function buildReviewFindings(input: {
+  categoryId?: string;
+  issues: CanonicalReviewIssue[];
+  sectionId: string;
+  sectionItems: CanonicalSignalItem[];
+}) {
+  const signalFindings: CanonicalReviewFinding[] = input.sectionItems
+    .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
+    .map((item) => ({
+      categoryId: input.categoryId,
+      description: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention.",
+      id: `${input.sectionId}-signal-${item.key}`,
+      nextStep: getSignalNextStep(item.key),
+      observedValue: formatCompactValue(item.value),
+      referenceLabel: getReviewReference(item.key)?.label,
+      referenceUrl: getReviewReference(item.key)?.url,
+      severity: getSignalFindingSeverity(item.key, item.value),
+      title: item.label
+    }));
+
+  const issueFindings: CanonicalReviewFinding[] = input.issues.map((issue, index) => ({
+    categoryId: input.categoryId ?? getDefaultIssueCategoryId(input.sectionId),
+    description: issue.description,
+    evidence: issue.evidence,
+    id: `${input.sectionId}-issue-${index}`,
+    nextStep: getReviewIssueNextStep(issue),
+    observedValue: issue.evidence && issue.evidence.length > 0 ? summarizeReviewIssueEvidence(issue.evidence) : `${issue.severity} severity`,
+    referenceLabel: getReviewReference(issue.title)?.label,
+    referenceUrl: getReviewReference(issue.title)?.url,
+    severity: issue.severity,
+    sourceLabel: getFindingSourceLabel(issue.evidence),
+    sourceUrl: getFindingSourceUrl(issue.evidence),
+    title: issue.title
+  }));
+
+  return [...signalFindings, ...issueFindings].sort(
+    (left, right) => severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title)
+  );
+}
+
+function getDefaultIssueCategoryId(sectionId: string) {
+  switch (sectionId) {
+    case "policy_clarity_consistency_review":
+      return "cross_document_consistency";
+    default:
+      return undefined;
+  }
+}
+
+function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
+  if (/preconsent|tracking_before_consent|session_replay|conflict|mismatch/i.test(key)) {
+    return "high";
+  }
+
+  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
+    return "medium";
+  }
+
+  if (typeof value === "number" && /risk_score|ambiguity_score|friction_score/i.test(key)) {
+    return value >= 70 ? "high" : "medium";
+  }
+
+  return "medium";
+}
+
+function getFindingSourceUrl(evidence?: string[]) {
+  if (!evidence || evidence.length === 0) {
+    return undefined;
+  }
+
+  return evidence.find((entry) => /^https?:\/\//i.test(entry.trim()));
+}
+
+function getFindingSourceLabel(evidence?: string[]) {
+  const sourceUrl = getFindingSourceUrl(evidence);
+  if (!sourceUrl) {
+    return undefined;
+  }
+
+  const lowered = sourceUrl.toLowerCase();
+  if (lowered.includes("/terms")) {
+    return "TOS";
+  }
+  if (lowered.includes("/privacy")) {
+    return "Privacy Policy";
+  }
+  if (lowered.includes("/cookie")) {
+    return "Cookie Policy";
+  }
+  if (lowered.includes("/refund")) {
+    return "Refund Policy";
+  }
+  return "Source";
+}
+
+function getReviewReference(keyOrTitle: string) {
+  const haystack = keyOrTitle.toLowerCase();
+
+  if (haystack.includes("session replay")) {
+    return {
+      label: "FTC",
+      url: "https://www.ftc.gov/business-guidance/privacy-security"
+    };
+  }
+
+  if (haystack.includes("dsar") || haystack.includes("do-not-sell") || haystack.includes("user-rights")) {
+    return {
+      label: "CCPA",
+      url: "https://oag.ca.gov/privacy/ccpa"
+    };
+  }
+
+  if (haystack.includes("policy conflict") || haystack.includes("policy-to-behavior") || haystack.includes("low-confidence")) {
+    return {
+      label: "Drafting",
+      url: "https://www.ftc.gov/business-guidance/privacy-security"
+    };
+  }
+
+  if (haystack.includes("pre-consent") || haystack.includes("tracking before consent") || haystack.includes("consent")) {
+    return {
+      label: "Consent",
+      url: "https://www.ftc.gov/business-guidance/privacy-security"
+    };
+  }
+
+  if (haystack.includes("accessibility") || haystack.includes("wcag")) {
+    return {
+      label: "WCAG",
+      url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
+    };
+  }
+
+  if (
+    haystack.includes("discount") ||
+    haystack.includes("limited-time") ||
+    haystack.includes("price comparison") ||
+    haystack.includes("store-credit")
+  ) {
+    return {
+      label: "FTC",
+      url: "https://www.ftc.gov/business-guidance/advertising-marketing"
+    };
+  }
+
+  return undefined;
+}
+
+function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
+  if (!input.finding.sourceUrl && !input.finding.referenceUrl) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {input.finding.sourceUrl ? (
+        <Link
+          href={input.finding.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
+        >
+          <span>?</span>
+          <span>{input.finding.sourceLabel ?? "Source"}</span>
+        </Link>
+      ) : null}
+      {input.finding.referenceUrl ? (
+        <Link
+          href={input.finding.referenceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
+        >
+          <span>↗</span>
+          <span>{input.finding.referenceLabel ?? "Reference"}</span>
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function formatReviewFindingSummaryTitle(title: string) {
+  const normalized = title
+    .replace(/^Possible /i, "")
+    .replace(/^Observed /i, "")
+    .replace(/\s+detected$/i, "")
+    .replace(/\s+present$/i, "")
+    .replace(/\s+incidents$/i, "")
+    .replace(/\s+candidate$/i, "")
+    .trim();
+
+  switch (normalized) {
+    case "Pre-consent tracking":
+    case "Pre-consent tracking incidents":
+      return "Pre-consent tracking";
+    case "Session replay tool":
+    case "Session replay":
+    case "Undisclosed session replay":
+      return "Session replay";
+    case "Policy-to-behavior conflict":
+      return "Policy conflict";
+    case "Accessibility claim mismatch":
+      return "Claim mismatch";
+    case "Store-credit-only remedy":
+      return "Store-credit-only remedy";
+    case "Low-confidence policy extraction":
+      return "Low-confidence extraction";
+    default:
+      return normalized;
+  }
+}
+
+function formatReviewFindingSummaryValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const normalized = value.trim();
+
+  if (/^https?:\/\//i.test(normalized)) {
+    const lowered = normalized.toLowerCase();
+    if (lowered.includes("/terms")) {
+      return "TOS";
+    }
+    if (lowered.includes("/privacy")) {
+      return "Privacy Policy";
+    }
+    if (lowered.includes("/cookie")) {
+      return "Cookie Policy";
+    }
+    if (lowered.includes("/refund")) {
+      return "Refund Policy";
+    }
+    return "Linked page";
+  }
+
+  return normalized;
+}
+
+function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
+  return (
+    <div className="space-y-6">
+      {REPORT_PRIMARY_PILLARS.map((pillar) => {
+        const sections = getReportSectionsForPillar(pillar.id)
+          .map((section) => {
+            const categories = getReportEvidenceCategoriesForSection(section.id)
+              .map((category) => {
+                const items = getReportSignalsForEvidenceCategory(category.id)
+                  .map(({ relation, signal }) => ({
+                    key: signal.key,
+                    label: signal.label,
+                    relation,
+                    source: signal.source,
+                    value: getReportSignalValue({
+                      policyEnrichment: input.scanRecord.policyEnrichment,
+                      runtimeArtifacts: input.scanRecord.runtimeArtifacts,
+                      signals: input.scanRecord.signals,
+                      snapshot: input.scanRecord.snapshot,
+                      signal
+                    })
+                  }))
+                  .filter((item) => isSignalValuePopulated(item.key, item.value))
+                  .sort((left, right) => {
+                    const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
+                    return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
+                  });
+                const reviewFindings = buildReviewFindings({
+                  categoryId: category.id,
+                  issues: [],
+                  sectionId: section.id,
+                  sectionItems: items
+                });
+
+                return {
+                  category,
+                  emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
+                  items,
+                  reviewFindings
+                };
+              });
+
+            const issues = buildSectionReviewIssues({
+              accessibilityIssueRows: input.accessibilityIssueRows,
+              consentAuditFindings: input.consentAuditFindings,
+              policyBehaviorContradictions: input.policyBehaviorContradictions,
+              preconsentViolationRows: input.preconsentViolationRows,
+              scanReportReviewIssues: input.scanReportReviewIssues,
+              sectionId: section.id,
+              snapshot: input.snapshot
+            });
+            const reviewFindings = buildReviewFindings({
+              issues,
+              sectionId: section.id,
+              sectionItems: []
+            });
+            const categoriesWithFindings = categories.map((category) => ({
+              ...category,
+              reviewFindings: [
+                ...category.reviewFindings,
+                ...reviewFindings.filter((finding) => finding.categoryId === category.category.id)
+              ].sort((left, right) => severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title))
+            }));
+            const visibleCategories = categoriesWithFindings.filter((category) => category.items.length > 0 || category.reviewFindings.length > 0);
+            const sectionItems = visibleCategories.flatMap((category) => category.items);
+
+            return {
+              hiddenCategoryCount: categoriesWithFindings.length - visibleCategories.length,
+              reviewFindings: [
+                ...visibleCategories.flatMap((category) => category.reviewFindings),
+                ...reviewFindings.filter((finding) => !finding.categoryId)
+              ].sort((left, right) => severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title)),
+              sectionLevelFindings: reviewFindings.filter((finding) => !finding.categoryId),
+              section,
+              sectionItems,
+              visibleCategories
+            };
+          })
+          .filter((section) => section.visibleCategories.length > 0 || section.reviewFindings.length > 0);
+
+        if (sections.length === 0) {
+          return null;
+        }
+
+        return (
+          <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
+            {sections.map(({ hiddenCategoryCount, reviewFindings, section, sectionItems, sectionLevelFindings, visibleCategories }) => {
+              const status = getSectionStatus({ items: sectionItems, reviewFindings });
+
+              return (
+                <CollapsibleSectionCard
+                  key={section.id}
+                  title={
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>{section.label}</span>
+                      <span className={status.badgeClass}>{status.label}</span>
+                    </span>
+                  }
+                  subtitle={
+                    <div className="flex flex-wrap items-center gap-2">
+                      {reviewFindings.length > 0 ? (
+                        reviewFindings.map((finding) => (
+                          <div key={`${section.id}-${finding.id}-summary`} className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1">
+                            <p className="truncate text-xs font-semibold text-slate-950">
+                              {formatReviewFindingSummaryTitle(finding.title)} {formatReviewFindingSummaryValue(finding.observedValue)}
+                            </p>
+                          </div>
+                        ))
+                      ) : null}
+                    </div>
+                  }
+                  defaultOpen={false}
+                  contentClassName="space-y-4"
+                >
+                  {sectionLevelFindings.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="space-y-3">
+                        {sectionLevelFindings.map((finding) => (
+                          <div
+                            key={finding.id}
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3"
+                          >
+                            <div className="grid gap-3 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-950">{finding.title}</p>
+                                <p className="mt-1 text-sm text-slate-700">{finding.observedValue ?? `${finding.severity} severity`}</p>
+                              </div>
+                              <p className="text-sm text-slate-700">{finding.description}</p>
+                              <div className="min-w-0 space-y-2">
+                                <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                <ReviewFindingLinks finding={finding} />
+                                {finding.evidence && finding.evidence.length > 0 ? (
+                                  <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {visibleCategories.map(({ category, items, reviewFindings: categoryFindings }) => (
+                      <div key={category.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{category.label}</p>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700">
+                            {items.length} signal{items.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        {(() => {
+                          const { normal } = partitionSignals(items);
+                          const allCategoryFindings = reviewFindings
+                            .filter((finding) => finding.categoryId === category.id)
+                            .sort(
+                            (left, right) =>
+                              severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title)
+                            );
+
+                          return (
+                            <div className="mt-4 space-y-3">
+                              {allCategoryFindings.map((finding) => (
+                                <div
+                                  key={finding.id}
+                                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3"
+                                >
+                                  <div className="grid gap-3 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-950">{finding.title}</p>
+                                      <p className="mt-1 text-sm text-slate-700">{finding.observedValue ?? `${finding.severity} severity`}</p>
+                                    </div>
+                                    <p className="text-sm text-slate-700">{finding.description}</p>
+                                    <div className="min-w-0 space-y-2">
+                                      <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                      <ReviewFindingLinks finding={finding} />
+                                      {finding.evidence && finding.evidence.length > 0 ? (
+                                        <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {normal.length > 0 ? (
+                                <div className="grid gap-2 lg:grid-cols-3">
+                                  {normal.map((item) => (
+                                    <div
+                                      key={`${category.id}-${item.key}-${item.relation}`}
+                                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                                    >
+                                      <p className="text-sm text-slate-950">
+                                        <span className="font-medium text-slate-700">{item.label}</span>{" "}
+                                        <span className="font-semibold text-slate-950">{formatCompactValue(item.value)}</span>
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+
+                </CollapsibleSectionCard>
+              );
+            })}
+          </PrimaryPillarGroup>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatReviewIssueReason(reason: string) {
+  switch (reason) {
+    case "policy_behavior_conflict_candidate":
+      return "Possible policy-to-behavior conflict";
+    case "session_replay_without_disclosure_detected":
+      return "Possible undisclosed session replay";
+    case "missing_dsar_high_exposure":
+      return "Possible missing DSAR path";
+    case "low_confidence_critical_fields":
+      return "Low-confidence policy extraction";
+    default:
+      return reason.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+}
+
+function formatReviewIssueDescription(reason: string) {
+  switch (reason) {
+    case "policy_behavior_conflict_candidate":
+      return "Observed site behavior may conflict with the site’s public-facing policy language.";
+    case "session_replay_without_disclosure_detected":
+      return "Session replay behavior may be present without a clear matching disclosure in the scanned policy pages.";
+    case "missing_dsar_high_exposure":
+      return "The site may have elevated exposure while still lacking a clear DSAR path in policy disclosures.";
+    case "low_confidence_critical_fields":
+      return "Critical policy extraction fields were low confidence and need manual review in the scan report.";
+    default:
+      return `This issue was added to the scan report review queue under ${formatReviewIssueReason(reason)}.`;
+  }
+}
+
+function getReviewIssueNextStep(issue: CanonicalReviewIssue) {
+  if (issue.evidence && issue.evidence.length > 0) {
+    return "Review the linked evidence in this section and confirm whether the issue reflects an actual policy or disclosure gap.";
+  }
+
+  return "Inspect the supporting signals in this section and confirm whether the issue reflects a real reviewer concern.";
+}
+
+function summarizeReviewIssueEvidence(evidence: string[]) {
+  if (evidence.length === 1) {
+    return evidence[0] ?? "";
+  }
+
+  const [first, second] = evidence;
+  const remainingCount = evidence.length - 2;
+
+  return remainingCount > 0
+    ? `${first} | ${second} | +${remainingCount} more`
+    : `${first} | ${second}`;
 }
 
 function ResultCategorySection(input: {
@@ -1151,74 +1970,23 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const isInProgress = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const executionPlan = getExecutionPlan(scanRecord.scan.scanConfigJson);
-  const previewDerivedFindings = snapshot
-    ? derivePreviewFindingsFromSnapshotRecord(snapshot, {
-        hostname: scanRecord.scan.domainHostname ?? "Unknown website",
-        normalizedUrl: `https://${scanRecord.scan.domainHostname ?? ""}`,
-        pagesScanned: scanRecord.scan.pagesScanned
-      })
-    : [];
-  const relatedPreviewFindings =
-    previewDerivedFindings.length === 0 && scanRecord.relatedPreviewSnapshot
-      ? derivePreviewFindingsFromSnapshotRecord(scanRecord.relatedPreviewSnapshot, {
-          hostname: scanRecord.scan.domainHostname ?? "Unknown website",
-          normalizedUrl: `https://${scanRecord.scan.domainHostname ?? ""}`,
-          pagesScanned: scanRecord.scan.pagesScanned
-        })
-      : [];
-  const consentAuditFindings = deriveConsentAuditFindings(snapshot, runtimeArtifacts);
-  const signalDerivedFindings =
-    previewDerivedFindings.length === 0
-      ? [
-          hasTruthySignal(scanRecord.signals, "tracking_before_consent_detected") ||
-          hasTruthySignal(scanRecord.signals, "preconsent_tracking_detected") ||
-          hasTruthySignal(scanRecord.signals, "third_party_cookie_set_before_consent")
-            ? {
-                affectedPage: "Homepage",
-                category: "privacy",
-                severity: "high",
-                title: "Tracking activity observed before consent",
-                description:
-                  "The live scan observed tracking signals or third-party cookies before a clear consent interaction point was completed."
-              }
-            : null
-        ].filter((finding): finding is PreviewSampleFinding => Boolean(finding))
-      : [];
-  const trackerRiskSummaryFindings =
-    previewDerivedFindings.length === 0
-      ? [
-          scanRecord.trackerVendors.some((tracker) => tracker.vendorCategory === "session_replay")
-            ? {
-                affectedPage: "Observed pages",
-                category: "privacy",
-                severity: "high",
-                title: "Session replay tooling detected",
-                description:
-                  "Session replay or behavior-analytics infrastructure was observed in the tracker inventory, which is typically higher sensitivity than basic analytics."
-              }
-            : null,
-          scanRecord.trackerVendors.filter((tracker) => tracker.vendorCategory === "advertising").length >= 2
-            ? {
-                affectedPage: "Observed pages",
-                category: "privacy",
-                severity: "medium",
-                title: "Multi-vendor advertising stack detected",
-                description:
-                  "Multiple advertising or retargeting vendors were observed, indicating broader third-party data-sharing and adtech activity."
-              }
-            : null,
-          scanRecord.trackerVendors.some((tracker) => tracker.collectionEndpointType === "first_party_collection_proxy")
-            ? {
-                affectedPage: "Observed pages",
-                category: "privacy",
-                severity: "high",
-                title: "First-party collection proxy detected",
-                description:
-                  "At least one tracker appeared to collect through a first-party endpoint rather than a direct third-party hostname, which can make third-party collection less obvious from a simple hostname review."
-              }
-            : null
-        ].filter((finding): finding is PreviewSampleFinding => Boolean(finding))
-      : [];
+  const policyEnrichmentById = new Map(
+    scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row])
+  );
+  const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
+    const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
+
+    return {
+      description: formatReviewIssueDescription(String(row.reason ?? "")),
+      key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
+      pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
+      pageUrl: typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string" ? String(enrichment?.pageUrl ?? enrichment?.page_url) : null,
+      reason: String(row.reason ?? ""),
+      reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
+      reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
+      summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
+    };
+  });
   const preconsentViolationRows = derivePreconsentViolationRows({
     persistedViolations: scanRecord.preconsentViolations,
     runtimeArtifacts,
@@ -1231,6 +1999,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     snapshot,
     trackerVendors: scanRecord.trackerVendors
   });
+  const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
     snapshot?.tracking_before_consent_detected === true ||
@@ -1257,10 +2026,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const consentAcceptNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_accept_new_tracker_vendor_names");
   const consentPostAcceptTrackerEvidenceUrls = getRecordStringArray(runtimeArtifacts, "consent_post_accept_tracker_evidence_urls");
   const accessibilityIssueRows = snapshot ? deriveAccessibilityIssueRows(snapshot) : [];
-  const accessibilityIssueChangeRows = deriveAccessibilityIssueChangeRows({
-    currentSnapshot: snapshot,
-    previousSnapshot: scanRecord.previousSnapshot
-  });
   const accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
     examples: scanRecord.accessibilityRuleExamples ?? [],
     ruleCounts: scanRecord.accessibilityRuleCounts ?? []
@@ -1268,13 +2033,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
     .sort((left, right) => right.weightedPriority - left.weightedPriority)
     .slice(0, 6);
-  const accessibilityDisclosureCount = [
-    snapshot?.accessibility_statement_present === true,
-    snapshot?.vpat_or_accessibility_conformance_doc_present === true,
-    snapshot?.accessibility_contact_method_present === true
-  ].filter(Boolean).length;
-  const preconsentNewCount = scanRecord.preconsentChanges.filter((change) => change.changeType === "new").length;
-  const preconsentResolvedCount = scanRecord.preconsentChanges.filter((change) => change.changeType === "resolved").length;
   const privacyLegalSectionScore = averageNumbers([
     getFiniteNumber(snapshot?.privacy_score),
     getFiniteNumber(snapshot?.legal_coverage_score)
@@ -1419,973 +2177,18 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       ) : null}
 
       {snapshot ? (
-        <div className="space-y-4">
-          <div className="space-y-4">
-            <TopLevelEvidenceSection
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>Privacy Policy & Disclosure</span>
-                  <InfoTip text="Core policy-page coverage, consumer policy posture, policy enrichment, and claim-versus-behavior contradictions are grouped here so users can evaluate what the site says before looking at runtime behavior." />
-                </span>
-              }
-            >
-              <ResultCategorySection
-                title="Policy and disclosure posture"
-                staticSection
-                collapseDetails
-                detailsTitle="Disclosure detail signals"
-                collapsible={false}
-                metrics={[
-                  {
-                    label: "Policy coverage",
-                    value: formatRating(snapshot.legal_coverage_score),
-                    tooltip:
-                      "A 5-point higher-is-better summary of public-facing policy and disclosure coverage, including whether key policy or transparency pages are present."
-                  },
-                  {
-                    label: "Consumer posture",
-                    value: formatRating(snapshot.consumer_protection_score),
-                    tooltip:
-                      "A 5-point higher-is-better summary of consumer-facing transparency posture, including disclosures, cancellation or refund clarity, and policy-to-behavior consistency signals."
-                  },
-                  {
-                    label: "Privacy policy",
-                    value: formatCompactValue(snapshot.privacy_policy_present),
-                    tooltip:
-                      "Whether the scan detected a public privacy policy page or a strong privacy-policy signal."
-                  },
-                  {
-                    label: "Terms",
-                    value: formatCompactValue(snapshot.terms_of_service_present),
-                    tooltip:
-                      "Whether the scan detected a public terms of service, terms and conditions, or comparable terms page."
-                  }
-                ]}
-                details={[
-                  { label: "Cookie policy", value: snapshot.cookie_policy_present },
-                  { label: "Accessibility statement", value: snapshot.accessibility_statement_present },
-                  { label: "Contact page", value: snapshot.contact_page_present },
-                  { label: "Subscription terms", value: snapshot.subscription_terms_present },
-                  { label: "Auto-renew disclosure", value: snapshot.auto_renew_disclosure_present ?? snapshot.auto_renewal_disclosure_present },
-                  { label: "Cancellation policy", value: snapshot.subscription_cancellation_policy_present ?? snapshot.cancellation_policy_present },
-                  { label: "Free trial", value: snapshot.free_trial_detected },
-                  { label: "Refund policy", value: snapshot.refund_policy_present },
-                  { label: "Countdown timer", value: snapshot.dark_pattern_countdown_timer_present },
-                  { label: "Fake scarcity language", value: snapshot.dark_pattern_fake_scarcity_language },
-                  { label: "Policy enrichment pages", value: scanRecord.policyEnrichment.length },
-                  { label: "Policy review items", value: scanRecord.policyReviewQueue.length }
-                ]}
-              />
-
-              {policyBehaviorContradictions.length > 0 ? (
-                <StaticSubsection
-                  title="Contradictions and claim checks"
-                  tooltip="These contradiction cards compare public policy or consent claims against observed runtime behavior. They are intentionally shown here as a synthesis layer inside the privacy and disclosure section, rather than as a separate top-level report area."
-                >
-                  <div className={METRIC_GRID_CLASS}>
-                    <div className={EMPHASIS_METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-amber-800">Contradictions surfaced</p>
-                      <p className={EMPHASIS_METRIC_CARD_VALUE_CLASS}>{policyBehaviorContradictions.length}</p>
-                    </div>
-                    <div
-                      className={
-                        snapshot.policy_behavior_conflict_detected ?? snapshot.policyBehaviorConflictDetected
-                          ? EMPHASIS_METRIC_CARD_CLASS
-                          : METRIC_CARD_CLASS
-                      }
-                    >
-                      <p
-                        className={
-                          snapshot.policy_behavior_conflict_detected ?? snapshot.policyBehaviorConflictDetected
-                            ? "text-[10px] uppercase tracking-[0.14em] text-amber-800"
-                            : "text-[10px] uppercase tracking-[0.14em] text-slate-500"
-                        }
-                      >
-                        Policy conflict signal
-                      </p>
-                      <p
-                        className={
-                          snapshot.policy_behavior_conflict_detected ?? snapshot.policyBehaviorConflictDetected
-                            ? EMPHASIS_METRIC_CARD_VALUE_CLASS
-                            : METRIC_CARD_VALUE_CLASS
-                        }
-                      >
-                        {formatCompactValue(snapshot.policy_behavior_conflict_detected ?? snapshot.policyBehaviorConflictDetected)}
-                      </p>
-                    </div>
-                    <div className={preconsentViolationRows.length > 0 ? EMPHASIS_METRIC_CARD_CLASS : METRIC_CARD_CLASS}>
-                      <p
-                        className={
-                          preconsentViolationRows.length > 0
-                            ? "text-[10px] uppercase tracking-[0.14em] text-amber-800"
-                            : "text-[10px] uppercase tracking-[0.14em] text-slate-500"
-                        }
-                      >
-                        Pre-consent conflicts
-                      </p>
-                      <p className={preconsentViolationRows.length > 0 ? EMPHASIS_METRIC_CARD_VALUE_CLASS : METRIC_CARD_VALUE_CLASS}>
-                        {preconsentViolationRows.length}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Advertising vendors</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {scanRecord.trackerVendors.filter((tracker) => tracker.vendorCategory === "advertising").length}
-                      </p>
-                    </div>
-                  </div>
-                  <CollapsibleSectionCard title="Contradiction records" defaultOpen={false} contentClassName="space-y-4">
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {policyBehaviorContradictions.map((row) => (
-                        <div
-                          key={`${row.title}-${row.status}-${row.observedBehavior}`}
-                          className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-950">{row.title}</p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{row.status}</p>
-                            </div>
-                            <span
-                              className={
-                                row.severity === "high"
-                                  ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-rose-700"
-                                  : "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-700"
-                              }
-                            >
-                              {row.severity}
-                            </span>
-                          </div>
-                          <p className="mt-3 text-sm text-slate-700">
-                            <span className="font-medium text-slate-900">Policy claim:</span> {row.claim}
-                          </p>
-                          <p className="mt-2 text-sm text-slate-700">
-                            <span className="font-medium text-slate-900">Observed behavior:</span> {row.observedBehavior}
-                          </p>
-                          {row.evidence.length > 0 ? (
-                            <div className="mt-3 space-y-1">
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Evidence</p>
-                              {row.evidence.map((evidence) =>
-                                evidence.startsWith("http://") || evidence.startsWith("https://") ? (
-                                  <a
-                                    key={`${row.title}-${evidence}`}
-                                    className="block break-all text-xs text-slate-700 underline underline-offset-2"
-                                    href={evidence}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    {evidence}
-                                  </a>
-                                ) : (
-                                  <p key={`${row.title}-${evidence}`} className="text-xs text-slate-700">
-                                    {evidence}
-                                  </p>
-                                )
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleSectionCard>
-                </StaticSubsection>
-              ) : null}
-
-              <PolicyEnrichmentSection
-                enrichments={scanRecord.policyEnrichment}
-                reviewQueue={scanRecord.policyReviewQueue}
-                embedded
-              />
-            </TopLevelEvidenceSection>
-
-            <TopLevelEvidenceSection
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>Cookie Banner & Consent</span>
-                  <InfoTip text="Visible consent controls, CMP posture, dark-pattern indicators, and post-choice enforcement behavior are grouped here so the consent system can be evaluated end to end." />
-                </span>
-              }
-            >
-              <ResultCategorySection
-                title="Consent posture summary"
-                staticSection
-                collapseDetails
-                detailsTitle="Consent detail signals"
-                collapsible={false}
-                metrics={[
-                  {
-                    label: "Privacy rating",
-                    value: formatRating(snapshot.privacy_score),
-                    tooltip:
-                      "A 5-point higher-is-better summary of observable privacy posture, including public rights paths, privacy disclosures, and data-handling signals surfaced in this scan."
-                  },
-                  {
-                    label: "Consent rating",
-                    value: formatRating(snapshot.consent_score),
-                    tooltip:
-                      "A 5-point higher-is-better summary of consent posture, including visible consent controls, reject-all availability, granular choices, and consent-related behavior."
-                  },
-                  {
-                    label: "Cookie banner",
-                    value: formatCompactValue(snapshot.cookie_banner_present),
-                    tooltip:
-                      "Whether the scan observed a visible cookie or consent banner on the site during this run."
-                  },
-                  {
-                    label: "Pre-consent tracking",
-                    value: formatCompactValue(preConsentTrackingObserved),
-                    tooltip:
-                      "Whether tracking-related behavior or third-party cookie activity was observed before a clear consent interaction point was completed."
-                  }
-                ]}
-                details={[
-                  { label: "Consent mechanism", value: snapshot.consent_mechanism_type },
-                  { label: "CMP vendor", value: snapshot.cmp_vendor_name },
-                  { label: "Reject-all control", value: snapshot.reject_all_present },
-                  { label: "Granular preferences", value: snapshot.granular_preferences_present },
-                  { label: "Reject button missing", value: snapshot.dark_pattern_reject_button_missing },
-                  { label: "Accept more prominent", value: snapshot.dark_pattern_accept_button_prominence },
-                  { label: "Forced consent wall", value: snapshot.dark_pattern_forced_consent_wall },
-                  { label: "Dismiss without reject", value: snapshot.dark_pattern_dismiss_without_reject },
-                  { label: "DSAR mechanism", value: snapshot.dsar_request_mechanism_present },
-                  { label: "Privacy request form", value: snapshot.privacy_request_form_present },
-                  { label: "Access request path", value: snapshot.data_access_request_present },
-                  { label: "Deletion request path", value: snapshot.data_deletion_request_present },
-                  { label: "Privacy contact channel", value: snapshot.privacy_contact_channel_type },
-                  { label: "Cookie count", value: snapshot.cookie_count_total },
-                  { label: "Third-party cookies", value: snapshot.third_party_cookie_count }
-                ]}
-              />
-
-              {consentAuditCompleted ? (
-                <StaticSubsection
-                  title="Post-choice audit"
-                  tooltip="Interaction audit evidence comparing the site before consent and after a reject interaction. This helps distinguish visible banners from actual consent enforcement."
-                >
-                  <div className={METRIC_GRID_CLASS}>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Reject interaction</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {formatCompactValue(consentRejectInteractionSucceeded)}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Pre-consent conflicts</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {formatCompactValue(consentPreconsentViolationCount)}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Tracking reduced after reject</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {formatCompactValue(consentRejectReducedTracking)}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">3P cookies reduced</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {formatCompactValue(consentRejectReducedThirdPartyCookies)}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Accept interaction</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {formatCompactValue(consentAcceptInteractionSucceeded)}
-                      </p>
-                    </div>
-                  </div>
-                  <CollapsibleSectionCard title="Audit detail signals" defaultOpen={false}>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Cookie counts</p>
-                        <p className="mt-1 text-sm text-slate-700">
-                          Baseline {formatCompactValue(consentBaselineCookieCount)} · Post-reject{" "}
-                          {formatCompactValue(consentPostRejectCookieCount)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Reject clicks</p>
-                        <p className="mt-1 text-sm text-slate-700">
-                          {formatCompactValue(runtimeArtifacts?.consent_reject_click_count)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Baseline tracker vendors</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentBaselineTrackerVendors)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Baseline evidence URLs</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentBaselineTrackerEvidenceUrls)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Post-reject tracker vendors</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentPostRejectTrackerVendors)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Post-reject evidence URLs</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentPostRejectTrackerEvidenceUrls)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Persisted after reject</p>
-                        <p className="mt-1 text-sm text-slate-700">
-                          {formatCompactValue(consentRejectPersistedTrackerVendors)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">New after reject</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentRejectNewTrackerVendors)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">New after accept</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentAcceptNewTrackerVendors)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Post-accept evidence URLs</p>
-                        <p className="mt-1 text-sm text-slate-700">{formatCompactValue(consentPostAcceptTrackerEvidenceUrls)}</p>
-                      </div>
-                    </div>
-                  </CollapsibleSectionCard>
-                </StaticSubsection>
-              ) : null}
-            </TopLevelEvidenceSection>
-
-            <TopLevelEvidenceSection
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>Tracker & Third-Party Data Collection Detection</span>
-                  <InfoTip text="This section covers the observed tracker ecosystem, third-party collection surface, inventory changes, and the concrete vendors behind the site’s analytics, advertising, replay, and customer-data routing stack." />
-                </span>
-              }
-            >
-              <ResultCategorySection
-                title="Tracker posture summary"
-                staticSection
-                collapseDetails
-                detailsTitle="Tracker detail signals"
-                collapsible={false}
-                metrics={[
-                  {
-                    label: "Tracker count",
-                    value: formatCompactValue(snapshot.tracker_count_total),
-                    tooltip:
-                      "The total number of tracker detections surfaced in the scan across the observed pages and runtime evidence."
-                  },
-                  {
-                    label: "3P script domains",
-                    value: formatCompactValue(snapshot.third_party_script_domain_count),
-                    tooltip:
-                      "The number of distinct third-party script source domains observed, which helps indicate how broad the site's external script ecosystem is."
-                  },
-                  {
-                    label: "Forms",
-                    value: formatCompactValue(snapshot.form_count_total),
-                    tooltip:
-                      "The number of detected forms observed in the scan, used as a simple indicator of user-input and data-collection surface area."
-                  },
-                  {
-                    label: "Sensitive collection",
-                    value: formatCompactValue(snapshot.high_sensitivity_data_collection_detected),
-                    tooltip:
-                      "Whether the scan detected signals suggesting collection of higher-sensitivity user data through public-facing forms or flows."
-                  }
-                ]}
-                details={[
-                  { label: "Session replay trackers", value: snapshot.session_replay_tracker_count },
-                  { label: "Session replay tool", value: snapshot.session_replay_tool_detected },
-                  { label: "Google Ads", value: snapshot.ad_network_google_ads },
-                  { label: "Meta Ads", value: snapshot.ad_network_meta_ads },
-                  { label: "Retargeting pixel", value: snapshot.retargeting_pixel_detected },
-                  { label: "Checkout or payment flow", value: snapshot.checkout_or_payment_form_present },
-                  { label: "Chat support vendor", value: snapshot.chat_support_vendor },
-                  { label: "Payment processors", value: snapshot.payment_processor_hints },
-                  { label: "Tracker concentration", value: snapshot.tracker_vendor_concentration_score },
-                  { label: "Tracker diversity", value: snapshot.tracker_diversity_score },
-                  { label: "3P request count", value: runtimeArtifacts?.third_party_request_count },
-                  { label: "3P request domains", value: runtimeArtifacts?.third_party_request_domains },
-                  { label: "Initial cookies", value: runtimeArtifacts?.initial_cookie_count },
-                  { label: "Initial cookie names", value: runtimeArtifacts?.initial_cookie_names },
-                  { label: "Script tag count", value: runtimeArtifacts?.script_tag_count },
-                  { label: "Script source domains", value: runtimeArtifacts?.script_src_domains }
-                ]}
-              />
-
-              {scanRecord.trackerChanges.length > 0 ? (
-                <SectionSubsection
-                  title="Tracker changes versus previous scan"
-                  intro="This subsection highlights vendor additions and removals so changes in the third-party stack stand out immediately."
-                  tooltip="Tracker vendors added or removed compared with the prior completed scan for this domain."
-                >
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-700">Added vendors</p>
-                      <p className="mt-1 text-sm font-semibold text-emerald-950">
-                        {scanRecord.trackerChanges.filter((change) => change.changeType === "added").length}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-amber-700">Removed vendors</p>
-                      <p className="mt-1 text-sm font-semibold text-amber-950">
-                        {scanRecord.trackerChanges.filter((change) => change.changeType === "removed").length}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {scanRecord.trackerChanges.map((change) => (
-                      <div
-                        key={`${change.changeType}-${change.vendorName}`}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-slate-950">{change.vendorName}</p>
-                          <span
-                            className={
-                              change.changeType === "added"
-                                ? "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-800"
-                                : "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-800"
-                            }
-                          >
-                            {change.changeType}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{change.vendorCategory}</p>
-                        <p className="mt-2 text-sm text-slate-700">Confidence {formatConfidence(change.confidence)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </SectionSubsection>
-              ) : null}
-
-              {scanRecord.trackerVendors.length > 0 ? (
-                <StaticSubsection
-                  title="Tracker inventory"
-                  tooltip="Observed tracker and third-party data-collection vendors for this scan, including category, request source, party classification, and consent timing when known."
-                >
-                  <div className={METRIC_GRID_CLASS}>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Tracker vendors</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>{scanRecord.trackerVendors.length}</p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Advertising vendors</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {scanRecord.trackerVendors.filter((tracker) => tracker.vendorCategory === "advertising").length}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Session replay vendors</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {scanRecord.trackerVendors.filter((tracker) => tracker.vendorCategory === "session_replay").length}
-                      </p>
-                    </div>
-                    <div className={METRIC_CARD_CLASS}>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Distinct categories</p>
-                      <p className={METRIC_CARD_VALUE_CLASS}>
-                        {new Set(scanRecord.trackerVendors.map((tracker) => tracker.vendorCategory)).size}
-                      </p>
-                    </div>
-                  </div>
-                  <CollapsibleSectionCard title="Tracker vendor records" defaultOpen={false}>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {scanRecord.trackerVendors.map((tracker) => (
-                        <div
-                          key={`${tracker.vendorName}-${tracker.scriptHost ?? "none"}-${tracker.detectionSource}`}
-                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                        >
-                          <p className="text-sm font-medium text-slate-950">{tracker.vendorName}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-                            {tracker.vendorCategory} · {tracker.detectionSource} · {tracker.firstPartyOrThirdParty}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {getTrackerRiskLabels(tracker).map((label) => (
-                              <span
-                                key={`${tracker.vendorName}-${label}`}
-                                className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700"
-                              >
-                                {formatTrackerRiskLabel(label)}
-                              </span>
-                            ))}
-                          </div>
-                          <p className="mt-2 text-sm text-slate-700">
-                            Before consent {formatCompactValue(tracker.beforeConsent)} · Confidence {formatConfidence(tracker.confidence)}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-600">
-                            Host {tracker.scriptHost ?? "n/a"} · Signature {tracker.matchedSignatureId ?? "n/a"}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-600">
-                            Endpoint {formatCollectionEndpointType(tracker.collectionEndpointType)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </CollapsibleSectionCard>
-                </StaticSubsection>
-              ) : null}
-            </TopLevelEvidenceSection>
-
-            <TopLevelEvidenceSection
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>Pre-Consent Tracking Detection</span>
-                  <InfoTip text="This section covers vendors and evidence observed before a consent interaction was completed, plus changes from the prior scan and the supporting request evidence." />
-                </span>
-              }
-            >
-              {preconsentViolationRows.length > 0 ? (
-                <>
-                  <StaticSubsection
-                    title="Violation overview"
-                  >
-                    <div className={METRIC_GRID_CLASS}>
-                      <div className={EMPHASIS_METRIC_CARD_CLASS}>
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-800">Tracked vendors</p>
-                        <p className={EMPHASIS_METRIC_CARD_VALUE_CLASS}>{preconsentViolationRows.length}</p>
-                      </div>
-                      <div className={EMPHASIS_METRIC_CARD_CLASS}>
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-800">Evidence URLs</p>
-                        <p className={EMPHASIS_METRIC_CARD_VALUE_CLASS}>{consentBaselineTrackerEvidenceUrls.length}</p>
-                      </div>
-                    </div>
-                    <CollapsibleSectionCard title="Violation detail signals" defaultOpen={false}>
-                      <div className={METRIC_GRID_CLASS}>
-                        <div className={METRIC_CARD_CLASS}>
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Advertising / adtech</p>
-                          <p className={METRIC_CARD_VALUE_CLASS}>
-                            {preconsentViolationRows.filter((row) => row.vendorCategory === "advertising").length}
-                          </p>
-                        </div>
-                        <div className={METRIC_CARD_CLASS}>
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Session replay</p>
-                          <p className={METRIC_CARD_VALUE_CLASS}>
-                            {preconsentViolationRows.filter((row) => row.vendorCategory === "session_replay").length}
-                          </p>
-                        </div>
-                      </div>
-                    </CollapsibleSectionCard>
-                  </StaticSubsection>
-
-                  {scanRecord.preconsentChanges.length > 0 ? (
-                    <SectionSubsection
-                      title="Change tracking"
-                      intro="This compares the current pre-consent trackers with the previous completed scan for the same domain."
-                    >
-                      <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-700">New since previous scan</p>
-                          <p className="mt-1 text-sm font-semibold text-emerald-950">{preconsentNewCount}</p>
-                        </div>
-                        <div className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-sky-700">Resolved since previous scan</p>
-                          <p className="mt-1 text-sm font-semibold text-sky-950">{preconsentResolvedCount}</p>
-                        </div>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {scanRecord.preconsentChanges.map((change) => (
-                          <div key={`preconsent-change-${change.changeType}-${change.vendorName}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-slate-950">{change.vendorName}</p>
-                              <span
-                                className={
-                                  change.changeType === "new"
-                                    ? "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-800"
-                                    : "rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-sky-800"
-                                }
-                              >
-                                {change.changeType}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{change.vendorCategory}</p>
-                            <p className="mt-2 text-sm text-slate-700">Confidence {formatConfidence(change.confidence)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </SectionSubsection>
-                  ) : null}
-
-                  <StaticSubsection
-                    title="Vendor evidence"
-                  >
-                    <CollapsibleSectionCard title="Vendor records" defaultOpen={false}>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {preconsentViolationRows.map((row) => (
-                          <div
-                            key={`preconsent-${row.vendorName}`}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-950">{row.vendorName}</p>
-                                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-                                  {row.vendorCategory} · {row.detectionSource}
-                                </p>
-                              </div>
-                              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-rose-700">
-                                pre-consent
-                              </span>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {getTrackerRiskLabels({
-                                vendorCategory: row.vendorCategory,
-                                vendorName: row.vendorName,
-                                collectionEndpointType: row.collectionEndpointType
-                              }).map((label) => (
-                                <span
-                                  key={`${row.vendorName}-${label}-preconsent`}
-                                  className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700"
-                                >
-                                  {formatTrackerRiskLabel(label)}
-                                </span>
-                              ))}
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700">
-                                {formatTrackerSeverityLabel(
-                                  getTrackerSeverity({
-                                    vendorCategory: row.vendorCategory,
-                                    vendorName: row.vendorName,
-                                    collectionEndpointType: row.collectionEndpointType
-                                  }).label
-                                )}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm text-slate-700">Endpoint {formatCollectionEndpointType(row.collectionEndpointType)}</p>
-                            <p className="mt-1 text-sm text-slate-600">Host {row.scriptHost ?? "n/a"}</p>
-                            <div className="mt-3 space-y-1">
-                              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Evidence URLs</p>
-                              {row.evidenceUrls.length > 0 ? (
-                                row.evidenceUrls.map((url) => (
-                                  <a
-                                    key={`${row.vendorName}-${url}`}
-                                    className="block break-all text-xs text-slate-700 underline underline-offset-2"
-                                    href={url}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    {url}
-                                  </a>
-                                ))
-                              ) : (
-                                <p className="text-xs text-slate-500">No vendor-specific URL sample matched; runtime audit still observed this vendor pre-consent.</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CollapsibleSectionCard>
-                  </StaticSubsection>
-                </>
-              ) : (
-                <StaticSubsection
-                  title="Violation overview"
-                >
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
-                    No pre-consent tracker violations were persisted for this scan.
-                  </div>
-                </StaticSubsection>
-              )}
-            </TopLevelEvidenceSection>
-
-            <TopLevelEvidenceSection
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>Accessibility & Consumer Protection Signals</span>
-                  <InfoTip text="This section combines public-facing accessibility posture with the most consumer-protection-relevant collection and friction signals, so accessibility and disclosure risk can be reviewed in one place." />
-                </span>
-              }
-            >
-              <StaticSubsection
-                title="Accessibility & disclosure posture"
-                tooltip="A more analyst-friendly accessibility view combining automated WCAG-oriented issue families with public-facing accessibility disclosures such as statements, VPAT references, and support channels."
-              >
-                <div className={METRIC_GRID_CLASS}>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">WCAG issue volume</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(snapshot.wcag_error_count_total)}</p>
-                  </div>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Disclosure coverage</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>{accessibilityDisclosureCount}/3</p>
-                  </div>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Claim mismatch</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>
-                      {formatCompactValue(snapshot.accessibility_claim_mismatch_detected)}
-                    </p>
-                  </div>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Accessibility risk score</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>
-                      {formatCompactValue(snapshot.accessibility_litigation_risk_score)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className={METRIC_GRID_CLASS}>
-                  {accessibilityIssueRows.length > 0 ? (
-                    accessibilityIssueRows.map((row) => {
-                      const severity = getAccessibilitySeverity(row.count);
-                      return (
-                        <div key={row.key} className={METRIC_CARD_CLASS}>
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-950">{row.label}</p>
-                            <span
-                              className={
-                                severity === "high"
-                                  ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-rose-700"
-                                  : severity === "medium"
-                                    ? "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-700"
-                                    : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700"
-                              }
-                            >
-                              {severity}
-                            </span>
-                          </div>
-                          <p className={METRIC_CARD_VALUE_CLASS}>{row.count}</p>
-                          <p className="mt-2 text-sm text-slate-600">{row.description}</p>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
-                      No major automated WCAG issue families were surfaced in this scan.
-                    </div>
-                  )}
-                </div>
-
-                <div className={METRIC_GRID_CLASS}>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Accessibility statement</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(snapshot.accessibility_statement_present)}</p>
-                  </div>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">VPAT / conformance reference</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(snapshot.vpat_or_accessibility_conformance_doc_present)}</p>
-                  </div>
-                  <div className={METRIC_CARD_CLASS}>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Support contact</p>
-                    <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(snapshot.accessibility_contact_method_present)}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-950">
-                  This section is aligned to public-facing WCAG-oriented issue patterns and accessibility disclosure posture. It is useful for triage and accessibility risk screening, not as a formal WCAG conformance certification.
-                </div>
-                <CollapsibleSectionCard title="Accessibility evidence details" defaultOpen={false} contentClassName="space-y-4">
-                  {accessibilityIssueChangeRows.length > 0 ? (
-                    <div className="space-y-3">
-                      <p className="text-sm font-medium text-slate-800">Changes versus previous completed scan</p>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {accessibilityIssueChangeRows.map((row) => (
-                          <div key={`a11y-change-${row.key}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-slate-950">{row.label}</p>
-                              <span
-                                className={
-                                  row.delta > 0
-                                    ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-rose-700"
-                                    : "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-700"
-                                }
-                              >
-                                {row.delta > 0 ? `+${row.delta}` : row.delta}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm text-slate-600">
-                              Previous {row.previous} · Current {row.current}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {prioritizedAccessibilityRuleRows.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-slate-800">Representative WCAG evidence and remediation priority</p>
-                        <InfoTip text="These rows come from persisted accessibility rule counts for the scan's automated browser audit. They map the top rules into likely WCAG criteria, explain user impact, and suggest a remediation-first order." />
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {prioritizedAccessibilityRuleRows.map((row) => (
-                          <div
-                            key={`accessibility-evidence-${row.ruleCode}`}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-950">{row.family}</p>
-                                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-                                  {row.ruleCode} · {row.ruleGroup}
-                                </p>
-                              </div>
-                              <span
-                                className={
-                                  row.severity === "high"
-                                    ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-rose-700"
-                                    : row.severity === "medium"
-                                      ? "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-700"
-                                      : "rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-sky-700"
-                                }
-                              >
-                                {row.severity}
-                              </span>
-                            </div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
-                                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Instances</p>
-                                <p className="mt-1 text-sm font-semibold text-slate-950">{row.instanceCount}</p>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
-                                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Likely WCAG criteria</p>
-                                <p className="mt-1 text-sm font-semibold text-slate-950">{formatWcagCriteria(row.criteria)}</p>
-                              </div>
-                            </div>
-                            <p className="mt-3 text-sm text-slate-700">
-                              <span className="font-medium text-slate-900">Why it matters:</span> {row.impact}
-                            </p>
-                            {row.description ? (
-                              <p className="mt-2 text-sm text-slate-700">
-                                <span className="font-medium text-slate-900">Representative issue:</span> {row.description}
-                              </p>
-                            ) : null}
-                            <p className="mt-2 text-sm text-slate-700">
-                              <span className="font-medium text-slate-900">Fix first:</span> {row.remediation}
-                            </p>
-                            {row.representativeSelectors.length > 0 ? (
-                              <div className="mt-3 space-y-1">
-                                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Representative selectors</p>
-                                {row.representativeSelectors.slice(0, 3).map((selector) => (
-                                  <code
-                                    key={`${row.ruleCode}-${selector}`}
-                                    className="block overflow-hidden rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                                  >
-                                    {selector}
-                                  </code>
-                                ))}
-                              </div>
-                            ) : null}
-                            {row.pageUrl ? (
-                              <p className="mt-3 text-sm text-slate-700">
-                                <span className="font-medium text-slate-900">Observed on:</span>{" "}
-                                <a className="break-all underline underline-offset-2" href={row.pageUrl} rel="noreferrer" target="_blank">
-                                  {row.pageUrl}
-                                </a>
-                              </p>
-                            ) : null}
-                            {row.helpUrl ? (
-                              <p className="mt-2 text-sm text-slate-700">
-                                <span className="font-medium text-slate-900">WCAG / axe guidance:</span>{" "}
-                                <a className="underline underline-offset-2" href={row.helpUrl} rel="noreferrer" target="_blank">
-                                  {row.help ?? row.helpUrl}
-                                </a>
-                              </p>
-                            ) : null}
-                            <p className="mt-2 text-xs text-slate-500">
-                              Evidence source: {row.pageUrl ? "persisted accessibility rule examples from the browser audit." : "aggregated accessibility rule counts from the browser audit."}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </CollapsibleSectionCard>
-              </StaticSubsection>
-
-              <ResultCategorySection
-                title="Sensitive collection and consumer-risk signals"
-                staticSection
-                collapseDetails
-                detailsTitle="Sensitive collection detail signals"
-                collapsible={false}
-                metrics={[
-                  {
-                    label: "Sensitive collection",
-                    value: formatCompactValue(snapshot.high_sensitivity_data_collection_detected),
-                    tooltip:
-                      "Whether the scan detected observed signals that the site may request more sensitive categories of personal or identity-related information."
-                  },
-                  {
-                    label: "SSN collection",
-                    value: formatCompactValue(snapshot.form_collects_ssn),
-                    tooltip:
-                      "Whether form labels, placeholders, names, or nearby text suggested SSN or social-security-number collection."
-                  },
-                  {
-                    label: "Government ID",
-                    value: formatCompactValue(snapshot.form_collects_government_id),
-                    tooltip:
-                      "Whether the scan observed explicit form signals suggesting passport, driver's license, national ID, or similar government-ID collection."
-                  },
-                  {
-                    label: "Financial info",
-                    value: formatCompactValue(snapshot.form_collects_financial_information),
-                    tooltip:
-                      "Whether public-facing forms appeared to request bank, routing, salary, card, or comparable financial information."
-                  }
-                ]}
-                details={[
-                  { label: "Health information", value: snapshot.form_collects_health_information },
-                  { label: "Birthdate collection", value: snapshot.form_collects_birthdate },
-                  { label: "Geolocation collection", value: snapshot.form_collects_geolocation },
-                  { label: "Date-of-birth input", value: snapshot.date_of_birth_input_present },
-                  { label: "Payment-card input", value: snapshot.payment_card_input_present },
-                  { label: "Address input", value: snapshot.address_input_present },
-                  { label: "Age gate", value: snapshot.age_gate_present },
-                  { label: "Parental consent reference", value: snapshot.parental_consent_reference_present }
-                ]}
-              />
-            </TopLevelEvidenceSection>
-          </div>
-        </div>
+        <CanonicalTaxonomyReview
+          accessibilityIssueRows={accessibilityIssueRows}
+          consentAuditFindings={consentAuditFindings}
+          policyBehaviorContradictions={policyBehaviorContradictions}
+          preconsentViolationRows={preconsentViolationRows}
+          prioritizedAccessibilityRuleRows={prioritizedAccessibilityRuleRows}
+          scanRecord={scanRecord}
+          scanReportReviewIssues={scanReportReviewIssues}
+          snapshot={snapshot}
+        />
       ) : null}
 
-      <RegulatoryRiskSection risk={scanRecord.regulatoryRisk} agencyMappings={scanRecord.agencyMappings} />
-
-      {snapshot ? (
-        <CollapsibleSectionCard
-          title={
-            <span className="flex items-center gap-1.5">
-              <span>AI, Automation & Emerging Practices</span>
-              <InfoTip text="AI assistants, automation disclosures, AI answer experiences, and related emerging-practice signals are intentionally separated from the core privacy and accessibility evidence above." />
-            </span>
-          }
-          defaultOpen
-          contentClassName="space-y-4"
-        >
-          <ResultCategorySection
-            title={PRIMARY_SCAN_CATEGORY_META.ai_automation_emerging_practices.label}
-            collapsible={false}
-            metrics={[
-              {
-                label: "AI chatbot",
-                value: formatCompactValue(snapshot.ai_chatbot_present),
-                tooltip:
-                  "Whether the scan detected a likely visible chatbot or assistant experience based on vendor signatures, widget markers, and explicit assistant language."
-              },
-              {
-                label: "AI vendor",
-                value: formatCompactValue(snapshot.ai_chatbot_vendor),
-                tooltip:
-                  "The strongest visible AI or chat-assistant vendor signature detected on the site during the scan, if any."
-              },
-              {
-                label: "AI disclosure",
-                value: formatCompactValue(snapshot.ai_disclosure_text_present),
-                tooltip:
-                  "Whether visible page text suggested explicit AI-related disclosure language such as AI-generated responses, powered by AI, or automated assistant messaging."
-              },
-              {
-                label: "AI search/answers",
-                value: formatCompactValue(snapshot.ai_search_or_answer_experience_detected),
-                tooltip:
-                  "Whether the scan detected a clearly AI-labeled question-to-answer or instant-answer experience, beyond generic site search."
-              }
-            ]}
-            details={[
-              { label: "AI assistant widget", value: snapshot.ai_assistant_widget_detected },
-              { label: "AI policy reference", value: snapshot.ai_terms_or_policy_ai_reference },
-              { label: "AI help-center reference", value: snapshot.ai_help_center_ai_reference },
-              { label: "Hiring automation signal", value: snapshot.ai_hiring_automation_signal_detected }
-            ]}
-          />
-        </CollapsibleSectionCard>
-      ) : null}
 
       <CollapsibleSectionCard
         title={
@@ -2396,6 +2199,54 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
         }
         contentClassName="space-y-6"
       >
+        {snapshot ? (
+          <CollapsibleSectionCard
+            title={
+              <span className="flex items-center gap-1.5">
+                <span>AI, Automation & Emerging Practices</span>
+                <InfoTip text="AI assistants, automation disclosures, AI answer experiences, and related emerging-practice signals kept in diagnostics for research and lower-priority review." />
+              </span>
+            }
+          >
+            <ResultCategorySection
+              title={PRIMARY_SCAN_CATEGORY_META.ai_automation_emerging_practices.label}
+              collapsible={false}
+              metrics={[
+                {
+                  label: "AI chatbot",
+                  value: formatCompactValue(snapshot.ai_chatbot_present),
+                  tooltip:
+                    "Whether the scan detected a likely visible chatbot or assistant experience based on vendor signatures, widget markers, and explicit assistant language."
+                },
+                {
+                  label: "AI vendor",
+                  value: formatCompactValue(snapshot.ai_chatbot_vendor),
+                  tooltip:
+                    "The strongest visible AI or chat-assistant vendor signature detected on the site during the scan, if any."
+                },
+                {
+                  label: "AI disclosure",
+                  value: formatCompactValue(snapshot.ai_disclosure_text_present),
+                  tooltip:
+                    "Whether visible page text suggested explicit AI-related disclosure language such as AI-generated responses, powered by AI, or automated assistant messaging."
+                },
+                {
+                  label: "AI search/answers",
+                  value: formatCompactValue(snapshot.ai_search_or_answer_experience_detected),
+                  tooltip:
+                    "Whether the scan detected a clearly AI-labeled question-to-answer or instant-answer experience, beyond generic site search."
+                }
+              ]}
+              details={[
+                { label: "AI assistant widget", value: snapshot.ai_assistant_widget_detected },
+                { label: "AI policy reference", value: snapshot.ai_terms_or_policy_ai_reference },
+                { label: "AI help-center reference", value: snapshot.ai_help_center_ai_reference },
+                { label: "Hiring automation signal", value: snapshot.ai_hiring_automation_signal_detected }
+              ]}
+            />
+          </CollapsibleSectionCard>
+        ) : null}
+
         {snapshot ? (
           <ResultCategorySection
             title={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.label}

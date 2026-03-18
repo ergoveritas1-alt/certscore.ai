@@ -149,8 +149,18 @@ export function PolicyEnrichmentSection(input: {
   enrichments: Array<Record<string, unknown>>;
   reviewQueue: Array<Record<string, unknown>>;
   embedded?: boolean;
+  pageTypes?: string[];
+  title?: string;
 }) {
+  const allowedPageTypes = input.pageTypes?.length
+    ? new Set(input.pageTypes)
+    : null;
   const visibleEnrichments = input.enrichments.filter((enrichment) => {
+    const pageType = getField(enrichment, "pageType", "page_type");
+    if (allowedPageTypes && (typeof pageType !== "string" || !allowedPageTypes.has(pageType))) {
+      return false;
+    }
+
     const pageUrl = getField(enrichment, "pageUrl", "page_url");
     const summary = getField(enrichment, "policySummaryShort", "policy_summary_short");
     const mentions = getField(enrichment, "policyMentions", "policy_mentions");
@@ -158,13 +168,15 @@ export function PolicyEnrichmentSection(input: {
     return Boolean(pageUrl || summary || (Array.isArray(mentions) && mentions.length > 0));
   });
 
+  const sectionTitle = input.title ?? (input.embedded ? "Policy document analysis" : "Policy enrichment");
+
   if (visibleEnrichments.length === 0) {
     if (input.embedded) {
       return (
         <CollapsibleSectionCard
           title={
             <span className="flex items-center gap-1.5">
-              <span>Policy document analysis</span>
+              <span>{sectionTitle}</span>
               <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
             </span>
           }
@@ -180,7 +192,7 @@ export function PolicyEnrichmentSection(input: {
       <CollapsibleSectionCard
         title={
           <span className="flex items-center gap-1.5">
-            <span>Policy enrichment</span>
+            <span>{sectionTitle}</span>
             <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
           </span>
         }
@@ -200,7 +212,7 @@ export function PolicyEnrichmentSection(input: {
       <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium text-slate-900">Policy document analysis</p>
+            <p className="text-sm font-medium text-slate-900">{sectionTitle}</p>
             <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
           </div>
         </div>
@@ -246,7 +258,7 @@ export function PolicyEnrichmentSection(input: {
     <CollapsibleSectionCard
       title={
         <span className="flex items-center gap-1.5">
-          <span>Policy enrichment</span>
+          <span>{sectionTitle}</span>
           <InfoTip text="Structured extraction derived from detected legal pages. It stores normalized outputs and short evidence snippets, not raw policy bodies." />
         </span>
       }
