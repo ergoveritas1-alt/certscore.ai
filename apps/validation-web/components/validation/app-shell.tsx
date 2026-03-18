@@ -7,7 +7,8 @@ import { useState, type ReactNode } from "react";
 const navItems = [
   { href: "/app", label: "Overview", shortLabel: "OV" },
   { href: "/app/scans", label: "All scans", shortLabel: "SC" },
-  { href: "/app/issues", label: "Issue analytics", shortLabel: "IA" }
+  { href: "/app/issues", label: "Issue analytics", shortLabel: "IA" },
+  { href: "/app/changes", label: "Audit history", shortLabel: "AH" }
 ] as const;
 
 export function ValidationAppShell(input: {

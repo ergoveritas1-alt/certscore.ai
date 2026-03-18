@@ -488,6 +488,22 @@ export async function getValidationIssueAnalytics() {
     .sort((left, right) => right.reviewedCount - left.reviewedCount || left.supportedRate - right.supportedRate);
 }
 
+export async function listValidationAuditEvents() {
+  await requireValidationAdminContext();
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_audit_events")
+    .select("id, actor_user_id, event_type, reason, previous_value_json, next_value_json, created_at, users ( email )")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    throw new Error(`Failed to load validation audit history: ${error.message}`);
+  }
+
+  return (data ?? []) as Array<Record<string, unknown>>;
+}
+
 export async function createManualValidationRun(input: { targetId: string }) {
   const { user } = await requireValidationAdminContext();
   const settings = await ensureSettings();
