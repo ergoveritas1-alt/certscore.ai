@@ -37,7 +37,7 @@ After the repo is connected, prefer Git-based deploys for web changes:
 - make the change in the repo root
 - `git add` the intended files
 - commit with a clear message
-- push the production branch to GitHub so Vercel deploys from Git
+- push `main` to GitHub so Vercel deploys production from Git
 
 Use `npx vercel deploy --prod` only as a manual fallback when you intentionally need a direct CLI deployment.
 

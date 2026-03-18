@@ -10,7 +10,7 @@
 
 ## Production expectation
 
-- Treat a push to the production branch as the preferred way to promote web changes, assuming the Vercel project is configured to auto-deploy from Git.
+- Treat a push to `main` as the preferred way to promote web changes, since the Vercel project is configured to auto-deploy production from `main`.
 - If that Git-to-Vercel linkage is uncertain, call it out before claiming a change is live in production.
 
 ## Scope note

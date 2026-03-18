@@ -168,7 +168,7 @@ The validation crawler deployment and VM runbook is documented in [docs/validati
 ### Vercel web app
 
 - prefer Git-based deploys for production web changes
-- stage the intended files, commit them, and push the production branch to GitHub
+- stage the intended files, commit them, and push `main` to GitHub
 - treat the connected Vercel project as the primary production deploy path
 - do not deploy from `apps/web`
 - use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
