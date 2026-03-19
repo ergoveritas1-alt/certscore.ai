@@ -1261,6 +1261,38 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "privacy.session_replay_runtime_detected",
+    "Session replay runtime detected",
+    "adtech_analytics_replay_footprint",
+    [],
+    ["tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "privacy.session_replay_runtime_vendors",
+    "Session replay runtime vendors",
+    "adtech_analytics_replay_footprint",
+    [],
+    ["tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.session_replay_disclosure_present",
+    "Session replay disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["transparency_notice_data_subject_rights", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.session_replay_disclosure_pages",
+    "Session replay disclosure pages",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["transparency_notice_data_subject_rights", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "context.children_audience_likely",
     "Children audience likely",
     "minor_related_age_gated_collection_context",
