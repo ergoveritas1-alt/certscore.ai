@@ -57,9 +57,11 @@ test("findValidationFindingForKeys returns the first matched rule key", () => {
 
 test("getValidationMatchKeysForTitle maps low-confidence extraction title variants", () => {
   assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence policy extraction"), [
+    "section_review.low_confidence_critical_fields",
     "scan_report_review.low_confidence_critical_fields"
   ]);
   assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence extraction Privacy Policy"), [
+    "section_review.low_confidence_critical_fields",
     "scan_report_review.low_confidence_critical_fields"
   ]);
 });
