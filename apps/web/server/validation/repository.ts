@@ -682,11 +682,48 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
   revalidatePath("/app/validation");
 }
 
-export async function addValidationTargetAction(input: { hostname: string }) {
+export async function addValidationTargetAction() {
   const context = await requireAdmin();
   const supabase = createAdminClient();
-  const normalizedUrl = normalizeUrl(input.hostname);
-  const hostname = extractHostname(normalizedUrl);
+  const targetRank = Math.floor(Math.random() * (50_000 - 1_000 + 1)) + 1_000;
+
+  const loadCandidate = async (direction: "gte" | "lte") => {
+    let query = supabase
+      .from("validation_targets")
+      .select("hostname, normalized_url, tranco_rank")
+      .eq("source", "tranco")
+      .gte("tranco_rank", 1_000)
+      .lte("tranco_rank", 50_000)
+      .limit(1);
+
+    query =
+      direction === "gte"
+        ? query.gte("tranco_rank", targetRank).order("tranco_rank", { ascending: true })
+        : query.lte("tranco_rank", targetRank).order("tranco_rank", { ascending: false });
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      throw new Error(`Failed to load Tranco validation target: ${error.message}`);
+    }
+
+    return (data as { hostname: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
+  };
+
+  const higherCandidate = await loadCandidate("gte");
+  const lowerCandidate = await loadCandidate("lte");
+  const candidate =
+    higherCandidate && lowerCandidate
+      ? Math.abs((higherCandidate.tranco_rank ?? targetRank) - targetRank) <= Math.abs((lowerCandidate.tranco_rank ?? targetRank) - targetRank)
+        ? higherCandidate
+        : lowerCandidate
+      : higherCandidate ?? lowerCandidate;
+
+  if (!candidate) {
+    throw new Error("No Tranco validation target is available in the 1000-50000 range.");
+  }
+
+  const hostname = extractHostname(candidate.normalized_url);
+  const normalizedUrl = normalizeUrl(candidate.normalized_url);
 
   const { error } = await supabase.from("validation_targets").upsert(
     {
@@ -708,7 +745,9 @@ export async function addValidationTargetAction(input: { hostname: string }) {
     event_type: "validation.target_added",
     metadata_json: {
       hostname,
-      normalizedUrl
+      normalizedUrl,
+      selectedRank: candidate.tranco_rank,
+      targetRank
     }
   });
 

@@ -72,11 +72,6 @@ export async function submitValidationTargetAction(formData: FormData) {
   throw new Error("Unsupported validation target action.");
 }
 
-export async function submitValidationTargetAddAction(formData: FormData) {
-  const hostname = String(formData.get("hostname") ?? "").trim();
-  if (!hostname) {
-    throw new Error("Hostname is required.");
-  }
-
-  await addValidationTargetAction({ hostname });
+export async function submitValidationTargetAddAction() {
+  await addValidationTargetAction();
 }

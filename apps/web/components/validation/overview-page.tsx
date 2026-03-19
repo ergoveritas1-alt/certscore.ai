@@ -93,12 +93,10 @@ export async function ValidationOverviewPage() {
 
             <form action={submitValidationTargetAddAction} className="space-y-2 rounded-2xl border border-slate-200 p-4">
               <p className="text-sm font-medium text-slate-950">Add target</p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input className="w-full rounded-2xl border border-slate-300 px-3 py-2 text-sm" name="hostname" placeholder="example.com" type="text" />
-                <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950 sm:shrink-0" type="submit">
-                  Add target
-                </button>
-              </div>
+              <p className="text-sm text-slate-600">Pull a random Tranco domain between rank 1,000 and 50,000 into the queue.</p>
+              <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
+                Add random Tranco target
+              </button>
             </form>
           </CardContent>
         </Card>
