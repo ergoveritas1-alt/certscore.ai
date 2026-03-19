@@ -79,7 +79,7 @@ function inferTrackerFromEvidenceUrls(evidenceUrls: string[]) {
 
 type PreconsentViolationInsert = {
   scan_id: string;
-  organization_id: string;
+  organization_id: string | null;
   domain_id: string;
   vendor_name: string;
   vendor_category: string;
@@ -94,7 +94,7 @@ type PreconsentViolationInsert = {
 
 type AccessibilityRuleExampleInsert = {
   scan_id: string;
-  organization_id: string;
+  organization_id: string | null;
   domain_id: string;
   page_url: string;
   rule_code: string;
@@ -109,7 +109,7 @@ type AccessibilityRuleExampleInsert = {
 };
 
 export function buildPreconsentViolationRows(bundle: SnapshotBundle) {
-  if (!bundle.snapshot.organizationId || !bundle.snapshot.domainId) {
+  if (!bundle.snapshot.domainId) {
     return [];
   }
 
@@ -164,14 +164,14 @@ export function buildPreconsentViolationRows(bundle: SnapshotBundle) {
 }
 
 export function buildAccessibilityRuleExampleRows(bundle: SnapshotBundle) {
-  if (!bundle.snapshot.organizationId || !bundle.snapshot.domainId) {
+  if (!bundle.snapshot.domainId) {
     return [] as AccessibilityRuleExampleInsert[];
   }
 
   return bundle.accessibilityRuleExamples.map((example) => ({
     scan_id: bundle.snapshot.scanId,
-    organization_id: bundle.snapshot.organizationId!,
-    domain_id: bundle.snapshot.domainId!,
+    organization_id: bundle.snapshot.organizationId,
+    domain_id: bundle.snapshot.domainId,
     page_url: example.pageUrl,
     rule_code: example.ruleCode,
     rule_group: example.ruleGroup,
@@ -247,10 +247,6 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
     if (reviewQueueError) {
       throw new Error(`Failed to persist policy review queue rows: ${reviewQueueError.message}`);
     }
-  }
-
-  if (!bundle.snapshot.organizationId) {
-    return;
   }
 
   const { error: runtimeArtifactsError } = await supabase.from("scan_runtime_artifacts").upsert(buildRuntimeArtifactRow(bundle), {

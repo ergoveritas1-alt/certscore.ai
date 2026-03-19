@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 type ScanStatusAutoRefreshProps = {
@@ -8,7 +7,6 @@ type ScanStatusAutoRefreshProps = {
 };
 
 export function ScanStatusAutoRefresh({ status }: ScanStatusAutoRefreshProps) {
-  const router = useRouter();
   const shouldRefresh = status === "queued" || status === "running";
 
   useEffect(() => {
@@ -17,13 +15,19 @@ export function ScanStatusAutoRefresh({ status }: ScanStatusAutoRefreshProps) {
     }
 
     const intervalId = window.setInterval(() => {
-      router.refresh();
-    }, 3000);
+      if (document.visibilityState !== "visible" || !navigator.onLine) {
+        return;
+      }
+
+      // Use a normal page reload here instead of router.refresh() so transient
+      // dev-server fetch failures do not throw the scan page into a runtime overlay.
+      window.location.reload();
+    }, 5000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [router, shouldRefresh]);
+  }, [shouldRefresh]);
 
   if (!shouldRefresh) {
     return null;

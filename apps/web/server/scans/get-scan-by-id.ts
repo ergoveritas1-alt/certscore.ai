@@ -2,9 +2,11 @@
 
 import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import type { ScanValidationFindingSummary } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
 
 export type ScanDetailRecord = {
   id: string;
@@ -125,6 +127,8 @@ export type AccessibilityRuleExampleRecord = {
   severity: string;
 };
 
+export type ScanValidationFindingRecord = ScanValidationFindingSummary;
+
 type ScanRow = {
   completed_at: string | null;
   created_at: string;
@@ -196,6 +200,23 @@ type AccessibilityRuleExampleRow = {
   severity: string;
 };
 
+type ValidationRunFindingRow = {
+  id: string;
+  rule_key: string;
+  title: string;
+};
+
+type ValidationVerdictRow = {
+  confidence: number | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported";
+  agreement_score: number | null;
+};
+
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
   const next = { ...snapshot };
   delete next.id;
@@ -250,14 +271,30 @@ function mergeRelatedPreviewSnapshot(
   return merged;
 }
 
-export async function getScanById(input: { organizationId: string; scanId: string }) {
+export async function getScanById(input: { organizationId: string; scanId: string; viewerEmail?: string | null }) {
   const supabase = createAdminClient();
-  const { data: scan, error } = await supabase
-    .from("scans")
-    .select("id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
-    .eq("id", input.scanId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
+  const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
+
+  const loadScan = async (organizationId: string | null) => {
+    let query = supabase
+      .from("scans")
+      .select("id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
+      .eq("id", input.scanId);
+
+    query = organizationId === null ? query.is("organization_id", null) : query.eq("organization_id", organizationId);
+
+    return query.maybeSingle();
+  };
+
+  const primaryScanResult = await loadScan(input.organizationId);
+  let scan = primaryScanResult.data;
+  let error = primaryScanResult.error;
+
+  if (!scan && !error && adminCanViewAnonymousScans) {
+    const anonymousScanResult = await loadScan(null);
+    scan = anonymousScanResult.data;
+    error = anonymousScanResult.error;
+  }
 
   if (error) {
     throw new Error(`Failed to load scan: ${error.message}`);
@@ -269,24 +306,26 @@ export async function getScanById(input: { organizationId: string; scanId: strin
 
   const scanRow = scan as ScanRow;
   let domainHostname: string | null = null;
+  const scanOrganizationId = (scanRow as ScanRow & { organization_id?: string | null }).organization_id ?? null;
 
   if (scanRow.domain_id) {
-    const { data: domain } = await supabase
-      .from("domains")
-      .select("id, hostname")
-      .eq("id", scanRow.domain_id)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle();
+    let domainQuery = supabase.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
+    domainQuery =
+      scanOrganizationId === null && adminCanViewAnonymousScans
+        ? domainQuery.is("organization_id", null)
+        : domainQuery.eq("organization_id", input.organizationId);
+
+    const { data: domain } = await domainQuery.maybeSingle();
 
     domainHostname = (domain as DomainRow | null)?.hostname ?? null;
   }
 
   const previousScanPromise =
-    scanRow.domain_id
+    scanRow.domain_id && scanOrganizationId !== null
       ? supabase
           .from("scans")
           .select("id")
-          .eq("organization_id", input.organizationId)
+          .eq("organization_id", scanOrganizationId)
           .eq("domain_id", scanRow.domain_id)
           .eq("status", "completed")
           .lt("created_at", scanRow.created_at)
@@ -306,7 +345,8 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     { data: accessibilityRuleExamples },
     { data: policyEnrichment },
     { data: policyReviewQueue },
-    { data: previousScan }
+    { data: previousScan },
+    { data: validationRun }
   ] = await Promise.all([
     supabase
       .from("scan_events")
@@ -367,11 +407,99 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       .select("*")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
-    previousScanPromise
+    previousScanPromise,
+    supabase
+      .from("validation_runs")
+      .select("id")
+      .eq("scan_id", input.scanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
   ]);
 
   if (eventsError) {
     throw new Error(`Failed to load scan events: ${eventsError.message}`);
+  }
+
+  let validationFindings: ScanValidationFindingRecord[] = [];
+  const validationRunId = (validationRun as { id?: string } | null)?.id ?? null;
+
+  if (validationRunId) {
+    const { data: validationFindingRows, error: validationFindingsError } = await supabase
+      .from("validation_run_findings")
+      .select("id, rule_key, title")
+      .eq("validation_run_id", validationRunId)
+      .order("finding_rank", { ascending: true });
+
+    if (validationFindingsError) {
+      throw new Error(`Failed to load validation findings for scan ${input.scanId}: ${validationFindingsError.message}`);
+    }
+
+    const findingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
+    const findingIds = findingRows.map((row) => row.id);
+    const verdictMap = new Map<string, ValidationVerdictRow>();
+
+    if (findingIds.length > 0) {
+      let verdictRows: ValidationVerdictRow[] = [];
+      const withSystemConfidence = await supabase
+        .from("validation_verdicts")
+        .select(
+          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, system_confidence_score, system_confidence_band, system_confidence_explanation"
+        )
+        .in("validation_run_finding_id", findingIds);
+
+      if (withSystemConfidence.error && withSystemConfidence.error.message.toLowerCase().includes("system_confidence")) {
+        const fallback = await supabase
+          .from("validation_verdicts")
+          .select("validation_run_finding_id, verdict, confidence, rationale, agreement_score")
+          .in("validation_run_finding_id", findingIds);
+
+        if (fallback.error) {
+          throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${fallback.error.message}`);
+        }
+
+        verdictRows = ((fallback.data ?? []) as Array<{
+          agreement_score: number | null;
+          confidence: number | null;
+          rationale: string | null;
+          validation_run_finding_id: string;
+          verdict: "supported" | "inconclusive" | "not_supported";
+        }>).map((row) => ({
+          agreement_score: row.agreement_score,
+          confidence: row.confidence,
+          rationale: row.rationale,
+          system_confidence_band: null,
+          system_confidence_explanation: null,
+          system_confidence_score: null,
+          validation_run_finding_id: row.validation_run_finding_id,
+          verdict: row.verdict
+        }));
+      } else if (withSystemConfidence.error) {
+        throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${withSystemConfidence.error.message}`);
+      } else {
+        verdictRows = (withSystemConfidence.data ?? []) as ValidationVerdictRow[];
+      }
+
+      for (const verdict of verdictRows) {
+        verdictMap.set(verdict.validation_run_finding_id, verdict);
+      }
+    }
+
+    validationFindings = findingRows.map((row) => {
+      const verdict = verdictMap.get(row.id);
+
+      return {
+        agreementScore: verdict?.agreement_score ?? null,
+        modelConfidence: verdict?.confidence ?? null,
+        rationale: verdict?.rationale ?? null,
+        ruleKey: row.rule_key,
+        systemConfidenceBand: verdict?.system_confidence_band ?? null,
+        systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
+        systemConfidenceScore: verdict?.system_confidence_score ?? null,
+        title: row.title,
+        verdict: verdict?.verdict ?? null
+      } satisfies ScanValidationFindingRecord;
+    });
   }
 
   const previousSnapshot = previousScan?.id
@@ -595,6 +723,7 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       : null,
     policyEnrichment: normalizedPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    validationFindings,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot
       ? buildAgencyMappings(buildAgencyMappingSource(regulatorySnapshot as Record<string, unknown>), regulatoryRisk)

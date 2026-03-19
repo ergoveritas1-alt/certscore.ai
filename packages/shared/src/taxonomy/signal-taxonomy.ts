@@ -478,6 +478,22 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "data_collection_third_party_ecosystem",
       subcategory: "Session Replay / Behavioral Tools"
     },
+    "privacy.session_replay_runtime_detected": {
+      primaryCategory: "data_collection_third_party_ecosystem",
+      subcategory: "Session Replay / Behavioral Tools"
+    },
+    "privacy.session_replay_runtime_vendors": {
+      primaryCategory: "data_collection_third_party_ecosystem",
+      subcategory: "Session Replay / Behavioral Tools"
+    },
+    "disclosure.session_replay_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures"
+    },
+    "disclosure.session_replay_disclosure_pages": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures"
+    },
     "commerce.ai_chatbot_present": {
       primaryCategory: "ai_automation_emerging_practices",
       subcategory: "Visible AI Assistants"

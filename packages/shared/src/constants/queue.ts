@@ -70,7 +70,14 @@ export const SCAN_EVENT_TYPES = {
   scheduledScanSkippedExistingActiveScan: "scheduled_scan.skipped_existing_active_scan",
   scheduledQueued: "scheduled_scan.queued",
   changesComputed: "signals.changes_computed",
+  validationRunQueued: "validation.run_queued",
+  validationRunStarted: "validation.run_started",
+  validationTargetClaimed: "validation.target_claimed",
   validationClaimed: "validation.claimed",
+  validationPipelinePaused: "validation.pipeline_paused",
+  validationPipelineResumed: "validation.pipeline_resumed",
+  validationModeChanged: "validation.mode_changed",
+  validationIntervalChanged: "validation.interval_changed",
   validationCollectQueued: "validation.collect_queued",
   validationCollectStarted: "validation.collect_started",
   validationCollectCompleted: "validation.collect_completed",
@@ -78,6 +85,7 @@ export const SCAN_EVENT_TYPES = {
   validationRankCompleted: "validation.rank_completed",
   validationVerdictStarted: "validation.verdict_started",
   validationVerdictCompleted: "validation.verdict_completed",
+  validationVerdictFailed: "validation.verdict_failed",
   validationRunCompleted: "validation.run_completed",
   validationRunFailed: "validation.run_failed"
 } as const;

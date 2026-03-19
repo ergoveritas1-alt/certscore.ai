@@ -15,6 +15,13 @@ import { FullScanProgressCard } from "../../../../components/scans/full-scan-pro
 import { InfoTip } from "../../../../components/scans/info-tip";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
+  buildValidationFindingLookup,
+  findValidationFindingForKeys,
+  getValidationMatchKeysForSignal,
+  getValidationMatchKeysForTitle,
+  type ScanValidationFindingSummary
+} from "../../../../lib/scans/validation-review-linking";
+import {
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
 } from "../../../../lib/scans/signal-taxonomy";
@@ -954,6 +961,7 @@ type CanonicalReviewFinding = {
   sourceLabel?: string;
   sourceUrl?: string;
   title: string;
+  validationSummary?: ScanValidationFindingSummary | null;
 };
 
 type ScanRecordData = NonNullable<Awaited<ReturnType<typeof getScanById>>>;
@@ -977,6 +985,29 @@ type CanonicalTaxonomyReviewProps = {
   }>;
   snapshot: Record<string, unknown>;
 };
+
+function ScanSectionFallback(input: { message: string; title: string }) {
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+      <p className="font-semibold">{input.title}</p>
+      <p className="mt-1 text-amber-900">{input.message}</p>
+    </div>
+  );
+}
+
+function renderCanonicalTaxonomyReviewSafely(input: CanonicalTaxonomyReviewProps) {
+  try {
+    return <CanonicalTaxonomyReview {...input} />;
+  } catch (error) {
+    console.error("Failed to render canonical scan review", error);
+    return (
+      <ScanSectionFallback
+        title="Review sections unavailable"
+        message="The live scan completed, but the structured review sections could not be rendered for this scan. Advanced diagnostics are still available below."
+      />
+    );
+  }
+}
 
 type CanonicalSignalItem = {
   key: string;
@@ -1013,6 +1044,25 @@ function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown
   return null;
 }
 
+function getSnapshotSignalValue(snapshot: Record<string, unknown> | null, signalKey: string) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const snapshotKey = getSignalNamespaceKey(signalKey);
+  const directValue = snapshot[snapshotKey];
+  if (directValue !== null && directValue !== undefined) {
+    return directValue;
+  }
+
+  switch (signalKey) {
+    case "privacy.cmp_vendor_detected":
+      return snapshot.cmp_vendor_name ?? null;
+    default:
+      return null;
+  }
+}
+
 function getReportSignalValue(input: {
   policyEnrichment: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
@@ -1021,8 +1071,7 @@ function getReportSignalValue(input: {
   signal: ReportSignalDefinition;
 }) {
   if (input.signal.source === "snapshot_signal") {
-    const snapshotKey = getSignalNamespaceKey(input.signal.key);
-    return input.snapshot?.[snapshotKey] ?? findPersistedSignalValue(input.signals, input.signal.key);
+    return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
 
   if (input.signal.source === "runtime_artifact_signal") {
@@ -1346,6 +1395,7 @@ function buildReviewFindings(input: {
   issues: CanonicalReviewIssue[];
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
+  validationFindingLookup?: Map<string, ScanValidationFindingSummary>;
 }) {
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
     .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
@@ -1358,6 +1408,9 @@ function buildReviewFindings(input: {
       referenceLabel: getReviewReference(item.key)?.label,
       referenceUrl: getReviewReference(item.key)?.url,
       severity: getSignalFindingSeverity(item.key, item.value),
+      validationSummary: input.validationFindingLookup
+        ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
+        : null,
       title: item.label
     }));
 
@@ -1373,7 +1426,10 @@ function buildReviewFindings(input: {
     severity: issue.severity,
     sourceLabel: getFindingSourceLabel(issue.evidence),
     sourceUrl: getFindingSourceUrl(issue.evidence),
-    title: issue.title
+    title: issue.title,
+    validationSummary: input.validationFindingLookup
+      ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForTitle(issue.title))
+      : null
   }));
 
   return [...signalFindings, ...issueFindings].sort(
@@ -1522,6 +1578,70 @@ function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
   );
 }
 
+function formatValidationVerdictLabel(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
+  switch (verdict) {
+    case "supported":
+      return "Supported";
+    case "not_supported":
+      return "Not supported";
+    default:
+      return "Inconclusive";
+  }
+}
+
+function getValidationVerdictBadgeClass(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
+  switch (verdict) {
+    case "supported":
+      return "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-800";
+    case "not_supported":
+      return "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-rose-800";
+    default:
+      return "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-800";
+  }
+}
+
+function formatConfidencePercent(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function ReviewFindingValidationSummary(input: { finding: CanonicalReviewFinding }) {
+  const summary = input.finding.validationSummary;
+  if (!summary || !summary.verdict) {
+    return null;
+  }
+
+  const systemConfidence = formatConfidencePercent(summary.systemConfidenceScore);
+  const modelConfidence = formatConfidencePercent(summary.modelConfidence);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={getValidationVerdictBadgeClass(summary.verdict)}>{formatValidationVerdictLabel(summary.verdict)}</span>
+        {systemConfidence ? (
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-700">
+            System confidence {systemConfidence}
+          </span>
+        ) : null}
+        {summary.systemConfidenceBand ? (
+          <span className="text-xs uppercase tracking-[0.12em] text-slate-500">
+            {summary.systemConfidenceBand.replaceAll("_", " ")}
+          </span>
+        ) : null}
+      </div>
+      {summary.systemConfidenceExplanation ? (
+        <p className="mt-2 text-xs text-slate-600">{summary.systemConfidenceExplanation}</p>
+      ) : summary.rationale ? (
+        <p className="mt-2 text-xs text-slate-600">{summary.rationale}</p>
+      ) : null}
+      {modelConfidence ? <p className="mt-1 text-[11px] text-slate-500">Model confidence {modelConfidence}</p> : null}
+    </div>
+  );
+}
+
 function formatReviewFindingSummaryTitle(title: string) {
   const normalized = title
     .replace(/^Possible /i, "")
@@ -1581,6 +1701,8 @@ function formatReviewFindingSummaryValue(value: string | null) {
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
+  const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
+
   return (
     <div className="space-y-6">
       {REPORT_PRIMARY_PILLARS.map((pillar) => {
@@ -1611,7 +1733,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                   categoryId: category.id,
                   issues: [],
                   sectionId: section.id,
-                  sectionItems: items
+                  sectionItems: items,
+                  validationFindingLookup
                 });
 
                 return {
@@ -1634,7 +1757,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             const reviewFindings = buildReviewFindings({
               issues,
               sectionId: section.id,
-              sectionItems: []
+              sectionItems: [],
+              validationFindingLookup
             });
             const categoriesWithFindings = categories.map((category) => ({
               ...category,
@@ -1643,11 +1767,11 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                 ...reviewFindings.filter((finding) => finding.categoryId === category.category.id)
               ].sort((left, right) => severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title))
             }));
-            const visibleCategories = categoriesWithFindings.filter((category) => category.items.length > 0 || category.reviewFindings.length > 0);
+            const visibleCategories = categoriesWithFindings;
             const sectionItems = visibleCategories.flatMap((category) => category.items);
 
             return {
-              hiddenCategoryCount: categoriesWithFindings.length - visibleCategories.length,
+              hiddenCategoryCount: 0,
               reviewFindings: [
                 ...visibleCategories.flatMap((category) => category.reviewFindings),
                 ...reviewFindings.filter((finding) => !finding.categoryId)
@@ -1657,12 +1781,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               sectionItems,
               visibleCategories
             };
-          })
-          .filter((section) => section.visibleCategories.length > 0 || section.reviewFindings.length > 0);
-
-        if (sections.length === 0) {
-          return null;
-        }
+          });
 
         return (
           <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
@@ -1710,6 +1829,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                               <p className="text-sm text-slate-700">{finding.description}</p>
                               <div className="min-w-0 space-y-2">
                                 <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                <ReviewFindingValidationSummary finding={finding} />
                                 <ReviewFindingLinks finding={finding} />
                                 {finding.evidence && finding.evidence.length > 0 ? (
                                   <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
@@ -1756,6 +1876,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                     <p className="text-sm text-slate-700">{finding.description}</p>
                                     <div className="min-w-0 space-y-2">
                                       <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                      <ReviewFindingValidationSummary finding={finding} />
                                       <ReviewFindingLinks finding={finding} />
                                       {finding.evidence && finding.evidence.length > 0 ? (
                                         <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
@@ -1764,6 +1885,12 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                   </div>
                                 </div>
                               ))}
+
+                              {allCategoryFindings.length === 0 && normal.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3">
+                                  <p className="text-sm text-slate-600">No material evidence surfaced for this category in this scan.</p>
+                                </div>
+                              ) : null}
 
                               {normal.length > 0 ? (
                                 <div className="grid gap-2 lg:grid-cols-3">
@@ -1956,10 +2083,11 @@ type ScanDetailPageProps = {
 };
 
 export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
-  const [{ scanId }, { organization }] = await Promise.all([params, getDashboardContext()]);
+  const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
   const scanRecord = await getScanById({
     organizationId: organization.id,
-    scanId
+    scanId,
+    viewerEmail: user.email
   });
 
   if (!scanRecord) {
@@ -1970,36 +2098,70 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const isInProgress = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const executionPlan = getExecutionPlan(scanRecord.scan.scanConfigJson);
-  const policyEnrichmentById = new Map(
-    scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row])
-  );
-  const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
-    const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
+  let reviewSectionError: string | null = null;
+  let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
+  let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
+  let policyBehaviorContradictions: PolicyBehaviorContradiction[] = [];
+  let consentAuditFindings: PreviewSampleFinding[] = [];
+  let accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows> = [];
+  let accessibilityRuleEvidenceRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows> = [];
+  let prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows> = [];
+  let taxonomySnapshotSections: Array<{ description: string; fields: string[]; title: string }> = [];
 
-    return {
-      description: formatReviewIssueDescription(String(row.reason ?? "")),
-      key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
-      pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
-      pageUrl: typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string" ? String(enrichment?.pageUrl ?? enrichment?.page_url) : null,
-      reason: String(row.reason ?? ""),
-      reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
-      reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
-      summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
-    };
-  });
-  const preconsentViolationRows = derivePreconsentViolationRows({
-    persistedViolations: scanRecord.preconsentViolations,
-    runtimeArtifacts,
-    trackerVendors: scanRecord.trackerVendors
-  });
-  const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
-    policyEnrichments: scanRecord.policyEnrichment,
-    preconsentViolations: preconsentViolationRows,
-    runtimeArtifacts,
-    snapshot,
-    trackerVendors: scanRecord.trackerVendors
-  });
-  const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
+  try {
+    const policyEnrichmentById = new Map(
+      scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row])
+    );
+    scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
+      const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
+
+      return {
+        description: formatReviewIssueDescription(String(row.reason ?? "")),
+        key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
+        pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
+        pageUrl:
+          typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string"
+            ? String(enrichment?.pageUrl ?? enrichment?.page_url)
+            : null,
+        reason: String(row.reason ?? ""),
+        reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
+        reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
+        summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
+      };
+    });
+    preconsentViolationRows = derivePreconsentViolationRows({
+      persistedViolations: scanRecord.preconsentViolations,
+      runtimeArtifacts,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    policyBehaviorContradictions = derivePolicyBehaviorContradictions({
+      policyEnrichments: scanRecord.policyEnrichment,
+      preconsentViolations: preconsentViolationRows,
+      runtimeArtifacts,
+      snapshot,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
+    accessibilityIssueRows = snapshot ? deriveAccessibilityIssueRows(snapshot) : [];
+    accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
+      examples: scanRecord.accessibilityRuleExamples ?? [],
+      ruleCounts: scanRecord.accessibilityRuleCounts ?? []
+    });
+    prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
+      .sort((left, right) => right.weightedPriority - left.weightedPriority)
+      .slice(0, 6);
+    taxonomySnapshotSections = snapshot
+      ? groupSnapshotFieldsByPrimaryCategory(Object.keys(snapshot)).map((group) => ({
+          title: group.category.label,
+          description: group.category.description,
+          fields: group.entries.map((entry) => entry.key)
+        }))
+      : [];
+  } catch (error) {
+    reviewSectionError = error instanceof Error ? error.message : "Unknown error";
+    console.error("Failed to prepare scan review sections", error);
+  }
+
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
     snapshot?.tracking_before_consent_detected === true ||
@@ -2025,14 +2187,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const consentRejectNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_reject_new_tracker_vendor_names");
   const consentAcceptNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_accept_new_tracker_vendor_names");
   const consentPostAcceptTrackerEvidenceUrls = getRecordStringArray(runtimeArtifacts, "consent_post_accept_tracker_evidence_urls");
-  const accessibilityIssueRows = snapshot ? deriveAccessibilityIssueRows(snapshot) : [];
-  const accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
-    examples: scanRecord.accessibilityRuleExamples ?? [],
-    ruleCounts: scanRecord.accessibilityRuleCounts ?? []
-  });
-  const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
-    .sort((left, right) => right.weightedPriority - left.weightedPriority)
-    .slice(0, 6);
   const privacyLegalSectionScore = averageNumbers([
     getFiniteNumber(snapshot?.privacy_score),
     getFiniteNumber(snapshot?.legal_coverage_score)
@@ -2052,13 +2206,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     getFiniteNumber(snapshot?.accessibility_score),
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
-  const taxonomySnapshotSections = snapshot
-    ? groupSnapshotFieldsByPrimaryCategory(Object.keys(snapshot)).map((group) => ({
-        title: group.category.label,
-        description: group.category.description,
-        fields: group.entries.map((entry) => entry.key)
-      }))
-    : [];
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -2163,12 +2310,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
                     <InfoTip align="start" text="Outcome of the consent interaction audit after attempting a reject path. This shows whether tracking activity actually changed after the choice." />
                   </div>
                 ) : null}
-                {snapshot.cmp_vendor_name ? (
-                  <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700">
-                    <span>CMP {String(snapshot.cmp_vendor_name)}</span>
-                    <InfoTip align="end" text="Consent-management platform vendor detected on the site, based on observed CMP signatures or consent-surface behavior." />
-                  </div>
-                ) : null}
               </div>
 
             </div>
@@ -2177,16 +2318,25 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       ) : null}
 
       {snapshot ? (
-        <CanonicalTaxonomyReview
-          accessibilityIssueRows={accessibilityIssueRows}
-          consentAuditFindings={consentAuditFindings}
-          policyBehaviorContradictions={policyBehaviorContradictions}
-          preconsentViolationRows={preconsentViolationRows}
-          prioritizedAccessibilityRuleRows={prioritizedAccessibilityRuleRows}
-          scanRecord={scanRecord}
-          scanReportReviewIssues={scanReportReviewIssues}
-          snapshot={snapshot}
-        />
+        <>
+          {reviewSectionError ? (
+            <ScanSectionFallback
+              title="Review sections unavailable"
+              message={`The live scan loaded, but the structured review sections could not be prepared for this scan. ${reviewSectionError}`}
+            />
+          ) : (
+            renderCanonicalTaxonomyReviewSafely({
+              accessibilityIssueRows,
+              consentAuditFindings,
+              policyBehaviorContradictions,
+              preconsentViolationRows,
+              prioritizedAccessibilityRuleRows,
+              scanRecord,
+              scanReportReviewIssues,
+              snapshot
+            })
+          )}
+        </>
       ) : null}
 
 

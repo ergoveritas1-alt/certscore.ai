@@ -14,7 +14,7 @@ type PolicyDetectionState = {
 export type DerivedSignalInsert = {
   category: "accessibility" | "privacy" | "disclosure";
   domain_id: string;
-  organization_id: string;
+  organization_id: string | null;
   scan_id: string;
   signal_key: string;
   signal_label: string;
@@ -31,7 +31,7 @@ export type DerivedSnapshotInsert = {
   high_severity_count: number;
   low_severity_count: number;
   medium_severity_count: number;
-  organization_id: string;
+  organization_id: string | null;
   pages_requested: number;
   pages_scanned: number;
   privacy_policy_present: boolean;
@@ -47,7 +47,7 @@ type Input = {
   accessibilityFindings: DerivedFindingRecord[];
   disclosureFindings: DerivedFindingRecord[];
   domainId: string;
-  organizationId: string;
+  organizationId: string | null;
   pagesRequested: number;
   pagesScanned: number;
   policyChecks: Map<PolicyType, { result: PolicyContentCheckResult; scanPageId: string | null }>;

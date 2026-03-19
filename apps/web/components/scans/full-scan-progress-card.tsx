@@ -155,7 +155,8 @@ function buildActivityFeed(input: {
 }
 
 export function FullScanProgressCard({ createdAt, events, status }: FullScanProgressCardProps) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const initialNowMs = Date.parse(events.at(-1)?.createdAt ?? createdAt);
+  const [nowMs, setNowMs] = useState(initialNowMs);
 
   useEffect(() => {
     if (status !== "queued" && status !== "running") {

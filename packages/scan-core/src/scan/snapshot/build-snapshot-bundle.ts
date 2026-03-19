@@ -11,6 +11,7 @@ import {
   type ScanTrackerVendor,
   type SnapshotSignalItem
 } from "@website-signal-risk-scanner/shared";
+import { evaluateBehaviorDisclosure } from "../behavior-disclosure/evaluate";
 import { createBrowser } from "../browser/create-browser";
 import { navigateWithPolicy } from "../browser/navigate-with-policy";
 import { mapAxeImpactToSeverity } from "../page-audit/map-axe-severity";
@@ -2414,31 +2415,57 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       triggerReasonCount: policyLlmTriggerReasons.length
     }
   });
-  const policyEnrichmentBundle = await enrichPolicyPages({
-    scanId: input.scanId,
-    organizationId: input.organizationId,
-    domainId: input.domainId,
-    pages: policyPages,
-    advertisingTrackerCount: trackerSummary.advertisingTrackerCount,
-    sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
-    euExposureLikely: jurisdictionSignals.euExposureLikely,
-    californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
-    allowLlm: !isPreviewScan,
-    archiveSource: null,
-    forceLlm: false,
-    llmTriggerReasons: policyLlmTriggerReasons
-  });
-  await persistBuildPhaseDiagnostic({
-    scanId: input.scanId,
-    domainId: input.domainId,
-    organizationId: input.organizationId,
-    phase: "policy_enrichment",
-    status: "ok",
-    metadata: {
-      diagnosticCount: policyEnrichmentBundle.diagnostics.length,
-      snapshotOverrideKeys: Object.keys(policyEnrichmentBundle.snapshotOverrides ?? {}).length
-    }
-  });
+  const policyEnrichmentTimeoutMs = Math.max(5_000, Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000);
+  let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
+  try {
+    policyEnrichmentBundle = await withStepTimeout(policyEnrichmentTimeoutMs, "Policy enrichment", () =>
+      enrichPolicyPages({
+        scanId: input.scanId,
+        organizationId: input.organizationId,
+        domainId: input.domainId,
+        pages: policyPages,
+        advertisingTrackerCount: trackerSummary.advertisingTrackerCount,
+        sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
+        euExposureLikely: jurisdictionSignals.euExposureLikely,
+        californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
+        allowLlm: !isPreviewScan,
+        archiveSource: null,
+        forceLlm: false,
+        llmTriggerReasons: policyLlmTriggerReasons
+      })
+    );
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "policy_enrichment",
+      status: "ok",
+      metadata: {
+        diagnosticCount: policyEnrichmentBundle.diagnostics.length,
+        snapshotOverrideKeys: Object.keys(policyEnrichmentBundle.snapshotOverrides ?? {}).length
+      }
+    });
+  } catch (error) {
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "policy_enrichment",
+      status: "error",
+      metadata: {
+        message: error instanceof Error ? error.message : "Unknown policy enrichment failure.",
+        timeoutMs: policyEnrichmentTimeoutMs
+      }
+    });
+    policyEnrichmentBundle = {
+      diagnostics: [],
+      enrichments: [],
+      evidences: [],
+      primaryPolicyEnrichmentId: null,
+      reviewQueueItems: [],
+      snapshotOverrides: {}
+    };
+  }
   for (const diagnostic of policyEnrichmentBundle.diagnostics) {
     await persistPolicyLlmDiagnostic({
       scanId: input.scanId,
@@ -3260,6 +3287,69 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       (snapshotWithScores.sessionReplayTrackerCount > 0 ? 10 : 0)
   );
   const compatibilitySignals = projectSnapshotSignals(snapshotWithScores, allTrackers);
+  const sessionReplayDisclosurePages = policyEnrichmentBundle.enrichments
+    .filter((enrichment) =>
+      enrichment.policyMentions.some(
+        (mention) => mention.topic === "session_replay_disclosure" && Number(mention.confidence ?? 0) >= 0.55
+      )
+    )
+    .map((enrichment) => enrichment.pageUrl);
+  const sessionReplayRuntimeVendors = [
+    ...new Set(allTrackers.filter((tracker) => tracker.vendorCategory === "session_replay").map((tracker) => tracker.vendorName))
+  ];
+  const sessionReplayEvaluation = evaluateBehaviorDisclosure({
+    behaviorKey: "session_replay",
+    disclosureEvidence: sessionReplayDisclosurePages,
+    disclosurePresent: sessionReplayDisclosurePages.length > 0,
+    runtimeDetected: snapshotWithScores.sessionReplayToolDetected || snapshotWithScores.sessionReplayTrackerCount > 0,
+    runtimeEvidence: sessionReplayRuntimeVendors,
+    vendors: sessionReplayRuntimeVendors
+  });
+
+  if (sessionReplayEvaluation.runtimeDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.session_replay_runtime_detected",
+        label: "Session replay runtime detected",
+        value: true
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.vendors.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.session_replay_runtime_vendors",
+        label: "Session replay runtime vendors",
+        value: sessionReplayEvaluation.vendors
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.disclosurePresent) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.session_replay_disclosure_present",
+        label: "Session replay disclosure present",
+        value: true
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.disclosureEvidence.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.session_replay_disclosure_pages",
+        label: "Session replay disclosure pages",
+        value: sessionReplayEvaluation.disclosureEvidence
+      })
+    );
+  }
+
   if (runtimeArtifacts.consentAuditCompleted === true) {
     compatibilitySignals.push(
       toTaxonomySignal({

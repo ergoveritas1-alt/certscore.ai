@@ -3,7 +3,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 export type PersistedSignalInsert = {
   category: string;
   domain_id: string;
-  organization_id: string;
+  organization_id: string | null;
   scan_id: string;
   signal_key: string;
   signal_label: string;
