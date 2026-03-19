@@ -113,9 +113,16 @@ const navItems = [
   { href: "/app/settings", label: "Settings", icon: SettingsIcon }
 ] as const;
 
+const validationNavItems = [
+  { href: "/app/validation", label: "Validation", icon: OverviewIcon },
+  { href: "/app/validation/scans", label: "Validation Runs", icon: ScansIcon },
+  { href: "/app/validation/issues", label: "Validation Issues", icon: ShieldIcon }
+] as const;
+
 type AppShellProps = {
   children: ReactNode;
   isPlatformAdmin?: boolean;
+  isValidationAdmin?: boolean;
   organizationName: string;
   plan: string;
   userEmail: string;
@@ -145,7 +152,14 @@ const DEV_INSTANCE_BRANCH = process.env.NEXT_PUBLIC_DEV_GIT_BRANCH;
 const DEV_INSTANCE_PATH = process.env.NEXT_PUBLIC_DEV_WORKTREE_PATH;
 const DEV_INSTANCE_PORT = process.env.NEXT_PUBLIC_DEV_PORT;
 
-export function AppShell({ children, organizationName, plan, userEmail, isPlatformAdmin = false }: AppShellProps) {
+export function AppShell({
+  children,
+  organizationName,
+  plan,
+  userEmail,
+  isPlatformAdmin = false,
+  isValidationAdmin = false
+}: AppShellProps) {
   const pathname = usePathname();
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
@@ -153,9 +167,11 @@ export function AppShell({ children, organizationName, plan, userEmail, isPlatfo
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const scopedNavItems = isPlatformAdmin
-    ? [...navItems, { href: "/app/admin", label: "Admin", icon: ShieldIcon }]
-    : navItems;
+  const scopedNavItems = [
+    ...navItems,
+    ...(isValidationAdmin ? validationNavItems : []),
+    ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
+  ];
 
   useEffect(() => {
     setAccountMenuOpen(false);
