@@ -85,7 +85,7 @@ export type ValidationRunRecord = {
 };
 
 type ScanSignalRow = {
-  category: "accessibility" | "context" | "disclosure" | "privacy";
+  category: string;
   signal_key: string;
   signal_label: string;
   signal_value_json: boolean | number | string | string[] | null;
@@ -127,6 +127,38 @@ type ValidationSnapshotFallbackRow = {
   reject_all_present: boolean;
   third_party_cookie_set_before_consent: boolean | null;
   tracking_before_consent_detected: boolean | null;
+};
+
+type SnapshotSupplementRow = {
+  accessibility_litigation_risk_score: number | null;
+  retargeting_pixel_detected: boolean | null;
+};
+
+type PolicyReviewQueueRow = {
+  id: string;
+  policy_enrichment_id: string | null;
+  reason: string;
+  review_status: string | null;
+  scan_id: string;
+};
+
+type PolicyEnrichmentLookupRow = {
+  id: string;
+  policy_ambiguity_score?: number | null;
+  policy_coverage_ratio?: number | null;
+  policy_effective_date?: string | null;
+  policy_field_coverage?: Record<string, unknown>;
+  policy_governing_law?: string | null;
+  policy_notice_contact_present?: boolean | null;
+  page_type: string | null;
+  page_url: string | null;
+  policy_semantic_confidence?: number | null;
+  policy_snippet_count?: number | null;
+  policy_structurally_weak?: boolean | null;
+  policy_summary_short?: string | null;
+  policy_termination_or_suspension_present?: boolean | null;
+  policy_cancellation_or_refund_present?: boolean | null;
+  policy_arbitration_present?: boolean | null;
 };
 
 export type ValidationRunFindingInsert = {
@@ -310,7 +342,13 @@ function isGenericValidationConcernSignal(row: ScanSignalRow) {
     /preconsent/,
     /conflict/,
     /mismatch/,
+    /retargeting_pixel/,
     /session_replay/,
+    /functional_misalignment/,
+    /technical_disclosure/,
+    /disclosure_gap/,
+    /structurally_obstructed/,
+    /likely_obstructed/,
     /high_sensitivity_data_collection_detected/,
     /limited_time_offer_language_present/,
     /discount_claim_present/,
@@ -332,15 +370,19 @@ function isGenericValidationConcernSignal(row: ScanSignalRow) {
 }
 
 function getGenericValidationFindingSeverity(row: ScanSignalRow): FindingSeverity {
-  if (/preconsent|session_replay|conflict|mismatch/i.test(row.signal_key)) {
+  if (/preconsent|session_replay|conflict|mismatch|functional_misalignment|technical_disclosure|disclosure_gap/i.test(row.signal_key)) {
     return "high";
+  }
+
+  if (/structurally_obstructed|likely_obstructed/i.test(row.signal_key)) {
+    return "medium";
   }
 
   if (typeof row.signal_value_json === "number" && /risk_score|ambiguity_score|friction_score/i.test(row.signal_key)) {
     return row.signal_value_json >= 70 ? "high" : "medium";
   }
 
-  if (/store_credit_only|termination_for_cause|service_suspension_or_termination|high_sensitivity_data_collection_detected/i.test(row.signal_key)) {
+  if (/store_credit_only|termination_for_cause|service_suspension_or_termination|high_sensitivity_data_collection_detected|retargeting_pixel/i.test(row.signal_key)) {
     return "medium";
   }
 
@@ -352,26 +394,59 @@ function mapScanSignalCategoryToFindingCategory(row: ScanSignalRow): FindingCate
     return "legal";
   }
 
-  if (row.category === "context") {
+  if (row.category === "context" || row.category === "commerce" || row.category === "security") {
     return "privacy";
   }
 
-  return row.category;
+  return row.category === "accessibility" ? "accessibility" : "privacy";
+}
+
+function getGenericValidationFindingTitle(row: ScanSignalRow) {
+  if (row.signal_key === "privacy.policy_runtime_functional_misalignment_detected") {
+    return "High-confidence functional misalignment";
+  }
+
+  if (row.signal_key === "disclosure.policy_runtime_missing_technical_disclosure_detected") {
+    return "Missing technical disclosure";
+  }
+
+  if (row.signal_key === "disclosure.policy_runtime_disclosure_likely_obstructed") {
+    return "Disclosure likely obstructed";
+  }
+
+  if (row.signal_key === "privacy.cookie_runtime_disclosure_gap_detected") {
+    return "Cookie disclosure gap";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_structurally_obstructed") {
+    return "Cookie policy structurally obstructed";
+  }
+
+  if (row.signal_key === "privacy.user_rights_friction_score" && typeof row.signal_value_json === "number") {
+    return row.signal_value_json >= 100 ? "Critical user-rights fulfillment friction" : "High user-rights fulfillment friction";
+  }
+
+  if (row.signal_key === "accessibility.accessibility_risk_score" && typeof row.signal_value_json === "number") {
+    return "Elevated accessibility risk score";
+  }
+
+  return row.signal_label;
 }
 
 function buildGenericValidationFinding(row: ScanSignalRow): ValidationFindingDefinition {
+  const title = getGenericValidationFindingTitle(row);
   return {
     buildEvidence: () =>
       buildDefaultEvidencePacket(
         row,
-        `${row.signal_label} was elevated during the scan and merits reviewer attention.`
+        `${title} was elevated during the scan and merits reviewer attention.`
       ),
     category: mapScanSignalCategoryToFindingCategory(row),
-    description: `${row.signal_label} was elevated during the scan and merits reviewer attention.`,
+    description: `${title} was elevated during the scan and merits reviewer attention.`,
     ruleKey: `scan_signal.${row.signal_key}`,
     severity: getGenericValidationFindingSeverity(row),
     subtype: "scan_signal_review",
-    title: row.signal_label
+    title
   } satisfies ValidationFindingDefinition;
 }
 
@@ -411,6 +486,34 @@ function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): Validati
       }
     ]
   };
+}
+
+function normalizePolicyPageTypeLabel(pageType: string | null) {
+  switch (pageType) {
+    case "privacy_policy":
+      return "Privacy Policy";
+    case "terms_of_service":
+      return "TOS";
+    case "cookie_policy":
+      return "Cookie Policy";
+    default:
+      return "Policy";
+  }
+}
+
+function buildPolicyReviewDescription(reason: string) {
+  switch (reason) {
+    case "policy_behavior_conflict_candidate":
+      return "Observed site behavior may conflict with the site’s public-facing policy language.";
+    case "session_replay_without_disclosure_detected":
+      return "Session replay behavior may be present without a clear matching disclosure in the scanned policy pages.";
+    case "missing_dsar_high_exposure":
+      return "The site may have elevated exposure while still lacking a clear DSAR path in policy disclosures.";
+    case "low_confidence_critical_fields":
+      return "Critical policy extraction fields were low confidence and need manual review in the scan report.";
+    default:
+      return `This issue was added to the scan report review queue under ${reason.replaceAll("_", " ")}.`;
+  }
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -1332,28 +1435,41 @@ export async function insertValidationScanEvent(input: {
 
 export async function loadRankableFindings(scanId: string) {
   const supabase = createAdminClient();
-  const [{ data: signalRows, error }, { data: snapshot, error: snapshotError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] =
-    await Promise.all([
-      supabase
-        .from("scan_signals")
-        .select("category, signal_key, signal_label, signal_value_json, value_type")
-        .eq("scan_id", scanId)
-        .in("category", ["accessibility", "context", "disclosure", "privacy"]),
-      supabase
-        .from("scan_snapshots")
-        .select(
-          "cmp_vendor_name, consent_withdrawal_mechanism_present, cookie_banner_present, dark_pattern_reject_button_missing, legal_coverage_score, preconsent_tracking_detected, privacy_policy_present, privacy_policy_word_count, reject_all_present, third_party_cookie_set_before_consent, tracking_before_consent_detected"
-        )
-        .eq("scan_id", scanId)
-        .maybeSingle(),
-      supabase
-        .from("scan_runtime_artifacts")
-        .select(
-          "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, third_party_request_domains, script_src_domains"
-        )
-        .eq("scan_id", scanId)
-        .maybeSingle()
-    ]);
+  const [
+    { data: signalRows, error },
+    { data: snapshot, error: snapshotError },
+    { data: runtimeArtifacts, error: runtimeArtifactsError },
+    { data: snapshotSupplements, error: snapshotSupplementError },
+    { data: policyQueue, error: policyQueueError }
+  ] = await Promise.all([
+    supabase
+      .from("scan_signals")
+      .select("category, signal_key, signal_label, signal_value_json, value_type")
+      .eq("scan_id", scanId),
+    supabase
+      .from("scan_snapshots")
+      .select(
+        "cmp_vendor_name, consent_withdrawal_mechanism_present, cookie_banner_present, dark_pattern_reject_button_missing, legal_coverage_score, preconsent_tracking_detected, privacy_policy_present, privacy_policy_word_count, reject_all_present, third_party_cookie_set_before_consent, tracking_before_consent_detected"
+      )
+      .eq("scan_id", scanId)
+      .maybeSingle(),
+    supabase
+      .from("scan_runtime_artifacts")
+      .select(
+        "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, third_party_request_domains, script_src_domains"
+      )
+      .eq("scan_id", scanId)
+      .maybeSingle(),
+    supabase
+      .from("scan_snapshots")
+      .select("retargeting_pixel_detected, accessibility_litigation_risk_score")
+      .eq("scan_id", scanId)
+      .maybeSingle(),
+    supabase
+      .from("policy_review_queue")
+      .select("id, policy_enrichment_id, reason, review_status, scan_id")
+      .eq("scan_id", scanId)
+  ]);
 
   if (error) {
     throw new Error(`Failed to load validation findings for scan ${scanId}: ${error.message}`);
@@ -1365,6 +1481,14 @@ export async function loadRankableFindings(scanId: string) {
 
   if (runtimeArtifactsError) {
     throw new Error(`Failed to load validation runtime context for scan ${scanId}: ${runtimeArtifactsError.message}`);
+  }
+
+  if (snapshotSupplementError) {
+    throw new Error(`Failed to load validation snapshot supplements for scan ${scanId}: ${snapshotSupplementError.message}`);
+  }
+
+  if (policyQueueError) {
+    throw new Error(`Failed to load validation policy review queue for scan ${scanId}: ${policyQueueError.message}`);
   }
 
   const rows = (signalRows ?? []) as ScanSignalRow[];
@@ -1420,6 +1544,125 @@ export async function loadRankableFindings(scanId: string) {
       subtype: definition.subtype,
       title: definition.title
     });
+  }
+
+  const queueRows = (policyQueue ?? []) as PolicyReviewQueueRow[];
+  const enrichmentIds = queueRows
+    .map((row) => row.policy_enrichment_id)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  let policyEnrichmentRows: PolicyEnrichmentLookupRow[] = [];
+  if (enrichmentIds.length > 0) {
+    const { data: enrichmentRows, error: enrichmentError } = await supabase
+      .from("policy_enrichment")
+      .select("id, page_type, page_url, policy_ambiguity_score, policy_arbitration_present, policy_cancellation_or_refund_present, policy_coverage_ratio, policy_effective_date, policy_field_coverage, policy_governing_law, policy_notice_contact_present, policy_semantic_confidence, policy_snippet_count, policy_structurally_weak, policy_summary_short, policy_termination_or_suspension_present")
+      .in("id", enrichmentIds);
+
+    if (enrichmentError) {
+      throw new Error(`Failed to load validation policy enrichment for scan ${scanId}: ${enrichmentError.message}`);
+    }
+
+    policyEnrichmentRows = (enrichmentRows ?? []) as PolicyEnrichmentLookupRow[];
+  }
+
+  const existingRuleKeys = new Set(findings.map((finding) => finding.rule_key));
+  const existingTitles = new Set(findings.map((finding) => finding.title.trim().toLowerCase()));
+
+  for (const row of queueRows) {
+    const enrichment = row.policy_enrichment_id
+      ? policyEnrichmentRows.find((candidate) => candidate.id === row.policy_enrichment_id)
+      : undefined;
+    const pageType = enrichment?.page_type ?? "unknown";
+    const pageTypeLabel = normalizePolicyPageTypeLabel(pageType);
+    const title =
+      row.reason === "low_confidence_critical_fields"
+        ? `Low-confidence extraction ${pageTypeLabel}`
+        : `${row.reason.replaceAll("_", " ")} ${pageTypeLabel}`.replace(/\b\w/g, (char) => char.toUpperCase());
+    const ruleKey = `policy_review.${row.reason}.${String(pageType).toLowerCase()}`;
+
+    if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.trim().toLowerCase())) {
+      continue;
+    }
+
+    findings.push({
+      category: "legal",
+      description: buildPolicyReviewDescription(row.reason),
+      evidence_json: {
+        pageType: enrichment?.page_type ?? null,
+        pageUrl: enrichment?.page_url ?? null,
+        policyEnrichmentId: row.policy_enrichment_id,
+        policyAmbiguityScore: enrichment?.policy_ambiguity_score ?? null,
+        policyArbitrationPresent: enrichment?.policy_arbitration_present ?? null,
+        policyCancellationOrRefundPresent: enrichment?.policy_cancellation_or_refund_present ?? null,
+        policyCoverageRatio: enrichment?.policy_coverage_ratio ?? null,
+        policyEffectiveDate: enrichment?.policy_effective_date ?? null,
+        policyFieldCoverage: enrichment?.policy_field_coverage ?? {},
+        policyGoverningLaw: enrichment?.policy_governing_law ?? null,
+        policyNoticeContactPresent: enrichment?.policy_notice_contact_present ?? null,
+        reviewQueueReason: row.reason,
+        reviewStatus: row.review_status,
+        policySemanticConfidence: enrichment?.policy_semantic_confidence ?? null,
+        policySnippetCount: enrichment?.policy_snippet_count ?? null,
+        policyStructurallyWeak: enrichment?.policy_structurally_weak ?? null,
+        policySummaryShort: enrichment?.policy_summary_short ?? null,
+        policyTerminationOrSuspensionPresent: enrichment?.policy_termination_or_suspension_present ?? null
+      },
+      finding_id: null,
+      page_url: enrichment?.page_url ?? null,
+      rule_key: ruleKey,
+      severity: row.reason === "policy_behavior_conflict_candidate" ? "high" : "medium",
+      subtype: "policy_review_queue",
+      title
+    });
+    existingRuleKeys.add(ruleKey);
+    existingTitles.add(title.trim().toLowerCase());
+  }
+
+  const snapshotSupplement = (snapshotSupplements as SnapshotSupplementRow | null) ?? null;
+  if (snapshotSupplement?.retargeting_pixel_detected === true) {
+    const title = "Retargeting pixel detected";
+    const ruleKey = "scan_snapshot.commerce.retargeting_pixel_detected";
+
+    if (!existingRuleKeys.has(ruleKey) && !existingTitles.has(title.toLowerCase())) {
+      findings.push({
+        category: "privacy",
+        description: "Advertising or retargeting technology appears to be active and merits direct review.",
+        evidence_json: {
+          snapshotField: "retargeting_pixel_detected",
+          value: true
+        },
+        finding_id: null,
+        page_url: null,
+        rule_key: ruleKey,
+        severity: "high",
+        subtype: "snapshot_review",
+        title
+      });
+      existingRuleKeys.add(ruleKey);
+      existingTitles.add(title.toLowerCase());
+    }
+  }
+
+  if (typeof snapshotSupplement?.accessibility_litigation_risk_score === "number") {
+    const title = "Accessibility risk score";
+    const ruleKey = "scan_snapshot.accessibility.accessibility_risk_score";
+
+    if (!existingRuleKeys.has(ruleKey) && !existingTitles.has(title.toLowerCase())) {
+      findings.push({
+        category: "accessibility",
+        description: "Scanner-derived risk indicator is elevated.",
+        evidence_json: {
+          snapshotField: "accessibility_litigation_risk_score",
+          value: snapshotSupplement.accessibility_litigation_risk_score
+        },
+        finding_id: null,
+        page_url: null,
+        rule_key: ruleKey,
+        severity: "medium",
+        subtype: "snapshot_review",
+        title
+      });
+    }
   }
 
   return findings.filter((finding, index, allFindings) => {
