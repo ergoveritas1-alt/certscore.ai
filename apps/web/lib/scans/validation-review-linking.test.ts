@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildValidationFindingLookup, findValidationFindingForKeys, type ScanValidationFinding } from "./validation-review-linking";
+import {
+  buildValidationFindingLookup,
+  findValidationFindingForKeys,
+  getValidationMatchKeysForTitle,
+  type ScanValidationFinding
+} from "./validation-review-linking";
 
 function makeFinding(input: Partial<ScanValidationFinding> & Pick<ScanValidationFinding, "id" | "ruleKey" | "title">): ScanValidationFinding {
   return {
@@ -48,4 +53,13 @@ test("findValidationFindingForKeys returns the first matched rule key", () => {
     findValidationFindingForKeys(lookup, ["privacy.trackers_before_consent_detected", "privacy.session_replay_without_disclosure_detected"])?.id,
     "c"
   );
+});
+
+test("getValidationMatchKeysForTitle maps low-confidence extraction title variants", () => {
+  assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence policy extraction"), [
+    "scan_report_review.low_confidence_critical_fields"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence extraction Privacy Policy"), [
+    "scan_report_review.low_confidence_critical_fields"
+  ]);
 });
