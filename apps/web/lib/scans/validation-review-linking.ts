@@ -1,8 +1,21 @@
-export type ScanValidationFindingSummary = {
+export type ScanValidationFinding = {
+  category: string | null;
+  description: string | null;
+  evidence: Record<string, unknown> | null;
+  findingFamily: string | null;
+  findingScope: string | null;
+  findingSource: string | null;
+  findingSubject: string | null;
+  id: string;
   agreementScore: number | null;
   modelConfidence: number | null;
+  model: string | null;
+  pageUrl: string | null;
+  promptVersion: string | null;
   rationale: string | null;
   ruleKey: string;
+  severity: string | null;
+  subtype: string | null;
   systemConfidenceBand: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
   systemConfidenceExplanation: string | null;
   systemConfidenceScore: number | null;
@@ -46,8 +59,8 @@ export function getValidationMatchKeysForTitle(title: string) {
   return TITLE_TO_VALIDATION_RULE_KEYS[normalizeFindingTitle(title)] ?? [];
 }
 
-export function buildValidationFindingLookup(findings: ScanValidationFindingSummary[]) {
-  const lookup = new Map<string, ScanValidationFindingSummary>();
+export function buildValidationFindingLookup(findings: ScanValidationFinding[]) {
+  const lookup = new Map<string, ScanValidationFinding>();
 
   for (const finding of findings) {
     const existing = lookup.get(finding.ruleKey);
@@ -69,7 +82,7 @@ export function buildValidationFindingLookup(findings: ScanValidationFindingSumm
 }
 
 export function findValidationFindingForKeys(
-  lookup: Map<string, ScanValidationFindingSummary>,
+  lookup: Map<string, ScanValidationFinding>,
   ruleKeys: string[]
 ) {
   for (const ruleKey of ruleKeys) {

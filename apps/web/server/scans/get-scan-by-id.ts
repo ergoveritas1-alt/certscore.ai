@@ -2,7 +2,7 @@
 
 import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
-import type { ScanValidationFindingSummary } from "../../lib/scans/validation-review-linking";
+import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
@@ -127,7 +127,7 @@ export type AccessibilityRuleExampleRecord = {
   severity: string;
 };
 
-export type ScanValidationFindingRecord = ScanValidationFindingSummary;
+export type ScanValidationFindingRecord = ScanValidationFinding;
 
 type ScanRow = {
   completed_at: string | null;
@@ -201,9 +201,47 @@ type AccessibilityRuleExampleRow = {
 };
 
 type ValidationRunFindingRow = {
+  category: string | null;
+  description: string | null;
+  evidence_json: Record<string, unknown> | null;
+  finding_family: string | null;
+  finding_scope: string | null;
+  finding_source: string | null;
+  finding_subject: string | null;
   id: string;
   rule_key: string;
+  severity: string | null;
+  subtype: string | null;
   title: string;
+  page_url: string | null;
+  validation_verdicts:
+    | {
+        agreement_score: number | null;
+        confidence: number | null;
+        created_at: string | null;
+        evidence_json: Record<string, unknown> | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }
+    | Array<{
+        agreement_score: number | null;
+        confidence: number | null;
+        created_at: string | null;
+        evidence_json: Record<string, unknown> | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }>
+    | null;
 };
 
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
@@ -416,7 +454,9 @@ export async function getScanById(input: { organizationId: string; scanId: strin
   if (validationRunId) {
     const { data: validationFindingRows, error: validationFindingsError } = await supabase
       .from("validation_run_findings")
-      .select("id, rule_key, title")
+      .select(
+        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+      )
       .eq("validation_run_id", validationRunId)
       .order("finding_rank", { ascending: true });
 
@@ -427,16 +467,36 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     const findingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
 
     validationFindings = findingRows.map((row) => {
+      const verdictRows = Array.isArray(row.validation_verdicts)
+        ? row.validation_verdicts
+        : row.validation_verdicts
+          ? [row.validation_verdicts]
+          : [];
+      const verdict = verdictRows[0];
+
       return {
-        agreementScore: null,
-        modelConfidence: null,
-        rationale: null,
+        agreementScore: verdict?.agreement_score ?? null,
+        category: row.category,
+        description: row.description,
+        evidence: row.evidence_json ?? null,
+        findingFamily: row.finding_family,
+        findingScope: row.finding_scope,
+        findingSource: row.finding_source,
+        findingSubject: row.finding_subject,
+        id: row.id,
+        model: verdict?.model ?? null,
+        modelConfidence: verdict?.confidence ?? null,
+        pageUrl: row.page_url,
+        promptVersion: verdict?.prompt_version ?? null,
+        rationale: verdict?.rationale ?? null,
         ruleKey: row.rule_key,
-        systemConfidenceBand: null,
-        systemConfidenceExplanation: null,
-        systemConfidenceScore: null,
+        severity: row.severity,
+        subtype: row.subtype,
+        systemConfidenceBand: verdict?.system_confidence_band ?? null,
+        systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
+        systemConfidenceScore: verdict?.system_confidence_score ?? null,
         title: row.title,
-        verdict: null
+        verdict: verdict?.verdict ?? null
       } satisfies ScanValidationFindingRecord;
     });
   }

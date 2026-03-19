@@ -15,13 +15,16 @@ import { FullScanProgressCard } from "../../../../components/scans/full-scan-pro
 import { InfoTip } from "../../../../components/scans/info-tip";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
+  buildCanonicalReviewFindingPresentation,
+  type CanonicalReviewFindingPresentation
+} from "../../../../lib/scans/canonical-review-finding";
+import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
   getValidationMatchKeysForSignal,
   getValidationMatchKeysForTitle,
-  type ScanValidationFindingSummary
+  type ScanValidationFinding
 } from "../../../../lib/scans/validation-review-linking";
-import { getReviewFindingNextStep, getReviewFindingReference } from "../../../../lib/scans/review-finding-presentation";
 import {
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
@@ -959,15 +962,15 @@ type CanonicalReviewFinding = {
   description: string;
   evidence?: string[];
   id: string;
-  nextStep: string;
+  linkedValidationFinding?: ScanValidationFinding | null;
   observedValue: string | null;
+  presentation: CanonicalReviewFindingPresentation;
   referenceLabel?: string;
   referenceUrl?: string;
   severity: "high" | "medium" | "low";
   sourceLabel?: string;
   sourceUrl?: string;
   title: string;
-  validationSummary?: ScanValidationFindingSummary | null;
 };
 
 type ScanRecordData = NonNullable<Awaited<ReturnType<typeof getScanById>>>;
@@ -1374,7 +1377,7 @@ function buildReviewFindings(input: {
   issues: CanonicalReviewIssue[];
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
-  validationFindingLookup?: Map<string, ScanValidationFindingSummary>;
+  validationFindingLookup?: Map<string, ScanValidationFinding>;
 }) {
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
     .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
@@ -1382,14 +1385,16 @@ function buildReviewFindings(input: {
       categoryId: input.categoryId,
       description: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention.",
       id: `${input.sectionId}-signal-${item.key}`,
-      nextStep: getReviewFindingNextStep({ keyOrTitle: item.key, findingTitle: item.label }),
-      observedValue: formatCompactValue(item.value),
-      referenceLabel: getReviewFindingReference({ keyOrTitle: item.key, findingTitle: item.label })?.label,
-      referenceUrl: getReviewFindingReference({ keyOrTitle: item.key, findingTitle: item.label })?.url,
-      severity: getSignalFindingSeverity(item.key, item.value),
-      validationSummary: input.validationFindingLookup
+      linkedValidationFinding: input.validationFindingLookup
         ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
         : null,
+      observedValue: formatCompactValue(item.value),
+      presentation: {
+        findingName: item.label,
+        suggestedFix: "Review the flagged evidence in this section and confirm whether the signal needs follow-up.",
+        whyThisMatters: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention."
+      },
+      severity: getSignalFindingSeverity(item.key, item.value),
       title: item.label
     }));
 
@@ -1398,22 +1403,53 @@ function buildReviewFindings(input: {
     description: issue.description,
     evidence: issue.evidence,
     id: `${input.sectionId}-issue-${index}`,
-    nextStep: getReviewIssueNextStep(issue),
+    linkedValidationFinding: input.validationFindingLookup
+      ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForTitle(issue.title))
+      : null,
     observedValue: issue.evidence && issue.evidence.length > 0 ? summarizeReviewIssueEvidence(issue.evidence) : `${issue.severity} severity`,
-    referenceLabel: getReviewFindingReference({ keyOrTitle: issue.title, findingTitle: issue.title })?.label,
-    referenceUrl: getReviewFindingReference({ keyOrTitle: issue.title, findingTitle: issue.title })?.url,
+    presentation: {
+      findingName: issue.title,
+      suggestedFix: getReviewIssueNextStep(issue),
+      whyThisMatters: issue.description
+    },
     severity: issue.severity,
     sourceLabel: getFindingSourceLabel(issue.evidence),
     sourceUrl: getFindingSourceUrl(issue.evidence),
-    title: issue.title,
-    validationSummary: input.validationFindingLookup
-      ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForTitle(issue.title))
-      : null
+    title: issue.title
   }));
 
-  return [...signalFindings, ...issueFindings].sort(
+  return enrichReviewFindingsPresentation([...signalFindings, ...issueFindings]).sort(
     (left, right) => severityRank(left.severity) - severityRank(right.severity) || left.title.localeCompare(right.title)
   );
+}
+
+function enrichReviewFindingsPresentation(findings: CanonicalReviewFinding[]) {
+  return findings.map((finding) => {
+    const siblingFindings = findings.filter((candidate) => candidate.id !== finding.id);
+    const presentation = buildCanonicalReviewFindingPresentation(
+      {
+        evidence: finding.evidence,
+        linkedValidationFinding: finding.linkedValidationFinding,
+        observedValue: finding.observedValue,
+        severity: finding.severity,
+        title: finding.title
+      },
+      siblingFindings.map((candidate) => ({
+        evidence: candidate.evidence,
+        linkedValidationFinding: candidate.linkedValidationFinding,
+        observedValue: candidate.observedValue,
+        severity: candidate.severity,
+        title: candidate.title
+      }))
+    );
+
+    return {
+      ...finding,
+      presentation,
+      referenceLabel: presentation.suggestedBestPractice?.label,
+      referenceUrl: presentation.suggestedBestPractice?.url
+    };
+  });
 }
 
 function getDefaultIssueCategoryId(sectionId: string) {
@@ -1472,7 +1508,11 @@ function getFindingSourceLabel(evidence?: string[]) {
 }
 
 function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
-  if (!input.finding.sourceUrl && !input.finding.referenceUrl) {
+  const shouldShowReferenceLink =
+    input.finding.referenceUrl &&
+    input.finding.referenceUrl !== input.finding.presentation.suggestedBestPractice?.url;
+
+  if (!input.finding.sourceUrl && !shouldShowReferenceLink) {
     return null;
   }
 
@@ -1489,9 +1529,9 @@ function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
           <span>{input.finding.sourceLabel ?? "Source"}</span>
         </Link>
       ) : null}
-      {input.finding.referenceUrl ? (
+      {shouldShowReferenceLink ? (
         <Link
-          href={input.finding.referenceUrl}
+          href={input.finding.referenceUrl!}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
@@ -1500,6 +1540,68 @@ function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
           <span>{input.finding.referenceLabel ?? "Reference"}</span>
         </Link>
       ) : null}
+    </div>
+  );
+}
+
+function formatValidationSupport(finding: CanonicalReviewFinding) {
+  if (!finding.linkedValidationFinding) {
+    return null;
+  }
+
+  const parts = [
+    finding.linkedValidationFinding.verdict ? `Validation ${finding.linkedValidationFinding.verdict.replaceAll("_", " ")}` : null,
+    finding.linkedValidationFinding.agreementScore !== null ? `agreement ${finding.linkedValidationFinding.agreementScore}` : null,
+    finding.linkedValidationFinding.systemConfidenceBand
+      ? `system confidence ${finding.linkedValidationFinding.systemConfidenceBand.replaceAll("_", " ")}`
+      : null
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function ReviewFindingCard(input: { finding: CanonicalReviewFinding }) {
+  const validationSupport = formatValidationSupport(input.finding);
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+      <div className="grid gap-4 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
+        <div className="min-w-0 space-y-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">{input.finding.presentation.findingName}</p>
+            <p className="mt-1 text-sm text-slate-700">{input.finding.observedValue ?? `${input.finding.severity} severity`}</p>
+          </div>
+          {input.finding.presentation.confidenceScore ? (
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Confidence {input.finding.presentation.confidenceScore}</p>
+          ) : null}
+          {validationSupport ? <p className="text-xs text-slate-500">{validationSupport}</p> : null}
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why It Matters</p>
+          <p className="text-sm text-slate-700">{input.finding.presentation.whyThisMatters}</p>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Suggested Fix</p>
+            <p className="text-sm text-slate-700">{input.finding.presentation.suggestedFix}</p>
+          </div>
+          {input.finding.presentation.suggestedBestPractice ? (
+            <Link
+              href={input.finding.presentation.suggestedBestPractice.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
+            >
+              <span>↗</span>
+              <span>{input.finding.presentation.suggestedBestPractice.label}</span>
+            </Link>
+          ) : null}
+          <ReviewFindingLinks finding={input.finding} />
+          {input.finding.evidence && input.finding.evidence.length > 0 ? (
+            <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(input.finding.evidence)}</p>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1665,7 +1767,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                         reviewFindings.map((finding) => (
                           <div key={`${section.id}-${finding.id}-summary`} className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1">
                             <p className="truncate text-xs font-semibold text-slate-950">
-                              {formatReviewFindingSummaryTitle(finding.title)} {formatReviewFindingSummaryValue(finding.observedValue)}
+                              {formatReviewFindingSummaryTitle(finding.presentation.findingName)} {formatReviewFindingSummaryValue(finding.observedValue)}
                             </p>
                           </div>
                         ))
@@ -1679,25 +1781,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                     <div className="space-y-3">
                       <div className="space-y-3">
                         {sectionLevelFindings.map((finding) => (
-                          <div
-                            key={finding.id}
-                            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3"
-                          >
-                            <div className="grid gap-3 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-950">{finding.title}</p>
-                                <p className="mt-1 text-sm text-slate-700">{finding.observedValue ?? `${finding.severity} severity`}</p>
-                              </div>
-                              <p className="text-sm text-slate-700">{finding.description}</p>
-                              <div className="min-w-0 space-y-2">
-                                <p className="text-sm text-slate-700">{finding.nextStep}</p>
-                                <ReviewFindingLinks finding={finding} />
-                                {finding.evidence && finding.evidence.length > 0 ? (
-                                  <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
+                          <ReviewFindingCard key={finding.id} finding={finding} />
                         ))}
                       </div>
                     </div>
@@ -1725,25 +1809,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                           return (
                             <div className="mt-4 space-y-3">
                               {allCategoryFindings.map((finding) => (
-                                <div
-                                  key={finding.id}
-                                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3"
-                                >
-                                  <div className="grid gap-3 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-semibold text-slate-950">{finding.title}</p>
-                                      <p className="mt-1 text-sm text-slate-700">{finding.observedValue ?? `${finding.severity} severity`}</p>
-                                    </div>
-                                    <p className="text-sm text-slate-700">{finding.description}</p>
-                                    <div className="min-w-0 space-y-2">
-                                      <p className="text-sm text-slate-700">{finding.nextStep}</p>
-                                      <ReviewFindingLinks finding={finding} />
-                                      {finding.evidence && finding.evidence.length > 0 ? (
-                                        <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
+                                <ReviewFindingCard key={finding.id} finding={finding} />
                               ))}
 
                               {allCategoryFindings.length === 0 && normal.length === 0 ? (
