@@ -23,8 +23,13 @@ export function EmailVerificationCard({ email, verifiedAt }: EmailVerificationCa
           <p>
             Verified on{" "}
             {new Intl.DateTimeFormat("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short"
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+              timeZoneName: "short"
             }).format(new Date(verifiedAt))}
             .
           </p>

@@ -21,7 +21,6 @@ function formatDateTime(value: string | null) {
   }
 
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles",
     month: "short",
     day: "numeric",
     year: "numeric",

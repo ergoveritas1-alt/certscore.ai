@@ -8,8 +8,13 @@ function formatDateTime(value: string | null) {
   }
 
   return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short"
   }).format(new Date(value));
 }
 
