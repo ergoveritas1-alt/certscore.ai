@@ -5,6 +5,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
 
 export type ScanDetailRecord = {
   id: string;
@@ -250,14 +251,30 @@ function mergeRelatedPreviewSnapshot(
   return merged;
 }
 
-export async function getScanById(input: { organizationId: string; scanId: string }) {
+export async function getScanById(input: { organizationId: string; scanId: string; viewerEmail?: string | null }) {
   const supabase = createAdminClient();
-  const { data: scan, error } = await supabase
-    .from("scans")
-    .select("id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
-    .eq("id", input.scanId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
+  const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
+
+  const loadScan = async (organizationId: string | null) => {
+    let query = supabase
+      .from("scans")
+      .select("id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
+      .eq("id", input.scanId);
+
+    query = organizationId === null ? query.is("organization_id", null) : query.eq("organization_id", organizationId);
+
+    return query.maybeSingle();
+  };
+
+  const primaryScanResult = await loadScan(input.organizationId);
+  let scan = primaryScanResult.data;
+  let error = primaryScanResult.error;
+
+  if (!scan && !error && adminCanViewAnonymousScans) {
+    const anonymousScanResult = await loadScan(null);
+    scan = anonymousScanResult.data;
+    error = anonymousScanResult.error;
+  }
 
   if (error) {
     throw new Error(`Failed to load scan: ${error.message}`);
@@ -269,24 +286,26 @@ export async function getScanById(input: { organizationId: string; scanId: strin
 
   const scanRow = scan as ScanRow;
   let domainHostname: string | null = null;
+  const scanOrganizationId = (scanRow as ScanRow & { organization_id?: string | null }).organization_id ?? null;
 
   if (scanRow.domain_id) {
-    const { data: domain } = await supabase
-      .from("domains")
-      .select("id, hostname")
-      .eq("id", scanRow.domain_id)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle();
+    let domainQuery = supabase.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
+    domainQuery =
+      scanOrganizationId === null && adminCanViewAnonymousScans
+        ? domainQuery.is("organization_id", null)
+        : domainQuery.eq("organization_id", input.organizationId);
+
+    const { data: domain } = await domainQuery.maybeSingle();
 
     domainHostname = (domain as DomainRow | null)?.hostname ?? null;
   }
 
   const previousScanPromise =
-    scanRow.domain_id
+    scanRow.domain_id && scanOrganizationId !== null
       ? supabase
           .from("scans")
           .select("id")
-          .eq("organization_id", input.organizationId)
+          .eq("organization_id", scanOrganizationId)
           .eq("domain_id", scanRow.domain_id)
           .eq("status", "completed")
           .lt("created_at", scanRow.created_at)

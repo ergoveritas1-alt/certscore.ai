@@ -92,6 +92,18 @@ type ScanSignalRow = {
   value_type: "boolean" | "number" | "text" | "string_array";
 };
 
+type ValidationSnapshotFallbackRow = {
+  cookie_banner_present: boolean;
+  dark_pattern_reject_button_missing: boolean;
+  legal_coverage_score: number | null;
+  preconsent_tracking_detected: boolean;
+  privacy_policy_present: boolean;
+  privacy_policy_word_count: number | null;
+  reject_all_present: boolean;
+  third_party_cookie_set_before_consent: boolean | null;
+  tracking_before_consent_detected: boolean | null;
+};
+
 export type ValidationRunFindingInsert = {
   category: FindingCategory;
   description: string;
@@ -106,6 +118,12 @@ export type ValidationRunFindingInsert = {
 };
 
 export type ValidationRunFindingRow = ValidationRunFindingInsert & {
+  id: string;
+  validation_run_id: string;
+};
+
+type ValidationRunFindingDbRow = Omit<ValidationRunFindingInsert, "rank"> & {
+  finding_rank: number;
   id: string;
   validation_run_id: string;
 };
@@ -175,6 +193,82 @@ function isActiveSignalValue(value: ScanSignalRow["signal_value_json"], valueTyp
   }
 
   return Array.isArray(value) && value.length > 0;
+}
+
+function buildSnapshotFallbackFindings(snapshot: ValidationSnapshotFallbackRow): Omit<ValidationRunFindingInsert, "rank">[] {
+  const findings: Omit<ValidationRunFindingInsert, "rank">[] = [];
+
+  if (
+    snapshot.preconsent_tracking_detected ||
+    snapshot.tracking_before_consent_detected === true ||
+    snapshot.third_party_cookie_set_before_consent === true
+  ) {
+    findings.push({
+      category: "privacy",
+      description: "Tracking activity appears to occur before the visitor can make a consent choice.",
+      evidence_json: {
+        source: "scan_snapshot_fallback",
+        preconsentTrackingDetected: snapshot.preconsent_tracking_detected,
+        thirdPartyCookieSetBeforeConsent: snapshot.third_party_cookie_set_before_consent,
+        trackingBeforeConsentDetected: snapshot.tracking_before_consent_detected
+      },
+      finding_id: null,
+      page_url: null,
+      rule_key: "privacy.trackers_before_consent_detected",
+      severity: "high",
+      subtype: "preconsent_tracking",
+      title: "Trackers observed before consent"
+    });
+  }
+
+  if (
+    snapshot.cookie_banner_present &&
+    (!snapshot.reject_all_present || snapshot.dark_pattern_reject_button_missing)
+  ) {
+    findings.push({
+      category: "privacy",
+      description: "A consent experience was detected without a clear reject-all control.",
+      evidence_json: {
+        cookieBannerPresent: snapshot.cookie_banner_present,
+        darkPatternRejectButtonMissing: snapshot.dark_pattern_reject_button_missing,
+        rejectAllPresent: snapshot.reject_all_present,
+        source: "scan_snapshot_fallback"
+      },
+      finding_id: null,
+      page_url: null,
+      rule_key: "privacy.reject_control_missing_detected",
+      severity: "high",
+      subtype: "consent_controls",
+      title: "Reject-all control missing"
+    });
+  }
+
+  if (
+    snapshot.privacy_policy_present &&
+    (
+      (((snapshot.privacy_policy_word_count ?? 0) > 0) && ((snapshot.privacy_policy_word_count ?? 0) < 250)) ||
+      (((snapshot.legal_coverage_score ?? 100) > 0) && ((snapshot.legal_coverage_score ?? 100) < 70))
+    )
+  ) {
+    findings.push({
+      category: "legal",
+      description: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
+      evidence_json: {
+        legalCoverageScore: snapshot.legal_coverage_score,
+        privacyPolicyPresent: snapshot.privacy_policy_present,
+        privacyPolicyWordCount: snapshot.privacy_policy_word_count,
+        source: "scan_snapshot_fallback"
+      },
+      finding_id: null,
+      page_url: null,
+      rule_key: "disclosure.privacy_policy_limited",
+      severity: "medium",
+      subtype: "policy_coverage",
+      title: "Privacy policy coverage limited"
+    });
+  }
+
+  return findings;
 }
 
 function addDays(now: Date, days: number) {
@@ -614,13 +708,12 @@ export async function createValidationScan(input: {
   const supabase = createAdminClient();
   const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
   const scanConfig = {
-    fullReportPreview: true,
     hostname: input.hostname,
     maxPages: pagesRequested,
     normalizedUrl: input.normalizedUrl,
     processor: "agentic-validation-v1",
     profile: "agentic-validation-v1",
-    source: "validation-canary"
+    source: "validation-manual"
   };
 
   const { data, error } = await supabase
@@ -630,7 +723,7 @@ export async function createValidationScan(input: {
       pages_requested: pagesRequested,
       pages_scanned: 0,
       scan_config_json: scanConfig,
-      scan_type: "preview",
+      scan_type: "full",
       status: "queued"
     })
     .select("id")
@@ -685,6 +778,26 @@ export async function loadRankableFindings(scanId: string) {
 
   const rows = (findings ?? []) as ScanSignalRow[];
 
+  if (rows.length === 0) {
+    const { data: snapshot, error: snapshotError } = await supabase
+      .from("scan_snapshots")
+      .select(
+        "cookie_banner_present, reject_all_present, dark_pattern_reject_button_missing, preconsent_tracking_detected, tracking_before_consent_detected, third_party_cookie_set_before_consent, privacy_policy_present, privacy_policy_word_count, legal_coverage_score"
+      )
+      .eq("scan_id", scanId)
+      .maybeSingle();
+
+    if (snapshotError) {
+      throw new Error(`Failed to load validation snapshot fallback for scan ${scanId}: ${snapshotError.message}`);
+    }
+
+    if (snapshot) {
+      return buildSnapshotFallbackFindings(snapshot as ValidationSnapshotFallbackRow);
+    }
+
+    return [];
+  }
+
   return rows
     .filter(
       (row): row is ScanSignalRow & { signal_key: keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS } =>
@@ -726,30 +839,36 @@ export async function replaceValidationRunFindings(validationRunId: string, find
 
   const { data, error } = await supabase
     .from("validation_run_findings")
-    .insert(findings.map((finding) => ({ ...finding, validation_run_id: validationRunId })))
-    .select("id, validation_run_id, finding_id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, rank");
+    .insert(findings.map(({ rank, ...finding }) => ({ ...finding, finding_rank: rank, rank, validation_run_id: validationRunId })))
+    .select("id, validation_run_id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank");
 
   if (error) {
     throw new Error(`Failed to insert validation run findings: ${error.message}`);
   }
 
-  return (data ?? []) as ValidationRunFindingRow[];
+  return ((data ?? []) as ValidationRunFindingDbRow[]).map((row) => ({
+    ...row,
+    rank: row.finding_rank
+  }));
 }
 
 export async function listValidationRunFindings(validationRunId: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("validation_run_findings")
-    .select("id, validation_run_id, finding_id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, rank")
+    .select("id, validation_run_id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
     .eq("validation_run_id", validationRunId)
-    .order("rank", { ascending: true })
+    .order("finding_rank", { ascending: true })
     .limit(VALIDATION_FINDING_LIMIT);
 
   if (error) {
     throw new Error(`Failed to load validation run findings for ${validationRunId}: ${error.message}`);
   }
 
-  return (data ?? []) as ValidationRunFindingRow[];
+  return ((data ?? []) as ValidationRunFindingDbRow[]).map((row) => ({
+    ...row,
+    rank: row.finding_rank
+  }));
 }
 
 export async function replaceValidationVerdict(input: ValidationVerdictInsert) {

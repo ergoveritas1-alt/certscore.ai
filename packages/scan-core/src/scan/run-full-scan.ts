@@ -56,7 +56,7 @@ function getRequestedPageCount(scan: ScanRow, domain: DomainRow) {
 
 function toCompatibilitySignalRows(input: {
   domainId: string;
-  organizationId: string;
+  organizationId: string | null;
   scanId: string;
   signals: Array<{
     category: string;
@@ -144,10 +144,6 @@ export async function runFullScanJob(scanId: string) {
 
   if (!scanRow.domain_id) {
     throw new Error(`Scan ${scanId} is missing a domain.`);
-  }
-
-  if (!scanRow.organization_id && scanRow.scan_type !== "preview") {
-    throw new Error(`Scan ${scanId} is missing an organization.`);
   }
 
   if (scanRow.status === "completed") {
@@ -376,17 +372,15 @@ export async function runFullScanJob(scanId: string) {
         accessibilityScore: bundle.snapshot.accessibilityScore
       }
     });
-    if (scanRow.organization_id) {
-      await replaceScanSignals({
+    await replaceScanSignals({
+      scanId,
+      signals: toCompatibilitySignalRows({
         scanId,
-        signals: toCompatibilitySignalRows({
-          scanId,
-          organizationId: scanRow.organization_id,
-          domainId: domainRow.id,
-          signals: bundle.compatibilitySignals
-        })
-      });
-    }
+        organizationId: scanRow.organization_id,
+        domainId: domainRow.id,
+        signals: bundle.compatibilitySignals
+      })
+    });
 
     await insertScanEvent({
       scanId,

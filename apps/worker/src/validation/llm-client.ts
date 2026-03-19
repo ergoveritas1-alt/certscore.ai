@@ -7,11 +7,54 @@ const PROMPT_VERSION = "validation_verdict_v1";
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 const verdictSchema = z.object({
-  confidence: z.number().min(0).max(1),
+  confidence: z.coerce.number().min(0).max(1),
   evidence: z.array(z.string()).max(5).default([]),
   rationale: z.string().min(1),
   verdict: z.enum(["supported", "inconclusive", "not_supported"])
 });
+
+function normalizeConfidence(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/%$/, "");
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isFinite(parsed)) {
+      const scaled = normalized.endsWith("%") || parsed > 1 ? parsed / 100 : parsed;
+      return Math.max(0, Math.min(1, scaled));
+    }
+  }
+
+  return 0.5;
+}
+
+function normalizeEvidence(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry)).slice(0, 5);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+function normalizeVerdictPayload(value: unknown) {
+  const candidate = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+
+  return {
+    confidence: normalizeConfidence(candidate.confidence),
+    evidence: normalizeEvidence(candidate.evidence),
+    rationale: typeof candidate.rationale === "string" && candidate.rationale.trim().length > 0 ? candidate.rationale.trim() : "No rationale returned.",
+    verdict:
+      candidate.verdict === "supported" || candidate.verdict === "not_supported" || candidate.verdict === "inconclusive"
+        ? candidate.verdict
+        : "inconclusive"
+  };
+}
 
 function buildPrompt(finding: ValidationRunFindingRow) {
   return [
@@ -118,7 +161,7 @@ export async function requestValidationVerdict(finding: ValidationRunFindingRow)
           ? content.map((entry) => (typeof entry?.text === "string" ? entry.text : "")).join("").trim()
           : "";
 
-    const parsed = verdictSchema.parse(JSON.parse(extractJsonObject(rawContent)));
+    const parsed = verdictSchema.parse(normalizeVerdictPayload(JSON.parse(extractJsonObject(rawContent))));
     return {
       ...parsed,
       model: payload.model ?? env.VALIDATION_OPENAI_MODEL,

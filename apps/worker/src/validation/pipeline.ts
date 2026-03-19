@@ -144,17 +144,24 @@ export async function runValidationCollectJob(validationRunId: string) {
   });
 
   try {
-    const domain = await ensureAnonymousValidationDomain(validationRun.hostname, validationRun.normalizedUrl);
-    const scanId = await createValidationScan({
-      domainId: domain.id,
-      hostname: validationRun.hostname,
-      normalizedUrl: validationRun.normalizedUrl
-    });
+    const domain =
+      validationRun.domainId && validationRun.scanId
+        ? { id: validationRun.domainId }
+        : await ensureAnonymousValidationDomain(validationRun.hostname, validationRun.normalizedUrl);
+    const scanId =
+      validationRun.scanId ??
+      (await createValidationScan({
+        domainId: domain.id,
+        hostname: validationRun.hostname,
+        normalizedUrl: validationRun.normalizedUrl
+      }));
 
-    await updateValidationRun(validationRunId, {
-      domain_id: domain.id,
-      scan_id: scanId
-    });
+    if (!validationRun.domainId || !validationRun.scanId) {
+      await updateValidationRun(validationRunId, {
+        domain_id: domain.id,
+        scan_id: scanId
+      });
+    }
 
     await insertValidationScanEvent({
       domainId: domain.id,

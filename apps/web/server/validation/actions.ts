@@ -1,6 +1,7 @@
 "use server";
 
 import type { ValidationRunMode } from "@website-signal-risk-scanner/shared";
+import { redirect } from "next/navigation";
 import {
   addValidationTargetAction,
   queueManualValidationRunAction,
@@ -27,7 +28,8 @@ export async function submitManualValidationRunAction(formData: FormData) {
     throw new Error("Missing validation target.");
   }
 
-  await queueManualValidationRunAction({ targetId });
+  const result = await queueManualValidationRunAction({ targetId });
+  redirect(`/app/scans/${result.scanId}`);
 }
 
 export async function submitValidationTargetAction(formData: FormData) {
@@ -72,6 +74,11 @@ export async function submitValidationTargetAction(formData: FormData) {
   throw new Error("Unsupported validation target action.");
 }
 
-export async function submitValidationTargetAddAction() {
-  await addValidationTargetAction();
+export async function submitValidationTargetAddAction(formData: FormData) {
+  const hostname = String(formData.get("hostname") ?? "").trim();
+  if (!hostname) {
+    throw new Error("Missing hostname.");
+  }
+
+  await addValidationTargetAction({ hostname });
 }

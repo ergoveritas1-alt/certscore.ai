@@ -63,9 +63,9 @@ type ValidationRunFindingRow = {
   category: string;
   description: string;
   evidence_json: Record<string, unknown>;
+  finding_rank: number;
   id: string;
   page_url: string | null;
-  rank: number;
   rule_key: string;
   severity: string;
   subtype: string | null;
@@ -82,6 +82,96 @@ type ValidationVerdictRow = {
   validation_run_finding_id: string;
   verdict: ValidationVerdict;
 };
+
+async function ensureValidationDomainForOrganization(input: {
+  organizationId: string;
+  hostname: string;
+  normalizedUrl: string;
+}) {
+  const supabase = createAdminClient();
+  const { data: existing, error: existingError } = await supabase
+    .from("domains")
+    .select("id, hostname, normalized_url")
+    .eq("organization_id", input.organizationId)
+    .eq("normalized_url", input.normalizedUrl)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(`Failed to load validation domain ${input.normalizedUrl}: ${existingError.message}`);
+  }
+
+  if (existing) {
+    return existing as { hostname: string; id: string; normalized_url: string };
+  }
+
+  const { data, error } = await supabase
+    .from("domains")
+    .insert({
+      hostname: input.hostname,
+      normalized_url: input.normalizedUrl,
+      organization_id: input.organizationId,
+      scan_frequency: "manual"
+    })
+    .select("id, hostname, normalized_url")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create validation domain ${input.hostname}: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return data as { hostname: string; id: string; normalized_url: string };
+}
+
+async function createValidationScan(input: {
+  domainId: string;
+  hostname: string;
+  normalizedUrl: string;
+  organizationId: string;
+  pagesRequested?: number;
+  submittedByUserId: string;
+}) {
+  const supabase = createAdminClient();
+  const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
+  const scanConfig = {
+    hostname: input.hostname,
+    maxPages: pagesRequested,
+    normalizedUrl: input.normalizedUrl,
+    processor: "agentic-validation-v1",
+    profile: "agentic-validation-v1",
+    source: "validation-manual"
+  };
+
+  const { data, error } = await supabase
+    .from("scans")
+    .insert({
+      domain_id: input.domainId,
+      organization_id: input.organizationId,
+      pages_requested: pagesRequested,
+      pages_scanned: 0,
+      scan_config_json: scanConfig,
+      scan_type: "full",
+      status: "queued",
+      submitted_by_user_id: input.submittedByUserId
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create validation scan for ${input.hostname}: ${error?.message ?? "Unknown error"}`);
+  }
+
+  const scanId = (data as { id: string }).id;
+  const { error: domainError } = await supabase
+    .from("domains")
+    .update({ latest_scan_id: scanId })
+    .eq("id", input.domainId)
+    .eq("organization_id", input.organizationId);
+  if (domainError) {
+    throw new Error(`Failed to set validation domain latest scan: ${domainError.message}`);
+  }
+
+  return scanId;
+}
 
 function getPipelineState(settings: ValidationSettingsRow): ValidationPipelineState {
   return process.env.VALIDATION_PIPELINE_ENABLED === "0"
@@ -136,7 +226,8 @@ export async function listValidationTargets(limit = 25) {
   const { data, error } = await supabase
     .from("validation_targets")
     .select("id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error")
-    .order("tranco_rank", { ascending: true, nullsFirst: false })
+    .eq("source", "manual")
+    .order("tranco_rank", { ascending: true, nullsFirst: true })
     .limit(limit);
 
   if (error) {
@@ -318,9 +409,9 @@ export async function getValidationRunDetail(validationRunId: string) {
 
   const { data: findings, error: findingsError } = await supabase
     .from("validation_run_findings")
-    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, rank")
+    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
     .eq("validation_run_id", validationRunId)
-    .order("rank", { ascending: true });
+    .order("finding_rank", { ascending: true });
 
   if (findingsError) {
     throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
@@ -364,7 +455,7 @@ export async function getValidationRunDetail(validationRunId: string) {
         description: finding.description,
         evidence: finding.evidence_json ?? {},
         pageUrl: finding.page_url,
-        rank: finding.rank,
+        rank: finding.finding_rank,
         ruleKey: finding.rule_key,
         severity: finding.severity,
         subtype: finding.subtype,
@@ -554,9 +645,23 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     throw new Error("Validation pipeline is paused.");
   }
 
+  const domain = await ensureValidationDomainForOrganization({
+    hostname: (target as { hostname: string }).hostname,
+    normalizedUrl: (target as { normalized_url: string }).normalized_url,
+    organizationId: context.organization.id
+  });
+  const scanId = await createValidationScan({
+    domainId: domain.id,
+    hostname: (target as { hostname: string }).hostname,
+    normalizedUrl: (target as { normalized_url: string }).normalized_url,
+    organizationId: context.organization.id,
+    submittedByUserId: context.user.id
+  });
+
   const { data: run, error: runError } = await supabase
     .from("validation_runs")
     .insert({
+      domain_id: domain.id,
       hostname: (target as { hostname: string }).hostname,
       normalized_url: (target as { normalized_url: string }).normalized_url,
       rank_band:
@@ -569,6 +674,7 @@ export async function queueManualValidationRunAction(input: { targetId: string }
                 ? "20k-50k"
                 : "50k-100k"
           : null,
+      scan_id: scanId,
       status: "queued",
       tranco_rank: (target as { tranco_rank: number | null }).tranco_rank,
       trigger_mode: "manual",
@@ -600,13 +706,47 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
     metadata_json: {
+      hostname: (target as { hostname: string }).hostname,
       targetId: input.targetId,
       validationRunId: (run as { id: string }).id
     }
   });
 
+  const { error: removeError } = await supabase.from("validation_targets").delete().eq("id", (target as { id: string }).id);
+  if (removeError) {
+    throw new Error(`Failed to consume validation target from queue: ${removeError.message}`);
+  }
+
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: context.user.id,
+    event_type: "validation.target_removed",
+    metadata_json: {
+      hostname: (target as { hostname: string }).hostname,
+      reason: "queued_for_manual_run",
+      targetId: input.targetId,
+      validationRunId: (run as { id: string }).id
+    }
+  });
+
+  await addRandomTrancoValidationTarget({
+    actorUserId: context.user.id,
+    eventType: "validation.target_added",
+    excludedHostnames: [(target as { hostname: string }).hostname],
+    metadata: {
+      replacedHostname: (target as { hostname: string }).hostname,
+      validationRunId: (run as { id: string }).id
+    },
+    supabase
+  });
+
   revalidatePath("/app");
   revalidatePath("/app/scans");
+  revalidatePath("/app/validation");
+
+  return {
+    scanId,
+    validationRunId: (run as { id: string }).id
+  };
 }
 
 export async function updateValidationTargetStateAction(input: {
@@ -682,10 +822,12 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
   revalidatePath("/app/validation");
 }
 
-export async function addValidationTargetAction() {
-  const context = await requireAdmin();
-  const supabase = createAdminClient();
+async function pickRandomTrancoValidationTarget(
+  supabase: ReturnType<typeof createAdminClient>,
+  excludedHostnames: string[] = []
+) {
   const targetRank = Math.floor(Math.random() * (50_000 - 1_000 + 1)) + 1_000;
+  const excluded = excludedHostnames.filter(Boolean);
 
   const loadCandidate = async (direction: "gte" | "lte") => {
     let query = supabase
@@ -700,6 +842,10 @@ export async function addValidationTargetAction() {
       direction === "gte"
         ? query.gte("tranco_rank", targetRank).order("tranco_rank", { ascending: true })
         : query.lte("tranco_rank", targetRank).order("tranco_rank", { ascending: false });
+
+    if (excluded.length > 0) {
+      query = query.not("hostname", "in", `(${excluded.map((hostname) => `"${hostname}"`).join(",")})`);
+    }
 
     const { data, error } = await query.maybeSingle();
     if (error) {
@@ -722,8 +868,65 @@ export async function addValidationTargetAction() {
     throw new Error("No Tranco validation target is available in the 1000-50000 range.");
   }
 
+  return {
+    candidate,
+    targetRank
+  };
+}
+
+async function addRandomTrancoValidationTarget(params: {
+  actorUserId: string;
+  excludedHostnames?: string[];
+  eventType?: string;
+  metadata?: Record<string, unknown>;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, supabase } = params;
+  const { candidate, targetRank } = await pickRandomTrancoValidationTarget(supabase, excludedHostnames);
+
   const hostname = extractHostname(candidate.normalized_url);
   const normalizedUrl = normalizeUrl(candidate.normalized_url);
+
+  const { error } = await supabase.from("validation_targets").upsert(
+    {
+      active: true,
+      denylisted: false,
+      hostname,
+      normalized_url: normalizedUrl,
+      source: "manual"
+    },
+    { onConflict: "hostname" }
+  );
+
+  if (error) {
+    throw new Error(`Failed to add validation target: ${error.message}`);
+  }
+
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: actorUserId,
+    event_type: eventType,
+    metadata_json: {
+      hostname,
+      ...metadata,
+      normalizedUrl,
+      selectedRank: candidate.tranco_rank,
+      targetRank
+    }
+  });
+
+  return {
+    hostname,
+    normalizedUrl,
+    selectedRank: candidate.tranco_rank,
+    targetRank
+  };
+}
+
+export async function addValidationTargetAction(input: { hostname: string }) {
+  const context = await requireAdmin();
+  const supabase = createAdminClient();
+  const normalizedUrl = normalizeUrl(input.hostname);
+  const hostname = extractHostname(normalizedUrl);
 
   const { error } = await supabase.from("validation_targets").upsert(
     {
@@ -746,10 +949,10 @@ export async function addValidationTargetAction() {
     metadata_json: {
       hostname,
       normalizedUrl,
-      selectedRank: candidate.tranco_rank,
-      targetRank
+      source: "manual_entry"
     }
   });
 
   revalidatePath("/app");
+  revalidatePath("/app/validation");
 }
