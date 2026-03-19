@@ -63,6 +63,27 @@ export function getValidationMatchKeysForTitle(title: string) {
   return TITLE_TO_VALIDATION_RULE_KEYS[normalizeFindingTitle(title)] ?? [];
 }
 
+export function getValidationMatchKeysForReviewReason(reason: string) {
+  switch (reason.trim().toLowerCase()) {
+    case "policy_behavior_conflict_candidate":
+      return ["scan_report_review.policy_behavior_conflict_candidate"];
+    case "session_replay_without_disclosure_detected":
+      return [
+        "scan_report_review.session_replay_without_disclosure_detected",
+        "privacy.session_replay_without_disclosure_detected"
+      ];
+    case "missing_dsar_high_exposure":
+      return ["scan_report_review.missing_dsar_high_exposure"];
+    case "low_confidence_critical_fields":
+      return [
+        "section_review.low_confidence_critical_fields",
+        "scan_report_review.low_confidence_critical_fields"
+      ];
+    default:
+      return [];
+  }
+}
+
 export function buildValidationFindingLookup(findings: ScanValidationFinding[]) {
   const lookup = new Map<string, ScanValidationFinding>();
 

@@ -21,6 +21,7 @@ import {
 import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
+  getValidationMatchKeysForReviewReason,
   getValidationMatchKeysForSignal,
   getValidationMatchKeysForTitle,
   type ScanValidationFinding
@@ -953,6 +954,7 @@ function PrimaryPillarGroup(input: {
 type CanonicalReviewIssue = {
   description: string;
   evidence?: string[];
+  linkedValidationRuleKeys?: string[];
   severity: "high" | "medium" | "low";
   title: string;
 };
@@ -1278,6 +1280,7 @@ function buildSectionReviewIssues(input: {
           return {
             description: row.description,
             evidence: row.pageUrl ? [row.pageUrl] : [],
+            linkedValidationRuleKeys: getValidationMatchKeysForReviewReason(row.reason),
             severity: reviewSeverity,
             title: formatReviewIssueReason(row.reason)
           };
@@ -1404,7 +1407,12 @@ function buildReviewFindings(input: {
     evidence: issue.evidence,
     id: `${input.sectionId}-issue-${index}`,
     linkedValidationFinding: input.validationFindingLookup
-      ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForTitle(issue.title))
+      ? findValidationFindingForKeys(
+          input.validationFindingLookup,
+          issue.linkedValidationRuleKeys && issue.linkedValidationRuleKeys.length > 0
+            ? issue.linkedValidationRuleKeys
+            : getValidationMatchKeysForTitle(issue.title)
+        )
       : null,
     observedValue: issue.evidence && issue.evidence.length > 0 ? summarizeReviewIssueEvidence(issue.evidence) : `${issue.severity} severity`,
     presentation: {

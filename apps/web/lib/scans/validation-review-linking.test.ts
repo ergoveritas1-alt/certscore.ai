@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
+  getValidationMatchKeysForReviewReason,
   getValidationMatchKeysForTitle,
   type ScanValidationFinding
 } from "./validation-review-linking";
@@ -61,6 +62,13 @@ test("getValidationMatchKeysForTitle maps low-confidence extraction title varian
     "scan_report_review.low_confidence_critical_fields"
   ]);
   assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence extraction Privacy Policy"), [
+    "section_review.low_confidence_critical_fields",
+    "scan_report_review.low_confidence_critical_fields"
+  ]);
+});
+
+test("getValidationMatchKeysForReviewReason maps scan review reasons directly to validation rule keys", () => {
+  assert.deepEqual(getValidationMatchKeysForReviewReason("low_confidence_critical_fields"), [
     "section_review.low_confidence_critical_fields",
     "scan_report_review.low_confidence_critical_fields"
   ]);
