@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   addValidationTargetAction,
   queueManualValidationRunAction,
+  queueValidationRescanAction,
   removeValidationTargetAction,
   updateValidationSettingsAction,
   updateValidationTargetStateAction
@@ -81,4 +82,14 @@ export async function submitValidationTargetAddAction(formData: FormData) {
   }
 
   await addValidationTargetAction({ hostname });
+}
+
+export async function submitValidationRescanAction(formData: FormData) {
+  const domainId = String(formData.get("domainId") ?? "").trim();
+  if (!domainId) {
+    throw new Error("Missing validation domain.");
+  }
+
+  const result = await queueValidationRescanAction({ domainId });
+  redirect(`/app/scans/${result.scanId}`);
 }

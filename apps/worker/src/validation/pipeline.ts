@@ -2,6 +2,7 @@ import { buildFindingComparisonKey, runFullScanJob } from "@website-signal-risk-
 import { createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
 import { VALIDATION_RANK_JOB, VALIDATION_VERDICT_JOB, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { getAgreementScoreForVerdict } from "./constants";
+import { computeValidationSystemConfidence } from "./confidence";
 import { requestValidationVerdict } from "./llm-client";
 import {
   createValidationScan,
@@ -16,6 +17,7 @@ import {
   summarizeValidationRun,
   updateValidationRun,
   updateValidationTargetAfterRun,
+  type ValidationEvidencePacket,
   type ValidationRunFindingInsert
 } from "./repository";
 
@@ -312,6 +314,10 @@ export async function runValidationVerdictJob(validationRunId: string) {
       }
 
       const verdict = await requestValidationVerdict(finding);
+      const systemConfidence = computeValidationSystemConfidence({
+        evidence: finding.evidence_json as ValidationEvidencePacket,
+        verdict: verdict.verdict
+      });
       await replaceValidationVerdict({
         agreement_score: getAgreementScoreForVerdict(verdict.verdict),
         confidence: verdict.confidence,
@@ -321,6 +327,9 @@ export async function runValidationVerdictJob(validationRunId: string) {
         model: verdict.model,
         prompt_version: verdict.promptVersion,
         rationale: verdict.rationale,
+        system_confidence_band: systemConfidence.band,
+        system_confidence_explanation: systemConfidence.explanation,
+        system_confidence_score: systemConfidence.score,
         validation_run_finding_id: finding.id,
         verdict: verdict.verdict
       });

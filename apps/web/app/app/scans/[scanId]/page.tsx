@@ -15,6 +15,13 @@ import { FullScanProgressCard } from "../../../../components/scans/full-scan-pro
 import { InfoTip } from "../../../../components/scans/info-tip";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
+  buildValidationFindingLookup,
+  findValidationFindingForKeys,
+  getValidationMatchKeysForSignal,
+  getValidationMatchKeysForTitle,
+  type ScanValidationFindingSummary
+} from "../../../../lib/scans/validation-review-linking";
+import {
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
 } from "../../../../lib/scans/signal-taxonomy";
@@ -954,6 +961,7 @@ type CanonicalReviewFinding = {
   sourceLabel?: string;
   sourceUrl?: string;
   title: string;
+  validationSummary?: ScanValidationFindingSummary | null;
 };
 
 type ScanRecordData = NonNullable<Awaited<ReturnType<typeof getScanById>>>;
@@ -1387,6 +1395,7 @@ function buildReviewFindings(input: {
   issues: CanonicalReviewIssue[];
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
+  validationFindingLookup?: Map<string, ScanValidationFindingSummary>;
 }) {
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
     .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
@@ -1399,6 +1408,9 @@ function buildReviewFindings(input: {
       referenceLabel: getReviewReference(item.key)?.label,
       referenceUrl: getReviewReference(item.key)?.url,
       severity: getSignalFindingSeverity(item.key, item.value),
+      validationSummary: input.validationFindingLookup
+        ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
+        : null,
       title: item.label
     }));
 
@@ -1414,7 +1426,10 @@ function buildReviewFindings(input: {
     severity: issue.severity,
     sourceLabel: getFindingSourceLabel(issue.evidence),
     sourceUrl: getFindingSourceUrl(issue.evidence),
-    title: issue.title
+    title: issue.title,
+    validationSummary: input.validationFindingLookup
+      ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForTitle(issue.title))
+      : null
   }));
 
   return [...signalFindings, ...issueFindings].sort(
@@ -1563,6 +1578,70 @@ function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
   );
 }
 
+function formatValidationVerdictLabel(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
+  switch (verdict) {
+    case "supported":
+      return "Supported";
+    case "not_supported":
+      return "Not supported";
+    default:
+      return "Inconclusive";
+  }
+}
+
+function getValidationVerdictBadgeClass(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
+  switch (verdict) {
+    case "supported":
+      return "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-800";
+    case "not_supported":
+      return "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-rose-800";
+    default:
+      return "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-800";
+  }
+}
+
+function formatConfidencePercent(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function ReviewFindingValidationSummary(input: { finding: CanonicalReviewFinding }) {
+  const summary = input.finding.validationSummary;
+  if (!summary || !summary.verdict) {
+    return null;
+  }
+
+  const systemConfidence = formatConfidencePercent(summary.systemConfidenceScore);
+  const modelConfidence = formatConfidencePercent(summary.modelConfidence);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={getValidationVerdictBadgeClass(summary.verdict)}>{formatValidationVerdictLabel(summary.verdict)}</span>
+        {systemConfidence ? (
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-700">
+            System confidence {systemConfidence}
+          </span>
+        ) : null}
+        {summary.systemConfidenceBand ? (
+          <span className="text-xs uppercase tracking-[0.12em] text-slate-500">
+            {summary.systemConfidenceBand.replaceAll("_", " ")}
+          </span>
+        ) : null}
+      </div>
+      {summary.systemConfidenceExplanation ? (
+        <p className="mt-2 text-xs text-slate-600">{summary.systemConfidenceExplanation}</p>
+      ) : summary.rationale ? (
+        <p className="mt-2 text-xs text-slate-600">{summary.rationale}</p>
+      ) : null}
+      {modelConfidence ? <p className="mt-1 text-[11px] text-slate-500">Model confidence {modelConfidence}</p> : null}
+    </div>
+  );
+}
+
 function formatReviewFindingSummaryTitle(title: string) {
   const normalized = title
     .replace(/^Possible /i, "")
@@ -1622,6 +1701,8 @@ function formatReviewFindingSummaryValue(value: string | null) {
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
+  const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
+
   return (
     <div className="space-y-6">
       {REPORT_PRIMARY_PILLARS.map((pillar) => {
@@ -1652,7 +1733,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                   categoryId: category.id,
                   issues: [],
                   sectionId: section.id,
-                  sectionItems: items
+                  sectionItems: items,
+                  validationFindingLookup
                 });
 
                 return {
@@ -1675,7 +1757,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             const reviewFindings = buildReviewFindings({
               issues,
               sectionId: section.id,
-              sectionItems: []
+              sectionItems: [],
+              validationFindingLookup
             });
             const categoriesWithFindings = categories.map((category) => ({
               ...category,
@@ -1746,6 +1829,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                               <p className="text-sm text-slate-700">{finding.description}</p>
                               <div className="min-w-0 space-y-2">
                                 <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                <ReviewFindingValidationSummary finding={finding} />
                                 <ReviewFindingLinks finding={finding} />
                                 {finding.evidence && finding.evidence.length > 0 ? (
                                   <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
@@ -1792,6 +1876,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                     <p className="text-sm text-slate-700">{finding.description}</p>
                                     <div className="min-w-0 space-y-2">
                                       <p className="text-sm text-slate-700">{finding.nextStep}</p>
+                                      <ReviewFindingValidationSummary finding={finding} />
                                       <ReviewFindingLinks finding={finding} />
                                       {finding.evidence && finding.evidence.length > 0 ? (
                                         <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>

@@ -3,7 +3,7 @@ import { getWorkerEnv } from "../env";
 import type { ValidationEvidencePacket, ValidationRunFindingRow } from "./repository";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const PROMPT_VERSION = "validation_verdict_v1";
+const PROMPT_VERSION = "validation_verdict_v2";
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 const verdictSchema = z.object({
@@ -59,17 +59,25 @@ function normalizeVerdictPayload(value: unknown) {
 function buildPrompt(finding: ValidationRunFindingRow) {
   return [
     "You are reviewing the validity of an automated website compliance finding.",
-    "Judge only whether the automated finding is supported by the supplied evidence.",
+    "Judge only whether the automated finding is supported by the supplied evidence and the rule-specific review policy.",
     "Do not make new factual claims beyond the evidence payload.",
-    "If the evidence is too weak or ambiguous, return inconclusive.",
-    "Treat the evidence payload as a structured packet with claim, supportingSignals, runtimeEvidence, policyEvidence, pageUrls, confidenceBasis, and missingEvidence.",
-    "Missing evidence should reduce confidence and often leads to an inconclusive result.",
+    "Treat the evidence payload as a structured packet with claim, supportingSignals, runtimeEvidence, policyEvidence, pageUrls, confidenceBasis, missingEvidence, and reviewPolicy.",
+    "Apply the reviewPolicy rubric directly instead of inventing your own standard.",
+    "Missing ideal evidence should lower confidence, but should not override a strong detector plus supporting evidence when there is no meaningful contrary evidence.",
+    "Return inconclusive when the detector is weak, contradictory, ambiguous, or when the reviewPolicy says important coverage gaps keep the claim uncertain.",
+    "Return not_supported only when there is meaningful contrary evidence or the rule-specific notSupportedIf conditions are met.",
     'Return JSON with keys: verdict, confidence, rationale, evidence.'
   ].join("\n");
 }
 
 function normalizeEvidencePacket(value: Record<string, unknown>): ValidationEvidencePacket {
   const supportingSignals = Array.isArray(value.supportingSignals) ? value.supportingSignals : [];
+  const reviewPolicy =
+    typeof value.reviewPolicy === "object" && value.reviewPolicy !== null ? (value.reviewPolicy as Record<string, unknown>) : null;
+  const reviewRubric =
+    reviewPolicy && typeof reviewPolicy.rubric === "object" && reviewPolicy.rubric !== null
+      ? (reviewPolicy.rubric as Record<string, unknown>)
+      : null;
 
   return {
     claim: typeof value.claim === "string" ? value.claim : "",
@@ -77,6 +85,48 @@ function normalizeEvidencePacket(value: Record<string, unknown>): ValidationEvid
     missingEvidence: Array.isArray(value.missingEvidence) ? value.missingEvidence.map((entry) => String(entry)) : [],
     pageUrls: Array.isArray(value.pageUrls) ? value.pageUrls.map((entry) => String(entry)) : [],
     policyEvidence: Array.isArray(value.policyEvidence) ? value.policyEvidence.map((entry) => String(entry)) : [],
+    reviewPolicy: reviewPolicy
+      ? {
+          claimType:
+            reviewPolicy.claimType === "tracking_before_consent" ||
+            reviewPolicy.claimType === "tracking_after_reject" ||
+            reviewPolicy.claimType === "automated_accessibility"
+              ? reviewPolicy.claimType
+              : "behavior_without_disclosure",
+          contraryEvidenceTypes: Array.isArray(reviewPolicy.contraryEvidenceTypes)
+            ? reviewPolicy.contraryEvidenceTypes.map((entry: unknown) => String(entry))
+            : [],
+          detectorStrength:
+            reviewPolicy.detectorStrength === "weak" || reviewPolicy.detectorStrength === "medium"
+              ? reviewPolicy.detectorStrength
+              : "strong",
+          gapTolerance:
+            reviewPolicy.gapTolerance === "low" || reviewPolicy.gapTolerance === "high" ? reviewPolicy.gapTolerance : "medium",
+          requiredSupportTypes: Array.isArray(reviewPolicy.requiredSupportTypes)
+            ? reviewPolicy.requiredSupportTypes.map((entry: unknown) => String(entry))
+            : [],
+          rubric: reviewRubric
+            ? {
+                inconclusiveIf: Array.isArray(reviewRubric.inconclusiveIf)
+                  ? reviewRubric.inconclusiveIf.map((entry: unknown) => String(entry))
+                  : [],
+                notSupportedIf: Array.isArray(reviewRubric.notSupportedIf)
+                  ? reviewRubric.notSupportedIf.map((entry: unknown) => String(entry))
+                  : [],
+                supportedIf: Array.isArray(reviewRubric.supportedIf)
+                  ? reviewRubric.supportedIf.map((entry: unknown) => String(entry))
+                  : []
+              }
+            : { inconclusiveIf: [], notSupportedIf: [], supportedIf: [] }
+        }
+      : {
+          claimType: "behavior_without_disclosure",
+          contraryEvidenceTypes: [],
+          detectorStrength: "medium",
+          gapTolerance: "medium",
+          requiredSupportTypes: [],
+          rubric: { inconclusiveIf: [], notSupportedIf: [], supportedIf: [] }
+        },
     runtimeEvidence: Array.isArray(value.runtimeEvidence) ? value.runtimeEvidence.map((entry) => String(entry)) : [],
     supportingSignals: supportingSignals
       .filter((entry) => typeof entry === "object" && entry !== null)

@@ -2415,31 +2415,57 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       triggerReasonCount: policyLlmTriggerReasons.length
     }
   });
-  const policyEnrichmentBundle = await enrichPolicyPages({
-    scanId: input.scanId,
-    organizationId: input.organizationId,
-    domainId: input.domainId,
-    pages: policyPages,
-    advertisingTrackerCount: trackerSummary.advertisingTrackerCount,
-    sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
-    euExposureLikely: jurisdictionSignals.euExposureLikely,
-    californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
-    allowLlm: !isPreviewScan,
-    archiveSource: null,
-    forceLlm: false,
-    llmTriggerReasons: policyLlmTriggerReasons
-  });
-  await persistBuildPhaseDiagnostic({
-    scanId: input.scanId,
-    domainId: input.domainId,
-    organizationId: input.organizationId,
-    phase: "policy_enrichment",
-    status: "ok",
-    metadata: {
-      diagnosticCount: policyEnrichmentBundle.diagnostics.length,
-      snapshotOverrideKeys: Object.keys(policyEnrichmentBundle.snapshotOverrides ?? {}).length
-    }
-  });
+  const policyEnrichmentTimeoutMs = Math.max(5_000, Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000);
+  let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
+  try {
+    policyEnrichmentBundle = await withStepTimeout(policyEnrichmentTimeoutMs, "Policy enrichment", () =>
+      enrichPolicyPages({
+        scanId: input.scanId,
+        organizationId: input.organizationId,
+        domainId: input.domainId,
+        pages: policyPages,
+        advertisingTrackerCount: trackerSummary.advertisingTrackerCount,
+        sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
+        euExposureLikely: jurisdictionSignals.euExposureLikely,
+        californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
+        allowLlm: !isPreviewScan,
+        archiveSource: null,
+        forceLlm: false,
+        llmTriggerReasons: policyLlmTriggerReasons
+      })
+    );
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "policy_enrichment",
+      status: "ok",
+      metadata: {
+        diagnosticCount: policyEnrichmentBundle.diagnostics.length,
+        snapshotOverrideKeys: Object.keys(policyEnrichmentBundle.snapshotOverrides ?? {}).length
+      }
+    });
+  } catch (error) {
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "policy_enrichment",
+      status: "error",
+      metadata: {
+        message: error instanceof Error ? error.message : "Unknown policy enrichment failure.",
+        timeoutMs: policyEnrichmentTimeoutMs
+      }
+    });
+    policyEnrichmentBundle = {
+      diagnostics: [],
+      enrichments: [],
+      evidences: [],
+      primaryPolicyEnrichmentId: null,
+      reviewQueueItems: [],
+      snapshotOverrides: {}
+    };
+  }
   for (const diagnostic of policyEnrichmentBundle.diagnostics) {
     await persistPolicyLlmDiagnostic({
       scanId: input.scanId,

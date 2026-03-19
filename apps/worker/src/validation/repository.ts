@@ -160,6 +160,9 @@ export type ValidationVerdictInsert = {
   model: string;
   prompt_version: string;
   rationale: string;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low";
+  system_confidence_explanation: string;
+  system_confidence_score: number;
   validation_run_finding_id: string;
   verdict: ValidationVerdict;
 };
@@ -170,6 +173,18 @@ export type ValidationEvidencePacket = {
   missingEvidence: string[];
   pageUrls: string[];
   policyEvidence: string[];
+  reviewPolicy: {
+    claimType: "behavior_without_disclosure" | "tracking_before_consent" | "tracking_after_reject" | "automated_accessibility";
+    contraryEvidenceTypes: string[];
+    detectorStrength: "strong" | "medium" | "weak";
+    gapTolerance: "high" | "low" | "medium";
+    requiredSupportTypes: string[];
+    rubric: {
+      inconclusiveIf: string[];
+      notSupportedIf: string[];
+      supportedIf: string[];
+    };
+  };
   runtimeEvidence: string[];
   supportingSignals: Array<{
     category: ScanSignalRow["category"];
@@ -289,6 +304,25 @@ function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): Validati
     missingEvidence: ["No rule-specific evidence builder has been configured yet."],
     pageUrls: [],
     policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["contrary_runtime_evidence", "contrary_policy_disclosure"],
+      detectorStrength: "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["detector_signal"],
+      rubric: {
+        inconclusiveIf: [
+          "The detector is weak or ambiguous.",
+          "Important coverage gaps make the claim uncertain."
+        ],
+        notSupportedIf: [
+          "There is clear contrary evidence that the claim is false."
+        ],
+        supportedIf: [
+          "The detector fired and supporting evidence exists with no meaningful contrary evidence."
+        ]
+      }
+    },
     runtimeEvidence: [],
     supportingSignals: [
       {
@@ -329,6 +363,29 @@ function buildSessionReplayEvidence(row: ScanSignalRow, context: ValidationEvide
     ],
     pageUrls: [],
     policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["explicit_session_replay_disclosure", "evidence_detector_is_misfiring"],
+      detectorStrength: "strong",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["derived_mismatch_detector", "vendor_evidence"],
+      rubric: {
+        inconclusiveIf: [
+          "Replay vendor evidence is weak or ambiguous.",
+          "Disclosure search coverage is materially incomplete.",
+          "The detector fired but the supporting evidence is internally inconsistent."
+        ],
+        notSupportedIf: [
+          "There is explicit disclosure covering session replay behavior.",
+          "There is convincing evidence that the detected vendor is not a session replay tool."
+        ],
+        supportedIf: [
+          "A positive mismatch detector is present.",
+          "Replay vendor evidence exists.",
+          "There is no meaningful contrary disclosure evidence."
+        ]
+      }
+    },
     runtimeEvidence: uniqueStrings([
       ...requestDomains.filter((domain) => /fullstory|replay/i.test(domain)),
       ...scriptDomains.filter((domain) => /fullstory|replay/i.test(domain))
@@ -362,18 +419,50 @@ function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: Validation
   const evidenceUrls = Array.isArray(context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json)
     ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json as string[])
     : [];
+  const trackerVendors = Array.isArray(context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")?.signal_value_json as string[])
+    : [];
+  const violationCount = context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json;
 
   return {
     claim: "Tracking activity appears to occur before the visitor can make a consent choice.",
     confidenceBasis: [
       "A pre-consent tracking detector fired during the scan.",
-      typeof context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json === "number"
-        ? `Pre-consent tracker violation count: ${String(context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json)}.`
+      typeof violationCount === "number"
+        ? `Pre-consent tracker violation count: ${String(violationCount)}.`
         : "A specific violation count was not available."
+      ,
+      evidenceUrls.length > 0
+        ? `Concrete pre-consent request evidence was captured (${Math.min(evidenceUrls.length, 5)} URLs retained).`
+        : "Concrete request URLs were not retained in this packet.",
+      trackerVendors.length > 0 ? `Known tracker vendors observed before consent: ${trackerVendors.join(", ")}.` : "Specific pre-consent tracker vendors were not isolated."
     ],
     missingEvidence: evidenceUrls.length > 0 ? [] : ["Concrete request URLs or cookie evidence captured before consent."],
     pageUrls: [],
     policyEvidence: [],
+    reviewPolicy: {
+      claimType: "tracking_before_consent",
+      contraryEvidenceTypes: ["consent_already_granted", "evidence_captured_after_choice"],
+      detectorStrength: "strong",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["detector_signal", "request_or_cookie_evidence", "tracker_vendor_evidence"],
+      rubric: {
+        inconclusiveIf: [
+          "The timing of tracking relative to consent is unclear.",
+          "The detector fired but no concrete request, cookie, or vendor evidence supports it.",
+          "Coverage gaps make the detector result uncertain."
+        ],
+        notSupportedIf: [
+          "The evidence shows tracking only after a valid consent choice.",
+          "The observed network activity is not reasonably tracking-related."
+        ],
+        supportedIf: [
+          "A pre-consent detector fired.",
+          "Concrete request, cookie, or vendor evidence supports the detector.",
+          "There is no meaningful contrary timing evidence."
+        ]
+      }
+    },
     runtimeEvidence: evidenceUrls.slice(0, 5),
     supportingSignals: relatedSignals.map((signal) => ({
       category: signal.category,
@@ -390,19 +479,61 @@ function buildRejectPersistenceEvidence(row: ScanSignalRow, context: ValidationE
       ? context.runtimeArtifacts?.consent_reject_persisted_tracker_vendor_names
       : null) ??
     (Array.isArray(row.signal_value_json) ? row.signal_value_json : []);
+  const postRejectEvidenceUrls = Array.isArray(context.runtimeArtifacts?.consent_post_reject_tracker_evidence_urls)
+    ? context.runtimeArtifacts.consent_post_reject_tracker_evidence_urls
+    : [];
+  const reducedTracking = context.runtimeArtifacts?.consent_reject_reduced_tracking;
+  const rejectWorked =
+    reducedTracking !== null ||
+    postRejectEvidenceUrls.length > 0 ||
+    persistedVendors.length > 0;
 
   return {
     claim: "Trackers continued to persist after a reject-style consent interaction.",
     confidenceBasis: [
-      "Consent interaction audit completed.",
-      context.runtimeArtifacts?.consent_reject_reduced_tracking === true
-        ? "Tracking decreased after reject, but some vendors still persisted."
-        : "Reject interaction did not fully suppress observed trackers."
+      rejectWorked
+        ? "The consent audit successfully completed a reject-style interaction."
+        : "The consent audit attempted a reject-style interaction, but completion certainty was limited.",
+      reducedTracking === true
+        ? "Tracking decreased after reject, but some vendors or requests still persisted."
+        : "Reject interaction did not fully suppress observed tracker activity.",
+      postRejectEvidenceUrls.length > 0
+        ? `Concrete post-reject request evidence was captured (${Math.min(postRejectEvidenceUrls.length, 5)} URLs retained).`
+        : "Concrete post-reject request URLs were not retained in this packet.",
+      persistedVendors.length > 0
+        ? `Tracker vendors persisted after reject: ${persistedVendors.join(", ")}.`
+        : "Specific post-reject tracker vendors were not isolated."
     ],
-    missingEvidence: context.runtimeArtifacts?.consent_post_reject_tracker_evidence_urls?.length ? [] : ["Request-level evidence URLs after reject interaction."],
+    missingEvidence: [
+      ...(postRejectEvidenceUrls.length > 0 ? [] : ["Concrete request URLs captured after the reject interaction."]),
+      ...(rejectWorked ? [] : ["A clearly confirmed reject interaction completion state."])
+    ],
     pageUrls: [],
     policyEvidence: [],
-    runtimeEvidence: (context.runtimeArtifacts?.consent_post_reject_tracker_evidence_urls ?? []).slice(0, 5),
+    reviewPolicy: {
+      claimType: "tracking_after_reject",
+      contraryEvidenceTypes: ["reject_fully_suppressed_tracking", "reject_step_failed", "retained_request_is_strictly_necessary"],
+      detectorStrength: "strong",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["consent_audit_signal", "post_reject_vendor_or_request_evidence"],
+      rubric: {
+        inconclusiveIf: [
+          "The reject interaction did not complete reliably.",
+          "Evidence after reject is incomplete or ambiguous.",
+          "The retained post-reject request is concrete but its purpose is unclear."
+        ],
+        notSupportedIf: [
+          "The evidence shows tracking was fully suppressed after reject.",
+          "The retained request is reasonably essential rather than tracking-related."
+        ],
+        supportedIf: [
+          "The reject interaction completed.",
+          "Concrete post-reject vendor or request evidence exists.",
+          "There is no meaningful contrary suppression evidence."
+        ]
+      }
+    },
+    runtimeEvidence: postRejectEvidenceUrls.slice(0, 5),
     supportingSignals: [
       {
         category: row.category,
@@ -415,6 +546,12 @@ function buildRejectPersistenceEvidence(row: ScanSignalRow, context: ValidationE
         key: "privacy.persisted_tracker_vendors_after_reject",
         label: "Persisted tracker vendors after reject",
         value: persistedVendors
+      },
+      {
+        category: "privacy",
+        key: "privacy.reject_interaction_completed",
+        label: "Reject interaction completed",
+        value: rejectWorked
       }
     ]
   };
@@ -435,6 +572,25 @@ function buildAccessibilityEvidence(row: ScanSignalRow, context: ValidationEvide
     missingEvidence: ["Rule-level example rows or affected page URLs for the highest-priority violations."],
     pageUrls: [],
     policyEvidence: [],
+    reviewPolicy: {
+      claimType: "automated_accessibility",
+      contraryEvidenceTypes: ["rule_output_invalidated", "scan_coverage_too_thin"],
+      detectorStrength: "strong",
+      gapTolerance: "high",
+      requiredSupportTypes: ["automated_rule_counts"],
+      rubric: {
+        inconclusiveIf: [
+          "The automated findings are too sparse or coverage is materially incomplete."
+        ],
+        notSupportedIf: [
+          "There is convincing evidence that the automated rule output is invalid or unrelated."
+        ],
+        supportedIf: [
+          "Automated rule violations were recorded.",
+          "There is no meaningful contrary evidence undermining those results."
+        ]
+      }
+    },
     runtimeEvidence: [],
     supportingSignals: relatedSignals.map((signal) => ({
       category: signal.category,

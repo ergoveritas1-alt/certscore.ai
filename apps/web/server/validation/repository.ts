@@ -32,6 +32,7 @@ type ValidationRunRow = {
   average_agreement_score: number | null;
   completed_at: string | null;
   created_at: string;
+  domain_id: string | null;
   error_message: string | null;
   finding_count: number;
   hostname: string;
@@ -79,6 +80,9 @@ type ValidationVerdictRow = {
   model: string;
   prompt_version: string;
   rationale: string;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
   validation_run_finding_id: string;
   verdict: ValidationVerdict;
 };
@@ -312,6 +316,7 @@ export async function listValidationRuns(input?: {
   const runIds = rows.map((row) => row.id);
   const findingIdsByRun = new Map<string, string[]>();
   const verdictSummaryByRun = new Map<string, { inconclusive: number; notSupported: number; supported: number }>();
+  const findingCountByRun = new Map<string, number>();
 
   if (runIds.length > 0) {
     const { data: findings, error: findingsError } = await supabase
@@ -327,6 +332,10 @@ export async function listValidationRuns(input?: {
       const list = findingIdsByRun.get(row.validation_run_id) ?? [];
       list.push(row.id);
       findingIdsByRun.set(row.validation_run_id, list);
+    }
+
+    for (const [runId, findingIds] of findingIdsByRun.entries()) {
+      findingCountByRun.set(runId, findingIds.length);
     }
 
     const allFindingIds = [...findingIdsByRun.values()].flat();
@@ -373,11 +382,15 @@ export async function listValidationRuns(input?: {
       completedAt: row.completed_at,
       createdAt: row.created_at,
       errorMessage: row.error_message,
-      findingCount: row.finding_count,
+      findingCount: findingCountByRun.get(row.id) ?? row.finding_count,
       hostname: row.hostname,
       id: row.id,
       rankBand: row.rank_band,
-      reviewedFindingCount: row.reviewed_finding_count,
+      reviewedFindingCount:
+        ((verdictSummaryByRun.get(row.id)?.supported ?? 0) +
+          (verdictSummaryByRun.get(row.id)?.inconclusive ?? 0) +
+          (verdictSummaryByRun.get(row.id)?.notSupported ?? 0)) ||
+        row.reviewed_finding_count,
       scanId: row.scan_id,
       status: row.status,
       trancoRank: row.tranco_rank,
@@ -395,7 +408,7 @@ export async function getValidationRunDetail(validationRunId: string) {
   const supabase = createAdminClient();
   const { data: run, error: runError } = await supabase
     .from("validation_runs")
-    .select("id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message")
+    .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message")
     .eq("id", validationRunId)
     .maybeSingle();
 
@@ -422,7 +435,7 @@ export async function getValidationRunDetail(validationRunId: string) {
   if (findingIds.length > 0) {
     const { data: verdicts, error: verdictsError } = await supabase
       .from("validation_verdicts")
-      .select("validation_run_finding_id, verdict, confidence, rationale, evidence_json, model, prompt_version, agreement_score")
+      .select("validation_run_finding_id, verdict, confidence, rationale, evidence_json, model, prompt_version, agreement_score, system_confidence_score, system_confidence_band, system_confidence_explanation")
       .in("validation_run_finding_id", findingIds);
 
     if (verdictsError) {
@@ -438,6 +451,7 @@ export async function getValidationRunDetail(validationRunId: string) {
     averageAgreementScore: (run as ValidationRunRow).average_agreement_score,
     completedAt: (run as ValidationRunRow).completed_at,
     createdAt: (run as ValidationRunRow).created_at,
+    domainId: (run as ValidationRunRow).domain_id,
     errorMessage: (run as ValidationRunRow).error_message,
     findingCount: (run as ValidationRunRow).finding_count,
     hostname: (run as ValidationRunRow).hostname,
@@ -469,6 +483,9 @@ export async function getValidationRunDetail(validationRunId: string) {
               model: verdictMap.get(finding.id)?.model ?? "",
               promptVersion: verdictMap.get(finding.id)?.prompt_version ?? "",
               rationale: verdictMap.get(finding.id)?.rationale ?? "",
+              systemConfidenceBand: verdictMap.get(finding.id)?.system_confidence_band ?? null,
+              systemConfidenceExplanation: verdictMap.get(finding.id)?.system_confidence_explanation ?? null,
+              systemConfidenceScore: verdictMap.get(finding.id)?.system_confidence_score ?? null,
               verdict: verdictMap.get(finding.id)?.verdict ?? "inconclusive"
             }
           : null
@@ -737,6 +754,103 @@ export async function queueManualValidationRunAction(input: { targetId: string }
       validationRunId: (run as { id: string }).id
     },
     supabase
+  });
+
+  revalidatePath("/app");
+  revalidatePath("/app/scans");
+  revalidatePath("/app/validation");
+
+  return {
+    scanId,
+    validationRunId: (run as { id: string }).id
+  };
+}
+
+export async function queueValidationRescanAction(input: { domainId: string }) {
+  const context = await requireAdmin();
+  const availability = getValidationQueueAvailability();
+  if (!availability.enabled) {
+    throw new Error(availability.reason ?? "Validation queue is unavailable.");
+  }
+
+  const supabase = createAdminClient();
+  const { data: domain, error: domainError } = await supabase
+    .from("domains")
+    .select("id, hostname, normalized_url")
+    .eq("id", input.domainId)
+    .eq("organization_id", context.organization.id)
+    .maybeSingle();
+
+  if (domainError) {
+    throw new Error(`Failed to load validation domain: ${domainError.message}`);
+  }
+
+  if (!domain) {
+    throw new Error("Validation domain not found.");
+  }
+
+  const { data: settings, error: settingsError } = await supabase
+    .from("validation_settings")
+    .select("pipeline_enabled")
+    .eq("singleton_key", "default")
+    .single();
+
+  if (settingsError) {
+    throw new Error(`Failed to load validation pipeline state: ${settingsError.message}`);
+  }
+
+  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !(settings as { pipeline_enabled: boolean }).pipeline_enabled) {
+    throw new Error("Validation pipeline is paused.");
+  }
+
+  const scanId = await createValidationScan({
+    domainId: (domain as { id: string }).id,
+    hostname: (domain as { hostname: string }).hostname,
+    normalizedUrl: (domain as { normalized_url: string }).normalized_url,
+    organizationId: context.organization.id,
+    submittedByUserId: context.user.id
+  });
+
+  const { data: previousRun } = await supabase
+    .from("validation_runs")
+    .select("tranco_rank, rank_band")
+    .eq("domain_id", (domain as { id: string }).id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: run, error: runError } = await supabase
+    .from("validation_runs")
+    .insert({
+      domain_id: (domain as { id: string }).id,
+      hostname: (domain as { hostname: string }).hostname,
+      normalized_url: (domain as { normalized_url: string }).normalized_url,
+      rank_band: (previousRun as { rank_band: string | null } | null)?.rank_band ?? null,
+      scan_id: scanId,
+      status: "queued",
+      tranco_rank: (previousRun as { tranco_rank: number | null } | null)?.tranco_rank ?? null,
+      trigger_mode: "manual",
+      triggered_by_user_id: context.user.id,
+      validation_target_id: null
+    })
+    .select("id")
+    .single();
+
+  if (runError || !run) {
+    throw new Error(`Failed to create validation re-scan run: ${runError?.message ?? "Unknown error"}`);
+  }
+
+  await enqueueValidationCollectJob((run as { id: string }).id);
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: context.user.id,
+    event_type: "validation.manual_run_queued",
+    metadata_json: {
+      domainId: input.domainId,
+      hostname: (domain as { hostname: string }).hostname,
+      scanId,
+      validationRunId: (run as { id: string }).id,
+      reason: "validation_rescan"
+    }
   });
 
   revalidatePath("/app");
