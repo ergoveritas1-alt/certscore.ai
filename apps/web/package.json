@@ -7,7 +7,7 @@
     "check-env": "node --enable-source-maps ./scripts/check-env.ts",
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts",
-    "dev": "next dev",
+    "dev": "next dev --port 3000",
     "typecheck": "next typegen . && tsc --noEmit",
     "clean": "rm -rf .next"
   },

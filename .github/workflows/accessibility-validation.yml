@@ -1,0 +1,103 @@
+name: Accessibility Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/accessibility-validation.yml"
+      - "apps/worker/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/accessibility-validation.yml"
+      - "apps/worker/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+  workflow_dispatch:
+
+jobs:
+  worker-accessibility-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @website-signal-risk-scanner/worker playwright:install
+
+      - name: Typecheck worker
+        run: pnpm --filter @website-signal-risk-scanner/worker typecheck
+
+      - name: Run accessibility validation tests
+        working-directory: apps/worker
+        run: node --import tsx --test ./src/scan/accessibility-validation.test.ts
+
+  live-accessibility-benchmark:
+    runs-on: ubuntu-latest
+    needs: worker-accessibility-tests
+    if: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.REDIS_URL != '' && secrets.SUPABASE_STORAGE_BUCKET != '' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      SUPABASE_STORAGE_BUCKET: ${{ secrets.SUPABASE_STORAGE_BUCKET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @website-signal-risk-scanner/worker playwright:install
+
+      - name: Create worker env file
+        working-directory: apps/worker
+        run: |
+          cat <<'EOF' > .env.local
+          NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          REDIS_URL=${REDIS_URL}
+          SUPABASE_STORAGE_BUCKET=${SUPABASE_STORAGE_BUCKET}
+          EOF
+
+      - name: Run live accessibility benchmark assertions
+        working-directory: apps/worker
+        run: pnpm benchmark:accessibility:assert

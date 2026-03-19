@@ -1,5 +1,5 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
-import { runFullScanJob } from "../src/scan/run-full-scan";
+import { runFullScanJob } from "@website-signal-risk-scanner/scan-core";
 
 type OrganizationRow = {
   id: string;

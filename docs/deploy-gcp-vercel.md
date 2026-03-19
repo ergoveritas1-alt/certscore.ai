@@ -32,6 +32,15 @@ Import the repository into Vercel and configure:
 - Install command: `pnpm install`
 - Build command: `pnpm build`
 
+After the repo is connected, prefer Git-based deploys for web changes:
+
+- make the change in the repo root
+- `git add` the intended files
+- commit with a clear message
+- push `main` to GitHub so Vercel deploys production from Git
+
+Use `npx vercel deploy --prod` only as a manual fallback when you intentionally need a direct CLI deployment.
+
 Set the production environment variables in Vercel:
 
 - `NEXT_PUBLIC_APP_URL`
@@ -103,3 +112,14 @@ Validate in this order:
 5. report data persists in Supabase
 6. PDFs generate
 7. the hourly scheduler path runs successfully
+
+## Validation Ops sibling deploy
+
+The validation-only deployment uses a different topology:
+
+- Vercel deploy of `apps/web` with `APP_FLAVOR=validation_ops`
+- separate Redis via `VALIDATION_REDIS_URL`
+- separate VM for `start:validation` and `start:validation:scheduler`
+- optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
+
+See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.

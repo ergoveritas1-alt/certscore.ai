@@ -1,0 +1,19 @@
+# Repo Agent Notes
+
+## Git and deployment workflow
+
+- Make changes in the repo, then stage the relevant files with `git add`.
+- Create a commit with a clear message.
+- Push the branch to GitHub instead of deploying the current working tree directly to Vercel.
+- Prefer Git-based production deploys through the connected GitHub repository.
+- Do not run `npx vercel deploy --prod` unless the user explicitly asks for a direct Vercel CLI deploy or the Git-based deploy path is unavailable.
+
+## Production expectation
+
+- Treat a push to `main` as the preferred way to promote web changes, since the Vercel project is configured to auto-deploy production from `main`.
+- If that Git-to-Vercel linkage is uncertain, call it out before claiming a change is live in production.
+
+## Scope note
+
+- These instructions apply to the web app deployment path.
+- Worker deployments still use the existing GCP deployment flow and helper scripts unless the user asks to change that setup.

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { runConsentInteractionAudit } from "../src/scan/snapshot/consent-interaction";
+import { runConsentInteractionAudit } from "@website-signal-risk-scanner/scan-core";
 
 async function main() {
   const args = process.argv.slice(2).filter(Boolean);

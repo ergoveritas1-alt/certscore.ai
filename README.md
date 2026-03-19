@@ -46,6 +46,7 @@ website-signal-risk-scanner/
 This monorepo should use separate environment files per app in local development:
 
 - copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
+- copy [apps/web/.env.validation.example](/Users/benmasek/WC01/apps/web/.env.validation.example) to [apps/web/.env.validation.local](/Users/benmasek/WC01/apps/web/.env.validation.local) for the validation-only web app
 - copy [apps/worker/.env.example](/Users/benmasek/WC01/apps/worker/.env.example) to [apps/worker/.env.local](/Users/benmasek/WC01/apps/worker/.env.local)
 
 Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a single root `.env.local` for app runtime configuration.
@@ -91,6 +92,7 @@ Compatibility note:
    - `pnpm install`
 2. Copy the environment template:
    - `cp apps/web/.env.example apps/web/.env.local`
+   - `cp apps/web/.env.validation.example apps/web/.env.validation.local`
    - `cp apps/worker/.env.example apps/worker/.env.local`
 3. Create a dedicated Supabase dev project.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
@@ -111,9 +113,11 @@ Compatibility note:
    - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
 11. Start the web app:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-12. Start the worker:
+12. Start the validation web app on a separate port when needed:
+   - `pnpm dev:validation:web`
+13. Start the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker dev`
-13. Run a scheduler sweep manually when needed:
+14. Run a scheduler sweep manually when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification
@@ -123,13 +127,32 @@ Use these commands before shipping changes:
 - `pnpm turbo run typecheck`
 - `pnpm turbo run build`
 
+Accessibility-specific validation:
+
+- `pnpm --filter @website-signal-risk-scanner/worker typecheck`
+- `node --import tsx --test /Users/benmasek/WC01/apps/worker/src/scan/accessibility-validation.test.ts`
+- `pnpm --filter @website-signal-risk-scanner/worker benchmark:accessibility:assert`
+
+The live benchmark assertion command requires `apps/worker/.env.local` with the worker runtime variables and will execute real scans against the demo workspace.
+
+## CI accessibility validation
+
+GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
+
+- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks the worker, and runs the deterministic accessibility validation tests.
+- `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `SUPABASE_STORAGE_BUCKET`.
+- If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
+
 ## Runtime validation tooling
 
 Use these lightweight checks before first deployment validation:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
+- `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`
+- `pnpm --filter @website-signal-risk-scanner/worker check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
+- `pnpm --filter @website-signal-risk-scanner/worker check-runtime:validation`
 
 Use these runtime smoke helpers:
 
@@ -137,12 +160,18 @@ Use these runtime smoke helpers:
 - `pnpm --filter @website-signal-risk-scanner/worker smoke:scheduler`
 
 The full runtime QA sequence is documented in [docs/runtime-validation.md](/Users/benmasek/WC01/docs/runtime-validation.md).
+The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](/Users/benmasek/WC01/docs/validation-pipeline-plan.md).
+The validation crawler deployment and VM runbook is documented in [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md).
 
 ## Production deployment
 
 ### Vercel web app
 
-- deploy `apps/web`
+- prefer Git-based deploys for production web changes
+- stage the intended files, commit them, and push `main` to GitHub
+- treat the connected Vercel project as the primary production deploy path
+- do not deploy from `apps/web`
+- use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
 - configure the web environment variables from the shared list above
 - use only production Supabase URL and keys in Vercel
 - ensure Supabase Auth redirects include the production callback on `certscore.ai`
