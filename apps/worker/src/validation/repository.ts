@@ -85,11 +85,36 @@ export type ValidationRunRecord = {
 };
 
 type ScanSignalRow = {
-  category: "disclosure" | "privacy";
+  category: "accessibility" | "context" | "disclosure" | "privacy";
   signal_key: string;
   signal_label: string;
   signal_value_json: boolean | number | string | string[] | null;
   value_type: "boolean" | "number" | "text" | "string_array";
+};
+
+type ScanSnapshotRow = {
+  cmp_vendor_name: string | null;
+  consent_withdrawal_mechanism_present: boolean | null;
+  cookie_banner_present: boolean;
+  dark_pattern_reject_button_missing: boolean;
+  legal_coverage_score: number | null;
+  preconsent_tracking_detected: boolean;
+  privacy_policy_present: boolean;
+  privacy_policy_word_count: number | null;
+  reject_all_present: boolean;
+  third_party_cookie_set_before_consent: boolean | null;
+  tracking_before_consent_detected: boolean | null;
+};
+
+type ScanRuntimeArtifactsRow = {
+  consent_post_reject_tracker_evidence_urls: string[] | null;
+  consent_post_reject_tracker_vendor_names: string[] | null;
+  consent_reject_persisted_tracker_vendor_names: string[] | null;
+  consent_reject_reduced_tracking: boolean | null;
+  consent_withdrawal_mechanism_present?: boolean | null;
+  initial_cookie_count?: number | null;
+  script_src_domains?: string[] | null;
+  third_party_request_domains?: string[] | null;
 };
 
 type ValidationSnapshotFallbackRow = {
@@ -139,45 +164,286 @@ export type ValidationVerdictInsert = {
   verdict: ValidationVerdict;
 };
 
+export type ValidationEvidencePacket = {
+  claim: string;
+  confidenceBasis: string[];
+  missingEvidence: string[];
+  pageUrls: string[];
+  policyEvidence: string[];
+  runtimeEvidence: string[];
+  supportingSignals: Array<{
+    category: ScanSignalRow["category"];
+    key: string;
+    label: string;
+    value: ScanSignalRow["signal_value_json"];
+  }>;
+};
+
+type ValidationEvidenceBuildContext = {
+  runtimeArtifacts: ScanRuntimeArtifactsRow | null;
+  scanSignalsByKey: Map<string, ScanSignalRow>;
+  snapshot: ScanSnapshotRow | null;
+};
+
+type ValidationFindingDefinition = {
+  buildEvidence?: (row: ScanSignalRow, context: ValidationEvidenceBuildContext) => ValidationEvidencePacket;
+  category: FindingCategory;
+  description: string;
+  ruleKey: string;
+  severity: FindingSeverity;
+  subtype: string | null;
+  title: string;
+};
+
 const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
   string,
-  {
-    category: FindingCategory;
-    description: string;
-    severity: FindingSeverity;
-    subtype: string | null;
-    title: string;
-  }
+  ValidationFindingDefinition
 > = {
   "privacy.reject_control_missing_detected": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A consent experience was detected without a clear reject-all control."),
     category: "privacy",
     description: "A consent experience was detected without a clear reject-all control.",
+    ruleKey: "privacy.reject_control_missing_detected",
     severity: "high",
     subtype: "consent_controls",
     title: "Reject-all control missing"
   },
   "privacy.trackers_before_consent_detected": {
+    buildEvidence: buildPreconsentTrackingEvidence,
     category: "privacy",
     description: "Tracking activity appears to occur before the visitor can make a consent choice.",
+    ruleKey: "privacy.trackers_before_consent_detected",
     severity: "high",
     subtype: "preconsent_tracking",
     title: "Trackers observed before consent"
   },
+  "privacy.preconsent_tracking_detected": {
+    buildEvidence: buildPreconsentTrackingEvidence,
+    category: "privacy",
+    description: "Tracking activity appears to occur before the visitor can make a consent choice.",
+    ruleKey: "privacy.trackers_before_consent_detected",
+    severity: "high",
+    subtype: "preconsent_tracking",
+    title: "Trackers observed before consent"
+  },
+  "privacy.preconsent_violation_count": {
+    buildEvidence: buildPreconsentTrackingEvidence,
+    category: "privacy",
+    description: "Pre-consent tracker requests were observed before the visitor could make a consent choice.",
+    ruleKey: "privacy.trackers_before_consent_detected",
+    severity: "high",
+    subtype: "preconsent_tracking",
+    title: "Trackers observed before consent"
+  },
+  "privacy.consent_reject_persisted_tracker_vendors": {
+    buildEvidence: buildRejectPersistenceEvidence,
+    category: "privacy",
+    description: "Trackers continued to persist after a reject-style consent interaction.",
+    ruleKey: "privacy.trackers_persist_after_reject_detected",
+    severity: "high",
+    subtype: "consent_enforcement",
+    title: "Trackers persisted after reject"
+  },
   "disclosure.privacy_policy_limited": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A privacy policy was detected, but its coverage appeared limited or incomplete."),
     category: "legal",
     description: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
+    ruleKey: "disclosure.privacy_policy_limited",
     severity: "medium",
     subtype: "policy_coverage",
     title: "Privacy policy coverage limited"
   },
   "disclosure.disclosure_language_missing_detected": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "Promotional or affiliate disclosure language appears to be missing."),
     category: "legal",
     description: "Promotional or affiliate disclosure language appears to be missing.",
+    ruleKey: "disclosure.disclosure_language_missing_detected",
     severity: "high",
     subtype: "disclosure_language",
     title: "Disclosure language missing"
+  },
+  "context.session_replay_without_disclosure_detected": {
+    buildEvidence: buildSessionReplayEvidence,
+    category: "privacy",
+    description: "Session replay behavior appears present without a corresponding disclosure on the site.",
+    ruleKey: "privacy.session_replay_without_disclosure_detected",
+    severity: "high",
+    subtype: "session_replay_disclosure",
+    title: "Session replay without disclosure"
+  },
+  "accessibility.wcag_error_count_total": {
+    buildEvidence: buildAccessibilityEvidence,
+    category: "accessibility",
+    description: "Automated accessibility testing surfaced WCAG rule violations on this site.",
+    ruleKey: "accessibility.wcag_errors_detected",
+    severity: "medium",
+    subtype: "automated_accessibility",
+    title: "Automated accessibility issues detected"
   }
 };
+
+function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): ValidationEvidencePacket {
+  return {
+    claim,
+    confidenceBasis: ["Automated detector fired for this signal."],
+    missingEvidence: ["No rule-specific evidence builder has been configured yet."],
+    pageUrls: [],
+    policyEvidence: [],
+    runtimeEvidence: [],
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
+      }
+    ]
+  };
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean))];
+}
+
+function buildSessionReplayEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const trackerSignals = [
+    context.scanSignalsByKey.get("privacy.tracker_vendors"),
+    context.scanSignalsByKey.get("commerce.session_replay_tool_detected")
+  ].filter(Boolean) as ScanSignalRow[];
+  const vendors = Array.isArray(context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json as string[])
+    : [];
+  const likelyReplayVendors = vendors.filter((vendor) => /fullstory|session/i.test(vendor));
+  const requestDomains = context.runtimeArtifacts?.third_party_request_domains ?? [];
+  const scriptDomains = context.runtimeArtifacts?.script_src_domains ?? [];
+
+  return {
+    claim: "Session replay behavior appears present without a corresponding disclosure on the site.",
+    confidenceBasis: [
+      "A context-level detector flagged session replay without disclosure.",
+      likelyReplayVendors.length > 0 ? `Likely replay vendors detected: ${likelyReplayVendors.join(", ")}.` : "Replay vendor names were not isolated with high confidence."
+    ],
+    missingEvidence: [
+      "Direct disclosure excerpt or explicit no-disclosure policy excerpt.",
+      "Page-level evidence URL showing the replay script on a specific page."
+    ],
+    pageUrls: [],
+    policyEvidence: [],
+    runtimeEvidence: uniqueStrings([
+      ...requestDomains.filter((domain) => /fullstory|replay/i.test(domain)),
+      ...scriptDomains.filter((domain) => /fullstory|replay/i.test(domain))
+    ]),
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
+      },
+      ...trackerSignals.map((signal) => ({
+        category: signal.category,
+        key: signal.signal_key,
+        label: signal.signal_label,
+        value: signal.signal_value_json
+      }))
+    ]
+  };
+}
+
+function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const relatedSignals = [
+    context.scanSignalsByKey.get("privacy.preconsent_tracking_detected"),
+    context.scanSignalsByKey.get("privacy.preconsent_violation_count"),
+    context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors"),
+    context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls"),
+    context.scanSignalsByKey.get("privacy.third_party_cookie_count")
+  ].filter(Boolean) as ScanSignalRow[];
+
+  const evidenceUrls = Array.isArray(context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json as string[])
+    : [];
+
+  return {
+    claim: "Tracking activity appears to occur before the visitor can make a consent choice.",
+    confidenceBasis: [
+      "A pre-consent tracking detector fired during the scan.",
+      typeof context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json === "number"
+        ? `Pre-consent tracker violation count: ${String(context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json)}.`
+        : "A specific violation count was not available."
+    ],
+    missingEvidence: evidenceUrls.length > 0 ? [] : ["Concrete request URLs or cookie evidence captured before consent."],
+    pageUrls: [],
+    policyEvidence: [],
+    runtimeEvidence: evidenceUrls.slice(0, 5),
+    supportingSignals: relatedSignals.map((signal) => ({
+      category: signal.category,
+      key: signal.signal_key,
+      label: signal.signal_label,
+      value: signal.signal_value_json
+    }))
+  };
+}
+
+function buildRejectPersistenceEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const persistedVendors =
+    (Array.isArray(context.runtimeArtifacts?.consent_reject_persisted_tracker_vendor_names)
+      ? context.runtimeArtifacts?.consent_reject_persisted_tracker_vendor_names
+      : null) ??
+    (Array.isArray(row.signal_value_json) ? row.signal_value_json : []);
+
+  return {
+    claim: "Trackers continued to persist after a reject-style consent interaction.",
+    confidenceBasis: [
+      "Consent interaction audit completed.",
+      context.runtimeArtifacts?.consent_reject_reduced_tracking === true
+        ? "Tracking decreased after reject, but some vendors still persisted."
+        : "Reject interaction did not fully suppress observed trackers."
+    ],
+    missingEvidence: context.runtimeArtifacts?.consent_post_reject_tracker_evidence_urls?.length ? [] : ["Request-level evidence URLs after reject interaction."],
+    pageUrls: [],
+    policyEvidence: [],
+    runtimeEvidence: (context.runtimeArtifacts?.consent_post_reject_tracker_evidence_urls ?? []).slice(0, 5),
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
+      },
+      {
+        category: "privacy",
+        key: "privacy.persisted_tracker_vendors_after_reject",
+        label: "Persisted tracker vendors after reject",
+        value: persistedVendors
+      }
+    ]
+  };
+}
+
+function buildAccessibilityEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const relatedSignals = [
+    context.scanSignalsByKey.get("accessibility.wcag_error_count_total"),
+    context.scanSignalsByKey.get("accessibility.wcag_aria_error_count"),
+    context.scanSignalsByKey.get("accessibility.wcag_focus_indicator_issue_count")
+  ].filter(Boolean) as ScanSignalRow[];
+
+  return {
+    claim: "Automated accessibility testing surfaced WCAG rule violations on this site.",
+    confidenceBasis: [
+      typeof row.signal_value_json === "number" ? `Automated WCAG error count: ${row.signal_value_json}.` : "Automated accessibility rule violations were recorded."
+    ],
+    missingEvidence: ["Rule-level example rows or affected page URLs for the highest-priority violations."],
+    pageUrls: [],
+    policyEvidence: [],
+    runtimeEvidence: [],
+    supportingSignals: relatedSignals.map((signal) => ({
+      category: signal.category,
+      key: signal.signal_key,
+      label: signal.signal_label,
+      value: signal.signal_value_json
+    }))
+  };
+}
 
 function isActiveSignalValue(value: ScanSignalRow["signal_value_json"], valueType: ScanSignalRow["value_type"]) {
   if (valueType === "boolean") {
@@ -207,10 +473,32 @@ function buildSnapshotFallbackFindings(snapshot: ValidationSnapshotFallbackRow):
       category: "privacy",
       description: "Tracking activity appears to occur before the visitor can make a consent choice.",
       evidence_json: {
-        source: "scan_snapshot_fallback",
-        preconsentTrackingDetected: snapshot.preconsent_tracking_detected,
-        thirdPartyCookieSetBeforeConsent: snapshot.third_party_cookie_set_before_consent,
-        trackingBeforeConsentDetected: snapshot.tracking_before_consent_detected
+        claim: "Tracking activity appears to occur before the visitor can make a consent choice.",
+        confidenceBasis: ["Snapshot fallback detected pre-consent tracking indicators."],
+        missingEvidence: ["Request-level evidence URLs were not available in snapshot fallback mode."],
+        pageUrls: [],
+        policyEvidence: [],
+        runtimeEvidence: [],
+        supportingSignals: [
+          {
+            category: "privacy",
+            key: "privacy.preconsent_tracking_detected",
+            label: "Pre-consent tracking detected",
+            value: snapshot.preconsent_tracking_detected
+          },
+          {
+            category: "privacy",
+            key: "privacy.third_party_cookie_set_before_consent",
+            label: "Third-party cookies before consent",
+            value: snapshot.third_party_cookie_set_before_consent
+          },
+          {
+            category: "privacy",
+            key: "privacy.tracking_before_consent_detected",
+            label: "Tracking before consent detected",
+            value: snapshot.tracking_before_consent_detected
+          }
+        ]
       },
       finding_id: null,
       page_url: null,
@@ -229,10 +517,32 @@ function buildSnapshotFallbackFindings(snapshot: ValidationSnapshotFallbackRow):
       category: "privacy",
       description: "A consent experience was detected without a clear reject-all control.",
       evidence_json: {
-        cookieBannerPresent: snapshot.cookie_banner_present,
-        darkPatternRejectButtonMissing: snapshot.dark_pattern_reject_button_missing,
-        rejectAllPresent: snapshot.reject_all_present,
-        source: "scan_snapshot_fallback"
+        claim: "A consent experience was detected without a clear reject-all control.",
+        confidenceBasis: ["Snapshot fallback indicates a consent surface without a clear reject control."],
+        missingEvidence: ["Banner HTML or page-level consent UI evidence was not available in snapshot fallback mode."],
+        pageUrls: [],
+        policyEvidence: [],
+        runtimeEvidence: [],
+        supportingSignals: [
+          {
+            category: "privacy",
+            key: "privacy.cookie_banner_present",
+            label: "Cookie banner present",
+            value: snapshot.cookie_banner_present
+          },
+          {
+            category: "privacy",
+            key: "privacy.reject_all_present",
+            label: "Reject all present",
+            value: snapshot.reject_all_present
+          },
+          {
+            category: "privacy",
+            key: "privacy.dark_pattern_reject_button_missing",
+            label: "Reject button missing",
+            value: snapshot.dark_pattern_reject_button_missing
+          }
+        ]
       },
       finding_id: null,
       page_url: null,
@@ -254,10 +564,32 @@ function buildSnapshotFallbackFindings(snapshot: ValidationSnapshotFallbackRow):
       category: "legal",
       description: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
       evidence_json: {
-        legalCoverageScore: snapshot.legal_coverage_score,
-        privacyPolicyPresent: snapshot.privacy_policy_present,
-        privacyPolicyWordCount: snapshot.privacy_policy_word_count,
-        source: "scan_snapshot_fallback"
+        claim: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
+        confidenceBasis: ["Snapshot fallback indicates weak privacy-policy coverage signals."],
+        missingEvidence: ["Policy excerpts or structured coverage diagnostics were not available in snapshot fallback mode."],
+        pageUrls: [],
+        policyEvidence: [],
+        runtimeEvidence: [],
+        supportingSignals: [
+          {
+            category: "disclosure",
+            key: "disclosure.privacy_policy_present",
+            label: "Privacy policy present",
+            value: snapshot.privacy_policy_present
+          },
+          {
+            category: "context",
+            key: "context.legal_coverage_score",
+            label: "Legal coverage score",
+            value: snapshot.legal_coverage_score
+          },
+          {
+            category: "disclosure",
+            key: "disclosure.privacy_policy_word_count",
+            label: "Privacy policy word count",
+            value: snapshot.privacy_policy_word_count
+          }
+        ]
       },
       finding_id: null,
       page_url: null,
@@ -766,17 +1098,47 @@ export async function insertValidationScanEvent(input: {
 
 export async function loadRankableFindings(scanId: string) {
   const supabase = createAdminClient();
-  const { data: findings, error } = await supabase
-    .from("scan_signals")
-    .select("category, signal_key, signal_label, signal_value_json, value_type")
-    .eq("scan_id", scanId)
-    .in("category", ["privacy", "disclosure"]);
+  const [{ data: findings, error }, { data: snapshot, error: snapshotError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] =
+    await Promise.all([
+      supabase
+        .from("scan_signals")
+        .select("category, signal_key, signal_label, signal_value_json, value_type")
+        .eq("scan_id", scanId)
+        .in("category", ["accessibility", "context", "disclosure", "privacy"]),
+      supabase
+        .from("scan_snapshots")
+        .select(
+          "cmp_vendor_name, consent_withdrawal_mechanism_present, cookie_banner_present, dark_pattern_reject_button_missing, legal_coverage_score, preconsent_tracking_detected, privacy_policy_present, privacy_policy_word_count, reject_all_present, third_party_cookie_set_before_consent, tracking_before_consent_detected"
+        )
+        .eq("scan_id", scanId)
+        .maybeSingle(),
+      supabase
+        .from("scan_runtime_artifacts")
+        .select(
+          "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, third_party_request_domains, script_src_domains"
+        )
+        .eq("scan_id", scanId)
+        .maybeSingle()
+    ]);
 
   if (error) {
     throw new Error(`Failed to load validation findings for scan ${scanId}: ${error.message}`);
   }
 
+  if (snapshotError) {
+    throw new Error(`Failed to load validation snapshot context for scan ${scanId}: ${snapshotError.message}`);
+  }
+
+  if (runtimeArtifactsError) {
+    throw new Error(`Failed to load validation runtime context for scan ${scanId}: ${runtimeArtifactsError.message}`);
+  }
+
   const rows = (findings ?? []) as ScanSignalRow[];
+  const context: ValidationEvidenceBuildContext = {
+    runtimeArtifacts: (runtimeArtifacts as ScanRuntimeArtifactsRow | null) ?? null,
+    scanSignalsByKey: new Map(rows.map((row) => [row.signal_key, row])),
+    snapshot: (snapshot as ScanSnapshotRow | null) ?? null
+  };
 
   if (rows.length === 0) {
     const { data: snapshot, error: snapshotError } = await supabase
@@ -810,15 +1172,10 @@ export async function loadRankableFindings(scanId: string) {
       return {
         category: definition.category,
         description: definition.description,
-        evidence_json: {
-          signalCategory: row.category,
-          signalKey: row.signal_key,
-          signalLabel: row.signal_label,
-          signalValue: row.signal_value_json
-        },
+        evidence_json: definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description),
         finding_id: null,
         page_url: null,
-        rule_key: row.signal_key,
+        rule_key: definition.ruleKey,
         severity: definition.severity,
         subtype: definition.subtype,
         title: definition.title

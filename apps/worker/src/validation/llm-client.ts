@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getWorkerEnv } from "../env";
-import type { ValidationRunFindingRow } from "./repository";
+import type { ValidationEvidencePacket, ValidationRunFindingRow } from "./repository";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const PROMPT_VERSION = "validation_verdict_v1";
@@ -62,11 +62,45 @@ function buildPrompt(finding: ValidationRunFindingRow) {
     "Judge only whether the automated finding is supported by the supplied evidence.",
     "Do not make new factual claims beyond the evidence payload.",
     "If the evidence is too weak or ambiguous, return inconclusive.",
+    "Treat the evidence payload as a structured packet with claim, supportingSignals, runtimeEvidence, policyEvidence, pageUrls, confidenceBasis, and missingEvidence.",
+    "Missing evidence should reduce confidence and often leads to an inconclusive result.",
     'Return JSON with keys: verdict, confidence, rationale, evidence.'
   ].join("\n");
 }
 
+function normalizeEvidencePacket(value: Record<string, unknown>): ValidationEvidencePacket {
+  const supportingSignals = Array.isArray(value.supportingSignals) ? value.supportingSignals : [];
+
+  return {
+    claim: typeof value.claim === "string" ? value.claim : "",
+    confidenceBasis: Array.isArray(value.confidenceBasis) ? value.confidenceBasis.map((entry) => String(entry)) : [],
+    missingEvidence: Array.isArray(value.missingEvidence) ? value.missingEvidence.map((entry) => String(entry)) : [],
+    pageUrls: Array.isArray(value.pageUrls) ? value.pageUrls.map((entry) => String(entry)) : [],
+    policyEvidence: Array.isArray(value.policyEvidence) ? value.policyEvidence.map((entry) => String(entry)) : [],
+    runtimeEvidence: Array.isArray(value.runtimeEvidence) ? value.runtimeEvidence.map((entry) => String(entry)) : [],
+    supportingSignals: supportingSignals
+      .filter((entry) => typeof entry === "object" && entry !== null)
+      .map((entry) => {
+        const signal = entry as Record<string, unknown>;
+        return {
+          category:
+            signal.category === "accessibility" ||
+            signal.category === "context" ||
+            signal.category === "disclosure" ||
+            signal.category === "privacy"
+              ? signal.category
+              : "context",
+          key: typeof signal.key === "string" ? signal.key : "",
+          label: typeof signal.label === "string" ? signal.label : "",
+          value: signal.value as ValidationEvidencePacket["supportingSignals"][number]["value"]
+        };
+      })
+  };
+}
+
 function buildUserMessage(finding: ValidationRunFindingRow) {
+  const evidencePacket = normalizeEvidencePacket(finding.evidence_json);
+
   return JSON.stringify(
     {
       finding: {
@@ -77,7 +111,7 @@ function buildUserMessage(finding: ValidationRunFindingRow) {
         severity: finding.severity,
         title: finding.title
       },
-      evidence: finding.evidence_json
+      evidence: evidencePacket
     },
     null,
     2
