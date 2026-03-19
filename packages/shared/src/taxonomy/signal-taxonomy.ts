@@ -546,6 +546,26 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "privacy_consent_user_choice",
       subcategory: "Pre-Consent Tracking"
     },
+    "privacy.policy_runtime_functional_misalignment_detected": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Privacy Rights & Controls"
+    },
+    "disclosure.policy_runtime_missing_technical_disclosure_detected": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Policy Consistency & Behavior"
+    },
+    "disclosure.policy_runtime_disclosure_likely_obstructed": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Policy Consistency & Behavior"
+    },
+    "privacy.cookie_runtime_disclosure_gap_detected": {
+      primaryCategory: "data_collection_third_party_ecosystem",
+      subcategory: "Analytics & Tracking"
+    },
+    "disclosure.cookie_policy_structurally_obstructed": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures"
+    },
     "commerce.form_collects_ssn": {
       primaryCategory: "sensitive_data_identity_signals",
       subcategory: "Identity Inputs"

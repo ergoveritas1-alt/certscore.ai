@@ -112,6 +112,42 @@ test("selectPolicyChunksForLlm does not force the last chunk for long privacy pa
   );
 });
 
+test("ruleBasedPolicyPreprocess extracts structured cookie disclosures from tables", () => {
+  const result = ruleBasedPolicyPreprocess({
+    html: `
+      <table aria-label="cookie-table">
+        <tr><th>Cookie Name</th><th>Provider</th><th>Purpose</th><th>Duration</th></tr>
+        <tr><td>_ga</td><td>Google Analytics</td><td>Analytics</td><td>2 years</td></tr>
+        <tr><td>_fbp</td><td>Meta</td><td>Advertising</td><td>90 days</td></tr>
+      </table>
+    `,
+    pageType: "cookie_policy",
+    text: "Cookie Name Provider Purpose Duration _ga Google Analytics Analytics 2 years _fbp Meta Advertising 90 days"
+  });
+
+  assert.equal(result.cookieDisclosures?.length, 2);
+  assert.equal(result.cookieDisclosures?.[0]?.cookieName, "_ga");
+  assert.equal(result.cookieDisclosures?.[0]?.provider, "Google Analytics");
+  assert.equal(result.cookieDisclosures?.[0]?.purpose, "Analytics");
+  assert.equal(result.cookieDisclosures?.[0]?.duration, "2 years");
+});
+
+test("ruleBasedPolicyPreprocess extracts semi-structured cookie disclosures", () => {
+  const result = ruleBasedPolicyPreprocess({
+    pageType: "cookie_policy",
+    text: `
+      Cookie Name: ajs_user_id
+      Provider: Segment
+      Purpose: Analytics
+      Duration: 1 year
+    `
+  });
+
+  assert.equal(result.cookieDisclosures?.length, 1);
+  assert.equal(result.cookieDisclosures?.[0]?.cookieName, "ajs_user_id");
+  assert.equal(result.cookieDisclosures?.[0]?.provider, "Segment");
+});
+
 test("validatePolicyChunkJson accepts valid JSON and rejects invented snippets", () => {
   const chunkText = "We comply with GDPR and you may request deletion of your data through our privacy form.";
 
@@ -251,6 +287,7 @@ test("mergePolicyChunkExtractions deterministically merges enums and lists", () 
     ruleResult: {
       actionableFlags: [],
       arbitrationPresent: null,
+      cancellationOrRefundPresent: null,
       childrenReference: "unknown",
       dataCategories: ["email"],
       dataAccessRequestPresent: false,
@@ -263,6 +300,7 @@ test("mergePolicyChunkExtractions deterministically merges enums and lists", () 
       needLlm: true,
       normalizedPolicyHash: "hash",
       normalizedText: "Policy text",
+      noticeContactPresent: null,
       policyClaimNoSale: null,
       policyClaimNoTracking: null,
       policyClaimPrivacyProtective: null,
@@ -271,6 +309,7 @@ test("mergePolicyChunkExtractions deterministically merges enums and lists", () 
       retentionDisclosure: "none",
       semanticConfidence: 0.58,
       summary: "Fallback summary",
+      terminationOrSuspensionPresent: null,
       transferMechanisms: [],
       updateDate: null
     },
@@ -336,6 +375,7 @@ test("mergePolicyChunkExtractions derives arbitration flag from merged terms ver
     ruleResult: {
       actionableFlags: ["arbitration_clause_present"],
       arbitrationPresent: true,
+      cancellationOrRefundPresent: null,
       childrenReference: "unknown",
       dataCategories: [],
       dataAccessRequestPresent: false,
@@ -348,6 +388,7 @@ test("mergePolicyChunkExtractions derives arbitration flag from merged terms ver
       needLlm: true,
       normalizedPolicyHash: "hash",
       normalizedText: "Terms text",
+      noticeContactPresent: null,
       policyClaimNoSale: null,
       policyClaimNoTracking: null,
       policyClaimPrivacyProtective: null,
@@ -356,6 +397,7 @@ test("mergePolicyChunkExtractions derives arbitration flag from merged terms ver
       retentionDisclosure: "none",
       semanticConfidence: 0.7,
       summary: "Terms summary",
+      terminationOrSuspensionPresent: null,
       transferMechanisms: [],
       updateDate: "2025-12-01"
     },
@@ -420,6 +462,17 @@ test("ruleBasedPolicyPreprocess extracts governing law and arbitration from term
   assert.ok(!result.actionableFlags.includes("missing_dsar"));
   assert.ok(!result.actionableFlags.includes("vague_retention"));
   assert.ok(!result.actionableFlags.includes("vague_policy_language"));
+});
+
+test("ruleBasedPolicyPreprocess extracts notice, termination, and cancellation terms from terms text", () => {
+  const result = ruleBasedPolicyPreprocess({
+    pageType: "terms_of_service",
+    text: "You may send written notice to legal@example.com. We may suspend or terminate your account for cause. Subscription fees are non-refundable after cancellation."
+  });
+
+  assert.equal(result.noticeContactPresent, true);
+  assert.equal(result.terminationOrSuspensionPresent, true);
+  assert.equal(result.cancellationOrRefundPresent, true);
 });
 
 test("ruleBasedPolicyPreprocess clamps overly long summaries", () => {

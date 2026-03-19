@@ -20,7 +20,7 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
     <div className="space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">All validation scans</h1>
-        <p className="max-w-3xl text-slate-600">Most recent runs first, with persisted verdict summaries and agreement scores.</p>
+        <p className="max-w-3xl text-slate-600">Most recent runs first, showing persisted automated CertScore findings.</p>
       </div>
 
       <Card className="border-slate-200 bg-white">
@@ -64,11 +64,10 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                 <tr className="text-left text-slate-500">
                   <th className="pb-3 pr-4 font-medium">Run time</th>
                   <th className="pb-3 pr-4 font-medium">Domain</th>
+                  <th className="pb-3 pr-4 font-medium">Scan ID</th>
                   <th className="pb-3 pr-4 font-medium">Rank</th>
                   <th className="pb-3 pr-4 font-medium">Status</th>
                   <th className="pb-3 pr-4 font-medium">Findings</th>
-                  <th className="pb-3 pr-4 font-medium">Verdicts</th>
-                  <th className="pb-3 pr-4 font-medium">Agreement</th>
                   <th className="pb-3 font-medium">Action</th>
                 </tr>
               </thead>
@@ -85,20 +84,15 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                       </div>
                     </td>
                     <td className="py-4 pr-4 text-slate-600">
+                      <span className="font-mono text-xs text-slate-700">{run.scanId ?? "—"}</span>
+                    </td>
+                    <td className="py-4 pr-4 text-slate-600">
                       {run.trancoRank ?? "—"} · {run.rankBand ?? "—"}
                     </td>
                     <td className="py-4 pr-4 text-slate-600">{run.status}</td>
                     <td className="py-4 pr-4 text-slate-600">
-                      {run.findingCount} flagged / {run.reviewedFindingCount} reviewed
+                      {run.findingCount} flagged
                     </td>
-                    <td className="py-4 pr-4 text-slate-600">
-                      <div className="space-y-1">
-                        <p>Supported {run.verdictSummary.supported}</p>
-                        <p>Inconclusive {run.verdictSummary.inconclusive}</p>
-                        <p>Not supported {run.verdictSummary.notSupported}</p>
-                      </div>
-                    </td>
-                    <td className="py-4 pr-4 text-slate-600">{run.averageAgreementScore ?? "—"}</td>
                     <td className="py-4">
                       <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
                         View results

@@ -8,11 +8,15 @@ function formatLabelSegment(value: string) {
 
 export type ValidationFindingFamilyId =
   | "accessibility_review"
+  | "cookie_runtime_review"
+  | "policy_runtime_review"
   | "policy_review_queue"
   | "policy_section_review"
   | "uncategorized";
 
 export type ValidationFindingSource =
+  | "cookie_runtime"
+  | "policy_runtime"
   | "policy_enrichment"
   | "policy_review_queue"
   | "snapshot_accessibility"
@@ -54,6 +58,26 @@ export function deriveValidationFindingTaxonomy(input: {
       scope: "page",
       source: "policy_enrichment",
       subject: "privacy"
+    };
+  }
+
+  if (rulePrefix === "policy_runtime") {
+    return {
+      familyId: "policy_runtime_review",
+      familyLabel: "Policy Runtime Review",
+      scope: "page",
+      source: "policy_runtime",
+      subject: "disclosure"
+    };
+  }
+
+  if (rulePrefix === "cookie_runtime") {
+    return {
+      familyId: "cookie_runtime_review",
+      familyLabel: "Cookie Runtime Review",
+      scope: "page",
+      source: "cookie_runtime",
+      subject: "disclosure"
     };
   }
 

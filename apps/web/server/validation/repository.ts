@@ -5,7 +5,6 @@ import {
   VALIDATION_DEFAULT_INTERVAL_MINUTES,
   VALIDATION_DEFAULT_RUN_MODE,
   VALIDATION_INTERVAL_OPTIONS,
-  type ValidationAgreementScore,
   type ValidationPipelineState,
   type ValidationRunMode,
   type ValidationRunStatus,
@@ -73,19 +72,497 @@ type ValidationRunFindingRow = {
   title: string;
 };
 
-type ValidationVerdictRow = {
-  agreement_score: ValidationAgreementScore;
-  confidence: number;
-  evidence_json: Record<string, unknown>;
-  model: string;
-  prompt_version: string;
-  rationale: string;
-  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-  system_confidence_explanation: string | null;
-  system_confidence_score: number | null;
-  validation_run_finding_id: string;
-  verdict: ValidationVerdict;
+type ExistingFindingIdentity = Pick<ValidationRunFindingRow, "rule_key" | "title">;
+
+type ScanSignalRow = {
+  category: string;
+  signal_key: string;
+  signal_label: string;
+  signal_value_json: boolean | number | string | string[] | null;
+  value_type: string;
 };
+
+type SnapshotSupplementRow = {
+  accessibility_litigation_risk_score: number | null;
+  retargeting_pixel_detected: boolean | null;
+};
+
+type PolicyReviewQueueRow = {
+  id: string;
+  policy_enrichment_id: string | null;
+  reason: string;
+  review_status: string | null;
+  scan_id: string;
+};
+
+type PolicyEnrichmentLookupRow = {
+  id: string;
+  policy_ambiguity_score?: number | null;
+  policy_coverage_ratio?: number | null;
+  policy_effective_date?: string | null;
+  policy_field_coverage?: Record<string, unknown>;
+  policy_governing_law?: string | null;
+  policy_notice_contact_present?: boolean | null;
+  page_type: string | null;
+  page_url: string | null;
+  policy_semantic_confidence?: number | null;
+  policy_snippet_count?: number | null;
+  policy_structurally_weak?: boolean | null;
+  policy_summary_short?: string | null;
+  policy_termination_or_suspension_present?: boolean | null;
+  policy_cancellation_or_refund_present?: boolean | null;
+  policy_arbitration_present?: boolean | null;
+};
+
+function isPopulatedValidationSignal(key: string, value: ScanSignalRow["signal_value_json"]) {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+
+    if (/score|window_days|word_count|semantic_confidence/i.test(key)) {
+      return true;
+    }
+
+    return value > 0;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0 && value !== "unknown" && value !== "absent" && value !== "none";
+  }
+
+  return true;
+}
+
+function isConcerningValidationSignal(row: ScanSignalRow) {
+  if (!isPopulatedValidationSignal(row.signal_key, row.signal_value_json)) {
+    return false;
+  }
+
+  const negativePatterns = [
+    /dark_pattern/,
+    /preconsent/,
+    /conflict/,
+    /mismatch/,
+    /litigation_risk_score/,
+    /error_count/,
+    /warning_count/,
+    /issue_count/,
+    /failures_count/,
+    /store_credit_only/,
+    /termination_for_cause/,
+    /service_suspension_or_termination/,
+    /retargeting_pixel/,
+    /session_replay/,
+    /functional_misalignment/,
+    /technical_disclosure/,
+    /disclosure_gap/,
+    /structurally_obstructed/,
+    /likely_obstructed/,
+    /high_sensitivity_data_collection_detected/,
+    /limited_time_offer_language_present/,
+    /discount_claim_present/,
+    /original_price_comparison_present/
+  ];
+
+  if (negativePatterns.some((pattern) => pattern.test(row.signal_key))) {
+    return true;
+  }
+
+  if (typeof row.signal_value_json === "number" && /risk_score|ambiguity_score|friction_score/i.test(row.signal_key)) {
+    return row.signal_value_json > 0;
+  }
+
+  return false;
+}
+
+function getValidationConcernReason(row: ScanSignalRow) {
+  const key = row.signal_key;
+
+  if (/functional_misalignment/i.test(key)) {
+    return "Strong runtime evidence suggests the live rights-fulfillment experience conflicts with the site’s policy posture.";
+  }
+
+  if (/technical_disclosure/i.test(key)) {
+    return "Runtime behavior suggests a tracking or replay function that is not clearly disclosed in the scanned policy materials.";
+  }
+
+  if (/disclosure_gap/i.test(key)) {
+    return "Observed runtime cookies could not be reconciled to explicit cookie disclosures on the site.";
+  }
+
+  if (/structurally_obstructed|likely_obstructed/i.test(key)) {
+    return "The scanned policy surface was too weak or structurally obstructed for reliable technical disclosure reconciliation.";
+  }
+
+  if (/preconsent|tracking_before_consent/i.test(key)) {
+    return "Observed before a clear user choice was made.";
+  }
+
+  if (/conflict|mismatch/i.test(key)) {
+    return "Signals a contradiction or mismatch that merits direct review.";
+  }
+
+  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
+    return "Promotional or choice architecture may need closer disclosure review.";
+  }
+
+  if (/store_credit_only/i.test(key)) {
+    return "Post-purchase remedy may be more restrictive than expected.";
+  }
+
+  if (/termination_for_cause|service_suspension_or_termination/i.test(key)) {
+    return "Terms reserve restrictive enforcement rights that should be read directly.";
+  }
+
+  if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
+    return "Scanner-derived risk indicator is elevated.";
+  }
+
+  if (/error_count|warning_count|issue_count|failures_count/i.test(key)) {
+    return "Automated issues were surfaced in this area.";
+  }
+
+  return "This signal is worth reviewer attention.";
+}
+
+function getValidationSignalSeverity(row: ScanSignalRow) {
+  if (/preconsent|session_replay|conflict|mismatch|functional_misalignment|technical_disclosure|disclosure_gap/i.test(row.signal_key)) {
+    return "high";
+  }
+
+  if (/structurally_obstructed|likely_obstructed/i.test(row.signal_key)) {
+    return "medium";
+  }
+
+  if (typeof row.signal_value_json === "number" && /risk_score|ambiguity_score|friction_score/i.test(row.signal_key)) {
+    return row.signal_value_json >= 70 ? "high" : "medium";
+  }
+
+  return "medium";
+}
+
+function getSupplementalFindingTitle(row: ScanSignalRow) {
+  if (row.signal_key === "privacy.policy_runtime_functional_misalignment_detected") {
+    return "High-confidence functional misalignment";
+  }
+
+  if (row.signal_key === "disclosure.policy_runtime_missing_technical_disclosure_detected") {
+    return "Missing technical disclosure";
+  }
+
+  if (row.signal_key === "disclosure.policy_runtime_disclosure_likely_obstructed") {
+    return "Disclosure likely obstructed";
+  }
+
+  if (row.signal_key === "privacy.cookie_runtime_disclosure_gap_detected") {
+    return "Cookie disclosure gap";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_structurally_obstructed") {
+    return "Cookie policy structurally obstructed";
+  }
+
+  if (row.signal_key === "privacy.user_rights_friction_score" && typeof row.signal_value_json === "number") {
+    return row.signal_value_json >= 100 ? "Critical user-rights fulfillment friction" : "High user-rights fulfillment friction";
+  }
+
+  if (row.signal_key === "accessibility.accessibility_risk_score" && typeof row.signal_value_json === "number") {
+    return "Elevated accessibility risk score";
+  }
+
+  return row.signal_label;
+}
+
+function buildSupplementalValidationFindingRows(existingFindings: ValidationRunFindingRow[], scanSignals: ScanSignalRow[]) {
+  const existingRuleKeys = new Set(existingFindings.map((row) => row.rule_key));
+  const existingTitles = new Set(existingFindings.map((row) => row.title.trim().toLowerCase()));
+  const supplements: ValidationRunFindingRow[] = [];
+
+  for (const row of scanSignals) {
+    if (!isConcerningValidationSignal(row)) {
+      continue;
+    }
+
+    const title = getSupplementalFindingTitle(row);
+    if (existingRuleKeys.has(`scan_signal.${row.signal_key}`) || existingTitles.has(title.trim().toLowerCase())) {
+      continue;
+    }
+
+    supplements.push({
+      category: row.category,
+      description: getValidationConcernReason(row),
+      evidence_json: {
+        signalKey: row.signal_key,
+        signalLabel: row.signal_label,
+        signalValue: row.signal_value_json,
+        signalCategory: row.category
+      },
+      finding_rank: existingFindings.length + supplements.length + 1,
+      id: `supplemental:${row.signal_key}`,
+      page_url: null,
+      rule_key: `scan_signal.${row.signal_key}`,
+      severity: getValidationSignalSeverity(row),
+      subtype: "scan_signal_review",
+      title
+    });
+  }
+
+  return supplements;
+}
+
+function normalizePolicyPageTypeLabel(pageType: string | null) {
+  switch (pageType) {
+    case "privacy_policy":
+      return "Privacy Policy";
+    case "terms_of_service":
+      return "TOS";
+    case "cookie_policy":
+      return "Cookie Policy";
+    default:
+      return "Policy";
+  }
+}
+
+function buildPolicyReviewDescription(reason: string) {
+  switch (reason) {
+    case "policy_behavior_conflict_candidate":
+      return "Observed site behavior may conflict with the site’s public-facing policy language.";
+    case "session_replay_without_disclosure_detected":
+      return "Session replay behavior may be present without a clear matching disclosure in the scanned policy pages.";
+    case "missing_dsar_high_exposure":
+      return "The site may have elevated exposure while still lacking a clear DSAR path in policy disclosures.";
+    case "low_confidence_critical_fields":
+      return "Critical policy extraction fields were low confidence and need manual review in the scan report.";
+    default:
+      return `This issue was added to the scan report review queue under ${reason.replaceAll("_", " ")}.`;
+  }
+}
+
+function buildSupplementalPolicyQueueFindings(input: {
+  existingFindings: ExistingFindingIdentity[];
+  policyEnrichmentById: Map<string, PolicyEnrichmentLookupRow>;
+  policyReviewQueueRows: PolicyReviewQueueRow[];
+  startingRank: number;
+}) {
+  const existingRuleKeys = new Set(input.existingFindings.map((row) => row.rule_key));
+  const existingTitles = new Set(input.existingFindings.map((row) => row.title.trim().toLowerCase()));
+  const supplements: ValidationRunFindingRow[] = [];
+
+  for (const row of input.policyReviewQueueRows) {
+    const enrichment = row.policy_enrichment_id ? input.policyEnrichmentById.get(row.policy_enrichment_id) : undefined;
+    const pageType = enrichment?.page_type ?? "unknown";
+    const pageTypeLabel = normalizePolicyPageTypeLabel(pageType);
+    const title =
+      row.reason === "low_confidence_critical_fields"
+        ? `Low-confidence extraction ${pageTypeLabel}`
+        : `${row.reason.replaceAll("_", " ")} ${pageTypeLabel}`.replace(/\b\w/g, (char) => char.toUpperCase());
+    const ruleKey = `policy_review.${row.reason}.${String(pageType).toLowerCase()}`;
+
+    if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.trim().toLowerCase())) {
+      continue;
+    }
+
+    supplements.push({
+      category: "legal",
+      description: buildPolicyReviewDescription(row.reason),
+      evidence_json: {
+        pageType: enrichment?.page_type ?? null,
+        pageUrl: enrichment?.page_url ?? null,
+        policyEnrichmentId: row.policy_enrichment_id,
+        policyAmbiguityScore: enrichment?.policy_ambiguity_score ?? null,
+        policyArbitrationPresent: enrichment?.policy_arbitration_present ?? null,
+        policyCancellationOrRefundPresent: enrichment?.policy_cancellation_or_refund_present ?? null,
+        policyCoverageRatio: enrichment?.policy_coverage_ratio ?? null,
+        policyEffectiveDate: enrichment?.policy_effective_date ?? null,
+        policyFieldCoverage: enrichment?.policy_field_coverage ?? {},
+        policyGoverningLaw: enrichment?.policy_governing_law ?? null,
+        policyNoticeContactPresent: enrichment?.policy_notice_contact_present ?? null,
+        reviewQueueReason: row.reason,
+        reviewStatus: row.review_status,
+        policySemanticConfidence: enrichment?.policy_semantic_confidence ?? null,
+        policySnippetCount: enrichment?.policy_snippet_count ?? null,
+        policyStructurallyWeak: enrichment?.policy_structurally_weak ?? null,
+        policySummaryShort: enrichment?.policy_summary_short ?? null,
+        policyTerminationOrSuspensionPresent: enrichment?.policy_termination_or_suspension_present ?? null
+      },
+      finding_rank: input.startingRank + supplements.length + 1,
+      id: `supplemental:policy_review:${row.id}`,
+      page_url: enrichment?.page_url ?? null,
+      rule_key: ruleKey,
+      severity: row.reason === "policy_behavior_conflict_candidate" ? "high" : "medium",
+      subtype: "policy_review_queue",
+      title
+    });
+  }
+
+  return supplements;
+}
+
+function buildSupplementalSnapshotFindings(input: {
+  existingFindings: ExistingFindingIdentity[];
+  snapshot: SnapshotSupplementRow | null;
+  startingRank: number;
+}) {
+  const snapshot = input.snapshot;
+  if (!snapshot) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  const existingRuleKeys = new Set(input.existingFindings.map((row) => row.rule_key));
+  const existingTitles = new Set(input.existingFindings.map((row) => row.title.trim().toLowerCase()));
+  const supplements: ValidationRunFindingRow[] = [];
+
+  if (snapshot.retargeting_pixel_detected === true) {
+    const title = "Retargeting pixel detected";
+    const ruleKey = "scan_snapshot.commerce.retargeting_pixel_detected";
+
+    if (!existingRuleKeys.has(ruleKey) && !existingTitles.has(title.toLowerCase())) {
+      supplements.push({
+        category: "privacy",
+        description: "Advertising or retargeting technology appears to be active and merits direct review.",
+        evidence_json: {
+          snapshotField: "retargeting_pixel_detected",
+          value: true
+        },
+        finding_rank: input.startingRank + supplements.length + 1,
+        id: "supplemental:snapshot:retargeting_pixel_detected",
+        page_url: null,
+        rule_key: ruleKey,
+        severity: "high",
+        subtype: "snapshot_review",
+        title
+      });
+    }
+  }
+
+  if (typeof snapshot.accessibility_litigation_risk_score === "number") {
+    const title = "Accessibility risk score";
+    const ruleKey = "scan_snapshot.accessibility.accessibility_risk_score";
+
+    if (!existingRuleKeys.has(ruleKey) && !existingTitles.has(title.toLowerCase())) {
+      supplements.push({
+        category: "accessibility",
+        description: "Scanner-derived risk indicator is elevated.",
+        evidence_json: {
+          snapshotField: "accessibility_litigation_risk_score",
+          value: snapshot.accessibility_litigation_risk_score
+        },
+        finding_rank: input.startingRank + supplements.length + 1,
+        id: "supplemental:snapshot:accessibility_risk_score",
+        page_url: null,
+        rule_key: ruleKey,
+        severity: "medium",
+        subtype: "snapshot_review",
+        title
+      });
+    }
+  }
+
+  return supplements;
+}
+
+async function loadSupplementalValidationFindings(input: {
+  existingFindings: ExistingFindingIdentity[];
+  scanId: string | null;
+}) {
+  if (!input.scanId) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  const supabase = createAdminClient();
+  const [{ data: scanSignals, error: scanSignalsError }, { data: snapshot, error: snapshotError }, { data: policyQueue, error: policyQueueError }] =
+    await Promise.all([
+      supabase
+        .from("scan_signals")
+        .select("category, signal_key, signal_label, signal_value_json, value_type")
+        .eq("scan_id", input.scanId),
+      supabase
+        .from("scan_snapshots")
+        .select("retargeting_pixel_detected, accessibility_litigation_risk_score")
+        .eq("scan_id", input.scanId)
+        .maybeSingle(),
+      supabase
+        .from("policy_review_queue")
+        .select("id, policy_enrichment_id, reason, review_status, scan_id")
+        .eq("scan_id", input.scanId)
+    ]);
+
+  if (scanSignalsError) {
+    throw new Error(`Failed to load supplemental scan signals for ${input.scanId}: ${scanSignalsError.message}`);
+  }
+
+  if (snapshotError) {
+    throw new Error(`Failed to load supplemental snapshot context for ${input.scanId}: ${snapshotError.message}`);
+  }
+
+  if (policyQueueError) {
+    throw new Error(`Failed to load supplemental policy review queue for ${input.scanId}: ${policyQueueError.message}`);
+  }
+
+  const queueRows = (policyQueue ?? []) as PolicyReviewQueueRow[];
+  const enrichmentIds = queueRows
+    .map((row) => row.policy_enrichment_id)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  let policyEnrichmentRows: PolicyEnrichmentLookupRow[] = [];
+  if (enrichmentIds.length > 0) {
+    const { data: enrichmentRows, error: enrichmentError } = await supabase
+      .from("policy_enrichment")
+      .select("id, page_type, page_url, policy_ambiguity_score, policy_arbitration_present, policy_cancellation_or_refund_present, policy_coverage_ratio, policy_effective_date, policy_field_coverage, policy_governing_law, policy_notice_contact_present, policy_semantic_confidence, policy_snippet_count, policy_structurally_weak, policy_summary_short, policy_termination_or_suspension_present")
+      .in("id", enrichmentIds);
+
+    if (enrichmentError) {
+      throw new Error(`Failed to load supplemental policy enrichment rows for ${input.scanId}: ${enrichmentError.message}`);
+    }
+
+    policyEnrichmentRows = (enrichmentRows ?? []) as PolicyEnrichmentLookupRow[];
+  }
+  const policyEnrichmentById = new Map(policyEnrichmentRows.map((row) => [row.id, row]));
+
+  const existingFindingRows = input.existingFindings.map((row, index) => ({
+    category: "privacy",
+    description: "",
+    evidence_json: {},
+    finding_rank: index + 1,
+    id: `existing:${index}`,
+    page_url: null,
+    rule_key: row.rule_key,
+    severity: "medium",
+    subtype: null,
+    title: row.title
+  })) satisfies ValidationRunFindingRow[];
+
+  const signalSupplements = buildSupplementalValidationFindingRows(existingFindingRows, (scanSignals ?? []) as ScanSignalRow[]);
+  const policySupplements = buildSupplementalPolicyQueueFindings({
+    existingFindings: [...input.existingFindings, ...signalSupplements],
+    policyEnrichmentById,
+    policyReviewQueueRows: queueRows,
+    startingRank: input.existingFindings.length + signalSupplements.length
+  });
+  const snapshotSupplements = buildSupplementalSnapshotFindings({
+    existingFindings: [...input.existingFindings, ...signalSupplements, ...policySupplements],
+    snapshot: (snapshot as SnapshotSupplementRow | null) ?? null,
+    startingRank: input.existingFindings.length + signalSupplements.length + policySupplements.length
+  });
+
+  return [...signalSupplements, ...policySupplements, ...snapshotSupplements].map((row, index) => ({
+    ...row,
+    finding_rank: input.existingFindings.length + index + 1
+  }));
+}
 
 async function ensureValidationDomainForOrganization(input: {
   organizationId: string;
@@ -314,88 +791,54 @@ export async function listValidationRuns(input?: {
 
   const rows = (data ?? []) as ValidationRunRow[];
   const runIds = rows.map((row) => row.id);
-  const findingIdsByRun = new Map<string, string[]>();
-  const verdictSummaryByRun = new Map<string, { inconclusive: number; notSupported: number; supported: number }>();
   const findingCountByRun = new Map<string, number>();
+  const existingFindingIdentitiesByRun = new Map<string, ExistingFindingIdentity[]>();
 
   if (runIds.length > 0) {
     const { data: findings, error: findingsError } = await supabase
       .from("validation_run_findings")
-      .select("id, validation_run_id")
+      .select("id, validation_run_id, rule_key, title")
       .in("validation_run_id", runIds);
 
     if (findingsError) {
       throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
     }
 
-    for (const row of (findings ?? []) as Array<{ id: string; validation_run_id: string }>) {
-      const list = findingIdsByRun.get(row.validation_run_id) ?? [];
-      list.push(row.id);
-      findingIdsByRun.set(row.validation_run_id, list);
+    for (const row of (findings ?? []) as Array<{ id: string; validation_run_id: string; rule_key: string; title: string }>) {
+      const list = findingCountByRun.get(row.validation_run_id) ?? 0;
+      findingCountByRun.set(row.validation_run_id, list + 1);
+      const existing = existingFindingIdentitiesByRun.get(row.validation_run_id) ?? [];
+      existing.push({ rule_key: row.rule_key, title: row.title });
+      existingFindingIdentitiesByRun.set(row.validation_run_id, existing);
     }
+  }
 
-    for (const [runId, findingIds] of findingIdsByRun.entries()) {
-      findingCountByRun.set(runId, findingIds.length);
-    }
-
-    const allFindingIds = [...findingIdsByRun.values()].flat();
-    if (allFindingIds.length > 0) {
-      const { data: verdicts, error: verdictsError } = await supabase
-        .from("validation_verdicts")
-        .select("validation_run_finding_id, verdict")
-        .in("validation_run_finding_id", allFindingIds);
-
-      if (verdictsError) {
-        throw new Error(`Failed to load validation verdict summaries: ${verdictsError.message}`);
-      }
-
-      const runIdByFindingId = new Map<string, string>();
-      for (const [runId, findingIds] of findingIdsByRun.entries()) {
-        for (const findingId of findingIds) {
-          runIdByFindingId.set(findingId, runId);
-        }
-      }
-
-      for (const row of (verdicts ?? []) as Array<{ validation_run_finding_id: string; verdict: ValidationVerdict }>) {
-        const runId = runIdByFindingId.get(row.validation_run_finding_id);
-        if (!runId) {
-          continue;
-        }
-
-        const summary = verdictSummaryByRun.get(runId) ?? { inconclusive: 0, notSupported: 0, supported: 0 };
-        if (row.verdict === "supported") {
-          summary.supported += 1;
-        } else if (row.verdict === "not_supported") {
-          summary.notSupported += 1;
-        } else {
-          summary.inconclusive += 1;
-        }
-        verdictSummaryByRun.set(runId, summary);
-      }
-    }
+  const supplementalCountByRun = new Map<string, number>();
+  for (const row of rows) {
+    const persistedCount = findingCountByRun.get(row.id) ?? row.finding_count;
+    const supplements = await loadSupplementalValidationFindings({
+      existingFindings: existingFindingIdentitiesByRun.get(row.id) ?? [],
+      scanId: row.scan_id
+    });
+    supplementalCountByRun.set(row.id, persistedCount + supplements.length);
   }
 
   const totalCount = count ?? 0;
   return {
     items: rows.map((row) => ({
-      averageAgreementScore: row.average_agreement_score,
+      averageAgreementScore: null,
       completedAt: row.completed_at,
       createdAt: row.created_at,
       errorMessage: row.error_message,
-      findingCount: findingCountByRun.get(row.id) ?? row.finding_count,
+      findingCount: supplementalCountByRun.get(row.id) ?? findingCountByRun.get(row.id) ?? row.finding_count,
       hostname: row.hostname,
       id: row.id,
       rankBand: row.rank_band,
-      reviewedFindingCount:
-        ((verdictSummaryByRun.get(row.id)?.supported ?? 0) +
-          (verdictSummaryByRun.get(row.id)?.inconclusive ?? 0) +
-          (verdictSummaryByRun.get(row.id)?.notSupported ?? 0)) ||
-        row.reviewed_finding_count,
+      reviewedFindingCount: 0,
       scanId: row.scan_id,
       status: row.status,
       trancoRank: row.tranco_rank,
-      triggerMode: row.trigger_mode,
-      verdictSummary: verdictSummaryByRun.get(row.id) ?? { inconclusive: 0, notSupported: 0, supported: 0 }
+      triggerMode: row.trigger_mode
     })),
     page,
     pageCount: Math.ceil(totalCount / 50),
@@ -430,22 +873,12 @@ export async function getValidationRunDetail(validationRunId: string) {
     throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
   }
 
-  const findingIds = ((findings ?? []) as ValidationRunFindingRow[]).map((row) => row.id);
-  const verdictMap = new Map<string, ValidationVerdictRow>();
-  if (findingIds.length > 0) {
-    const { data: verdicts, error: verdictsError } = await supabase
-      .from("validation_verdicts")
-      .select("validation_run_finding_id, verdict, confidence, rationale, evidence_json, model, prompt_version, agreement_score, system_confidence_score, system_confidence_band, system_confidence_explanation")
-      .in("validation_run_finding_id", findingIds);
-
-    if (verdictsError) {
-      throw new Error(`Failed to load validation verdicts: ${verdictsError.message}`);
-    }
-
-    for (const row of (verdicts ?? []) as ValidationVerdictRow[]) {
-      verdictMap.set(row.validation_run_finding_id, row);
-    }
-  }
+  let normalizedFindings = (findings ?? []) as ValidationRunFindingRow[];
+  const supplementalFindings = await loadSupplementalValidationFindings({
+    existingFindings: normalizedFindings,
+    scanId: (run as ValidationRunRow).scan_id
+  });
+  normalizedFindings = [...normalizedFindings, ...supplementalFindings];
 
   return {
     averageAgreementScore: (run as ValidationRunRow).average_agreement_score,
@@ -453,7 +886,7 @@ export async function getValidationRunDetail(validationRunId: string) {
     createdAt: (run as ValidationRunRow).created_at,
     domainId: (run as ValidationRunRow).domain_id,
     errorMessage: (run as ValidationRunRow).error_message,
-    findingCount: (run as ValidationRunRow).finding_count,
+    findingCount: normalizedFindings.length,
     hostname: (run as ValidationRunRow).hostname,
     id: (run as ValidationRunRow).id,
     rankBand: (run as ValidationRunRow).rank_band,
@@ -462,8 +895,7 @@ export async function getValidationRunDetail(validationRunId: string) {
     status: (run as ValidationRunRow).status,
     trancoRank: (run as ValidationRunRow).tranco_rank,
     triggerMode: (run as ValidationRunRow).trigger_mode,
-    rows: ((findings ?? []) as ValidationRunFindingRow[]).map((finding) => ({
-      agreementScore: verdictMap.get(finding.id)?.agreement_score ?? null,
+    rows: normalizedFindings.map((finding) => ({
       automatedFinding: {
         category: finding.category,
         description: finding.description,
@@ -474,21 +906,7 @@ export async function getValidationRunDetail(validationRunId: string) {
         severity: finding.severity,
         subtype: finding.subtype,
         title: finding.title
-      },
-      verdict:
-        verdictMap.get(finding.id)
-          ? {
-              confidence: verdictMap.get(finding.id)?.confidence ?? 0,
-              evidence: verdictMap.get(finding.id)?.evidence_json ?? {},
-              model: verdictMap.get(finding.id)?.model ?? "",
-              promptVersion: verdictMap.get(finding.id)?.prompt_version ?? "",
-              rationale: verdictMap.get(finding.id)?.rationale ?? "",
-              systemConfidenceBand: verdictMap.get(finding.id)?.system_confidence_band ?? null,
-              systemConfidenceExplanation: verdictMap.get(finding.id)?.system_confidence_explanation ?? null,
-              systemConfidenceScore: verdictMap.get(finding.id)?.system_confidence_score ?? null,
-              verdict: verdictMap.get(finding.id)?.verdict ?? "inconclusive"
-            }
-          : null
+      }
     }))
   };
 }

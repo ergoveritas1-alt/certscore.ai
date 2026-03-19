@@ -1,5 +1,11 @@
 import { extractSentenceSnippet, hashNormalizedPolicyText, normalizePolicyText } from "./normalize";
-import type { PolicyPageType, PolicyRulePreprocessResult, PolicyTopicKey, PolicyTransferMechanismItem } from "./types";
+import type {
+  PolicyCookieDisclosureItem,
+  PolicyPageType,
+  PolicyRulePreprocessResult,
+  PolicyTopicKey,
+  PolicyTransferMechanismItem
+} from "./types";
 
 const DATA_CATEGORY_PATTERNS = [
   { category: "email", pattern: /\bemail address(?:es)?\b/i },
@@ -81,6 +87,164 @@ function extractArbitrationPresent(text: string) {
   }
 
   return /\barbitration\b|\bbinding arbitration\b|\bdispute resolution\b|\bclass action waiver\b/i.test(text);
+}
+
+function extractNoticeContactPresent(text: string) {
+  if (!text) {
+    return null;
+  }
+
+  return /\bcontact us\b|\bemail us at\b|\bnotices? to\b|\bsend notices? to\b|\bwritten notice\b/i.test(text);
+}
+
+function extractTerminationOrSuspensionPresent(text: string) {
+  if (!text) {
+    return null;
+  }
+
+  return /\bterminate\b|\btermination\b|\bsuspend\b|\bsuspension\b|\bwe may suspend\b|\bwe may terminate\b/i.test(text);
+}
+
+function extractCancellationOrRefundPresent(text: string) {
+  if (!text) {
+    return null;
+  }
+
+  return /\bcancel(?:lation)?\b|\brefunds?\b|\bbilling\b|\bsubscription\b|\brenewal\b|\bchargebacks?\b/i.test(text);
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function stripHtml(value: string) {
+  return decodeHtmlEntities(value.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function normalizeCookieToken(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function looksLikeCookieName(value: string) {
+  return /^[_a-z0-9.-]{2,}$/i.test(value) || /^ajs_[a-z0-9._-]+$/i.test(value);
+}
+
+function extractCookieDisclosures(input: { html?: string; text: string }) {
+  const html = input.html ?? "";
+  const disclosures: PolicyCookieDisclosureItem[] = [];
+
+  const pushDisclosure = (disclosure: PolicyCookieDisclosureItem) => {
+    const normalizedName = normalizeCookieToken(disclosure.cookieName);
+    const normalizedProvider = normalizeCookieToken(disclosure.provider);
+    const normalizedPurpose = normalizeCookieToken(disclosure.purpose);
+    const normalizedDuration = normalizeCookieToken(disclosure.duration);
+
+    const existing = disclosures.find((item) => {
+      return (
+        normalizeCookieToken(item.cookieName) === normalizedName &&
+        normalizeCookieToken(item.provider) === normalizedProvider &&
+        normalizeCookieToken(item.purpose) === normalizedPurpose &&
+        normalizeCookieToken(item.duration) === normalizedDuration
+      );
+    });
+
+    if (existing) {
+      existing.confidence = Math.max(existing.confidence, disclosure.confidence);
+      existing.snippet = existing.snippet ?? disclosure.snippet;
+      existing.cookieName = existing.cookieName ?? disclosure.cookieName;
+      existing.provider = existing.provider ?? disclosure.provider;
+      existing.purpose = existing.purpose ?? disclosure.purpose;
+      existing.duration = existing.duration ?? disclosure.duration;
+      return;
+    }
+
+    disclosures.push(disclosure);
+  };
+
+  const tableMatches = html.match(/<table[\s\S]*?<\/table>/gi) ?? [];
+
+  for (const table of tableMatches) {
+    const rowMatches = table.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
+    if (rowMatches.length < 2) {
+      continue;
+    }
+
+    const headerCells = rowMatches[0]?.match(/<(?:th|td)[^>]*>[\s\S]*?<\/(?:th|td)>/gi)?.map(stripHtml) ?? [];
+    const headerIndex = {
+      cookieName: headerCells.findIndex((cell) => /\bcookie\b|\bname\b/i.test(cell)),
+      provider: headerCells.findIndex((cell) => /\bprovider\b|\bvendor\b/i.test(cell)),
+      purpose: headerCells.findIndex((cell) => /\bpurpose\b|\bcategory\b|\btype\b/i.test(cell)),
+      duration: headerCells.findIndex((cell) => /\bduration\b|\bexpiry\b|\bexpiration\b|\bretention\b/i.test(cell))
+    };
+
+    if (headerIndex.cookieName < 0 && headerIndex.provider < 0 && headerIndex.purpose < 0 && headerIndex.duration < 0) {
+      continue;
+    }
+
+    for (const row of rowMatches.slice(1)) {
+      const cells = row.match(/<(?:th|td)[^>]*>[\s\S]*?<\/(?:th|td)>/gi)?.map(stripHtml) ?? [];
+      if (cells.length === 0) {
+        continue;
+      }
+
+      const cookieName = headerIndex.cookieName >= 0 ? cells[headerIndex.cookieName] ?? null : null;
+      if (cookieName && !looksLikeCookieName(cookieName) && headerIndex.provider < 0) {
+        continue;
+      }
+
+      const provider = headerIndex.provider >= 0 ? cells[headerIndex.provider] ?? null : null;
+      const purpose = headerIndex.purpose >= 0 ? cells[headerIndex.purpose] ?? null : null;
+      const duration = headerIndex.duration >= 0 ? cells[headerIndex.duration] ?? null : null;
+
+      if (!cookieName && !provider && !purpose && !duration) {
+        continue;
+      }
+
+      pushDisclosure({
+        confidence: 0.9,
+        cookieName,
+        provider,
+        purpose,
+        duration,
+        snippet: [cookieName, provider, purpose, duration].filter(Boolean).join(" | ") || null
+      });
+    }
+  }
+
+  const blockPattern =
+    /(?:cookie name|name)\s*[:\-]\s*([^\n|;]+)[\s\S]{0,180}?(?:provider|vendor)\s*[:\-]\s*([^\n|;]+)?[\s\S]{0,180}?(?:purpose|category|type)\s*[:\-]\s*([^\n|;]+)?[\s\S]{0,180}?(?:duration|expiry|expiration|retention)\s*[:\-]\s*([^\n|;]+)/gi;
+
+  for (const match of input.text.matchAll(blockPattern)) {
+    const cookieName = match[1]?.trim() ?? null;
+    const provider = match[2]?.trim() ?? null;
+    const purpose = match[3]?.trim() ?? null;
+    const duration = match[4]?.trim() ?? null;
+
+    if (!cookieName && !provider && !purpose && !duration) {
+      continue;
+    }
+
+    pushDisclosure({
+      confidence: 0.72,
+      cookieName,
+      provider,
+      purpose,
+      duration,
+      snippet: match[0]?.replace(/\s+/g, " ").trim() ?? null
+    });
+  }
+
+  return disclosures.slice(0, 64);
 }
 
 export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: PolicyPageType; text: string }) {
@@ -212,14 +376,31 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     addEvidence(`data_category:${entry.category}`, snippet);
     return [entry.category];
   });
+  const cookieDisclosures = pageType === "cookie_policy" ? extractCookieDisclosures({ html: input.html, text: input.text }) : [];
+
+  for (const disclosure of cookieDisclosures) {
+    const evidenceKey =
+      disclosure.cookieName && disclosure.cookieName.length > 0
+        ? `cookie:${disclosure.cookieName.toLowerCase()}`
+        : disclosure.provider
+          ? `cookie-provider:${disclosure.provider.toLowerCase()}`
+          : null;
+    addEvidence(evidenceKey ?? `cookie:${cookieDisclosures.indexOf(disclosure)}`, disclosure.snippet);
+  }
 
   const privacyPolicyDateMatch = normalizedText.match(/(last updated|effective date)[:\s]+([a-z0-9,\-/ ]{4,80})/i)?.[2]?.trim() ?? null;
   const privacyPolicyDate = extractPolicyUpdateDate(privacyPolicyDateMatch ?? "");
   const governingLaw = extractGoverningLaw(normalizedText);
   const arbitrationPresent = extractArbitrationPresent(normalizedText);
+  const noticeContactPresent = extractNoticeContactPresent(normalizedText);
+  const terminationOrSuspensionPresent = extractTerminationOrSuspensionPresent(normalizedText);
+  const cancellationOrRefundPresent = extractCancellationOrRefundPresent(normalizedText);
   addEvidence("effective_date", privacyPolicyDate ? getSnippetForPattern(normalizedText, /(last updated|effective date)[:\s]+([a-z0-9,\-/ ]{4,80})/i) : null);
   addEvidence("governing_law", governingLaw ? getSnippetForPattern(normalizedText, /\bgoverned by (?:the )?laws of [A-Za-z .-]{2,80}(?:,|\.)|\bthe laws of [A-Za-z .-]{2,80} shall govern\b|\bgoverning law[:\s]+[A-Za-z .-]{2,80}(?:,|\.)/i) : null);
   addEvidence("arbitration", arbitrationPresent ? getSnippetForPattern(normalizedText, /\barbitration\b|\bbinding arbitration\b|\bdispute resolution\b|\bclass action waiver\b/i) : null);
+  addEvidence("notice_contact", noticeContactPresent ? getSnippetForPattern(normalizedText, /\bcontact us\b|\bemail us at\b|\bnotices? to\b|\bsend notices? to\b|\bwritten notice\b/i) : null);
+  addEvidence("termination", terminationOrSuspensionPresent ? getSnippetForPattern(normalizedText, /\bterminate\b|\btermination\b|\bsuspend\b|\bsuspension\b|\bwe may suspend\b|\bwe may terminate\b/i) : null);
+  addEvidence("cancellation_refund", cancellationOrRefundPresent ? getSnippetForPattern(normalizedText, /\bcancel(?:lation)?\b|\brefunds?\b|\bbilling\b|\bsubscription\b|\brenewal\b|\bchargebacks?\b/i) : null);
   if (!isTermsPage && dsarMechanism !== "present") {
     actionableFlags.push("missing_dsar");
   }
@@ -248,7 +429,10 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
             0.52 +
               (privacyPolicyDate ? 0.1 : 0) +
               (governingLaw ? 0.12 : 0) +
-              (arbitrationPresent ? 0.12 : 0)
+              (arbitrationPresent ? 0.12 : 0) +
+              (noticeContactPresent ? 0.08 : 0) +
+              (terminationOrSuspensionPresent ? 0.08 : 0) +
+              (cancellationOrRefundPresent ? 0.08 : 0)
           )
         )
     : normalizedText.length === 0
@@ -258,7 +442,9 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
   return {
     actionableFlags: Array.from(new Set(actionableFlags)),
     arbitrationPresent,
+    cancellationOrRefundPresent,
     childrenReference,
+    cookieDisclosures,
     dataCategories: Array.from(new Set(dataCategories)),
     dataAccessRequestPresent,
     dataDeletionRequestPresent,
@@ -273,6 +459,7 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
       (policyMentions.some((mention) => mention.topic === "sensitive_data") && dsarMechanism !== "present"),
     normalizedPolicyHash: hashNormalizedPolicyText(normalizedText),
     normalizedText,
+    noticeContactPresent,
     policyClaimNoSale: doNotSellLink || doNotSellText,
     policyClaimNoTracking,
     policyClaimPrivacyProtective,
@@ -281,6 +468,7 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     retentionDisclosure,
     semanticConfidence,
     summary: clampSummary(firstSentence(normalizedText)),
+    terminationOrSuspensionPresent,
     transferMechanisms,
     updateDate: privacyPolicyDate
   } satisfies PolicyRulePreprocessResult;

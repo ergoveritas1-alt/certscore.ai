@@ -120,6 +120,7 @@ export async function ValidationOverviewPage() {
                   <thead>
                     <tr className="text-left text-slate-500">
                       <th className="pb-3 pr-4 font-medium">Domain</th>
+                      <th className="pb-3 pr-4 font-medium">Scan ID</th>
                       <th className="pb-3 pr-4 font-medium">Mode</th>
                       <th className="pb-3 pr-4 font-medium">Status</th>
                       <th className="pb-3 pr-4 font-medium">Score</th>
@@ -131,6 +132,9 @@ export async function ValidationOverviewPage() {
                     {recentRuns.items.slice(0, 4).map((run) => (
                       <tr key={run.id}>
                         <td className="py-3 pr-4 text-slate-900">{run.hostname}</td>
+                        <td className="py-3 pr-4 text-slate-600">
+                          <span className="font-mono text-xs text-slate-700">{run.scanId ?? "—"}</span>
+                        </td>
                         <td className="py-3 pr-4 text-slate-600">{run.triggerMode}</td>
                         <td className="py-3 pr-4 text-slate-600">{run.status}</td>
                         <td className="py-3 pr-4 text-slate-600">{run.averageAgreementScore ?? "—"}</td>

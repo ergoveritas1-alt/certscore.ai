@@ -21,6 +21,7 @@ import {
   getValidationMatchKeysForTitle,
   type ScanValidationFindingSummary
 } from "../../../../lib/scans/validation-review-linking";
+import { getReviewFindingNextStep, getReviewFindingReference } from "../../../../lib/scans/review-finding-presentation";
 import {
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
@@ -1078,7 +1079,7 @@ function getReportSignalValue(input: {
     return input.runtimeArtifacts?.[input.signal.key] ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
 
-  return getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key);
+  return getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
 }
 
 function isSignalValuePopulated(key: string, value: unknown) {
@@ -1137,6 +1138,11 @@ function isConcerningSignal(key: string, value: unknown) {
     /service_suspension_or_termination/,
     /retargeting_pixel/,
     /session_replay/,
+    /functional_misalignment/,
+    /technical_disclosure/,
+    /disclosure_gap/,
+    /structurally_obstructed/,
+    /likely_obstructed/,
     /high_sensitivity_data_collection_detected/,
     /limited_time_offer_language_present/,
     /discount_claim_present/,
@@ -1193,38 +1199,6 @@ function getSignalConcernReason(key: string, value: unknown) {
   }
 
   return "This signal is worth reviewer attention.";
-}
-
-function getSignalNextStep(key: string) {
-  if (/preconsent|tracking_before_consent/i.test(key)) {
-    return "Review the supporting runtime evidence and verify non-essential tracking is blocked until consent is given.";
-  }
-
-  if (/conflict|mismatch/i.test(key)) {
-    return "Compare the supporting evidence against the public-facing policy language and confirm whether the mismatch is real.";
-  }
-
-  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
-    return "Review the surrounding offer and disclosure context to confirm the presentation is clear and not misleading.";
-  }
-
-  if (/store_credit_only/i.test(key)) {
-    return "Review the refund and remedy language directly and confirm whether the limitation is acceptable.";
-  }
-
-  if (/termination_for_cause|service_suspension_or_termination/i.test(key)) {
-    return "Read the relevant terms language directly and assess whether the enforcement posture needs escalation.";
-  }
-
-  if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
-    return "Inspect the supporting signals in this section to determine what is driving the elevated scanner score.";
-  }
-
-  if (/error_count|warning_count|issue_count|failures_count/i.test(key)) {
-    return "Review the underlying findings in this section and confirm whether remediation or escalation is warranted.";
-  }
-
-  return "Review the flagged evidence in this section and confirm whether the signal needs follow-up.";
 }
 
 function partitionSignals(items: CanonicalSignalItem[]) {
@@ -1403,10 +1377,10 @@ function buildReviewFindings(input: {
       categoryId: input.categoryId,
       description: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention.",
       id: `${input.sectionId}-signal-${item.key}`,
-      nextStep: getSignalNextStep(item.key),
+      nextStep: getReviewFindingNextStep({ keyOrTitle: item.key, findingTitle: item.label }),
       observedValue: formatCompactValue(item.value),
-      referenceLabel: getReviewReference(item.key)?.label,
-      referenceUrl: getReviewReference(item.key)?.url,
+      referenceLabel: getReviewFindingReference({ keyOrTitle: item.key, findingTitle: item.label })?.label,
+      referenceUrl: getReviewFindingReference({ keyOrTitle: item.key, findingTitle: item.label })?.url,
       severity: getSignalFindingSeverity(item.key, item.value),
       validationSummary: input.validationFindingLookup
         ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
@@ -1421,8 +1395,8 @@ function buildReviewFindings(input: {
     id: `${input.sectionId}-issue-${index}`,
     nextStep: getReviewIssueNextStep(issue),
     observedValue: issue.evidence && issue.evidence.length > 0 ? summarizeReviewIssueEvidence(issue.evidence) : `${issue.severity} severity`,
-    referenceLabel: getReviewReference(issue.title)?.label,
-    referenceUrl: getReviewReference(issue.title)?.url,
+    referenceLabel: getReviewFindingReference({ keyOrTitle: issue.title, findingTitle: issue.title })?.label,
+    referenceUrl: getReviewFindingReference({ keyOrTitle: issue.title, findingTitle: issue.title })?.url,
     severity: issue.severity,
     sourceLabel: getFindingSourceLabel(issue.evidence),
     sourceUrl: getFindingSourceUrl(issue.evidence),
@@ -1492,59 +1466,6 @@ function getFindingSourceLabel(evidence?: string[]) {
   return "Source";
 }
 
-function getReviewReference(keyOrTitle: string) {
-  const haystack = keyOrTitle.toLowerCase();
-
-  if (haystack.includes("session replay")) {
-    return {
-      label: "FTC",
-      url: "https://www.ftc.gov/business-guidance/privacy-security"
-    };
-  }
-
-  if (haystack.includes("dsar") || haystack.includes("do-not-sell") || haystack.includes("user-rights")) {
-    return {
-      label: "CCPA",
-      url: "https://oag.ca.gov/privacy/ccpa"
-    };
-  }
-
-  if (haystack.includes("policy conflict") || haystack.includes("policy-to-behavior") || haystack.includes("low-confidence")) {
-    return {
-      label: "Drafting",
-      url: "https://www.ftc.gov/business-guidance/privacy-security"
-    };
-  }
-
-  if (haystack.includes("pre-consent") || haystack.includes("tracking before consent") || haystack.includes("consent")) {
-    return {
-      label: "Consent",
-      url: "https://www.ftc.gov/business-guidance/privacy-security"
-    };
-  }
-
-  if (haystack.includes("accessibility") || haystack.includes("wcag")) {
-    return {
-      label: "WCAG",
-      url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
-    };
-  }
-
-  if (
-    haystack.includes("discount") ||
-    haystack.includes("limited-time") ||
-    haystack.includes("price comparison") ||
-    haystack.includes("store-credit")
-  ) {
-    return {
-      label: "FTC",
-      url: "https://www.ftc.gov/business-guidance/advertising-marketing"
-    };
-  }
-
-  return undefined;
-}
-
 function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
   if (!input.finding.sourceUrl && !input.finding.referenceUrl) {
     return null;
@@ -1574,70 +1495,6 @@ function ReviewFindingLinks(input: { finding: CanonicalReviewFinding }) {
           <span>{input.finding.referenceLabel ?? "Reference"}</span>
         </Link>
       ) : null}
-    </div>
-  );
-}
-
-function formatValidationVerdictLabel(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
-  switch (verdict) {
-    case "supported":
-      return "Supported";
-    case "not_supported":
-      return "Not supported";
-    default:
-      return "Inconclusive";
-  }
-}
-
-function getValidationVerdictBadgeClass(verdict: NonNullable<ScanValidationFindingSummary["verdict"]>) {
-  switch (verdict) {
-    case "supported":
-      return "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-800";
-    case "not_supported":
-      return "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-rose-800";
-    default:
-      return "rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-800";
-  }
-}
-
-function formatConfidencePercent(value: number | null) {
-  if (value === null || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return `${Math.round(value * 100)}%`;
-}
-
-function ReviewFindingValidationSummary(input: { finding: CanonicalReviewFinding }) {
-  const summary = input.finding.validationSummary;
-  if (!summary || !summary.verdict) {
-    return null;
-  }
-
-  const systemConfidence = formatConfidencePercent(summary.systemConfidenceScore);
-  const modelConfidence = formatConfidencePercent(summary.modelConfidence);
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={getValidationVerdictBadgeClass(summary.verdict)}>{formatValidationVerdictLabel(summary.verdict)}</span>
-        {systemConfidence ? (
-          <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-700">
-            System confidence {systemConfidence}
-          </span>
-        ) : null}
-        {summary.systemConfidenceBand ? (
-          <span className="text-xs uppercase tracking-[0.12em] text-slate-500">
-            {summary.systemConfidenceBand.replaceAll("_", " ")}
-          </span>
-        ) : null}
-      </div>
-      {summary.systemConfidenceExplanation ? (
-        <p className="mt-2 text-xs text-slate-600">{summary.systemConfidenceExplanation}</p>
-      ) : summary.rationale ? (
-        <p className="mt-2 text-xs text-slate-600">{summary.rationale}</p>
-      ) : null}
-      {modelConfidence ? <p className="mt-1 text-[11px] text-slate-500">Model confidence {modelConfidence}</p> : null}
     </div>
   );
 }
@@ -1829,7 +1686,6 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                               <p className="text-sm text-slate-700">{finding.description}</p>
                               <div className="min-w-0 space-y-2">
                                 <p className="text-sm text-slate-700">{finding.nextStep}</p>
-                                <ReviewFindingValidationSummary finding={finding} />
                                 <ReviewFindingLinks finding={finding} />
                                 {finding.evidence && finding.evidence.length > 0 ? (
                                   <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>
@@ -1876,7 +1732,6 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                     <p className="text-sm text-slate-700">{finding.description}</p>
                                     <div className="min-w-0 space-y-2">
                                       <p className="text-sm text-slate-700">{finding.nextStep}</p>
-                                      <ReviewFindingValidationSummary finding={finding} />
                                       <ReviewFindingLinks finding={finding} />
                                       {finding.evidence && finding.evidence.length > 0 ? (
                                         <p className="break-all text-xs text-slate-600">{summarizeReviewIssueEvidence(finding.evidence)}</p>

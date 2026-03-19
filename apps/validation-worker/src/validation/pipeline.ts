@@ -104,6 +104,265 @@ function pageTypeLabel(pageType: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function hasSparsePolicyExtraction(input: {
+  confidence: number | null;
+  coverageRatio?: number | null;
+  flags: string[];
+  mentions: unknown[];
+  snippetCount?: number | null;
+  structurallyWeak?: boolean | null;
+  summaryShort: unknown;
+}) {
+  if (input.structurallyWeak === true) {
+    return true;
+  }
+
+  if (input.confidence !== null && input.confidence < 0.6) {
+    return true;
+  }
+
+  if (input.coverageRatio !== null && input.coverageRatio !== undefined && input.coverageRatio < 0.5) {
+    return true;
+  }
+
+  if (input.flags.includes("llm_provider_error") || input.flags.includes("low_confidence")) {
+    return true;
+  }
+
+  if (input.snippetCount !== null && input.snippetCount !== undefined && input.snippetCount === 0) {
+    return true;
+  }
+
+  if (input.mentions.length === 0) {
+    return true;
+  }
+
+  return typeof input.summaryShort !== "string" || input.summaryShort.trim().length === 0;
+}
+
+function buildPolicyRuntimeFinding(input: {
+  description: string;
+  evidence: Record<string, unknown>;
+  pageType: string | null;
+  pageUrl: string | null;
+  ruleKey: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+}) {
+  const taxonomy = deriveValidationFindingTaxonomy({
+    category: "scan_report_review",
+    ruleKey: input.ruleKey,
+    subtype: "policy_runtime_review"
+  });
+
+  return {
+    category: "scan_report_review" as const,
+    description: input.description,
+    evidence: input.evidence,
+    findingFamily: taxonomy.familyId,
+    findingScope: taxonomy.scope,
+    findingSource: taxonomy.source,
+    findingSubject: taxonomy.subject,
+    pageUrl: input.pageUrl,
+    rank: 0,
+    ruleKey: input.ruleKey,
+    severity: input.severity,
+    subtype: "policy_runtime_review" as const,
+    title: input.title
+  };
+}
+
+type CookieDisclosureRow = {
+  confidence: number;
+  cookieName: string | null;
+  duration: string | null;
+  provider: string | null;
+  purpose: string | null;
+  snippetHash: string | null;
+};
+
+const COOKIE_PROVIDER_HINTS: Array<{
+  category?: string;
+  name: string;
+  prefixes: string[];
+  provider: string;
+}> = [
+  { name: "google_analytics", prefixes: ["_ga", "_gid", "_gat", "_gac_", "_gcl_"], provider: "Google Analytics", category: "analytics" },
+  { name: "doubleclick", prefixes: ["ide", "test_cookie"], provider: "DoubleClick", category: "advertising" },
+  { name: "meta", prefixes: ["_fbp", "fr"], provider: "Meta", category: "advertising" },
+  { name: "segment", prefixes: ["ajs_"], provider: "Segment", category: "analytics" },
+  { name: "hotjar", prefixes: ["_hj"], provider: "Hotjar", category: "analytics" }
+];
+
+function normalizeCookieName(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value.trim().toLowerCase();
+}
+
+function normalizeCookieTokenList(values: string[]) {
+  return [...new Set(values.map((value) => normalizeCookieName(value)).filter((value): value is string => Boolean(value)))];
+}
+
+function inferCookieProvider(cookieName: string) {
+  const normalized = normalizeCookieName(cookieName);
+  if (!normalized) {
+    return null;
+  }
+
+  return COOKIE_PROVIDER_HINTS.find((hint) => hint.prefixes.some((prefix) => normalized.startsWith(prefix.toLowerCase()))) ?? null;
+}
+
+function matchRuntimeCookie(input: { cookieName: string; disclosures: CookieDisclosureRow[] }) {
+  const runtimeName = normalizeCookieName(input.cookieName);
+  if (!runtimeName) {
+    return null;
+  }
+
+  for (const disclosure of input.disclosures) {
+    const disclosedName = normalizeCookieName(disclosure.cookieName);
+    if (disclosedName && (runtimeName === disclosedName || runtimeName.startsWith(disclosedName) || disclosedName.startsWith(runtimeName))) {
+      return { disclosure, method: disclosedName === runtimeName ? "exact" : "prefix" as const };
+    }
+  }
+
+  const inferred = inferCookieProvider(runtimeName);
+  if (!inferred) {
+    return null;
+  }
+
+  for (const disclosure of input.disclosures) {
+    const provider = disclosure.provider?.toLowerCase() ?? "";
+    const purpose = disclosure.purpose?.toLowerCase() ?? "";
+    if (provider.includes(inferred.provider.toLowerCase()) || (inferred.category && purpose.includes(inferred.category))) {
+      return { disclosure, method: provider.includes(inferred.provider.toLowerCase()) ? ("provider" as const) : ("category" as const) };
+    }
+  }
+
+  return null;
+}
+
+function deriveCookieRuntimeFindings(input: {
+  policyEnrichments: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+}) {
+  const cookiePolicyEnrichment =
+    input.policyEnrichments.find((row) => (row.page_type ?? row.pageType) === "cookie_policy") ?? null;
+
+  if (!cookiePolicyEnrichment) {
+    return [] as Array<ReturnType<typeof buildPolicyRuntimeFinding>>;
+  }
+
+  const pageUrl = typeof cookiePolicyEnrichment.page_url === "string" ? cookiePolicyEnrichment.page_url : null;
+  const pageType = typeof cookiePolicyEnrichment.page_type === "string" ? cookiePolicyEnrichment.page_type : "cookie_policy";
+  const runtimeCookies = Array.isArray(input.runtimeArtifacts?.initial_cookie_names)
+    ? normalizeCookieTokenList(
+        (input.runtimeArtifacts?.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
+      )
+    : [];
+  const disclosures = Array.isArray(cookiePolicyEnrichment.policy_cookie_disclosures)
+    ? ((cookiePolicyEnrichment.policy_cookie_disclosures as unknown[]) ?? []).flatMap((value) => {
+        if (typeof value !== "object" || value === null) {
+          return [];
+        }
+
+        const record = value as Record<string, unknown>;
+        return [
+          {
+            confidence: typeof record.confidence === "number" ? record.confidence : 0,
+            cookieName: typeof record.cookie_name === "string" ? record.cookie_name : typeof record.cookieName === "string" ? record.cookieName : null,
+            duration: typeof record.duration === "string" ? record.duration : null,
+            provider: typeof record.provider === "string" ? record.provider : null,
+            purpose: typeof record.purpose === "string" ? record.purpose : null,
+            snippetHash: typeof record.snippet_hash === "string" ? record.snippet_hash : typeof record.snippetHash === "string" ? record.snippetHash : null
+          } satisfies CookieDisclosureRow
+        ];
+      })
+    : [];
+  const flags = Array.isArray(cookiePolicyEnrichment.policy_actionable_flags)
+    ? cookiePolicyEnrichment.policy_actionable_flags.filter((value): value is string => typeof value === "string")
+    : [];
+  const semanticConfidence =
+    typeof cookiePolicyEnrichment.policy_semantic_confidence === "number" &&
+    Number.isFinite(cookiePolicyEnrichment.policy_semantic_confidence)
+      ? cookiePolicyEnrichment.policy_semantic_confidence
+      : null;
+
+  if (runtimeCookies.length === 0) {
+    return [];
+  }
+
+  const matched = runtimeCookies.flatMap((cookieName) => {
+    const match = matchRuntimeCookie({ cookieName, disclosures });
+    return match ? [{ cookieName, ...match }] : [];
+  });
+  const unmatched = runtimeCookies.filter((cookieName) => !matched.some((entry) => entry.cookieName === cookieName));
+  const findings: Array<ReturnType<typeof buildPolicyRuntimeFinding>> = [];
+
+  const structurallyWeak =
+    disclosures.length === 0 ||
+    (semanticConfidence !== null && semanticConfidence < 0.6) ||
+    flags.includes("low_confidence") ||
+    flags.includes("llm_provider_error");
+
+  if (structurallyWeak) {
+    findings.push(
+      buildPolicyRuntimeFinding({
+        description:
+          "A cookie policy page was present, but it did not expose enough structured cookie disclosure metadata to reconcile the cookies observed at runtime with confidence.",
+        evidence: {
+          cookie_policy_url: pageUrl,
+          extracted_cookie_row_count: disclosures.length,
+          policy_actionable_flags: flags,
+          policy_semantic_confidence: semanticConfidence,
+          runtime_cookie_names: runtimeCookies
+        },
+        pageType,
+        pageUrl,
+        ruleKey: "cookie_runtime.cookie_policy_obstructed",
+        severity: "medium",
+        title: "Cookie policy structurally obstructed"
+      })
+    );
+  }
+
+  if (!structurallyWeak && unmatched.length > 0) {
+    findings.push(
+      buildPolicyRuntimeFinding({
+        description:
+          "Runtime cookies were observed in the browser, but one or more of those cookies could not be matched to a disclosed cookie entry in the site’s cookie policy.",
+        evidence: {
+          cookie_policy_url: pageUrl,
+          disclosed_cookie_rows: disclosures.map((row) => ({
+            confidence: row.confidence,
+            cookieName: row.cookieName,
+            duration: row.duration,
+            provider: row.provider,
+            purpose: row.purpose,
+            snippetHash: row.snippetHash
+          })),
+          matching_methods: matched.map((row) => ({
+            cookieName: row.cookieName,
+            matchedCookieName: row.disclosure.cookieName,
+            method: row.method
+          })),
+          runtime_cookie_names: runtimeCookies,
+          unmatched_cookie_names: unmatched
+        },
+        pageType,
+        pageUrl,
+        ruleKey: "cookie_runtime.disclosure_gap",
+        severity: "high",
+        title: "Cookie disclosure gap"
+      })
+    );
+  }
+
+  return findings;
+}
+
 function buildSectionIssueFinding(input: {
   description: string;
   evidence: Record<string, unknown>;
@@ -141,7 +400,7 @@ function derivePolicySectionFindings(input: {
   policyReviewQueue: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown> | null;
 }) {
-  const findings: ReturnType<typeof buildSectionIssueFinding>[] = [];
+  const findings: Array<ReturnType<typeof buildSectionIssueFinding> | ReturnType<typeof buildPolicyRuntimeFinding>> = [];
   const reviewReasonsByEnrichmentId = new Map<string, Set<string>>();
 
   for (const row of input.policyReviewQueue) {
@@ -159,6 +418,11 @@ function derivePolicySectionFindings(input: {
   const highExposure =
     getRecordBoolean(input.snapshot, "eu_exposure_likely") ||
     getRecordBoolean(input.snapshot, "california_exposure_likely");
+  const rightsFrictionScore = getSnapshotNumber(input.snapshot, "user_rights_friction_score");
+  const retargetingPixelDetected = getRecordBoolean(input.snapshot, "retargeting_pixel_detected");
+  const sessionReplayWithoutDisclosureDetected =
+    getRecordBoolean(input.snapshot, "session_replay_without_disclosure_detected") ||
+    getRecordBoolean(input.snapshot, "session_replay_detected_without_disclosure");
 
   for (const enrichment of input.policyEnrichments) {
     const enrichmentId = String(enrichment.id ?? "");
@@ -180,13 +444,32 @@ function derivePolicySectionFindings(input: {
         ? enrichment.policy_ambiguity_score
         : null;
     const dsarMechanism = typeof enrichment.policy_dsar_mechanism === "string" ? enrichment.policy_dsar_mechanism : null;
+    const policyCoverageRatio =
+      typeof enrichment.policy_coverage_ratio === "number" && Number.isFinite(enrichment.policy_coverage_ratio)
+        ? enrichment.policy_coverage_ratio
+        : null;
+    const policySnippetCount =
+      typeof enrichment.policy_snippet_count === "number" && Number.isFinite(enrichment.policy_snippet_count)
+        ? enrichment.policy_snippet_count
+        : null;
+    const policyStructurallyWeak = enrichment.policy_structurally_weak === true;
+    const summaryShort = enrichment.policy_summary_short ?? null;
     const typeLabel = pageTypeLabel(pageType);
     const baseEvidence = {
       page_type: pageType,
       policy_actionable_flags: flags,
       policy_ambiguity_score: ambiguity,
+      policy_arbitration_present: enrichment.policy_arbitration_present ?? null,
+      policy_cancellation_or_refund_present: enrichment.policy_cancellation_or_refund_present ?? null,
+      policy_coverage_ratio: policyCoverageRatio,
+      policy_effective_date: enrichment.policy_effective_date ?? null,
+      policy_field_coverage: enrichment.policy_field_coverage ?? {},
+      policy_governing_law: enrichment.policy_governing_law ?? null,
+      policy_notice_contact_present: enrichment.policy_notice_contact_present ?? null,
       policy_semantic_confidence: confidence,
-      policy_summary_short: enrichment.policy_summary_short ?? null
+      policy_snippet_count: policySnippetCount,
+      policy_structurally_weak: policyStructurallyWeak,
+      policy_summary_short: summaryShort
     };
 
     if (pageType === "privacy_policy" && dsarMechanism === "absent") {
@@ -265,6 +548,98 @@ function derivePolicySectionFindings(input: {
           title: "Low confidence on critical policy fields"
         })
       );
+
+      const synthesisEvidence = {
+        ...baseEvidence,
+        policy_mentions: mentions,
+        policy_review_reasons: [...reasons],
+        source_page_type: pageType,
+        source_policy_url: pageUrl,
+        supporting_snippets: enrichment.policy_evidence_snippets ?? null,
+        synthesis_source_reason: "low_confidence_critical_fields",
+        synthesis_trigger_summary: [] as string[]
+      };
+
+      if (rightsFrictionScore >= 100) {
+        synthesisEvidence.synthesis_trigger_summary.push("user_rights_friction_score=100");
+        findings.push(
+          buildPolicyRuntimeFinding({
+            description:
+              "The policy extraction was low confidence while runtime signals show users are effectively blocked from exercising privacy rights, suggesting a likely mismatch between disclosed user choice and the actual rights-fulfillment experience.",
+            evidence: {
+              ...synthesisEvidence,
+              user_rights_friction_score: rightsFrictionScore
+            },
+            pageType,
+            pageUrl,
+            ruleKey: "policy_runtime.functional_misalignment",
+            severity: "high",
+            title: "High-confidence functional misalignment"
+          })
+        );
+      }
+
+      if (retargetingPixelDetected || sessionReplayWithoutDisclosureDetected) {
+        const triggerSummary = [
+          retargetingPixelDetected ? "retargeting_pixel_detected=true" : null,
+          sessionReplayWithoutDisclosureDetected ? "session_replay_without_disclosure_detected=true" : null
+        ].filter((value): value is string => value !== null);
+        findings.push(
+          buildPolicyRuntimeFinding({
+            description:
+              "Runtime behavior indicates tracking or replay functionality that was not clearly recoverable from the policy text, suggesting a likely missing technical disclosure rather than a purely low-confidence extraction issue.",
+            evidence: {
+              ...synthesisEvidence,
+              retargeting_pixel_detected: retargetingPixelDetected,
+              session_replay_without_disclosure_detected: sessionReplayWithoutDisclosureDetected,
+              synthesis_trigger_summary: [...synthesisEvidence.synthesis_trigger_summary, ...triggerSummary]
+            },
+            pageType,
+            pageUrl,
+            ruleKey: "policy_runtime.missing_technical_disclosure",
+            severity: "high",
+            title: "Missing technical disclosure"
+          })
+        );
+      }
+
+      if (
+        hasSparsePolicyExtraction({
+          confidence,
+          coverageRatio: policyCoverageRatio,
+          flags,
+          mentions,
+          snippetCount: policySnippetCount,
+          structurallyWeak: policyStructurallyWeak,
+          summaryShort
+        })
+      ) {
+        const triggerSummary = [
+          confidence !== null && confidence < 0.6 ? `policy_semantic_confidence=${confidence}` : null,
+          policyCoverageRatio !== null && policyCoverageRatio < 0.5 ? `policy_coverage_ratio=${policyCoverageRatio}` : null,
+          policySnippetCount === 0 ? "policy_snippet_count=0" : null,
+          policyStructurallyWeak ? "policy_structurally_weak=true" : null,
+          flags.includes("llm_provider_error") ? "llm_provider_error" : null,
+          flags.includes("low_confidence") ? "low_confidence" : null,
+          mentions.length === 0 ? "policy_mentions_empty" : null,
+          typeof summaryShort !== "string" || summaryShort.trim().length === 0 ? "policy_summary_missing" : null
+        ].filter((value): value is string => value !== null);
+        findings.push(
+          buildPolicyRuntimeFinding({
+            description:
+              "The policy page appears structurally weak for automated disclosure capture, suggesting that important disclosures may be technically obstructed, incomplete, or embedded in a way that prevents reliable indexing.",
+            evidence: {
+              ...synthesisEvidence,
+              synthesis_trigger_summary: [...synthesisEvidence.synthesis_trigger_summary, ...triggerSummary]
+            },
+            pageType,
+            pageUrl,
+            ruleKey: "policy_runtime.disclosure_likely_obstructed",
+            severity: "medium",
+            title: "Disclosure likely obstructed"
+          })
+        );
+      }
     }
 
     if (pageType === "terms_of_service" && mentions.length === 0) {
@@ -496,6 +871,10 @@ export function deriveValidationFindings(input: Awaited<ReturnType<typeof loadCo
   }
 
   findings.push(
+    ...deriveCookieRuntimeFindings({
+      policyEnrichments: input.policyEnrichments,
+      runtimeArtifacts: input.runtimeArtifacts
+    }),
     ...derivePolicySectionFindings({
       policyEnrichments: input.policyEnrichments,
       policyReviewQueue: input.policyReviewQueue,

@@ -1471,6 +1471,46 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "policy_enrichment_signal",
+    "privacy.policy_runtime_functional_misalignment_detected",
+    "Policy/runtime functional misalignment detected",
+    "policy_to_behavior_contradictions",
+    ["rights_request_mechanisms"],
+    ["consumer_rights_request_handling", "opt_out_choice_design_dark_pattern_risk"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "disclosure.policy_runtime_missing_technical_disclosure_detected",
+    "Missing technical disclosure detected",
+    "policy_to_behavior_contradictions",
+    ["data_handling_disclosures"],
+    ["tracking_profiling_sensitive_data_risk", "disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "disclosure.policy_runtime_disclosure_likely_obstructed",
+    "Policy disclosure likely obstructed",
+    "clarity_completeness_risk",
+    ["manual_review_triggers"],
+    ["transparency_notice_data_subject_rights"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.cookie_runtime_disclosure_gap_detected",
+    "Cookie disclosure gap detected",
+    "third_party_network_cookie_surface",
+    ["data_handling_disclosures"],
+    ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "disclosure.cookie_policy_structurally_obstructed",
+    "Cookie policy structurally obstructed",
+    "manual_review_triggers",
+    ["clarity_completeness_risk"],
+    ["third_party_network_cookie_surface", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
     "policyEffectiveDate",
     "Policy effective date",
     "terms_coverage_enforceability_signals"

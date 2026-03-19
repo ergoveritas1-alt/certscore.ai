@@ -1,23 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import Link from "next/link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
 import { getValidationRunDetail } from "../../server/validation/repository";
 import { submitValidationRescanAction } from "../../server/validation/actions";
+import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
 
 type ValidationRunDetailPageProps = {
   runId: string;
 };
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatConfidenceBand(value: "very_high" | "high" | "moderate" | "low" | "very_low" | null) {
-  if (!value) {
-    return null;
-  }
-
-  return value.replace(/_/g, " ");
-}
 
 export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPageProps) {
   const detail = await getValidationRunDetail(runId);
@@ -30,6 +20,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">{detail.hostname}</h1>
+          <p className="font-mono text-xs text-slate-500">scan_id {detail.scanId ?? "—"}</p>
           <p className="text-slate-600">
             {detail.status} · {detail.triggerMode} · Rank {detail.trancoRank ?? "—"} · {detail.rankBand ?? "—"}
           </p>
@@ -56,75 +47,66 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
 
       <Card className="border-slate-200 bg-white">
         <CardHeader>
-          <CardTitle>Finding review</CardTitle>
+          <CardTitle>Automated findings</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed divide-y divide-slate-200 text-sm">
-              <colgroup>
-                <col className="w-[44%]" />
-                <col className="w-[44%]" />
-                <col className="w-[12%]" />
-              </colgroup>
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="pb-3 pr-4 font-medium">Automated finding</th>
-                  <th className="pb-3 pr-4 font-medium">GPT-5.4 analysis</th>
-                  <th className="pb-3 font-medium">Agreement</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {detail.rows.map((row) => (
-                  <tr key={`${row.automatedFinding.ruleKey}-${row.automatedFinding.rank}`} className="align-top">
-                    <td className="py-4 pr-4">
-                      <div className="space-y-2">
+          <div className="space-y-4">
+            {detail.rows.map((row) => (
+              <div key={`${row.automatedFinding.ruleKey}-${row.automatedFinding.rank}`} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
+                {(() => {
+                  const siblingFindingKeysOrTitles = detail.rows
+                    .filter((candidate) => candidate.automatedFinding.pageUrl === row.automatedFinding.pageUrl)
+                    .flatMap((candidate) => [candidate.automatedFinding.ruleKey, candidate.automatedFinding.title])
+                    .filter((value) => value !== row.automatedFinding.ruleKey && value !== row.automatedFinding.title);
+                  const presentation = getReviewFindingPresentation({
+                    evidence: row.automatedFinding.evidence,
+                    keyOrTitle: row.automatedFinding.ruleKey,
+                    findingTitle: row.automatedFinding.title,
+                    siblingFindingKeysOrTitles
+                  });
+                  const pageLabel = row.automatedFinding.pageUrl ?? detail.hostname;
+                  const summaryJson = {
+                    url: pageLabel,
+                    findingName: row.automatedFinding.title,
+                    confidenceScore: presentation.confidenceScore ?? "NA",
+                    whyThisMatters: presentation.whyThisMatters,
+                    suggestedFix: presentation.suggestedFix,
+                    suggestedBestPractice: presentation.bestPracticeLink
+                      ? {
+                          organization: presentation.bestPracticeLink.label,
+                          title: presentation.bestPracticeLink.title,
+                          url: presentation.bestPracticeLink.url
+                        }
+                      : null
+                  };
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">URL</p>
+                        <p className="text-sm text-slate-700 break-all">{pageLabel}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Finding name</p>
                         <p className="font-semibold text-slate-950">
                           #{row.automatedFinding.rank} · {row.automatedFinding.title}
                         </p>
                         <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
-                          {row.automatedFinding.ruleKey} · {row.automatedFinding.severity}
+                          {row.automatedFinding.ruleKey} · {row.automatedFinding.severity} · {detail.hostname}
                         </p>
-                        <p className="text-slate-700">{row.automatedFinding.description}</p>
-                        <p className="text-xs text-slate-500">Page: {row.automatedFinding.pageUrl ?? "site-level"}</p>
-                        <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
-                          {JSON.stringify(row.automatedFinding.evidence, null, 2)}
-                        </pre>
                       </div>
-                    </td>
-                    <td className="py-4 pr-4">
-                      {row.verdict ? (
-                        <div className="space-y-2">
-                          <p className="font-semibold text-slate-950">{row.verdict.verdict}</p>
-                          <p className="text-slate-700">{row.verdict.rationale}</p>
-                          <p className="text-xs text-slate-500">
-                            Confidence {formatPercent(row.verdict.confidence)} · {row.verdict.model} · {row.verdict.promptVersion}
-                          </p>
-                          {typeof row.verdict.systemConfidenceScore === "number" ? (
-                            <p className="text-xs text-slate-500">
-                              System confidence {formatPercent(row.verdict.systemConfidenceScore)}
-                              {row.verdict.systemConfidenceBand ? ` · ${formatConfidenceBand(row.verdict.systemConfidenceBand)}` : ""}
-                            </p>
-                          ) : null}
-                          {row.verdict.systemConfidenceExplanation ? (
-                            <p className="text-xs text-slate-500">{row.verdict.systemConfidenceExplanation}</p>
-                          ) : null}
-                          <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
-                            {JSON.stringify(row.verdict.evidence, null, 2)}
-                          </pre>
-                        </div>
-                      ) : (
-                        <p className="text-slate-500">Verdict pending.</p>
-                      )}
-                    </td>
-                    <td className="py-4">
-                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-900">
-                        {row.agreementScore ?? "—"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
+                        {JSON.stringify(summaryJson, null, 2)}
+                      </pre>
+                      <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
+                        {JSON.stringify(row.automatedFinding.evidence, null, 2)}
+                      </pre>
+                    </div>
+                  );
+                })()}
+              </div>
+            ))}
+            {detail.rows.length === 0 ? <p className="text-sm text-slate-500">No automated findings were stored for this run.</p> : null}
           </div>
         </CardContent>
       </Card>

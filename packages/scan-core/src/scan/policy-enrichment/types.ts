@@ -36,6 +36,15 @@ export type PolicyTransferMechanismItem = {
   snippet: string | null;
 };
 
+export type PolicyCookieDisclosureItem = {
+  confidence: number;
+  cookieName: string | null;
+  duration: string | null;
+  provider: string | null;
+  purpose: string | null;
+  snippet: string | null;
+};
+
 export type PolicyFieldValue<T> = {
   confidence: number;
   snippet: string | null;
@@ -95,7 +104,9 @@ export type PolicyLlmChunkDiagnostic = {
 export type PolicyRulePreprocessResult = {
   actionableFlags: string[];
   arbitrationPresent: boolean | null;
+  cancellationOrRefundPresent: boolean | null;
   childrenReference: PolicyChildrenReference;
+  cookieDisclosures?: PolicyCookieDisclosureItem[];
   dataCategories: string[];
   dataAccessRequestPresent: boolean;
   dataDeletionRequestPresent: boolean;
@@ -107,6 +118,7 @@ export type PolicyRulePreprocessResult = {
   needLlm: boolean;
   normalizedPolicyHash: string;
   normalizedText: string;
+  noticeContactPresent: boolean | null;
   policyClaimNoSale: boolean | null;
   policyClaimNoTracking: boolean | null;
   policyClaimPrivacyProtective: boolean | null;
@@ -115,6 +127,7 @@ export type PolicyRulePreprocessResult = {
   retentionDisclosure: PolicyRetentionDisclosure | null;
   semanticConfidence: number;
   summary: string | null;
+  terminationOrSuspensionPresent: boolean | null;
   transferMechanisms: PolicyTransferMechanismItem[];
   updateDate: string | null;
 };
@@ -187,9 +200,23 @@ export type MergedPolicyExtraction = {
   policyActionableFlags: string[];
   policyAmbiguityScore: number | null;
   policyArbitrationPresent: boolean | null;
+  policyCancellationOrRefundPresent: boolean | null;
   policyChildrenReference: PolicyChildrenReference;
+  policyCookieDisclosures?: Array<{
+    confidence: number;
+    cookieName: string | null;
+    duration: string | null;
+    provider: string | null;
+    purpose: string | null;
+    snippetHash: string | null;
+  }>;
   policyEffectiveDate: string | null;
+  policyFieldCoverage: Record<string, { confidence: number | null; found: boolean; snippetKey: string | null }>;
+  policyCoverageRatio: number | null;
   policyGoverningLaw: string | null;
+  policyNoticeContactPresent: boolean | null;
+  policySnippetCount: number | null;
+  policyStructurallyWeak: boolean | null;
   privacyContactChannelType: PrivacyContactChannelType | null;
   policyRetentionDisclosure: PolicyRetentionDisclosure | null;
   policyClaimNoSale: boolean | null;
@@ -207,6 +234,7 @@ export type MergedPolicyExtraction = {
   policySemanticConfidence: number | null;
   policySubprocessorsListed: boolean | null;
   policySummaryShort: string | null;
+  policyTerminationOrSuspensionPresent: boolean | null;
   policyTransferMechanisms: Array<{ confidence: number; mechanism: string; snippetHash: string | null }>;
 };
 

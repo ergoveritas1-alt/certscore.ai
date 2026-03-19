@@ -279,6 +279,9 @@ function toCachedEnrichment(input: {
     policyEffectiveDate: (input.cached.policy_effective_date as string | null) ?? null,
     policyGoverningLaw: (input.cached.policy_governing_law as string | null) ?? null,
     policyArbitrationPresent: (input.cached.policy_arbitration_present as boolean | null) ?? null,
+    policyNoticeContactPresent: (input.cached.policy_notice_contact_present as boolean | null) ?? null,
+    policyTerminationOrSuspensionPresent: (input.cached.policy_termination_or_suspension_present as boolean | null) ?? null,
+    policyCancellationOrRefundPresent: (input.cached.policy_cancellation_or_refund_present as boolean | null) ?? null,
     privacyContactChannelType: (input.cached.privacy_contact_channel_type as PolicyEnrichment["privacyContactChannelType"]) ?? null,
     policyRetentionDisclosure: (input.cached.policy_retention_disclosure as PolicyEnrichment["policyRetentionDisclosure"]) ?? null,
     policyClaimNoSale: (input.cached.policy_claim_no_sale as boolean | null) ?? null,
@@ -305,6 +308,13 @@ function toCachedEnrichment(input: {
       input.cached.policy_evidence_snippets && typeof input.cached.policy_evidence_snippets === "object"
         ? (input.cached.policy_evidence_snippets as Record<string, string | string[] | null>)
         : {},
+    policyFieldCoverage:
+      input.cached.policy_field_coverage && typeof input.cached.policy_field_coverage === "object"
+        ? (input.cached.policy_field_coverage as PolicyEnrichment["policyFieldCoverage"])
+        : {},
+    policyCoverageRatio: (input.cached.policy_coverage_ratio as number | null) ?? null,
+    policySnippetCount: (input.cached.policy_snippet_count as number | null) ?? null,
+    policyStructurallyWeak: (input.cached.policy_structurally_weak as boolean | null) ?? null,
     policySemanticConfidence: (input.cached.policy_semantic_confidence as number | null) ?? null,
     policyAiModel: (input.cached.policy_ai_model as string | null) ?? POLICY_EXTRACTION_CONFIG.model,
     policyAiModelVersion: (input.cached.policy_ai_model_version as string | null) ?? POLICY_EXTRACTION_CONFIG.modelVersion,
@@ -545,9 +555,24 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
     ),
             policyAmbiguityScore: contentQuality.insufficientContent ? 90 : ruleResult.needLlm ? 68 : 34,
             policyArbitrationPresent: allowTermsClauses ? ruleResult.arbitrationPresent : null,
+            policyCancellationOrRefundPresent: allowTermsClauses ? ruleResult.cancellationOrRefundPresent : null,
             policyChildrenReference: ruleResult.childrenReference,
+            policyCookieDisclosures: (ruleResult.cookieDisclosures ?? []).map((item) => ({
+              confidence: item.confidence,
+              cookieName: item.cookieName,
+              duration: item.duration,
+              provider: item.provider,
+              purpose: item.purpose,
+              snippetHash: null
+            })),
             policyEffectiveDate: ruleResult.updateDate,
+            policyFieldCoverage: {},
+            policyCoverageRatio: null,
             policyGoverningLaw: allowTermsClauses ? ruleResult.governingLaw : null,
+            policyNoticeContactPresent: allowTermsClauses ? ruleResult.noticeContactPresent : null,
+            policySnippetCount: Object.keys(ruleResult.evidenceSnippets).length,
+            policyStructurallyWeak: contentQuality.insufficientContent || Object.keys(ruleResult.evidenceSnippets).length === 0,
+            policyTerminationOrSuspensionPresent: allowTermsClauses ? ruleResult.terminationOrSuspensionPresent : null,
             privacyContactChannelType: ruleResult.privacyContactChannelType,
             policyRetentionDisclosure: ruleResult.retentionDisclosure,
             policyClaimNoSale: ruleResult.policyClaimNoSale,
@@ -605,6 +630,9 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       policyEffectiveDate: merged.policyEffectiveDate,
       policyGoverningLaw: allowTermsClauses ? merged.policyGoverningLaw : null,
       policyArbitrationPresent: allowTermsClauses ? merged.policyArbitrationPresent : null,
+      policyNoticeContactPresent: allowTermsClauses ? merged.policyNoticeContactPresent : null,
+      policyTerminationOrSuspensionPresent: allowTermsClauses ? merged.policyTerminationOrSuspensionPresent : null,
+      policyCancellationOrRefundPresent: allowTermsClauses ? merged.policyCancellationOrRefundPresent : null,
       privacyContactChannelType: merged.privacyContactChannelType,
       policyRetentionDisclosure: merged.policyRetentionDisclosure,
       policyClaimNoSale: merged.policyClaimNoSale,
@@ -630,6 +658,21 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         snippetHash: ("snippetHash" in item ? item.snippetHash : null) ?? policyEvidence.references.transfer ?? null
       })),
       policyChildrenReference: merged.policyChildrenReference,
+      policyCookieDisclosures: (merged.policyCookieDisclosures ?? []).map((item) => {
+        const cookieSnippetHash =
+          item.cookieName ? policyEvidence.references[`cookie:${item.cookieName.toLowerCase()}`] : null;
+        const providerSnippetHash =
+          item.provider ? policyEvidence.references[`cookie-provider:${item.provider.toLowerCase()}`] : null;
+
+        return {
+          confidence: item.confidence,
+          cookieName: item.cookieName,
+          duration: item.duration,
+          provider: item.provider,
+          purpose: item.purpose,
+          snippetHash: cookieSnippetHash ?? providerSnippetHash ?? item.snippetHash ?? null
+        };
+      }),
       policyAmbiguityScore: merged.policyAmbiguityScore,
       policyBehaviorConflictCandidate,
       policyActionableFlags: Array.from(
@@ -641,6 +684,19 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         ])
       ).sort(),
       policyEvidenceSnippets: policyEvidence.references,
+      policyFieldCoverage: Object.fromEntries(
+        Object.entries(merged.policyFieldCoverage).map(([key, value]) => [
+          key,
+          {
+            confidence: value.confidence,
+            found: value.found,
+            snippetHash: value.snippetKey ? (policyEvidence.references[value.snippetKey] ?? null) : null
+          }
+        ])
+      ),
+      policyCoverageRatio: merged.policyCoverageRatio,
+      policySnippetCount: merged.policySnippetCount,
+      policyStructurallyWeak: merged.policyStructurallyWeak,
       policySemanticConfidence: merged.policySemanticConfidence,
       policyAiModel: modelMeta.model,
       policyAiModelVersion: modelMeta.modelVersion,

@@ -206,17 +206,6 @@ type ValidationRunFindingRow = {
   title: string;
 };
 
-type ValidationVerdictRow = {
-  confidence: number | null;
-  rationale: string | null;
-  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-  system_confidence_explanation: string | null;
-  system_confidence_score: number | null;
-  validation_run_finding_id: string;
-  verdict: "supported" | "inconclusive" | "not_supported";
-  agreement_score: number | null;
-};
-
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
   const next = { ...snapshot };
   delete next.id;
@@ -436,68 +425,18 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     }
 
     const findingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
-    const findingIds = findingRows.map((row) => row.id);
-    const verdictMap = new Map<string, ValidationVerdictRow>();
-
-    if (findingIds.length > 0) {
-      let verdictRows: ValidationVerdictRow[] = [];
-      const withSystemConfidence = await supabase
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIds);
-
-      if (withSystemConfidence.error && withSystemConfidence.error.message.toLowerCase().includes("system_confidence")) {
-        const fallback = await supabase
-          .from("validation_verdicts")
-          .select("validation_run_finding_id, verdict, confidence, rationale, agreement_score")
-          .in("validation_run_finding_id", findingIds);
-
-        if (fallback.error) {
-          throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${fallback.error.message}`);
-        }
-
-        verdictRows = ((fallback.data ?? []) as Array<{
-          agreement_score: number | null;
-          confidence: number | null;
-          rationale: string | null;
-          validation_run_finding_id: string;
-          verdict: "supported" | "inconclusive" | "not_supported";
-        }>).map((row) => ({
-          agreement_score: row.agreement_score,
-          confidence: row.confidence,
-          rationale: row.rationale,
-          system_confidence_band: null,
-          system_confidence_explanation: null,
-          system_confidence_score: null,
-          validation_run_finding_id: row.validation_run_finding_id,
-          verdict: row.verdict
-        }));
-      } else if (withSystemConfidence.error) {
-        throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${withSystemConfidence.error.message}`);
-      } else {
-        verdictRows = (withSystemConfidence.data ?? []) as ValidationVerdictRow[];
-      }
-
-      for (const verdict of verdictRows) {
-        verdictMap.set(verdict.validation_run_finding_id, verdict);
-      }
-    }
 
     validationFindings = findingRows.map((row) => {
-      const verdict = verdictMap.get(row.id);
-
       return {
-        agreementScore: verdict?.agreement_score ?? null,
-        modelConfidence: verdict?.confidence ?? null,
-        rationale: verdict?.rationale ?? null,
+        agreementScore: null,
+        modelConfidence: null,
+        rationale: null,
         ruleKey: row.rule_key,
-        systemConfidenceBand: verdict?.system_confidence_band ?? null,
-        systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
-        systemConfidenceScore: verdict?.system_confidence_score ?? null,
+        systemConfidenceBand: null,
+        systemConfidenceExplanation: null,
+        systemConfidenceScore: null,
         title: row.title,
-        verdict: verdict?.verdict ?? null
+        verdict: null
       } satisfies ScanValidationFindingRecord;
     });
   }

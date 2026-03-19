@@ -547,6 +547,15 @@ export type PolicyTransferMechanism = {
   snippetHash: string | null;
 };
 
+export type PolicyCookieDisclosure = {
+  confidence: number;
+  cookieName: string | null;
+  duration: string | null;
+  provider: string | null;
+  purpose: string | null;
+  snippetHash: string | null;
+};
+
 export type PolicyEnrichment = {
   id: string;
   scanId: string;
@@ -557,6 +566,9 @@ export type PolicyEnrichment = {
   policyEffectiveDate: string | null;
   policyGoverningLaw: string | null;
   policyArbitrationPresent: boolean | null;
+  policyNoticeContactPresent: boolean | null;
+  policyTerminationOrSuspensionPresent: boolean | null;
+  policyCancellationOrRefundPresent: boolean | null;
   privacyContactChannelType: PrivacyContactChannelType | null;
   policyRetentionDisclosure: PolicyRetentionDisclosure | null;
   policyClaimNoSale: boolean | null;
@@ -564,6 +576,7 @@ export type PolicyEnrichment = {
   policyClaimPrivacyProtective: boolean | null;
   policyMentions: PolicyMention[];
   policyDataCategories: string[];
+  policyCookieDisclosures?: PolicyCookieDisclosure[];
   policyRetentionPeriods: PolicyRetentionPeriod[];
   policyDsarMechanism: PolicyDsarMechanism;
   policyDsarConfidence: number | null;
@@ -576,6 +589,10 @@ export type PolicyEnrichment = {
   policyBehaviorConflictCandidate: boolean | null;
   policyActionableFlags: string[];
   policyEvidenceSnippets: Record<string, string | string[] | null>;
+  policyFieldCoverage: Record<string, { confidence: number | null; found: boolean; snippetHash: string | null }>;
+  policyCoverageRatio: number | null;
+  policySnippetCount: number | null;
+  policyStructurallyWeak: boolean | null;
   policySemanticConfidence: number | null;
   policyAiModel: string | null;
   policyAiModelVersion: string | null;

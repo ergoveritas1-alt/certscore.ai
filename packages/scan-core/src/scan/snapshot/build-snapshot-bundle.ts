@@ -249,6 +249,111 @@ function toTaxonomySignal(input: Omit<SnapshotSignalItem, "primaryCategory" | "p
   };
 }
 
+function normalizeCookieName(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value.trim().toLowerCase();
+}
+
+const COOKIE_PROVIDER_HINTS: Array<{
+  category?: string;
+  prefixes: string[];
+  provider: string;
+}> = [
+  { prefixes: ["_ga", "_gid", "_gat", "_gac_", "_gcl_"], provider: "Google Analytics", category: "analytics" },
+  { prefixes: ["ide", "test_cookie"], provider: "DoubleClick", category: "advertising" },
+  { prefixes: ["_fbp", "fr"], provider: "Meta", category: "advertising" },
+  { prefixes: ["ajs_"], provider: "Segment", category: "analytics" },
+  { prefixes: ["_hj"], provider: "Hotjar", category: "analytics" }
+];
+
+function inferCookieProvider(cookieName: string) {
+  const normalized = normalizeCookieName(cookieName);
+  if (!normalized) {
+    return null;
+  }
+
+  return COOKIE_PROVIDER_HINTS.find((hint) => hint.prefixes.some((prefix) => normalized.startsWith(prefix.toLowerCase()))) ?? null;
+}
+
+function matchCookieDisclosure(input: {
+  cookieName: string;
+  disclosures: Array<Record<string, unknown>>;
+}) {
+  const runtimeName = normalizeCookieName(input.cookieName);
+  if (!runtimeName) {
+    return null;
+  }
+
+  for (const disclosure of input.disclosures) {
+    const disclosedName = normalizeCookieName(
+      typeof disclosure.cookieName === "string"
+        ? disclosure.cookieName
+        : typeof disclosure.cookie_name === "string"
+          ? disclosure.cookie_name
+          : null
+    );
+
+    if (disclosedName && (runtimeName === disclosedName || runtimeName.startsWith(disclosedName) || disclosedName.startsWith(runtimeName))) {
+      return disclosure;
+    }
+  }
+
+  const inferred = inferCookieProvider(runtimeName);
+  if (!inferred) {
+    return null;
+  }
+
+  for (const disclosure of input.disclosures) {
+    const provider = typeof disclosure.provider === "string" ? disclosure.provider.toLowerCase() : "";
+    const purpose = typeof disclosure.purpose === "string" ? disclosure.purpose.toLowerCase() : "";
+
+    if (provider.includes(inferred.provider.toLowerCase()) || (inferred.category && purpose.includes(inferred.category))) {
+      return disclosure;
+    }
+  }
+
+  return null;
+}
+
+function hasSparsePolicyExtraction(input: {
+  confidence: number | null;
+  coverageRatio?: number | null;
+  flags: string[];
+  mentions: Array<{ confidence: number; topic: string }>;
+  snippetCount?: number | null;
+  structurallyWeak?: boolean | null;
+  summaryShort: string | null;
+}) {
+  if (input.structurallyWeak === true) {
+    return true;
+  }
+
+  if (input.confidence !== null && input.confidence < 0.6) {
+    return true;
+  }
+
+  if (input.coverageRatio !== null && input.coverageRatio !== undefined && input.coverageRatio < 0.5) {
+    return true;
+  }
+
+  if (input.flags.includes("llm_provider_error") || input.flags.includes("low_confidence")) {
+    return true;
+  }
+
+  if (input.snippetCount !== null && input.snippetCount !== undefined && input.snippetCount === 0) {
+    return true;
+  }
+
+  if (input.mentions.length === 0) {
+    return true;
+  }
+
+  return typeof input.summaryShort !== "string" || input.summaryShort.trim().length === 0;
+}
+
 async function persistPolicyResolutionDiagnostic(input: {
   scanId: string;
   domainId: string;
@@ -2335,24 +2440,44 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         fetchedPageCount: fetchedPagesByUrl.size
       }
     });
-    await upgradeThinPolicyPages({
-      domainId: input.domainId,
-      fetchedPagesByUrl,
-      organizationId: input.organizationId,
-      plan: scanPlan,
-      robotsPolicy: robotsState.policy,
-      scanId: input.scanId
-    });
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: "upgrade_thin_policy_pages",
-      status: "ok",
-      metadata: {
-        fetchedPageCount: fetchedPagesByUrl.size
-      }
-    });
+    const thinPolicyUpgradeTimeoutMs = Math.max(
+      5_000,
+      Number.parseInt(process.env.THIN_POLICY_UPGRADE_TIMEOUT_MS ?? "30000", 10) || 30_000
+    );
+    try {
+      await withStepTimeout(thinPolicyUpgradeTimeoutMs, "Thin policy upgrade", () =>
+        upgradeThinPolicyPages({
+          domainId: input.domainId,
+          fetchedPagesByUrl,
+          organizationId: input.organizationId,
+          plan: scanPlan,
+          robotsPolicy: robotsState.policy,
+          scanId: input.scanId
+        })
+      );
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "upgrade_thin_policy_pages",
+        status: "ok",
+        metadata: {
+          fetchedPageCount: fetchedPagesByUrl.size
+        }
+      });
+    } catch (error) {
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "upgrade_thin_policy_pages",
+        status: "error",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          fetchedPageCount: fetchedPagesByUrl.size
+        }
+      });
+    }
   }
 
   const fetchedPages = [...fetchedPagesByUrl.values()];
@@ -3482,6 +3607,134 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         value: runtimeArtifacts.consentAcceptClickCount ?? 0
       })
     );
+  }
+
+  const reviewReasonsByEnrichmentId = new Map<string, Set<string>>();
+  for (const row of policyEnrichmentBundle.reviewQueueItems) {
+    const enrichmentId = String(row.policyEnrichmentId ?? "");
+    if (!enrichmentId) {
+      continue;
+    }
+
+    const existing = reviewReasonsByEnrichmentId.get(enrichmentId) ?? new Set<string>();
+    existing.add(String(row.reason ?? ""));
+    reviewReasonsByEnrichmentId.set(enrichmentId, existing);
+  }
+
+  let functionalMisalignmentDetected = false;
+  let missingTechnicalDisclosureDetected = false;
+  let disclosureLikelyObstructedDetected = false;
+
+  for (const enrichment of policyEnrichmentBundle.enrichments) {
+    const reasons = reviewReasonsByEnrichmentId.get(String(enrichment.id ?? "")) ?? new Set<string>();
+    if (!reasons.has("low_confidence_critical_fields")) {
+      continue;
+    }
+
+    const flags = Array.isArray(enrichment.policyActionableFlags)
+      ? enrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
+      : [];
+    const mentions = Array.isArray(enrichment.policyMentions) ? enrichment.policyMentions : [];
+
+    if ((snapshotWithScores.userRightsFrictionScore ?? 0) >= 100) {
+      functionalMisalignmentDetected = true;
+    }
+
+    if (
+      snapshotWithScores.retargetingPixelDetected === true ||
+      snapshotWithScores.sessionReplayWithoutDisclosureDetected === true
+    ) {
+      missingTechnicalDisclosureDetected = true;
+    }
+
+    if (
+      hasSparsePolicyExtraction({
+        confidence: enrichment.policySemanticConfidence,
+        coverageRatio: enrichment.policyCoverageRatio,
+        flags,
+        mentions,
+        snippetCount: enrichment.policySnippetCount,
+        structurallyWeak: enrichment.policyStructurallyWeak,
+        summaryShort: enrichment.policySummaryShort
+      })
+    ) {
+      disclosureLikelyObstructedDetected = true;
+    }
+  }
+
+  if (functionalMisalignmentDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.policy_runtime_functional_misalignment_detected",
+        label: "Policy/runtime functional misalignment detected",
+        value: true
+      })
+    );
+  }
+
+  if (missingTechnicalDisclosureDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.policy_runtime_missing_technical_disclosure_detected",
+        label: "Missing technical disclosure detected",
+        value: true
+      })
+    );
+  }
+
+  if (disclosureLikelyObstructedDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.policy_runtime_disclosure_likely_obstructed",
+        label: "Policy disclosure likely obstructed",
+        value: true
+      })
+    );
+  }
+
+  const cookiePolicyEnrichment =
+    policyEnrichmentBundle.enrichments.find((enrichment) => enrichment.pageType === "cookie_policy") ?? null;
+  const runtimeCookieNames = [...new Set((runtimeArtifacts.initialCookieNames ?? []).map((value) => normalizeCookieName(value)).filter((value): value is string => Boolean(value)))];
+  if (cookiePolicyEnrichment && runtimeCookieNames.length > 0) {
+    const cookieDisclosures = Array.isArray(cookiePolicyEnrichment.policyCookieDisclosures)
+      ? cookiePolicyEnrichment.policyCookieDisclosures
+      : [];
+    const cookieFlags = Array.isArray(cookiePolicyEnrichment.policyActionableFlags)
+      ? cookiePolicyEnrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
+      : [];
+    const cookiePolicyStructurallyObstructed =
+      cookieDisclosures.length === 0 ||
+      (typeof cookiePolicyEnrichment.policySemanticConfidence === "number" && cookiePolicyEnrichment.policySemanticConfidence < 0.6) ||
+      cookieFlags.includes("low_confidence") ||
+      cookieFlags.includes("llm_provider_error");
+
+    if (cookiePolicyStructurallyObstructed) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: "disclosure.cookie_policy_structurally_obstructed",
+          label: "Cookie policy structurally obstructed",
+          value: true
+        })
+      );
+    } else {
+      const unmatchedCookieNames = runtimeCookieNames.filter(
+        (cookieName) => !matchCookieDisclosure({ cookieName, disclosures: cookieDisclosures })
+      );
+      if (unmatchedCookieNames.length > 0) {
+        compatibilitySignals.push(
+          toTaxonomySignal({
+            category: "privacy",
+            key: "privacy.cookie_runtime_disclosure_gap_detected",
+            label: "Cookie disclosure gap detected",
+            value: true
+          })
+        );
+      }
+    }
   }
   const byCategory = compatibilitySignals.reduce<Record<string, number>>((accumulator, signal) => {
     accumulator[signal.category] = (accumulator[signal.category] ?? 0) + 1;

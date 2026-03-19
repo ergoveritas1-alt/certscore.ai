@@ -55,7 +55,6 @@ function mergeEnumField<T extends string | boolean | null>(input: {
       value: input.defaultValue
     };
   }
-
   const high = nonNull.find((chunk) => chunk.confidence >= input.highThreshold);
   if (high) {
     return high;
@@ -92,6 +91,128 @@ function mergeEnumField<T extends string | boolean | null>(input: {
         confidence: winnerMedian,
         value: input.defaultValue
       };
+}
+
+function buildPolicyFieldCoverage(input: {
+  pageType: PolicyPageType;
+  ruleResult: PolicyRulePreprocessResult;
+  policySemanticConfidence: number;
+  merged: {
+    policyEffectiveDate: string | null;
+    policyGoverningLaw: string | null;
+    policyArbitrationPresent: boolean | null;
+    policyDsarMechanism: string;
+    policyDoNotSell: string;
+    privacyContactChannelType: string | null;
+    policyRetentionPeriods: Array<{ periodText: string }>;
+    policyRetentionDisclosure: string | null;
+    policyTransferMechanisms: Array<{ mechanism: string }>;
+    policyNoticeContactPresent: boolean | null;
+    policyTerminationOrSuspensionPresent: boolean | null;
+    policyCancellationOrRefundPresent: boolean | null;
+    policyCookieDisclosures: Array<{ cookieName: string | null; provider: string | null; duration: string | null; purpose: string | null }>;
+  };
+}) {
+  const baseConfidence = input.policySemanticConfidence > 0 ? input.policySemanticConfidence : null;
+  const fields: Record<string, { confidence: number | null; found: boolean; snippetKey: string | null }> = {};
+
+  if (input.pageType === "terms_of_service") {
+    fields.effective_date = {
+      confidence: input.merged.policyEffectiveDate ? baseConfidence : null,
+      found: Boolean(input.merged.policyEffectiveDate),
+      snippetKey: "effective_date"
+    };
+    fields.governing_law = {
+      confidence: input.merged.policyGoverningLaw ? baseConfidence : null,
+      found: Boolean(input.merged.policyGoverningLaw),
+      snippetKey: "governing_law"
+    };
+    fields.arbitration = {
+      confidence: input.merged.policyArbitrationPresent ? baseConfidence : null,
+      found: input.merged.policyArbitrationPresent === true,
+      snippetKey: "arbitration"
+    };
+    fields.notice_contact = {
+      confidence: input.merged.policyNoticeContactPresent ? baseConfidence : null,
+      found: input.merged.policyNoticeContactPresent === true,
+      snippetKey: "notice_contact"
+    };
+    fields.termination_or_suspension = {
+      confidence: input.merged.policyTerminationOrSuspensionPresent ? baseConfidence : null,
+      found: input.merged.policyTerminationOrSuspensionPresent === true,
+      snippetKey: "termination"
+    };
+    fields.cancellation_or_refund = {
+      confidence: input.merged.policyCancellationOrRefundPresent ? baseConfidence : null,
+      found: input.merged.policyCancellationOrRefundPresent === true,
+      snippetKey: "cancellation_refund"
+    };
+  } else if (input.pageType === "cookie_policy") {
+    fields.cookie_rows = {
+      confidence: input.merged.policyCookieDisclosures.length > 0 ? baseConfidence : null,
+      found: input.merged.policyCookieDisclosures.length > 0,
+      snippetKey: input.merged.policyCookieDisclosures[0]?.cookieName ? `cookie:${input.merged.policyCookieDisclosures[0].cookieName.toLowerCase()}` : null
+    };
+    fields.cookie_duration = {
+      confidence: input.merged.policyCookieDisclosures.some((item) => Boolean(item.duration)) ? baseConfidence : null,
+      found: input.merged.policyCookieDisclosures.some((item) => Boolean(item.duration)),
+      snippetKey: input.merged.policyCookieDisclosures[0]?.cookieName ? `cookie:${input.merged.policyCookieDisclosures[0].cookieName.toLowerCase()}` : null
+    };
+    fields.cookie_provider = {
+      confidence: input.merged.policyCookieDisclosures.some((item) => Boolean(item.provider)) ? baseConfidence : null,
+      found: input.merged.policyCookieDisclosures.some((item) => Boolean(item.provider)),
+      snippetKey: input.merged.policyCookieDisclosures[0]?.provider ? `cookie-provider:${input.merged.policyCookieDisclosures[0].provider.toLowerCase()}` : null
+    };
+  } else {
+    fields.dsar_path = {
+      confidence: input.merged.policyDsarMechanism !== "unknown" ? baseConfidence : null,
+      found: input.merged.policyDsarMechanism === "present" || input.merged.policyDsarMechanism === "partial",
+      snippetKey: "dsar"
+    };
+    fields.privacy_contact = {
+      confidence: input.merged.privacyContactChannelType && input.merged.privacyContactChannelType !== "none" ? baseConfidence : null,
+      found: Boolean(input.merged.privacyContactChannelType && input.merged.privacyContactChannelType !== "none"),
+      snippetKey: "dsar"
+    };
+    fields.do_not_sell = {
+      confidence: input.merged.policyDoNotSell !== "unknown" ? baseConfidence : null,
+      found: input.merged.policyDoNotSell === "present_link" || input.merged.policyDoNotSell === "present_text",
+      snippetKey: "do_not_sell"
+    };
+    fields.retention = {
+      confidence:
+        input.merged.policyRetentionDisclosure !== "none" || input.merged.policyRetentionPeriods.length > 0 ? baseConfidence : null,
+      found: input.merged.policyRetentionDisclosure !== "none" || input.merged.policyRetentionPeriods.length > 0,
+      snippetKey: "retention"
+    };
+    fields.third_party_sharing = {
+      confidence:
+        input.merged.policyTransferMechanisms.length > 0 || input.ruleResult.mentions.some((item) => item.topic === "cross_border_transfer")
+          ? baseConfidence
+          : null,
+      found:
+        input.merged.policyTransferMechanisms.length > 0 || input.ruleResult.mentions.some((item) => item.topic === "cross_border_transfer"),
+      snippetKey: "transfer:SCC"
+    };
+  }
+
+  const coverageEntries = Object.values(fields);
+  const foundCount = coverageEntries.filter((entry) => entry.found).length;
+  const ratio = coverageEntries.length > 0 ? foundCount / coverageEntries.length : 0;
+  const snippetCount = Object.keys(input.ruleResult.evidenceSnippets).length;
+  const structurallyWeak =
+    snippetCount === 0 ||
+    ratio < 0.5 ||
+    input.policySemanticConfidence < 0.6 ||
+    input.ruleResult.actionableFlags.includes("low_confidence") ||
+    input.ruleResult.actionableFlags.includes("llm_provider_error");
+
+  return {
+    fields,
+    policyCoverageRatio: ratio,
+    policySnippetCount: snippetCount,
+    policyStructurallyWeak: structurallyWeak
+  };
 }
 
 export function mergePolicyChunkExtractions(input: {
@@ -201,6 +322,7 @@ export function mergePolicyChunkExtractions(input: {
     (item) => `${item.category}:${item.periodText}`,
     input.moderateThreshold
   );
+  const policyCookieDisclosures = input.ruleResult.cookieDisclosures ?? [];
   const transferMechanisms = dedupeListWithConfidence(
     input.chunkExtractions.flatMap((chunk) => chunk.transferMechanisms),
     (item) => item.mechanism,
@@ -263,6 +385,26 @@ export function mergePolicyChunkExtractions(input: {
           ]
     ).filter((value) => value > 0)
   );
+  const policyFieldCoverage = buildPolicyFieldCoverage({
+    pageType,
+    policySemanticConfidence,
+    ruleResult: input.ruleResult,
+    merged: {
+      policyArbitrationPresent: arbitrationPresent.value,
+      policyCancellationOrRefundPresent: input.ruleResult.cancellationOrRefundPresent,
+      policyCookieDisclosures,
+      policyDsarMechanism: dsarMechanism.value,
+      policyDoNotSell: doNotSell.value,
+      policyEffectiveDate: effectiveDate.value ?? input.ruleResult.updateDate,
+      policyGoverningLaw: governingLaw.value ?? input.ruleResult.governingLaw,
+      policyNoticeContactPresent: input.ruleResult.noticeContactPresent,
+      policyRetentionDisclosure: retentionDisclosure.value ?? input.ruleResult.retentionDisclosure,
+      policyRetentionPeriods: retentionStatements.length > 0 ? retentionStatements : input.ruleResult.retentionStatements,
+      policyTerminationOrSuspensionPresent: input.ruleResult.terminationOrSuspensionPresent,
+      policyTransferMechanisms: transferMechanisms.length > 0 ? transferMechanisms : input.ruleResult.transferMechanisms,
+      privacyContactChannelType: privacyContactChannelType.value ?? input.ruleResult.privacyContactChannelType
+    }
+  });
 
   return {
     policyActionableFlags: Array.from(
@@ -276,8 +418,21 @@ export function mergePolicyChunkExtractions(input: {
     policyAmbiguityScore: Math.max(0, Math.min(100, Math.round(ambiguitySeed))),
     policyArbitrationPresent: arbitrationPresent.value,
     policyChildrenReference: childrenReference.value ?? input.ruleResult.childrenReference,
+    policyCookieDisclosures: policyCookieDisclosures.map((item) => ({
+      confidence: item.confidence,
+      cookieName: item.cookieName,
+      duration: item.duration,
+      provider: item.provider,
+      purpose: item.purpose,
+      snippetHash: null
+    })),
+    policyFieldCoverage: policyFieldCoverage.fields,
+    policyCoverageRatio: policyFieldCoverage.policyCoverageRatio,
     policyEffectiveDate: effectiveDate.value ?? input.ruleResult.updateDate,
     policyGoverningLaw: governingLaw.value ?? input.ruleResult.governingLaw,
+    policyNoticeContactPresent: input.ruleResult.noticeContactPresent,
+    policySnippetCount: policyFieldCoverage.policySnippetCount,
+    policyStructurallyWeak: policyFieldCoverage.policyStructurallyWeak,
     privacyContactChannelType: privacyContactChannelType.value ?? input.ruleResult.privacyContactChannelType,
     policyRetentionDisclosure: retentionDisclosure.value ?? input.ruleResult.retentionDisclosure,
     policyClaimNoSale: policyClaimNoSale.value ?? input.ruleResult.policyClaimNoSale,
@@ -303,6 +458,8 @@ export function mergePolicyChunkExtractions(input: {
         ? true
         : null,
     policySummaryShort,
+    policyTerminationOrSuspensionPresent: input.ruleResult.terminationOrSuspensionPresent,
+    policyCancellationOrRefundPresent: input.ruleResult.cancellationOrRefundPresent,
     policyTransferMechanisms: (transferMechanisms.length > 0 ? transferMechanisms : input.ruleResult.transferMechanisms).map((item) => ({
       confidence: item.confidence,
       mechanism: item.mechanism,

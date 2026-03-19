@@ -1,23 +1,16 @@
 import { buildFindingComparisonKey, runFullScanJob } from "@website-signal-risk-scanner/scan-core";
-import { createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
-import { VALIDATION_RANK_JOB, VALIDATION_VERDICT_JOB, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
-import { getAgreementScoreForVerdict } from "./constants";
-import { computeValidationSystemConfidence } from "./confidence";
-import { requestValidationVerdict } from "./llm-client";
+import { createValidationRankQueue } from "../queue/queues";
+import { VALIDATION_RANK_JOB, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   createValidationScan,
   ensureAnonymousValidationDomain,
   getValidationPipelineState,
   getValidationRunById,
   insertValidationScanEvent,
-  listValidationRunFindings,
   loadRankableFindings,
   replaceValidationRunFindings,
-  replaceValidationVerdict,
-  summarizeValidationRun,
   updateValidationRun,
   updateValidationTargetAfterRun,
-  type ValidationEvidencePacket,
   type ValidationRunFindingInsert
 } from "./repository";
 
@@ -256,28 +249,42 @@ export async function runValidationRankJob(validationRunId: string) {
       scanId: validationRun.scanId
     });
 
-    if ((await getValidationPipelineState()) === "running") {
-      await createValidationVerdictQueue().add(
-        VALIDATION_VERDICT_JOB,
-        { validationRunId },
-        {
-          attempts: 2,
-          jobId: `${validationRunId}--verdict`
-        }
-      );
-    } else {
+    if ((await getValidationPipelineState()) !== "running") {
       await failValidationRun({
         domainId: validationRun.domainId,
-        eventMessage: "Validation pipeline paused before verdicting could start.",
+        eventMessage: "Validation pipeline paused before completion.",
         eventType: SCAN_EVENT_TYPES.validationPipelinePaused,
         hostname: validationRun.hostname,
-        message: "Validation pipeline paused before verdicting could start.",
+        message: "Validation pipeline paused before completion.",
         scanId: validationRun.scanId,
         trancoRank: validationRun.trancoRank,
         updateTarget: false,
         validationRunId
       });
+      return;
     }
+
+    await updateValidationRun(validationRunId, {
+      average_agreement_score: null,
+      completed_at: new Date().toISOString(),
+      reviewed_finding_count: 0,
+      status: "completed"
+    });
+    await updateValidationTargetAfterRun({
+      hostname: validationRun.hostname,
+      lastStatus: "completed",
+      trancoRank: validationRun.trancoRank
+    });
+    await insertValidationScanEvent({
+      domainId: validationRun.domainId,
+      eventType: SCAN_EVENT_TYPES.validationRunCompleted,
+      message: "Validation findings finalized.",
+      metadata: {
+        findingCount: ranked.length,
+        validationRunId
+      },
+      scanId: validationRun.scanId
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown validation ranking error";
     await failValidationRun({
@@ -292,101 +299,6 @@ export async function runValidationRankJob(validationRunId: string) {
       trancoRank: validationRun.trancoRank,
       updateTarget: true,
       validationRunId
-    });
-    throw error;
-  }
-}
-
-export async function runValidationVerdictJob(validationRunId: string) {
-  const validationRun = await getValidationRunById(validationRunId);
-  if (!validationRun || !validationRun.scanId) {
-    throw new Error(`Validation run ${validationRunId} is missing a scan.`);
-  }
-
-  const findings = await listValidationRunFindings(validationRunId);
-
-  try {
-    let pausedBeforeCompletion = false;
-    for (const finding of findings) {
-      if ((await getValidationPipelineState()) !== "running") {
-        pausedBeforeCompletion = true;
-        break;
-      }
-
-      const verdict = await requestValidationVerdict(finding);
-      const systemConfidence = computeValidationSystemConfidence({
-        evidence: finding.evidence_json as ValidationEvidencePacket,
-        verdict: verdict.verdict
-      });
-      await replaceValidationVerdict({
-        agreement_score: getAgreementScoreForVerdict(verdict.verdict),
-        confidence: verdict.confidence,
-        evidence_json: {
-          evidence: verdict.evidence
-        },
-        model: verdict.model,
-        prompt_version: verdict.promptVersion,
-        rationale: verdict.rationale,
-        system_confidence_band: systemConfidence.band,
-        system_confidence_explanation: systemConfidence.explanation,
-        system_confidence_score: systemConfidence.score,
-        validation_run_finding_id: finding.id,
-        verdict: verdict.verdict
-      });
-    }
-
-    if (pausedBeforeCompletion) {
-      await failValidationRun({
-        domainId: validationRun.domainId,
-        eventMessage: "Validation pipeline paused before verdicting completed.",
-        eventType: SCAN_EVENT_TYPES.validationPipelinePaused,
-        hostname: validationRun.hostname,
-        message: "Validation pipeline paused before verdicting completed.",
-        scanId: validationRun.scanId,
-        trancoRank: validationRun.trancoRank,
-        updateTarget: false,
-        validationRunId
-      });
-      return;
-    }
-
-    await summarizeValidationRun(validationRunId);
-    await updateValidationTargetAfterRun({
-      hostname: validationRun.hostname,
-      lastStatus: "completed",
-      trancoRank: validationRun.trancoRank
-    });
-    await insertValidationScanEvent({
-      domainId: validationRun.domainId,
-      eventType: SCAN_EVENT_TYPES.validationVerdictCompleted,
-      message: "Validation verdicting completed.",
-      metadata: {
-        validationRunId
-      },
-      scanId: validationRun.scanId
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown validation verdict error";
-    await updateValidationRun(validationRunId, {
-      completed_at: new Date().toISOString(),
-      error_message: message,
-      status: "failed"
-    });
-    await updateValidationTargetAfterRun({
-      errorMessage: message,
-      hostname: validationRun.hostname,
-      lastStatus: "failed",
-      trancoRank: validationRun.trancoRank
-    });
-    await insertValidationScanEvent({
-      domainId: validationRun.domainId,
-      eventType: SCAN_EVENT_TYPES.validationVerdictFailed,
-      message: "Validation verdicting failed.",
-      metadata: {
-        error: message,
-        validationRunId
-      },
-      scanId: validationRun.scanId
     });
     throw error;
   }

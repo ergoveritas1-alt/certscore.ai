@@ -53,6 +53,40 @@ test("maps accessibility review findings to explicit accessibility metadata", ()
   );
 });
 
+test("maps policy runtime findings to explicit runtime review metadata", () => {
+  assert.deepEqual(
+    deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: "policy_runtime.functional_misalignment",
+      subtype: "policy_runtime_review"
+    }),
+    {
+      familyId: "policy_runtime_review",
+      familyLabel: "Policy Runtime Review",
+      scope: "page",
+      source: "policy_runtime",
+      subject: "disclosure"
+    }
+  );
+});
+
+test("maps cookie runtime findings to explicit cookie runtime metadata", () => {
+  assert.deepEqual(
+    deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: "cookie_runtime.disclosure_gap",
+      subtype: "cookie_runtime_review"
+    }),
+    {
+      familyId: "cookie_runtime_review",
+      familyLabel: "Cookie Runtime Review",
+      scope: "page",
+      source: "cookie_runtime",
+      subject: "disclosure"
+    }
+  );
+});
+
 test("prefers explicit finding_family when rendering a label", () => {
   assert.deepEqual(
     getValidationFindingFamily({

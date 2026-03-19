@@ -29,7 +29,7 @@ function bootstrapValidationWorker() {
 
   console.info("[validation-worker] worker service started", {
     concurrency: env.WORKER_CONCURRENCY,
-    queues: ["validation.collect", "validation.rank", "validation.verdict"]
+    queues: ["validation.collect", "validation.rank"]
   });
 }
 

@@ -297,6 +297,84 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
   }
 };
 
+function isGenericValidationConcernSignal(row: ScanSignalRow) {
+  const key = row.signal_key;
+  const value = row.signal_value_json;
+
+  if (!isActiveSignalValue(value, row.value_type)) {
+    return false;
+  }
+
+  const negativePatterns = [
+    /dark_pattern/,
+    /preconsent/,
+    /conflict/,
+    /mismatch/,
+    /session_replay/,
+    /high_sensitivity_data_collection_detected/,
+    /limited_time_offer_language_present/,
+    /discount_claim_present/,
+    /original_price_comparison_present/,
+    /store_credit_only/,
+    /termination_for_cause/,
+    /service_suspension_or_termination/
+  ];
+
+  if (negativePatterns.some((pattern) => pattern.test(key))) {
+    return true;
+  }
+
+  if (typeof value === "number") {
+    return /risk_score|ambiguity_score|friction_score/i.test(key) && value > 0;
+  }
+
+  return false;
+}
+
+function getGenericValidationFindingSeverity(row: ScanSignalRow): FindingSeverity {
+  if (/preconsent|session_replay|conflict|mismatch/i.test(row.signal_key)) {
+    return "high";
+  }
+
+  if (typeof row.signal_value_json === "number" && /risk_score|ambiguity_score|friction_score/i.test(row.signal_key)) {
+    return row.signal_value_json >= 70 ? "high" : "medium";
+  }
+
+  if (/store_credit_only|termination_for_cause|service_suspension_or_termination|high_sensitivity_data_collection_detected/i.test(row.signal_key)) {
+    return "medium";
+  }
+
+  return "medium";
+}
+
+function mapScanSignalCategoryToFindingCategory(row: ScanSignalRow): FindingCategory {
+  if (row.category === "disclosure") {
+    return "legal";
+  }
+
+  if (row.category === "context") {
+    return "privacy";
+  }
+
+  return row.category;
+}
+
+function buildGenericValidationFinding(row: ScanSignalRow): ValidationFindingDefinition {
+  return {
+    buildEvidence: () =>
+      buildDefaultEvidencePacket(
+        row,
+        `${row.signal_label} was elevated during the scan and merits reviewer attention.`
+      ),
+    category: mapScanSignalCategoryToFindingCategory(row),
+    description: `${row.signal_label} was elevated during the scan and merits reviewer attention.`,
+    ruleKey: `scan_signal.${row.signal_key}`,
+    severity: getGenericValidationFindingSeverity(row),
+    subtype: "scan_signal_review",
+    title: row.signal_label
+  } satisfies ValidationFindingDefinition;
+}
+
 function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): ValidationEvidencePacket {
   return {
     claim,
@@ -1254,7 +1332,7 @@ export async function insertValidationScanEvent(input: {
 
 export async function loadRankableFindings(scanId: string) {
   const supabase = createAdminClient();
-  const [{ data: findings, error }, { data: snapshot, error: snapshotError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] =
+  const [{ data: signalRows, error }, { data: snapshot, error: snapshotError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] =
     await Promise.all([
       supabase
         .from("scan_signals")
@@ -1289,7 +1367,7 @@ export async function loadRankableFindings(scanId: string) {
     throw new Error(`Failed to load validation runtime context for scan ${scanId}: ${runtimeArtifactsError.message}`);
   }
 
-  const rows = (findings ?? []) as ScanSignalRow[];
+  const rows = (signalRows ?? []) as ScanSignalRow[];
   const context: ValidationEvidenceBuildContext = {
     runtimeArtifacts: (runtimeArtifacts as ScanRuntimeArtifactsRow | null) ?? null,
     scanSignalsByKey: new Map(rows.map((row) => [row.signal_key, row])),
@@ -1316,27 +1394,37 @@ export async function loadRankableFindings(scanId: string) {
     return [];
   }
 
-  return rows
-    .filter(
-      (row): row is ScanSignalRow & { signal_key: keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS } =>
-        row.signal_key in VALIDATION_SIGNAL_FINDING_DEFINITIONS
-    )
-    .filter((row) => isActiveSignalValue(row.signal_value_json, row.value_type))
-    .map((row) => {
-      const definition = VALIDATION_SIGNAL_FINDING_DEFINITIONS[row.signal_key]!;
+  const findings: Omit<ValidationRunFindingInsert, "rank">[] = [];
 
-      return {
-        category: definition.category,
-        description: definition.description,
-        evidence_json: definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description),
-        finding_id: null,
-        page_url: null,
-        rule_key: definition.ruleKey,
-        severity: definition.severity,
-        subtype: definition.subtype,
-        title: definition.title
-      };
+  for (const row of rows) {
+    if (!isActiveSignalValue(row.signal_value_json, row.value_type)) {
+      continue;
+    }
+
+    const definition =
+      VALIDATION_SIGNAL_FINDING_DEFINITIONS[row.signal_key as keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS] ??
+      (isGenericValidationConcernSignal(row) ? buildGenericValidationFinding(row) : null);
+
+    if (!definition) {
+      continue;
+    }
+
+    findings.push({
+      category: definition.category,
+      description: definition.description,
+      evidence_json: definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description),
+      finding_id: null,
+      page_url: null,
+      rule_key: definition.ruleKey,
+      severity: definition.severity,
+      subtype: definition.subtype,
+      title: definition.title
     });
+  }
+
+  return findings.filter((finding, index, allFindings) => {
+    return allFindings.findIndex((candidate) => candidate.rule_key === finding.rule_key) === index;
+  });
 }
 
 export async function replaceValidationRunFindings(validationRunId: string, findings: ValidationRunFindingInsert[]) {
