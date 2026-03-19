@@ -8,6 +8,7 @@
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "dev": "next dev --port 3000",
+    "dev:validation:local": "next dev --port 3003",
     "typecheck": "next typegen . && tsc --noEmit",
     "clean": "rm -rf .next"
   },

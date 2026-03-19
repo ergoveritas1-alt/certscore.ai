@@ -15,6 +15,7 @@
     "dev": "turbo run dev --parallel",
     "dev:certscore:web": "pnpm --filter @website-signal-risk-scanner/web dev",
     "dev:certscore:worker": "pnpm --filter @website-signal-risk-scanner/worker dev",
+    "dev:validation:local": "pnpm --parallel --stream --filter @website-signal-risk-scanner/web --filter @website-signal-risk-scanner/worker run dev:validation:local",
     "dev:validation:web": "pnpm --filter @website-signal-risk-scanner/validation-web dev",
     "dev:validation:worker": "pnpm --filter @website-signal-risk-scanner/validation-worker dev",
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/validation-worker scheduler",

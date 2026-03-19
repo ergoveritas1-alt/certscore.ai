@@ -8,6 +8,7 @@
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "dev": "node --env-file=.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
     "dev:validation": "node --env-file=.env.local --enable-source-maps --import tsx --watch ./src/validation/index.ts",
+    "dev:validation:local": "node --env-file=.env.local --enable-source-maps --import tsx --watch ./src/validation/index.ts",
     "benchmark:accessibility": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/accessibility-benchmark-matrix.ts",
     "benchmark:accessibility:assert": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/accessibility-benchmark-matrix.ts --run-now --assert",
     "start": "node --enable-source-maps ./dist/apps/worker/src/index.js",
