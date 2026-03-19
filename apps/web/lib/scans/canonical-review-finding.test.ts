@@ -33,6 +33,7 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
     {
       linkedValidationFinding: makeLinkedFinding({
         id: "1",
+        modelConfidence: 0.2,
         ruleKey: "privacy.trackers_before_consent_detected",
         title: "Trackers observed before consent",
         evidence: {
@@ -50,6 +51,7 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
   assert.match(presentation.whyThisMatters, /before a visitor can provide or deny consent/i);
   assert.match(presentation.suggestedFix, /Consent Mode v2|consent/i);
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "0.2");
 });
 
 test("uses low-confidence extraction copy when sibling runtime findings add context", () => {
@@ -57,6 +59,7 @@ test("uses low-confidence extraction copy when sibling runtime findings add cont
     {
       linkedValidationFinding: makeLinkedFinding({
         id: "2",
+        modelConfidence: 0.2,
         ruleKey: "scan_report_review.low_confidence_critical_fields",
         title: "Low-confidence policy extraction"
       }),
@@ -80,6 +83,24 @@ test("uses low-confidence extraction copy when sibling runtime findings add cont
 
   assert.match(presentation.whyThisMatters, /could not extract critical disclosure fields/i);
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.2");
+});
+
+test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      evidence: ["https://jili58d.com/privacy"],
+      observedValue: "Privacy Policy",
+      severity: "medium",
+      title: "Low-confidence policy extraction"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /could not extract critical disclosure fields/i);
+  assert.match(presentation.suggestedFix, /manual technical review/i);
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, null);
 });
 
 test("falls back to generic presentation for unmatched findings without linked validation data", () => {
@@ -96,4 +117,5 @@ test("falls back to generic presentation for unmatched findings without linked v
   assert.equal(presentation.findingName, "Unexpected disclosure concern");
   assert.match(presentation.whyThisMatters, /merit reviewer attention/i);
   assert.match(presentation.suggestedFix, /confirm whether the signal needs follow-up/i);
+  assert.equal(presentation.confidenceScore, null);
 });

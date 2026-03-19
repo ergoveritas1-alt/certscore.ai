@@ -13,11 +13,21 @@ export type ReviewFindingSeverity = "high" | "medium" | "low";
 
 export type ReviewFindingPresentationSource = {
   evidence?: string[];
-  linkedValidationFinding?: Pick<ScanValidationFinding, "evidence" | "pageUrl" | "ruleKey" | "title"> | null;
+  linkedValidationFinding?: Pick<ScanValidationFinding, "evidence" | "modelConfidence" | "pageUrl" | "ruleKey" | "title"> | null;
   observedValue: string | null;
   severity: ReviewFindingSeverity;
   title: string;
 };
+
+function formatValidationConfidence(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const rounded = Math.round(value * 100) / 100;
+  const hundredths = Math.round(rounded * 100);
+  return hundredths % 10 === 0 ? rounded.toFixed(1) : rounded.toFixed(2);
+}
 
 function buildFallbackEvidence(input: ReviewFindingPresentationSource) {
   const pageUrls = (input.evidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim()));
@@ -45,9 +55,10 @@ export function buildCanonicalReviewFindingPresentation(
     keyOrTitle: finding.linkedValidationFinding?.ruleKey ?? finding.title,
     siblingFindingKeysOrTitles
   });
+  const confidenceScore = formatValidationConfidence(finding.linkedValidationFinding?.modelConfidence ?? null);
 
   return {
-    confidenceScore: presentation.confidenceScore ?? null,
+    confidenceScore,
     findingName: finding.linkedValidationFinding?.title ?? finding.title,
     suggestedBestPractice: presentation.bestPracticeLink,
     suggestedFix: presentation.suggestedFix,

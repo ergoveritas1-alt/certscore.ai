@@ -105,7 +105,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         }
       }
     ],
-    matches: [/low-confidence extraction/i, /low_confidence_critical_fields/i]
+    matches: [/low-confidence extraction/i, /low-confidence policy extraction/i, /low_confidence_critical_fields/i]
   },
   {
     base: {

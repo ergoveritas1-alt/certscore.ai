@@ -73,6 +73,14 @@ type ValidationRunFindingRow = {
   severity: string;
   subtype: string | null;
   title: string;
+  validation_verdicts?:
+    | {
+        confidence: number | null;
+      }
+    | Array<{
+        confidence: number | null;
+      }>
+    | null;
 };
 
 type ExistingFindingIdentity = Pick<ValidationRunFindingRow, "rule_key" | "title">;
@@ -887,7 +895,7 @@ export async function getValidationRunDetail(validationRunId: string) {
 
   const { data: findings, error: findingsError } = await supabase
     .from("validation_run_findings")
-    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
+    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank, validation_verdicts ( confidence )")
     .eq("validation_run_id", validationRunId)
     .order("finding_rank", { ascending: true });
 
@@ -917,19 +925,29 @@ export async function getValidationRunDetail(validationRunId: string) {
     status: (run as ValidationRunRow).status,
     trancoRank: (run as ValidationRunRow).tranco_rank,
     triggerMode: (run as ValidationRunRow).trigger_mode,
-    rows: normalizedFindings.map((finding) => ({
-      automatedFinding: {
-        category: finding.category,
-        description: finding.description,
-        evidence: finding.evidence_json ?? {},
-        pageUrl: finding.page_url,
-        rank: finding.finding_rank,
-        ruleKey: finding.rule_key,
-        severity: finding.severity,
-        subtype: finding.subtype,
-        title: finding.title
-      }
-    }))
+    rows: normalizedFindings.map((finding) => {
+      const verdictRows = Array.isArray(finding.validation_verdicts)
+        ? finding.validation_verdicts
+        : finding.validation_verdicts
+          ? [finding.validation_verdicts]
+          : [];
+      const verdict = verdictRows[0];
+
+      return {
+        automatedFinding: {
+          category: finding.category,
+          description: finding.description,
+          evidence: finding.evidence_json ?? {},
+          modelConfidence: verdict?.confidence ?? null,
+          pageUrl: finding.page_url,
+          rank: finding.finding_rank,
+          ruleKey: finding.rule_key,
+          severity: finding.severity,
+          subtype: finding.subtype,
+          title: finding.title
+        }
+      };
+    })
   };
 }
 
