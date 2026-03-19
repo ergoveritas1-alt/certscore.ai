@@ -152,6 +152,7 @@ export default function HomepageTrialPage() {
                   helperText="Trial concept: faster entry point, less explanation, clearer action."
                   inputLabel="Website domain"
                   inputPlaceholder="Enter yoursite.com"
+                  mode="preview"
                 />
               </div>
 

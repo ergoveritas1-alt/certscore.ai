@@ -22,7 +22,7 @@ export default function PreviewPage() {
               <CardTitle>Start a full scan</CardTitle>
             </CardHeader>
             <CardContent>
-              <DomainScanForm buttonLabel="Run full scan" />
+              <DomainScanForm buttonLabel="Run full scan" mode="full" />
             </CardContent>
           </Card>
         </div>

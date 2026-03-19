@@ -10,13 +10,15 @@ type DomainScanFormProps = {
   helperText?: string;
   inputLabel?: string;
   inputPlaceholder?: string;
+  mode?: "full" | "preview";
 };
 
 export function DomainScanForm({
   buttonLabel = "Start full scan",
   helperText,
   inputLabel = "Website domain",
-  inputPlaceholder = "Enter yoursite.com"
+  inputPlaceholder = "Enter yoursite.com",
+  mode = "preview"
 }: DomainScanFormProps) {
   const router = useRouter();
   const [domain, setDomain] = useState("");
@@ -39,7 +41,7 @@ export function DomainScanForm({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/full-scan", {
+      const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
           domain
         }),
@@ -49,17 +51,18 @@ export function DomainScanForm({
         method: "POST"
       });
 
-      const payload = (await response.json()) as { error?: string; scanUrl?: string };
+      const payload = (await response.json()) as { error?: string; previewUrl?: string; scanUrl?: string };
+      const destination = mode === "preview" ? payload.previewUrl : payload.scanUrl;
 
-      if (!response.ok || !payload.scanUrl) {
-        setErrorMessage(payload.error ?? "The full scan could not be started. Please try again.");
+      if (!response.ok || !destination) {
+        setErrorMessage(payload.error ?? (mode === "preview" ? "The preview scan could not be started. Please try again." : "The full scan could not be started. Please try again."));
         setIsSubmitting(false);
         return;
       }
 
-      router.push(payload.scanUrl);
+      router.push(destination);
     } catch {
-      setErrorMessage("The full scan could not be started. Please try again.");
+      setErrorMessage(mode === "preview" ? "The preview scan could not be started. Please try again." : "The full scan could not be started. Please try again.");
       setIsSubmitting(false);
     }
   }

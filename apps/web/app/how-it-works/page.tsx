@@ -56,7 +56,7 @@ export default function HowItWorksPage() {
             CertScore.ai turns public website behavior into structured findings around privacy, consent, trackers, accessibility, and disclosure posture.
           </p>
           <div className="max-w-[30rem] pt-2">
-            <DomainScanForm buttonLabel="Run a scan" inputLabel="Website domain" />
+            <DomainScanForm buttonLabel="Run a scan" inputLabel="Website domain" mode="preview" />
           </div>
         </div>
         </div>

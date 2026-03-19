@@ -274,6 +274,7 @@ export default async function MarketingHomePage() {
                   buttonLabel="Start homepage scan"
                   helperText="The preview is lightweight and shows sample findings for the homepage before signup."
                   inputLabel="Website domain"
+                  mode="preview"
                 />
               </CardContent>
             </Card>
