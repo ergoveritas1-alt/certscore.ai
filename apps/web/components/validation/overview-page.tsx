@@ -146,7 +146,7 @@ export async function ValidationOverviewPage() {
 
           <Card className="border-slate-200 bg-white">
             <CardHeader>
-              <CardTitle>Target inventory</CardTitle>
+              <CardTitle>Target queue</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -182,17 +182,9 @@ export async function ValidationOverviewPage() {
                         </form>
                         <form action={submitValidationTargetAction}>
                           <input name="targetId" type="hidden" value={target.id} />
-                          <input name="targetAction" type="hidden" value="clear-backoff" />
-                          <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
-                            Clear backoff
-                          </button>
-                        </form>
-                        <form action={submitValidationTargetAction}>
-                          <input name="targetId" type="hidden" value={target.id} />
-                          <input name="targetAction" type="hidden" value={target.denylisted ? "restore" : "deny"} />
-                          <input name="denyReason" type="hidden" value="Suppressed from validation ops." />
+                          <input name="targetAction" type="hidden" value="remove" />
                           <button className="rounded-full border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 transition hover:border-rose-400 hover:text-rose-800" type="submit">
-                            {target.denylisted ? "Restore" : "Suppress"}
+                            Remove
                           </button>
                         </form>
                       </div>

@@ -645,6 +645,43 @@ export async function updateValidationTargetStateAction(input: {
   revalidatePath("/app/scans");
 }
 
+export async function removeValidationTargetAction(input: { targetId: string }) {
+  const context = await requireAdmin();
+  const supabase = createAdminClient();
+
+  const { data: target, error: loadError } = await supabase
+    .from("validation_targets")
+    .select("id, hostname")
+    .eq("id", input.targetId)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(`Failed to load validation target: ${loadError.message}`);
+  }
+
+  if (!target) {
+    throw new Error("Validation target not found.");
+  }
+
+  const { error } = await supabase.from("validation_targets").delete().eq("id", input.targetId);
+  if (error) {
+    throw new Error(`Failed to remove validation target: ${error.message}`);
+  }
+
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: context.user.id,
+    event_type: "validation.target_removed",
+    metadata_json: {
+      hostname: (target as { hostname: string }).hostname,
+      targetId: input.targetId
+    }
+  });
+
+  revalidatePath("/app");
+  revalidatePath("/app/scans");
+  revalidatePath("/app/validation");
+}
+
 export async function addValidationTargetAction(input: { hostname: string }) {
   const context = await requireAdmin();
   const supabase = createAdminClient();

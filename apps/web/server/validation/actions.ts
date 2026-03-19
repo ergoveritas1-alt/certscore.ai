@@ -4,6 +4,7 @@ import type { ValidationRunMode } from "@website-signal-risk-scanner/shared";
 import {
   addValidationTargetAction,
   queueManualValidationRunAction,
+  removeValidationTargetAction,
   updateValidationSettingsAction,
   updateValidationTargetStateAction
 } from "./repository";
@@ -56,6 +57,13 @@ export async function submitValidationTargetAction(formData: FormData) {
   if (action === "restore") {
     await updateValidationTargetStateAction({
       denylisted: false,
+      targetId
+    });
+    return;
+  }
+
+  if (action === "remove") {
+    await removeValidationTargetAction({
       targetId
     });
     return;
