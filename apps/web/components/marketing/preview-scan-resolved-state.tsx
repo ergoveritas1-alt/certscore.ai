@@ -106,48 +106,73 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
         </Card>
       </div>
 
-      <RegulatoryRiskSection risk={scan.regulatoryRisk} agencyMappings={scan.agencyMappings} />
+      <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.88)_100%)]">
+        <div aria-hidden="true" className="pointer-events-none select-none blur-[3px] opacity-60">
+          <div className="space-y-8 p-6">
+            <RegulatoryRiskSection risk={scan.regulatoryRisk} agencyMappings={scan.agencyMappings} />
 
-      <RegulatoryRelevanceSection mappings={scan.agencyMappings} />
+            <RegulatoryRelevanceSection mappings={scan.agencyMappings} />
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-slate-200 bg-ink text-white">
-          <CardHeader>
-            <CardTitle>Create an account to save scan results</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-slate-200">
-            <p>Sign up to run deeper scans, keep scan history, and review signal changes over time.</p>
-            <div className="rounded-2xl bg-white/5 p-4 text-sm">
-              <p className="font-medium text-white">After signup you unlock:</p>
-              <ul className="mt-3 space-y-2">
-                <li>Multi-page scan coverage based on your plan</li>
-                <li>Saved signal summaries and recent changes</li>
-                <li>Per-website scan history</li>
-              </ul>
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+              <Card className="border-slate-200 bg-ink text-white">
+                <CardHeader>
+                  <CardTitle>Saved scan workflow</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm text-slate-200">
+                  <p>Deeper scans, saved history, and change tracking continue inside the app.</p>
+                  <div className="rounded-2xl bg-white/5 p-4 text-sm">
+                    <p className="font-medium text-white">Full results include:</p>
+                    <ul className="mt-3 space-y-2">
+                      <li>Multi-page scan coverage based on your plan</li>
+                      <li>Saved signal summaries and recent changes</li>
+                      <li>Per-website scan history</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 bg-white">
+                <CardHeader>
+                  <CardTitle>Preview notes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-slate-600">
+                  {payload.summaryBullets.map((bullet) => (
+                    <p key={bullet}>{bullet}</p>
+                  ))}
+                  <p>More pages can be scanned under a signed-in plan, not just the homepage.</p>
+                  <p>Saved scan history and change tracking are available inside the app.</p>
+                </CardContent>
+              </Card>
             </div>
-            <div className="flex flex-col gap-3">
-              <Button asChild className="w-full bg-white text-ink hover:bg-slate-100">
-                <Link href={loginHref}>Create account to continue</Link>
-              </Button>
-              <Button asChild className="w-full" variant="secondary">
-                <Link href={loginHref}>Already have an account? Sign in</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Preview notes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
-            {payload.summaryBullets.map((bullet) => (
-              <p key={bullet}>{bullet}</p>
-            ))}
-            <p>More pages can be scanned under a signed-in plan, not just the homepage.</p>
-            <p>Saved scan history and change tracking are available inside the app.</p>
-          </CardContent>
-        </Card>
+        <div className="absolute inset-0 flex items-center justify-center bg-[linear-gradient(180deg,rgba(248,250,252,0.3)_0%,rgba(248,250,252,0.82)_18%,rgba(255,255,255,0.96)_42%,rgba(248,250,252,0.98)_100%)] px-6 py-10">
+          <Card className="w-full max-w-xl border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]">
+            <CardHeader>
+              <CardTitle>Create an account to view the rest of the results</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-600">
+              <p>You've seen the top preview findings. Sign up to unlock the remaining results, deeper scans, and saved scan history.</p>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="font-medium text-slate-950">After signup you unlock:</p>
+                <ul className="mt-3 space-y-2">
+                  <li>Regulatory overlays and expanded result sections</li>
+                  <li>Multi-page scan coverage based on your plan</li>
+                  <li>Saved signal summaries and recent changes</li>
+                </ul>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button asChild className="flex-1">
+                  <Link href={loginHref}>Create account to continue</Link>
+                </Button>
+                <Button asChild className="flex-1" variant="secondary">
+                  <Link href={loginHref}>Already have an account? Sign in</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
