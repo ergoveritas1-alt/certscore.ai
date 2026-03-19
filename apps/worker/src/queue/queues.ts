@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
-import { getSharedRedisConnection } from "./connection";
+import { getSharedRedisConnection, getValidationRedisConnection } from "./connection";
 
 export function createPreviewScanQueue() {
   return new Queue(QUEUE_NAMES.previewScan, {
@@ -17,5 +17,23 @@ export function createFullScanQueue() {
 export function createScheduledScanQueue() {
   return new Queue(QUEUE_NAMES.scheduledScan, {
     connection: getSharedRedisConnection()
+  });
+}
+
+export function createValidationCollectQueue() {
+  return new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationCollect, {
+    connection: getValidationRedisConnection()
+  });
+}
+
+export function createValidationRankQueue() {
+  return new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationRank, {
+    connection: getValidationRedisConnection()
+  });
+}
+
+export function createValidationVerdictQueue() {
+  return new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationVerdict, {
+    connection: getValidationRedisConnection()
   });
 }

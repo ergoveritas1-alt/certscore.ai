@@ -3,6 +3,7 @@ import type { ConnectionOptions } from "bullmq";
 import { getWorkerEnv } from "../env";
 
 let redisConnection: ConnectionOptions | null = null;
+let validationRedisConnection: ConnectionOptions | null = null;
 
 export function createRedisConnection(redisUrl: string): ConnectionOptions {
   const url = new URL(redisUrl);
@@ -34,4 +35,20 @@ export function getSharedRedisConnection() {
 
   redisConnection = createRedisConnection(redisUrl);
   return redisConnection;
+}
+
+export function getValidationRedisConnection() {
+  if (validationRedisConnection) {
+    return validationRedisConnection;
+  }
+
+  const env = getWorkerEnv();
+  const redisUrl = env.VALIDATION_REDIS_URL;
+
+  if (!redisUrl) {
+    throw new Error("VALIDATION_REDIS_URL is not configured.");
+  }
+
+  validationRedisConnection = createRedisConnection(redisUrl);
+  return validationRedisConnection;
 }
