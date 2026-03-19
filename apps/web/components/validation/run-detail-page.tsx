@@ -5,16 +5,6 @@ import { getValidationRunDetail } from "../../server/validation/repository";
 import { submitValidationRescanAction } from "../../server/validation/actions";
 import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
 
-function formatValidationConfidence(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "NA";
-  }
-
-  const rounded = Math.round(value * 100) / 100;
-  const hundredths = Math.round(rounded * 100);
-  return hundredths % 10 === 0 ? rounded.toFixed(1) : rounded.toFixed(2);
-}
-
 type ValidationRunDetailPageProps = {
   runId: string;
 };
@@ -78,7 +68,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                   const summaryJson = {
                     url: pageLabel,
                     findingName: row.automatedFinding.title,
-                    confidenceScore: formatValidationConfidence(row.automatedFinding.modelConfidence),
+                    confidenceScore: presentation.confidenceScore ?? "NA",
                     whyThisMatters: presentation.whyThisMatters,
                     suggestedFix: presentation.suggestedFix,
                     suggestedBestPractice: presentation.bestPracticeLink

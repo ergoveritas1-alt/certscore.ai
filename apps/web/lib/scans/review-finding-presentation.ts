@@ -309,12 +309,16 @@ function inferDetectorStrength(haystack: string) {
     return 0.6;
   }
 
+  if (/high-confidence structural disclosure failure|structural disclosure failure/i.test(haystack)) {
+    return 0.7;
+  }
+
   if (/session replay|accessibility|wcag|error_count|warning_count|issue_count|failures_count|risk_score|friction_score|critical user-rights fulfillment friction/i.test(haystack)) {
     return 0.5;
   }
 
   if (/low-confidence extraction|low_confidence_critical_fields|obstructed/i.test(haystack)) {
-    return 0.35;
+    return 0.55;
   }
 
   return 0.45;
@@ -367,8 +371,31 @@ function computeSupportStrength(input: {
       : typeof evidence.policy_snippet_count === "number"
         ? evidence.policy_snippet_count
         : null;
+  const policyAmbiguityScore =
+    typeof evidence.policyAmbiguityScore === "number"
+      ? evidence.policyAmbiguityScore
+      : typeof evidence.policy_ambiguity_score === "number"
+        ? evidence.policy_ambiguity_score
+        : null;
+  const policyStructurallyWeak =
+    evidence.policyStructurallyWeak === true || evidence.policy_structurally_weak === true;
   if (typeof policySnippetCount === "number" && policySnippetCount > 0) {
     score += Math.min(0.1, policySnippetCount * 0.02);
+  }
+  if (typeof policySnippetCount === "number" && policySnippetCount === 0 && /low-confidence extraction|structural disclosure failure|obstructed/i.test(input.haystack)) {
+    score += 0.12;
+  }
+  if (typeof policyAmbiguityScore === "number") {
+    if (policyAmbiguityScore >= 90) {
+      score += 0.25;
+    } else if (policyAmbiguityScore >= 75) {
+      score += 0.18;
+    } else if (policyAmbiguityScore >= 50) {
+      score += 0.08;
+    }
+  }
+  if (policyStructurallyWeak) {
+    score += 0.2;
   }
   const policyFieldCoverage =
     evidence.policyFieldCoverage && typeof evidence.policyFieldCoverage === "object"
@@ -437,15 +464,7 @@ function computeGapPenalty(input: {
     penalty += 0.05;
   }
 
-  if (/low-confidence extraction|low_confidence_critical_fields/i.test(input.haystack)) {
-    penalty += /policy_runtime\.|cookie_runtime\./i.test(input.siblingHaystack) ? 0.05 : 0.2;
-  }
-
   if (/obstructed/i.test(input.haystack)) {
-    penalty += 0.1;
-  }
-
-  if (input.evidence?.policyStructurallyWeak === true || input.evidence?.policy_structurally_weak === true) {
     penalty += 0.1;
   }
 
