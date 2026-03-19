@@ -1,7 +1,6 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
   SCAN_EVENT_TYPES,
-  VALIDATION_ALLOWED_FINDING_CATEGORIES,
   VALIDATION_DEFAULT_INTERVAL_MINUTES,
   VALIDATION_DEFAULT_RUN_MODE,
   type FindingCategory,
@@ -85,21 +84,12 @@ export type ValidationRunRecord = {
   triggerMode: ValidationRunMode;
 };
 
-type FindingRow = {
-  category: FindingCategory;
-  description: string;
-  evidence_json: Record<string, unknown>;
-  id: string;
-  rule_key: string;
-  scan_page_id: string | null;
-  severity: FindingSeverity;
-  subtype: string;
-  title: string;
-};
-
-type ScanPageRow = {
-  id: string;
-  page_url: string;
+type ScanSignalRow = {
+  category: "disclosure" | "privacy";
+  signal_key: string;
+  signal_label: string;
+  signal_value_json: boolean | number | string | string[] | null;
+  value_type: "boolean" | "number" | "text" | "string_array";
 };
 
 export type ValidationRunFindingInsert = {
@@ -130,6 +120,62 @@ export type ValidationVerdictInsert = {
   validation_run_finding_id: string;
   verdict: ValidationVerdict;
 };
+
+const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
+  string,
+  {
+    category: FindingCategory;
+    description: string;
+    severity: FindingSeverity;
+    subtype: string | null;
+    title: string;
+  }
+> = {
+  "privacy.reject_control_missing_detected": {
+    category: "privacy",
+    description: "A consent experience was detected without a clear reject-all control.",
+    severity: "high",
+    subtype: "consent_controls",
+    title: "Reject-all control missing"
+  },
+  "privacy.trackers_before_consent_detected": {
+    category: "privacy",
+    description: "Tracking activity appears to occur before the visitor can make a consent choice.",
+    severity: "high",
+    subtype: "preconsent_tracking",
+    title: "Trackers observed before consent"
+  },
+  "disclosure.privacy_policy_limited": {
+    category: "legal",
+    description: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
+    severity: "medium",
+    subtype: "policy_coverage",
+    title: "Privacy policy coverage limited"
+  },
+  "disclosure.disclosure_language_missing_detected": {
+    category: "legal",
+    description: "Promotional or affiliate disclosure language appears to be missing.",
+    severity: "high",
+    subtype: "disclosure_language",
+    title: "Disclosure language missing"
+  }
+};
+
+function isActiveSignalValue(value: ScanSignalRow["signal_value_json"], valueType: ScanSignalRow["value_type"]) {
+  if (valueType === "boolean") {
+    return value === true;
+  }
+
+  if (valueType === "number") {
+    return typeof value === "number" && value > 0;
+  }
+
+  if (valueType === "text") {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
+  return Array.isArray(value) && value.length > 0;
+}
 
 function addDays(now: Date, days: number) {
   return new Date(now.getTime() + days * 24 * 60 * 60_000);
@@ -628,45 +674,43 @@ export async function insertValidationScanEvent(input: {
 export async function loadRankableFindings(scanId: string) {
   const supabase = createAdminClient();
   const { data: findings, error } = await supabase
-    .from("findings")
-    .select("id, category, subtype, rule_key, title, description, severity, evidence_json, scan_page_id")
+    .from("scan_signals")
+    .select("category, signal_key, signal_label, signal_value_json, value_type")
     .eq("scan_id", scanId)
-    .in("category", [...VALIDATION_ALLOWED_FINDING_CATEGORIES]);
+    .in("category", ["privacy", "disclosure"]);
 
   if (error) {
     throw new Error(`Failed to load validation findings for scan ${scanId}: ${error.message}`);
   }
 
-  const rows = (findings ?? []) as FindingRow[];
-  const scanPageIds = [...new Set(rows.map((row) => row.scan_page_id).filter(Boolean))] as string[];
-  const pageUrlMap = new Map<string, string>();
+  const rows = (findings ?? []) as ScanSignalRow[];
 
-  if (scanPageIds.length > 0) {
-    const { data: scanPages, error: scanPagesError } = await supabase
-      .from("scan_pages")
-      .select("id, page_url")
-      .in("id", scanPageIds);
+  return rows
+    .filter(
+      (row): row is ScanSignalRow & { signal_key: keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS } =>
+        row.signal_key in VALIDATION_SIGNAL_FINDING_DEFINITIONS
+    )
+    .filter((row) => isActiveSignalValue(row.signal_value_json, row.value_type))
+    .map((row) => {
+      const definition = VALIDATION_SIGNAL_FINDING_DEFINITIONS[row.signal_key]!;
 
-    if (scanPagesError) {
-      throw new Error(`Failed to load scan pages for validation scan ${scanId}: ${scanPagesError.message}`);
-    }
-
-    for (const row of (scanPages ?? []) as ScanPageRow[]) {
-      pageUrlMap.set(row.id, row.page_url);
-    }
-  }
-
-  return rows.map((row) => ({
-    category: row.category,
-    description: row.description,
-    evidence_json: row.evidence_json ?? {},
-    finding_id: row.id,
-    page_url: row.scan_page_id ? pageUrlMap.get(row.scan_page_id) ?? null : null,
-    rule_key: row.rule_key,
-    severity: row.severity,
-    subtype: row.subtype ?? null,
-    title: row.title
-  }));
+      return {
+        category: definition.category,
+        description: definition.description,
+        evidence_json: {
+          signalCategory: row.category,
+          signalKey: row.signal_key,
+          signalLabel: row.signal_label,
+          signalValue: row.signal_value_json
+        },
+        finding_id: null,
+        page_url: null,
+        rule_key: row.signal_key,
+        severity: definition.severity,
+        subtype: definition.subtype,
+        title: definition.title
+      };
+    });
 }
 
 export async function replaceValidationRunFindings(validationRunId: string, findings: ValidationRunFindingInsert[]) {
