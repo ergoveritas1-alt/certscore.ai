@@ -12,12 +12,15 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { normalizeUrl, extractHostname } from "@website-signal-risk-scanner/shared";
 import { revalidatePath } from "next/cache";
-import { enqueueValidationCollectJob, getValidationQueueAvailability } from "../queue/validation-queue";
+import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
 import { requireValidationAdminContext } from "./auth";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
   last_tranco_sync_at: string | null;
+  last_worker_heartbeat_at: string | null;
+  last_worker_host: string | null;
+  last_worker_started_at: string | null;
   next_due_at: string | null;
   operator_note: string | null;
   pipeline_enabled: boolean;
@@ -679,7 +682,7 @@ export async function getValidationSettings() {
       },
       { onConflict: "singleton_key" }
     )
-    .select("singleton_key, pipeline_enabled, run_mode, automatic_interval_minutes, operator_note, updated_at, updated_by_user_id, next_due_at, last_tranco_sync_at")
+    .select("singleton_key, pipeline_enabled, run_mode, automatic_interval_minutes, operator_note, updated_at, updated_by_user_id, next_due_at, last_tranco_sync_at, last_worker_heartbeat_at, last_worker_started_at, last_worker_host")
     .single();
 
   if (error || !data) {
@@ -687,16 +690,35 @@ export async function getValidationSettings() {
   }
 
   const row = data as ValidationSettingsRow;
+  const queueHealth = getValidationQueueAvailability().enabled ? await getValidationQueueHealth() : null;
+  const heartbeatAgeMs = row.last_worker_heartbeat_at ? Date.now() - new Date(row.last_worker_heartbeat_at).getTime() : null;
+  const workerHealthy = typeof heartbeatAgeMs === "number" ? heartbeatAgeMs <= 90_000 : false;
+  const collectWaiting = queueHealth?.collect.waiting ?? 0;
+  const rankWaiting = queueHealth?.rank.waiting ?? 0;
+  const collectActive = queueHealth?.collect.active ?? 0;
+  const rankActive = queueHealth?.rank.active ?? 0;
+  const backlogDetected = Boolean(
+    queueHealth &&
+      (collectWaiting > 0 || rankWaiting > 0) &&
+      collectActive + rankActive === 0
+  );
+
   return {
     automaticIntervalMinutes: row.automatic_interval_minutes,
     lastTrancoSyncAt: row.last_tranco_sync_at,
+    lastWorkerHeartbeatAt: row.last_worker_heartbeat_at,
+    lastWorkerHost: row.last_worker_host,
+    lastWorkerStartedAt: row.last_worker_started_at,
     nextDueAt: row.next_due_at,
     operatorNote: row.operator_note,
     pipelineEnabled: row.pipeline_enabled,
     pipelineState: getPipelineState(row),
+    queueHealth,
     runMode: row.run_mode,
     updatedAt: row.updated_at,
     updatedByUserId: row.updated_by_user_id,
+    workerBacklogDetected: backlogDetected,
+    workerHealthy,
     viewerEmail: context.user.email ?? ""
   };
 }

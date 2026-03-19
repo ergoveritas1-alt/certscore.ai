@@ -6,6 +6,7 @@ import { getConfiguredValidationRedisUrl, getWebServerEnv } from "../../lib/env"
 
 let connection: ConnectionOptions | null = null;
 let collectQueue: Queue<{ validationRunId: string }> | null = null;
+let rankQueue: Queue<{ validationRunId: string }> | null = null;
 
 function createRedisConnection(redisUrl: string): ConnectionOptions {
   const url = new URL(redisUrl);
@@ -54,6 +55,22 @@ function getCollectQueue() {
   return collectQueue;
 }
 
+function getRankQueue() {
+  if (rankQueue) {
+    return rankQueue;
+  }
+
+  rankQueue = new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationRank, {
+    connection: getRedisConnection(),
+    defaultJobOptions: {
+      removeOnComplete: 100,
+      removeOnFail: 100
+    }
+  });
+
+  return rankQueue;
+}
+
 export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
   const redisUrl = getConfiguredValidationRedisUrl(env);
   if (!redisUrl) {
@@ -87,4 +104,16 @@ export async function enqueueValidationCollectJob(validationRunId: string) {
       jobId: `${validationRunId}--collect`
     }
   );
+}
+
+export async function getValidationQueueHealth() {
+  const [collectCounts, rankCounts] = await Promise.all([
+    getCollectQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
+    getRankQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused")
+  ]);
+
+  return {
+    collect: collectCounts,
+    rank: rankCounts
+  };
 }

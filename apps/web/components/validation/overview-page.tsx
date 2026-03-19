@@ -55,7 +55,37 @@ export async function ValidationOverviewPage() {
               <p className="sm:col-span-2">
                 Last Tranco sync: <ViewerTimestamp value={settings.lastTrancoSyncAt} fallback="Never" />
               </p>
+              <p>
+                Worker heartbeat: <ViewerTimestamp value={settings.lastWorkerHeartbeatAt} fallback="Never" />
+              </p>
+              <p>
+                Worker host: <span className="font-semibold text-slate-950">{settings.lastWorkerHost ?? "—"}</span>
+              </p>
+              <p>
+                Collect queue:{" "}
+                <span className="font-semibold text-slate-950">
+                  {settings.queueHealth ? `${settings.queueHealth.collect.waiting} waiting / ${settings.queueHealth.collect.active} active` : "—"}
+                </span>
+              </p>
+              <p>
+                Rank queue:{" "}
+                <span className="font-semibold text-slate-950">
+                  {settings.queueHealth ? `${settings.queueHealth.rank.waiting} waiting / ${settings.queueHealth.rank.active} active` : "—"}
+                </span>
+              </p>
             </div>
+
+            {!settings.workerHealthy ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                Validation worker heartbeat is stale. New validation jobs may remain queued until a worker is running.
+              </div>
+            ) : null}
+
+            {settings.workerBacklogDetected ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                Validation queue backlog detected with no active worker consumption. Investigate the validation worker immediately.
+              </div>
+            ) : null}
 
             <form action={submitValidationSettingsAction} className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">

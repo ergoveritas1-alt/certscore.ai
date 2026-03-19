@@ -18,6 +18,7 @@
     "dev:validation:local": "pnpm --parallel --stream --filter @website-signal-risk-scanner/web --filter @website-signal-risk-scanner/worker run dev:validation:local",
     "dev:validation:web": "pnpm --filter @website-signal-risk-scanner/validation-web dev",
     "dev:validation:worker": "pnpm --filter @website-signal-risk-scanner/worker dev:validation",
+    "dev:validation:worker:watch": "pnpm --filter @website-signal-risk-scanner/worker dev:validation:watch",
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/worker validation:scheduler",
     "gcloud:auth": "bash ./scripts/gcloud-auth-login.sh",
     "restart:certscore": "bash ./scripts/restart-certscore.sh",

@@ -1,11 +1,18 @@
 import { getWorkerEnv } from "../env";
+import { hostname as getHostname } from "node:os";
 import { createValidationWorkers } from "./workers";
+import { recordValidationWorkerHeartbeat } from "./repository";
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 function bootstrapValidationWorker() {
   const env = getWorkerEnv();
   if (!env.VALIDATION_REDIS_URL) {
     throw new Error("VALIDATION_REDIS_URL is not configured.");
   }
+
+  const startedAt = new Date();
+  const host = getHostname();
 
   const workers = createValidationWorkers();
   workers.forEach((worker) => {
@@ -31,6 +38,27 @@ function bootstrapValidationWorker() {
     concurrency: env.WORKER_CONCURRENCY,
     queues: ["validation.collect", "validation.rank"]
   });
+
+  void recordValidationWorkerHeartbeat({
+    host,
+    startedAt
+  }).catch((error) => {
+    console.error("[validation-worker] failed to record startup heartbeat", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  });
+
+  const interval = setInterval(() => {
+    void recordValidationWorkerHeartbeat({
+      host
+    }).catch((error) => {
+      console.error("[validation-worker] failed to record heartbeat", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+
+  interval.unref();
 }
 
 bootstrapValidationWorker();

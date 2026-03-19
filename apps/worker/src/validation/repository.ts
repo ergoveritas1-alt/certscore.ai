@@ -18,6 +18,9 @@ type ValidationSettingsRow = {
   automatic_interval_minutes: number;
   last_scheduled_at: string | null;
   last_tranco_sync_at: string | null;
+  last_worker_heartbeat_at: string | null;
+  last_worker_host: string | null;
+  last_worker_started_at: string | null;
   next_due_at: string | null;
   operator_note: string | null;
   pipeline_enabled: boolean;
@@ -977,7 +980,7 @@ export async function ensureValidationSettings() {
       { onConflict: "singleton_key" }
     )
     .select(
-      "singleton_key, pipeline_enabled, run_mode, automatic_interval_minutes, updated_at, updated_by_user_id, operator_note, next_due_at, last_scheduled_at, last_tranco_sync_at"
+      "singleton_key, pipeline_enabled, run_mode, automatic_interval_minutes, updated_at, updated_by_user_id, operator_note, next_due_at, last_scheduled_at, last_tranco_sync_at, last_worker_heartbeat_at, last_worker_started_at, last_worker_host"
     )
     .single();
 
@@ -1060,6 +1063,36 @@ export async function setValidationScheduleState(input: {
   const { error } = await supabase.from("validation_settings").update(patch).eq("singleton_key", VALIDATION_SETTINGS_KEY);
   if (error) {
     throw new Error(`Failed to update validation scheduler state: ${error.message}`);
+  }
+}
+
+export async function recordValidationWorkerHeartbeat(input: {
+  host: string;
+  startedAt?: Date;
+  heartbeatAt?: Date;
+}) {
+  const supabase = createAdminClient();
+  const patch: Record<string, string | null> = {
+    last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
+    last_worker_host: input.host
+  };
+
+  if (input.startedAt) {
+    patch.last_worker_started_at = input.startedAt.toISOString();
+  }
+
+  const { error } = await supabase
+    .from("validation_settings")
+    .upsert(
+      {
+        singleton_key: VALIDATION_SETTINGS_KEY,
+        ...patch
+      },
+      { onConflict: "singleton_key" }
+    );
+
+  if (error) {
+    throw new Error(`Failed to record validation worker heartbeat: ${error.message}`);
   }
 }
 
