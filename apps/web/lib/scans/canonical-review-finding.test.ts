@@ -544,6 +544,55 @@ test("uses strong retargeting-pixel copy and high confidence", () => {
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
+test("uses session-replay copy and moderate confidence for detector-backed replay findings", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-1",
+        ruleKey: "commerce.session_replay_tool_detected",
+        title: "Session replay tool detected",
+        evidence: {
+          claim: "Session replay tool detected was elevated during the scan and merits reviewer attention.",
+          confidenceBasis: ["Automated detector fired for this signal."],
+          missingEvidence: ["No rule-specific evidence builder has been configured yet."],
+          pageUrls: [],
+          policyEvidence: [],
+          reviewPolicy: {
+            claimType: "behavior_without_disclosure",
+            detectorStrength: "medium",
+            gapTolerance: "medium"
+          },
+          runtimeEvidence: [],
+          supportingSignals: [
+            {
+              category: "commerce",
+              key: "commerce.session_replay_tool_detected",
+              label: "Session replay tool detected",
+              value: true
+            }
+          ]
+        }
+      }),
+      observedValue: "Session replay tool detected",
+      severity: "high",
+      title: "Session replay tool detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Session replay tool detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /collect sensitive interaction data|transparency and consent risk/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /replay tooling is necessary|disclose it explicitly|consent framework/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "FTC");
+  assert.equal(presentation.confidenceScore, "0.6");
+});
+
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
