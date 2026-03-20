@@ -75,9 +75,14 @@ test("uses strong copy and high evidence strength for functional misalignment", 
   );
 
   assert.equal(presentation.findingName, "Functional misalignment");
-  assert.match(presentation.whyThisMatters, /functional misalignment/i);
-  assert.match(presentation.whyThisMatters, /technical dark pattern|asymmetry/i);
-  assert.match(presentation.suggestedFix, /functional symmetry/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /definitive functional misalignment|asymmetric user experience|technical dark pattern|CCPA and GDPR exposure/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Functional Symmetry|same number of clicks|secondary authentication|account-creation hurdles/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });

@@ -124,9 +124,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://cppa.ca.gov/regulations/pdf/20230329_final_approved_regs.pdf"
       },
       suggestedFix:
-        "Perform a technical audit to achieve functional symmetry between the opt-in and opt-out paths. Refactor the privacy-request workflow so revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, without secondary authentication or account-creation hurdles that are not clearly disclosed in the policy.",
+        "Perform a technical audit to achieve Functional Symmetry between the opt-in and opt-out paths. Refactor the privacy-request workflow to ensure that revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, without requiring secondary authentication or account-creation hurdles not mentioned in the policy.",
       whyThisMatters:
-        "The automated scan confirmed a functional misalignment where the live rights-fulfillment workflow contradicts the site’s stated privacy promises. This kind of asymmetry can indicate a technical dark pattern, where exercising privacy rights requires materially more friction than the initial data-ingestion path, creating direct GDPR and CCPA exposure."
+        "The automated scan confirmed a definitive functional misalignment where the live rights-fulfillment workflow contradicts the site's stated privacy promises. This discrepancy indicates an asymmetric user experience, a technical dark pattern, where the friction required to exercise privacy rights is significantly higher than the initial data-ingestion path, creating direct CCPA and GDPR exposure."
     },
     matches: [/policy_runtime\.functional_misalignment/i, /high-confidence functional misalignment/i]
   },
