@@ -152,9 +152,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/dpv/"
       },
       suggestedFix:
-        "Perform a technical audit of the policy DOM to expose hidden or dynamic text blocks. Refactor the page into a flatter semantic structure with explicit section IDs for mandatory disclosures, and make sure content is not gated behind JavaScript-only interactions or display-none styling.",
+        "Perform a technical audit of the policy DOM to expose all hidden or dynamic text blocks. To resolve this, refactor the page to use a flattened HTML structure with semantic section tags and explicit IDs for all mandatory disclosures, ensuring content is not gated behind JavaScript-only interactions or display:none CSS properties.",
       whyThisMatters:
-        "The automated scan confirmed an obstruction signal, indicating that the site architecture prevents reliable disclosure mapping. This kind of technical barrier, often caused by dynamic, collapsible, or non-semantic containers, can obstruct both automated auditing and user visibility into critical privacy practices."
+        "The automated scan confirmed a definitive obstruction signal, indicating that the site's architecture prevents reliable data mapping. This technical barrier, often caused by content nested in non-semantic, dynamic, or collapsible containers, obstructs both automated auditing and user visibility into critical privacy practices."
     },
     matches: [/policy_runtime\.disclosure_likely_obstructed/i, /disclosure likely obstructed/i]
   },

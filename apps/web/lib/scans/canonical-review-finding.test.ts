@@ -316,8 +316,14 @@ test("uses strong obstruction copy and high confidence for disclosure likely obs
   );
 
   assert.equal(presentation.findingName, "Disclosure likely obstructed");
-  assert.match(presentation.whyThisMatters, /architecture prevents reliable disclosure mapping|technical barrier/i);
-  assert.match(presentation.suggestedFix, /technical audit of the policy DOM|JavaScript-only interactions|display-none/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /definitive obstruction signal|prevents reliable data mapping|automated auditing and user visibility/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /technical audit of the policy DOM|flattened HTML structure|JavaScript-only interactions|display:none/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
