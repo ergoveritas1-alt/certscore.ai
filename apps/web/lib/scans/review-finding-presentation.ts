@@ -546,7 +546,9 @@ function computeSupportStrength(input: {
         : typeof evidence.value === "number"
           ? evidence.value
           : null;
-    if (signalValue !== null && signalValue <= -4) {
+    if (signalValue !== null && signalValue <= -10) {
+      score += 0.32;
+    } else if (signalValue !== null && signalValue <= -4) {
       score += 0.27;
     } else if (signalValue !== null && signalValue < 0) {
       score += 0.2;
@@ -656,6 +658,22 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   for (const override of config.evidenceAwareOverrides ?? []) {
     if (override.match.test(input.haystack)) {
       Object.assign(presentation, override.override);
+    }
+  }
+
+  if (/accessibility risk score|elevated accessibility risk score/i.test(input.haystack)) {
+    const signalValue =
+      typeof input.evidence?.signalValue === "number"
+        ? input.evidence.signalValue
+        : typeof input.evidence?.value === "number"
+          ? input.evidence.value
+          : null;
+
+    if (signalValue !== null && signalValue <= -10) {
+      presentation.whyThisMatters =
+        "The accessibility risk score of -10 represents a critical outlier, signaling a severe density of structural WCAG violations. In technical auditing, a score of this magnitude typically confirms systemic failures in the DOM, such as pervasive keyboard traps, non-semantic navigation, or entirely missing ARIA metadata, which present insurmountable barriers for users with disabilities and create maximum legal exposure.";
+      presentation.suggestedFix =
+        "Perform an immediate technical remediation of the site's global templates. Address the core architectural failures: (1) eliminate all keyboard traps in navigation modals, (2) implement a complete ARIA landmark structure (main, nav, header), and (3) refactor dynamic components to ensure focus-management logic follows a logical, machine-readable tab order.";
     }
   }
 

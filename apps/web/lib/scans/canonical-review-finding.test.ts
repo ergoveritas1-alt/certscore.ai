@@ -221,6 +221,40 @@ test("uses strong systemic accessibility copy for negative accessibility risk sc
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
+test("uses max-strength accessibility risk copy for critical negative outliers", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-risk-2",
+        ruleKey: "accessibility.risk_score",
+        title: "Accessibility risk score",
+        evidence: {
+          signalValue: -10,
+          snapshotField: "accessibility_litigation_risk_score",
+          supportingSignals: ["systemic accessibility failures in global templates"],
+          value: -10
+        }
+      }),
+      observedValue: "-10",
+      severity: "high",
+      title: "Accessibility risk score"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility risk score");
+  assert.match(
+    presentation.whyThisMatters,
+    /accessibility risk score of -10|critical outlier|insurmountable barriers|max(imum)? legal exposure/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /immediate technical remediation|eliminate all keyboard traps|complete ARIA landmark structure|machine-readable tab order/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
 test("uses landmark-specific accessibility copy and high confidence for landmark issues", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
