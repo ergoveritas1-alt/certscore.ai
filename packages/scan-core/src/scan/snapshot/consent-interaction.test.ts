@@ -92,8 +92,10 @@ test("reject path flags auth-wall friction when the opt-out flow reveals login g
   const helpers = (mod as unknown as {
     __test?: {
       performRejectPath: (page: Page, startHost: string, waitForSettle: (maxWaitMs: number) => Promise<void>) => Promise<{
+        authWallDetected: boolean;
         clicked: boolean;
         clickCount: number | null;
+        externalRedirectDetected: boolean;
         redirectOrAuthRequired: boolean;
       }>;
     };
@@ -102,12 +104,68 @@ test("reject path flags auth-wall friction when the opt-out flow reveals login g
   await withPage(async (page) => {
     await page.setContent(`
       <div id="banner">
-        <button id="manage" onclick="document.body.innerText='Login required to manage privacy settings'">Manage preferences</button>
+        <button id="manage" onclick="document.body.innerHTML='<form><label>Password <input type=&quot;password&quot; /></label></form>'">Manage preferences</button>
       </div>
     `);
 
     const result = await helpers!.performRejectPath(page, "", async () => {});
+    assert.equal(result.authWallDetected, true);
+    assert.equal(result.externalRedirectDetected, false);
     assert.equal(result.redirectOrAuthRequired, true);
     assert.equal(result.clickCount, 1);
+  });
+});
+
+test("blocker detection treats visible password fields as auth walls", async () => {
+  const mod = await import("./consent-interaction");
+  const helpers = (mod as unknown as {
+    __test?: {
+      detectPathBlockers: (
+        page: Page,
+        startHost: string
+      ) => Promise<{ authWallDetected: boolean; externalRedirectDetected: boolean; redirectOrAuthRequired: boolean }>;
+    };
+  }).__test;
+
+  await withPage(async (page) => {
+    await page.setContent(`
+      <form>
+        <label>Password <input type="password" /></label>
+      </form>
+    `);
+
+    const result = await helpers!.detectPathBlockers(page, "");
+    assert.equal(result.authWallDetected, true);
+    assert.equal(result.externalRedirectDetected, false);
+    assert.equal(result.redirectOrAuthRequired, true);
+  });
+});
+
+test("blocker detection flags external redirects separately from auth walls", async () => {
+  const mod = await import("./consent-interaction");
+  const helpers = (mod as unknown as {
+    __test?: {
+      performRejectPath: (page: Page, startHost: string, waitForSettle: (maxWaitMs: number) => Promise<void>) => Promise<{
+        authWallDetected: boolean;
+        clicked: boolean;
+        clickCount: number | null;
+        externalRedirectDetected: boolean;
+        redirectOrAuthRequired: boolean;
+      }>;
+    };
+  }).__test;
+
+  await withPage(async (page) => {
+    await page.goto("https://example.com", { waitUntil: "domcontentloaded" });
+    await page.setContent(`
+      <div id="banner">
+        <button id="reject" onclick="window.location.href='https://other.example/privacy'">Reject all</button>
+      </div>
+    `);
+
+    const result = await helpers!.performRejectPath(page, "example.com", async () => {});
+    assert.equal(result.authWallDetected, false);
+    assert.equal(result.externalRedirectDetected, true);
+    assert.equal(result.redirectOrAuthRequired, true);
   });
 });

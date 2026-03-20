@@ -23,9 +23,23 @@ async function main() {
         finalUrl: result.finalUrl,
         attemptedProbeProfiles: result.attemptedProbeProfiles,
         winningProbeProfile: result.winningProbeProfile,
+        opt_in_clicks: result.optInClicks,
+        opt_out_clicks: result.optOutClicks,
+        click_delta: result.consentFrictionDelta,
+        auth_wall_detected: result.authWallDetected,
+        external_redirect_detected: result.externalRedirectDetected,
+        evidence_log: result.evidenceLog,
         baseline: result.baseline,
         postReject: result.postReject,
-        postAccept: result.postAccept
+        postAccept: result.postAccept,
+        canonicalRuntimeArtifactPreview: {
+          consent_opt_in_clicks: result.optInClicks,
+          consent_opt_out_clicks: result.optOutClicks,
+          consent_friction_delta: result.consentFrictionDelta,
+          consent_redirect_or_auth_required: result.consentRedirectOrAuthRequired,
+          consent_opt_in_evidence_log: result.optInEvidenceLog,
+          consent_opt_out_evidence_log: result.optOutEvidenceLog
+        }
       },
       null,
       2

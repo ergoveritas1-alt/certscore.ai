@@ -24,10 +24,13 @@ export type ConsentInteractionStageResult = {
 
 export type ConsentInteractionAudit = {
   attemptedProbeProfiles: string[];
+  authWallDetected: boolean;
   baseline: ConsentInteractionStageResult;
   acceptNewTrackerVendorNames: string[];
   consentFrictionDelta: number | null;
   consentRedirectOrAuthRequired: boolean | null;
+  evidenceLog: string[];
+  externalRedirectDetected: boolean;
   finalUrl: string;
   optInEvidenceLog: ConsentInteractionEvidenceStep[];
   optInClicks: number | null;
@@ -55,9 +58,11 @@ type ConsentToggleCandidate = {
 };
 
 type ConsentPathExecutionResult = {
+  authWallDetected: boolean;
   clicked: boolean;
   clickCount: number | null;
   evidenceLog: ConsentInteractionEvidenceStep[];
+  externalRedirectDetected: boolean;
   redirectOrAuthRequired: boolean;
 };
 
@@ -101,6 +106,7 @@ function intersection(left: string[], right: string[]) {
 export const __test = {
   difference,
   intersection,
+  detectPathBlockers,
   isAuthWallText(text: string) {
     return AUTH_WALL_PATTERNS.test(text);
   },
@@ -339,22 +345,40 @@ async function collectToggleCandidates(page: Page): Promise<ConsentToggleCandida
     .catch(() => []);
 }
 
-async function detectRedirectOrAuth(page: Page, startHost: string) {
+async function detectPathBlockers(page: Page, startHost: string) {
   const currentUrl = page.url();
-  let redirected = false;
+  let externalRedirectDetected = false;
 
   try {
-    redirected = new URL(currentUrl).hostname !== startHost;
+    const currentHost = new URL(currentUrl).hostname;
+    externalRedirectDetected = Boolean(startHost) && currentHost !== startHost;
   } catch {
-    redirected = false;
+    externalRedirectDetected = false;
   }
 
-  const authWall = await page
-    .evaluate(() => document.body?.innerText?.replace(/\s+/g, " ").trim() ?? "")
-    .then((text) => AUTH_WALL_PATTERNS.test(text))
+  const authWallDetected = await page
+    .evaluate(() => {
+      const bodyText = document.body?.innerText?.replace(/\s+/g, " ").trim() ?? "";
+      const passwordInputVisible = [...document.querySelectorAll("input[type='password']")].some((element) => {
+        const htmlElement = element as HTMLElement;
+        const style = window.getComputedStyle(htmlElement);
+        return (
+          style.visibility !== "hidden" &&
+          style.display !== "none" &&
+          htmlElement.getBoundingClientRect().width > 0 &&
+          htmlElement.getBoundingClientRect().height > 0
+        );
+      });
+
+      return passwordInputVisible || AUTH_WALL_PATTERNS.test(bodyText);
+    })
     .catch(() => false);
 
-  return redirected || authWall;
+  return {
+    authWallDetected,
+    externalRedirectDetected,
+    redirectOrAuthRequired: authWallDetected || externalRedirectDetected
+  };
 }
 
 function pushEvidenceStep(
@@ -391,6 +415,8 @@ async function performAcceptPath(
   waitForSettle: (maxWaitMs: number) => Promise<void>
 ): Promise<ConsentPathExecutionResult> {
   const evidenceLog: ConsentInteractionEvidenceStep[] = [];
+  let authWallDetected = false;
+  let externalRedirectDetected = false;
   let redirectOrAuthRequired = false;
 
   for (const candidate of await collectButtonCandidates(page)) {
@@ -407,11 +433,16 @@ async function performAcceptPath(
         text: candidate.text,
         urlAfterClick: page.url()
       });
-      redirectOrAuthRequired = await detectRedirectOrAuth(page, startHost);
+      const blockers = await detectPathBlockers(page, startHost);
+      authWallDetected = blockers.authWallDetected;
+      externalRedirectDetected = blockers.externalRedirectDetected;
+      redirectOrAuthRequired = blockers.redirectOrAuthRequired;
       return {
+        authWallDetected,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
+        externalRedirectDetected,
         redirectOrAuthRequired
       };
     } catch {
@@ -420,9 +451,11 @@ async function performAcceptPath(
   }
 
   return {
+    authWallDetected,
     clicked: false,
     clickCount: null,
     evidenceLog,
+    externalRedirectDetected,
     redirectOrAuthRequired
   };
 }
@@ -433,6 +466,8 @@ async function performRejectPath(
   waitForSettle: (maxWaitMs: number) => Promise<void>
 ): Promise<ConsentPathExecutionResult> {
   const evidenceLog: ConsentInteractionEvidenceStep[] = [];
+  let authWallDetected = false;
+  let externalRedirectDetected = false;
   let redirectOrAuthRequired = false;
   let preferencesDescents = 0;
 
@@ -451,7 +486,10 @@ async function performRejectPath(
           text: candidate.text,
           urlAfterClick: page.url()
         });
-        redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+        const blockers = await detectPathBlockers(page, startHost);
+        authWallDetected ||= blockers.authWallDetected;
+        externalRedirectDetected ||= blockers.externalRedirectDetected;
+        redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
         return true;
       } catch {
         continue;
@@ -463,9 +501,11 @@ async function performRejectPath(
 
   if (await clickDirectReject()) {
     return {
+      authWallDetected,
       clicked: true,
       clickCount: evidenceLog.length,
       evidenceLog,
+      externalRedirectDetected,
       redirectOrAuthRequired
     };
   }
@@ -485,7 +525,10 @@ async function performRejectPath(
         text: preferencesCandidate.text,
         urlAfterClick: page.url()
       });
-      redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+      const blockers = await detectPathBlockers(page, startHost);
+      authWallDetected ||= blockers.authWallDetected;
+      externalRedirectDetected ||= blockers.externalRedirectDetected;
+      redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       preferencesDescents += 1;
     } catch {
       break;
@@ -493,9 +536,11 @@ async function performRejectPath(
 
     if (await clickDirectReject()) {
       return {
+        authWallDetected,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
+        externalRedirectDetected,
         redirectOrAuthRequired
       };
     }
@@ -517,7 +562,10 @@ async function performRejectPath(
           text: toggle.text,
           urlAfterClick: page.url()
         });
-        redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+        const blockers = await detectPathBlockers(page, startHost);
+        authWallDetected ||= blockers.authWallDetected;
+        externalRedirectDetected ||= blockers.externalRedirectDetected;
+        redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       } catch {
         continue;
       }
@@ -541,11 +589,16 @@ async function performRejectPath(
         text: saveCandidate.text,
         urlAfterClick: page.url()
       });
-      redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+      const blockers = await detectPathBlockers(page, startHost);
+      authWallDetected ||= blockers.authWallDetected;
+      externalRedirectDetected ||= blockers.externalRedirectDetected;
+      redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       return {
+        authWallDetected,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
+        externalRedirectDetected,
         redirectOrAuthRequired
       };
     } catch {
@@ -554,9 +607,11 @@ async function performRejectPath(
   }
 
   return {
+    authWallDetected,
     clicked: evidenceLog.some((step) => step.action !== "preferences"),
     clickCount: evidenceLog.length > 0 ? evidenceLog.length : null,
     evidenceLog,
+    externalRedirectDetected,
     redirectOrAuthRequired
   };
 }
@@ -794,16 +849,19 @@ async function runSingleConsentInteractionAudit(input: {
   );
 
   return {
+    authWallDetected: rejectSession.path.authWallDetected,
     acceptNewTrackerVendorNames: difference(acceptSession.postStage.trackerVendorNames, acceptSession.baseline.trackerVendorNames),
     baseline: rejectSession.baseline,
     consentFrictionDelta:
       rejectSession.path.clickCount !== null && acceptSession.path.clickCount !== null
         ? rejectSession.path.clickCount - acceptSession.path.clickCount
         : null,
-    consentRedirectOrAuthRequired:
-      rejectSession.path.redirectOrAuthRequired || acceptSession.path.redirectOrAuthRequired
-        ? true
-        : false,
+    consentRedirectOrAuthRequired: rejectSession.path.redirectOrAuthRequired ? true : false,
+    evidenceLog: [
+      ...acceptSession.path.evidenceLog.map((step) => `opt-in step ${step.stepIndex}: ${step.text}`),
+      ...rejectSession.path.evidenceLog.map((step) => `opt-out step ${step.stepIndex}: ${step.text}`)
+    ],
+    externalRedirectDetected: rejectSession.path.externalRedirectDetected,
     finalUrl: acceptSession.finalUrl || rejectSession.finalUrl,
     optInClicks: acceptSession.path.clickCount,
     optInEvidenceLog: acceptSession.path.evidenceLog.slice(0, MAX_ACCEPT_CLICKS),
@@ -884,3 +942,11 @@ export async function runConsentInteractionAudit(
     winningProbeProfile
   };
 }
+export type ConsentSymmetryEvidence = {
+  authWallDetected: boolean;
+  clickDelta: number | null;
+  evidenceLog: string[];
+  externalRedirectDetected: boolean;
+  optInClicks: number | null;
+  optOutClicks: number | null;
+};
