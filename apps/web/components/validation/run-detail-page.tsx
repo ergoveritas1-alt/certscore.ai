@@ -5,6 +5,7 @@ import { getValidationRunDetail } from "../../server/validation/repository";
 import { submitValidationRescanAction } from "../../server/validation/actions";
 import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
 import { normalizeFindingName } from "../../lib/scans/canonical-review-finding";
+import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 
 type ValidationRunDetailPageProps = {
@@ -149,7 +150,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                         {JSON.stringify(summaryJson, null, 2)}
                       </pre>
                       <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
-                        {JSON.stringify(row.automatedFinding.evidence, null, 2)}
+                        {JSON.stringify(compactEvidenceJsonForDisplay(row.automatedFinding.evidence), null, 2)}
                       </pre>
                     </div>
                   );

@@ -110,6 +110,11 @@ type ScanSnapshotRow = {
 };
 
 type ScanRuntimeArtifactsRow = {
+  consent_blocker_page_title?: string | null;
+  consent_blocker_text_snippet?: string | null;
+  consent_blocker_type?: "auth_wall" | "external_redirect" | "extra_click_path" | null;
+  consent_blocker_url?: string | null;
+  consent_evidence_pass_count?: number | null;
   consent_accept_click_count?: number | null;
   consent_friction_delta?: number | null;
   consent_opt_in_clicks?: number | null;
@@ -875,23 +880,62 @@ function buildSessionReplayEvidence(row: ScanSignalRow, context: ValidationEvide
 }
 
 function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
-  const relatedSignals = [
-    context.scanSignalsByKey.get("privacy.preconsent_tracking_detected"),
-    context.scanSignalsByKey.get("privacy.preconsent_violation_count"),
-    context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors"),
-    context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls"),
-    context.scanSignalsByKey.get("privacy.third_party_cookie_count")
-  ].filter(Boolean) as ScanSignalRow[];
+  const trackingDetectedSignal = context.scanSignalsByKey.get("privacy.preconsent_tracking_detected");
+  const violationCountSignal = context.scanSignalsByKey.get("privacy.preconsent_violation_count");
+  const trackerVendorsSignal = context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors");
+  const evidenceUrlsSignal = context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls");
+  const thirdPartyCookieCountSignal = context.scanSignalsByKey.get("privacy.third_party_cookie_count");
 
-  const evidenceUrls = Array.isArray(context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json)
-    ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_evidence_urls")?.signal_value_json as string[])
+  const evidenceUrls = Array.isArray(evidenceUrlsSignal?.signal_value_json)
+    ? (evidenceUrlsSignal.signal_value_json as string[])
     : [];
-  const trackerVendors = Array.isArray(context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")?.signal_value_json)
-    ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")?.signal_value_json as string[])
+  const trackerVendors = Array.isArray(trackerVendorsSignal?.signal_value_json)
+    ? (trackerVendorsSignal.signal_value_json as string[])
     : [];
-  const violationCount = context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json;
+  const violationCount = violationCountSignal?.signal_value_json;
   const evidenceSummary = summarizePreconsentEvidenceUrls(evidenceUrls, trackerVendors);
   const observedVendors = evidenceSummary.vendorsObserved;
+  const supportingSignals = [
+    trackingDetectedSignal
+      ? {
+          category: trackingDetectedSignal.category,
+          key: trackingDetectedSignal.signal_key,
+          label: trackingDetectedSignal.signal_label,
+          value: trackingDetectedSignal.signal_value_json
+        }
+      : null,
+    violationCountSignal
+      ? {
+          category: violationCountSignal.category,
+          key: violationCountSignal.signal_key,
+          label: violationCountSignal.signal_label,
+          value: violationCountSignal.signal_value_json
+        }
+      : null,
+    {
+      category: evidenceUrlsSignal?.category ?? "privacy",
+      key: "privacy.preconsent_tracker_evidence_urls",
+      label: "Pre-consent tracker evidence summary",
+      value: evidenceSummary
+    },
+    thirdPartyCookieCountSignal
+      ? {
+          category: thirdPartyCookieCountSignal.category,
+          key: thirdPartyCookieCountSignal.signal_key,
+          label: thirdPartyCookieCountSignal.signal_label,
+          value: thirdPartyCookieCountSignal.signal_value_json
+        }
+      : null
+  ].filter(Boolean) as ValidationEvidencePacket["supportingSignals"];
+
+  if (trackerVendorsSignal && observedVendors.length > 0) {
+    supportingSignals.push({
+      category: trackerVendorsSignal.category,
+      key: trackerVendorsSignal.signal_key,
+      label: "Pre-consent tracker vendors",
+      value: observedVendors
+    });
+  }
 
   return {
     claim: "Tracking activity appears to occur before the visitor can make a consent choice.",
@@ -933,15 +977,7 @@ function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: Validation
       }
     },
     runtimeEvidence: evidenceSummary.sampleUrls,
-    supportingSignals: relatedSignals.map((signal) => ({
-      category: signal.category,
-      key: signal.signal_key,
-      label: signal.signal_key === "privacy.preconsent_tracker_evidence_urls" ? "Pre-consent tracker evidence summary" : signal.signal_label,
-      value:
-        signal.signal_key === "privacy.preconsent_tracker_evidence_urls"
-          ? evidenceSummary
-          : signal.signal_value_json
-    }))
+    supportingSignals
   };
 }
 
@@ -1137,6 +1173,11 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
   const frictionDelta = context.runtimeArtifacts?.consent_friction_delta ?? (
     typeof optInClicks === "number" && typeof optOutClicks === "number" ? optOutClicks - optInClicks : null
   );
+  const blockerType = context.runtimeArtifacts?.consent_blocker_type ?? null;
+  const blockerUrl = context.runtimeArtifacts?.consent_blocker_url ?? null;
+  const blockerPageTitle = context.runtimeArtifacts?.consent_blocker_page_title ?? null;
+  const blockerTextSnippet = context.runtimeArtifacts?.consent_blocker_text_snippet ?? null;
+  const evidencePassCount = context.runtimeArtifacts?.consent_evidence_pass_count ?? null;
   const redirectOrAuthRequired = context.runtimeArtifacts?.consent_redirect_or_auth_required === true;
   const optInEvidenceLog = normalizeConsentEvidenceLog(context.runtimeArtifacts?.consent_opt_in_evidence_log);
   const optOutEvidenceLog = normalizeConsentEvidenceLog(context.runtimeArtifacts?.consent_opt_out_evidence_log);
@@ -1150,6 +1191,9 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
     ...optInEvidenceLog.slice(0, 3).map((step) => `opt-in step ${step.stepIndex ?? "?"}: ${step.text}`),
     ...optOutEvidenceLog.slice(0, 5).map((step) => `opt-out step ${step.stepIndex ?? "?"}: ${step.text}`)
   ];
+  if (blockerTextSnippet) {
+    runtimeEvidence.push(`blocker snippet: ${blockerTextSnippet}`);
+  }
 
   const supportingSignals = [
     {
@@ -1195,6 +1239,22 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
       value: true
     });
   }
+  if (blockerType) {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.user_rights_friction_score.blocker_type",
+      label: "Consent blocker type",
+      value: blockerType
+    });
+  }
+  if (typeof evidencePassCount === "number" && evidencePassCount > 0) {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.user_rights_friction_score.evidence_pass_count",
+      label: "Consent evidence pass count",
+      value: evidencePassCount
+    });
+  }
 
   const strongEvidence =
     redirectOrAuthRequired || (typeof frictionDelta === "number" && frictionDelta > 0 && typeof optInClicks === "number" && typeof optOutClicks === "number");
@@ -1227,7 +1287,7 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
       concreteEvidenceAvailable
         ? []
         : ["Completed opt-in and opt-out click-path evidence showing whether the flows are symmetric."],
-    pageUrls: [],
+    pageUrls: blockerUrl ? [blockerUrl] : [],
     policyEvidence: [],
     reviewPolicy: {
       claimType: "behavior_without_disclosure",
@@ -2003,7 +2063,7 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("scan_runtime_artifacts")
       .select(
-        "consent_accept_click_count, consent_friction_delta, consent_opt_in_clicks, consent_opt_in_evidence_log, consent_opt_out_clicks, consent_opt_out_evidence_log, consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_redirect_or_auth_required, consent_reject_click_count, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
+        "consent_accept_click_count, consent_blocker_page_title, consent_blocker_text_snippet, consent_blocker_type, consent_blocker_url, consent_evidence_pass_count, consent_friction_delta, consent_opt_in_clicks, consent_opt_in_evidence_log, consent_opt_out_clicks, consent_opt_out_evidence_log, consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_redirect_or_auth_required, consent_reject_click_count, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
       )
       .eq("scan_id", scanId)
       .maybeSingle(),
