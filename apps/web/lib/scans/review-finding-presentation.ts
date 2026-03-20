@@ -309,9 +309,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Perform a targeted DOM audit to resolve the identified WCAG failures. Prioritize Level A remediation first: ensure images have descriptive alt text, interactive elements have unique aria-labels where needed, and keyboard tab order is logically structured so users do not encounter traps or skipped controls.",
+        "Perform a targeted DOM audit to resolve the identified WCAG failures. Prioritize Level A remediation: ensure all images have descriptive alt text, interactive elements (buttons/links) have unique aria-labels, and the tabindex sequence is logically structured to prevent keyboard traps in dynamic page components.",
       whyThisMatters:
-        "Automated testing identified confirmed WCAG rule violations, which points to technical barriers for users with disabilities. Even when the total count is modest, issues such as missing ARIA attributes, missing alt text, or broken keyboard flow can make interactive elements inaccessible to screen readers or keyboard-only navigation."
+        "The automated detector confirmed distinct WCAG rule violations, signaling structural defects in the DOM. In technical auditing, even a low error count can indicate critical barriers, such as missing ARIA landmarks or broken keyboard focus, that render core navigation or interactive elements inaccessible to users relying on assistive technologies."
     },
     matches: [/error_count/i, /warning_count/i, /issue_count/i, /failures_count/i, /accessibility/i, /wcag/i]
   }
@@ -344,8 +344,8 @@ function inferDetectorStrength(haystack: string) {
     return 0.72;
   }
 
-  if (/automated accessibility issues detected/i.test(haystack)) {
-    return 0.62;
+  if (/automated accessibility issues detected|wcag errors/i.test(haystack)) {
+    return 0.55;
   }
 
   if (/functional misalignment/i.test(haystack)) {
@@ -514,9 +514,12 @@ function computeSupportStrength(input: {
         : claimType === "automated_accessibility"
           ? supportingSignalValue
           : null;
+    if (claimType === "automated_accessibility") {
+      score += 0.12;
+    }
     if (countValue !== null) {
       if (countValue <= 3) {
-        score += 0.18;
+        score += 0.1;
       } else if (countValue <= 10) {
         score += 0.22;
       } else {

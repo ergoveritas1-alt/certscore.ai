@@ -129,10 +129,16 @@ test("uses strong accessibility copy and high confidence for confirmed WCAG issu
   );
 
   assert.equal(presentation.findingName, "WCAG errors");
-  assert.match(presentation.whyThisMatters, /users with disabilities/i);
-  assert.match(presentation.suggestedFix, /Level A remediation|aria-labels|alt text/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /distinct WCAG rule violations|structural defects in the DOM|missing ARIA landmarks|broken keyboard focus/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Level A remediation|descriptive alt text|interactive elements \(buttons\/links\) have unique aria-labels|tabindex sequence/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.ok(Number(presentation.confidenceScore) >= 0.9);
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
 test("uses high confidence for WCAG errors when evidence count is carried in supporting signals", () => {
@@ -167,7 +173,7 @@ test("uses high confidence for WCAG errors when evidence count is carried in sup
   );
 
   assert.equal(presentation.findingName, "WCAG errors");
-  assert.ok(Number(presentation.confidenceScore) >= 0.9);
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
 test("uses strong systemic accessibility copy for negative accessibility risk scores", () => {
