@@ -30,6 +30,7 @@ const CROSS_DOMAIN_KEY_PAGE_TYPES = new Set<KeyPageType>([
 export const KEY_PAGE_DISCOVERY_BUDGETS = {
   maxAdditionalFetchAttempts: 8,
   maxCandidates: 20,
+  maxCandidatesPerTypeBeforeGlobalTrim: 3,
   maxFetchAttemptsPerType: 3,
   maxSameBrandCandidatesPerType: 2,
   maxSameBrandSubdomainHosts: 3,
@@ -40,6 +41,8 @@ export const KEY_PAGE_DISCOVERY_BUDGETS = {
 
 const SAME_BRAND_SUBDOMAIN_PREFIXES = ["wiki", "help", "support", "legal", "docs", "privacy"] as const;
 const MAX_SAME_BRAND_SUBDOMAIN_HUB_FETCHES_PER_HOST = 2;
+const SAME_BRAND_SUBDOMAIN_HUB_GUESS_SOURCE_MIN_SCORE = 14;
+const SAME_BRAND_SUBDOMAIN_HUB_FETCH_MIN_SCORE = 10;
 const SAME_BRAND_SUBDOMAIN_HUB_KEYWORDS = [
   "service",
   "services",
@@ -56,6 +59,22 @@ const SAME_BRAND_SUBDOMAIN_HUB_KEYWORDS = [
   "portal",
   "wiki"
 ] as const;
+const SAME_BRAND_SUBDOMAIN_HUB_KEYWORD_WEIGHTS: Record<(typeof SAME_BRAND_SUBDOMAIN_HUB_KEYWORDS)[number], number> = {
+  service: 10,
+  services: 10,
+  servis: 10,
+  support: 8,
+  help: 8,
+  docs: 8,
+  documentation: 8,
+  manual: 6,
+  guide: 6,
+  project: 2,
+  projects: 2,
+  proekty: 2,
+  portal: 4,
+  wiki: 2
+};
 
 type LinkLike = {
   href: string;
@@ -169,6 +188,28 @@ function toOriginUrl(url: string) {
   }
 }
 
+function shouldInspectSameBrandSubdomainHost(hostname: string, registeredDomain: string) {
+  if (hostname === registeredDomain || hostname === `www.${registeredDomain}`) {
+    return false;
+  }
+
+  const suffix = `.${registeredDomain}`;
+  if (!hostname.endsWith(suffix)) {
+    return false;
+  }
+
+  const subdomainLabel = hostname.slice(0, -suffix.length).split(".").filter(Boolean).pop() ?? "";
+  if (!subdomainLabel) {
+    return false;
+  }
+
+  if (subdomainLabel.length === 1) {
+    return false;
+  }
+
+  return true;
+}
+
 function collectSameBrandSubdomainOrigins(input: {
   homepageUrl: string;
   sitemapUrls: string[];
@@ -176,7 +217,7 @@ function collectSameBrandSubdomainOrigins(input: {
 }) {
   const homepageHost = new URL(input.homepageUrl).hostname;
   const registeredDomain = getRegisteredDomain(homepageHost);
-  const candidates = new Map<string, number>();
+  const candidates = new Map<string, { bonus: number; origin: string }>();
 
   const maybeAdd = (url: string, bonus: number) => {
     try {
@@ -187,8 +228,14 @@ function collectSameBrandSubdomainOrigins(input: {
       if (getRegisteredDomain(parsed.hostname) !== registeredDomain) {
         return;
       }
+      if (!shouldInspectSameBrandSubdomainHost(parsed.hostname, registeredDomain)) {
+        return;
+      }
       const origin = `${parsed.protocol}//${parsed.hostname}/`;
-      candidates.set(origin, Math.max(candidates.get(origin) ?? 0, bonus));
+      const existing = candidates.get(parsed.hostname);
+      if (!existing || bonus > existing.bonus || (bonus === existing.bonus && parsed.protocol === "https:")) {
+        candidates.set(parsed.hostname, { bonus, origin });
+      }
     } catch {
       return;
     }
@@ -207,9 +254,9 @@ function collectSameBrandSubdomainOrigins(input: {
     maybeAdd(`${homepageProtocol}//${prefix}.${registeredDomain}/`, 40);
   }
 
-  return [...candidates.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .map(([origin]) => origin)
+  return [...candidates.values()]
+    .sort((left, right) => right.bonus - left.bonus)
+    .map((candidate) => candidate.origin)
     .slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxSameBrandSubdomainHosts);
 }
 
@@ -235,6 +282,27 @@ function toPascalCasePathSegment(value: string) {
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join("");
+}
+
+function getSameBrandGuessLocaleHints(sourceUrl: string, localeHints: string[]) {
+  const inferred = new Set(inferLocaleHints({ homepageUrl: sourceUrl }));
+
+  try {
+    const hostname = new URL(sourceUrl).hostname.toLowerCase();
+    const tld = hostname.split(".").pop() ?? "";
+    if (tld === "ru") {
+      inferred.add("ru");
+    }
+  } catch {
+    // Ignore malformed source URLs and fall back to provided hints.
+  }
+
+  if (!inferred.has("ru")) {
+    return localeHints;
+  }
+
+  const filteredGlobalHints = localeHints.filter((locale) => locale === "ru" || locale === "en");
+  return dedupe([...inferred, ...filteredGlobalHints]);
 }
 
 function buildRelativeGuessedUrls(sourceUrl: string, pageType: KeyPageType, localeHints: string[]) {
@@ -276,15 +344,10 @@ function buildSameBrandSubdomainGuessedCandidates(input: {
   const candidates: DiscoveryCandidateDraft[] = [];
 
   for (const sourceUrl of dedupe(input.sourceUrls)) {
+    const sourceLocaleHints = getSameBrandGuessLocaleHints(sourceUrl, input.localeHints);
+
     for (const pageType of getSupportedKeyPageTypes()) {
-      const guessedUrls = [
-        ...getLocalizedPathGuesses({
-          homepageUrl: sourceUrl,
-          localeHints: input.localeHints,
-          pageType
-        }),
-        ...buildRelativeGuessedUrls(sourceUrl, pageType, input.localeHints)
-      ];
+      const guessedUrls = buildRelativeGuessedUrls(sourceUrl, pageType, sourceLocaleHints);
 
       for (const guessedUrl of dedupe(guessedUrls)) {
         if (getHostRelation(guessedUrl, input.homepageUrl) !== "same_brand_subdomain") {
@@ -295,7 +358,7 @@ function buildSameBrandSubdomainGuessedCandidates(input: {
           anchorText: null,
           candidateUrl: guessedUrl,
           discoveredFrom: "same_brand_subdomain",
-          localeHints: input.localeHints,
+          localeHints: sourceLocaleHints,
           pageType,
           sourceUrl
         });
@@ -306,7 +369,7 @@ function buildSameBrandSubdomainGuessedCandidates(input: {
           candidateUrl: guessedUrl,
           discoveredFrom: "same_brand_subdomain",
           hostRelation: "same_brand_subdomain",
-          localeHints: input.localeHints,
+          localeHints: sourceLocaleHints,
           pageType,
           pageTypeConfidence: scored.pageTypeConfidence,
           sourceUrl
@@ -430,12 +493,13 @@ async function fetchSameBrandSubdomainCandidates(input: {
           originUrl: fetched.finalUrl || originUrl
         })
       }))
-      .filter((candidate) => candidate.score >= 14)
+      .filter((candidate) => candidate.score >= SAME_BRAND_SUBDOMAIN_HUB_FETCH_MIN_SCORE)
       .sort((left, right) => right.score - left.score)
       .slice(0, MAX_SAME_BRAND_SUBDOMAIN_HUB_FETCHES_PER_HOST);
 
     let secondHopCandidates: DiscoveryCandidateDraft[] = [];
     const eligibleSecondHopSourceUrls: string[] = [];
+    const eligibleGuessedSourceUrls = new Set<string>();
     for (const secondHopHub of secondHopHubs) {
       const secondHopFetched = await fetchTextPage(secondHopHub.href, 2, {
         bypassRobots: true,
@@ -451,6 +515,13 @@ async function fetchSameBrandSubdomainCandidates(input: {
         continue;
       }
       const secondHopLinks = extractLinks(secondHopFetched.body, secondHopFetched.finalUrl || secondHopHub.href);
+      for (const guessSourceUrl of collectSameBrandSubdomainGuessSourceUrls({
+        homepageUrl: input.homepageUrl,
+        links: secondHopLinks,
+        originUrl: secondHopFetched.finalUrl || secondHopHub.href
+      })) {
+        eligibleGuessedSourceUrls.add(guessSourceUrl);
+      }
       const secondHopLocaleHints = dedupe([
         ...subdomainLocaleHints,
         ...inferLocaleHints({
@@ -480,7 +551,8 @@ async function fetchSameBrandSubdomainCandidates(input: {
       localeHints: subdomainLocaleHints,
       sourceUrls: [
         fetched.finalUrl || originUrl,
-        ...eligibleSecondHopSourceUrls
+        ...eligibleSecondHopSourceUrls,
+        ...eligibleGuessedSourceUrls
       ]
     });
 
@@ -545,6 +617,14 @@ function getUrlTokens(url: string) {
   }
 }
 
+function getUrlPathDepth(url: string) {
+  try {
+    return new URL(url).pathname.split("/").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
 function scoreCandidate(input: {
   anchorText: string | null;
   candidateUrl: string;
@@ -590,8 +670,31 @@ function scoreCandidate(input: {
       break;
   }
 
+  let sameBrandPathBonus = 0;
+  if (input.discoveredFrom === "same_brand_subdomain") {
+    const pathDepth = getUrlPathDepth(input.candidateUrl);
+    if (pathDepth === 2) {
+      sameBrandPathBonus = 12;
+    } else if (pathDepth >= 3) {
+      sameBrandPathBonus = -12;
+    }
+  }
+
+  let sameBrandSourceContextBonus = 0;
+  if (input.discoveredFrom === "same_brand_subdomain" && input.sourceUrl) {
+    const sourceTokens = getUrlTokens(input.sourceUrl);
+    if (sourceTokens.includes("servis") || sourceTokens.includes("service") || sourceTokens.includes("services")) {
+      sameBrandSourceContextBonus += 10;
+    }
+    if (sourceTokens.includes("proekty") || sourceTokens.includes("project") || sourceTokens.includes("projects")) {
+      sameBrandSourceContextBonus -= 10;
+    }
+  }
+
   const candidateScore =
     sourceBonus +
+    sameBrandPathBonus +
+    sameBrandSourceContextBonus +
     urlKeywordScore * 2 +
     anchorKeywordScore * 3 +
     (exactGuessMatch ? 12 : 0) +
@@ -665,13 +768,34 @@ function scoreSameBrandSubdomainHubCandidate(input: {
     const segmentCount = candidate.pathname.split("/").filter(Boolean).length;
     const tokens = normalizeLegalMatchText(`${candidate.pathname} ${input.anchorText ?? ""}`);
     const keywordScore = SAME_BRAND_SUBDOMAIN_HUB_KEYWORDS.reduce((score, keyword) => {
-      return tokens.includes(keyword) ? score + Math.max(4, keyword.length) : score;
+      return tokens.includes(keyword) ? score + SAME_BRAND_SUBDOMAIN_HUB_KEYWORD_WEIGHTS[keyword] : score;
     }, 0);
 
     return keywordScore + (segmentCount <= 2 ? 10 : segmentCount === 3 ? 4 : 0);
   } catch {
     return -1;
   }
+}
+
+function collectSameBrandSubdomainGuessSourceUrls(input: {
+  homepageUrl: string;
+  links: LinkLike[];
+  originUrl: string;
+}) {
+  return input.links
+    .filter((link) => getHostRelation(link.href, input.homepageUrl) === "same_brand_subdomain")
+    .filter((link) => !isSameDocumentLink(link.href, input.originUrl))
+    .map((link) => ({
+      href: link.href,
+      score: scoreSameBrandSubdomainHubCandidate({
+        anchorText: link.text,
+        candidateUrl: link.href,
+        originUrl: input.originUrl
+      })
+    }))
+    .filter((candidate) => candidate.score >= SAME_BRAND_SUBDOMAIN_HUB_GUESS_SOURCE_MIN_SCORE)
+    .sort((left, right) => right.score - left.score)
+    .map((candidate) => candidate.href);
 }
 
 function mergeCandidates(candidates: DiscoveryCandidateDraft[]) {
@@ -698,7 +822,96 @@ function mergeCandidates(candidates: DiscoveryCandidateDraft[]) {
     });
   }
 
-  return [...merged.values()].sort((left, right) => right.candidateScore - left.candidateScore);
+  return [...merged.values()].sort(compareDiscoveryCandidates);
+}
+
+function trimCandidatesWithTypeCoverage(candidates: DiscoveryCandidateDraft[]) {
+  const selected = new Map<string, DiscoveryCandidateDraft>();
+  const byType = new Map<KeyPageType, DiscoveryCandidateDraft[]>();
+
+  for (const candidate of candidates) {
+    byType.set(candidate.pageType, [...(byType.get(candidate.pageType) ?? []), candidate]);
+  }
+
+  for (const pageType of getSupportedKeyPageTypes()) {
+    const group = (byType.get(pageType) ?? []).slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxCandidatesPerTypeBeforeGlobalTrim);
+    for (const candidate of group) {
+      selected.set(`${candidate.pageType}:${candidate.candidateUrl}`, candidate);
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (selected.size >= KEY_PAGE_DISCOVERY_BUDGETS.maxCandidates) {
+      break;
+    }
+    selected.set(`${candidate.pageType}:${candidate.candidateUrl}`, candidate);
+  }
+
+  return [...selected.values()].sort(compareDiscoveryCandidates).slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxCandidates);
+}
+
+function compareDiscoveryCandidates(left: DiscoveryCandidateDraft, right: DiscoveryCandidateDraft) {
+  if (left.candidateScore !== right.candidateScore) {
+    return right.candidateScore - left.candidateScore;
+  }
+
+  const leftCandidateDepthPreference = getPreferredPolicyPathDepth(left.candidateUrl);
+  const rightCandidateDepthPreference = getPreferredPolicyPathDepth(right.candidateUrl);
+  if (leftCandidateDepthPreference !== rightCandidateDepthPreference) {
+    return rightCandidateDepthPreference - leftCandidateDepthPreference;
+  }
+
+  const leftSourceDepth = getSourceUrlDepth(left.sourceUrl);
+  const rightSourceDepth = getSourceUrlDepth(right.sourceUrl);
+  if (leftSourceDepth !== rightSourceDepth) {
+    return rightSourceDepth - leftSourceDepth;
+  }
+
+  const leftFinalSegment = getFinalPathSegment(left.candidateUrl);
+  const rightFinalSegment = getFinalPathSegment(right.candidateUrl);
+  if (leftFinalSegment.length !== rightFinalSegment.length) {
+    return leftFinalSegment.length - rightFinalSegment.length;
+  }
+
+  const leftPascalCase = isPascalCaseSegment(leftFinalSegment) ? 1 : 0;
+  const rightPascalCase = isPascalCaseSegment(rightFinalSegment) ? 1 : 0;
+  if (leftPascalCase !== rightPascalCase) {
+    return rightPascalCase - leftPascalCase;
+  }
+
+  return left.candidateUrl.localeCompare(right.candidateUrl);
+}
+
+function getPreferredPolicyPathDepth(url: string) {
+  const depth = getUrlPathDepth(url);
+  if (depth === 2) {
+    return 3;
+  }
+  if (depth === 1) {
+    return 2;
+  }
+  if (depth === 0) {
+    return 1;
+  }
+  return 0;
+}
+
+function getFinalPathSegment(url: string) {
+  try {
+    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function isPascalCaseSegment(value: string) {
+  if (!/^[A-Z][A-Za-z0-9]+$/.test(value)) {
+    return false;
+  }
+
+  const uppercaseCount = [...value].filter((character) => /[A-Z]/.test(character)).length;
+  return uppercaseCount >= 2;
 }
 
 function mergeLegalHubCandidates(
@@ -964,12 +1177,12 @@ export async function buildKeyPageDiscoveryState(input: {
   });
 
   return {
-    candidates: mergeCandidates([
+    candidates: trimCandidatesWithTypeCoverage(mergeCandidates([
       ...renderedDiscovery.candidates,
       ...sitemapDiscovery.candidates,
       ...sameBrandSubdomainDiscovery.candidates,
       ...guessedCandidates
-    ]).slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxCandidates),
+    ])),
     legalHubCandidates: mergeLegalHubCandidates(renderedDiscovery.legalHubCandidates),
     localeHints: dedupe([...localeHints, ...sameBrandSubdomainDiscovery.localeHints]),
     sameBrandSubdomainHostsInspected: sameBrandSubdomainDiscovery.hostsInspected,
@@ -981,7 +1194,7 @@ export async function buildKeyPageDiscoveryState(input: {
 
 export function mergeKeyPageDiscoveryStates(states: KeyPageDiscoveryState[]) {
   return {
-    candidates: mergeCandidates(states.flatMap((state) => state.candidates)).slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxCandidates),
+    candidates: trimCandidatesWithTypeCoverage(mergeCandidates(states.flatMap((state) => state.candidates))),
     legalHubCandidates: mergeLegalHubCandidates(states.flatMap((state) => state.legalHubCandidates)),
     localeHints: dedupe(states.flatMap((state) => state.localeHints)),
     sameBrandSubdomainHostsInspected: dedupe(states.flatMap((state) => state.sameBrandSubdomainHostsInspected)),

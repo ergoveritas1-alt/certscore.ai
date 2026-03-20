@@ -75,6 +75,19 @@ test("buildKeyPageDiscoveryState discovers same-brand legal pages on sibling sub
       );
     }
 
+    if (url === "https://wiki.liveinternet.ru/ProektyLiveInternet") {
+      return new Response(
+        `
+        <html lang="ru">
+          <body>
+            <a href="/ServisDnevnikovLiveInternet">Сервис дневников</a>
+          </body>
+        </html>
+        `,
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+    }
+
     throw new Error(`Unexpected fetch for ${url}`);
   }) as typeof globalThis.fetch;
 
@@ -249,6 +262,61 @@ test("buildKeyPageDiscoveryState guesses orphaned policy paths on same-brand sub
     assert.equal(privacyCandidate?.discoveredFrom, "same_brand_subdomain");
     assert.equal(privacyCandidate?.hostRelation, "same_brand_subdomain");
     assert.equal(termsCandidate?.discoveredFrom, "same_brand_subdomain");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("buildKeyPageDiscoveryState promotes service-hub links discovered on second-hop project pages into guessed policy targets", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: URL | RequestInfo) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://wiki.liveinternet.ru/") {
+      return new Response(
+        `
+        <html lang="ru">
+          <body>
+            <a href="/ProektyLiveInternet">Проекты</a>
+            <a href="/ProektyLiveInternet">Проекты</a>
+          </body>
+        </html>
+        `,
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+    }
+
+    if (url === "https://wiki.liveinternet.ru/ProektyLiveInternet") {
+      return new Response(
+        `
+        <html lang="ru">
+          <body>
+            <a href="/ServisDnevnikovLiveInternet">Сервис дневников</a>
+          </body>
+        </html>
+        `,
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+    }
+
+    throw new Error(`Unexpected fetch for ${url}`);
+  }) as typeof globalThis.fetch;
+
+  try {
+    const state = await buildKeyPageDiscoveryState({
+      homepageLanguage: null,
+      homepageUrl: "https://www.liveinternet.ru/",
+      renderedLinks: [],
+      renderedSource: "rendered_link",
+      sitemapUrls: [],
+      sourceUrl: "https://www.liveinternet.ru/"
+    });
+
+    const privacyCandidate = state.candidates.find(
+      (candidate) =>
+        candidate.pageType === "privacy_policy" &&
+        candidate.candidateUrl === "https://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/PrivacyPolicy"
+    );
+    assert.equal(privacyCandidate?.discoveredFrom, "same_brand_subdomain");
   } finally {
     globalThis.fetch = originalFetch;
   }
