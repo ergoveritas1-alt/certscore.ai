@@ -279,9 +279,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /critical user-rights fulfillment friction/i,
         override: {
           suggestedFix:
-            "Implement functional symmetry in the UI. Ensure that the technical path for revoking consent or deleting data is reachable in the same number of clicks as the accept path and does not trigger secondary modals, forced account creation, or login redirects that were not required during the initial data collection.",
+            "Implement Functional Symmetry in the UI. Ensure that the technical path for revoking consent or deleting data is reachable in the same number of clicks as the Accept path and does not trigger secondary modals, forced account creation, or login redirects that were not required during the initial data collection.",
           whyThisMatters:
-            "The runtime detector returned a maximum friction score of 100, confirming that the user-rights fulfillment path is technically obstructed. This represents a hard block where exercising privacy rights is functionally impossible or materially more complex than the initial data-ingestion path, signaling a high-risk technical dark pattern."
+            "The runtime detector returned a maximum friction score of 100, confirming that the user-rights fulfillment path is technically obstructed. This represents a Hard Block where exercising privacy rights, such as opting out or requesting deletion, is functionally impossible or significantly more complex than the initial data-ingestion path, signaling a high-risk technical dark pattern."
         }
       }
     ],

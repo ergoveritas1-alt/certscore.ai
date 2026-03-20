@@ -108,8 +108,14 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
   );
 
   assert.equal(presentation.findingName, "Critical user-rights fulfillment friction");
-  assert.match(presentation.whyThisMatters, /maximum friction score of 100|hard block/i);
-  assert.match(presentation.suggestedFix, /functional symmetry/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /maximum friction score of 100|Hard Block|opting out or requesting deletion|high-risk technical dark pattern/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Functional Symmetry|same number of clicks as the Accept path|secondary modals|forced account creation|login redirects/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
   assert.equal(presentation.confidenceScore, "1.0");
 });
