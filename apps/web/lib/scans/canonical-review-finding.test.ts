@@ -392,7 +392,7 @@ test("uses tos extraction copy and max confidence for structurally weak terms pa
   assert.equal(presentation.findingName, "Extraction TOS");
   assert.match(
     presentation.whyThisMatters,
-    /Policy Ambiguity Score of 90|technically dark to automated auditing|Governing Law, Dispute Resolution, and Termination rights/i
+    /complete semantic obstruction regarding the Terms of Service|Policy Ambiguity Score of 90|technically dark to automated auditing|Governing Law, Dispute Resolution, and Termination rights/i
   );
   assert.match(
     presentation.suggestedFix,
