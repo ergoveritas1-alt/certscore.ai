@@ -108,9 +108,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /privacy policy|extraction privacy policy/i,
         override: {
           suggestedFix:
-            "Immediate manual verification is required to extract the following missing metadata: (1) Data Retention periods, (2) Third-party recipient categories, and (3) Legal basis for processing. Technically, the DOM must be refactored to replace unstructured div soup with semantic section or article tags that use explicit IDs for mandatory disclosures.",
+            "Immediate manual verification is required to extract the following missing metadata: (1) Data Retention periods, (2) Third-party recipient categories, and (3) Legal basis for processing. To resolve this for future scans, refactor the rendered HTML to replace unstructured div containers with semantic section or article tags that use explicit IDs for mandatory disclosures.",
           whyThisMatters:
-            "The automated scan confirmed a total failure in semantic transparency. With a Policy Ambiguity Score of 90 and zero extractable snippets, the site is effectively dark to automated auditing. This structural weakness prevents the verification of mandatory disclosures, including Data Controller identity and DSAR endpoints."
+            "The automated scan confirmed a complete semantic obstruction regarding the privacy policy. With a Policy Ambiguity Score of 90 and zero extractable snippets, the document is technically dark to automated auditing. This structural gap prevents the verification of mandatory disclosures, including Data Controller identity and DSAR endpoints."
         }
       }
     ],

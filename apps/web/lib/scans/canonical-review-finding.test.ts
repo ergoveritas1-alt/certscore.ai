@@ -322,11 +322,11 @@ test("uses privacy-policy extraction copy and max confidence for structurally we
   assert.equal(presentation.findingName, "Extraction Privacy Policy");
   assert.match(
     presentation.whyThisMatters,
-    /Policy Ambiguity Score of 90|dark to automated auditing|Data Controller identity and DSAR endpoints/i
+    /complete semantic obstruction regarding the privacy policy|Policy Ambiguity Score of 90|technically dark to automated auditing|Data Controller identity and DSAR endpoints/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Immediate manual verification is required|Data Retention periods|Third-party recipient categories|Legal basis for processing/i
+    /Immediate manual verification is required|Data Retention periods|Third-party recipient categories|Legal basis for processing|replace unstructured div containers|semantic section or article tags/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.equal(presentation.confidenceScore, "1.0");
