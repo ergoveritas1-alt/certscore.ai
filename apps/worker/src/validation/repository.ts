@@ -329,8 +329,106 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     severity: "medium",
     subtype: "automated_accessibility",
     title: "Automated accessibility issues detected"
+  },
+  "disclosure.privacy_policy_surface_missing": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A privacy policy surface was not detected during the scan."),
+    category: "legal",
+    description: "A privacy policy surface was not detected during the scan.",
+    ruleKey: "disclosure.privacy_policy_surface_missing",
+    severity: "high",
+    subtype: "key_page_coverage",
+    title: "Privacy policy surface not detected"
+  },
+  "disclosure.privacy_policy_fetch_failed": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The privacy policy target page was detected but could not be fetched successfully."),
+    category: "legal",
+    description: "The privacy policy target page was detected but could not be fetched successfully.",
+    ruleKey: "disclosure.privacy_policy_fetch_failed",
+    severity: "high",
+    subtype: "key_page_coverage",
+    title: "Privacy policy page unavailable"
+  },
+  "disclosure.terms_of_service_surface_missing": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A terms page surface was not detected during the scan."),
+    category: "legal",
+    description: "A terms page surface was not detected during the scan.",
+    ruleKey: "disclosure.terms_of_service_surface_missing",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Terms page surface not detected"
+  },
+  "disclosure.terms_of_service_fetch_failed": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The terms page target URL was detected but could not be fetched successfully."),
+    category: "legal",
+    description: "The terms page target URL was detected but could not be fetched successfully.",
+    ruleKey: "disclosure.terms_of_service_fetch_failed",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Terms page unavailable"
+  },
+  "disclosure.cookie_policy_surface_missing": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A cookie policy surface was not detected during the scan."),
+    category: "legal",
+    description: "A cookie policy surface was not detected during the scan.",
+    ruleKey: "disclosure.cookie_policy_surface_missing",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Cookie policy surface not detected"
+  },
+  "disclosure.cookie_policy_fetch_failed": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The cookie policy target URL was detected but could not be fetched successfully."),
+    category: "legal",
+    description: "The cookie policy target URL was detected but could not be fetched successfully.",
+    ruleKey: "disclosure.cookie_policy_fetch_failed",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Cookie policy unavailable"
+  },
+  "disclosure.accessibility_statement_surface_missing": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "An accessibility statement surface was not detected during the scan."),
+    category: "accessibility",
+    description: "An accessibility statement surface was not detected during the scan.",
+    ruleKey: "disclosure.accessibility_statement_surface_missing",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Accessibility statement surface not detected"
+  },
+  "disclosure.accessibility_statement_fetch_failed": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The accessibility statement target URL was detected but could not be fetched successfully."),
+    category: "accessibility",
+    description: "The accessibility statement target URL was detected but could not be fetched successfully.",
+    ruleKey: "disclosure.accessibility_statement_fetch_failed",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Accessibility statement unavailable"
+  },
+  "disclosure.contact_page_surface_missing": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A contact page surface was not detected during the scan."),
+    category: "legal",
+    description: "A contact page surface was not detected during the scan.",
+    ruleKey: "disclosure.contact_page_surface_missing",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Contact page surface not detected"
+  },
+  "disclosure.contact_page_fetch_failed": {
+    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The contact page target URL was detected but could not be fetched successfully."),
+    category: "legal",
+    description: "The contact page target URL was detected but could not be fetched successfully.",
+    ruleKey: "disclosure.contact_page_fetch_failed",
+    severity: "medium",
+    subtype: "key_page_coverage",
+    title: "Contact page unavailable"
   }
 };
+
+const PRECONSENT_FINDING_SIGNAL_KEYS = [
+  "privacy.trackers_before_consent_detected",
+  "privacy.preconsent_tracking_detected",
+  "privacy.preconsent_violation_count",
+  "privacy.preconsent_tracker_vendors",
+  "privacy.preconsent_tracker_evidence_urls"
+] as const;
 
 function isGenericValidationConcernSignal(row: ScanSignalRow) {
   const key = row.signal_key;
@@ -350,6 +448,8 @@ function isGenericValidationConcernSignal(row: ScanSignalRow) {
     /functional_misalignment/,
     /technical_disclosure/,
     /disclosure_gap/,
+    /surface_missing/,
+    /fetch_failed/,
     /structurally_obstructed/,
     /likely_obstructed/,
     /high_sensitivity_data_collection_detected/,
@@ -377,7 +477,11 @@ function getGenericValidationFindingSeverity(row: ScanSignalRow): FindingSeverit
     return "high";
   }
 
-  if (/structurally_obstructed|likely_obstructed/i.test(row.signal_key)) {
+  if (/privacy_policy_(surface_missing|fetch_failed)/i.test(row.signal_key)) {
+    return "high";
+  }
+
+  if (/structurally_obstructed|likely_obstructed|surface_missing|fetch_failed/i.test(row.signal_key)) {
     return "medium";
   }
 
@@ -423,6 +527,46 @@ function getGenericValidationFindingTitle(row: ScanSignalRow) {
 
   if (row.signal_key === "disclosure.cookie_policy_structurally_obstructed") {
     return "Cookie policy structurally obstructed";
+  }
+
+  if (row.signal_key === "disclosure.privacy_policy_surface_missing") {
+    return "Privacy policy surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.privacy_policy_fetch_failed") {
+    return "Privacy policy page unavailable";
+  }
+
+  if (row.signal_key === "disclosure.terms_of_service_surface_missing") {
+    return "Terms page surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.terms_of_service_fetch_failed") {
+    return "Terms page unavailable";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_surface_missing") {
+    return "Cookie policy surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_fetch_failed") {
+    return "Cookie policy unavailable";
+  }
+
+  if (row.signal_key === "disclosure.accessibility_statement_surface_missing") {
+    return "Accessibility statement surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.accessibility_statement_fetch_failed") {
+    return "Accessibility statement unavailable";
+  }
+
+  if (row.signal_key === "disclosure.contact_page_surface_missing") {
+    return "Contact page surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.contact_page_fetch_failed") {
+    return "Contact page unavailable";
   }
 
   if (row.signal_key === "privacy.user_rights_friction_score" && typeof row.signal_value_json === "number") {
@@ -1552,9 +1696,35 @@ export async function loadRankableFindings(scanId: string) {
   }
 
   const findings: Omit<ValidationRunFindingInsert, "rank">[] = [];
+  const primaryPreconsentRow = PRECONSENT_FINDING_SIGNAL_KEYS
+    .map((key) => context.scanSignalsByKey.get(key))
+    .find((row): row is ScanSignalRow => row != null && isActiveSignalValue(row.signal_value_json, row.value_type));
+
+  if (primaryPreconsentRow) {
+    const definition = VALIDATION_SIGNAL_FINDING_DEFINITIONS["privacy.preconsent_tracking_detected"]!;
+    findings.push({
+      category: definition.category,
+      description: definition.description,
+      evidence_json: definition.buildEvidence
+        ? definition.buildEvidence(primaryPreconsentRow, context)
+        : buildDefaultEvidencePacket(primaryPreconsentRow, definition.description),
+      finding_id: null,
+      page_url: null,
+      rule_key: definition.ruleKey,
+      severity: definition.severity,
+      subtype: definition.subtype,
+      title: definition.title
+    });
+  }
+
+  const suppressedSignalKeys = new Set<string>(primaryPreconsentRow ? PRECONSENT_FINDING_SIGNAL_KEYS : []);
 
   for (const row of rows) {
     if (!isActiveSignalValue(row.signal_value_json, row.value_type)) {
+      continue;
+    }
+
+    if (suppressedSignalKeys.has(row.signal_key)) {
       continue;
     }
 

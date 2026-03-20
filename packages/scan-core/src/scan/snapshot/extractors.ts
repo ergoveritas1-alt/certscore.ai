@@ -21,6 +21,14 @@ import {
   type VendorSignature
 } from "./signature-registry";
 import { normalizeTextForHash, stableHash } from "./hash";
+import {
+  getLocalizedKeywords,
+  getLocalizedPathGuesses,
+  getSupportedKeyPageTypes,
+  inferLocaleHints,
+  normalizeLegalMatchText,
+  scoreKeywordMatches
+} from "./key-page-locale-config";
 import type { ExtractedForm, ExtractedInput, ExtractedLink, ExtractedScript, StaticPageResult } from "./types";
 import type { RobotsPolicy } from "../robots/policy";
 import { getCrawlerUserAgent } from "../crawler-identity";
@@ -138,9 +146,17 @@ function parseRetryAfterMs(value: string | null) {
 
 function classifyPageType(url: string): PageType {
   const pathname = new URL(url).pathname.toLowerCase();
+  const normalizedPath = normalizeLegalMatchText(pathname);
 
   if (pathname === "/") {
     return "homepage";
+  }
+
+  for (const pageType of getSupportedKeyPageTypes()) {
+    const localizedKeywords = getLocalizedKeywords(pageType, ["en", "fr", "de", "es", "it", "nl", "pt"]);
+    if (scoreKeywordMatches(normalizedPath, localizedKeywords) >= 8) {
+      return pageType;
+    }
   }
 
   if (pathname.includes("privacy")) {
@@ -641,14 +657,22 @@ function urlMatchesPageType(url: string, pageType: PageType) {
   return POLICY_PATH_GUESSES[pageType].some((guess) => pathname === guess || pathname.startsWith(`${guess}/`) || pathname.includes(guess));
 }
 
-function classifyPageTypeFromLink(link: ExtractedLink): PageType {
+function classifyPageTypeFromLink(link: ExtractedLink, localeHints: string[]): PageType {
   const byUrl = classifyPageType(link.href);
 
   if (byUrl !== "other") {
     return byUrl;
   }
 
-  const text = link.text.toLowerCase();
+  const text = normalizeLegalMatchText(link.text);
+
+  for (const pageType of getSupportedKeyPageTypes()) {
+    const localizedKeywords = getLocalizedKeywords(pageType, localeHints);
+    const score = scoreKeywordMatches(text, localizedKeywords) * 3 + scoreKeywordMatches(link.href, localizedKeywords) * 2;
+    if (score >= 12) {
+      return pageType;
+    }
+  }
 
   if (/privacy/.test(text)) {
     return "privacy_policy";
@@ -719,12 +743,17 @@ function classifyPageTypeFromLink(link: ExtractedLink): PageType {
 
 export function discoverCandidatePages(homepageUrl: string, links: ExtractedLink[]) {
   const homepageHostname = new URL(homepageUrl).hostname;
+  const localeHints = inferLocaleHints({
+    homepageLanguage: null,
+    homepageUrl,
+    links
+  });
   const discovered = new Map<string, PageType>();
 
   discovered.set(homepageUrl, "homepage");
 
   for (const link of links) {
-    const pageType = classifyPageTypeFromLink(link);
+    const pageType = classifyPageTypeFromLink(link, localeHints);
     const hostname = new URL(link.href).hostname;
 
     if (hostname !== homepageHostname && !CROSS_DOMAIN_POLICY_PAGE_TYPES.has(pageType)) {
@@ -735,6 +764,20 @@ export function discoverCandidatePages(homepageUrl: string, links: ExtractedLink
 
     if (!existing || existing === "other") {
       discovered.set(link.href, pageType);
+    }
+  }
+
+  for (const pageType of getSupportedKeyPageTypes()) {
+    for (const guessedUrl of getLocalizedPathGuesses({
+      homepageUrl,
+      localeHints,
+      pageType
+    })) {
+      if (discovered.has(guessedUrl)) {
+        continue;
+      }
+
+      discovered.set(guessedUrl, pageType);
     }
   }
 

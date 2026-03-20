@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page, Request } from "playwright";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
   getPrimaryCategoryLabel,
@@ -14,6 +14,7 @@ import {
 import { evaluateBehaviorDisclosure } from "../behavior-disclosure/evaluate";
 import { createBrowser } from "../browser/create-browser";
 import { navigateWithPolicy } from "../browser/navigate-with-policy";
+import { summarizeKeyPageCoverage } from "../page-audit/key-page-coverage";
 import { mapAxeImpactToSeverity } from "../page-audit/map-axe-severity";
 import { normalizeAxeResults } from "../page-audit/normalize-axe-results";
 import { runAxe } from "../page-audit/run-axe";
@@ -58,6 +59,14 @@ import {
   summarizeTrackers
 } from "./extractors";
 import { fetchDnsSignals, fetchDomainRegistration, fetchTlsMetadata } from "./network-enrichment";
+import {
+  buildKeyPageDiscoveryState,
+  buildKeyPageDiscoverySummary,
+  KEY_PAGE_DISCOVERY_BUDGETS,
+  mergeKeyPageDiscoveryStates,
+  toKeyPageFetchTargets,
+  type KeyPageFetchAttempt
+} from "./key-page-discovery";
 import { shouldContinueRuntimeWait } from "./browser-stability";
 import {
   getCachedDnsSignals,
@@ -178,6 +187,7 @@ type BrowserPassResult = {
   initialCookieCount: number | null;
   initialCookieDomains: string[];
   initialCookieNames: string[];
+  preconsentEvidenceUrls: string[];
   scriptSrcDomains: string[];
   scriptTagCount: number;
   thirdPartyRequestCount: number;
@@ -207,9 +217,21 @@ type FetchedRobotsState = {
   robotsHasDisallowRules: boolean | null;
   robotsTxtFetchedAt: string;
   robotsTxtHash: string | null;
+  robotsTxtBody: string | null;
   robotsTxtUrl: string;
   robotsRulesLoaded: boolean | null;
+  sitemapUrls: string[];
 };
+
+const KEY_PAGE_TYPES = [
+  "privacy_policy",
+  "terms_of_service",
+  "cookie_policy",
+  "accessibility_statement",
+  "contact"
+] as const satisfies Array<
+  Extract<StaticPageResult["pageType"], "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">
+>;
 
 const BROWSER_PASS_HARD_TIMEOUT_MS = 45_000;
 const BROWSER_PASS_STEP_TIMEOUT_MS = 10_000;
@@ -1046,6 +1068,65 @@ function selectTargets(
   return selected;
 }
 
+function mergeCandidateTargets(
+  candidates: Array<{
+    pageType: StaticPageResult["pageType"];
+    priority: number;
+    url: string;
+  }>,
+  discoveryCandidates: Array<{
+    candidateScore: number;
+    candidateUrl: string;
+    pageType: StaticPageResult["pageType"];
+  }>
+) {
+  const merged = new Map<string, { pageType: StaticPageResult["pageType"]; priority: number; url: string }>();
+
+  for (const candidate of candidates) {
+    merged.set(candidate.url, candidate);
+  }
+
+  for (const candidate of discoveryCandidates) {
+    const existing = merged.get(candidate.candidateUrl);
+    const next = {
+      pageType: candidate.pageType,
+      priority: priorityForPage(candidate.pageType) + candidate.candidateScore,
+      url: candidate.candidateUrl
+    } satisfies { pageType: StaticPageResult["pageType"]; priority: number; url: string };
+
+    if (!existing || next.priority > existing.priority) {
+      merged.set(candidate.candidateUrl, next);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function getMissingKeyPageTypes(pages: StaticPageResult[]) {
+  const covered = new Set(
+    pages
+      .filter((page) => page.fetchStatus === "ok" || page.fetchStatus === "redirected")
+      .map((page) => page.pageType)
+  );
+
+  return KEY_PAGE_TYPES.filter((pageType) => !covered.has(pageType));
+}
+
+function formatKeyPageTypeLabel(pageType: (typeof KEY_PAGE_TYPES)[number]) {
+  switch (pageType) {
+    case "privacy_policy":
+      return "Privacy policy";
+    case "terms_of_service":
+      return "Terms of service";
+    case "cookie_policy":
+      return "Cookie policy";
+    case "accessibility_statement":
+      return "Accessibility statement";
+    case "contact":
+      return "Contact page";
+  }
+}
+
 function sameHostname(leftUrl: string, rightUrl: string) {
   try {
     return new URL(leftUrl).hostname === new URL(rightUrl).hostname;
@@ -1062,6 +1143,11 @@ async function fetchRobotsState(input: { domainId: string; scanId: string; start
     const robots = await fetchTextPage(robotsUrl, 5, {
       bypassRobots: true
     });
+    const sitemapUrls = [...new Set(
+      [...robots.body.matchAll(/^\s*sitemap\s*:\s*(\S+)\s*$/gim)]
+        .map((match) => match[1]?.trim() ?? "")
+        .filter((value) => value.length > 0)
+    )];
     const policy = createRobotsPolicy({
       body: robots.body,
       fetchedAt,
@@ -1080,10 +1166,12 @@ async function fetchRobotsState(input: { domainId: string; scanId: string; start
       robotsGroupCount: policy.groupCount,
       robotsHasAllowRules: policy.hasAllowRules,
       robotsHasDisallowRules: policy.hasDisallowRules,
+      robotsTxtBody: robots.body,
       robotsTxtFetchedAt: fetchedAt,
       robotsTxtHash: stableHash(robots.body),
       robotsTxtUrl: robotsUrl,
-      robotsRulesLoaded: policy.rulesLoaded
+      robotsRulesLoaded: policy.rulesLoaded,
+      sitemapUrls
     } as const;
   } catch {
     return {
@@ -1096,10 +1184,12 @@ async function fetchRobotsState(input: { domainId: string; scanId: string; start
       robotsGroupCount: null,
       robotsHasAllowRules: null,
       robotsHasDisallowRules: null,
+      robotsTxtBody: null,
       robotsTxtFetchedAt: fetchedAt,
       robotsTxtHash: null,
       robotsTxtUrl: robotsUrl,
-      robotsRulesLoaded: null
+      robotsRulesLoaded: null,
+      sitemapUrls: []
     } as const;
   }
 }
@@ -1171,6 +1261,51 @@ function buildAccessibilityRuleExamples(input: {
 
 function isFirstPartyHost(host: string | null, pageDomain: string) {
   return host === pageDomain || (host ? host.endsWith(`.${pageDomain}`) : false);
+}
+
+const PRECONSENT_STATE0_RESOURCE_TYPES = new Set(["xhr", "fetch", "script", "image"]);
+
+export function shouldCapturePreconsentState0Request(input: {
+  pageDomain: string;
+  requestUrl: string;
+  resourceType: string;
+}) {
+  if (!PRECONSENT_STATE0_RESOURCE_TYPES.has(input.resourceType)) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(input.requestUrl).hostname;
+    return !isFirstPartyHost(hostname, input.pageDomain);
+  } catch {
+    return false;
+  }
+}
+
+export function summarizePreconsentBaselineEvidence(input: {
+  browserPassPreconsentEvidenceUrls: string[];
+  browserPassTrackerVendorNames: string[];
+  consentAuditBaselineEvidenceUrls?: string[] | null;
+  consentAuditBaselineTrackerVendorNames?: string[] | null;
+}) {
+  const trackerEvidenceUrls = [
+    ...new Set([
+      ...(input.consentAuditBaselineEvidenceUrls ?? []),
+      ...input.browserPassPreconsentEvidenceUrls
+    ])
+  ];
+  const trackerVendorNames = [
+    ...new Set([
+      ...(input.consentAuditBaselineTrackerVendorNames ?? []),
+      ...input.browserPassTrackerVendorNames
+    ])
+  ];
+
+  return {
+    trackerEvidenceUrls,
+    trackerVendorNames,
+    violationCount: Math.max(trackerEvidenceUrls.length, trackerVendorNames.length)
+  };
 }
 
 function browserScriptsToMatches(scriptUrls: string[]) {
@@ -1466,6 +1601,7 @@ async function runBrowserPass(input: {
   });
   const page = await browserHandle.context.newPage();
   const requestUrls = new Set<string>();
+  const preconsentRequestUrls = new Set<string>();
   let mixedContentDetected = false;
   let timedOut = false;
   let inflightRequests = 0;
@@ -1582,7 +1718,7 @@ async function runBrowserPass(input: {
     await route.continue();
   });
 
-  page.on("request", (request) => {
+  const trackRequest = (request: Request) => {
     const requestUrl = request.url();
     inflightRequests += 1;
     lastNetworkActivityAt = Date.now();
@@ -1591,7 +1727,23 @@ async function runBrowserPass(input: {
     if (input.homepageUrl.startsWith("https://") && requestUrl.startsWith("http://")) {
       mixedContentDetected = true;
     }
-  });
+  };
+
+  const capturePreconsentState0Request = (request: Request) => {
+    const requestUrl = request.url();
+    if (
+      shouldCapturePreconsentState0Request({
+        pageDomain: input.domain,
+        requestUrl,
+        resourceType: request.resourceType()
+      })
+    ) {
+      preconsentRequestUrls.add(requestUrl);
+    }
+  };
+
+  page.on("request", trackRequest);
+  page.on("request", capturePreconsentState0Request);
 
   const markRequestCompleted = () => {
     inflightRequests = Math.max(0, inflightRequests - 1);
@@ -1674,6 +1826,7 @@ async function runBrowserPass(input: {
         initialCookieCount: null,
         initialCookieDomains: [],
         initialCookieNames: [],
+        preconsentEvidenceUrls: [],
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
@@ -1693,6 +1846,7 @@ async function runBrowserPass(input: {
         }),
       Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserPostLoadWaitMs + 2_000)
     );
+    page.off("request", capturePreconsentState0Request);
     cookiesBeforeConsent = await runInstrumentedStep("preconsent_cookies", () =>
       browserHandle.context.cookies().catch(() => [])
     );
@@ -1770,8 +1924,10 @@ async function runBrowserPass(input: {
   const browserScripts = browserScriptsToMatches(scriptUrls);
   const cmpVendor = detectNamedVendor(content, browserScripts, CMP_VENDOR_SIGNATURES);
   const widgetVendor = detectNamedVendor(content, browserScripts, ACCESSIBILITY_WIDGET_SIGNATURES);
+  const preconsentEvidenceUrls = [...preconsentRequestUrls];
+  const preconsentTrackerMatchingUrls = [...new Set([...preconsentEvidenceUrls, ...scriptUrls])];
   const trackerDiagnostics = TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
-    const matchedUrls = [...new Set([...requestUrls, ...scriptUrls])]
+    const matchedUrls = preconsentTrackerMatchingUrls
       .map((url) => ({ url, match: analyzeVendorRequestMatch(url, signature, input.domain) }))
       .filter((entry) => entry.match);
 
@@ -1792,7 +1948,7 @@ async function runBrowserPass(input: {
   });
   const trackerVendors = dedupeTrackers(
     TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
-      const matchedRequest = [...new Set([...requestUrls, ...scriptUrls])]
+      const matchedRequest = preconsentTrackerMatchingUrls
         .map((url) => ({ url, match: analyzeVendorRequestMatch(url, signature, input.domain) }))
         .find((entry) => entry.match);
       if (!matchedRequest?.match) {
@@ -1865,11 +2021,11 @@ async function runBrowserPass(input: {
       browserSessionUsable,
       firstPartyCookieSetBeforeConsent,
       thirdPartyCookieSetBeforeConsent,
-      trackerCount: trackerVendors.length
+      trackerCount: Math.max(trackerVendors.length, preconsentEvidenceUrls.length)
     }),
     serviceWorkerDetected,
     mixedContentDetected,
-    preconsentTrackingDetected: trackerVendors.length > 0,
+    preconsentTrackingDetected: preconsentEvidenceUrls.length > 0 || trackerVendors.length > 0,
     timedOut,
     trackerVendors,
     widgetVendor: widgetVendor?.name ?? null,
@@ -1885,6 +2041,7 @@ async function runBrowserPass(input: {
     initialCookieNames: browserSessionUsable
       ? [...new Set(cookiesBeforeConsent.map((cookie) => cookie.name).filter((name): name is string => Boolean(name))).values()].sort()
       : [],
+    preconsentEvidenceUrls,
     scriptSrcDomains: [...new Set(scriptUrls.map((url) => {
       try {
         return new URL(url).hostname;
@@ -2099,12 +2256,21 @@ async function runBestBrowserPass(input: {
 }
 
 async function fetchTargetsWithConcurrency(input: {
+  attemptedTargetUrls?: Set<string>;
   coverageTargetTypes?: Set<StaticPageResult["pageType"]>;
   homepageUrl: string;
   concurrency: number;
   fetchedPagesByUrl: Map<string, StaticPageResult>;
   domainId?: string;
+  onTargetResult?: (result: {
+    fetchOutcome: StaticPageResult["fetchStatus"];
+    finalUrl: string | null;
+    pageType: StaticPageResult["pageType"];
+    statusCode: number | null;
+    targetUrl: string;
+  }) => void;
   organizationId?: string | null;
+  phase?: string;
   robotsPolicy?: RobotsPolicy | null;
   scanId?: string;
   targets: Array<{
@@ -2113,7 +2279,9 @@ async function fetchTargetsWithConcurrency(input: {
     url: string;
   }>;
 }) {
-  const queue = input.targets.filter((target) => !input.fetchedPagesByUrl.has(target.url));
+  const queue = input.targets.filter(
+    (target) => !input.fetchedPagesByUrl.has(target.url) && !(input.attemptedTargetUrls?.has(target.url) ?? false)
+  );
   const concurrency = Math.max(1, input.concurrency);
   let nextIndex = 0;
 
@@ -2133,11 +2301,12 @@ async function fetchTargetsWithConcurrency(input: {
         return;
       }
 
-      const phase = "expansion_fetch_target";
+      const phase = input.phase ?? "expansion_fetch_target";
       const targetMetadata = {
         pageType: target.pageType,
         targetUrl: target.url
       } satisfies Record<string, unknown>;
+      input.attemptedTargetUrls?.add(target.url);
 
       if (input.scanId && input.domainId) {
         await persistBuildPhaseDiagnostic({
@@ -2161,6 +2330,13 @@ async function fetchTargetsWithConcurrency(input: {
             url: target.url
           })
       ).catch(async (error) => {
+        input.onTargetResult?.({
+          fetchOutcome: "error",
+          finalUrl: null,
+          pageType: target.pageType,
+          statusCode: null,
+          targetUrl: target.url
+        });
         if (input.scanId && input.domainId) {
           await persistBuildPhaseDiagnostic({
             scanId: input.scanId,
@@ -2184,6 +2360,13 @@ async function fetchTargetsWithConcurrency(input: {
       }
 
       input.fetchedPagesByUrl.set(page.pageUrl, page);
+      input.onTargetResult?.({
+        fetchOutcome: page.fetchStatus,
+        finalUrl: page.finalUrl,
+        pageType: page.pageType,
+        statusCode: page.statusCode,
+        targetUrl: target.url
+      });
 
       if (input.scanId && input.domainId) {
         await persistBuildPhaseDiagnostic({
@@ -2290,8 +2473,39 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   const prefetchTargetCount = isPreviewScan ? 1 : scanPlan.prefetchTargetCount;
   const expansionTargetCount = isPreviewScan ? 0 : scanPlan.expansionTargetCount;
   const staticFetchConcurrency = isPreviewScan ? 1 : scanPlan.staticFetchConcurrency;
-  const preBrowserCandidates = discoverCandidatePages(homepageUrl, homepage.links)
-    .filter((target) => isUrlAllowedByRobots(target.url, robotsState.policy))
+  const attemptedTargetUrls = new Set<string>();
+  const keyPageFetchAttempts = new Map<string, KeyPageFetchAttempt>();
+  const recordKeyPageFetchAttempt = (result: {
+    fetchOutcome: StaticPageResult["fetchStatus"];
+    finalUrl: string | null;
+    pageType: StaticPageResult["pageType"];
+    statusCode: number | null;
+    targetUrl: string;
+  }) => {
+    if (!KEY_PAGE_TYPES.includes(result.pageType as (typeof KEY_PAGE_TYPES)[number])) {
+      return;
+    }
+
+    keyPageFetchAttempts.set(result.targetUrl, {
+      candidateUrl: result.targetUrl,
+      fetchOutcome: result.fetchOutcome
+    });
+  };
+  const preBrowserKeyPageDiscovery = await buildKeyPageDiscoveryState({
+    homepageLanguage: homepage.language,
+    homepageUrl,
+    renderedLinks: homepage.links,
+    renderedSource: "rendered_link",
+    robotsPolicy: robotsState.policy,
+    robotsTxtBody: robotsState.robotsTxtBody,
+    sitemapUrls: robotsState.sitemapUrls,
+    sourceUrl: homepageUrl
+  });
+  const preBrowserCandidates = mergeCandidateTargets(
+    discoverCandidatePages(homepageUrl, homepage.links),
+    preBrowserKeyPageDiscovery.candidates
+  )
+    .filter((target) => !sameHostname(target.url, homepageUrl) || isUrlAllowedByRobots(target.url, robotsState.policy))
     .sort((left, right) => right.priority - left.priority)
     .sort((left, right) => priorityForPage(right.pageType) - priorityForPage(left.pageType));
 
@@ -2306,6 +2520,9 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     organizationId: input.organizationId,
     robotsPolicy: robotsState.policy,
     scanId: input.scanId,
+    attemptedTargetUrls,
+    onTargetResult: recordKeyPageFetchAttempt,
+    phase: "prefetch_fetch_target",
     targets: prefetchedTargets
   });
   const prefetchedPages: StaticPageResult[] = [...prefetchedPagesByUrl.values()];
@@ -2373,6 +2590,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         initialCookieCount: null,
         initialCookieDomains: [],
         initialCookieNames: [],
+        preconsentEvidenceUrls: [],
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
@@ -2381,8 +2599,23 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       }) satisfies BrowserPassResult
   );
 
-  const candidates = discoverCandidatePages(homepageUrl, [...homepage.links, ...browserPass.discoveredLinks])
-    .filter((target) => isUrlAllowedByRobots(target.url, robotsState.policy))
+  let keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
+    preBrowserKeyPageDiscovery,
+    await buildKeyPageDiscoveryState({
+      homepageLanguage: homepage.language,
+      homepageUrl,
+      renderedLinks: browserPass.discoveredLinks,
+      renderedSource: "rendered_link",
+      robotsPolicy: robotsState.policy,
+      sourceUrl: homepageUrl
+    })
+  ]);
+
+  const candidates = mergeCandidateTargets(
+    discoverCandidatePages(homepageUrl, [...homepage.links, ...browserPass.discoveredLinks]),
+    keyPageDiscoveryState.candidates
+  )
+    .filter((target) => !sameHostname(target.url, homepageUrl) || isUrlAllowedByRobots(target.url, robotsState.policy))
     .sort((left, right) => right.priority - left.priority)
     .sort((left, right) => priorityForPage(right.pageType) - priorityForPage(left.pageType));
 
@@ -2415,6 +2648,8 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       organizationId: input.organizationId,
       robotsPolicy: robotsState.policy,
       scanId: input.scanId,
+      attemptedTargetUrls,
+      onTargetResult: recordKeyPageFetchAttempt,
       targets: expansionTargets
     });
     await persistBuildPhaseDiagnostic({
@@ -2427,6 +2662,141 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         fetchedPageCount: fetchedPagesByUrl.size
       }
     });
+  }
+
+  if (!isPreviewScan) {
+    let remainingAdditionalFetchAttempts: number = KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts;
+    const attemptedLegalHubUrls = new Set<string>();
+    const secondHopUsageByType = new Map<string, number>();
+
+    while (remainingAdditionalFetchAttempts > 0) {
+      const currentPages = [...fetchedPagesByUrl.values()];
+      const missingKeyPageTypes = getMissingKeyPageTypes(currentPages);
+      if (missingKeyPageTypes.length === 0) {
+        break;
+      }
+
+      const additionalTargets = toKeyPageFetchTargets({
+        attemptedUrls: attemptedTargetUrls,
+        candidates: keyPageDiscoveryState.candidates.filter((candidate) => missingKeyPageTypes.includes(candidate.pageType)),
+        fetchedPages: currentPages,
+        maxAttemptsPerType: KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
+        maxTotalAttempts: Math.min(remainingAdditionalFetchAttempts, KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts)
+      }).map((candidate) => ({
+        pageType: candidate.pageType,
+        priority: priorityForPage(candidate.pageType) + candidate.candidateScore,
+        url: candidate.candidateUrl
+      }));
+
+      if (additionalTargets.length > 0) {
+        await fetchTargetsWithConcurrency({
+          coverageTargetTypes: new Set(missingKeyPageTypes),
+          homepageUrl,
+          concurrency: staticFetchConcurrency,
+          domainId: input.domainId,
+          fetchedPagesByUrl,
+          organizationId: input.organizationId,
+          robotsPolicy: robotsState.policy,
+          scanId: input.scanId,
+          attemptedTargetUrls,
+          onTargetResult: recordKeyPageFetchAttempt,
+          phase: "key_page_coverage_fetch_target",
+          targets: additionalTargets
+        });
+        remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - additionalTargets.length);
+        continue;
+      }
+
+      const hubCandidate = keyPageDiscoveryState.legalHubCandidates.find((candidate) => {
+        if (attemptedLegalHubUrls.has(candidate.candidateUrl)) {
+          return false;
+        }
+
+        return missingKeyPageTypes.some(
+          (pageType) =>
+            (secondHopUsageByType.get(pageType) ?? 0) < KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
+        );
+      });
+
+      if (!hubCandidate) {
+        break;
+      }
+
+      attemptedLegalHubUrls.add(hubCandidate.candidateUrl);
+      remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - 1);
+      for (const pageType of missingKeyPageTypes) {
+        secondHopUsageByType.set(pageType, (secondHopUsageByType.get(pageType) ?? 0) + 1);
+      }
+
+      const hubPhaseMetadata = {
+        sourceUrl: hubCandidate.sourceUrl,
+        targetUrl: hubCandidate.candidateUrl
+      } satisfies Record<string, unknown>;
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "key_page_legal_hub_fetch",
+        status: "start",
+        metadata: hubPhaseMetadata
+      });
+      const hubStartedAt = Date.now();
+      const legalHubPage = await withStepTimeout(
+        STATIC_FETCH_TARGET_TIMEOUT_MS,
+        `Static fetch ${hubCandidate.candidateUrl}`,
+        () =>
+          fetchStaticPage({
+            pageType: "other",
+            robotsPolicy: sameHostname(hubCandidate.candidateUrl, homepageUrl) ? robotsState.policy : null,
+            url: hubCandidate.candidateUrl
+          })
+      ).catch(async (error) => {
+        await persistBuildPhaseDiagnostic({
+          scanId: input.scanId,
+          domainId: input.domainId,
+          organizationId: input.organizationId,
+          phase: "key_page_legal_hub_fetch",
+          status: "error",
+          metadata: {
+            ...hubPhaseMetadata,
+            elapsedMs: Date.now() - hubStartedAt,
+            error: error instanceof Error ? error.message : "Unknown error"
+          }
+        });
+        return null;
+      });
+
+      if (!legalHubPage) {
+        continue;
+      }
+
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "key_page_legal_hub_fetch",
+        status: "ok",
+        metadata: {
+          ...hubPhaseMetadata,
+          elapsedMs: Date.now() - hubStartedAt,
+          fetchStatus: legalHubPage.fetchStatus,
+          finalUrl: legalHubPage.finalUrl,
+          statusCode: legalHubPage.statusCode
+        }
+      });
+
+      keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
+        keyPageDiscoveryState,
+        await buildKeyPageDiscoveryState({
+          homepageLanguage: legalHubPage.language ?? homepage.language,
+          homepageUrl,
+          renderedLinks: legalHubPage.links,
+          renderedSource: "second_hop_legal_hub",
+          robotsPolicy: robotsState.policy,
+          sourceUrl: legalHubPage.finalUrl ?? hubCandidate.candidateUrl
+        })
+      ]);
+    }
   }
 
   if (!isPreviewScan) {
@@ -2482,11 +2852,25 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
 
   const fetchedPages = [...fetchedPagesByUrl.values()];
   const successfulPages = fetchedPages.filter((page) => page.fetchStatus === "ok" || page.fetchStatus === "redirected");
+  const browserDiscoveredUrls = new Set(browserPass.discoveredLinks.map((link) => link.href));
   const browserDiscoveredPageTypes = new Set(
     discoverCandidatePages(homepageUrl, browserPass.discoveredLinks)
+      .filter((candidate) => browserDiscoveredUrls.has(candidate.url))
       .map((candidate) => candidate.pageType)
       .filter((pageType) => pageType !== "homepage" && pageType !== "other")
   );
+  const keyPageDiscoverySummary = buildKeyPageDiscoverySummary({
+    attemptedUrls: attemptedTargetUrls,
+    candidates: keyPageDiscoveryState.candidates,
+    fetchAttempts: keyPageFetchAttempts,
+    fetchedPages,
+    homepageUrl,
+    localeHints: keyPageDiscoveryState.localeHints,
+    sameBrandSubdomainHostsInspected: keyPageDiscoveryState.sameBrandSubdomainHostsInspected,
+    sitemapFilesFetched: keyPageDiscoveryState.sitemapFilesFetched,
+    sitemapIndexUrlsFetched: keyPageDiscoveryState.sitemapIndexUrlsFetched,
+    sitemapUrls: keyPageDiscoveryState.sitemapUrls
+  });
   const policyPages = policyPagesFromFetchedPages(successfulPages);
   const contactSignals = deriveContactSignals(successfulPages);
   const jurisdictionSignals = deriveJurisdictionAndIndustry(successfulPages, new URL(homepageUrl).hostname);
@@ -2752,6 +3136,12 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         ? "modal"
         : "banner"
     : "none";
+  const preconsentBaselineEvidence = summarizePreconsentBaselineEvidence({
+    browserPassPreconsentEvidenceUrls: browserPass.preconsentEvidenceUrls,
+    browserPassTrackerVendorNames: browserPass.trackerVendors.map((vendor) => vendor.vendorName),
+    consentAuditBaselineEvidenceUrls: consentInteractionAudit?.baseline.trackerEvidenceUrls ?? [],
+    consentAuditBaselineTrackerVendorNames: consentInteractionAudit?.baseline.trackerVendorNames ?? []
+  });
   const runtimeArtifacts = {
     scanId: input.scanId,
     thirdPartyRequestDomains: browserPass.thirdPartyRequestDomains,
@@ -2775,9 +3165,10 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       : null,
     consentBaselineCookieCount: consentInteractionAudit?.baseline.cookieCount ?? null,
     consentBaselineThirdPartyCookieCount: consentInteractionAudit?.baseline.thirdPartyCookieCount ?? null,
-    consentPreconsentViolationCount: consentInteractionAudit?.baseline.trackerVendorNames.length ?? null,
-    consentBaselineTrackerEvidenceUrls: consentInteractionAudit?.baseline.trackerEvidenceUrls ?? [],
-    consentBaselineTrackerVendorNames: consentInteractionAudit?.baseline.trackerVendorNames ?? [],
+    consentPreconsentViolationCount: preconsentBaselineEvidence.violationCount > 0 ? preconsentBaselineEvidence.violationCount : null,
+    consentBaselineTrackerEvidenceUrls: preconsentBaselineEvidence.trackerEvidenceUrls,
+    consentBaselineTrackerVendorNames: preconsentBaselineEvidence.trackerVendorNames,
+    keyPageDiscoverySummary,
     consentRejectPersistedTrackerVendorNames: consentInteractionAudit?.rejectPersistedTrackerVendorNames ?? [],
     consentRejectNewTrackerVendorNames: consentInteractionAudit?.rejectNewTrackerVendorNames ?? [],
     consentRejectClickCount: consentInteractionAudit?.postReject.clickCount ?? null,
@@ -2847,15 +3238,19 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         return result;
       })();
   const allText = successfulPages.map((page) => page.textContent).join("\n");
-  const privacyPolicyPresent =
-    policyPages.some((page) => page.pageType === "privacy_policy") || browserDiscoveredPageTypes.has("privacy_policy");
-  const termsOfServicePresent =
-    policyPages.some((page) => page.pageType === "terms_of_service") || browserDiscoveredPageTypes.has("terms_of_service");
-  const cookiePolicyPresent =
-    policyPages.some((page) => page.pageType === "cookie_policy") || browserDiscoveredPageTypes.has("cookie_policy");
-  const accessibilityStatementPresent =
-    policyPages.some((page) => page.pageType === "accessibility_statement") ||
-    browserDiscoveredPageTypes.has("accessibility_statement");
+  const keyPageCoverage = summarizeKeyPageCoverage({
+    discoveredPageTypes: new Set(
+      keyPageDiscoverySummary.pageSummaries.filter((summary) => summary.surfaceDetected).map((summary) => summary.pageType)
+    ),
+    failedAttemptedUrlsByPageType: Object.fromEntries(
+      keyPageDiscoverySummary.pageSummaries.map((summary) => [summary.pageType, summary.successfulUrl ? [] : summary.attemptedUrls])
+    ) as Partial<Record<StaticPageResult["pageType"], string[]>>,
+    fetchedPages
+  });
+  const privacyPolicyPresent = keyPageCoverage.find((row) => row.pageType === "privacy_policy")?.fetched === true;
+  const termsOfServicePresent = keyPageCoverage.find((row) => row.pageType === "terms_of_service")?.fetched === true;
+  const cookiePolicyPresent = keyPageCoverage.find((row) => row.pageType === "cookie_policy")?.fetched === true;
+  const accessibilityStatementPresent = keyPageCoverage.find((row) => row.pageType === "accessibility_statement")?.fetched === true;
   const refundPolicyPresent =
     policyPages.some((page) => page.pageType === "refund_policy") || browserDiscoveredPageTypes.has("refund_policy");
   const shippingPolicyPresent =
@@ -2868,8 +3263,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   const advertisingDisclosurePresent =
     policyPages.some((page) => page.pageType === "advertising_disclosure") ||
     browserDiscoveredPageTypes.has("advertising_disclosure");
-  const contactPagePresent =
-    successfulPages.some((page) => page.pageType === "contact") || browserDiscoveredPageTypes.has("contact");
+  const contactPagePresent = keyPageCoverage.find((row) => row.pageType === "contact")?.fetched === true;
   const snapshotBase: Omit<
     ScanSnapshot,
     | "accessibilityScore"
@@ -3412,6 +3806,49 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       (snapshotWithScores.sessionReplayTrackerCount > 0 ? 10 : 0)
   );
   const compatibilitySignals = projectSnapshotSignals(snapshotWithScores, allTrackers);
+  for (const coverage of keyPageCoverage) {
+    if (!coverage.surfaceDetected) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: coverage.surfaceMissingSignalKey,
+          label: coverage.surfaceMissingSignalLabel,
+          value: true
+        })
+      );
+    } else if (!coverage.fetched && coverage.failedPageUrls.length > 0) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: coverage.fetchFailedSignalKey,
+          label: coverage.fetchFailedSignalLabel,
+          value: coverage.failedPageUrls
+        })
+      );
+    }
+  }
+  const unresolvedBoundedKeyPages = keyPageDiscoverySummary.pageSummaries
+    .filter(
+      (summary) =>
+        !summary.successfulUrl &&
+        (summary.surfaceDetected ||
+          summary.guessedOnly ||
+          summary.attemptCount > 0 ||
+          summary.stopReason === "no_surface" ||
+          summary.stopReason === "budget_exhausted")
+    )
+    .map((summary) => formatKeyPageTypeLabel(summary.pageType))
+    .sort();
+  if (unresolvedBoundedKeyPages.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        label: "Bounded key-page discovery unresolved",
+        value: unresolvedBoundedKeyPages
+      })
+    );
+  }
   const sessionReplayDisclosurePages = policyEnrichmentBundle.enrichments
     .filter((enrichment) =>
       enrichment.policyMentions.some(

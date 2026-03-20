@@ -4,6 +4,7 @@ import { listValidationRuns, listValidationTargets, getValidationSettings } from
 import { getValidationQueueAvailability } from "../../server/queue/validation-queue";
 import {
   submitManualValidationRunAction,
+  submitValidationRescanAction,
   submitValidationSettingsAction,
   submitValidationTargetAction,
   submitValidationTargetAddAction
@@ -16,10 +17,16 @@ function formatStateLabel(value: string) {
 export async function ValidationOverviewPage() {
   const [settings, targets, recentRuns, queueAvailability] = await Promise.all([
     getValidationSettings(),
-    listValidationTargets(5),
+    listValidationTargets(7),
     listValidationRuns({ page: 1 }),
     Promise.resolve(getValidationQueueAvailability())
   ]);
+  const queuedOrActiveValidationJobs =
+    (settings.queueHealth?.collect.waiting ?? 0) +
+    (settings.queueHealth?.collect.active ?? 0) +
+    (settings.queueHealth?.rank.waiting ?? 0) +
+    (settings.queueHealth?.rank.active ?? 0);
+  const showWorkerHeartbeatWarning = !settings.workerHealthy && queuedOrActiveValidationJobs > 0;
 
   return (
     <div className="space-y-8">
@@ -75,7 +82,7 @@ export async function ValidationOverviewPage() {
               </p>
             </div>
 
-            {!settings.workerHealthy ? (
+            {showWorkerHeartbeatWarning ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                 Validation worker heartbeat is stale. New validation jobs may remain queued until a worker is running.
               </div>
@@ -172,9 +179,19 @@ export async function ValidationOverviewPage() {
                           <ViewerTimestamp value={run.createdAt} />
                         </td>
                         <td className="py-3">
-                          <a className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
-                            View
-                          </a>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <a className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
+                              View
+                            </a>
+                            {run.domainId ? (
+                              <form action={submitValidationRescanAction}>
+                                <input name="domainId" type="hidden" value={run.domainId} />
+                                <button className="text-sm font-medium text-slate-900 underline underline-offset-4" type="submit">
+                                  Re-scan
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}

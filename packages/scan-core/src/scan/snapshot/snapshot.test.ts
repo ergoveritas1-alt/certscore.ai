@@ -18,7 +18,12 @@ import {
   discoverCandidatePages,
   policyPresenceHash
 } from "./extractors";
-import { derivePolicyTermsConflictDetected, inferConsentDarkPatternFlags } from "./build-snapshot-bundle";
+import {
+  derivePolicyTermsConflictDetected,
+  inferConsentDarkPatternFlags,
+  shouldCapturePreconsentState0Request,
+  summarizePreconsentBaselineEvidence
+} from "./build-snapshot-bundle";
 import { classifyConsentButtonRole } from "./consent-ui";
 import { diffSnapshots } from "./diff-snapshots";
 import {
@@ -574,6 +579,52 @@ test("projectSnapshotSignals surfaces accessibility gap fillers and new consumer
   assert.ok(keys.has("context.privacy_cookie_policy_conflict_detected"));
 });
 
+test("shouldCapturePreconsentState0Request keeps only qualifying third-party state-0 requests", () => {
+  assert.equal(
+    shouldCapturePreconsentState0Request({
+      pageDomain: "example.com",
+      requestUrl: "https://cdn.thirdparty.test/collect",
+      resourceType: "fetch"
+    }),
+    true
+  );
+  assert.equal(
+    shouldCapturePreconsentState0Request({
+      pageDomain: "example.com",
+      requestUrl: "https://example.com/api/profile",
+      resourceType: "fetch"
+    }),
+    false
+  );
+  assert.equal(
+    shouldCapturePreconsentState0Request({
+      pageDomain: "example.com",
+      requestUrl: "https://cdn.thirdparty.test/styles.css",
+      resourceType: "stylesheet"
+    }),
+    false
+  );
+});
+
+test("summarizePreconsentBaselineEvidence merges state-0 capture and consent baseline evidence", () => {
+  const summary = summarizePreconsentBaselineEvidence({
+    browserPassPreconsentEvidenceUrls: [
+      "https://cdn.thirdparty.test/pixel",
+      "https://analytics.vendor.test/collect"
+    ],
+    browserPassTrackerVendorNames: ["Vendor Pixel"],
+    consentAuditBaselineEvidenceUrls: ["https://analytics.vendor.test/collect"],
+    consentAuditBaselineTrackerVendorNames: ["Vendor Pixel", "Analytics Vendor"]
+  });
+
+  assert.deepEqual(summary.trackerEvidenceUrls.sort(), [
+    "https://analytics.vendor.test/collect",
+    "https://cdn.thirdparty.test/pixel"
+  ]);
+  assert.deepEqual(summary.trackerVendorNames.sort(), ["Analytics Vendor", "Vendor Pixel"]);
+  assert.equal(summary.violationCount, 2);
+});
+
 test("classifyScanAccess reports blocked legal coverage without treating it as policy weakness", () => {
   const classification = classifyScanAccess({
     snapshot: makeSnapshot({
@@ -607,6 +658,7 @@ test("classifyScanAccess reports blocked legal coverage without treating it as p
       consentPreconsentViolationCount: null,
       consentBaselineTrackerEvidenceUrls: [],
       consentBaselineTrackerVendorNames: [],
+      keyPageDiscoverySummary: null,
       consentRejectPersistedTrackerVendorNames: [],
       consentRejectNewTrackerVendorNames: [],
       consentRejectClickCount: null,

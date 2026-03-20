@@ -181,10 +181,21 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
     regulatoryTags: ["ftc_consumer_protection", "gdpr_eu_privacy", "ccpa_cpra", "accessibility_ada_wcag"],
     fields: [
       "privacy_policy_present",
+      "privacy_policy_surface_missing",
+      "privacy_policy_fetch_failed",
       "terms_of_service_present",
+      "terms_of_service_surface_missing",
+      "terms_of_service_fetch_failed",
       "cookie_policy_present",
+      "cookie_policy_surface_missing",
+      "cookie_policy_fetch_failed",
       "accessibility_statement_present",
+      "accessibility_statement_surface_missing",
+      "accessibility_statement_fetch_failed",
       "contact_page_present",
+      "contact_page_surface_missing",
+      "contact_page_fetch_failed",
+      "key_page_discovery_unresolved_after_bounded_search",
       "privacy_policy_word_count",
       "privacy_policy_last_updated_date"
     ]

@@ -5,6 +5,7 @@ import { getValidationRunDetail } from "../../server/validation/repository";
 import { submitValidationRescanAction } from "../../server/validation/actions";
 import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
 import { normalizeFindingName } from "../../lib/scans/canonical-review-finding";
+import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 
 type ValidationRunDetailPageProps = {
   runId: string;
@@ -15,6 +16,13 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
   if (!detail) {
     return <p className="text-sm text-slate-600">Validation run not found.</p>;
   }
+
+  const scanExecutionSummary = deriveScanExecutionSummary({
+    ...(detail.scanExecution ?? {}),
+    errorMessage: detail.errorMessage,
+    events: detail.scanEvents,
+    status: detail.status
+  });
 
   return (
     <div className="space-y-8">
@@ -33,10 +41,10 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
           <form action={submitValidationRescanAction}>
             <input name="domainId" type="hidden" value={detail.domainId} />
             <button
-              className="inline-flex h-11 items-center gap-2 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] transition hover:brightness-[1.03]"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
               type="submit"
             >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                 <path d="M21 3v6h-6" />
               </svg>
@@ -45,6 +53,47 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
           </form>
         ) : null}
       </div>
+
+      {scanExecutionSummary ? (
+        <Card
+          className={
+            scanExecutionSummary.tone === "danger"
+              ? "border-rose-200 bg-rose-50"
+              : scanExecutionSummary.tone === "success"
+                ? "border-emerald-200 bg-emerald-50"
+                : "border-amber-200 bg-amber-50"
+          }
+        >
+          <CardHeader>
+            <CardTitle
+              className={
+                scanExecutionSummary.tone === "danger"
+                  ? "text-rose-950"
+                  : scanExecutionSummary.tone === "success"
+                    ? "text-emerald-950"
+                    : "text-amber-950"
+              }
+            >
+              {scanExecutionSummary.title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul
+              className={
+                scanExecutionSummary.tone === "danger"
+                  ? "space-y-2 text-sm text-rose-900"
+                  : scanExecutionSummary.tone === "success"
+                    ? "space-y-2 text-sm text-emerald-900"
+                    : "space-y-2 text-sm text-amber-900"
+              }
+            >
+              {scanExecutionSummary.details.map((detailLine) => (
+                <li key={detailLine}>• {detailLine}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border-slate-200 bg-white">
         <CardHeader>

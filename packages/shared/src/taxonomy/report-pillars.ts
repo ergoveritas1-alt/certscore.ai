@@ -668,8 +668,24 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
 export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "snapshot_signal",
-    "privacy.privacy_policy_present",
-    "Privacy policy detected",
+    "disclosure.privacy_policy_present",
+    "Privacy policy fetched",
+    "notice_scope_entity_identity",
+    [],
+    ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.privacy_policy_surface_missing",
+    "Privacy policy surface not detected",
+    "notice_scope_entity_identity",
+    [],
+    ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.privacy_policy_fetch_failed",
+    "Privacy policy page unavailable",
     "notice_scope_entity_identity",
     [],
     ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
@@ -867,7 +883,23 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "snapshot_signal",
     "disclosure.terms_of_service_present",
-    "Terms of service detected",
+    "Terms page fetched",
+    "terms_coverage_enforceability_signals",
+    ["legal_commercial_disclosure_coverage"],
+    ["disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.terms_of_service_surface_missing",
+    "Terms page surface not detected",
+    "terms_coverage_enforceability_signals",
+    ["legal_commercial_disclosure_coverage"],
+    ["disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.terms_of_service_fetch_failed",
+    "Terms page unavailable",
     "terms_coverage_enforceability_signals",
     ["legal_commercial_disclosure_coverage"],
     ["disclosures_claim_substantiation"]
@@ -875,7 +907,23 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "snapshot_signal",
     "disclosure.cookie_policy_present",
-    "Cookie policy detected",
+    "Cookie policy fetched",
+    "data_handling_disclosures",
+    [],
+    ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.cookie_policy_surface_missing",
+    "Cookie policy surface not detected",
+    "data_handling_disclosures",
+    [],
+    ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.cookie_policy_fetch_failed",
+    "Cookie policy unavailable",
     "data_handling_disclosures",
     [],
     ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
@@ -883,7 +931,23 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "snapshot_signal",
     "disclosure.accessibility_statement_present",
-    "Accessibility statement detected",
+    "Accessibility statement fetched",
+    "public_accessibility_commitments",
+    [],
+    ["accessibility_commitments_support_paths"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.accessibility_statement_surface_missing",
+    "Accessibility statement surface not detected",
+    "public_accessibility_commitments",
+    [],
+    ["accessibility_commitments_support_paths"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.accessibility_statement_fetch_failed",
+    "Accessibility statement unavailable",
     "public_accessibility_commitments",
     [],
     ["accessibility_commitments_support_paths"]
@@ -891,10 +955,34 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "snapshot_signal",
     "disclosure.contact_page_present",
-    "Contact page detected",
+    "Contact page fetched",
     "privacy_contacts_accountability",
     ["support_accommodation_contact_paths"],
     ["privacy_governance_contactability"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.contact_page_surface_missing",
+    "Contact page surface not detected",
+    "privacy_contacts_accountability",
+    ["support_accommodation_contact_paths"],
+    ["privacy_governance_contactability"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.contact_page_fetch_failed",
+    "Contact page unavailable",
+    "privacy_contacts_accountability",
+    ["support_accommodation_contact_paths"],
+    ["privacy_governance_contactability"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "disclosure.key_page_discovery_unresolved_after_bounded_search",
+    "Bounded key-page discovery unresolved",
+    "manual_review_triggers",
+    ["legal_commercial_disclosure_coverage", "notice_scope_entity_identity", "privacy_contacts_accountability"],
+    ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
   ),
   defineReportSignal(
     "snapshot_signal",

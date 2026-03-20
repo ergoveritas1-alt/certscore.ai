@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import {
   REPORT_PRIMARY_PILLARS,
   getReportEvidenceCategoriesForSection,
@@ -13,6 +14,7 @@ import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
 import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
+import { RescanDomainForm } from "../../../../components/scans/rescan-domain-form";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
   buildCanonicalReviewFindingPresentation,
@@ -30,6 +32,8 @@ import {
   groupSnapshotFieldsByPrimaryCategory,
   PRIMARY_SCAN_CATEGORY_META
 } from "../../../../lib/scans/signal-taxonomy";
+import { getRescanAvailability } from "../../../../lib/scans/rescan-policy";
+import { deriveScanExecutionSummary } from "../../../../lib/scans/scan-timeout-summary";
 import {
   formatCollectionEndpointType,
 } from "../../../../lib/scans/tracker-risk";
@@ -54,6 +58,16 @@ function formatDateTime(value: string | null) {
 
 function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
+  if (!value) {
+    return "This domain cannot be re-scanned yet.";
+  }
+
+  return `Next re-scan available ${formatDateTime(value)} for this ${
+    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
+  } plan domain.`;
 }
 
 function formatEventMetadata(metadata: unknown) {
@@ -1151,6 +1165,9 @@ function isConcerningSignal(key: string, value: unknown) {
     /functional_misalignment/,
     /technical_disclosure/,
     /disclosure_gap/,
+    /surface_missing/,
+    /fetch_failed/,
+    /bounded_search/,
     /structurally_obstructed/,
     /likely_obstructed/,
     /high_sensitivity_data_collection_detected/,
@@ -1182,6 +1199,18 @@ function getSignalConcernReason(key: string, value: unknown) {
 
   if (/preconsent|tracking_before_consent/i.test(key)) {
     return "Observed before a clear user choice was made.";
+  }
+
+  if (/surface_missing/i.test(key)) {
+    return "A key disclosure or support page surface was not detected during the scan.";
+  }
+
+  if (/fetch_failed/i.test(key)) {
+    return "A key disclosure or support page was detected, but its target URL could not be fetched successfully.";
+  }
+
+  if (/key_page_discovery_unresolved_after_bounded_search/i.test(key)) {
+    return "The scanner exhausted its bounded key-page discovery budget without confirming one or more expected legal or support pages.";
   }
 
   if (/conflict|mismatch/i.test(key)) {
@@ -1474,7 +1503,11 @@ function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewF
     return "high";
   }
 
-  if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
+  if (/privacy_policy_(surface_missing|fetch_failed)/i.test(key)) {
+    return "high";
+  }
+
+  if (/key_page_discovery_unresolved_after_bounded_search|surface_missing|fetch_failed|dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
     return "medium";
   }
 
@@ -2031,6 +2064,22 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const snapshot = scanRecord.snapshot;
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const isInProgress = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
+  const canRescan = scanRecord.scan.status === "completed" && Boolean(scanRecord.scan.domainId);
+  const rescanAvailability = canRescan
+    ? getRescanAvailability({
+        activeScanExists: false,
+        lastScannedAt: scanRecord.scan.createdAt,
+        planCode: organization.plan
+      })
+    : null;
+  const rescanCooldownMessage =
+    canRescan && rescanAvailability
+      ? rescanAvailability.reason
+        ? rescanAvailability.reason
+        : !rescanAvailability.allowed
+          ? formatRescanCooldownMessage(rescanAvailability.nextAllowedAt, organization.plan)
+          : null
+      : null;
   const executionPlan = getExecutionPlan(scanRecord.scan.scanConfigJson);
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
@@ -2140,10 +2189,28 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     getFiniteNumber(snapshot?.accessibility_score),
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
+  const scanExecutionSummary = deriveScanExecutionSummary({
+    accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
+    consentAuditCompleted,
+    consentPreconsentViolationCount,
+    errorMessage: scanRecord.scan.errorMessage,
+    events: scanRecord.events,
+    keyPageDiscoverySummary:
+      runtimeArtifacts && typeof runtimeArtifacts === "object" ? (runtimeArtifacts.key_page_discovery_summary ?? null) : null,
+    pagesRequested: scanRecord.scan.pagesRequested,
+    pagesScanned: scanRecord.scan.pagesScanned,
+    preconsentTrackingDetected: snapshot?.preconsent_tracking_detected === true,
+    renderModeUsed: typeof snapshot?.render_mode_used === "string" ? snapshot.render_mode_used : null,
+    status: scanRecord.scan.status,
+    timeoutFlag: snapshot?.timeout_flag === true,
+    trackingBeforeConsentDetected: snapshot?.tracking_before_consent_detected === true,
+    trackerEvidenceUrlCount: consentBaselineTrackerEvidenceUrls.length,
+    wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total")
+  });
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-3">
           <Badge tone={scanRecord.scan.status === "completed" ? "success" : "warning"}>
             {formatStatus(scanRecord.scan.status)}
@@ -2158,6 +2225,17 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           </div>
           <ScanStatusAutoRefresh status={scanRecord.scan.status} />
         </div>
+        {canRescan && scanRecord.scan.domainId && rescanAvailability ? (
+          <div className="flex justify-end md:pt-0.5">
+            <RescanDomainForm
+              compact
+              cooldownMessage={rescanCooldownMessage}
+              disabled={!rescanAvailability.allowed}
+              domainId={scanRecord.scan.domainId}
+              showLabel
+            />
+          </div>
+        ) : null}
       </div>
 
       {isInProgress ? (
@@ -2186,6 +2264,33 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
                   />
                 </div>
               </div>
+
+              {scanExecutionSummary ? (
+                <div
+                  className={
+                    scanExecutionSummary.tone === "danger"
+                      ? "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950"
+                      : scanExecutionSummary.tone === "success"
+                        ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
+                        : "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                  }
+                >
+                  <p className="font-semibold">{scanExecutionSummary.title}</p>
+                  <ul
+                    className={
+                      scanExecutionSummary.tone === "danger"
+                        ? "mt-2 space-y-1 text-rose-900"
+                        : scanExecutionSummary.tone === "success"
+                          ? "mt-2 space-y-1 text-emerald-900"
+                          : "mt-2 space-y-1 text-amber-900"
+                    }
+                  >
+                    {scanExecutionSummary.details.map((detail) => (
+                      <li key={detail}>• {detail}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <div className={METRIC_GRID_CLASS}>
                 <div className={METRIC_CARD_CLASS}>
@@ -2393,8 +2498,8 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
             <p className="text-sm text-slate-600">No structured signals are available for this scan yet.</p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {scanRecord.signals.map((signal) => (
-                <div key={signal.key} className="rounded-2xl border border-slate-200 p-4">
+              {scanRecord.signals.map((signal, index) => (
+                <div key={`${signal.key}:${index}`} className="rounded-2xl border border-slate-200 p-4">
                   <p className="font-medium text-slate-900">{signal.label}</p>
                   <p className="mt-1 text-sm text-slate-500">{signal.primaryCategoryLabel}{signal.subcategory ? ` · ${signal.subcategory}` : ""}</p>
                   <p className="mt-3 text-sm text-slate-700">

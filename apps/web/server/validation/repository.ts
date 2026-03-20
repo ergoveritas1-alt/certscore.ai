@@ -12,6 +12,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { normalizeUrl, extractHostname } from "@website-signal-risk-scanner/shared";
 import { revalidatePath } from "next/cache";
+import { enqueueFullScanJob } from "../queue/full-scan-queue";
 import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
 import { requireValidationAdminContext } from "./auth";
 
@@ -45,6 +46,14 @@ type ValidationRunRow = {
   status: ValidationRunStatus;
   tranco_rank: number | null;
   trigger_mode: ValidationRunMode;
+};
+
+type ScanEventRow = {
+  created_at: string;
+  event_type: string;
+  id: string;
+  message: string;
+  metadata_json: unknown;
 };
 
 type ValidationTargetRow = {
@@ -180,6 +189,9 @@ function isConcerningValidationSignal(row: ScanSignalRow) {
     /functional_misalignment/,
     /technical_disclosure/,
     /disclosure_gap/,
+    /surface_missing/,
+    /fetch_failed/,
+    /bounded_search/,
     /structurally_obstructed/,
     /likely_obstructed/,
     /high_sensitivity_data_collection_detected/,
@@ -246,6 +258,18 @@ function getValidationConcernReason(row: ScanSignalRow) {
     return "Automated issues were surfaced in this area.";
   }
 
+  if (/surface_missing/i.test(key)) {
+    return "A key disclosure or support page surface was not detected during the scan.";
+  }
+
+  if (/fetch_failed/i.test(key)) {
+    return "A key disclosure or support page was detected, but its target URL could not be fetched successfully.";
+  }
+
+  if (/key_page_discovery_unresolved_after_bounded_search/i.test(key)) {
+    return "The scanner exhausted its bounded key-page discovery budget without confirming one or more expected legal or support pages.";
+  }
+
   return "This signal is worth reviewer attention.";
 }
 
@@ -254,7 +278,11 @@ function getValidationSignalSeverity(row: ScanSignalRow) {
     return "high";
   }
 
-  if (/structurally_obstructed|likely_obstructed/i.test(row.signal_key)) {
+  if (/privacy_policy_(surface_missing|fetch_failed)/i.test(row.signal_key)) {
+    return "high";
+  }
+
+  if (/key_page_discovery_unresolved_after_bounded_search|structurally_obstructed|likely_obstructed|surface_missing|fetch_failed/i.test(row.signal_key)) {
     return "medium";
   }
 
@@ -284,6 +312,50 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
 
   if (row.signal_key === "disclosure.cookie_policy_structurally_obstructed") {
     return "Cookie policy structurally obstructed";
+  }
+
+  if (row.signal_key === "disclosure.privacy_policy_surface_missing") {
+    return "Privacy policy surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.privacy_policy_fetch_failed") {
+    return "Privacy policy page unavailable";
+  }
+
+  if (row.signal_key === "disclosure.terms_of_service_surface_missing") {
+    return "Terms page surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.terms_of_service_fetch_failed") {
+    return "Terms page unavailable";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_surface_missing") {
+    return "Cookie policy surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_fetch_failed") {
+    return "Cookie policy unavailable";
+  }
+
+  if (row.signal_key === "disclosure.accessibility_statement_surface_missing") {
+    return "Accessibility statement surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.accessibility_statement_fetch_failed") {
+    return "Accessibility statement unavailable";
+  }
+
+  if (row.signal_key === "disclosure.contact_page_surface_missing") {
+    return "Contact page surface not detected";
+  }
+
+  if (row.signal_key === "disclosure.contact_page_fetch_failed") {
+    return "Contact page unavailable";
+  }
+
+  if (row.signal_key === "disclosure.key_page_discovery_unresolved_after_bounded_search") {
+    return "Bounded key-page discovery unresolved";
   }
 
   if (row.signal_key === "privacy.user_rights_friction_score" && typeof row.signal_value_json === "number") {
@@ -737,7 +809,6 @@ export async function listValidationTargets(limit = 25) {
   const { data, error } = await supabase
     .from("validation_targets")
     .select("id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error")
-    .eq("source", "manual")
     .order("tranco_rank", { ascending: true, nullsFirst: true })
     .limit(limit);
 
@@ -797,7 +868,7 @@ export async function listValidationRuns(input?: {
 
   let query = supabase
     .from("validation_runs")
-    .select("id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message", {
+    .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message", {
       count: "exact"
     })
     .order("created_at", { ascending: false });
@@ -859,6 +930,7 @@ export async function listValidationRuns(input?: {
       averageAgreementScore: null,
       completedAt: row.completed_at,
       createdAt: row.created_at,
+      domainId: row.domain_id,
       errorMessage: row.error_message,
       findingCount: supplementalCountByRun.get(row.id) ?? findingCountByRun.get(row.id) ?? row.finding_count,
       hostname: row.hostname,
@@ -893,6 +965,37 @@ export async function getValidationRunDetail(validationRunId: string) {
     return null;
   }
 
+  const [{ data: scanSnapshot }, { data: runtimeArtifacts }, { count: accessibilityRuleCountTotal }] = await Promise.all([
+    (run as ValidationRunRow).scan_id
+      ? supabase
+          .from("scan_snapshots")
+          .select("timeout_flag, render_mode_used, preconsent_tracking_detected, tracking_before_consent_detected, wcag_error_count_total, pages_scanned, pages_requested")
+          .eq("scan_id", (run as ValidationRunRow).scan_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    (run as ValidationRunRow).scan_id
+      ? supabase
+          .from("scan_runtime_artifacts")
+          .select("consent_audit_completed, consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls, key_page_discovery_summary")
+          .eq("scan_id", (run as ValidationRunRow).scan_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    (run as ValidationRunRow).scan_id
+      ? supabase
+          .from("scan_accessibility_rule_counts")
+          .select("rule_code", { count: "exact", head: true })
+          .eq("scan_id", (run as ValidationRunRow).scan_id)
+      : Promise.resolve({ count: 0 })
+  ]);
+
+  const { data: scanEvents } = (run as ValidationRunRow).scan_id
+    ? await supabase
+        .from("scan_events")
+        .select("id, event_type, message, metadata_json, created_at")
+        .eq("scan_id", (run as ValidationRunRow).scan_id)
+        .order("created_at", { ascending: true })
+    : { data: [] as ScanEventRow[] };
+
   const { data: findings, error: findingsError } = await supabase
     .from("validation_run_findings")
     .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank, validation_verdicts ( confidence )")
@@ -922,6 +1025,61 @@ export async function getValidationRunDetail(validationRunId: string) {
     rankBand: (run as ValidationRunRow).rank_band,
     reviewedFindingCount: (run as ValidationRunRow).reviewed_finding_count,
     scanId: (run as ValidationRunRow).scan_id,
+    scanExecution: {
+      accessibilityRuleCountTotal: accessibilityRuleCountTotal ?? 0,
+      consentAuditCompleted:
+        runtimeArtifacts && typeof (runtimeArtifacts as { consent_audit_completed?: unknown }).consent_audit_completed === "boolean"
+          ? Boolean((runtimeArtifacts as { consent_audit_completed: boolean }).consent_audit_completed)
+          : null,
+      consentPreconsentViolationCount:
+        runtimeArtifacts && typeof (runtimeArtifacts as { consent_preconsent_violation_count?: unknown }).consent_preconsent_violation_count === "number"
+          ? Number((runtimeArtifacts as { consent_preconsent_violation_count: number }).consent_preconsent_violation_count)
+          : null,
+      keyPageDiscoverySummary:
+        runtimeArtifacts && typeof (runtimeArtifacts as { key_page_discovery_summary?: unknown }).key_page_discovery_summary === "object"
+          ? ((runtimeArtifacts as { key_page_discovery_summary: unknown }).key_page_discovery_summary ?? null)
+          : null,
+      pagesRequested:
+        scanSnapshot && typeof (scanSnapshot as { pages_requested?: unknown }).pages_requested === "number"
+          ? Number((scanSnapshot as { pages_requested: number }).pages_requested)
+          : null,
+      pagesScanned:
+        scanSnapshot && typeof (scanSnapshot as { pages_scanned?: unknown }).pages_scanned === "number"
+          ? Number((scanSnapshot as { pages_scanned: number }).pages_scanned)
+          : null,
+      preconsentTrackingDetected:
+        scanSnapshot && typeof (scanSnapshot as { preconsent_tracking_detected?: unknown }).preconsent_tracking_detected === "boolean"
+          ? Boolean((scanSnapshot as { preconsent_tracking_detected: boolean }).preconsent_tracking_detected)
+          : null,
+      renderModeUsed:
+        scanSnapshot && typeof (scanSnapshot as { render_mode_used?: unknown }).render_mode_used === "string"
+          ? String((scanSnapshot as { render_mode_used: string }).render_mode_used)
+          : null,
+      timeoutFlag:
+        scanSnapshot && typeof (scanSnapshot as { timeout_flag?: unknown }).timeout_flag === "boolean"
+          ? Boolean((scanSnapshot as { timeout_flag: boolean }).timeout_flag)
+          : null,
+      trackerEvidenceUrlCount:
+        runtimeArtifacts &&
+        Array.isArray((runtimeArtifacts as { consent_baseline_tracker_evidence_urls?: unknown }).consent_baseline_tracker_evidence_urls)
+          ? ((runtimeArtifacts as { consent_baseline_tracker_evidence_urls: unknown[] }).consent_baseline_tracker_evidence_urls).length
+          : 0,
+      trackingBeforeConsentDetected:
+        scanSnapshot && typeof (scanSnapshot as { tracking_before_consent_detected?: unknown }).tracking_before_consent_detected === "boolean"
+          ? Boolean((scanSnapshot as { tracking_before_consent_detected: boolean }).tracking_before_consent_detected)
+          : null,
+      wcagErrorCountTotal:
+        scanSnapshot && typeof (scanSnapshot as { wcag_error_count_total?: unknown }).wcag_error_count_total === "number"
+          ? Number((scanSnapshot as { wcag_error_count_total: number }).wcag_error_count_total)
+          : null
+    },
+    scanEvents: ((scanEvents ?? []) as ScanEventRow[]).map((event) => ({
+      createdAt: event.created_at,
+      eventType: event.event_type,
+      id: event.id,
+      message: event.message,
+      metadataJson: event.metadata_json
+    })),
     status: (run as ValidationRunRow).status,
     trancoRank: (run as ValidationRunRow).tranco_rank,
     triggerMode: (run as ValidationRunRow).trigger_mode,
@@ -1176,6 +1334,7 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     throw new Error(`Failed to mark validation target queued: ${targetError.message}`);
   }
 
+  await enqueueFullScanJob(scanId);
   await enqueueValidationCollectJob((run as { id: string }).id);
   await supabase.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
@@ -1298,6 +1457,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(`Failed to create validation re-scan run: ${runError?.message ?? "Unknown error"}`);
   }
 
+  await enqueueFullScanJob(scanId);
   await enqueueValidationCollectJob((run as { id: string }).id);
   await supabase.from("validation_audit_events").insert({
     actor_user_id: context.user.id,

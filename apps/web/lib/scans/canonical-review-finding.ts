@@ -36,6 +36,19 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
     return "WCAG errors";
   }
 
+  if (
+    /^(trackers observed before consent|pre-consent tracking detected|pre-consent tracking activity|pre-consent tracker evidence urls|pre-consent tracker vendors|pre-consent tracker violations)$/i.test(
+      normalized
+    ) ||
+    /^privacy\.preconsent_/i.test(normalized)
+  ) {
+    return "Trackers observed before consent";
+  }
+
+  if (/^bounded key-page discovery unresolved$/i.test(normalized)) {
+    return "Bounded key-page discovery unresolved";
+  }
+
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 

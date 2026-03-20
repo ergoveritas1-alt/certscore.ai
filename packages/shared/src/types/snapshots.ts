@@ -492,6 +492,68 @@ export type ScanPage = {
   pageLanguage: string | null;
 };
 
+export type KeyPageDiscoverySource =
+  | "rendered_link"
+  | "sitemap"
+  | "guessed_slug"
+  | "second_hop_legal_hub"
+  | "same_brand_subdomain";
+
+export type KeyPageDiscoveryHostRelation = "same_host" | "same_brand_subdomain";
+
+export type KeyPageDiscoveryCandidate = {
+  pageType: Extract<PageType, "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">;
+  candidateUrl: string;
+  discoveredFrom: KeyPageDiscoverySource;
+  hostRelation: KeyPageDiscoveryHostRelation;
+  sourceUrl: string | null;
+  anchorText: string | null;
+  localeHints: string[];
+  candidateScore: number;
+  pageTypeConfidence: number;
+  fetchAttempted: boolean;
+  fetchOutcome: FetchStatus | null;
+};
+
+export type KeyPageDiscoveryPageSummary = {
+  pageType: Extract<PageType, "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">;
+  surfaceDetected: boolean;
+  guessedOnly: boolean;
+  successfulUrl: string | null;
+  successfulHostRelation: KeyPageDiscoveryHostRelation | null;
+  attemptedUrls: string[];
+  attemptCount: number;
+  bestDiscoverySource: KeyPageDiscoverySource | null;
+  stopReason:
+    | "covered"
+    | "all_attempts_failed"
+    | "budget_exhausted"
+    | "guessed_only"
+    | "no_surface"
+    | "not_needed"
+    | "repeated_failures";
+};
+
+export type KeyPageDiscoverySummary = {
+  localeHints: string[];
+  sitemapUrls: string[];
+  sitemapFilesFetched: string[];
+  sitemapIndexUrlsFetched: string[];
+  budgets: {
+    maxSitemapFiles: number;
+    maxSitemapIndexChildren: number;
+    maxCandidates: number;
+    maxAdditionalFetchAttempts: number;
+    maxFetchAttemptsPerType: number;
+    maxSecondHopLegalHubFetchesPerMissingType: number;
+    maxSameBrandSubdomainHosts: number;
+    maxSameBrandCandidatesPerType: number;
+  };
+  candidates: KeyPageDiscoveryCandidate[];
+  pageSummaries: KeyPageDiscoveryPageSummary[];
+  sameBrandSubdomainHostsInspected: string[];
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -527,6 +589,7 @@ export type ScanRuntimeArtifact = {
   consentPostAcceptThirdPartyCookieCount: number | null;
   consentPostAcceptTrackerEvidenceUrls: string[];
   consentPostAcceptTrackerVendorNames: string[];
+  keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
 };
 
 export type PolicyMention = {

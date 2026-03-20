@@ -49,14 +49,211 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /Pre-consent Tracking signal|third-party vendors immediately upon page load|third-party cookie|consent interface/i
+    /high-intent advertising and analytics vendors|page load|before the visitor has interacted with the Consent Management Platform|positive consent signal/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Denied state by default|consent_granted|Google Consent Mode v2|ad_storage|analytics_storage/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses healthcare-specific pre-consent tracking copy on medical domains", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1b",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Pre-consent tracking detected",
+        evidence: {
+          pageUrl: "https://mcw.edu/clinical-programs",
+          preconsent_tracker_vendors: ["Meta Pixel"],
+          supportingSignals: ["medical institution domain mcw.edu", "possible PHI exposure"]
+        }
+      }),
+      observedValue: "Meta Pixel",
+      severity: "high",
+      title: "Pre-consent tracking detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /medical institution domain like mcw\.edu|Protected Health Information|clinical searches|HHS tracking guidance/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Denied state by default|positive Accept signal|Google Consent Mode v2|May 2026 HHS deadline/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
+test("uses plain-language copy for pre-consent tracking activity", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1c",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Pre-consent tracking activity",
+        evidence: {
+          runtimeEvidence: ["third-party requests fire on initial page load"],
+          supportingSignals: ["advertising and analytics platforms observed"]
+        }
+      }),
+      observedValue: "third-party requests",
+      severity: "high",
+      title: "Pre-consent tracking activity"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /Pre-consent Tracking signal|third-party vendors immediately upon page load|consent interface|tag firing sequence is not currently gated by the Consent Management Platform's state/i
   );
   assert.match(
     presentation.suggestedFix,
     /Denied state by default|positive Accept signal|Consent Management Platform|Google Consent Mode v2/i
   );
+  assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
+  assert.equal(presentation.confidenceScore, "0.95");
+});
+
+test("uses max-confidence evidence-url copy for pre-consent tracker evidence URLs", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1e",
+        ruleKey: "privacy.preconsent_tracker_evidence_urls",
+        title: "Pre-consent tracker evidence URLs",
+        evidence: {
+          preconsent_tracker_evidence_urls: [
+            "https://example-ad-network.test/pixel",
+            "https://example-analytics.test/collect"
+          ],
+          runtimeEvidence: ["third-party requests fired during initial page load"]
+        }
+      }),
+      observedValue: "network requests",
+      severity: "high",
+      title: "Pre-consent tracker evidence URLs"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /multiple network requests to third-party advertising and analytics endpoints|initial page load phase|suppression signal|independent of the user consent state/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /All Pages or DOM Ready|consent_granted|Google Consent Mode v2|ad_storage and analytics_storage/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
-  assert.ok(Number(presentation.confidenceScore) >= 0.6);
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses max-confidence vendor copy for pre-consent tracker vendors", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1f",
+        ruleKey: "privacy.preconsent_tracker_vendors",
+        title: "Pre-consent tracker vendors",
+        evidence: {
+          preconsent_tracker_vendors: ["Google Analytics", "Reddit Pixel"],
+          runtimeEvidence: ["vendor requests fired during initial page load"]
+        }
+      }),
+      observedValue: "Google Analytics, Reddit Pixel",
+      severity: "high",
+      title: "Pre-consent tracker vendors"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /high-intent advertising and analytics vendors|page load|before the visitor has interacted|independently of a positive consent signal/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Denied state by default|consent_granted|Google Consent Mode v2|ad_storage|analytics_storage/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses count-based copy for pre-consent tracker violations", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1g",
+        ruleKey: "privacy.preconsent_tracker_violations",
+        title: "Pre-consent tracker violations",
+        evidence: {
+          count: 8,
+          runtimeEvidence: ["8 third-party scripts fired during initial page load"],
+          supportingSignals: ["tag manager initialization before consent"]
+        }
+      }),
+      observedValue: "8",
+      severity: "high",
+      title: "Pre-consent tracker violations"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /8 distinct pre-consent tracker violations|8 separate third-party request|before the visitor could interact|All Pages or Initialization events/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /8 tags associated with these violations|consent_granted|Google Consent Mode v2|ad_storage and analytics_storage/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses post-reject tracking copy for trackers persisted after reject", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1d",
+        ruleKey: "privacy.trackers_persisted_after_reject",
+        title: "Trackers persisted after reject",
+        evidence: {
+          runtimeEvidence: ["Reddit Pixel fired after reject interaction"],
+          supportingSignals: ["most trackers disabled except Reddit Pixel"]
+        }
+      }),
+      observedValue: "Reddit Pixel",
+      severity: "medium",
+      title: "Trackers persisted after reject"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers persisted after reject");
+  assert.match(
+    presentation.whyThisMatters,
+    /after selecting the reject option|certain tracking tools remained active|advertising pixel continued to transmit data|visitor expresses their preference to opt out/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Reddit Pixel|Reject trigger|Denied or Blocked|stops all data transmission/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "Ensuring Consent Choices are Respected");
+  assert.equal(presentation.confidenceScore, "0.83");
 });
 
 test("uses strong copy and high evidence strength for functional misalignment", () => {
@@ -116,11 +313,11 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
   assert.equal(presentation.findingName, "Critical user-rights fulfillment friction");
   assert.match(
     presentation.whyThisMatters,
-    /maximum friction score of 100|Hard Block|opting out or requesting deletion|high-risk technical dark pattern/i
+    /friction score of 100|technical obstruction|lack of functional parity|non-linear user journey|automated verification of compliance controls/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Functional Symmetry|same number of clicks as the Accept path|secondary modals|forced account creation|login redirects/i
+    /technical parity|same number of click-events as the initial consent|mandatory account creation|circular redirect logic/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
   assert.equal(presentation.confidenceScore, "1.0");
@@ -135,11 +332,11 @@ test("uses strong copy and high confidence for high user-rights fulfillment fric
         title: "High user-rights fulfillment friction",
         evidence: {
           runtimeEvidence: ["privacy-request path requires additional steps"],
-          signalValue: 90,
+          signalValue: 75,
           supportingSignals: ["high friction observed"]
         }
       }),
-      observedValue: "90",
+      observedValue: "75",
       severity: "high",
       title: "High user-rights fulfillment friction"
     },
@@ -149,14 +346,14 @@ test("uses strong copy and high confidence for high user-rights fulfillment fric
   assert.equal(presentation.findingName, "High user-rights fulfillment friction");
   assert.match(
     presentation.whyThisMatters,
-    /high friction score of 90|objective technical barrier|Functional Asymmetry|technical dark pattern/i
+    /high friction score of 75|objective technical barrier|Functional Asymmetry|technical dark pattern/i
   );
   assert.match(
     presentation.suggestedFix,
     /Functional Symmetry|opt-in and opt-out workflows|same number of clicks as the initial consent|forced account creation|hidden navigation paths/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
-  assert.equal(presentation.confidenceScore, "0.95");
+  assert.equal(presentation.confidenceScore, "0.7");
 });
 
 test("uses strong accessibility copy and high confidence for confirmed WCAG issues", () => {
@@ -189,6 +386,45 @@ test("uses strong accessibility copy and high confidence for confirmed WCAG issu
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.equal(presentation.confidenceScore, "0.95");
+});
+
+test("uses accessible plain-language copy for accessibility and user settings", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-friendly-1",
+        ruleKey: "scan_snapshot.accessibility.accessibility_and_user_settings",
+        title: "Accessibility and user settings",
+        evidence: {
+          runtimeEvidence: ["keyboard navigation blocked in menu"],
+          supportingSignals: [
+            {
+              key: "accessibility.user_settings",
+              label: "Accessibility and user settings",
+              value: true,
+              category: "accessibility"
+            }
+          ]
+        }
+      }),
+      observedValue: "true",
+      severity: "high",
+      title: "Accessibility and user settings"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility and user settings");
+  assert.match(
+    presentation.whyThisMatters,
+    /design makes it difficult|screen readers|navigate using only a keyboard|privacy settings/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /welcoming for everyone|menus work correctly for keyboard users|invisible labels|opt-out or privacy buttons/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "Making the Web Accessible for Everyone");
+  assert.equal(presentation.confidenceScore, "1.0");
 });
 
 test("uses high confidence for WCAG errors when evidence count is carried in supporting signals", () => {
@@ -224,6 +460,46 @@ test("uses high confidence for WCAG errors when evidence count is carried in sup
 
   assert.equal(presentation.findingName, "WCAG errors");
   assert.equal(presentation.confidenceScore, "0.95");
+});
+
+test("uses max-strength copy for high-volume WCAG errors", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-3",
+        ruleKey: "accessibility.wcag_errors_detected",
+        title: "WCAG errors",
+        evidence: {
+          count: 63,
+          runtimeEvidence: ["focus indicator failures observed in navigation"],
+          supportingSignals: [
+            {
+              key: "accessibility.wcag_error_count_total",
+              label: "WCAG errors",
+              value: 63,
+              category: "accessibility"
+            }
+          ]
+        }
+      }),
+      observedValue: "63",
+      severity: "high",
+      title: "WCAG errors"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "WCAG errors");
+  assert.match(
+    presentation.whyThisMatters,
+    /63 distinct WCAG rule violations|high density of structural defects|ARIA configuration errors|broken focus indicators/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /63 identified WCAG failures|focus indicator logic|ARIA attributes|text alternatives/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "1.0");
 });
 
 test("uses strong systemic accessibility copy for negative accessibility risk scores", () => {
@@ -294,6 +570,106 @@ test("uses max-strength accessibility risk copy for critical negative outliers",
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
+test("uses max-strength accessibility risk copy for score 100", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-risk-100",
+        ruleKey: "accessibility.risk_score",
+        title: "Accessibility risk score",
+        evidence: {
+          signalValue: 100,
+          snapshotField: "accessibility_litigation_risk_score",
+          supportingSignals: ["missing ARIA landmarks in shared layout"],
+          value: 100
+        }
+      }),
+      observedValue: "100",
+      severity: "high",
+      title: "Accessibility risk score"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility risk score");
+  assert.match(
+    presentation.whyThisMatters,
+    /accessibility risk score of 100|structural omissions|missing ARIA landmarks|assistive technologies/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /global site templates|ARIA landmark structures|unique, machine-readable labels|logical tab order/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses aria-specific accessibility copy", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-aria-1",
+        ruleKey: "accessibility.aria_issues",
+        title: "ARIA issues",
+        evidence: {
+          runtimeEvidence: ["invalid aria role on interactive menu control"],
+          supportingSignals: ["screen reader name missing on button"]
+        }
+      }),
+      observedValue: "invalid aria role",
+      severity: "high",
+      title: "ARIA issues"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "ARIA issues");
+  assert.match(
+    presentation.whyThisMatters,
+    /ARIA-related error|assistive technologies|silent or misleading control|buttons, menus, or forms/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /invalid ARIA attribute|role assigned to the element matches its actual function|required child elements|aria-label or aria-labelledby/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "WAI-ARIA Authoring Practices Guide");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
+test("uses focus-indicator-specific accessibility copy", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-focus-1",
+        ruleKey: "accessibility.wcag_focus_indicator_issue_count",
+        title: "Focus indicator issues",
+        evidence: {
+          signalKey: "accessibility.wcag_focus_indicator_issue_count",
+          signalLabel: "Focus indicator issues",
+          signalValue: 1,
+          signalCategory: "accessibility"
+        }
+      }),
+      observedValue: "1",
+      severity: "medium",
+      title: "Focus indicator issues"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Focus indicator issues");
+  assert.match(
+    presentation.whyThisMatters,
+    /visible focus indicator is missing or obscured|navigate via keyboard|visible outline|suppressed via CSS/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /outline: none|outline: 0|clear visual highlight|WCAG 2\.1 contrast requirements/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "WCAG Success Criterion 2.4.7: Focus Visible");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
 test("uses landmark-specific accessibility copy and high confidence for landmark issues", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -324,6 +700,38 @@ test("uses landmark-specific accessibility copy and high confidence for landmark
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
+});
+
+test("uses max-strength landmark copy for high-volume landmark issues", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "landmark-2",
+        ruleKey: "accessibility.landmark_issues",
+        title: "Landmark issues",
+        evidence: {
+          count: 36,
+          supportingSignals: ["landmark defects observed across shared templates"]
+        }
+      }),
+      observedValue: "36",
+      severity: "high",
+      title: "Landmark issues"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Landmark issues");
+  assert.match(
+    presentation.whyThisMatters,
+    /36 distinct landmark violations|significant defect in the site's semantic architecture|screen reader users use to skip repetitive content|multiple site templates/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /global page templates|exactly one main element|navigation blocks are wrapped in nav tags|Primary versus Footer navigation/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "1.0");
 });
 
 test("uses cookie-policy extraction copy and max confidence for structurally weak cookie policy pages", () => {
@@ -567,14 +975,112 @@ test("uses strong retargeting-pixel copy and high confidence", () => {
   assert.equal(presentation.findingName, "Retargeting pixel detected");
   assert.match(
     presentation.whyThisMatters,
-    /active retargeting pixel|persistent technical link|cross-site tracking|granular disclosure required/i
+    /active retargeting pixel|persistent technical link|cross-site tracking|specific product interactions|data exfiltration to ad platforms/i
   );
   assert.match(
     presentation.suggestedFix,
-    /network stack audit|Meta, Google, or Criteo|Marketing consent event|Consent Management Platform/i
+    /network stack audit|Meta, Reddit, or LinkedIn|Marketing consent event|Do Not Track|Global Privacy Control/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.ok(Number(presentation.confidenceScore) >= 0.95);
+  assert.ok(Number(presentation.confidenceScore) >= 0.9);
+});
+
+test("uses healthcare-specific retargeting-pixel copy on medical domains", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "pixel-2",
+        ruleKey: "retargeting_pixel",
+        title: "Retargeting pixel detected",
+        evidence: {
+          pageUrl: "https://mcw.edu/clinical-programs",
+          runtimeEvidence: ["retargeting pixel network request observed on clinical content"],
+          supportingSignals: ["medical institution domain mcw.edu"]
+        }
+      }),
+      observedValue: "mcw.edu",
+      severity: "high",
+      title: "Retargeting pixel detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Retargeting pixel detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /medical institution domain|clinical or educational pages|broader advertising profiles|HIPAA and privacy exposure/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Meta, Google, or Criteo|Marketing consent event|no health-related page metadata/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
+test("uses high-sensitivity data collection copy and elevated confidence", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "sensitive-1",
+        ruleKey: "high_sensitivity_data_collection_detected",
+        title: "High-sensitivity data collection detected",
+        evidence: {
+          runtimeEvidence: ["patient portal identifier observed in outbound request"],
+          supportingSignals: ["sensitive data collection signal triggered"]
+        }
+      }),
+      observedValue: "Sensitive request payload",
+      severity: "high",
+      title: "High-sensitivity data collection detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "High-sensitivity data collection detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /High-Sensitivity Data Collection signal|medical institution domain|HIPAA, GDPR, and CCPA exposure|Business Associate Agreement/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /immediate network-level audit|appointment scheduling data|patient portal identifiers|redact or hash sensitive fields/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "HHS");
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("uses developer-platform high-sensitivity data collection copy", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "sensitive-2",
+        ruleKey: "high_sensitivity_data_collection_detected",
+        title: "High-sensitivity data collection detected",
+        evidence: {
+          pageUrl: "https://semgrep.dev",
+          runtimeEvidence: ["workspace id and code search payload observed in outbound request"],
+          supportingSignals: ["developer-focused platform semgrep.dev"]
+        }
+      }),
+      observedValue: "semgrep.dev",
+      severity: "high",
+      title: "High-sensitivity data collection detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "High-sensitivity data collection detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /developer-focused platform|authentication tokens|project metadata|code-related search fields/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /workspace IDs|source code fragments|user identifiers|proprietary metadata is exfiltrated/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "FTC");
+  assert.equal(presentation.confidenceScore, "0.8");
 });
 
 test("uses session-replay copy and moderate confidence for detector-backed replay findings", () => {
@@ -616,14 +1122,14 @@ test("uses session-replay copy and moderate confidence for detector-backed repla
   assert.equal(presentation.findingName, "Session replay tool detected");
   assert.match(
     presentation.whyThisMatters,
-    /collect sensitive interaction data|transparency and consent risk/i
+    /active session replay scripts|mouse movements, scrolling behavior, and keystrokes|behavioral journey of the user/i
   );
   assert.match(
     presentation.suggestedFix,
-    /replay tooling is necessary|disclose it explicitly|consent framework/i
+    /specific session replay vendor|FullStory, Hotjar, or LogRocket|Consent Management Platform|masked to prevent the collection of PII/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
-  assert.equal(presentation.confidenceScore, "0.6");
+  assert.equal(presentation.confidenceScore, "0.9");
 });
 
 test("uses stronger runtime session-replay copy and high confidence", () => {
@@ -655,14 +1161,53 @@ test("uses stronger runtime session-replay copy and high confidence", () => {
   assert.equal(presentation.findingName, "Session replay runtime detected");
   assert.match(
     presentation.whyThisMatters,
-    /active session replay scripts|mouse movements, scrolls, and keystrokes|privacy risks|GDPR and CCPA/i
+    /active session replay scripts|scrolling patterns|behavioral journey of the user|aggregate page-level metrics/i
   );
   assert.match(
     presentation.suggestedFix,
-    /specific session replay vendor|Hotjar, FullStory, or Lucky Orange|Statistics or Functional consent category|retention period/i
+    /specific session replay vendor|FullStory, Hotjar, or LogRocket|Consent Management Platform|masked to prevent the collection of PII/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
   assert.equal(presentation.confidenceScore, "0.9");
+});
+
+test("uses vendor-specific runtime session-replay copy and elevated confidence", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-3",
+        ruleKey: "commerce.session_replay_runtime_vendors",
+        title: "Session replay runtime vendors",
+        evidence: {
+          runtimeEvidence: ["FullStory runtime script observed on page load"],
+          supportingSignals: [
+            {
+              category: "commerce",
+              key: "commerce.session_replay_runtime_vendors",
+              label: "Session replay runtime vendors",
+              value: ["FullStory"]
+            }
+          ]
+        }
+      }),
+      observedValue: "FullStory",
+      severity: "high",
+      title: "Session replay runtime vendors"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Session replay runtime vendors");
+  assert.match(
+    presentation.whyThisMatters,
+    /FullStory as an active session replay vendor|mouse movements, scrolling, and clicks|unintended collection of behavioral data|unmasked form fields/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /FullStory is explicitly listed|Consent Management Platform|Functional or Analytical cookies|masked within the FullStory configuration/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "FTC");
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
@@ -699,10 +1244,29 @@ test("falls back to generic presentation for unmatched findings without linked v
   assert.equal(presentation.confidenceScore, "0.55");
 });
 
+test("uses bounded key-page discovery presentation for unresolved bounded search findings", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      evidence: ["Privacy policy", "Terms of service"],
+      observedValue: "Privacy policy, Terms of service",
+      severity: "medium",
+      title: "Bounded key-page discovery unresolved"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Bounded key-page discovery unresolved");
+  assert.match(presentation.whyThisMatters, /bounded key-page discovery pass|tried and failed|coverage-related findings may be understated/i);
+  assert.match(presentation.suggestedFix, /stable footer links|legal hubs|sitemap entries|JS-only navigation/i);
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
 test("normalizeFindingName removes confidence-colored prefixes from display names", () => {
   assert.equal(normalizeFindingName("High-confidence technical disclosure gap"), "Technical disclosure gap");
   assert.equal(normalizeFindingName("Low-confidence policy extraction"), "Policy extraction");
   assert.equal(normalizeFindingName("Automated accessibility issues detected"), "WCAG errors");
+  assert.equal(normalizeFindingName("Pre-consent tracker vendors"), "Trackers observed before consent");
   assert.equal(normalizeFindingName("Missing technical disclosure"), "Missing technical disclosure");
   assert.equal(normalizeFindingName({ type: "click" } as unknown as string), "");
 });

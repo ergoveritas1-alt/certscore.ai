@@ -43,7 +43,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     }
   };
 
-  pushBoolean("privacy", "privacy.privacy_policy_present", "Privacy policy detected", snapshot.privacyPolicyPresent);
+  pushBoolean("disclosure", "disclosure.privacy_policy_present", "Privacy policy fetched", snapshot.privacyPolicyPresent);
   pushBoolean("privacy", "privacy.cookie_banner_present", "Cookie banner present", snapshot.cookieBannerPresent);
   if (snapshot.cmpVendorName) {
     activeSignals.push(
@@ -123,17 +123,17 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushBoolean(
     "disclosure",
     "disclosure.terms_of_service_present",
-    "Terms of service detected",
+    "Terms page fetched",
     snapshot.termsOfServicePresent
   );
-  pushBoolean("disclosure", "disclosure.cookie_policy_present", "Cookie policy detected", snapshot.cookiePolicyPresent);
+  pushBoolean("disclosure", "disclosure.cookie_policy_present", "Cookie policy fetched", snapshot.cookiePolicyPresent);
   pushBoolean(
     "disclosure",
     "disclosure.accessibility_statement_present",
-    "Accessibility statement detected",
+    "Accessibility statement fetched",
     snapshot.accessibilityStatementPresent
   );
-  pushBoolean("disclosure", "disclosure.contact_page_present", "Contact page detected", snapshot.contactPagePresent);
+  pushBoolean("disclosure", "disclosure.contact_page_present", "Contact page fetched", snapshot.contactPagePresent);
   pushBoolean("disclosure", "disclosure.refund_policy_present", "Refund policy detected", snapshot.refundPolicyPresent);
   pushBoolean(
     "disclosure",

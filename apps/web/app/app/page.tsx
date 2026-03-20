@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
+import { type PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
 import { RescanDomainForm } from "../../components/scans/rescan-domain-form";
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <h1 className="text-3xl font-semibold tracking-tight">Overview</h1>
 
-      <div className="grid gap-6 lg:grid-cols-4">
+      <div className="grid gap-6 lg:grid-cols-3">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
             <CardTitle>Domains</CardTitle>
@@ -137,15 +137,6 @@ export default async function DashboardPage() {
               {domains.length}/{planLimits.maxDomains}
             </p>
             <p>Tracked domains in this workspace.</p>
-          </CardContent>
-        </Card>
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Coverage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
-            <p className="text-2xl font-semibold text-slate-900">{getPlanDefinition(planLimits.planCode).coverageLabel}</p>
-            <p>Current coverage tier for this workspace.</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">

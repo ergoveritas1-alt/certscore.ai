@@ -53,6 +53,37 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentPreconsentViolationCount: 2,
       consentBaselineTrackerEvidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
       consentBaselineTrackerVendorNames: ["LinkedIn Insight Tag", "Marketo"],
+      keyPageDiscoverySummary: {
+        budgets: {
+          maxAdditionalFetchAttempts: 8,
+          maxCandidates: 20,
+          maxFetchAttemptsPerType: 3,
+          maxSameBrandCandidatesPerType: 2,
+          maxSameBrandSubdomainHosts: 3,
+          maxSecondHopLegalHubFetchesPerMissingType: 1,
+          maxSitemapFiles: 3,
+          maxSitemapIndexChildren: 2
+        },
+        candidates: [],
+        localeHints: ["en"],
+        pageSummaries: [
+          {
+            attemptCount: 1,
+            attemptedUrls: ["https://example.com/privacy"],
+            bestDiscoverySource: "sitemap",
+            guessedOnly: false,
+            pageType: "privacy_policy",
+            stopReason: "all_attempts_failed",
+            successfulUrl: null,
+            successfulHostRelation: null,
+            surfaceDetected: true
+          }
+        ],
+        sameBrandSubdomainHostsInspected: [],
+        sitemapFilesFetched: ["https://example.com/sitemap.xml"],
+        sitemapIndexUrlsFetched: [],
+        sitemapUrls: ["https://example.com/sitemap.xml"]
+      },
       consentRejectPersistedTrackerVendorNames: ["LinkedIn Insight Tag"],
       consentRejectNewTrackerVendorNames: [],
       consentRejectClickCount: 1,
@@ -96,6 +127,37 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_preconsent_violation_count: 2,
     consent_baseline_tracker_evidence_urls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
     consent_baseline_tracker_vendor_names: ["LinkedIn Insight Tag", "Marketo"],
+    key_page_discovery_summary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en"],
+      pageSummaries: [
+        {
+          attemptCount: 1,
+          attemptedUrls: ["https://example.com/privacy"],
+          bestDiscoverySource: "sitemap",
+          guessedOnly: false,
+          pageType: "privacy_policy",
+          stopReason: "all_attempts_failed",
+          successfulUrl: null,
+          successfulHostRelation: null,
+          surfaceDetected: true
+        }
+      ],
+      sameBrandSubdomainHostsInspected: [],
+      sitemapFilesFetched: ["https://example.com/sitemap.xml"],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: ["https://example.com/sitemap.xml"]
+    },
     consent_reject_persisted_tracker_vendor_names: ["LinkedIn Insight Tag"],
     consent_reject_new_tracker_vendor_names: [],
     consent_reject_click_count: 1,

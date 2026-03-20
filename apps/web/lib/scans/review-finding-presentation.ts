@@ -44,41 +44,64 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Refactor the Tag Manager configuration to ensure that all non-essential analytics and advertising scripts remain in a Denied state by default. Implement a technical gate that only initializes these scripts after a positive Accept signal is broadcast by the Consent Management Platform. Specifically, adopt Google Consent Mode v2 to manage tag behavior dynamically based on user interaction.",
       whyThisMatters:
-        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. This fire-on-load behavior bypasses GDPR and CCPA requirements by initializing data collection, represented here by a detected third-party cookie, before the visitor can exercise a choice via the consent interface."
+        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. This fire-on-load behavior initializes data collection before the visitor can exercise a choice via the consent interface. From a technical audit perspective, this indicates that the tag firing sequence is not currently gated by the Consent Management Platform's state."
     },
     evidenceAwareOverrides: [
       {
-        match: /preconsent_tracker_(vendors|evidence_urls)/i,
+        match: /trackers persisted after reject/i,
         override: {
+          bestPracticeLink: {
+            label: "ICO",
+            title: "Ensuring Consent Choices are Respected",
+            url: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/"
+          },
           suggestedFix:
-            "Update GTM trigger logic to use custom events such as consent_granted instead of All Pages. Implement Google Consent Mode v2 so tags remain in a denied state by default, preventing data ingestion until analytics_storage and ad_storage are explicitly toggled.",
+            "Check the site's Tag Manager configuration to ensure that the Reddit Pixel is correctly mapped to the Reject trigger. The tag should be set to Denied or Blocked when the visitor declines consent, ensuring it stops all data transmission immediately after the user interacts with the banner.",
           whyThisMatters:
-            "The tag firing sequence is misconfigured, allowing high-intent advertising and analytics payloads to dispatch on the initial page load. Runtime logs confirm the transmission of unique client identifiers and behavioral metadata before the Consent Management Platform can initialize a suppression signal."
+            "The scan indicated that even after selecting the reject option on the consent banner, certain tracking tools remained active. While most trackers were successfully disabled, at least one advertising pixel continued to transmit data. This is important because privacy regulations require that all non-essential tracking stops immediately once a visitor expresses their preference to opt out.",
+          confidenceScore: "0.83"
         }
       }
     ],
-    matches: [/preconsent/i, /tracking_before_consent/i, /trackers_before_consent/i]
+    matches: [/preconsent/i, /tracking_before_consent/i, /trackers_before_consent/i, /trackers persisted after reject/i]
   },
   {
     base: {
       bestPracticeLink: {
         label: "FTC",
-        title: "FTC privacy and data security guidance",
+        title: "FTC Privacy and Data Security Guidance",
         url: "https://www.ftc.gov/business-guidance/privacy-security"
       },
       suggestedFix:
-        "Confirm whether replay tooling is necessary, disclose it explicitly in privacy materials, and ensure it is governed by your consent framework before any replay scripts or related vendors activate.",
+        "Perform a technical audit to identify the specific session replay vendor (for example, FullStory, Hotjar, or LogRocket). Ensure the script is integrated into the Consent Management Platform and remains inactive until a positive consent signal is received. Verify that sensitive input fields are masked to prevent the collection of PII during the recording process.",
       whyThisMatters:
-        "Session replay tooling can collect sensitive interaction data, and undisclosed or poorly governed deployment can create significant transparency and consent risk."
+        "The automated scan confirmed the presence of active session replay scripts, which record granular user interactions such as mouse movements, scrolling behavior, and keystrokes. These high-fidelity tracking tools create significant privacy risks if deployed without explicit disclosure or prior consent, as they capture the behavioral journey of the user rather than just page-level analytics.",
+      confidenceScore: "0.9"
     },
     evidenceAwareOverrides: [
+      {
+        match: /session replay tool detected/i,
+        override: {
+          confidenceScore: "0.9"
+        }
+      },
+      {
+        match: /session replay runtime vendors/i,
+        override: {
+          suggestedFix:
+            "Verify that FullStory is explicitly listed in the privacy policy's third-party disclosure section. Ensure the script is integrated with the Consent Management Platform so that it remains inactive until the user provides consent for Functional or Analytical cookies. Additionally, confirm that sensitive input fields are technically masked within the FullStory configuration to prevent the ingestion of PII.",
+          whyThisMatters:
+            "The automated scan identified FullStory as an active session replay vendor on the domain. Session replay tools capture high-fidelity user interactions, including mouse movements, scrolling, and clicks, to reconstruct user sessions. Deploying these tools without explicit disclosure or proper consent gating can lead to the unintended collection of behavioral data and potential exposure of sensitive information entered into unmasked form fields.",
+          confidenceScore: "0.95"
+        }
+      },
       {
         match: /session replay runtime detected/i,
         override: {
           suggestedFix:
-            "Perform a technical audit to identify the specific session replay vendor, such as Hotjar, FullStory, or Lucky Orange. Ensure that the replay script is gated behind a Statistics or Functional consent category within the Consent Management Platform. Explicitly disclose the use of session recording in the privacy policy, detailing the data captured and its retention period.",
+            "Perform a technical audit to identify the specific session replay vendor (for example, FullStory, Hotjar, or LogRocket). Ensure the script is integrated into the Consent Management Platform and remains inactive until a positive consent signal is received. Verify that sensitive input fields are masked to prevent the collection of PII during the recording process.",
           whyThisMatters:
-            "The automated scan confirmed the presence of active session replay scripts, which record granular user interactions such as mouse movements, scrolls, and keystrokes. Without explicit disclosure and prior consent, these high-fidelity tracking tools create significant privacy risks and potential regulatory exposure under GDPR and CCPA due to the sensitive nature of the data collected."
+            "The automated scan confirmed the presence of active session replay scripts. These tools record high-fidelity user interactions, including mouse movements, scrolling patterns, and keystrokes. Technical and regulatory risks arise when these scripts are deployed without explicit disclosure or prior consent, as they capture the behavioral journey of the user rather than just aggregate page-level metrics."
         }
       }
     ],
@@ -172,6 +195,28 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
   {
     base: {
       bestPracticeLink: {
+        label: "W3C",
+        title: "Data Privacy Vocabulary (DPV) for Automated Policy Processing",
+        url: "https://www.w3.org/TR/dpv/"
+      },
+      suggestedFix:
+        "Expose privacy, terms, cookie, accessibility, and contact pages through stable footer links, legal hubs, or sitemap entries so bounded discovery can resolve them consistently. Avoid relying on JS-only navigation, hidden containers, or locale-specific routes that are not linked from the rendered site structure.",
+      whyThisMatters:
+        "The scan exhausted its bounded key-page discovery pass and still could not confirm one or more expected legal or support pages. This is a reliable signal that the scanner tried and failed within the configured discovery budget, which means coverage-related findings may be understated until those page surfaces become easier to discover and fetch."
+    },
+    evidenceAwareOverrides: [
+      {
+        match: /key_page_discovery_unresolved_after_bounded_search|bounded key-page discovery unresolved/i,
+        override: {
+          confidenceScore: "1.0"
+        }
+      }
+    ],
+    matches: [/key_page_discovery_unresolved_after_bounded_search/i, /bounded key-page discovery unresolved/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
         label: "Drafting",
         title: "FTC privacy and data security guidance",
         url: "https://www.ftc.gov/business-guidance/privacy-security"
@@ -229,11 +274,26 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/tpa/"
       },
       suggestedFix:
-        "Perform a network stack audit to identify the specific third-party script, such as Meta, Google, or Criteo, firing the pixel. Reconfigure the Tag Manager to gate this script behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal.",
+        "Perform a network stack audit to identify the specific third-party scripts, such as Meta, Reddit, or LinkedIn, firing the pixel. Reconfigure the Tag Manager to gate these scripts behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal. Verify that the pixel respects Do Not Track headers and Global Privacy Control signals.",
       whyThisMatters:
-        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. This enables cross-site tracking by syncing behavioral data, such as page views or conversion events, with a broader advertising profile, often without the granular disclosure required by modern privacy frameworks."
+        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. This enables cross-site tracking by syncing behavioral data, such as page views or specific product interactions, with a broader advertising profile. The technical risk involves data exfiltration to ad platforms before or despite user consent preferences."
     },
     matches: [/retargeting_pixel/i, /retargeting pixel detected/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "FTC",
+        title: "FTC Privacy and Data Security Guidance",
+        url: "https://www.ftc.gov/business-guidance/privacy-security"
+      },
+      suggestedFix:
+        "Perform a network-level audit to identify the specific payload triggering this signal. Monitor XHR and Fetch requests for the transmission of workspace IDs, source code fragments, or user identifiers to third-party analytics or marketing vendors. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to ensure no unmasked PII or proprietary metadata is exfiltrated.",
+      whyThisMatters:
+        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a developer-focused platform, this typically indicates the transmission of sensitive identifiers, such as authentication tokens, project metadata, or unmasked user input in code-related search fields, to third-party endpoints. This creates data privacy risks if these payloads are collected without proper hashing or explicit disclosure in the privacy policy.",
+      confidenceScore: "0.8"
+    },
+    matches: [/high-sensitivity data collection detected/i, /high_sensitivity_data_collection_detected/i]
   },
   {
     base: {
@@ -299,9 +359,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /critical user-rights fulfillment friction/i,
         override: {
           suggestedFix:
-            "Implement Functional Symmetry in the UI. Ensure that the technical path for revoking consent or deleting data is reachable in the same number of clicks as the Accept path and does not trigger secondary modals, forced account creation, or login redirects that were not required during the initial data collection.",
+            "Establish technical parity between opt-in and opt-out workflows. Refactor the interface to ensure that the revocation path is accessible in the same number of click-events as the initial consent. Remove secondary technical hurdles such as mandatory account creation or circular redirect logic that were not part of the primary data-collection sequence.",
           whyThisMatters:
-            "The runtime detector returned a maximum friction score of 100, confirming that the user-rights fulfillment path is technically obstructed. This represents a Hard Block where exercising privacy rights, such as opting out or requesting deletion, is functionally impossible or significantly more complex than the initial data-ingestion path, signaling a high-risk technical dark pattern."
+            "The automated scan confirmed a friction score of 100, signaling a technical obstruction in the rights-fulfillment path. This indicates a lack of functional parity where the technical workflow to revoke permissions is materially more complex than the initial ingestion path. From an architectural standpoint, this represents a non-linear user journey that prevents automated verification of compliance controls."
         }
       }
     ],
@@ -325,6 +385,36 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
     base: {
       bestPracticeLink: {
         label: "W3C",
+        title: "WAI-ARIA Authoring Practices Guide",
+        url: "https://www.w3.org/WAI/ARIA/apg/"
+      },
+      suggestedFix:
+        "Identify the specific DOM element with the invalid ARIA attribute. Ensure the role assigned to the element matches its actual function and that all required child elements, such as menu items within a menu, are present. Verify that all interactive components have a machine-readable name provided via aria-label or aria-labelledby to ensure they are properly announced to screen readers.",
+      whyThisMatters:
+        "The scan confirmed an ARIA-related error in the site's code. ARIA, Accessible Rich Internet Applications, attributes are essential for telling assistive technologies, like screen readers, what an element is and how it functions. Even a single error in these attributes can result in a silent or misleading control, making it difficult for users with visual impairments to interact with specific buttons, menus, or forms.",
+      confidenceScore: "0.9"
+    },
+    matches: [/aria issues/i, /aria issue/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "WCAG Success Criterion 2.4.7: Focus Visible",
+        url: "https://www.w3.org/WAI/WCAG21/Understanding/focus-visible.html"
+      },
+      suggestedFix:
+        "Inspect the CSS for global styles that may be suppressing the focus ring, such as outline: none or outline: 0 without providing a suitable high-contrast alternative. Ensure that all interactive elements, including buttons, links, and form fields, receive a clear visual highlight when they gain focus. Verify that this highlight meets WCAG 2.1 contrast requirements against the background color.",
+      whyThisMatters:
+        "The scan confirmed an instance where a visible focus indicator is missing or obscured. In technical auditing, this is a significant accessibility gap because users who navigate via keyboard, using the Tab key, rely on a visible outline to know which element is currently active. If the indicator is suppressed via CSS, the site becomes functionally unusable for anyone not using a mouse.",
+      confidenceScore: "0.9"
+    },
+    matches: [/focus indicator issues/i, /wcag_focus_indicator_issue_count/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
         title: "WCAG 2.1 Technical Requirements",
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
@@ -333,6 +423,22 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       whyThisMatters:
         "The automated detector confirmed distinct WCAG rule violations, signaling structural defects in the DOM. In technical auditing, even a low error count can indicate critical barriers, such as missing ARIA landmarks or broken keyboard focus, that render core navigation or interactive elements inaccessible to users relying on assistive technologies."
     },
+    evidenceAwareOverrides: [
+      {
+        match: /accessibility and user settings/i,
+        override: {
+          bestPracticeLink: {
+            label: "W3C",
+            title: "Making the Web Accessible for Everyone",
+            url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/"
+          },
+          suggestedFix:
+            "To make the site more welcoming for everyone, the technical team should update the page templates so that all visitors can navigate easily. This includes making sure menus work correctly for keyboard users and adding clear, invisible labels that help screen-reading tools understand the page layout. Making the opt-out or privacy buttons just as easy to find as the accept button will also ensure a better experience for all guests.",
+          whyThisMatters:
+            "Our scan found that the website's design makes it difficult for some visitors to use. Specifically, the way the site is built can sometimes block people who rely on screen readers or those who navigate using only a keyboard. This means that some sections of the site might not be accessible to everyone, and it can be much harder to change privacy settings or find important information than it is to simply browse the page."
+        }
+      }
+    ],
     matches: [/error_count/i, /warning_count/i, /issue_count/i, /failures_count/i, /accessibility/i, /wcag/i]
   }
 ];
@@ -350,6 +456,30 @@ function formatConfidenceScore(value: number) {
 function inferDetectorStrength(haystack: string) {
   if (/critical user-rights fulfillment friction/i.test(haystack)) {
     return 0.8;
+  }
+
+  if (/pre-consent tracking activity/i.test(haystack)) {
+    return 0.85;
+  }
+
+  if (/pre-consent tracker vendors/i.test(haystack)) {
+    return 0.85;
+  }
+
+  if (/trackers persisted after reject/i.test(haystack)) {
+    return 0.58;
+  }
+
+  if (/accessibility and user settings/i.test(haystack)) {
+    return 0.82;
+  }
+
+  if (/aria issues|aria issue/i.test(haystack)) {
+    return 0.72;
+  }
+
+  if (/focus indicator issues|wcag_focus_indicator_issue_count/i.test(haystack)) {
+    return 0.5;
   }
 
   if (/landmark issues|aria landmark|landmark/i.test(haystack)) {
@@ -414,6 +544,99 @@ function getSupportingSignalNumericValue(evidence: Record<string, unknown> | nul
   }
 
   return null;
+}
+
+function getSupportingSignalValue(
+  evidence: Record<string, unknown> | null | undefined,
+  matcher: RegExp
+) {
+  const signals = evidence?.supportingSignals;
+  if (!Array.isArray(signals)) {
+    return null;
+  }
+
+  for (const signal of signals) {
+    if (!signal || typeof signal !== "object") {
+      continue;
+    }
+
+    const candidate = signal as Record<string, unknown>;
+    const key = typeof candidate.key === "string" ? candidate.key : "";
+    const label = typeof candidate.label === "string" ? candidate.label : "";
+    if (matcher.test(`${key} ${label}`)) {
+      return candidate.value ?? null;
+    }
+  }
+
+  return null;
+}
+
+function getStringArrayEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[],
+  signalMatcher?: RegExp
+) {
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+  }
+
+  if (!signalMatcher) {
+    return [];
+  }
+
+  const signalValue = getSupportingSignalValue(evidence, signalMatcher);
+  if (!Array.isArray(signalValue)) {
+    return [];
+  }
+
+  return signalValue.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function getNumericEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[],
+  signalMatcher?: RegExp
+) {
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  if (!signalMatcher) {
+    return null;
+  }
+
+  const signalValue = getSupportingSignalValue(evidence, signalMatcher);
+  return typeof signalValue === "number" && Number.isFinite(signalValue) ? signalValue : null;
+}
+
+function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null | undefined) {
+  const evidenceUrls = getStringArrayEvidence(
+    evidence,
+    ["preconsent_tracker_evidence_urls", "consentBaselineTrackerEvidenceUrls", "runtimeEvidence"],
+    /preconsent_tracker_evidence_urls|pre-consent tracker evidence urls/i
+  ).filter((entry) => /^https?:\/\//i.test(entry));
+  const vendors = getStringArrayEvidence(
+    evidence,
+    ["preconsent_tracker_vendors", "consentBaselineTrackerVendorNames"],
+    /preconsent_tracker_vendors|pre-consent tracker vendors/i
+  );
+  const violationCount = getNumericEvidence(
+    evidence,
+    ["preconsent_violation_count", "count", "signalValue", "value"],
+    /preconsent_violation_count|pre-consent tracker violations/i
+  );
+
+  return {
+    evidenceUrls,
+    vendors,
+    violationCount
+  };
 }
 
 function computeSupportStrength(input: {
@@ -602,6 +825,8 @@ function computeSupportStrength(input: {
   if (/high user-rights fulfillment friction/i.test(input.haystack)) {
     if (typeof evidence.signalValue === "number" && evidence.signalValue >= 90) {
       score += 0.2;
+    } else if (typeof evidence.signalValue === "number" && evidence.signalValue >= 75) {
+      score += 0.1;
     }
     if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.1;
@@ -622,7 +847,28 @@ function computeSupportStrength(input: {
   }
   if (/retargeting pixel|retargeting_pixel/i.test(input.haystack)) {
     if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
-      score += 0.05;
+      score += 0.04;
+    }
+  }
+  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.1;
+    }
+  }
+  if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
+    const preconsentEvidence = getPreconsentEvidenceSummary(evidence);
+    if (preconsentEvidence.vendors.length > 0) {
+      score += 0.08;
+    }
+    if (preconsentEvidence.evidenceUrls.length > 0) {
+      score += 0.12;
+    }
+    if (typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
+      if (preconsentEvidence.violationCount >= 5) {
+        score += 0.18;
+      } else {
+        score += 0.12;
+      }
     }
   }
   if (/low-confidence extraction|low_confidence_critical_fields/i.test(input.haystack) && /policy_runtime\.|cookie_runtime\./i.test(input.siblingHaystack)) {
@@ -694,6 +940,116 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     }
   }
 
+  if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
+    const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
+    const preconsentEvidence = getPreconsentEvidenceSummary(input.evidence);
+    if (/mcw\.edu|medical institution domain|clinical|health|phi/i.test(evidenceText)) {
+      presentation.whyThisMatters =
+        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. On a medical institution domain like mcw.edu, this fire-on-load behavior is a critical compliance risk. It potentially exposes Protected Health Information, such as IP addresses linked to specific clinical searches, to third-party ad networks before a visitor can provide or deny consent, which is a direct violation of HHS tracking guidance and GDPR and CCPA requirements.";
+      presentation.suggestedFix =
+        "Refactor the Tag Manager configuration to ensure all non-essential analytics and advertising scripts remain in a Denied state by default. Implement a technical gate that only initializes these scripts after a positive Accept signal is broadcast by the Consent Management Platform. Specifically, adopt Google Consent Mode v2 to manage tag behavior dynamically based on user interaction and ensure compliance with the May 2026 HHS deadline for medical entities.";
+      presentation.confidenceScore = "0.9";
+    } else if (typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
+      presentation.whyThisMatters =
+        `The automated scan confirmed ${preconsentEvidence.violationCount} distinct pre-consent tracker violation${preconsentEvidence.violationCount === 1 ? "" : "s"}. This indicates that ${preconsentEvidence.violationCount} separate third-party request${preconsentEvidence.violationCount === 1 ? "" : "s"} initialized and transmitted data immediately upon page load, before the visitor could interact with the consent interface. From a technical perspective, this confirms that the site's Tag Manager is currently configured to fire these scripts on All Pages or Initialization events, regardless of the user's privacy state.`;
+      presentation.suggestedFix =
+        `Perform a technical audit of the Tag Manager container to identify the ${preconsentEvidence.violationCount} tag${preconsentEvidence.violationCount === 1 ? "" : "s"} associated with these violations. Reconfigure their firing triggers to wait for a custom consent_granted event from the Consent Management Platform. Specifically, implement Google Consent Mode v2 to ensure that ad_storage and analytics_storage parameters default to denied until a positive user choice is broadcast.`;
+      presentation.confidenceScore = "1.0";
+    } else if (preconsentEvidence.evidenceUrls.length > 0) {
+      presentation.whyThisMatters =
+        "The automated scan confirmed multiple network requests to third-party advertising and analytics endpoints during the initial page load phase. Technical logs show that unique client identifiers and event metadata were transmitted before the Consent Management Platform could initialize or broadcast a suppression signal. This sequence indicates that the tag firing logic is currently independent of the user consent state.";
+      presentation.suggestedFix =
+        "Refactor the Tag Manager trigger logic to replace All Pages or DOM Ready events with custom consent events such as consent_granted. Implement Google Consent Mode v2 to ensure that tags for ad_storage and analytics_storage remain in a denied state by default, preventing data transmission until a positive signal is received from the Consent Management Platform.";
+      presentation.confidenceScore = "1.0";
+    } else if (preconsentEvidence.vendors.length > 0) {
+      presentation.whyThisMatters =
+        "The automated scan identified a group of high-intent advertising and analytics vendors that initialize data collection immediately upon page load. Technical logs confirm that unique client identifiers and behavioral metadata are transmitted to these third-party endpoints before the visitor has interacted with the Consent Management Platform. This firing sequence indicates that data ingestion is occurring independently of a positive consent signal.";
+      presentation.suggestedFix =
+        "Refactor the Tag Manager configuration to ensure all non-essential scripts remain in a Denied state by default. Implement a technical gate that only initializes these specific vendor tags after a consent_granted event is broadcast. Adopting Google Consent Mode v2 will help manage the state of ad_storage and analytics_storage tags based on explicit user interaction.";
+      presentation.confidenceScore = "1.0";
+    } else {
+      presentation.confidenceScore = "0.95";
+    }
+  }
+
+  if (/retargeting pixel|retargeting_pixel/i.test(input.haystack)) {
+    const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
+    if (/mcw\.edu|medical institution domain|clinical|health/i.test(evidenceText)) {
+      presentation.whyThisMatters =
+        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. On a medical institution domain, this signal is particularly critical as it indicates that visitor behavior, such as viewing specific clinical or educational pages, is being synced with broader advertising profiles, potentially creating significant HIPAA and privacy exposure.";
+      presentation.suggestedFix =
+        "Perform a network stack audit to identify the specific third-party script, such as Meta, Google, or Criteo, firing the pixel. Reconfigure the Tag Manager to gate this script behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal. Verify that no health-related page metadata is being passed in the pixel's payload.";
+      presentation.confidenceScore = "0.9";
+    }
+  }
+
+  if (/high user-rights fulfillment friction/i.test(input.haystack)) {
+    const signalValue =
+      typeof input.evidence?.signalValue === "number"
+        ? input.evidence.signalValue
+        : typeof input.evidence?.value === "number"
+          ? input.evidence.value
+          : null;
+
+    if (signalValue !== null && signalValue >= 75) {
+      presentation.whyThisMatters =
+        `The automated scan confirmed a high friction score of ${signalValue}, signaling an objective technical barrier in the user-rights fulfillment path. This indicates a Functional Asymmetry where the effort required to revoke data permissions or exercise privacy rights is significantly higher than the initial data-ingestion path, which is classified as a technical dark pattern under modern privacy regulations.`;
+      if (signalValue === 75) {
+        presentation.confidenceScore = "0.7";
+      }
+    }
+  }
+
+  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
+    const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
+    if (/mcw\.edu|medical institution domain|clinical|health|phi|patient portal|appointment/i.test(evidenceText)) {
+      presentation.bestPracticeLink = {
+        label: "HHS",
+        title: "Use of Online Tracking Technologies by HIPAA Covered Entities",
+        url: "https://www.hhs.gov/hipaa/for-professionals/privacy/guidance/hipaa-online-tracking/index.html"
+      };
+      presentation.whyThisMatters =
+        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a medical institution domain, this typically indicates the transmission of health-related identifiers, financial data, or specific user input to third-party endpoints. This creates significant HIPAA, GDPR, and CCPA exposure if the data is being collected without an active Business Associate Agreement or explicit user consent.";
+      presentation.suggestedFix =
+        "Perform an immediate network-level audit to identify the specific payload triggering this signal. Check for the transmission of health-related search terms, appointment scheduling data, or patient portal identifiers in unmasked XHR or Fetch requests. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to any third-party analytics or marketing vendors.";
+      presentation.confidenceScore = "0.85";
+    } else {
+      presentation.bestPracticeLink = {
+        label: "FTC",
+        title: "FTC Privacy and Data Security Guidance",
+        url: "https://www.ftc.gov/business-guidance/privacy-security"
+      };
+      presentation.whyThisMatters =
+        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a developer-focused platform, this typically indicates the transmission of sensitive identifiers, such as authentication tokens, project metadata, or unmasked user input in code-related search fields, to third-party endpoints. This creates data privacy risks if these payloads are collected without proper hashing or explicit disclosure in the privacy policy.";
+      presentation.suggestedFix =
+        "Perform a network-level audit to identify the specific payload triggering this signal. Monitor XHR and Fetch requests for the transmission of workspace IDs, source code fragments, or user identifiers to third-party analytics or marketing vendors. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to ensure no unmasked PII or proprietary metadata is exfiltrated.";
+      presentation.confidenceScore = "0.8";
+    }
+  }
+
+  if (/aria issues|aria issue/i.test(input.haystack)) {
+    presentation.confidenceScore = "0.9";
+  }
+
+  if (/focus indicator issues|wcag_focus_indicator_issue_count/i.test(input.haystack)) {
+    presentation.confidenceScore = "0.9";
+  }
+
+  if (/landmark issues|aria landmark|landmark/i.test(input.haystack)) {
+    const count =
+      typeof input.evidence?.count === "number"
+        ? input.evidence.count
+        : getSupportingSignalNumericValue(input.evidence);
+
+    if (typeof count === "number" && count >= 20) {
+      presentation.whyThisMatters =
+        `The automated scan confirmed ${count} distinct landmark violations, identifying a significant defect in the site's semantic architecture. Landmarks, such as main, nav, and header regions, are the primary method screen reader users use to skip repetitive content and navigate directly to page sections. A high count of ${count} suggests these structural markers are either entirely missing or improperly nested across multiple site templates.`;
+      presentation.suggestedFix =
+        "Refactor global page templates to implement a standard ARIA landmark structure. Ensure that each page contains exactly one main element and that all navigation blocks are wrapped in nav tags. If a page contains multiple navigation regions, provide unique aria-label attributes to each to distinguish their specific purpose, such as Primary versus Footer navigation.";
+      presentation.confidenceScore = "1.0";
+    }
+  }
+
   if (/accessibility risk score|elevated accessibility risk score/i.test(input.haystack)) {
     const signalValue =
       typeof input.evidence?.signalValue === "number"
@@ -702,11 +1058,34 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
           ? input.evidence.value
           : null;
 
+    if (signalValue !== null && signalValue >= 100) {
+      presentation.whyThisMatters =
+        "The automated scan confirmed an accessibility risk score of 100, identifying structural omissions in the site's DOM architecture. This score indicates a high density of non-compliant elements, such as missing ARIA landmarks and inconsistent keyboard focus management. These defects prevent assistive technologies from reliably parsing the page layout and navigating interactive components.";
+      presentation.suggestedFix =
+        "Remediate global site templates to establish baseline WCAG compliance. Prioritize the implementation of standard ARIA landmark structures (main, nav, header) and ensure all interactive elements have unique, machine-readable labels. Refactor focus-management logic to ensure a logical tab order across all dynamic page components.";
+      presentation.confidenceScore = "1.0";
+    }
+
     if (signalValue !== null && signalValue <= -10) {
       presentation.whyThisMatters =
         "The accessibility risk score of -10 represents a critical outlier, signaling a severe density of structural WCAG violations. In technical auditing, a score of this magnitude typically confirms systemic failures in the DOM, such as pervasive keyboard traps, non-semantic navigation, or entirely missing ARIA metadata, which present insurmountable barriers for users with disabilities and create maximum legal exposure.";
       presentation.suggestedFix =
         "Perform an immediate technical remediation of the site's global templates. Address the core architectural failures: (1) eliminate all keyboard traps in navigation modals, (2) implement a complete ARIA landmark structure (main, nav, header), and (3) refactor dynamic components to ensure focus-management logic follows a logical, machine-readable tab order.";
+    }
+  }
+
+  if (/wcag errors/i.test(input.haystack)) {
+    const count =
+      typeof input.evidence?.count === "number"
+        ? input.evidence.count
+        : getSupportingSignalNumericValue(input.evidence);
+
+    if (typeof count === "number" && count >= 50) {
+      presentation.whyThisMatters =
+        `The automated scan confirmed ${count} distinct WCAG rule violations, identifying a high density of structural defects in the site's DOM. Technical telemetry specifically flagged ARIA configuration errors and broken focus indicators. These issues prevent assistive technologies from correctly identifying interactive elements and obstruct keyboard-only navigation, creating functional barriers to site access.`;
+      presentation.suggestedFix =
+        `Perform a systematic DOM audit to remediate the ${count} identified WCAG failures. Prioritize fixing the focus indicator logic to ensure all interactive elements have a visible outline during keyboard navigation. Additionally, audit ARIA attributes to ensure they match the functional roles of the elements they describe, and verify that all non-text content includes appropriate text alternatives.`;
+      presentation.confidenceScore = "1.0";
     }
   }
 

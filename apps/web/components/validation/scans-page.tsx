@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
+import { submitValidationRescanAction } from "../../server/validation/actions";
 import { listValidationRuns } from "../../server/validation/repository";
 
 type ValidationScansPageProps = {
@@ -94,9 +95,19 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                       {run.findingCount} flagged
                     </td>
                     <td className="py-4">
-                      <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
-                        View results
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
+                          View results
+                        </Link>
+                        {run.domainId ? (
+                          <form action={submitValidationRescanAction}>
+                            <input name="domainId" type="hidden" value={run.domainId} />
+                            <button className="text-sm font-medium text-slate-900 underline underline-offset-4" type="submit">
+                              Re-scan
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
