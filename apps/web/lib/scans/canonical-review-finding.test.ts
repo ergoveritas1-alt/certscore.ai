@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCanonicalReviewFindingPresentation } from "./canonical-review-finding";
+import { buildCanonicalReviewFindingPresentation, normalizeFindingName } from "./canonical-review-finding";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 function makeLinkedFinding(input: Partial<ScanValidationFinding> & Pick<ScanValidationFinding, "id" | "ruleKey" | "title">): ScanValidationFinding {
@@ -122,4 +122,10 @@ test("falls back to generic presentation for unmatched findings without linked v
   assert.match(presentation.whyThisMatters, /merit reviewer attention/i);
   assert.match(presentation.suggestedFix, /confirm whether the signal needs follow-up/i);
   assert.equal(presentation.confidenceScore, "0.55");
+});
+
+test("normalizeFindingName removes confidence-colored prefixes from display names", () => {
+  assert.equal(normalizeFindingName("High-confidence technical disclosure gap"), "Technical disclosure gap");
+  assert.equal(normalizeFindingName("Low-confidence policy extraction"), "Policy extraction");
+  assert.equal(normalizeFindingName("Missing technical disclosure"), "Missing technical disclosure");
 });

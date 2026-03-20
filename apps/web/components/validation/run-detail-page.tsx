@@ -4,6 +4,7 @@ import { ViewerTimestamp } from "../time/viewer-timestamp";
 import { getValidationRunDetail } from "../../server/validation/repository";
 import { submitValidationRescanAction } from "../../server/validation/actions";
 import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
+import { normalizeFindingName } from "../../lib/scans/canonical-review-finding";
 
 type ValidationRunDetailPageProps = {
   runId: string;
@@ -67,7 +68,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                   const pageLabel = row.automatedFinding.pageUrl ?? detail.hostname;
                   const summaryJson = {
                     url: pageLabel,
-                    findingName: row.automatedFinding.title,
+                    findingName: normalizeFindingName(row.automatedFinding.title),
                     confidenceScore: presentation.confidenceScore ?? "NA",
                     whyThisMatters: presentation.whyThisMatters,
                     suggestedFix: presentation.suggestedFix,

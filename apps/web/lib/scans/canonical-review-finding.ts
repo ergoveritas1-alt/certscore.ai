@@ -19,6 +19,21 @@ export type ReviewFindingPresentationSource = {
   title: string;
 };
 
+export function normalizeFindingName(title: string) {
+  const normalized = title
+    .replace(/^(high|low)-confidence\s+/i, "")
+    .replace(/^high confidence on\s+/i, "")
+    .replace(/^low confidence on\s+/i, "")
+    .replace(/^low extraction confidence$/i, "Extraction issue")
+    .trim();
+
+  if (!normalized) {
+    return normalized;
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 function buildFallbackEvidence(input: ReviewFindingPresentationSource) {
   const pageUrls = (input.evidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim()));
 
@@ -48,7 +63,7 @@ export function buildCanonicalReviewFindingPresentation(
 
   return {
     confidenceScore: presentation.confidenceScore ?? null,
-    findingName: finding.linkedValidationFinding?.title ?? finding.title,
+    findingName: normalizeFindingName(finding.linkedValidationFinding?.title ?? finding.title),
     suggestedBestPractice: presentation.bestPracticeLink,
     suggestedFix: presentation.suggestedFix,
     whyThisMatters: presentation.whyThisMatters
