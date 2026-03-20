@@ -347,8 +347,14 @@ test("uses tos extraction copy and max confidence for structurally weak terms pa
   );
 
   assert.equal(presentation.findingName, "Extraction TOS");
-  assert.match(presentation.whyThisMatters, /contractual transparency|governing law|termination rights/i);
-  assert.match(presentation.suggestedFix, /Governing Law, Arbitration, Termination, and Notice Contact/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /Policy Ambiguity Score of 90|technically dark to automated auditing|Governing Law, Dispute Resolution, and Termination rights/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /resolve this for future scans|semantic section or article tags|Governing Law, Arbitration, Termination, and Notice\/Contact/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.equal(presentation.confidenceScore, "1.0");
 });

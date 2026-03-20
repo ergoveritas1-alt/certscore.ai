@@ -90,9 +90,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /terms_of_service|tos/i,
         override: {
           suggestedFix:
-            "Perform a manual technical review of the terms page to map missing contractual disclosures. To improve future scans, refactor the rendered HTML to use semantic sectioning elements with explicit IDs for Governing Law, Arbitration, Termination, and Notice Contact language so those protections are not buried in weakly structured containers.",
+            "Perform a manual technical review of the terms page to map missing contractual disclosures. To resolve this for future scans, refactor the rendered HTML to use semantic section or article tags with explicit IDs for Governing Law, Arbitration, Termination, and Notice/Contact language, ensuring they are not buried in unstructured containers.",
           whyThisMatters:
-            "The automated scan confirmed a total failure in contractual transparency. With a high ambiguity score and zero extractable snippets, the terms are effectively dark to automated auditing, which prevents reliable verification of governing law, dispute resolution, and termination rights."
+            "The automated scan confirmed a total failure in contractual transparency. With a Policy Ambiguity Score of 90 and zero extractable snippets, the terms are technically dark to automated auditing. This structural weakness prevents the verification of core legal protections, including Governing Law, Dispute Resolution, and Termination rights."
         }
       },
       {
