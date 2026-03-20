@@ -593,6 +593,45 @@ test("uses session-replay copy and moderate confidence for detector-backed repla
   assert.equal(presentation.confidenceScore, "0.6");
 });
 
+test("uses stronger runtime session-replay copy and high confidence", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-2",
+        ruleKey: "commerce.session_replay_runtime_detected",
+        title: "Session replay runtime detected",
+        evidence: {
+          runtimeEvidence: ["session replay script observed on page load"],
+          supportingSignals: [
+            {
+              category: "commerce",
+              key: "commerce.session_replay_runtime_detected",
+              label: "Session replay runtime detected",
+              value: true
+            }
+          ]
+        }
+      }),
+      observedValue: "Session replay runtime detected",
+      severity: "high",
+      title: "Session replay runtime detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Session replay runtime detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /active session replay scripts|mouse movements, scrolls, and keystrokes|privacy risks|GDPR and CCPA/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /specific session replay vendor|Hotjar, FullStory, or Lucky Orange|Statistics or Functional consent category|retention period/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "FTC");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

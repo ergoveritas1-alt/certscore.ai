@@ -71,6 +71,17 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       whyThisMatters:
         "Session replay tooling can collect sensitive interaction data, and undisclosed or poorly governed deployment can create significant transparency and consent risk."
     },
+    evidenceAwareOverrides: [
+      {
+        match: /session replay runtime detected/i,
+        override: {
+          suggestedFix:
+            "Perform a technical audit to identify the specific session replay vendor, such as Hotjar, FullStory, or Lucky Orange. Ensure that the replay script is gated behind a Statistics or Functional consent category within the Consent Management Platform. Explicitly disclose the use of session recording in the privacy policy, detailing the data captured and its retention period.",
+          whyThisMatters:
+            "The automated scan confirmed the presence of active session replay scripts, which record granular user interactions such as mouse movements, scrolls, and keystrokes. Without explicit disclosure and prior consent, these high-fidelity tracking tools create significant privacy risks and potential regulatory exposure under GDPR and CCPA due to the sensitive nature of the data collected."
+        }
+      }
+    ],
     matches: [/session replay/i]
   },
   {
@@ -585,6 +596,11 @@ function computeSupportStrength(input: {
     }
     if (evidenceArrayLength(evidence, "policyEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.08;
+    }
+  }
+  if (/session replay runtime detected/i.test(input.haystack)) {
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.1;
     }
   }
   if (/retargeting pixel|retargeting_pixel/i.test(input.haystack)) {
