@@ -10,7 +10,9 @@ type NavigationResult = {
 export async function navigateWithPolicy(input: {
   page: Page;
   robotsPolicy?: RobotsPolicy | null;
+  timeoutMs?: number;
   url: string;
+  waitUntil?: "commit" | "domcontentloaded" | "load" | "networkidle";
 }) : Promise<NavigationResult> {
   if (!isUrlAllowedByRobots(input.url, input.robotsPolicy)) {
     return {
@@ -22,8 +24,8 @@ export async function navigateWithPolicy(input: {
   await waitForDomainRequestSlot(input.url);
 
   const response = await input.page.goto(input.url, {
-    waitUntil: "domcontentloaded",
-    timeout: 20_000
+    waitUntil: input.waitUntil ?? "domcontentloaded",
+    timeout: input.timeoutMs ?? 20_000
   });
 
   return {

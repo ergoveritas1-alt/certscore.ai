@@ -33,9 +33,25 @@ function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function hasRetainedBrowserEvidence(input: ScanTimeoutSummaryInput) {
+  const accessibilityRuleCountTotal = getFiniteNumber(input.accessibilityRuleCountTotal) ?? 0;
+  const wcagErrorCountTotal = getFiniteNumber(input.wcagErrorCountTotal) ?? 0;
+  const consentPreconsentViolationCount = getFiniteNumber(input.consentPreconsentViolationCount) ?? 0;
+  const trackerEvidenceUrlCount = getFiniteNumber(input.trackerEvidenceUrlCount) ?? 0;
+
+  return (
+    accessibilityRuleCountTotal > 0 ||
+    wcagErrorCountTotal > 0 ||
+    consentPreconsentViolationCount > 0 ||
+    trackerEvidenceUrlCount > 0 ||
+    input.consentAuditCompleted === true
+  );
+}
+
 export function deriveScanTimeoutSummary(input: ScanTimeoutSummaryInput): ScanTimeoutSummary | null {
   const timedOut = input.timeoutFlag === true;
   const httpOnlyFallback = input.renderModeUsed === "http_only";
+  const retainedBrowserEvidence = hasRetainedBrowserEvidence(input);
 
   if (!timedOut && !httpOnlyFallback) {
     return null;
@@ -44,7 +60,9 @@ export function deriveScanTimeoutSummary(input: ScanTimeoutSummaryInput): ScanTi
   const details: string[] = [];
   if (httpOnlyFallback) {
     details.push(
-      "The browser runtime pass did not complete cleanly, so this result fell back to the HTTP/static path for the final snapshot."
+      retainedBrowserEvidence
+        ? "The browser pass degraded before completion, so this run mixes partial runtime evidence with static fallback evidence."
+        : "Dynamic browser evidence was unavailable for this run, so the final snapshot relied on static HTTP fetches."
     );
   } else if (timedOut) {
     details.push("The browser runtime pass timed out before all dynamic checks could finish.");
@@ -52,15 +70,15 @@ export function deriveScanTimeoutSummary(input: ScanTimeoutSummaryInput): ScanTi
 
   const accessibilityRuleCountTotal = getFiniteNumber(input.accessibilityRuleCountTotal);
   const wcagErrorCountTotal = getFiniteNumber(input.wcagErrorCountTotal);
-  if ((accessibilityRuleCountTotal ?? 0) === 0 || (wcagErrorCountTotal ?? 0) === 0) {
+  if ((httpOnlyFallback || timedOut) && ((accessibilityRuleCountTotal ?? 0) === 0 || (wcagErrorCountTotal ?? 0) === 0)) {
     details.push(
-      "Automated accessibility rule rows were not retained for this run, so WCAG issue counts and rule-level examples may be understated or missing."
+      "Accessibility rule-level evidence was not retained for this degraded run, so WCAG counts or examples may be incomplete."
     );
   }
 
   if (input.consentAuditCompleted === false) {
     details.push(
-      "The consent interaction audit did not complete, so reject/accept enforcement behavior and post-choice tracker suppression evidence may be missing."
+      "The consent interaction audit did not complete, so reject/accept enforcement evidence may be incomplete."
     );
   }
 
@@ -104,6 +122,28 @@ function getEventNumber(metadata: unknown, key: string) {
 
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getRecoveredBrowserStages(
+  events: NonNullable<ScanTimeoutSummaryInput["events"]>
+) {
+  const recoveredStages = new Set<string>();
+
+  for (const event of events) {
+    if (
+      event.eventType !== "runtime.browser_pass_diagnostic" ||
+      getEventString(event.metadataJson, "status") !== "ok"
+    ) {
+      continue;
+    }
+
+    const recoveredStage = getEventString(event.metadataJson, "recoveryForStage");
+    if (recoveredStage) {
+      recoveredStages.add(recoveredStage);
+    }
+  }
+
+  return recoveredStages;
 }
 
 function humanizeDiagnosticName(value: string | null) {
@@ -197,6 +237,7 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   const timeoutSummary = deriveScanTimeoutSummary(input);
   const details = new Set<string>(timeoutSummary?.details ?? []);
   const events = input.events ?? [];
+  const recoveredBrowserStages = getRecoveredBrowserStages(events);
   const missingTargetPages: Array<{ label: string; pageType: string | null }> = [];
   const keyPageSummaries = getKeyPageDiscoverySummaries(input.keyPageDiscoverySummary);
   const resolvedPageTypes = new Set(
@@ -244,8 +285,17 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
       (event.eventType === "runtime.build_phase_diagnostic" || event.eventType === "runtime.browser_pass_diagnostic") &&
       getEventString(event.metadataJson, "status") === "timeout"
     ) {
-      const phase = humanizeDiagnosticName(getEventString(event.metadataJson, "phase") ?? getEventString(event.metadataJson, "stage"));
-      details.add(`${phase.charAt(0).toUpperCase() + phase.slice(1)} timed out before finishing.`);
+      const stageKey = getEventString(event.metadataJson, "phase") ?? getEventString(event.metadataJson, "stage");
+      if (stageKey && recoveredBrowserStages.has(stageKey)) {
+        continue;
+      }
+
+      const phase = humanizeDiagnosticName(stageKey);
+      const currentUrl = getEventString(event.metadataJson, "currentUrl");
+      const homepageUrl = getEventString(event.metadataJson, "homepageUrl");
+      const locationSuffix =
+        currentUrl && currentUrl !== homepageUrl ? ` while the browser was at ${currentUrl}.` : ".";
+      details.add(`${phase.charAt(0).toUpperCase() + phase.slice(1)} timed out before finishing${locationSuffix}`);
       continue;
     }
 
@@ -281,7 +331,6 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
     }
 
     if (missingTargetPages.length > 0) {
-      const uniqueMissingPages = [...new Set(missingTargetPages.map((page) => page.label))];
       const unresolvedIssueFamilies = [
         ...new Set(
           missingTargetPages
@@ -289,10 +338,9 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
             .filter((value): value is string => Boolean(value))
         )
       ];
-      details.add(`These expected target pages returned 404 during bounded key-page fetch: ${uniqueMissingPages.join("; ")}.`);
       if (unresolvedIssueFamilies.length > 0) {
         details.add(
-          `That means issue detection may understate ${unresolvedIssueFamilies.join(", ")} findings because those target pages were unavailable at their discovered URLs.`
+          `The scan could not retrieve standalone ${unresolvedIssueFamilies.join(", ")} pages within the bounded key-page fetch, so those findings may be understated if the pages exist at other URLs.`
         );
       } else {
         details.add(
@@ -308,12 +356,6 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
 
   for (const pageSummary of keyPageSummaries) {
     if (pageSummary.successfulUrl) {
-      if (pageSummary.successfulHostRelation === "same_brand_subdomain") {
-        const pageLabel = humanizeDiagnosticName(pageSummary.pageType);
-        details.add(
-          `${pageLabel.charAt(0).toUpperCase() + pageLabel.slice(1)} coverage was resolved on a same-brand subdomain (${pageSummary.successfulUrl}).`
-        );
-      }
       continue;
     }
 

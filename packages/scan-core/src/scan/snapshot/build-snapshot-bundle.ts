@@ -80,6 +80,7 @@ import {
 import { classifyConsentButtonRole } from "./consent-ui";
 import { runConsentInteractionAudit } from "./consent-interaction";
 import { getConsentProbeProfiles } from "./consent-profiles";
+import { persistAccessibilityEvidence, persistRuntimeArtifactsPatch } from "../persistence/save-snapshot-bundle";
 import { buildScanPlan, type ScanPlan } from "./scan-planner";
 import {
   ACCESSIBILITY_WIDGET_SIGNATURES,
@@ -1794,6 +1795,18 @@ async function waitForBrowserRuntimeStability(input: {
   }
 }
 
+function getLightweightBrowserRecoverySettings(input: {
+  browserNavigationTimeoutMs: number;
+  browserPostLoadWaitMs: number;
+}) {
+  return {
+    navigationStepTimeoutMs: Math.max(4_000, Math.min(8_000, input.browserNavigationTimeoutMs)),
+    navigationTimeoutMs: Math.max(3_000, Math.min(6_000, input.browserNavigationTimeoutMs)),
+    runtimeStabilityStepTimeoutMs: Math.max(2_500, Math.min(5_000, input.browserPostLoadWaitMs + 1_000)),
+    runtimeStabilityWaitMs: Math.max(750, Math.min(1_500, input.browserPostLoadWaitMs))
+  };
+}
+
 async function runBrowserPass(input: {
   browserContextOptions?: import("playwright").BrowserContextOptions;
   plan: ScanPlan;
@@ -1820,6 +1833,10 @@ async function runBrowserPass(input: {
   let browserSessionUsable = true;
   let cookiesBeforeConsent: Array<{ domain: string; name: string }> = [];
   let lastNetworkActivityAt = Date.now();
+  const browserRecoverySettings = getLightweightBrowserRecoverySettings({
+    browserNavigationTimeoutMs: input.plan.browserNavigationTimeoutMs,
+    browserPostLoadWaitMs: input.plan.browserPostLoadWaitMs
+  });
 
   const ensureWithinHardTimeout = async (stage: string) => {
     const elapsedMs = Date.now() - startedAt;
@@ -1835,6 +1852,7 @@ async function runBrowserPass(input: {
       stage,
       status: "timeout",
       metadata: {
+        currentUrl: page.url() || null,
         elapsedMs,
         inflightRequests,
         lastActivityElapsedMs: Date.now() - lastNetworkActivityAt
@@ -1847,7 +1865,8 @@ async function runBrowserPass(input: {
   const runInstrumentedStep = async <T>(
     stage: string,
     callback: () => Promise<T>,
-    timeoutMs = BROWSER_PASS_STEP_TIMEOUT_MS
+    timeoutMs = BROWSER_PASS_STEP_TIMEOUT_MS,
+    metadata?: Record<string, unknown>
   ) => {
     await ensureWithinHardTimeout(`${stage}:before`);
     await persistBrowserPassDiagnostic({
@@ -1858,8 +1877,10 @@ async function runBrowserPass(input: {
       stage,
       status: "start",
       metadata: {
+        currentUrl: page.url() || null,
         elapsedMs: Date.now() - startedAt,
-        inflightRequests
+        inflightRequests,
+        ...(metadata ?? {})
       }
     });
 
@@ -1873,8 +1894,10 @@ async function runBrowserPass(input: {
         stage,
         status: "ok",
         metadata: {
+          currentUrl: page.url() || null,
           elapsedMs: Date.now() - startedAt,
-          inflightRequests
+          inflightRequests,
+          ...(metadata ?? {})
         }
       });
       await ensureWithinHardTimeout(`${stage}:after`);
@@ -1890,13 +1913,40 @@ async function runBrowserPass(input: {
         stage,
         status,
         metadata: {
+          currentUrl: page.url() || null,
           elapsedMs: Date.now() - startedAt,
           error: message,
           inflightRequests,
-          lastActivityElapsedMs: Date.now() - lastNetworkActivityAt
+          lastActivityElapsedMs: Date.now() - lastNetworkActivityAt,
+          ...(metadata ?? {})
         }
       });
       throw error;
+    }
+  };
+
+  const runRecoverableHomepageStep = async <T>(inputStep: {
+    stage: "homepage_navigation" | "runtime_stability_wait";
+    callback: () => Promise<T>;
+    timeoutMs: number;
+    recoveryCallback: () => Promise<T>;
+    recoveryTimeoutMs: number;
+  }) => {
+    try {
+      return await runInstrumentedStep(inputStep.stage, inputStep.callback, inputStep.timeoutMs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown browser pass error";
+
+      return runInstrumentedStep(
+        `${inputStep.stage}_recovery`,
+        inputStep.recoveryCallback,
+        inputStep.recoveryTimeoutMs,
+        {
+          recoveryForStage: inputStep.stage,
+          recoveryMode: "lighter_settle_retry",
+          triggerError: message
+        }
+      );
     }
   };
 
@@ -1991,16 +2041,25 @@ async function runBrowserPass(input: {
   try {
     page.setDefaultNavigationTimeout(input.plan.browserNavigationTimeoutMs);
     page.setDefaultTimeout(input.plan.browserNavigationTimeoutMs);
-    const navigation = await runInstrumentedStep(
-      "homepage_navigation",
-      () =>
+    const navigation = await runRecoverableHomepageStep({
+      stage: "homepage_navigation",
+      callback: () =>
         navigateWithPolicy({
           page,
           robotsPolicy: input.robotsPolicy,
           url: input.homepageUrl
         }),
-      Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserNavigationTimeoutMs + 2_000)
-    );
+      timeoutMs: Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserNavigationTimeoutMs + 2_000),
+      recoveryCallback: () =>
+        navigateWithPolicy({
+          page,
+          robotsPolicy: input.robotsPolicy,
+          timeoutMs: browserRecoverySettings.navigationTimeoutMs,
+          url: input.homepageUrl,
+          waitUntil: "commit"
+        }),
+      recoveryTimeoutMs: browserRecoverySettings.navigationStepTimeoutMs
+    });
 
     if (navigation.blockedByPolicy) {
       timedOut = false;
@@ -2061,17 +2120,25 @@ async function runBrowserPass(input: {
       };
     }
 
-    await runInstrumentedStep(
-      "runtime_stability_wait",
-      () =>
+    await runRecoverableHomepageStep({
+      stage: "runtime_stability_wait",
+      callback: () =>
         waitForBrowserRuntimeStability({
           getInflightRequests: () => inflightRequests,
           getLastNetworkActivityAt: () => lastNetworkActivityAt,
           maxWaitMs: input.plan.browserPostLoadWaitMs,
           page
         }),
-      Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserPostLoadWaitMs + 2_000)
-    );
+      timeoutMs: Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserPostLoadWaitMs + 2_000),
+      recoveryCallback: () =>
+        waitForBrowserRuntimeStability({
+          getInflightRequests: () => inflightRequests,
+          getLastNetworkActivityAt: () => lastNetworkActivityAt,
+          maxWaitMs: browserRecoverySettings.runtimeStabilityWaitMs,
+          page
+        }),
+      recoveryTimeoutMs: browserRecoverySettings.runtimeStabilityStepTimeoutMs
+    });
     page.off("request", capturePreconsentState0Request);
     cookiesBeforeConsent = await runInstrumentedStep("preconsent_cookies", () =>
       browserHandle.context.cookies().catch(() => [])
@@ -2229,6 +2296,28 @@ async function runBrowserPass(input: {
     scanId: input.scanId,
     violations: normalizedViolations
   });
+  if (ruleCounts.length > 0 || ruleExamples.length > 0) {
+    await persistAccessibilityEvidence({
+      accessibilityRuleCounts: ruleCounts,
+      accessibilityRuleExamples: ruleExamples,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      scanId: input.scanId
+    }).catch(async (error) => {
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "axe_audit_persist",
+        status: "error",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown accessibility persistence error",
+          ruleCount: ruleCounts.length,
+          ruleExampleCount: ruleExamples.length
+        }
+      });
+    });
+  }
 
   await page.close().catch(() => undefined);
   await browserHandle.context.close().catch(() => undefined);
@@ -3314,6 +3403,21 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     }
   }
   const homepageHeaders: Record<string, string> = homepage.headers;
+  const consentAuditBaselineRightsFrictionScore =
+    (formSignals.privacyContactChannelType === "none" ? 45 : 0) +
+    ((policySignals.privacyRequestFormPresent || contactSignals.privacyRequestFormPresent) ? 0 : 10) +
+    (policySignals.dataAccessRequestPresent ? 0 : 15) +
+    (policySignals.dataDeletionRequestPresent ? 0 : 15) +
+    (formSignals.consentWithdrawalMechanismPresent ? 0 : 15);
+  const consentFallbackStartUrls = [
+    ...policyPages
+      .filter((page) => ["privacy_policy", "cookie_policy", "terms_of_service"].includes(page.pageType))
+      .map((page) => page.finalUrl ?? page.pageUrl),
+    ...keyPageDiscoverySummary.pageSummaries
+      .filter((summary) => ["privacy_policy", "cookie_policy", "terms_of_service"].includes(summary.pageType))
+      .map((summary) => summary.successfulUrl)
+      .filter((url): url is string => typeof url === "string" && url.length > 0)
+  ].filter((url, index, urls) => url !== homepageUrl && urls.indexOf(url) === index);
   await persistBuildPhaseDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -3328,11 +3432,66 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   const consentInteractionAudit =
     !isPreviewScan && (browserPass.cookieBannerPresent || cmpVendor?.name)
       ? await runConsentInteractionAudit(homepageUrl, {
+          baselineRightsFrictionScore: consentAuditBaselineRightsFrictionScore,
           domainId: input.domainId,
+          fallbackStartUrls: consentFallbackStartUrls,
           organizationId: input.organizationId,
           scanId: input.scanId
         }).catch(() => null)
       : null;
+  if (consentInteractionAudit) {
+    await persistRuntimeArtifactsPatch({
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      runtimeArtifacts: {
+        consentAuditCompleted: true,
+        consentRejectInteractionSucceeded: consentInteractionAudit.postReject.interactionSucceeded,
+        consentAcceptInteractionSucceeded: consentInteractionAudit.postAccept.interactionSucceeded,
+        consentRejectReducedTracking:
+          consentInteractionAudit.postReject.trackerVendorNames.length < consentInteractionAudit.baseline.trackerVendorNames.length,
+        consentRejectReducedThirdPartyCookies:
+          consentInteractionAudit.postReject.thirdPartyCookieCount < consentInteractionAudit.baseline.thirdPartyCookieCount,
+        consentBaselineCookieCount: consentInteractionAudit.baseline.cookieCount,
+        consentBaselineThirdPartyCookieCount: consentInteractionAudit.baseline.thirdPartyCookieCount,
+        consentRejectPersistedTrackerVendorNames: consentInteractionAudit.rejectPersistedTrackerVendorNames,
+        consentRejectNewTrackerVendorNames: consentInteractionAudit.rejectNewTrackerVendorNames,
+        consentRejectClickCount: consentInteractionAudit.postReject.clickCount,
+        consentAcceptClickCount: consentInteractionAudit.postAccept.clickCount,
+        consentOptInClicks: consentInteractionAudit.optInClicks,
+        consentOptOutClicks: consentInteractionAudit.optOutClicks,
+        consentBlockerType: consentInteractionAudit.consentBlockerType,
+        consentBlockerUrl: consentInteractionAudit.consentBlockerUrl,
+        consentBlockerPageTitle: consentInteractionAudit.consentBlockerPageTitle,
+        consentBlockerTextSnippet: consentInteractionAudit.consentBlockerTextSnippet,
+        consentEvidencePassCount: consentInteractionAudit.consentEvidencePassCount,
+        consentFrictionDelta: consentInteractionAudit.consentFrictionDelta,
+        consentRedirectOrAuthRequired: consentInteractionAudit.consentRedirectOrAuthRequired,
+        consentOptInEvidenceLog: consentInteractionAudit.optInEvidenceLog,
+        consentOptOutEvidenceLog: consentInteractionAudit.optOutEvidenceLog,
+        consentPostRejectCookieCount: consentInteractionAudit.postReject.cookieCount,
+        consentPostRejectThirdPartyCookieCount: consentInteractionAudit.postReject.thirdPartyCookieCount,
+        consentPostRejectTrackerEvidenceUrls: consentInteractionAudit.postReject.trackerEvidenceUrls,
+        consentPostRejectTrackerVendorNames: consentInteractionAudit.postReject.trackerVendorNames,
+        consentAcceptNewTrackerVendorNames: consentInteractionAudit.acceptNewTrackerVendorNames,
+        consentPostAcceptCookieCount: consentInteractionAudit.postAccept.cookieCount,
+        consentPostAcceptThirdPartyCookieCount: consentInteractionAudit.postAccept.thirdPartyCookieCount,
+        consentPostAcceptTrackerEvidenceUrls: consentInteractionAudit.postAccept.trackerEvidenceUrls,
+        consentPostAcceptTrackerVendorNames: consentInteractionAudit.postAccept.trackerVendorNames
+      },
+      scanId: input.scanId
+    }).catch(async (error) => {
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "consent_audit_persist",
+        status: "error",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown consent audit persistence error"
+        }
+      });
+    });
+  }
   await persistBuildPhaseDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -3406,6 +3565,11 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     consentAcceptClickCount: consentInteractionAudit?.postAccept.clickCount ?? null,
     consentOptInClicks: consentInteractionAudit?.optInClicks ?? null,
     consentOptOutClicks: consentInteractionAudit?.optOutClicks ?? null,
+    consentBlockerType: consentInteractionAudit?.consentBlockerType ?? null,
+    consentBlockerUrl: consentInteractionAudit?.consentBlockerUrl ?? null,
+    consentBlockerPageTitle: consentInteractionAudit?.consentBlockerPageTitle ?? null,
+    consentBlockerTextSnippet: consentInteractionAudit?.consentBlockerTextSnippet ?? null,
+    consentEvidencePassCount: consentInteractionAudit?.consentEvidencePassCount ?? null,
     consentFrictionDelta: consentInteractionAudit?.consentFrictionDelta ?? null,
     consentRedirectOrAuthRequired: consentInteractionAudit?.consentRedirectOrAuthRequired ?? null,
     consentOptInEvidenceLog: consentInteractionAudit?.optInEvidenceLog ?? [],

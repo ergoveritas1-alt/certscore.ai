@@ -35,8 +35,80 @@ test("reports timed out scans with warning details", () => {
 
   assert.equal(summary.title, "Scan pass completed with warnings");
   assert.equal(summary.tone, "warning");
-  assert(summary.details.some((detail) => detail.includes("fell back to the HTTP/static path")));
+  assert(summary.details.some((detail) => detail.includes("Dynamic browser evidence was unavailable")));
+  assert(summary.details.some((detail) => detail.includes("Accessibility rule-level evidence was not retained")));
+  assert(summary.details.some((detail) => detail.includes("consent interaction audit did not complete") || detail.includes("reject/accept enforcement evidence may be incomplete")));
   assert(summary.details.some((detail) => detail.includes("Homepage navigation timed out")));
+});
+
+test("includes redirected browser location in timeout detail when available", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [
+      {
+        eventType: "runtime.browser_pass_diagnostic",
+        message: "Browser pass homepage_navigation timeout.",
+        metadataJson: {
+          currentUrl: "https://example.com/login",
+          homepageUrl: "https://example.com",
+          stage: "homepage_navigation",
+          status: "timeout"
+        }
+      }
+    ],
+    renderModeUsed: "http_only",
+    status: "completed",
+    timeoutFlag: true
+  });
+
+  assert(summary.details.some((detail) => detail.includes("Homepage navigation timed out before finishing while the browser was at https://example.com/login.")));
+});
+
+test("uses softer browser degradation copy when some runtime evidence was retained", () => {
+  const summary = deriveScanExecutionSummary({
+    accessibilityRuleCountTotal: 0,
+    consentAuditCompleted: false,
+    events: [],
+    renderModeUsed: "http_only",
+    status: "completed",
+    timeoutFlag: true,
+    trackerEvidenceUrlCount: 2
+  });
+
+  assert.equal(summary.title, "Scan pass completed with warnings");
+  assert(summary.details.some((detail) => detail.includes("mixes partial runtime evidence with static fallback evidence")));
+  assert(summary.details.every((detail) => !detail.includes("Dynamic browser evidence was unavailable for this run")));
+});
+
+test("suppresses recovered homepage timeout details after lightweight browser retry succeeds", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [
+      {
+        eventType: "runtime.browser_pass_diagnostic",
+        message: "Browser pass homepage_navigation timeout.",
+        metadataJson: {
+          homepageUrl: "https://example.com",
+          stage: "homepage_navigation",
+          status: "timeout"
+        }
+      },
+      {
+        eventType: "runtime.browser_pass_diagnostic",
+        message: "Browser pass homepage_navigation_recovery ok.",
+        metadataJson: {
+          homepageUrl: "https://example.com",
+          recoveryForStage: "homepage_navigation",
+          recoveryMode: "lighter_settle_retry",
+          stage: "homepage_navigation_recovery",
+          status: "ok"
+        }
+      }
+    ],
+    renderModeUsed: "browser",
+    status: "completed",
+    timeoutFlag: false
+  });
+
+  assert(summary.details.every((detail) => !detail.includes("Homepage navigation timed out before finishing")));
 });
 
 test("reports failed scans as errors", () => {
@@ -107,10 +179,8 @@ test("reports partial scans with missing target page details", () => {
 
   assert.equal(summary.title, "Scan pass completed with warnings");
   assert(summary.details.some((detail) => detail.includes("only 2 of 8 planned pages captured")));
-  assert(summary.details.some((detail) => detail.includes("accessibility statement (https://example.com/accessibility)")));
-  assert(summary.details.some((detail) => detail.includes("privacy policy (https://example.com/privacy)")));
-  assert(summary.details.some((detail) => detail.includes("terms of service (https://example.com/terms)")));
-  assert(summary.details.some((detail) => detail.includes("accessibility, privacy-policy, terms findings")));
+  assert(summary.details.some((detail) => detail.includes("could not retrieve standalone accessibility, privacy-policy, terms pages")));
+  assert(summary.details.some((detail) => detail.includes("findings may be understated if the pages exist at other URLs")));
 });
 
 test("suppresses resolved key page types from partial-scan 404 understatement warnings", () => {
@@ -249,9 +319,11 @@ test("suppresses resolved key page types from partial-scan 404 understatement wa
   const combined = summary.details.join("\n");
   assert.doesNotMatch(combined, /privacy policy \(https:\/\/www\.liveinternet\.ru\/privacybeleid\)/i);
   assert.doesNotMatch(combined, /terms of service \(https:\/\/www\.liveinternet\.ru\/gebruiksvoorwaarden\)/i);
-  assert.match(combined, /cookie policy \(http:\/\/wiki\.liveinternet\.ru\/ServisDnevnikovLiveInternet\/cookies\)/i);
-  assert.match(combined, /accessibility statement \(http:\/\/wiki\.liveinternet\.ru\/ServisDnevnikovLiveInternet\/accessibility\)/i);
-  assert.match(combined, /may understate cookie-policy, accessibility findings/i);
+  assert.doesNotMatch(combined, /These expected target pages returned 404 during bounded key-page fetch/i);
+  assert.match(
+    combined,
+    /could not retrieve standalone cookie-policy, accessibility pages within the bounded key-page fetch/i
+  );
   assert.doesNotMatch(combined, /may understate .*privacy-policy/i);
   assert.doesNotMatch(combined, /may understate .*terms/i);
 });
