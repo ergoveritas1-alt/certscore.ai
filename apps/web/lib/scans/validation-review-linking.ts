@@ -25,22 +25,49 @@ export type ScanValidationFinding = {
 
 const SIGNAL_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "accessibility.wcag_error_count_total": ["accessibility.wcag_errors_detected"],
+  "accessibility.litigation_risk_score": ["scan_snapshot.accessibility.accessibility_risk_score"],
   "context.session_replay_without_disclosure_detected": ["privacy.session_replay_without_disclosure_detected"],
   "disclosure.disclosure_language_missing_detected": ["disclosure.disclosure_language_missing_detected"],
+  "disclosure.policy_runtime_disclosure_likely_obstructed": ["scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"],
   "disclosure.privacy_policy_limited": ["disclosure.privacy_policy_limited"],
+  "privacy.policy_runtime_functional_misalignment_detected": ["scan_signal.privacy.policy_runtime_functional_misalignment_detected"],
   "privacy.consent_reject_persisted_tracker_vendors": ["privacy.trackers_persist_after_reject_detected"],
   "privacy.preconsent_tracking_detected": ["privacy.trackers_before_consent_detected"],
   "privacy.preconsent_violation_count": ["privacy.trackers_before_consent_detected"],
   "privacy.reject_control_missing_detected": ["privacy.reject_control_missing_detected"],
-  "privacy.trackers_before_consent_detected": ["privacy.trackers_before_consent_detected"]
+  "privacy.trackers_before_consent_detected": ["privacy.trackers_before_consent_detected"],
+  "privacy.user_rights_friction_score": ["scan_signal.privacy.user_rights_friction_score"]
 };
 
 const TITLE_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "automated accessibility issues detected": ["accessibility.wcag_errors_detected"],
+  "accessibility risk score": ["scan_snapshot.accessibility.accessibility_risk_score"],
+  "critical user-rights fulfillment friction": ["scan_signal.privacy.user_rights_friction_score"],
+  "disclosure likely obstructed": ["scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"],
   "disclosure language missing": ["disclosure.disclosure_language_missing_detected"],
+  "functional misalignment": ["scan_signal.privacy.policy_runtime_functional_misalignment_detected"],
+  "high-confidence functional misalignment": ["scan_signal.privacy.policy_runtime_functional_misalignment_detected"],
   "low-confidence extraction": ["section_review.low_confidence_critical_fields", "scan_report_review.low_confidence_critical_fields"],
-  "low-confidence extraction privacy policy": ["section_review.low_confidence_critical_fields", "scan_report_review.low_confidence_critical_fields"],
-  "low-confidence extraction terms of service": ["section_review.low_confidence_critical_fields", "scan_report_review.low_confidence_critical_fields"],
+  "low-confidence extraction cookie policy": [
+    "policy_review.low_confidence_critical_fields.cookie_policy",
+    "section_review.low_confidence_critical_fields",
+    "scan_report_review.low_confidence_critical_fields"
+  ],
+  "low-confidence extraction privacy policy": [
+    "policy_review.low_confidence_critical_fields.privacy_policy",
+    "section_review.low_confidence_critical_fields",
+    "scan_report_review.low_confidence_critical_fields"
+  ],
+  "low-confidence extraction terms of service": [
+    "policy_review.low_confidence_critical_fields.terms_of_service",
+    "section_review.low_confidence_critical_fields",
+    "scan_report_review.low_confidence_critical_fields"
+  ],
+  "low-confidence extraction tos": [
+    "policy_review.low_confidence_critical_fields.terms_of_service",
+    "section_review.low_confidence_critical_fields",
+    "scan_report_review.low_confidence_critical_fields"
+  ],
   "low-confidence policy extraction": ["section_review.low_confidence_critical_fields", "scan_report_review.low_confidence_critical_fields"],
   "possible undisclosed session replay": ["privacy.session_replay_without_disclosure_detected"],
   "pre-consent tracking incidents detected": ["privacy.trackers_before_consent_detected"],
@@ -76,6 +103,9 @@ export function getValidationMatchKeysForReviewReason(reason: string) {
       return ["scan_report_review.missing_dsar_high_exposure"];
     case "low_confidence_critical_fields":
       return [
+        "policy_review.low_confidence_critical_fields.cookie_policy",
+        "policy_review.low_confidence_critical_fields.privacy_policy",
+        "policy_review.low_confidence_critical_fields.terms_of_service",
         "section_review.low_confidence_critical_fields",
         "scan_report_review.low_confidence_critical_fields"
       ];

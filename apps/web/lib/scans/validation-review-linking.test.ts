@@ -62,6 +62,7 @@ test("getValidationMatchKeysForTitle maps low-confidence extraction title varian
     "scan_report_review.low_confidence_critical_fields"
   ]);
   assert.deepEqual(getValidationMatchKeysForTitle("Low-confidence extraction Privacy Policy"), [
+    "policy_review.low_confidence_critical_fields.privacy_policy",
     "section_review.low_confidence_critical_fields",
     "scan_report_review.low_confidence_critical_fields"
   ]);
@@ -69,7 +70,25 @@ test("getValidationMatchKeysForTitle maps low-confidence extraction title varian
 
 test("getValidationMatchKeysForReviewReason maps scan review reasons directly to validation rule keys", () => {
   assert.deepEqual(getValidationMatchKeysForReviewReason("low_confidence_critical_fields"), [
+    "policy_review.low_confidence_critical_fields.cookie_policy",
+    "policy_review.low_confidence_critical_fields.privacy_policy",
+    "policy_review.low_confidence_critical_fields.terms_of_service",
     "section_review.low_confidence_critical_fields",
     "scan_report_review.low_confidence_critical_fields"
+  ]);
+});
+
+test("getValidationMatchKeysForTitle maps current scan-signal and snapshot finding titles", () => {
+  assert.deepEqual(getValidationMatchKeysForTitle("Functional misalignment"), [
+    "scan_signal.privacy.policy_runtime_functional_misalignment_detected"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Critical user-rights fulfillment friction"), [
+    "scan_signal.privacy.user_rights_friction_score"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Disclosure likely obstructed"), [
+    "scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Accessibility risk score"), [
+    "scan_snapshot.accessibility.accessibility_risk_score"
   ]);
 });
