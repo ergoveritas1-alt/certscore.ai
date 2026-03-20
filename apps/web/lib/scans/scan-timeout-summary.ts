@@ -140,6 +140,23 @@ function describeDiscoverySource(source: string | null) {
   }
 }
 
+function toIssueFamilyLabel(pageType: string) {
+  switch (pageType) {
+    case "privacy_policy":
+      return "privacy-policy";
+    case "terms_of_service":
+      return "terms";
+    case "cookie_policy":
+      return "cookie-policy";
+    case "accessibility_statement":
+      return "accessibility";
+    case "contact":
+      return "contact-page";
+    default:
+      return humanizeDiagnosticName(pageType);
+  }
+}
+
 function getKeyPageDiscoverySummaries(summary: unknown) {
   if (!summary || typeof summary !== "object") {
     return [] as Array<{
@@ -180,7 +197,11 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   const timeoutSummary = deriveScanTimeoutSummary(input);
   const details = new Set<string>(timeoutSummary?.details ?? []);
   const events = input.events ?? [];
-  const missingTargetPages: string[] = [];
+  const missingTargetPages: Array<{ label: string; pageType: string | null }> = [];
+  const keyPageSummaries = getKeyPageDiscoverySummaries(input.keyPageDiscoverySummary);
+  const resolvedPageTypes = new Set(
+    keyPageSummaries.filter((summary) => Boolean(summary.successfulUrl)).map((summary) => summary.pageType)
+  );
   let partialScanDetected = false;
   let partialScanPageCounts: { requested: number | null; scanned: number | null } = {
     requested: getFiniteNumber(input.pagesRequested),
@@ -209,12 +230,13 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
       ) &&
       getEventString(event.metadataJson, "fetchStatus") === "not_found"
     ) {
-      missingTargetPages.push(
-        formatPageLabel(
-          getEventString(event.metadataJson, "pageType"),
-          getEventString(event.metadataJson, "targetUrl") ?? getEventString(event.metadataJson, "finalUrl")
-        )
-      );
+      const pageType = getEventString(event.metadataJson, "pageType");
+      if (!pageType || !resolvedPageTypes.has(pageType)) {
+        missingTargetPages.push({
+          label: formatPageLabel(pageType, getEventString(event.metadataJson, "targetUrl") ?? getEventString(event.metadataJson, "finalUrl")),
+          pageType
+        });
+      }
       continue;
     }
 
@@ -259,11 +281,24 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
     }
 
     if (missingTargetPages.length > 0) {
-      const uniqueMissingPages = [...new Set(missingTargetPages)];
+      const uniqueMissingPages = [...new Set(missingTargetPages.map((page) => page.label))];
+      const unresolvedIssueFamilies = [
+        ...new Set(
+          missingTargetPages
+            .map((page) => (page.pageType ? toIssueFamilyLabel(page.pageType) : null))
+            .filter((value): value is string => Boolean(value))
+        )
+      ];
       details.add(`These expected target pages returned 404 during bounded key-page fetch: ${uniqueMissingPages.join("; ")}.`);
-      details.add(
-        "That means issue detection may understate privacy-policy, legal-page, cookie-policy, terms, accessibility, and contact-page findings because those target pages were unavailable at their discovered URLs."
-      );
+      if (unresolvedIssueFamilies.length > 0) {
+        details.add(
+          `That means issue detection may understate ${unresolvedIssueFamilies.join(", ")} findings because those target pages were unavailable at their discovered URLs.`
+        );
+      } else {
+        details.add(
+          "That means some issue families may be understated because not all planned follow-up pages were successfully fetched and analyzed."
+        );
+      }
     } else {
       details.add(
         "That means some issue families may be understated because not all planned follow-up pages were successfully fetched and analyzed."
@@ -271,7 +306,7 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
     }
   }
 
-  for (const pageSummary of getKeyPageDiscoverySummaries(input.keyPageDiscoverySummary)) {
+  for (const pageSummary of keyPageSummaries) {
     if (pageSummary.successfulUrl) {
       if (pageSummary.successfulHostRelation === "same_brand_subdomain") {
         const pageLabel = humanizeDiagnosticName(pageSummary.pageType);

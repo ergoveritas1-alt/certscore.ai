@@ -110,7 +110,150 @@ test("reports partial scans with missing target page details", () => {
   assert(summary.details.some((detail) => detail.includes("accessibility statement (https://example.com/accessibility)")));
   assert(summary.details.some((detail) => detail.includes("privacy policy (https://example.com/privacy)")));
   assert(summary.details.some((detail) => detail.includes("terms of service (https://example.com/terms)")));
-  assert(summary.details.some((detail) => detail.includes("privacy-policy, legal-page, cookie-policy, terms, accessibility, and contact-page findings")));
+  assert(summary.details.some((detail) => detail.includes("accessibility, privacy-policy, terms findings")));
+});
+
+test("suppresses resolved key page types from partial-scan 404 understatement warnings", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Build phase prefetch_fetch_target ok.",
+        metadataJson: {
+          phase: "prefetch_fetch_target",
+          fetchStatus: "not_found",
+          finalUrl: "https://www.liveinternet.ru/privacybeleid",
+          pageType: "privacy_policy",
+          status: "ok",
+          targetUrl: "https://www.liveinternet.ru/privacybeleid"
+        }
+      },
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Build phase prefetch_fetch_target ok.",
+        metadataJson: {
+          phase: "prefetch_fetch_target",
+          fetchStatus: "not_found",
+          finalUrl: "https://www.liveinternet.ru/gebruiksvoorwaarden",
+          pageType: "terms_of_service",
+          status: "ok",
+          targetUrl: "https://www.liveinternet.ru/gebruiksvoorwaarden"
+        }
+      },
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Build phase prefetch_fetch_target ok.",
+        metadataJson: {
+          phase: "prefetch_fetch_target",
+          fetchStatus: "not_found",
+          finalUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/cookies",
+          pageType: "cookie_policy",
+          status: "ok",
+          targetUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/cookies"
+        }
+      },
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Build phase prefetch_fetch_target ok.",
+        metadataJson: {
+          phase: "prefetch_fetch_target",
+          fetchStatus: "not_found",
+          finalUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/accessibility",
+          pageType: "accessibility_statement",
+          status: "ok",
+          targetUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/accessibility"
+        }
+      },
+      {
+        eventType: "crawl.page_discovery_completed",
+        message: "Stages 1-6 completed.",
+        metadataJson: {
+          pagesScanned: 4,
+          partialScan: true
+        }
+      }
+    ],
+    keyPageDiscoverySummary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en", "nl", "ru"],
+      pageSummaries: [
+        {
+          attemptCount: 1,
+          attemptedUrls: ["https://www.liveinternet.ru/privacybeleid"],
+          bestDiscoverySource: "same_brand_subdomain",
+          guessedOnly: false,
+          pageType: "privacy_policy",
+          stopReason: "covered",
+          successfulUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/PrivacyPolicy",
+          successfulHostRelation: "same_brand_subdomain",
+          surfaceDetected: true
+        },
+        {
+          attemptCount: 2,
+          attemptedUrls: [
+            "https://www.liveinternet.ru/gebruiksvoorwaarden",
+            "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/Pravila"
+          ],
+          bestDiscoverySource: "same_brand_subdomain",
+          guessedOnly: false,
+          pageType: "terms_of_service",
+          stopReason: "covered",
+          successfulUrl: "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/Pravila",
+          successfulHostRelation: "same_brand_subdomain",
+          surfaceDetected: true
+        },
+        {
+          attemptCount: 1,
+          attemptedUrls: ["http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/cookies"],
+          bestDiscoverySource: "same_brand_subdomain",
+          guessedOnly: false,
+          pageType: "cookie_policy",
+          stopReason: "all_attempts_failed",
+          successfulUrl: null,
+          successfulHostRelation: null,
+          surfaceDetected: true
+        },
+        {
+          attemptCount: 1,
+          attemptedUrls: ["http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/accessibility"],
+          bestDiscoverySource: "guessed_slug",
+          guessedOnly: false,
+          pageType: "accessibility_statement",
+          stopReason: "all_attempts_failed",
+          successfulUrl: null,
+          successfulHostRelation: null,
+          surfaceDetected: true
+        }
+      ],
+      sameBrandSubdomainHostsInspected: ["https://wiki.liveinternet.ru/"],
+      sitemapFilesFetched: [],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: []
+    },
+    pagesRequested: 8,
+    pagesScanned: 4,
+    status: "completed",
+    timeoutFlag: false
+  });
+
+  const combined = summary.details.join("\n");
+  assert.doesNotMatch(combined, /privacy policy \(https:\/\/www\.liveinternet\.ru\/privacybeleid\)/i);
+  assert.doesNotMatch(combined, /terms of service \(https:\/\/www\.liveinternet\.ru\/gebruiksvoorwaarden\)/i);
+  assert.match(combined, /cookie policy \(http:\/\/wiki\.liveinternet\.ru\/ServisDnevnikovLiveInternet\/cookies\)/i);
+  assert.match(combined, /accessibility statement \(http:\/\/wiki\.liveinternet\.ru\/ServisDnevnikovLiveInternet\/accessibility\)/i);
+  assert.match(combined, /may understate cookie-policy, accessibility findings/i);
+  assert.doesNotMatch(combined, /may understate .*privacy-policy/i);
+  assert.doesNotMatch(combined, /may understate .*terms/i);
 });
 
 test("reports provenance-aware key page discovery gaps", () => {
