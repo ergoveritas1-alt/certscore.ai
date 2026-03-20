@@ -42,9 +42,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/"
       },
       suggestedFix:
-        "Modify your Tag Manager to block the execution of analytics and advertising scripts until a positive Accept signal is received. Implement Google Consent Mode v2 so any preliminary initialization or measurement pings remain in a denied state by default during the pre-consent phase.",
+        "Refactor the Tag Manager configuration to ensure that all non-essential analytics and advertising scripts remain in a Denied state by default. Implement a technical gate that only initializes these scripts after a positive Accept signal is broadcast by the Consent Management Platform. Specifically, adopt Google Consent Mode v2 to manage tag behavior dynamically based on user interaction.",
       whyThisMatters:
-        "The site transmits unique identifiers and behavioral metadata to analytics or advertising vendors immediately upon page load. This fire-on-load behavior bypasses GDPR and CCPA requirements by collecting personal data before a visitor can provide or deny consent."
+        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. This fire-on-load behavior bypasses GDPR and CCPA requirements by initializing data collection, represented here by a detected third-party cookie, before the visitor can exercise a choice via the consent interface."
     },
     evidenceAwareOverrides: [
       {

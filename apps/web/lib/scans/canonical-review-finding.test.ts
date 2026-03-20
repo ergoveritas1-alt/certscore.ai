@@ -47,8 +47,14 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
   );
 
   assert.equal(presentation.findingName, "Trackers observed before consent");
-  assert.match(presentation.whyThisMatters, /before a visitor can provide or deny consent/i);
-  assert.match(presentation.suggestedFix, /Consent Mode v2|consent/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /Pre-consent Tracking signal|third-party vendors immediately upon page load|third-party cookie|consent interface/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Denied state by default|positive Accept signal|Consent Management Platform|Google Consent Mode v2/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.ok(Number(presentation.confidenceScore) >= 0.6);
 });
