@@ -690,6 +690,35 @@ function getSensitivePayloadViolations(evidence: Record<string, unknown> | null 
     .filter((entry) => entry.requestUrl.length > 0);
 }
 
+function getConsentFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const optInClicks =
+    getNumericEvidence(evidence, ["optInClicks", "consentOptInClicks", "consent_accept_click_count"], /accept click count/i) ??
+    null;
+  const optOutClicks =
+    getNumericEvidence(evidence, ["optOutClicks", "consentOptOutClicks", "consent_reject_click_count"], /reject click count/i) ??
+    null;
+  const frictionDelta = getNumericEvidence(
+    evidence,
+    ["frictionDelta", "consentFrictionDelta"],
+    /consent friction delta|friction delta/i
+  );
+  const redirectOrAuthRequired =
+    evidence?.redirectOrAuthRequired === true ||
+    evidence?.consentRedirectOrAuthRequired === true ||
+    getSupportingSignalValue(evidence, /redirect or auth required/i) === true;
+  const runtimeEvidence = getStringArrayEvidence(evidence, ["runtimeEvidence"]);
+
+  return {
+    frictionDelta:
+      frictionDelta ??
+      (typeof optInClicks === "number" && typeof optOutClicks === "number" ? optOutClicks - optInClicks : null),
+    optInClicks,
+    optOutClicks,
+    redirectOrAuthRequired,
+    runtimeEvidence
+  };
+}
+
 function computeSupportStrength(input: {
   evidence?: Record<string, unknown> | null;
   haystack: string;
@@ -1038,7 +1067,45 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     }
   }
 
+  if (/functional misalignment|rights-fulfillment friction|user-rights fulfillment friction|friction_score/i.test(input.haystack)) {
+    const frictionEvidence = getConsentFrictionEvidence(input.evidence);
+    const hasConcreteFrictionEvidence =
+      frictionEvidence.redirectOrAuthRequired ||
+      (typeof frictionEvidence.optInClicks === "number" &&
+        typeof frictionEvidence.optOutClicks === "number" &&
+        typeof frictionEvidence.frictionDelta === "number");
+
+    if (hasConcreteFrictionEvidence) {
+      if (frictionEvidence.redirectOrAuthRequired) {
+        presentation.whyThisMatters =
+          "The scan recorded an opt-out path that triggered a redirect or authentication barrier during the consent workflow. That is strong runtime evidence of functional asymmetry because the user had to clear an additional hurdle to refuse or withdraw consent.";
+        presentation.suggestedFix =
+          "Remove the redirect or authentication barrier from the basic opt-out path. Refusing or withdrawing consent should be accessible directly from the consent surface without requiring an account, a secondary login, or navigation away from the current page.";
+        presentation.confidenceScore = "0.95";
+      } else if ((frictionEvidence.frictionDelta ?? 0) > 0) {
+        presentation.whyThisMatters =
+          `The scan completed both sides of the consent flow and found that opt-in required ${frictionEvidence.optInClicks} click${frictionEvidence.optInClicks === 1 ? "" : "s"}, while opt-out required ${frictionEvidence.optOutClicks} click${frictionEvidence.optOutClicks === 1 ? "" : "s"}. That click-distance gap is concrete runtime evidence of asymmetry in the site's privacy-choice workflow.`;
+        presentation.suggestedFix =
+          "Refactor the consent UI so the opt-out path is as direct as the opt-in path. If an accept button is available immediately, the reject or equivalent privacy-choice path should be reachable with the same number of clicks and without secondary hurdles.";
+        presentation.confidenceScore = (frictionEvidence.frictionDelta ?? 0) >= 2 ? "0.95" : "0.85";
+      } else {
+        presentation.whyThisMatters =
+          "The scan completed both sides of the consent flow and retained click-path evidence, but it did not confirm a material asymmetry. This finding still merits review because the detector fired, yet the runtime evidence was not strong enough to prove friction.";
+        presentation.suggestedFix =
+          "Manually replay the consent and withdrawal paths on the live site and confirm whether any additional barriers appear outside the bounded automated flow.";
+        presentation.confidenceScore = "0.4";
+      }
+    } else {
+      presentation.whyThisMatters =
+        "An automated detector flagged a potential mismatch between the site's stated privacy-rights process and its observed runtime behavior. The detector has now been paired with a bounded click-path audit, but the retained traversal did not conclusively prove asymmetric friction.";
+      presentation.suggestedFix =
+        "Manual review recommended: navigate the consent path and the rights-request path on the live site, then document click counts, authentication requirements, and any barriers not disclosed in the privacy policy.";
+      presentation.confidenceScore = "0.35";
+    }
+  }
+
   if (/high user-rights fulfillment friction/i.test(input.haystack)) {
+    const frictionEvidence = getConsentFrictionEvidence(input.evidence);
     const signalValue =
       typeof input.evidence?.signalValue === "number"
         ? input.evidence.signalValue
@@ -1046,7 +1113,12 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
           ? input.evidence.value
           : null;
 
-    if (signalValue !== null && signalValue >= 75) {
+    if (
+      !frictionEvidence.redirectOrAuthRequired &&
+      !(typeof frictionEvidence.frictionDelta === "number" && frictionEvidence.frictionDelta > 0) &&
+      signalValue !== null &&
+      signalValue >= 75
+    ) {
       presentation.whyThisMatters =
         `The automated scan confirmed a high friction score of ${signalValue}, signaling an objective technical barrier in the user-rights fulfillment path. This indicates a Functional Asymmetry where the effort required to revoke data permissions or exercise privacy rights is significantly higher than the initial data-ingestion path, which is classified as a technical dark pattern under modern privacy regulations.`;
       if (signalValue === 75) {

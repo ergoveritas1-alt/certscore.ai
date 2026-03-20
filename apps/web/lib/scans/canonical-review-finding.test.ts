@@ -298,10 +298,12 @@ test("uses strong copy and high evidence strength for functional misalignment", 
         ruleKey: "policy_runtime.functional_misalignment",
         title: "High-confidence functional misalignment",
         evidence: {
-          pageUrl: "https://menardc.com/privacy",
-          runtimeEvidence: ["privacy request flow requires account creation"],
-          signalValue: 100,
-          supportingSignals: ["rights friction maxed"]
+          frictionDelta: 2,
+          optInClicks: 1,
+          optOutClicks: 3,
+          runtimeEvidence: ["opt-in step 1: Accept all", "opt-out step 1: Manage preferences", "opt-out step 3: Save choices"],
+          signalValue: 95,
+          supportingSignals: ["rights friction confirmed"]
         }
       }),
       observedValue: "Privacy Policy",
@@ -314,14 +316,14 @@ test("uses strong copy and high evidence strength for functional misalignment", 
   assert.equal(presentation.findingName, "Functional misalignment");
   assert.match(
     presentation.whyThisMatters,
-    /definitive functional misalignment|asymmetric user experience|technical dark pattern|CCPA and GDPR exposure/i
+    /opt-in required 1 click|opt-out required 3 clicks|concrete runtime evidence of asymmetry/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Functional Symmetry|same number of clicks|secondary authentication|account-creation hurdles/i
+    /opt-out path is as direct as the opt-in path|same number of clicks|secondary hurdles/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
-  assert.ok(Number(presentation.confidenceScore) >= 0.95);
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
 test("uses max-strength score and hard-block copy for critical user-rights fulfillment friction", () => {
@@ -332,7 +334,8 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
         ruleKey: "privacy.friction_score",
         title: "Critical user-rights fulfillment friction",
         evidence: {
-          runtimeEvidence: ["delete request path redirects to login"],
+          consentRedirectOrAuthRequired: true,
+          runtimeEvidence: ["opt-out step 1: Manage preferences", "redirect to login wall observed"],
           signalValue: 100,
           supportingSignals: ["hard block observed"]
         }
@@ -347,14 +350,14 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
   assert.equal(presentation.findingName, "Critical user-rights fulfillment friction");
   assert.match(
     presentation.whyThisMatters,
-    /friction score of 100|technical obstruction|lack of functional parity|non-linear user journey|automated verification of compliance controls/i
+    /redirect or authentication barrier|strong runtime evidence of functional asymmetry|additional hurdle/i
   );
   assert.match(
     presentation.suggestedFix,
-    /technical parity|same number of click-events as the initial consent|mandatory account creation|circular redirect logic/i
+    /Remove the redirect or authentication barrier|without requiring an account|without requiring.*login/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
-  assert.equal(presentation.confidenceScore, "1.0");
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
 test("uses strong copy and high confidence for high user-rights fulfillment friction", () => {
@@ -365,7 +368,10 @@ test("uses strong copy and high confidence for high user-rights fulfillment fric
         ruleKey: "privacy.friction_score",
         title: "High user-rights fulfillment friction",
         evidence: {
-          runtimeEvidence: ["privacy-request path requires additional steps"],
+          frictionDelta: 1,
+          optInClicks: 1,
+          optOutClicks: 2,
+          runtimeEvidence: ["opt-in step 1: Accept all", "opt-out step 1: Manage preferences", "opt-out step 2: Save choices"],
           signalValue: 75,
           supportingSignals: ["high friction observed"]
         }
@@ -380,14 +386,45 @@ test("uses strong copy and high confidence for high user-rights fulfillment fric
   assert.equal(presentation.findingName, "High user-rights fulfillment friction");
   assert.match(
     presentation.whyThisMatters,
-    /high friction score of 75|objective technical barrier|Functional Asymmetry|technical dark pattern/i
+    /opt-in required 1 click|opt-out required 2 clicks|concrete runtime evidence of asymmetry/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Functional Symmetry|opt-in and opt-out workflows|same number of clicks as the initial consent|forced account creation|hidden navigation paths/i
+    /opt-out path is as direct as the opt-in path|same number of clicks|secondary hurdles/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
-  assert.equal(presentation.confidenceScore, "0.7");
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("keeps rights-friction findings inconclusive when runtime symmetry evidence is incomplete", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "fr-3",
+        ruleKey: "privacy.friction_score",
+        title: "Potential rights-fulfillment friction",
+        evidence: {
+          runtimeEvidence: ["detector fired"],
+          signalValue: 35,
+          supportingSignals: ["consent symmetry detector fired"]
+        }
+      }),
+      observedValue: "35",
+      severity: "medium",
+      title: "Potential rights-fulfillment friction"
+    },
+    []
+  );
+
+  assert.match(
+    presentation.whyThisMatters,
+    /potential mismatch|bounded click-path audit|did not conclusively prove asymmetric friction/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /manual review recommended|document click counts|authentication requirements/i
+  );
+  assert.equal(presentation.confidenceScore, "0.35");
 });
 
 test("uses strong accessibility copy and high confidence for confirmed WCAG issues", () => {

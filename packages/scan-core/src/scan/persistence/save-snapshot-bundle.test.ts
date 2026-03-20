@@ -98,6 +98,42 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentRejectNewTrackerVendorNames: [],
       consentRejectClickCount: 1,
       consentAcceptClickCount: 0,
+      consentOptInClicks: 1,
+      consentOptOutClicks: 3,
+      consentFrictionDelta: 2,
+      consentRedirectOrAuthRequired: false,
+      consentOptInEvidenceLog: [
+        {
+          action: "accept",
+          selectorHint: "button#accept",
+          stepIndex: 1,
+          text: "Accept all",
+          urlAfterClick: "https://example.com/"
+        }
+      ],
+      consentOptOutEvidenceLog: [
+        {
+          action: "preferences",
+          selectorHint: "button#manage",
+          stepIndex: 1,
+          text: "Manage preferences",
+          urlAfterClick: "https://example.com/"
+        },
+        {
+          action: "toggle",
+          selectorHint: "input#analytics",
+          stepIndex: 2,
+          text: "Analytics cookies",
+          urlAfterClick: "https://example.com/"
+        },
+        {
+          action: "save",
+          selectorHint: "button#save",
+          stepIndex: 3,
+          text: "Save choices",
+          urlAfterClick: "https://example.com/"
+        }
+      ],
       consentPostRejectCookieCount: 3,
       consentPostRejectThirdPartyCookieCount: 1,
       consentPostRejectTrackerEvidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
@@ -182,6 +218,42 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_reject_new_tracker_vendor_names: [],
     consent_reject_click_count: 1,
     consent_accept_click_count: 0,
+    consent_opt_in_clicks: 1,
+    consent_opt_out_clicks: 3,
+    consent_friction_delta: 2,
+    consent_redirect_or_auth_required: false,
+    consent_opt_in_evidence_log: [
+      {
+        action: "accept",
+        selectorHint: "button#accept",
+        stepIndex: 1,
+        text: "Accept all",
+        urlAfterClick: "https://example.com/"
+      }
+    ],
+    consent_opt_out_evidence_log: [
+      {
+        action: "preferences",
+        selectorHint: "button#manage",
+        stepIndex: 1,
+        text: "Manage preferences",
+        urlAfterClick: "https://example.com/"
+      },
+      {
+        action: "toggle",
+        selectorHint: "input#analytics",
+        stepIndex: 2,
+        text: "Analytics cookies",
+        urlAfterClick: "https://example.com/"
+      },
+      {
+        action: "save",
+        selectorHint: "button#save",
+        stepIndex: 3,
+        text: "Save choices",
+        urlAfterClick: "https://example.com/"
+      }
+    ],
     consent_post_reject_cookie_count: 3,
     consent_post_reject_third_party_cookie_count: 1,
     consent_post_reject_tracker_evidence_urls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],

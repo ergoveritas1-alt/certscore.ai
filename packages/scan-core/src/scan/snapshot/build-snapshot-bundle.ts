@@ -3404,6 +3404,12 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     consentRejectNewTrackerVendorNames: consentInteractionAudit?.rejectNewTrackerVendorNames ?? [],
     consentRejectClickCount: consentInteractionAudit?.postReject.clickCount ?? null,
     consentAcceptClickCount: consentInteractionAudit?.postAccept.clickCount ?? null,
+    consentOptInClicks: consentInteractionAudit?.optInClicks ?? null,
+    consentOptOutClicks: consentInteractionAudit?.optOutClicks ?? null,
+    consentFrictionDelta: consentInteractionAudit?.consentFrictionDelta ?? null,
+    consentRedirectOrAuthRequired: consentInteractionAudit?.consentRedirectOrAuthRequired ?? null,
+    consentOptInEvidenceLog: consentInteractionAudit?.optInEvidenceLog ?? [],
+    consentOptOutEvidenceLog: consentInteractionAudit?.optOutEvidenceLog ?? [],
     consentPostRejectCookieCount: consentInteractionAudit?.postReject.cookieCount ?? null,
     consentPostRejectThirdPartyCookieCount: consentInteractionAudit?.postReject.thirdPartyCookieCount ?? null,
     consentPostRejectTrackerEvidenceUrls: consentInteractionAudit?.postReject.trackerEvidenceUrls ?? [],
@@ -3894,12 +3900,19 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       (partiallyBuiltSnapshot.paymentCardInputPresent ? 18 : 0) -
       (partiallyBuiltSnapshot.highSensitivityDataCollectionDetected ? 20 : 0)
   );
-  partiallyBuiltSnapshot.userRightsFrictionScore =
+  const baselineRightsFrictionScore =
     (partiallyBuiltSnapshot.privacyContactChannelType === "none" ? 45 : 0) +
     (partiallyBuiltSnapshot.privacyRequestFormPresent ? 0 : 10) +
     (partiallyBuiltSnapshot.dataAccessRequestPresent ? 0 : 15) +
     (partiallyBuiltSnapshot.dataDeletionRequestPresent ? 0 : 15) +
     (partiallyBuiltSnapshot.consentWithdrawalMechanismPresent ? 0 : 15);
+  const runtimeRightsFrictionScore =
+    runtimeArtifacts.consentRedirectOrAuthRequired === true
+      ? 100
+      : typeof runtimeArtifacts.consentFrictionDelta === "number" && runtimeArtifacts.consentFrictionDelta > 0
+        ? Math.min(100, 65 + runtimeArtifacts.consentFrictionDelta * 15)
+        : 0;
+  partiallyBuiltSnapshot.userRightsFrictionScore = Math.max(baselineRightsFrictionScore, runtimeRightsFrictionScore);
   partiallyBuiltSnapshot.consentMaturityScore = Math.max(
     0,
     Math.min(
@@ -4256,23 +4269,23 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       })
     );
   }
-  if ((runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
+  if ((runtimeArtifacts.consentOptOutClicks ?? runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
     compatibilitySignals.push(
       toTaxonomySignal({
         category: "privacy",
         key: "privacy.consent_reject_click_count",
         label: "Reject click count",
-        value: runtimeArtifacts.consentRejectClickCount ?? 0
+        value: runtimeArtifacts.consentOptOutClicks ?? runtimeArtifacts.consentRejectClickCount ?? 0
       })
     );
   }
-  if ((runtimeArtifacts.consentAcceptClickCount ?? 0) > 0) {
+  if ((runtimeArtifacts.consentOptInClicks ?? runtimeArtifacts.consentAcceptClickCount ?? 0) > 0) {
     compatibilitySignals.push(
       toTaxonomySignal({
         category: "privacy",
         key: "privacy.consent_accept_click_count",
         label: "Accept click count",
-        value: runtimeArtifacts.consentAcceptClickCount ?? 0
+        value: runtimeArtifacts.consentOptInClicks ?? runtimeArtifacts.consentAcceptClickCount ?? 0
       })
     );
   }
@@ -4289,7 +4302,9 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     reviewReasonsByEnrichmentId.set(enrichmentId, existing);
   }
 
-  let functionalMisalignmentDetected = false;
+  let functionalMisalignmentDetected =
+    runtimeArtifacts.consentRedirectOrAuthRequired === true ||
+    (typeof runtimeArtifacts.consentFrictionDelta === "number" && runtimeArtifacts.consentFrictionDelta > 0);
   let missingTechnicalDisclosureDetected = false;
   let disclosureLikelyObstructedDetected = false;
 

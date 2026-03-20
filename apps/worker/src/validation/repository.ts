@@ -110,10 +110,30 @@ type ScanSnapshotRow = {
 };
 
 type ScanRuntimeArtifactsRow = {
+  consent_accept_click_count?: number | null;
+  consent_friction_delta?: number | null;
+  consent_opt_in_clicks?: number | null;
+  consent_opt_in_evidence_log?: Array<{
+    action?: string | null;
+    selectorHint?: string | null;
+    stepIndex?: number | null;
+    text?: string | null;
+    urlAfterClick?: string | null;
+  }> | null;
+  consent_opt_out_clicks?: number | null;
+  consent_opt_out_evidence_log?: Array<{
+    action?: string | null;
+    selectorHint?: string | null;
+    stepIndex?: number | null;
+    text?: string | null;
+    urlAfterClick?: string | null;
+  }> | null;
   consent_post_reject_tracker_evidence_urls: string[] | null;
   consent_post_reject_tracker_vendor_names: string[] | null;
+  consent_redirect_or_auth_required?: boolean | null;
   consent_reject_persisted_tracker_vendor_names: string[] | null;
   consent_reject_reduced_tracking: boolean | null;
+  consent_reject_click_count?: number | null;
   consent_withdrawal_mechanism_present?: boolean | null;
   initial_cookie_count?: number | null;
   sensitive_payload_violations?: Array<{
@@ -421,6 +441,24 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     severity: "medium",
     subtype: "sensitive_data_collection",
     title: "Potential high-sensitivity data collection risk"
+  },
+  "privacy.policy_runtime_functional_misalignment_detected": {
+    buildEvidence: buildRightsFrictionEvidence,
+    category: "privacy",
+    description: "Observed runtime consent flows may impose more friction on opt-out than opt-in.",
+    ruleKey: "scan_signal.privacy.policy_runtime_functional_misalignment_detected",
+    severity: "high",
+    subtype: "scan_signal_review",
+    title: "High-confidence functional misalignment"
+  },
+  "privacy.user_rights_friction_score": {
+    buildEvidence: buildRightsFrictionEvidence,
+    category: "privacy",
+    description: "Observed runtime consent flows may impose more friction on opt-out than opt-in.",
+    ruleKey: "scan_signal.privacy.user_rights_friction_score",
+    severity: "high",
+    subtype: "scan_signal_review",
+    title: "Potential rights-fulfillment friction"
   },
   "accessibility.wcag_error_count_total": {
     buildEvidence: buildAccessibilityEvidence,
@@ -1073,6 +1111,147 @@ function buildHighSensitivityPayloadEvidence(row: ScanSignalRow, context: Valida
         value: row.signal_value_json
       }
     ]
+  };
+}
+
+function normalizeConsentEvidenceLog(
+  value: ScanRuntimeArtifactsRow["consent_opt_in_evidence_log"] | ScanRuntimeArtifactsRow["consent_opt_out_evidence_log"]
+) {
+  return Array.isArray(value)
+    ? value
+        .filter((step): step is NonNullable<typeof value>[number] => Boolean(step && typeof step === "object"))
+        .map((step) => ({
+          action: typeof step.action === "string" ? step.action : "unknown",
+          selectorHint: typeof step.selectorHint === "string" ? step.selectorHint : null,
+          stepIndex: typeof step.stepIndex === "number" ? step.stepIndex : null,
+          text: typeof step.text === "string" ? step.text : "",
+          urlAfterClick: typeof step.urlAfterClick === "string" ? step.urlAfterClick : null
+        }))
+        .filter((step) => step.text.length > 0)
+    : [];
+}
+
+function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const optInClicks = context.runtimeArtifacts?.consent_opt_in_clicks ?? context.runtimeArtifacts?.consent_accept_click_count ?? null;
+  const optOutClicks = context.runtimeArtifacts?.consent_opt_out_clicks ?? context.runtimeArtifacts?.consent_reject_click_count ?? null;
+  const frictionDelta = context.runtimeArtifacts?.consent_friction_delta ?? (
+    typeof optInClicks === "number" && typeof optOutClicks === "number" ? optOutClicks - optInClicks : null
+  );
+  const redirectOrAuthRequired = context.runtimeArtifacts?.consent_redirect_or_auth_required === true;
+  const optInEvidenceLog = normalizeConsentEvidenceLog(context.runtimeArtifacts?.consent_opt_in_evidence_log);
+  const optOutEvidenceLog = normalizeConsentEvidenceLog(context.runtimeArtifacts?.consent_opt_out_evidence_log);
+  const concreteEvidenceAvailable =
+    (typeof optInClicks === "number" && typeof optOutClicks === "number") ||
+    redirectOrAuthRequired ||
+    optInEvidenceLog.length > 0 ||
+    optOutEvidenceLog.length > 0;
+
+  const runtimeEvidence = [
+    ...optInEvidenceLog.slice(0, 3).map((step) => `opt-in step ${step.stepIndex ?? "?"}: ${step.text}`),
+    ...optOutEvidenceLog.slice(0, 5).map((step) => `opt-out step ${step.stepIndex ?? "?"}: ${step.text}`)
+  ];
+
+  const supportingSignals = [
+    {
+      category: row.category,
+      key: row.signal_key,
+      label: row.signal_label,
+      value: row.signal_value_json
+    }
+  ];
+
+  if (typeof optInClicks === "number") {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.consent_accept_click_count",
+      label: "Accept click count",
+      value: optInClicks
+    });
+  }
+
+  if (typeof optOutClicks === "number") {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.consent_reject_click_count",
+      label: "Reject click count",
+      value: optOutClicks
+    });
+  }
+
+  if (typeof frictionDelta === "number") {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.user_rights_friction_score.runtime_delta",
+      label: "Consent friction delta",
+      value: frictionDelta
+    });
+  }
+
+  if (redirectOrAuthRequired) {
+    supportingSignals.push({
+      category: "privacy",
+      key: "privacy.consent_redirect_or_auth_required",
+      label: "Redirect or auth required",
+      value: true
+    });
+  }
+
+  const strongEvidence =
+    redirectOrAuthRequired || (typeof frictionDelta === "number" && frictionDelta > 0 && typeof optInClicks === "number" && typeof optOutClicks === "number");
+  const claim = row.signal_key === "privacy.policy_runtime_functional_misalignment_detected"
+    ? strongEvidence
+      ? "The observed consent workflow appears functionally asymmetric: opting out required more friction than opting in."
+      : "A consent-symmetry detector flagged possible functional misalignment, but the retained runtime evidence does not yet confirm it."
+    : strongEvidence
+      ? "The observed consent workflow appears to impose more friction on opt-out than opt-in."
+      : "Potential rights-fulfillment friction is present, but the retained runtime evidence remains incomplete.";
+
+  return {
+    claim,
+    confidenceBasis: strongEvidence
+      ? [
+          "A consent-symmetry detector fired during the scan.",
+          typeof optInClicks === "number" && typeof optOutClicks === "number"
+            ? `Opt-in completed in ${optInClicks} click${optInClicks === 1 ? "" : "s"} while opt-out required ${optOutClicks} click${optOutClicks === 1 ? "" : "s"}.`
+            : "A completed runtime traversal captured asymmetry in the consent flow.",
+          redirectOrAuthRequired
+            ? "The opt-out path triggered a redirect or authentication barrier."
+            : "Evidence logs captured the clicked controls used to complete the consent flow."
+        ]
+      : [
+          "A consent-symmetry detector fired during the scan.",
+          "The runtime artifact now includes click-path evidence, but the captured traversal did not conclusively prove asymmetry.",
+          "Manual review is still needed to verify whether the live rights-fulfillment path is materially harder than the opt-in path."
+        ],
+    missingEvidence:
+      concreteEvidenceAvailable
+        ? []
+        : ["Completed opt-in and opt-out click-path evidence showing whether the flows are symmetric."],
+    pageUrls: [],
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["symmetric_choice_path", "documented_equivalent_opt_out"],
+      detectorStrength: strongEvidence ? "strong" : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: strongEvidence ? ["detector_signal", "runtime_click_path_evidence"] : ["detector_signal"],
+      rubric: {
+        inconclusiveIf: [
+          "The detector fired but the runtime click-path evidence is incomplete.",
+          "The scan did not complete both sides of the consent flow."
+        ],
+        notSupportedIf: [
+          "The retained runtime evidence shows the opt-out and opt-in paths were materially equivalent.",
+          "A redirect or login wall was not actually encountered on the opt-out path."
+        ],
+        supportedIf: [
+          "The scan recorded concrete opt-in and opt-out click counts or a redirect/auth barrier.",
+          "The retained evidence log supports the observed asymmetry."
+        ]
+      }
+    },
+    runtimeEvidence,
+    supportingSignals
   };
 }
 
@@ -1824,7 +2003,7 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("scan_runtime_artifacts")
       .select(
-        "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
+        "consent_accept_click_count, consent_friction_delta, consent_opt_in_clicks, consent_opt_in_evidence_log, consent_opt_out_clicks, consent_opt_out_evidence_log, consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_redirect_or_auth_required, consent_reject_click_count, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
       )
       .eq("scan_id", scanId)
       .maybeSingle(),

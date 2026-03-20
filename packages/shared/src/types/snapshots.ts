@@ -554,6 +554,14 @@ export type KeyPageDiscoverySummary = {
   sameBrandSubdomainHostsInspected: string[];
 };
 
+export type ConsentInteractionEvidenceStep = {
+  action: "accept" | "reject" | "preferences" | "save" | "toggle";
+  selectorHint: string | null;
+  stepIndex: number;
+  text: string;
+  urlAfterClick: string | null;
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -580,6 +588,12 @@ export type ScanRuntimeArtifact = {
   consentRejectNewTrackerVendorNames: string[];
   consentRejectClickCount: number | null;
   consentAcceptClickCount: number | null;
+  consentOptInClicks: number | null;
+  consentOptOutClicks: number | null;
+  consentFrictionDelta: number | null;
+  consentRedirectOrAuthRequired: boolean | null;
+  consentOptInEvidenceLog: ConsentInteractionEvidenceStep[];
+  consentOptOutEvidenceLog: ConsentInteractionEvidenceStep[];
   consentPostRejectCookieCount: number | null;
   consentPostRejectThirdPartyCookieCount: number | null;
   consentPostRejectTrackerEvidenceUrls: string[];

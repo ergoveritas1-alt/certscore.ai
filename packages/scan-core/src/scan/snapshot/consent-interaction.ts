@@ -1,4 +1,5 @@
 import type { BrowserContextOptions, Page } from "playwright";
+import type { ConsentInteractionEvidenceStep } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createBrowser } from "../browser/create-browser";
 import { navigateWithPolicy } from "../browser/navigate-with-policy";
@@ -25,7 +26,13 @@ export type ConsentInteractionAudit = {
   attemptedProbeProfiles: string[];
   baseline: ConsentInteractionStageResult;
   acceptNewTrackerVendorNames: string[];
+  consentFrictionDelta: number | null;
+  consentRedirectOrAuthRequired: boolean | null;
   finalUrl: string;
+  optInEvidenceLog: ConsentInteractionEvidenceStep[];
+  optInClicks: number | null;
+  optOutEvidenceLog: ConsentInteractionEvidenceStep[];
+  optOutClicks: number | null;
   postAccept: ConsentInteractionStageResult;
   postReject: ConsentInteractionStageResult;
   rejectNewTrackerVendorNames: string[];
@@ -33,8 +40,53 @@ export type ConsentInteractionAudit = {
   winningProbeProfile: string | null;
 };
 
+type ConsentButtonCandidate = {
+  index: number;
+  role: "accept" | "reject" | "preferences" | "dismiss" | "unknown";
+  selectorHint: string | null;
+  text: string;
+};
+
+type ConsentToggleCandidate = {
+  checked: boolean;
+  index: number;
+  selectorHint: string | null;
+  text: string;
+};
+
+type ConsentPathExecutionResult = {
+  clicked: boolean;
+  clickCount: number | null;
+  evidenceLog: ConsentInteractionEvidenceStep[];
+  redirectOrAuthRequired: boolean;
+};
+
+type ConsentPathSessionResult = {
+  baseline: ConsentInteractionStageResult;
+  finalUrl: string;
+  postStage: ConsentInteractionStageResult;
+  path: ConsentPathExecutionResult;
+};
+
 const CONSENT_AUDIT_STAGE_TIMEOUT_MS = 25_000;
 const CONSENT_AUDIT_HARD_TIMEOUT_MS = 70_000;
+const MAX_ACCEPT_CLICKS = 5;
+const MAX_OPT_OUT_CLICKS = 8;
+const MAX_TOGGLES = 5;
+const MAX_PREFERENCES_DESCENTS = 1;
+const SAVE_PATTERNS = [/save/, /confirm/, /apply/, /submit/, /allow selection/, /selection/, /continue/, /done/];
+const NON_ESSENTIAL_CATEGORY_PATTERNS = [
+  /analytics/,
+  /marketing/,
+  /advertising/,
+  /targeting/,
+  /performance/,
+  /personalization/,
+  /social/,
+  /measurement/
+];
+const AUTH_WALL_PATTERNS =
+  /sign in|log in|login|create account|authentication required|member access|continue with account|account required/i;
 
 function difference(left: string[], right: string[]) {
   const rightSet = new Set(right);
@@ -48,7 +100,18 @@ function intersection(left: string[], right: string[]) {
 
 export const __test = {
   difference,
-  intersection
+  intersection,
+  isAuthWallText(text: string) {
+    return AUTH_WALL_PATTERNS.test(text);
+  },
+  isNonEssentialToggleLabel(text: string) {
+    return NON_ESSENTIAL_CATEGORY_PATTERNS.some((pattern) => pattern.test(text.toLowerCase()));
+  },
+  isSaveAction(text: string) {
+    return SAVE_PATTERNS.some((pattern) => pattern.test(text.toLowerCase()));
+  },
+  performAcceptPath,
+  performRejectPath
 };
 
 async function persistConsentAuditDiagnostic(input: {
@@ -169,32 +232,333 @@ async function waitForRuntimeQuiet(page: Page, input: {
   }
 }
 
-async function clickConsentRole(page: Page, role: "reject" | "accept") {
-  const candidates = await page
+async function collectButtonCandidates(page: Page): Promise<ConsentButtonCandidate[]> {
+  return page
     .locator("button, a, [role='button'], input[type='button'], input[type='submit']")
     .evaluateAll((elements) =>
-      elements.map((element, index) => ({
-        index,
-        text: (element.textContent ?? element.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim()
+      elements
+        .map((element, index) => {
+          const htmlElement = element as HTMLElement;
+          const tag = element.tagName.toLowerCase();
+          const id = element.getAttribute("id");
+          const ariaLabel = element.getAttribute("aria-label");
+          const classes = [...element.classList].slice(0, 2);
+          const selectorHint = id
+            ? `${tag}#${id}`
+            : ariaLabel
+              ? `${tag}[aria-label="${ariaLabel}"]`
+              : classes.length > 0
+                ? `${tag}.${classes.join(".")}`
+                : htmlElement.getAttribute("name")
+                  ? `${tag}[name="${htmlElement.getAttribute("name")}"]`
+                  : tag;
+          const text = (
+            element.textContent ??
+            htmlElement.getAttribute("aria-label") ??
+            htmlElement.getAttribute("value") ??
+            ""
+          )
+            .replace(/\s+/g, " ")
+            .trim();
+          const style = window.getComputedStyle(htmlElement);
+          const visible =
+            text.length > 0 &&
+            style.visibility !== "hidden" &&
+            style.display !== "none" &&
+            htmlElement.getBoundingClientRect().width > 0 &&
+            htmlElement.getBoundingClientRect().height > 0;
+
+          return {
+            index,
+            selectorHint,
+            text,
+            visible
+          };
+        })
+        .filter((candidate) => candidate.visible)
+    )
+    .then((candidates) =>
+      candidates.map((candidate) => ({
+        index: candidate.index,
+        role: classifyConsentButtonRole(candidate.text),
+        selectorHint: candidate.selectorHint,
+        text: candidate.text
       }))
     )
     .catch(() => []);
+}
 
-  for (const candidate of candidates) {
-    if (classifyConsentButtonRole(candidate.text) !== role) {
+async function collectToggleCandidates(page: Page): Promise<ConsentToggleCandidate[]> {
+  return page
+    .locator("input[type='checkbox'], [role='switch'], [aria-checked]")
+    .evaluateAll((elements) =>
+      elements
+        .map((element, index) => {
+          const htmlElement = element as HTMLElement;
+          const inputElement = element as HTMLInputElement;
+          const tag = element.tagName.toLowerCase();
+          const id = element.getAttribute("id");
+          const ariaLabel = element.getAttribute("aria-label");
+          const classes = [...element.classList].slice(0, 2);
+          const selectorHint = id
+            ? `${tag}#${id}`
+            : ariaLabel
+              ? `${tag}[aria-label="${ariaLabel}"]`
+              : classes.length > 0
+                ? `${tag}.${classes.join(".")}`
+                : htmlElement.getAttribute("name")
+                  ? `${tag}[name="${htmlElement.getAttribute("name")}"]`
+                  : tag;
+          const style = window.getComputedStyle(htmlElement);
+          const visible =
+            style.visibility !== "hidden" &&
+            style.display !== "none" &&
+            htmlElement.getBoundingClientRect().width > 0 &&
+            htmlElement.getBoundingClientRect().height > 0;
+
+          const checked =
+            element.getAttribute("aria-checked") === "true" ||
+            inputElement.checked === true ||
+            htmlElement.getAttribute("aria-pressed") === "true";
+          const labelText =
+            htmlElement.closest("label")?.textContent ??
+            htmlElement.getAttribute("aria-label") ??
+            htmlElement.parentElement?.textContent ??
+            "";
+
+          return {
+            checked,
+            index,
+            selectorHint,
+            text: labelText.replace(/\s+/g, " ").trim(),
+            visible
+          };
+        })
+        .filter((candidate) => candidate.visible && candidate.text.length > 0)
+    )
+    .catch(() => []);
+}
+
+async function detectRedirectOrAuth(page: Page, startHost: string) {
+  const currentUrl = page.url();
+  let redirected = false;
+
+  try {
+    redirected = new URL(currentUrl).hostname !== startHost;
+  } catch {
+    redirected = false;
+  }
+
+  const authWall = await page
+    .evaluate(() => document.body?.innerText?.replace(/\s+/g, " ").trim() ?? "")
+    .then((text) => AUTH_WALL_PATTERNS.test(text))
+    .catch(() => false);
+
+  return redirected || authWall;
+}
+
+function pushEvidenceStep(
+  evidenceLog: ConsentInteractionEvidenceStep[],
+  input: {
+    action: ConsentInteractionEvidenceStep["action"];
+    selectorHint: string | null;
+    text: string;
+    urlAfterClick: string | null;
+  }
+) {
+  evidenceLog.push({
+    action: input.action,
+    selectorHint: input.selectorHint,
+    stepIndex: evidenceLog.length + 1,
+    text: input.text,
+    urlAfterClick: input.urlAfterClick
+  });
+}
+
+async function clickButtonCandidate(page: Page, candidate: ConsentButtonCandidate) {
+  const locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']").nth(candidate.index);
+  await locator.click({ timeout: 2_500 });
+}
+
+async function clickToggleCandidate(page: Page, candidate: ConsentToggleCandidate) {
+  const locator = page.locator("input[type='checkbox'], [role='switch'], [aria-checked]").nth(candidate.index);
+  await locator.click({ timeout: 2_500 });
+}
+
+async function performAcceptPath(
+  page: Page,
+  startHost: string,
+  waitForSettle: (maxWaitMs: number) => Promise<void>
+): Promise<ConsentPathExecutionResult> {
+  const evidenceLog: ConsentInteractionEvidenceStep[] = [];
+  let redirectOrAuthRequired = false;
+
+  for (const candidate of await collectButtonCandidates(page)) {
+    if (candidate.role !== "accept") {
       continue;
     }
 
-    const locator = page.locator("button, a, [role='button'], input[type='button'], input[type='submit']").nth(candidate.index);
     try {
-      await locator.click({ timeout: 2_500 });
-      return { clicked: true, clickCount: 1 };
+      await clickButtonCandidate(page, candidate);
+      await waitForSettle(2_000);
+      pushEvidenceStep(evidenceLog, {
+        action: "accept",
+        selectorHint: candidate.selectorHint,
+        text: candidate.text,
+        urlAfterClick: page.url()
+      });
+      redirectOrAuthRequired = await detectRedirectOrAuth(page, startHost);
+      return {
+        clicked: true,
+        clickCount: evidenceLog.length,
+        evidenceLog,
+        redirectOrAuthRequired
+      };
     } catch {
       continue;
     }
   }
 
-  return { clicked: false, clickCount: null };
+  return {
+    clicked: false,
+    clickCount: null,
+    evidenceLog,
+    redirectOrAuthRequired
+  };
+}
+
+async function performRejectPath(
+  page: Page,
+  startHost: string,
+  waitForSettle: (maxWaitMs: number) => Promise<void>
+): Promise<ConsentPathExecutionResult> {
+  const evidenceLog: ConsentInteractionEvidenceStep[] = [];
+  let redirectOrAuthRequired = false;
+  let preferencesDescents = 0;
+
+  const clickDirectReject = async () => {
+    for (const candidate of await collectButtonCandidates(page)) {
+      if (candidate.role !== "reject") {
+        continue;
+      }
+
+      try {
+        await clickButtonCandidate(page, candidate);
+        await waitForSettle(2_000);
+        pushEvidenceStep(evidenceLog, {
+          action: "reject",
+          selectorHint: candidate.selectorHint,
+          text: candidate.text,
+          urlAfterClick: page.url()
+        });
+        redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+        return true;
+      } catch {
+        continue;
+      }
+    }
+
+    return false;
+  };
+
+  if (await clickDirectReject()) {
+    return {
+      clicked: true,
+      clickCount: evidenceLog.length,
+      evidenceLog,
+      redirectOrAuthRequired
+    };
+  }
+
+  while (preferencesDescents < MAX_PREFERENCES_DESCENTS && evidenceLog.length < MAX_OPT_OUT_CLICKS) {
+    const preferencesCandidate = (await collectButtonCandidates(page)).find((candidate) => candidate.role === "preferences");
+    if (!preferencesCandidate) {
+      break;
+    }
+
+    try {
+      await clickButtonCandidate(page, preferencesCandidate);
+      await waitForSettle(2_000);
+      pushEvidenceStep(evidenceLog, {
+        action: "preferences",
+        selectorHint: preferencesCandidate.selectorHint,
+        text: preferencesCandidate.text,
+        urlAfterClick: page.url()
+      });
+      redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+      preferencesDescents += 1;
+    } catch {
+      break;
+    }
+
+    if (await clickDirectReject()) {
+      return {
+        clicked: true,
+        clickCount: evidenceLog.length,
+        evidenceLog,
+        redirectOrAuthRequired
+      };
+    }
+
+    const toggles = (await collectToggleCandidates(page)).filter(
+      (candidate) => candidate.checked && NON_ESSENTIAL_CATEGORY_PATTERNS.some((pattern) => pattern.test(candidate.text.toLowerCase()))
+    );
+    for (const toggle of toggles.slice(0, MAX_TOGGLES)) {
+      if (evidenceLog.length >= MAX_OPT_OUT_CLICKS) {
+        break;
+      }
+
+      try {
+        await clickToggleCandidate(page, toggle);
+        await waitForSettle(800);
+        pushEvidenceStep(evidenceLog, {
+          action: "toggle",
+          selectorHint: toggle.selectorHint,
+          text: toggle.text,
+          urlAfterClick: page.url()
+        });
+        redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+      } catch {
+        continue;
+      }
+    }
+
+    const saveCandidate = (await collectButtonCandidates(page)).find(
+      (candidate) =>
+        candidate.role === "reject" ||
+        SAVE_PATTERNS.some((pattern) => pattern.test(candidate.text.toLowerCase()))
+    );
+    if (!saveCandidate) {
+      break;
+    }
+
+    try {
+      await clickButtonCandidate(page, saveCandidate);
+      await waitForSettle(2_000);
+      pushEvidenceStep(evidenceLog, {
+        action: saveCandidate.role === "reject" ? "reject" : "save",
+        selectorHint: saveCandidate.selectorHint,
+        text: saveCandidate.text,
+        urlAfterClick: page.url()
+      });
+      redirectOrAuthRequired ||= await detectRedirectOrAuth(page, startHost);
+      return {
+        clicked: true,
+        clickCount: evidenceLog.length,
+        evidenceLog,
+        redirectOrAuthRequired
+      };
+    } catch {
+      break;
+    }
+  }
+
+  return {
+    clicked: evidenceLog.some((step) => step.action !== "preferences"),
+    clickCount: evidenceLog.length > 0 ? evidenceLog.length : null,
+    evidenceLog,
+    redirectOrAuthRequired
+  };
 }
 
 async function captureStage(input: {
@@ -202,7 +566,7 @@ async function captureStage(input: {
   domain: string;
   requestUrls: Set<string>;
   stage: ConsentInteractionStage;
-}) : Promise<ConsentInteractionStageResult> {
+}): Promise<ConsentInteractionStageResult> {
   const cookies = await input.context.cookies().catch(() => []);
   const matchedTrackerEvidence = TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
     const matchedUrls = [...input.requestUrls]
@@ -225,12 +589,97 @@ async function captureStage(input: {
 
   return {
     stage: input.stage,
-    clickCount: input.stage === "baseline" ? null : null,
+    clickCount: null,
     interactionSucceeded: input.stage === "baseline" ? true : input.requestUrls.size > 0 || cookies.length > 0,
     cookieCount: cookies.length,
     thirdPartyCookieCount: cookies.filter((cookie) => !(cookie.domain === input.domain || cookie.domain.endsWith(`.${input.domain}`))).length,
     trackerEvidenceUrls,
     trackerVendorNames
+  };
+}
+
+async function runConsentPathSession(input: {
+  contextOptions?: BrowserContextOptions;
+  domain: string;
+  domainId?: string;
+  organizationId?: string | null;
+  path: "accept" | "reject";
+  planWaitMs: number;
+  profileName?: string;
+  scanId?: string;
+  startUrl: string;
+}): Promise<ConsentPathSessionResult> {
+  const browserHandle = await createBrowser({
+    contextOptions: input.contextOptions
+  });
+  const page = await browserHandle.context.newPage();
+  let inflightRequests = 0;
+  let lastNetworkActivityAt = Date.now();
+  const requestUrls = new Set<string>();
+
+  page.on("request", (request) => {
+    inflightRequests += 1;
+    lastNetworkActivityAt = Date.now();
+    requestUrls.add(request.url());
+  });
+  const markSettled = () => {
+    inflightRequests = Math.max(0, inflightRequests - 1);
+    lastNetworkActivityAt = Date.now();
+  };
+  page.on("requestfinished", markSettled);
+  page.on("requestfailed", markSettled);
+
+  const waitForSettle = (maxWaitMs: number) =>
+    waitForRuntimeQuiet(page, {
+      getBannerDetected: () => detectConsentSurface(page),
+      getInflightRequests: () => inflightRequests,
+      getLastNetworkActivityAt: () => lastNetworkActivityAt,
+      maxWaitMs
+    });
+
+  await navigateWithPolicy({
+    page,
+    robotsPolicy: null,
+    url: input.startUrl
+  });
+
+  await waitForSettle(input.planWaitMs);
+
+  const currentUrl = page.url() || input.startUrl;
+  const domainHost = new URL(currentUrl).hostname;
+  const baseline = await captureStage({
+    context: browserHandle.context,
+    domain: domainHost,
+    requestUrls: new Set(requestUrls),
+    stage: "baseline"
+  });
+
+  requestUrls.clear();
+  const pathResult =
+    input.path === "reject"
+      ? await performRejectPath(page, domainHost, waitForSettle)
+      : await performAcceptPath(page, domainHost, waitForSettle);
+
+  const postStage = await captureStage({
+    context: browserHandle.context,
+    domain: domainHost,
+    requestUrls: new Set(requestUrls),
+    stage: input.path === "reject" ? "post_reject" : "post_accept"
+  });
+  postStage.interactionSucceeded = pathResult.clicked;
+  postStage.clickCount = pathResult.clickCount;
+
+  const finalUrl = page.url() || currentUrl;
+
+  await page.close().catch(() => undefined);
+  await browserHandle.context.close().catch(() => undefined);
+  await browserHandle.browser.close().catch(() => undefined);
+
+  return {
+    baseline,
+    finalUrl,
+    path: pathResult,
+    postStage
   };
 }
 
@@ -254,15 +703,7 @@ async function runSingleConsentInteractionAudit(input: {
     requestedPageCount: 1,
     robotsCrawlDelayMs: null
   });
-  const browserHandle = await createBrowser({
-    contextOptions: input.contextOptions
-  });
-  const page = await browserHandle.context.newPage();
   const finalUrl = homepage.finalUrl ?? startUrl;
-  const domainHost = new URL(finalUrl).hostname;
-  let inflightRequests = 0;
-  let lastNetworkActivityAt = Date.now();
-  const requestUrls = new Set<string>();
 
   const runStage = async <T>(stage: string, callback: () => Promise<T>, timeoutMs = CONSENT_AUDIT_STAGE_TIMEOUT_MS) => {
     const elapsedMs = Date.now() - startedAt;
@@ -275,8 +716,6 @@ async function runSingleConsentInteractionAudit(input: {
         status: "timeout",
         metadata: {
           elapsedMs,
-          inflightRequests,
-          lastActivityElapsedMs: Date.now() - lastNetworkActivityAt,
           profileName: input.profileName ?? null
         }
       });
@@ -291,7 +730,6 @@ async function runSingleConsentInteractionAudit(input: {
       status: "start",
       metadata: {
         elapsedMs,
-        inflightRequests,
         profileName: input.profileName ?? null
       }
     });
@@ -306,7 +744,6 @@ async function runSingleConsentInteractionAudit(input: {
         status: "ok",
         metadata: {
           elapsedMs: Date.now() - startedAt,
-          inflightRequests,
           profileName: input.profileName ?? null
         }
       });
@@ -321,8 +758,6 @@ async function runSingleConsentInteractionAudit(input: {
         metadata: {
           elapsedMs: Date.now() - startedAt,
           error: error instanceof Error ? error.message : "Unknown error",
-          inflightRequests,
-          lastActivityElapsedMs: Date.now() - lastNetworkActivityAt,
           profileName: input.profileName ?? null
         }
       });
@@ -330,100 +765,54 @@ async function runSingleConsentInteractionAudit(input: {
     }
   };
 
-  page.on("request", (request) => {
-    inflightRequests += 1;
-    lastNetworkActivityAt = Date.now();
-    requestUrls.add(request.url());
-  });
-  const markSettled = () => {
-    inflightRequests = Math.max(0, inflightRequests - 1);
-    lastNetworkActivityAt = Date.now();
-  };
-  page.on("requestfinished", markSettled);
-  page.on("requestfailed", markSettled);
-
-  await runStage("baseline_navigation", () =>
-    navigateWithPolicy({
-      page,
-      robotsPolicy: null,
-      url: finalUrl
-    }),
-    20_000
+  const rejectSession = await runStage("reject_path_session", () =>
+    runConsentPathSession({
+      contextOptions: input.contextOptions,
+      domain: input.domain,
+      domainId: input.domainId,
+      organizationId: input.organizationId ?? null,
+      path: "reject",
+      planWaitMs: plan.browserPostLoadWaitMs,
+      profileName: input.profileName,
+      scanId: input.scanId,
+      startUrl: finalUrl
+    })
   );
 
-  await runStage("baseline_runtime_wait", () =>
-    waitForRuntimeQuiet(page, {
-      getBannerDetected: () => detectConsentSurface(page),
-      getInflightRequests: () => inflightRequests,
-      getLastNetworkActivityAt: () => lastNetworkActivityAt,
-      maxWaitMs: plan.browserPostLoadWaitMs
-    }),
-    Math.max(5_000, plan.browserPostLoadWaitMs + 2_000)
+  const acceptSession = await runStage("accept_path_session", () =>
+    runConsentPathSession({
+      contextOptions: input.contextOptions,
+      domain: input.domain,
+      domainId: input.domainId,
+      organizationId: input.organizationId ?? null,
+      path: "accept",
+      planWaitMs: plan.browserPostLoadWaitMs,
+      profileName: input.profileName,
+      scanId: input.scanId,
+      startUrl: finalUrl
+    })
   );
-
-  const baseline = await captureStage({
-    context: browserHandle.context,
-    domain: domainHost,
-    requestUrls: new Set(requestUrls),
-    stage: "baseline"
-  });
-
-  requestUrls.clear();
-  const rejectClick = await runStage("reject_click", () => clickConsentRole(page, "reject"), 5_000);
-  if (rejectClick.clicked) {
-    await runStage("reject_runtime_wait", () =>
-      waitForRuntimeQuiet(page, {
-        getBannerDetected: () => detectConsentSurface(page),
-        getInflightRequests: () => inflightRequests,
-        getLastNetworkActivityAt: () => lastNetworkActivityAt,
-        maxWaitMs: 2_500
-      }),
-      6_000
-    );
-  }
-  const postReject = await captureStage({
-    context: browserHandle.context,
-    domain: domainHost,
-    requestUrls,
-    stage: "post_reject"
-  });
-  postReject.interactionSucceeded = rejectClick.clicked;
-  postReject.clickCount = rejectClick.clickCount;
-
-  requestUrls.clear();
-  const acceptClick = await runStage("accept_click", () => clickConsentRole(page, "accept"), 5_000);
-  if (acceptClick.clicked) {
-    await runStage("accept_runtime_wait", () =>
-      waitForRuntimeQuiet(page, {
-        getBannerDetected: () => detectConsentSurface(page),
-        getInflightRequests: () => inflightRequests,
-        getLastNetworkActivityAt: () => lastNetworkActivityAt,
-        maxWaitMs: 2_500
-      }),
-      6_000
-    );
-  }
-  const postAccept = await captureStage({
-    context: browserHandle.context,
-    domain: domainHost,
-    requestUrls,
-    stage: "post_accept"
-  });
-  postAccept.interactionSucceeded = acceptClick.clicked;
-  postAccept.clickCount = acceptClick.clickCount;
-
-  await page.close().catch(() => undefined);
-  await browserHandle.context.close().catch(() => undefined);
-  await browserHandle.browser.close().catch(() => undefined);
 
   return {
-    acceptNewTrackerVendorNames: difference(postAccept.trackerVendorNames, baseline.trackerVendorNames),
-    finalUrl,
-    baseline,
-    postReject,
-    postAccept,
-    rejectNewTrackerVendorNames: difference(postReject.trackerVendorNames, baseline.trackerVendorNames),
-    rejectPersistedTrackerVendorNames: intersection(postReject.trackerVendorNames, baseline.trackerVendorNames)
+    acceptNewTrackerVendorNames: difference(acceptSession.postStage.trackerVendorNames, acceptSession.baseline.trackerVendorNames),
+    baseline: rejectSession.baseline,
+    consentFrictionDelta:
+      rejectSession.path.clickCount !== null && acceptSession.path.clickCount !== null
+        ? rejectSession.path.clickCount - acceptSession.path.clickCount
+        : null,
+    consentRedirectOrAuthRequired:
+      rejectSession.path.redirectOrAuthRequired || acceptSession.path.redirectOrAuthRequired
+        ? true
+        : false,
+    finalUrl: acceptSession.finalUrl || rejectSession.finalUrl,
+    optInClicks: acceptSession.path.clickCount,
+    optInEvidenceLog: acceptSession.path.evidenceLog.slice(0, MAX_ACCEPT_CLICKS),
+    optOutClicks: rejectSession.path.clickCount,
+    optOutEvidenceLog: rejectSession.path.evidenceLog.slice(0, MAX_OPT_OUT_CLICKS),
+    postAccept: acceptSession.postStage,
+    postReject: rejectSession.postStage,
+    rejectNewTrackerVendorNames: difference(rejectSession.postStage.trackerVendorNames, rejectSession.baseline.trackerVendorNames),
+    rejectPersistedTrackerVendorNames: intersection(rejectSession.postStage.trackerVendorNames, rejectSession.baseline.trackerVendorNames)
   };
 }
 
@@ -454,7 +843,9 @@ export async function runConsentInteractionAudit(
   const winnerScore = (audit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">) =>
     (audit.postReject.interactionSucceeded ? 4 : 0) +
     (audit.postAccept.interactionSucceeded ? 2 : 0) +
-    (audit.postReject.clickCount ? 1 : 0) +
+    (audit.optOutClicks ? 1 : 0) +
+    ((audit.consentFrictionDelta ?? 0) > 0 ? 2 : 0) +
+    (audit.consentRedirectOrAuthRequired ? 2 : 0) +
     audit.postReject.trackerVendorNames.length;
 
   if (
