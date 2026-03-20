@@ -472,6 +472,38 @@ test("uses strong disclosure-gap copy for missing technical disclosure", () => {
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
+test("uses strong retargeting-pixel copy and high confidence", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "pixel-1",
+        ruleKey: "retargeting_pixel",
+        title: "Retargeting pixel detected",
+        evidence: {
+          runtimeEvidence: ["retargeting pixel network request observed"],
+          supportingSignals: ["marketing pixel active"]
+        }
+      }),
+      observedValue: "Advertising stack",
+      severity: "high",
+      title: "Retargeting pixel detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Retargeting pixel detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /active retargeting pixel|persistent technical link|cross-site tracking|granular disclosure required/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /network stack audit|Meta, Google, or Criteo|Marketing consent event|Consent Management Platform/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.ok(Number(presentation.confidenceScore) >= 0.95);
+});
+
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

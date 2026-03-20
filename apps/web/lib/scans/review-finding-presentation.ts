@@ -218,9 +218,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/tpa/"
       },
       suggestedFix:
-        "Audit the network stack to identify the specific third-party script (for example Meta, Google, or Criteo) triggering the pixel. Reconfigure your Tag Manager to gate this script behind a marketing consent event, ensuring the tag only initializes after your Consent Management Platform broadcasts a positive signal.",
+        "Perform a network stack audit to identify the specific third-party script, such as Meta, Google, or Criteo, firing the pixel. Reconfigure the Tag Manager to gate this script behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal.",
       whyThisMatters:
-        "A retargeting pixel establishes a technical link between the local user session and third-party advertising networks. This enables persistent cross-site tracking by syncing behavioral data, such as page views or conversion events, with a broader user advertising profile."
+        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. This enables cross-site tracking by syncing behavioral data, such as page views or conversion events, with a broader advertising profile, often without the granular disclosure required by modern privacy frameworks."
     },
     matches: [/retargeting_pixel/i, /retargeting pixel detected/i]
   },
@@ -583,6 +583,11 @@ function computeSupportStrength(input: {
     }
     if (evidenceArrayLength(evidence, "policyEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.08;
+    }
+  }
+  if (/retargeting pixel|retargeting_pixel/i.test(input.haystack)) {
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.05;
     }
   }
   if (/low-confidence extraction|low_confidence_critical_fields/i.test(input.haystack) && /policy_runtime\.|cookie_runtime\./i.test(input.siblingHaystack)) {
