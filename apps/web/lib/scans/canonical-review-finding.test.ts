@@ -118,6 +118,38 @@ test("uses plain-language copy for pre-consent tracking activity", () => {
   assert.equal(presentation.confidenceScore, "0.95");
 });
 
+test("uses calibrated generic copy for pre-consent tracking detected", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1c-detected",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Pre-consent tracking detected",
+        evidence: {
+          runtimeEvidence: ["third-party requests fire on initial page load"],
+          supportingSignals: ["advertising and analytics platforms observed"]
+        }
+      }),
+      observedValue: "third-party requests",
+      severity: "high",
+      title: "Pre-consent tracking detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /third-party network requests initiating before a consent choice could be recorded|zero-delay execution|ePrivacy Directive and GDPR/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Tag Manager or header scripts|denied or decoupled state|consent management platform \(CMP\) confirms an affirmative choice/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
 test("uses max-confidence evidence-url copy for pre-consent tracker evidence URLs", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -215,6 +247,38 @@ test("uses count-based copy for pre-consent tracker violations", () => {
     /these 8 requests|block them by default|affirmative opt-in state/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses calibrated max-confidence copy for 71 pre-consent tracking requests", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1g-71",
+        ruleKey: "privacy.preconsent_tracker_violations",
+        title: "Trackers observed before consent",
+        evidence: {
+          preconsent_tracker_violations: 71,
+          runtimeEvidence: ["third-party requests fired before consent choice"]
+        }
+      }),
+      observedValue: "71",
+      severity: "high",
+      title: "Trackers observed before consent"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.equal(
+    presentation.whyThisMatters,
+    "The automated scan observed 71 pre-consent tracking requests before the visitor could act on the consent interface. That pattern suggests one or more non-essential third-party tags or scripts began transmitting data during initial render rather than waiting for a confirmed consent state."
+  );
+  assert.equal(
+    presentation.suggestedFix,
+    "Audit the non-essential scripts responsible for these 71 requests and block them by default. They should initialize only after the Consent Management Platform, consent banner, or equivalent control records an affirmative opt-in state."
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
@@ -323,7 +387,7 @@ test("uses strong copy and high evidence strength for functional misalignment", 
     /opt-out path is as direct as the opt-in path|same number of clicks|secondary hurdles/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
-  assert.equal(presentation.confidenceScore, "0.95");
+  assert.equal(presentation.confidenceScore, "0.85");
 });
 
 test("uses max-strength score and hard-block copy for critical user-rights fulfillment friction", () => {
@@ -358,6 +422,66 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
   );
   assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
   assert.equal(presentation.confidenceScore, "0.95");
+});
+
+test("uses deterministic consent blocker evidence for functional misalignment findings", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "fm-2",
+        ruleKey: "scan_signal.privacy.policy_runtime_functional_misalignment_detected",
+        title: "High-confidence functional misalignment",
+        evidence: {
+          consentBlockerPageTitle: "Login Required",
+          consentBlockerTextSnippet: "Please sign in to manage your privacy choices.",
+          consentBlockerType: "auth_wall",
+          consentBlockerUrl: "https://example.com/privacy/login",
+          consentEvidencePassCount: 2,
+          consentRedirectOrAuthRequired: true,
+          runtimeEvidence: ["opt-out step 1: Manage preferences", "redirect to login wall observed"],
+          supportingSignals: ["hard block observed twice"]
+        }
+      }),
+      observedValue: "Privacy Policy",
+      severity: "high",
+      title: "High-confidence functional misalignment"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Functional misalignment");
+  assert.match(presentation.whyThisMatters, /Login Required|sign in to manage your privacy choices/i);
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses maximum confidence when the same friction blocker is reproduced twice", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "fr-1b",
+        ruleKey: "privacy.friction_score",
+        title: "Critical user-rights fulfillment friction",
+        evidence: {
+          consentBlockerPageTitle: "Login Required",
+          consentBlockerTextSnippet: "Please sign in to manage your privacy choices.",
+          consentBlockerType: "auth_wall",
+          consentBlockerUrl: "https://example.com/privacy/login",
+          consentEvidencePassCount: 2,
+          consentRedirectOrAuthRequired: true,
+          runtimeEvidence: ["opt-out step 1: Manage preferences", "redirect to login wall observed"],
+          signalValue: 100,
+          supportingSignals: ["hard block observed twice"]
+        }
+      }),
+      observedValue: "100",
+      severity: "high",
+      title: "Critical user-rights fulfillment friction"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /Login Required|sign in to manage your privacy choices/i);
+  assert.equal(presentation.confidenceScore, "1.0");
 });
 
 test("uses strong copy and high confidence for high user-rights fulfillment friction", () => {

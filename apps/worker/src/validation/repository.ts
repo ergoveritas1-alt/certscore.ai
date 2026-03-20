@@ -245,6 +245,15 @@ type ValidationSupportingSignalValue =
 
 export type ValidationEvidencePacket = {
   claim: string;
+  consentBlockerPageTitle?: string | null;
+  consentBlockerTextSnippet?: string | null;
+  consentBlockerType?: "auth_wall" | "external_redirect" | "extra_click_path" | null;
+  consentBlockerUrl?: string | null;
+  consentEvidencePassCount?: number | null;
+  consentFrictionDelta?: number | null;
+  consentOptInClicks?: number | null;
+  consentOptOutClicks?: number | null;
+  consentRedirectOrAuthRequired?: boolean | null;
   confidenceBasis: string[];
   missingEvidence: string[];
   pageUrls: string[];
@@ -1268,6 +1277,15 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
 
   return {
     claim,
+    consentBlockerPageTitle: blockerPageTitle,
+    consentBlockerTextSnippet: blockerTextSnippet,
+    consentBlockerType: blockerType,
+    consentBlockerUrl: blockerUrl,
+    consentEvidencePassCount: evidencePassCount,
+    consentFrictionDelta: frictionDelta,
+    consentOptInClicks: optInClicks,
+    consentOptOutClicks: optOutClicks,
+    consentRedirectOrAuthRequired: redirectOrAuthRequired,
     confidenceBasis: strongEvidence
       ? [
           "A consent-symmetry detector fired during the scan.",
