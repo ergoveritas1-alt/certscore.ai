@@ -42,9 +42,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/"
       },
       suggestedFix:
-        "Refactor the Tag Manager configuration to ensure that all non-essential analytics and advertising scripts remain in a Denied state by default. Implement a technical gate that only initializes these scripts after a positive Accept signal is broadcast by the Consent Management Platform. Specifically, adopt Google Consent Mode v2 to manage tag behavior dynamically based on user interaction.",
+        "Block or defer non-essential advertising, analytics, and measurement scripts until the site records an affirmative consent choice. Audit tag-manager rules, direct script includes, and vendor SDKs so the default state remains off until consent is granted.",
       whyThisMatters:
-        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. This fire-on-load behavior initializes data collection before the visitor can exercise a choice via the consent interface. From a technical audit perspective, this indicates that the tag firing sequence is not currently gated by the Consent Management Platform's state."
+        "The automated scan detected third-party tracking activity before the visitor had a meaningful chance to make a consent choice. That sequence can expose identifiers, device metadata, or browsing activity to external vendors before the site's consent state has been applied."
     },
     evidenceAwareOverrides: [
       {
@@ -621,22 +621,55 @@ function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null |
     ["preconsent_tracker_evidence_urls", "consentBaselineTrackerEvidenceUrls", "runtimeEvidence"],
     /preconsent_tracker_evidence_urls|pre-consent tracker evidence urls/i
   ).filter((entry) => /^https?:\/\//i.test(entry));
+  const summarySignalValue = getSupportingSignalValue(evidence, /preconsent_tracker_evidence_urls|pre-consent tracker evidence summary/i);
+  const signalSummary =
+    summarySignalValue && typeof summarySignalValue === "object" ? (summarySignalValue as Record<string, unknown>) : null;
+  const summaryUrls = Array.isArray(signalSummary?.sampleUrls)
+    ? signalSummary.sampleUrls.filter((entry): entry is string => typeof entry === "string" && /^https?:\/\//i.test(entry))
+    : [];
   const vendors = getStringArrayEvidence(
     evidence,
     ["preconsent_tracker_vendors", "consentBaselineTrackerVendorNames"],
     /preconsent_tracker_vendors|pre-consent tracker vendors/i
   );
+  const summaryVendors = Array.isArray(signalSummary?.vendorsObserved)
+    ? signalSummary.vendorsObserved.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
   const violationCount = getNumericEvidence(
     evidence,
     ["preconsent_violation_count", "count", "signalValue", "value"],
     /preconsent_violation_count|pre-consent tracker violations/i
   );
+  const requestCount =
+    getNumericEvidence(
+      evidence,
+      ["totalObservedUrls", "requestCount"],
+      /preconsent_tracker_evidence_summary|pre-consent tracker evidence summary/i
+    ) ??
+    (typeof signalSummary?.totalObservedUrls === "number" && Number.isFinite(signalSummary.totalObservedUrls)
+      ? signalSummary.totalObservedUrls
+      : null);
 
   return {
-    evidenceUrls,
-    vendors,
+    evidenceUrls: [...new Set([...summaryUrls, ...evidenceUrls])],
+    requestCount,
+    vendors: [...new Set([...vendors, ...summaryVendors])],
     violationCount
   };
+}
+
+function formatVendorList(vendors: string[]) {
+  const distinct = [...new Set(vendors.filter((entry) => entry.trim().length > 0))];
+  if (distinct.length === 0) {
+    return "multiple third-party ad and analytics vendors";
+  }
+  if (distinct.length === 1) {
+    return distinct[0]!;
+  }
+  if (distinct.length === 2) {
+    return `${distinct[0]} and ${distinct[1]}`;
+  }
+  return `${distinct.slice(0, 3).join(", ")}, and other third-party vendors`;
 }
 
 function computeSupportStrength(input: {
@@ -941,32 +974,33 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   }
 
   if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
-    const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
     const preconsentEvidence = getPreconsentEvidenceSummary(input.evidence);
-    if (/mcw\.edu|medical institution domain|clinical|health|phi/i.test(evidenceText)) {
+    const vendorList = formatVendorList(preconsentEvidence.vendors);
+    const requestCount = preconsentEvidence.violationCount ?? preconsentEvidence.requestCount;
+    if (typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
       presentation.whyThisMatters =
-        "The automated scan confirmed a Pre-consent Tracking signal, indicating that unique identifiers and behavioral metadata are transmitted to third-party vendors immediately upon page load. On a medical institution domain like mcw.edu, this fire-on-load behavior is a critical compliance risk. It potentially exposes Protected Health Information, such as IP addresses linked to specific clinical searches, to third-party ad networks before a visitor can provide or deny consent, which is a direct violation of HHS tracking guidance and GDPR and CCPA requirements.";
+        `The automated scan observed ${preconsentEvidence.violationCount} pre-consent tracking request${preconsentEvidence.violationCount === 1 ? "" : "s"} before the visitor could act on the consent interface. That pattern suggests one or more non-essential third-party tags or scripts began transmitting data during initial render rather than waiting for a confirmed consent state.`;
       presentation.suggestedFix =
-        "Refactor the Tag Manager configuration to ensure all non-essential analytics and advertising scripts remain in a Denied state by default. Implement a technical gate that only initializes these scripts after a positive Accept signal is broadcast by the Consent Management Platform. Specifically, adopt Google Consent Mode v2 to manage tag behavior dynamically based on user interaction and ensure compliance with the May 2026 HHS deadline for medical entities.";
-      presentation.confidenceScore = "0.9";
-    } else if (typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
-      presentation.whyThisMatters =
-        `The automated scan confirmed ${preconsentEvidence.violationCount} distinct pre-consent tracker violation${preconsentEvidence.violationCount === 1 ? "" : "s"}. This indicates that ${preconsentEvidence.violationCount} separate third-party request${preconsentEvidence.violationCount === 1 ? "" : "s"} initialized and transmitted data immediately upon page load, before the visitor could interact with the consent interface. From a technical perspective, this confirms that the site's Tag Manager is currently configured to fire these scripts on All Pages or Initialization events, regardless of the user's privacy state.`;
-      presentation.suggestedFix =
-        `Perform a technical audit of the Tag Manager container to identify the ${preconsentEvidence.violationCount} tag${preconsentEvidence.violationCount === 1 ? "" : "s"} associated with these violations. Reconfigure their firing triggers to wait for a custom consent_granted event from the Consent Management Platform. Specifically, implement Google Consent Mode v2 to ensure that ad_storage and analytics_storage parameters default to denied until a positive user choice is broadcast.`;
+        `Audit the non-essential scripts responsible for these ${preconsentEvidence.violationCount} request${preconsentEvidence.violationCount === 1 ? "" : "s"} and block them by default. They should initialize only after the Consent Management Platform, consent banner, or equivalent control records an affirmative opt-in state.`;
       presentation.confidenceScore = "1.0";
     } else if (preconsentEvidence.evidenceUrls.length > 0) {
       presentation.whyThisMatters =
-        "The automated scan confirmed multiple network requests to third-party advertising and analytics endpoints during the initial page load phase. Technical logs show that unique client identifiers and event metadata were transmitted before the Consent Management Platform could initialize or broadcast a suppression signal. This sequence indicates that the tag firing logic is currently independent of the user consent state.";
+        `The automated scan captured representative pre-consent requests to ${vendorList} during the initial page-load sequence. That evidence indicates that third-party measurement or advertising endpoints were contacted before the site's consent state had been clearly established.`;
       presentation.suggestedFix =
-        "Refactor the Tag Manager trigger logic to replace All Pages or DOM Ready events with custom consent events such as consent_granted. Implement Google Consent Mode v2 to ensure that tags for ad_storage and analytics_storage remain in a denied state by default, preventing data transmission until a positive signal is received from the Consent Management Platform.";
+        "Block or defer these vendor requests until an affirmative consent choice is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent is granted.";
       presentation.confidenceScore = "1.0";
     } else if (preconsentEvidence.vendors.length > 0) {
       presentation.whyThisMatters =
-        "The automated scan identified a group of high-intent advertising and analytics vendors that initialize data collection immediately upon page load. Technical logs confirm that unique client identifiers and behavioral metadata are transmitted to these third-party endpoints before the visitor has interacted with the Consent Management Platform. This firing sequence indicates that data ingestion is occurring independently of a positive consent signal.";
+        `The automated scan observed multiple third-party ad and analytics vendors before consent, including ${vendorList}. That suggests non-essential vendor code is initializing before the visitor has made a privacy choice.`;
       presentation.suggestedFix =
-        "Refactor the Tag Manager configuration to ensure all non-essential scripts remain in a Denied state by default. Implement a technical gate that only initializes these specific vendor tags after a consent_granted event is broadcast. Adopting Google Consent Mode v2 will help manage the state of ad_storage and analytics_storage tags based on explicit user interaction.";
+        "Identify where these vendor tags are loaded and gate them behind a positive consent signal. The default behavior should suppress non-essential advertising, analytics, and measurement vendors until the visitor opts in.";
       presentation.confidenceScore = "1.0";
+    } else if (typeof requestCount === "number" && requestCount > 0) {
+      presentation.whyThisMatters =
+        `The automated scan observed ${requestCount} pre-consent tracking-related request${requestCount === 1 ? "" : "s"} before the visitor had a meaningful chance to choose. That pattern indicates at least some non-essential tracking logic is firing before consent has been applied.`;
+      presentation.suggestedFix =
+        "Audit the scripts and network calls that run during initial render, then suppress non-essential advertising, analytics, and measurement behavior until a positive consent state is present.";
+      presentation.confidenceScore = "0.95";
     } else {
       presentation.confidenceScore = "0.95";
     }

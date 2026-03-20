@@ -49,17 +49,17 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /high-intent advertising and analytics vendors|page load|before the visitor has interacted with the Consent Management Platform|positive consent signal/i
+    /multiple third-party ad and analytics vendors|Meta Pixel|before consent|privacy choice/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Denied state by default|consent_granted|Google Consent Mode v2|ad_storage|analytics_storage/i
+    /Identify where these vendor tags are loaded|gate them behind a positive consent signal|suppress non-essential/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
-test("uses healthcare-specific pre-consent tracking copy on medical domains", () => {
+test("does not leak healthcare-specific pre-consent tracking copy when medical text is present in evidence", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
       linkedValidationFinding: makeLinkedFinding({
@@ -80,16 +80,10 @@ test("uses healthcare-specific pre-consent tracking copy on medical domains", ()
   );
 
   assert.equal(presentation.findingName, "Trackers observed before consent");
-  assert.match(
-    presentation.whyThisMatters,
-    /medical institution domain like mcw\.edu|Protected Health Information|clinical searches|HHS tracking guidance/i
-  );
-  assert.match(
-    presentation.suggestedFix,
-    /Denied state by default|positive Accept signal|Google Consent Mode v2|May 2026 HHS deadline/i
-  );
+  assert.doesNotMatch(presentation.whyThisMatters, /mcw\.edu|Protected Health Information|HHS/i);
+  assert.doesNotMatch(presentation.suggestedFix, /Google Consent Mode v2|May 2026 HHS deadline/i);
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
-  assert.equal(presentation.confidenceScore, "0.9");
+  assert.equal(presentation.confidenceScore, "1.0");
 });
 
 test("uses plain-language copy for pre-consent tracking activity", () => {
@@ -114,11 +108,11 @@ test("uses plain-language copy for pre-consent tracking activity", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /Pre-consent Tracking signal|third-party vendors immediately upon page load|consent interface|tag firing sequence is not currently gated by the Consent Management Platform's state/i
+    /third-party tracking activity|meaningful chance to make a consent choice|consent state has been applied/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Denied state by default|positive Accept signal|Consent Management Platform|Google Consent Mode v2/i
+    /Block or defer non-essential advertising, analytics, and measurement scripts|default state remains off until consent is granted/i
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
   assert.equal(presentation.confidenceScore, "0.95");
@@ -149,11 +143,11 @@ test("uses max-confidence evidence-url copy for pre-consent tracker evidence URL
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /multiple network requests to third-party advertising and analytics endpoints|initial page load phase|suppression signal|independent of the user consent state/i
+    /captured representative pre-consent requests|during the initial page-load sequence|before the site's consent state had been clearly established/i
   );
   assert.match(
     presentation.suggestedFix,
-    /All Pages or DOM Ready|consent_granted|Google Consent Mode v2|ad_storage and analytics_storage/i
+    /Block or defer these vendor requests until an affirmative consent choice is stored|inline loaders|bootstrap scripts/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.equal(presentation.confidenceScore, "1.0");
@@ -181,11 +175,11 @@ test("uses max-confidence vendor copy for pre-consent tracker vendors", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /high-intent advertising and analytics vendors|page load|before the visitor has interacted|independently of a positive consent signal/i
+    /multiple third-party ad and analytics vendors before consent|Google Analytics and Reddit Pixel/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Denied state by default|consent_granted|Google Consent Mode v2|ad_storage|analytics_storage/i
+    /Identify where these vendor tags are loaded|gate them behind a positive consent signal/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.equal(presentation.confidenceScore, "1.0");
@@ -214,13 +208,53 @@ test("uses count-based copy for pre-consent tracker violations", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /8 distinct pre-consent tracker violations|8 separate third-party request|before the visitor could interact|All Pages or Initialization events/i
+    /8 pre-consent tracking requests|before the visitor could act on the consent interface|during initial render/i
   );
   assert.match(
     presentation.suggestedFix,
-    /8 tags associated with these violations|consent_granted|Google Consent Mode v2|ad_storage and analytics_storage/i
+    /these 8 requests|block them by default|affirmative opt-in state/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses summarized pre-consent evidence from supporting signals without requiring the full raw URL list", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1h",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Trackers observed before consent",
+        evidence: {
+          supportingSignals: [
+            {
+              key: "privacy.preconsent_tracker_evidence_urls",
+              label: "Pre-consent tracker evidence summary",
+              value: {
+                sampleUrls: ["https://mc.yandex.com/watch/125905"],
+                totalObservedUrls: 71,
+                vendorsObserved: ["Yandex", "Viqeo", "AdRiver"]
+              }
+            }
+          ]
+        }
+      }),
+      observedValue: "Yandex",
+      severity: "high",
+      title: "Trackers observed before consent"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(
+    presentation.whyThisMatters,
+    /captured representative pre-consent requests|Yandex, Viqeo, AdRiver/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Block or defer these vendor requests until an affirmative consent choice is stored/i
+  );
   assert.equal(presentation.confidenceScore, "1.0");
 });
 

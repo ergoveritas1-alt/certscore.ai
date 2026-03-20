@@ -202,6 +202,14 @@ export type ValidationVerdictInsert = {
   verdict: ValidationVerdict;
 };
 
+type ValidationSupportingSignalValue =
+  | ScanSignalRow["signal_value_json"]
+  | {
+      sampleUrls: string[];
+      totalObservedUrls: number;
+      vendorsObserved: string[];
+    };
+
 export type ValidationEvidencePacket = {
   claim: string;
   confidenceBasis: string[];
@@ -225,7 +233,7 @@ export type ValidationEvidencePacket = {
     category: ScanSignalRow["category"];
     key: string;
     label: string;
-    value: ScanSignalRow["signal_value_json"];
+    value: ValidationSupportingSignalValue;
   }>;
 };
 
@@ -244,6 +252,73 @@ type ValidationFindingDefinition = {
   subtype: string | null;
   title: string;
 };
+
+type PreconsentEvidenceSummary = {
+  sampleUrls: string[];
+  totalObservedUrls: number;
+  vendorsObserved: string[];
+};
+
+function normalizeEvidenceUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.search = "";
+    return parsed.toString().replace(/\/$/, parsed.pathname === "/" ? "/" : "");
+  } catch {
+    return url.trim();
+  }
+}
+
+function inferVendorFromUrl(url: string) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+
+    if (hostname.includes("yandex")) {
+      return "Yandex";
+    }
+    if (hostname.includes("viqeo") || hostname.includes("vqserve")) {
+      return "Viqeo";
+    }
+    if (hostname.includes("adriver")) {
+      return "AdRiver";
+    }
+    if (hostname.includes("googlesyndication") || hostname.includes("doubleclick") || hostname.includes("google")) {
+      return "Google Ads";
+    }
+    if (hostname.includes("liveinternet") || hostname.endsWith("li.ru") || hostname.endsWith("yadro.ru")) {
+      return "LiveInternet";
+    }
+
+    const parts = hostname.split(".").filter(Boolean);
+    if (parts.length >= 2) {
+      return parts.slice(-2).join(".");
+    }
+    return hostname;
+  } catch {
+    return null;
+  }
+}
+
+function summarizePreconsentEvidenceUrls(evidenceUrls: string[], trackerVendors: string[]): PreconsentEvidenceSummary {
+  const normalizedUrls = [...new Set(
+    evidenceUrls
+      .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      .map((entry) => normalizeEvidenceUrl(entry))
+  )];
+
+  const inferredVendors = normalizedUrls
+    .map((entry) => inferVendorFromUrl(entry))
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+
+  const vendorsObserved = [...new Set([...trackerVendors, ...inferredVendors])].slice(0, 8);
+
+  return {
+    sampleUrls: normalizedUrls.slice(0, 5),
+    totalObservedUrls: evidenceUrls.length,
+    vendorsObserved
+  };
+}
 
 const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
   string,
@@ -751,6 +826,8 @@ function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: Validation
     ? (context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")?.signal_value_json as string[])
     : [];
   const violationCount = context.scanSignalsByKey.get("privacy.preconsent_violation_count")?.signal_value_json;
+  const evidenceSummary = summarizePreconsentEvidenceUrls(evidenceUrls, trackerVendors);
+  const observedVendors = evidenceSummary.vendorsObserved;
 
   return {
     claim: "Tracking activity appears to occur before the visitor can make a consent choice.",
@@ -760,12 +837,12 @@ function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: Validation
         ? `Pre-consent tracker violation count: ${String(violationCount)}.`
         : "A specific violation count was not available."
       ,
-      evidenceUrls.length > 0
-        ? `Concrete pre-consent request evidence was captured (${Math.min(evidenceUrls.length, 5)} URLs retained).`
+      evidenceSummary.totalObservedUrls > 0
+        ? `Concrete pre-consent request evidence was captured (${Math.min(evidenceSummary.sampleUrls.length, 5)} representative URLs retained).`
         : "Concrete request URLs were not retained in this packet.",
-      trackerVendors.length > 0 ? `Known tracker vendors observed before consent: ${trackerVendors.join(", ")}.` : "Specific pre-consent tracker vendors were not isolated."
+      observedVendors.length > 0 ? `Known tracker vendors observed before consent: ${observedVendors.join(", ")}.` : "Specific pre-consent tracker vendors were not isolated."
     ],
-    missingEvidence: evidenceUrls.length > 0 ? [] : ["Concrete request URLs or cookie evidence captured before consent."],
+    missingEvidence: evidenceSummary.totalObservedUrls > 0 ? [] : ["Concrete request URLs or cookie evidence captured before consent."],
     pageUrls: [],
     policyEvidence: [],
     reviewPolicy: {
@@ -791,12 +868,15 @@ function buildPreconsentTrackingEvidence(row: ScanSignalRow, context: Validation
         ]
       }
     },
-    runtimeEvidence: evidenceUrls.slice(0, 5),
+    runtimeEvidence: evidenceSummary.sampleUrls,
     supportingSignals: relatedSignals.map((signal) => ({
       category: signal.category,
       key: signal.signal_key,
-      label: signal.signal_label,
-      value: signal.signal_value_json
+      label: signal.signal_key === "privacy.preconsent_tracker_evidence_urls" ? "Pre-consent tracker evidence summary" : signal.signal_label,
+      value:
+        signal.signal_key === "privacy.preconsent_tracker_evidence_urls"
+          ? evidenceSummary
+          : signal.signal_value_json
     }))
   };
 }
