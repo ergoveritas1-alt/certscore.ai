@@ -179,7 +179,9 @@ test("uses strong systemic accessibility copy for negative accessibility risk sc
         title: "Accessibility risk score",
         evidence: {
           signalValue: -4,
-          supportingSignals: ["keyboard focus defects in shared templates"]
+          snapshotField: "accessibility_litigation_risk_score",
+          supportingSignals: ["keyboard focus defects in shared templates"],
+          value: -4
         }
       }),
       observedValue: "-4",
@@ -190,10 +192,16 @@ test("uses strong systemic accessibility copy for negative accessibility risk sc
   );
 
   assert.equal(presentation.findingName, "Accessibility risk score");
-  assert.match(presentation.whyThisMatters, /negative or materially out of baseline|systemic barriers/i);
-  assert.match(presentation.suggestedFix, /shared templates|keyboard traps|focus-management/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /accessibility risk score of -4|significant departure from baseline WCAG compliance|missing ARIA landmarks/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /shared templates|Keyboard Traps|machine-readable ARIA labels|focus-management logic/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.ok(Number(presentation.confidenceScore) >= 0.9);
+  assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
 test("uses landmark-specific accessibility copy and high confidence for landmark issues", () => {
@@ -441,4 +449,5 @@ test("normalizeFindingName removes confidence-colored prefixes from display name
   assert.equal(normalizeFindingName("Low-confidence policy extraction"), "Policy extraction");
   assert.equal(normalizeFindingName("Automated accessibility issues detected"), "WCAG errors");
   assert.equal(normalizeFindingName("Missing technical disclosure"), "Missing technical disclosure");
+  assert.equal(normalizeFindingName({ type: "click" } as unknown as string), "");
 });

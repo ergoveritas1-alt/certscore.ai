@@ -256,9 +256,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Conduct a technical audit of the site’s shared templates, especially the header, footer, and navigation, to remediate the root causes of the accessibility risk score. Prioritize keyboard traps, focus-management issues, and missing or duplicate ARIA labels across interactive elements.",
+        "Conduct a technical audit of the site's shared templates (header, footer, and navigation) to remediate the root causes of the risk score. Prioritize resolving Keyboard Traps and ensuring all interactive elements have unique, machine-readable ARIA labels. Refactor the focus-management logic to ensure a logical tab order across all dynamic page components.",
       whyThisMatters:
-        "An accessibility risk score that is negative or materially out of baseline can signal a dense cluster of unresolved structural WCAG defects in the DOM. These issues often indicate broken keyboard focus, weak landmark structure, or missing accessibility metadata in shared templates, creating systemic barriers for users relying on assistive technologies."
+        "The accessibility risk score of -4 indicates a significant departure from baseline WCAG compliance. In technical auditing, a negative or heavily outlier score typically correlates with a high density of unaddressed structural defects in the DOM, such as broken keyboard focus or missing ARIA landmarks, which create systemic barriers for users relying on assistive technologies."
     },
     matches: [/elevated accessibility risk score/i, /accessibility risk score/i]
   },
@@ -537,11 +537,16 @@ function computeSupportStrength(input: {
     }
   }
   if (/accessibility risk score|elevated accessibility risk score/i.test(input.haystack)) {
-    const signalValue = typeof evidence.signalValue === "number" ? evidence.signalValue : null;
+    const signalValue =
+      typeof evidence.signalValue === "number"
+        ? evidence.signalValue
+        : typeof evidence.value === "number"
+          ? evidence.value
+          : null;
     if (signalValue !== null && signalValue <= -4) {
-      score += 0.22;
+      score += 0.27;
     } else if (signalValue !== null && signalValue < 0) {
-      score += 0.16;
+      score += 0.2;
     }
     if (evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.05;
