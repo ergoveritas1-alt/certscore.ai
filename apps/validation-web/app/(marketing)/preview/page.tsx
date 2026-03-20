@@ -9,20 +9,24 @@ export default function PreviewPage() {
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-16">
         <div className="space-y-4">
-          <Badge tone="neutral">Full scan review</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight">Run a full scan and open the review report</h1>
+          <Badge tone="neutral">Homepage preview</Badge>
+          <h1 className="text-4xl font-semibold tracking-tight">Run a homepage scan before signup</h1>
           <p className="text-lg text-slate-600">
-            This flow now queues the same full scan path used in the app and opens the scan report review directly instead of generating a lightweight homepage preview.
+            Start with a lightweight preview that checks the homepage for sample accessibility, privacy, and disclosure findings before you create an account.
           </p>
         </div>
 
         <div className="mt-8">
           <Card className="border-slate-200 bg-white">
             <CardHeader>
-              <CardTitle>Start a full scan</CardTitle>
+              <CardTitle>Start a homepage preview</CardTitle>
             </CardHeader>
             <CardContent>
-              <DomainScanForm buttonLabel="Run full scan" />
+              <DomainScanForm
+                buttonLabel="Start homepage scan"
+                helperText="The preview is lightweight and shows sample findings for the homepage before signup."
+                mode="preview"
+              />
             </CardContent>
           </Card>
         </div>
@@ -33,7 +37,7 @@ export default function PreviewPage() {
               <CardTitle>Accessibility</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Full scan report sections include persisted automated accessibility evidence.
+              The homepage preview highlights visible accessibility signals before you queue a deeper scan.
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white">
@@ -41,15 +45,15 @@ export default function PreviewPage() {
               <CardTitle>Privacy</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Full scan report sections include tracker, consent, and pre-consent evidence.
+              Sample findings call out consent, tracker, and disclosure issues visible from the public homepage.
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white">
             <CardHeader>
-              <CardTitle>Review findings</CardTitle>
+              <CardTitle>Continue after signup</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Findings consolidate policy review queue, policy section review, and accessibility review outputs.
+              Create an account to unlock deeper scans, saved history, and the full review workflow.
             </CardContent>
           </Card>
         </div>
