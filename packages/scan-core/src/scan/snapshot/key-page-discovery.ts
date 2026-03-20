@@ -213,26 +213,163 @@ function collectSameBrandSubdomainOrigins(input: {
     .slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxSameBrandSubdomainHosts);
 }
 
-function limitSameBrandCandidatesPerType(candidates: DiscoveryCandidateDraft[]) {
-  const counts = new Map<KeyPageType, number>();
-  const selected: DiscoveryCandidateDraft[] = [];
-
-  for (const candidate of candidates) {
-    if (candidate.discoveredFrom !== "same_brand_subdomain") {
-      selected.push(candidate);
-      continue;
+function dedupeLinksByHref(links: LinkLike[]) {
+  const deduped = new Map<string, LinkLike>();
+  for (const link of links) {
+    if (!deduped.has(link.href)) {
+      deduped.set(link.href, link);
     }
-
-    const count = counts.get(candidate.pageType) ?? 0;
-    if (count >= KEY_PAGE_DISCOVERY_BUDGETS.maxSameBrandCandidatesPerType) {
-      continue;
-    }
-
-    counts.set(candidate.pageType, count + 1);
-    selected.push(candidate);
   }
 
-  return selected;
+  return [...deduped.values()];
+}
+
+function toPascalCasePathSegment(value: string) {
+  const cleaned = value.replace(/^\/+/, "").trim();
+  if (!cleaned) {
+    return cleaned;
+  }
+
+  return cleaned
+    .split(/[-_/]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join("");
+}
+
+function buildRelativeGuessedUrls(sourceUrl: string, pageType: KeyPageType, localeHints: string[]) {
+  try {
+    const parsed = new URL(sourceUrl);
+    const basePath = parsed.pathname.replace(/\/+$/, "");
+    if (!basePath || basePath === "/") {
+      return [] as string[];
+    }
+
+    const relativeGuesses = getLocalizedPathGuesses({
+      homepageUrl: `${parsed.origin}/`,
+      localeHints,
+      pageType
+    });
+
+    const urls = new Set<string>();
+    for (const guess of relativeGuesses) {
+      const guessPath = new URL(guess).pathname.replace(/^\/+/, "");
+      if (!guessPath) {
+        continue;
+      }
+
+      urls.add(new URL(`${basePath}/${guessPath}`, parsed.origin).toString());
+      urls.add(new URL(`${basePath}/${toPascalCasePathSegment(guessPath)}`, parsed.origin).toString());
+    }
+
+    return [...urls];
+  } catch {
+    return [] as string[];
+  }
+}
+
+function buildSameBrandSubdomainGuessedCandidates(input: {
+  homepageUrl: string;
+  localeHints: string[];
+  sourceUrls: string[];
+}) {
+  const candidates: DiscoveryCandidateDraft[] = [];
+
+  for (const sourceUrl of dedupe(input.sourceUrls)) {
+    for (const pageType of getSupportedKeyPageTypes()) {
+      const guessedUrls = [
+        ...getLocalizedPathGuesses({
+          homepageUrl: sourceUrl,
+          localeHints: input.localeHints,
+          pageType
+        }),
+        ...buildRelativeGuessedUrls(sourceUrl, pageType, input.localeHints)
+      ];
+
+      for (const guessedUrl of dedupe(guessedUrls)) {
+        if (getHostRelation(guessedUrl, input.homepageUrl) !== "same_brand_subdomain") {
+          continue;
+        }
+
+        const scored = scoreCandidate({
+          anchorText: null,
+          candidateUrl: guessedUrl,
+          discoveredFrom: "same_brand_subdomain",
+          localeHints: input.localeHints,
+          pageType,
+          sourceUrl
+        });
+
+        candidates.push({
+          anchorText: null,
+          candidateScore: scored.candidateScore,
+          candidateUrl: guessedUrl,
+          discoveredFrom: "same_brand_subdomain",
+          hostRelation: "same_brand_subdomain",
+          localeHints: input.localeHints,
+          pageType,
+          pageTypeConfidence: scored.pageTypeConfidence,
+          sourceUrl
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function limitSameBrandCandidatesPerType(candidates: DiscoveryCandidateDraft[]) {
+  const direct = candidates.filter((candidate) => candidate.discoveredFrom !== "same_brand_subdomain");
+  const sameBrand = candidates.filter((candidate) => candidate.discoveredFrom === "same_brand_subdomain");
+  const grouped = new Map<KeyPageType, DiscoveryCandidateDraft[]>();
+
+  for (const candidate of sameBrand) {
+    grouped.set(candidate.pageType, [...(grouped.get(candidate.pageType) ?? []), candidate]);
+  }
+
+  const selectedSameBrand = [...grouped.entries()].flatMap(([, group]) =>
+    group
+      .sort((left, right) => {
+        const leftHasAnchor = left.anchorText && left.anchorText.trim().length > 0 ? 1 : 0;
+        const rightHasAnchor = right.anchorText && right.anchorText.trim().length > 0 ? 1 : 0;
+        if (leftHasAnchor !== rightHasAnchor) {
+          return rightHasAnchor - leftHasAnchor;
+        }
+
+        const leftDepth = getSourceUrlDepth(left.sourceUrl);
+        const rightDepth = getSourceUrlDepth(right.sourceUrl);
+        if (leftDepth !== rightDepth) {
+          return rightDepth - leftDepth;
+        }
+
+        return right.candidateScore - left.candidateScore;
+      })
+      .slice(0, KEY_PAGE_DISCOVERY_BUDGETS.maxSameBrandCandidatesPerType)
+  );
+
+  return [...direct, ...selectedSameBrand];
+}
+
+function getSourceUrlDepth(sourceUrl: string | null) {
+  if (!sourceUrl) {
+    return 0;
+  }
+
+  try {
+    return new URL(sourceUrl).pathname.split("/").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+function isSameDocumentLink(candidateUrl: string, pageUrl: string) {
+  try {
+    const candidate = new URL(candidateUrl);
+    const page = new URL(pageUrl);
+    return candidate.hostname === page.hostname && candidate.pathname.replace(/\/+$/, "") === page.pathname.replace(/\/+$/, "");
+  } catch {
+    return false;
+  }
 }
 
 async function fetchSameBrandSubdomainCandidates(input: {
@@ -263,25 +400,27 @@ async function fetchSameBrandSubdomainCandidates(input: {
     if (subdomainLinks.length === 0) {
       continue;
     }
+    const dedupedSubdomainLinks = dedupeLinksByHref(subdomainLinks);
 
     const subdomainLocaleHints = dedupe([
       ...input.localeHints,
       ...inferLocaleHints({
         homepageLanguage: extractLanguage(fetched.body),
         homepageUrl: fetched.finalUrl || originUrl,
-        links: subdomainLinks
+        links: dedupedSubdomainLinks
       })
     ]);
 
     const renderedDiscovery = buildRenderedLinkCandidates({
       discoveredFrom: "same_brand_subdomain",
       homepageUrl: input.homepageUrl,
-      links: subdomainLinks,
+      links: dedupedSubdomainLinks,
       localeHints: subdomainLocaleHints,
       sourceUrl: fetched.finalUrl || originUrl
     });
 
-    const secondHopHubs = [...subdomainLinks]
+    const secondHopHubs = dedupedSubdomainLinks
+      .filter((link) => !isSameDocumentLink(link.href, fetched.finalUrl || originUrl))
       .map((link) => ({
         href: link.href,
         text: link.text,
@@ -296,6 +435,7 @@ async function fetchSameBrandSubdomainCandidates(input: {
       .slice(0, MAX_SAME_BRAND_SUBDOMAIN_HUB_FETCHES_PER_HOST);
 
     let secondHopCandidates: DiscoveryCandidateDraft[] = [];
+    const eligibleSecondHopSourceUrls: string[] = [];
     for (const secondHopHub of secondHopHubs) {
       const secondHopFetched = await fetchTextPage(secondHopHub.href, 2, {
         bypassRobots: true,
@@ -310,7 +450,6 @@ async function fetchSameBrandSubdomainCandidates(input: {
       ) {
         continue;
       }
-
       const secondHopLinks = extractLinks(secondHopFetched.body, secondHopFetched.finalUrl || secondHopHub.href);
       const secondHopLocaleHints = dedupe([
         ...subdomainLocaleHints,
@@ -320,20 +459,33 @@ async function fetchSameBrandSubdomainCandidates(input: {
           links: secondHopLinks
         })
       ]);
+      const secondHopRenderedDiscovery = buildRenderedLinkCandidates({
+        discoveredFrom: "same_brand_subdomain",
+        homepageUrl: input.homepageUrl,
+        links: secondHopLinks,
+        localeHints: secondHopLocaleHints,
+        sourceUrl: secondHopFetched.finalUrl || secondHopHub.href
+      });
+      if (secondHopRenderedDiscovery.candidates.length > 0) {
+        eligibleSecondHopSourceUrls.push(secondHopFetched.finalUrl || secondHopHub.href);
+      }
       secondHopCandidates = [
         ...secondHopCandidates,
-        ...buildRenderedLinkCandidates({
-          discoveredFrom: "same_brand_subdomain",
-          homepageUrl: input.homepageUrl,
-          links: secondHopLinks,
-          localeHints: secondHopLocaleHints,
-          sourceUrl: secondHopFetched.finalUrl || secondHopHub.href
-        }).candidates
+        ...secondHopRenderedDiscovery.candidates
       ];
     }
 
+    const subdomainGuessedCandidates = buildSameBrandSubdomainGuessedCandidates({
+      homepageUrl: input.homepageUrl,
+      localeHints: subdomainLocaleHints,
+      sourceUrls: [
+        fetched.finalUrl || originUrl,
+        ...eligibleSecondHopSourceUrls
+      ]
+    });
+
     states.push({
-      candidates: [...renderedDiscovery.candidates, ...secondHopCandidates],
+      candidates: [...renderedDiscovery.candidates, ...secondHopCandidates, ...subdomainGuessedCandidates],
       legalHubCandidates: [],
       localeHints: subdomainLocaleHints,
       sameBrandSubdomainHostsInspected: [originUrl],
