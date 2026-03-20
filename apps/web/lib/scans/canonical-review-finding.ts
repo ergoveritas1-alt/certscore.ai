@@ -19,8 +19,9 @@ export type ReviewFindingPresentationSource = {
   title: string;
 };
 
-export function normalizeFindingName(title: string) {
-  const normalized = title
+export function normalizeFindingName(title: string | null | undefined | unknown) {
+  const safeTitle = typeof title === "string" ? title : "";
+  const normalized = safeTitle
     .replace(/^(high|low)-confidence\s+/i, "")
     .replace(/^high confidence on\s+/i, "")
     .replace(/^low confidence on\s+/i, "")
@@ -29,6 +30,10 @@ export function normalizeFindingName(title: string) {
 
   if (!normalized) {
     return normalized;
+  }
+
+  if (/^automated accessibility issues detected$/i.test(normalized)) {
+    return "WCAG errors";
   }
 
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
