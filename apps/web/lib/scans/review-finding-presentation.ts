@@ -295,9 +295,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Perform a technical audit of the DOM to implement missing ARIA landmarks. Ensure the page uses semantic HTML5 tags or role attributes to define the header, nav, main, and footer regions. Verify that there is only one main landmark and that repeated landmark regions have unique labels where needed.",
+        "Perform a technical audit of the DOM to implement missing ARIA landmarks. Ensure the page uses semantic HTML5 tags or role attributes to define the header, nav, main, and footer regions. Specifically, verify that there is exactly one main landmark and that multiple nav regions have unique aria-labels to distinguish their purpose.",
       whyThisMatters:
-        "The automated detector confirmed ARIA landmark violations, which indicates a failure in the page's semantic regions. Landmarks are critical for screen reader users to navigate efficiently, and their absence or improper nesting can prevent users from skipping repetitive content or jumping to primary sections."
+        "The automated detector confirmed distinct ARIA landmark violations, signaling a failure in the page's semantic architecture. Landmarks, such as main, nav, and header regions, are critical for screen reader users to navigate efficiently; their absence or improper nesting prevents users from skipping repetitive content or jumping directly to primary sections."
     },
     matches: [/landmark issues/i, /aria landmark/i, /landmark/i]
   },

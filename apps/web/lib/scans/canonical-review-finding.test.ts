@@ -230,8 +230,14 @@ test("uses landmark-specific accessibility copy and high confidence for landmark
   );
 
   assert.equal(presentation.findingName, "Landmark issues");
-  assert.match(presentation.whyThisMatters, /semantic regions|screen reader users/i);
-  assert.match(presentation.suggestedFix, /ARIA landmarks|one main landmark|unique labels/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /distinct ARIA landmark violations|semantic architecture|screen reader users|jumping directly to primary sections/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /ARIA landmarks|exactly one main landmark|multiple nav regions have unique aria-labels/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
