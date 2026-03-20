@@ -138,9 +138,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/dpv/"
       },
       suggestedFix:
-        "Review the policy text and disclosure architecture against the observed runtime behavior, then add or clarify technical disclosures for the specific tracking or replay behavior that is actually present. Make sure the disclosure is explicit enough to be both user-readable and machine-indexable.",
+        "Perform a technical audit to map active tracking scripts (for example, session replay, fingerprinters, or third-party pixels) against the current privacy policy. Update the Technical Disclosures section to explicitly name these technologies, their purpose, and their data retention periods. Ensure the new text is formatted with semantic HTML tags to allow for automated indexing.",
       whyThisMatters:
-        "Observed runtime behavior suggests a tracking or replay function that is not clearly disclosed in the policy materials. That creates a likely technical-disclosure gap, not just a parser-confidence issue."
+        "The automated scan confirmed a definitive Missing Technical Disclosure where observed runtime behavior, such as tracking or session replay, is active but entirely absent from the policy materials. This gap between technical reality and legal disclosure creates significant GDPR and CCPA exposure, as it constitutes processing personal data without the required notice or transparency."
     },
     matches: [/policy_runtime\.missing_technical_disclosure/i, /missing technical disclosure/i]
   },

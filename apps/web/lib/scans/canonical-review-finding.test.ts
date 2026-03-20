@@ -422,6 +422,39 @@ test("uses low-confidence extraction copy when sibling runtime findings add cont
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
+test("uses strong disclosure-gap copy for missing technical disclosure", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "missing-tech-1",
+        ruleKey: "policy_runtime.missing_technical_disclosure",
+        title: "Missing technical disclosure",
+        evidence: {
+          pageUrl: "https://jili58d.com/privacy",
+          runtimeEvidence: ["session replay observed"],
+          supportingSignals: ["tracking active without matching disclosure"]
+        }
+      }),
+      observedValue: "Privacy Policy",
+      severity: "high",
+      title: "Missing technical disclosure"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Missing technical disclosure");
+  assert.match(
+    presentation.whyThisMatters,
+    /definitive Missing Technical Disclosure|tracking or session replay|GDPR and CCPA exposure/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /technical audit|session replay|third-party pixels|Technical Disclosures section|semantic HTML tags/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.ok(Number(presentation.confidenceScore) >= 0.95);
+});
+
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
