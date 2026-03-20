@@ -90,18 +90,27 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /terms_of_service|tos/i,
         override: {
           suggestedFix:
-            "Perform a manual technical review of the identified terms page and expose core contractual disclosures in clearer rendered HTML sections. Make sure effective date, governing law, dispute resolution, termination, and notice/contact language are directly recoverable without buried or weakly structured containers.",
+            "Perform a manual technical review of the terms page to map missing contractual disclosures. To improve future scans, refactor the rendered HTML to use semantic sectioning elements with explicit IDs for Governing Law, Arbitration, Termination, and Notice Contact language so those protections are not buried in weakly structured containers.",
           whyThisMatters:
-            "The automated parser could not recover core contractual fields from the terms page with high confidence. That usually points to weak document structure, sparse section anchors, or terms language that is technically difficult to map into user-rights and enforcement disclosures."
+            "The automated scan confirmed a total failure in contractual transparency. With a high ambiguity score and zero extractable snippets, the terms are effectively dark to automated auditing, which prevents reliable verification of governing law, dispute resolution, and termination rights."
         }
       },
       {
-        match: /cookie policy|low-confidence cookie policy extraction/i,
+        match: /cookie policy|low-confidence cookie policy extraction|extraction cookie policy/i,
         override: {
           suggestedFix:
-            "Conduct a manual technical audit of the cookie policy to identify and categorize the tracking technologies in use. To improve future automated scans, implement a structured HTML format using table or section tags with descriptive ARIA labels that explicitly define cookie name, provider, and duration.",
+            "Immediate manual verification is required to identify and categorize active tracking technologies. To improve future scans, refactor the rendered HTML into a flattened table structure or semantic section blocks with explicit IDs for Cookie Name, Provider, Purpose, and Duration so those fields are not buried in weakly structured dynamic containers.",
           whyThisMatters:
-            "The automated parser could not reliably map cookie categories such as Essential, Performance, or Targeting, or extract their retention periods. This usually points to weak semantic structure or dynamic table layouts that prevent the scanner from indexing disclosure metadata consistently."
+            "The automated scan confirmed a total failure in cookie disclosure transparency. With a high ambiguity score and zero extractable snippets, the tracking disclosures are effectively dark to automated auditing, which prevents reliable verification of cookie categories and retention periods."
+        }
+      },
+      {
+        match: /privacy policy|extraction privacy policy/i,
+        override: {
+          suggestedFix:
+            "Immediate manual verification is required to extract the following missing metadata: (1) Data Retention periods, (2) Third-party recipient categories, and (3) Legal basis for processing. Technically, the DOM must be refactored to replace unstructured div soup with semantic section or article tags that use explicit IDs for mandatory disclosures.",
+          whyThisMatters:
+            "The automated scan confirmed a total failure in semantic transparency. With a Policy Ambiguity Score of 90 and zero extractable snippets, the site is effectively dark to automated auditing. This structural weakness prevents the verification of mandatory disclosures, including Data Controller identity and DSAR endpoints."
         }
       }
     ],
@@ -115,9 +124,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://cppa.ca.gov/regulations/pdf/20230329_final_approved_regs.pdf"
       },
       suggestedFix:
-        "Compare the rights language in the policy against the live privacy-request workflow and remove any UX barriers that make opting out or deleting data harder than initial data collection. Treat this as a policy-and-product alignment issue, not just a copy update.",
+        "Perform a technical audit to achieve functional symmetry between the opt-in and opt-out paths. Refactor the privacy-request workflow so revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, without secondary authentication or account-creation hurdles that are not clearly disclosed in the policy.",
       whyThisMatters:
-        "Strong runtime evidence suggests the site’s actual rights-fulfillment experience is materially harder than the policy language implies. That kind of functional misalignment can signal a technical dark pattern and create elevated GDPR or CCPA exposure."
+        "The automated scan confirmed a functional misalignment where the live rights-fulfillment workflow contradicts the site’s stated privacy promises. This kind of asymmetry can indicate a technical dark pattern, where exercising privacy rights requires materially more friction than the initial data-ingestion path, creating direct GDPR and CCPA exposure."
     },
     matches: [/policy_runtime\.functional_misalignment/i, /high-confidence functional misalignment/i]
   },
@@ -143,9 +152,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/dpv/"
       },
       suggestedFix:
-        "Perform a manual review of the identified policy page and improve the document structure so critical disclosures are directly exposed in the rendered HTML. Avoid burying key policy fields inside collapsible or weakly structured containers that reduce automated and user visibility.",
+        "Perform a technical audit of the policy DOM to expose hidden or dynamic text blocks. Refactor the page into a flatter semantic structure with explicit section IDs for mandatory disclosures, and make sure content is not gated behind JavaScript-only interactions or display-none styling.",
       whyThisMatters:
-        "The policy page appears structurally weak for reliable disclosure extraction, which increases the risk that important privacy disclosures are technically obstructed, incomplete, or hard for users to find."
+        "The automated scan confirmed an obstruction signal, indicating that the site architecture prevents reliable disclosure mapping. This kind of technical barrier, often caused by dynamic, collapsible, or non-semantic containers, can obstruct both automated auditing and user visibility into critical privacy practices."
     },
     matches: [/policy_runtime\.disclosure_likely_obstructed/i, /disclosure likely obstructed/i]
   },
@@ -247,9 +256,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Conduct a targeted review of high-traffic page templates to identify systemic accessibility regressions. Prioritize fixing errors in shared components, such as missing ARIA labels in the header or broken focus order in menus, to lower aggregate risk across the site.",
+        "Conduct a technical audit of the site’s shared templates, especially the header, footer, and navigation, to remediate the root causes of the accessibility risk score. Prioritize keyboard traps, focus-management issues, and missing or duplicate ARIA labels across interactive elements.",
       whyThisMatters:
-        "An elevated accessibility risk score can correlate with the density of unaddressed WCAG violations across the DOM. High-frequency errors in shared elements such as navigation or footers can create systematic barriers for assistive technologies and degrade the experience site-wide."
+        "An accessibility risk score that is negative or materially out of baseline can signal a dense cluster of unresolved structural WCAG defects in the DOM. These issues often indicate broken keyboard focus, weak landmark structure, or missing accessibility metadata in shared templates, creating systemic barriers for users relying on assistive technologies."
     },
     matches: [/elevated accessibility risk score/i, /accessibility risk score/i]
   },
@@ -270,9 +279,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /critical user-rights fulfillment friction/i,
         override: {
           suggestedFix:
-            "Immediately simplify the rights-fulfillment process. Ensure that opting out or requesting data deletion is symmetrical to the data-collection process, requiring no more steps or effort than initial consent or registration.",
+            "Implement functional symmetry in the UI. Ensure that the technical path for revoking consent or deleting data is reachable in the same number of clicks as the accept path and does not trigger secondary modals, forced account creation, or login redirects that were not required during the initial data collection.",
           whyThisMatters:
-            "A maximum friction score indicates that users are functionally blocked from exercising their privacy rights. Under GDPR and CCPA, dark patterns such as requiring account creation to opt out or hiding deletion requests are high-severity violations that invite regulatory penalties."
+            "The runtime detector returned a maximum friction score of 100, confirming that the user-rights fulfillment path is technically obstructed. This represents a hard block where exercising privacy rights is functionally impossible or materially more complex than the initial data-ingestion path, signaling a high-risk technical dark pattern."
         }
       }
     ],
@@ -286,9 +295,23 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Perform a technical audit of the DOM to identify and remediate the flagged rule violations. Focus on high-impact fixes such as adding missing alt text to images, correcting aria-label implementation, and ensuring all interactive elements are reachable via tab order.",
+        "Perform a technical audit of the DOM to implement missing ARIA landmarks. Ensure the page uses semantic HTML5 tags or role attributes to define the header, nav, main, and footer regions. Verify that there is only one main landmark and that repeated landmark regions have unique labels where needed.",
       whyThisMatters:
-        "Automated accessibility failures typically point to concrete technical issues such as missing ARIA attributes, improper heading structures, or insufficient color contrast. These defects can directly degrade the experience for users relying on screen readers or keyboard-only navigation."
+        "The automated detector confirmed ARIA landmark violations, which indicates a failure in the page's semantic regions. Landmarks are critical for screen reader users to navigate efficiently, and their absence or improper nesting can prevent users from skipping repetitive content or jumping to primary sections."
+    },
+    matches: [/landmark issues/i, /aria landmark/i, /landmark/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "WCAG 2.1 Technical Requirements",
+        url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
+      },
+      suggestedFix:
+        "Perform a targeted DOM audit to resolve the identified WCAG failures. Prioritize Level A remediation first: ensure images have descriptive alt text, interactive elements have unique aria-labels where needed, and keyboard tab order is logically structured so users do not encounter traps or skipped controls.",
+      whyThisMatters:
+        "Automated testing identified confirmed WCAG rule violations, which points to technical barriers for users with disabilities. Even when the total count is modest, issues such as missing ARIA attributes, missing alt text, or broken keyboard flow can make interactive elements inaccessible to screen readers or keyboard-only navigation."
     },
     matches: [/error_count/i, /warning_count/i, /issue_count/i, /failures_count/i, /accessibility/i, /wcag/i]
   }
@@ -305,7 +328,31 @@ function formatConfidenceScore(value: number) {
 }
 
 function inferDetectorStrength(haystack: string) {
-  if (/preconsent|tracking_before_consent|trackers_before_consent|cookie_runtime\.disclosure_gap|retargeting pixel|missing technical disclosure|functional misalignment/i.test(haystack)) {
+  if (/critical user-rights fulfillment friction/i.test(haystack)) {
+    return 0.8;
+  }
+
+  if (/landmark issues|aria landmark|landmark/i.test(haystack)) {
+    return 0.72;
+  }
+
+  if (/accessibility risk score|elevated accessibility risk score/i.test(haystack)) {
+    return 0.68;
+  }
+
+  if (/disclosure likely obstructed|policy_runtime\.disclosure_likely_obstructed/i.test(haystack)) {
+    return 0.72;
+  }
+
+  if (/automated accessibility issues detected/i.test(haystack)) {
+    return 0.62;
+  }
+
+  if (/functional misalignment/i.test(haystack)) {
+    return 0.7;
+  }
+
+  if (/preconsent|tracking_before_consent|trackers_before_consent|cookie_runtime\.disclosure_gap|retargeting pixel|missing technical disclosure/i.test(haystack)) {
     return 0.6;
   }
 
@@ -327,6 +374,26 @@ function inferDetectorStrength(haystack: string) {
 function evidenceArrayLength(evidence: Record<string, unknown> | null | undefined, key: string) {
   const value = evidence?.[key];
   return Array.isArray(value) ? value.length : 0;
+}
+
+function getSupportingSignalNumericValue(evidence: Record<string, unknown> | null | undefined) {
+  const signals = evidence?.supportingSignals;
+  if (!Array.isArray(signals)) {
+    return null;
+  }
+
+  for (const signal of signals) {
+    if (!signal || typeof signal !== "object") {
+      continue;
+    }
+
+    const value = (signal as Record<string, unknown>).value;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function computeSupportStrength(input: {
@@ -379,6 +446,16 @@ function computeSupportStrength(input: {
         : null;
   const policyStructurallyWeak =
     evidence.policyStructurallyWeak === true || evidence.policy_structurally_weak === true;
+  const reviewPolicy =
+    evidence.reviewPolicy && typeof evidence.reviewPolicy === "object"
+      ? (evidence.reviewPolicy as Record<string, unknown>)
+      : null;
+  const detectorStrength = typeof reviewPolicy?.detectorStrength === "string" ? reviewPolicy.detectorStrength : null;
+  const claimType = typeof reviewPolicy?.claimType === "string" ? reviewPolicy.claimType : null;
+  const supportingSignalValue = getSupportingSignalNumericValue(evidence);
+  if (detectorStrength === "strong") {
+    score += 0.08;
+  }
   if (typeof policySnippetCount === "number" && policySnippetCount > 0) {
     score += Math.min(0.1, policySnippetCount * 0.02);
   }
@@ -430,8 +507,75 @@ function computeSupportStrength(input: {
   if (typeof evidence.count === "number" && evidence.count > 0) {
     score += 0.1;
   }
+  if (/automated accessibility issues detected|accessibility|wcag/i.test(input.haystack)) {
+    const countValue =
+      typeof evidence.count === "number"
+        ? evidence.count
+        : claimType === "automated_accessibility"
+          ? supportingSignalValue
+          : null;
+    if (countValue !== null) {
+      if (countValue <= 3) {
+        score += 0.18;
+      } else if (countValue <= 10) {
+        score += 0.22;
+      } else {
+        score += 0.26;
+      }
+    }
+    if (evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.05;
+    }
+  }
+  if (/landmark issues|aria landmark|landmark/i.test(input.haystack)) {
+    const countValue = typeof evidence.count === "number" ? evidence.count : null;
+    if (countValue !== null && countValue > 0) {
+      score += countValue <= 2 ? 0.13 : 0.18;
+    }
+    if (evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.05;
+    }
+  }
+  if (/accessibility risk score|elevated accessibility risk score/i.test(input.haystack)) {
+    const signalValue = typeof evidence.signalValue === "number" ? evidence.signalValue : null;
+    if (signalValue !== null && signalValue <= -4) {
+      score += 0.22;
+    } else if (signalValue !== null && signalValue < 0) {
+      score += 0.16;
+    }
+    if (evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.05;
+    }
+  }
   if (typeof evidence.reviewQueueReason === "string" || typeof evidence.policyEnrichmentId === "string") {
     score += 0.05;
+  }
+  if (/functional misalignment/i.test(input.haystack)) {
+    if (typeof evidence.signalValue === "number" && evidence.signalValue >= 90) {
+      score += 0.2;
+    }
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.1;
+    }
+    if (typeof evidence.pageUrl === "string" || evidenceArrayLength(evidence, "pageUrls") > 0) {
+      score += 0.05;
+    }
+  }
+  if (/critical user-rights fulfillment friction/i.test(input.haystack)) {
+    if (typeof evidence.signalValue === "number" && evidence.signalValue >= 100) {
+      score += 0.25;
+    }
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.1;
+    }
+  }
+  if (/disclosure likely obstructed|policy_runtime\.disclosure_likely_obstructed/i.test(input.haystack)) {
+    if (typeof evidence.pageUrl === "string" || evidenceArrayLength(evidence, "pageUrls") > 0) {
+      score += 0.05;
+    }
+    if (evidenceArrayLength(evidence, "policyEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.08;
+    }
   }
   if (/low-confidence extraction|low_confidence_critical_fields/i.test(input.haystack) && /policy_runtime\.|cookie_runtime\./i.test(input.siblingHaystack)) {
     score += 0.35;
