@@ -53,6 +53,16 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentPreconsentViolationCount: 2,
       consentBaselineTrackerEvidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
       consentBaselineTrackerVendorNames: ["LinkedIn Insight Tag", "Marketo"],
+      sensitivePayloadViolations: [
+        {
+          detectedType: "email_detected",
+          matchSnippet: "email=al***@example.com",
+          requestMethod: "POST",
+          requestUrl: "https://tracker.example.net/collect",
+          timestamp: "2026-03-20T14:19:44.000Z",
+          vendorHost: "tracker.example.net"
+        }
+      ],
       keyPageDiscoverySummary: {
         budgets: {
           maxAdditionalFetchAttempts: 8,
@@ -127,6 +137,16 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_preconsent_violation_count: 2,
     consent_baseline_tracker_evidence_urls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"],
     consent_baseline_tracker_vendor_names: ["LinkedIn Insight Tag", "Marketo"],
+    sensitive_payload_violations: [
+      {
+        detectedType: "email_detected",
+        matchSnippet: "email=al***@example.com",
+        requestMethod: "POST",
+        requestUrl: "https://tracker.example.net/collect",
+        timestamp: "2026-03-20T14:19:44.000Z",
+        vendorHost: "tracker.example.net"
+      }
+    ],
     key_page_discovery_summary: {
       budgets: {
         maxAdditionalFetchAttempts: 8,

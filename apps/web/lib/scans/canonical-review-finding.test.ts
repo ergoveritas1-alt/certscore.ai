@@ -1052,69 +1052,77 @@ test("uses healthcare-specific retargeting-pixel copy on medical domains", () =>
   assert.equal(presentation.confidenceScore, "0.9");
 });
 
-test("uses high-sensitivity data collection copy and elevated confidence", () => {
+test("uses confirmed exfiltration copy when plaintext third-party payload evidence is present", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
       linkedValidationFinding: makeLinkedFinding({
         id: "sensitive-1",
         ruleKey: "high_sensitivity_data_collection_detected",
-        title: "High-sensitivity data collection detected",
+        title: "Potential high-sensitivity data collection risk",
         evidence: {
-          runtimeEvidence: ["patient portal identifier observed in outbound request"],
-          supportingSignals: ["sensitive data collection signal triggered"]
+          runtimeEvidence: ["email in POST https://tracker.example.net/collect"],
+          sensitivePayloadViolations: [
+            {
+              detectedType: "email_detected",
+              matchSnippet: "email=al***@example.com",
+              requestMethod: "POST",
+              requestUrl: "https://tracker.example.net/collect",
+              timestamp: "2026-03-20T14:19:44.000Z",
+              vendorHost: "tracker.example.net"
+            }
+          ]
         }
       }),
       observedValue: "Sensitive request payload",
       severity: "high",
-      title: "High-sensitivity data collection detected"
+      title: "Potential high-sensitivity data collection risk"
     },
     []
   );
 
-  assert.equal(presentation.findingName, "High-sensitivity data collection detected");
+  assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
   assert.match(
     presentation.whyThisMatters,
-    /High-Sensitivity Data Collection signal|medical institution domain|HIPAA, GDPR, and CCPA exposure|Business Associate Agreement/i
+    /confirmed plaintext email data|third-party request|tracker\.example\.net/i
   );
   assert.match(
     presentation.suggestedFix,
-    /immediate network-level audit|appointment scheduling data|patient portal identifiers|redact or hash sensitive fields/i
+    /Immediately inspect the affected third-party integrations|remove sensitive fields|redaction or approved irreversible hashing/i
   );
-  assert.equal(presentation.suggestedBestPractice?.label, "HHS");
-  assert.equal(presentation.confidenceScore, "0.85");
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.95");
 });
 
-test("uses developer-platform high-sensitivity data collection copy", () => {
+test("uses low-confidence risk copy when no direct payload proof is retained", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
       linkedValidationFinding: makeLinkedFinding({
         id: "sensitive-2",
         ruleKey: "high_sensitivity_data_collection_detected",
-        title: "High-sensitivity data collection detected",
+        title: "Potential high-sensitivity data collection risk",
         evidence: {
-          pageUrl: "https://semgrep.dev",
-          runtimeEvidence: ["workspace id and code search payload observed in outbound request"],
-          supportingSignals: ["developer-focused platform semgrep.dev"]
+          runtimeEvidence: ["third-party request observed"],
+          supportingSignals: ["sensitive data collection signal triggered"]
         }
       }),
-      observedValue: "semgrep.dev",
+      observedValue: "third-party payload risk",
       severity: "high",
-      title: "High-sensitivity data collection detected"
+      title: "Potential high-sensitivity data collection risk"
     },
     []
   );
 
-  assert.equal(presentation.findingName, "High-sensitivity data collection detected");
+  assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
   assert.match(
     presentation.whyThisMatters,
-    /developer-focused platform|authentication tokens|project metadata|code-related search fields/i
+    /requests to third-party endpoints associated with tracking or measurement behavior|does not by itself confirm transmission of high-sensitivity user input/i
   );
   assert.match(
     presentation.suggestedFix,
-    /workspace IDs|source code fragments|user identifiers|proprietary metadata is exfiltrated/i
+    /Audit the relevant third-party requests and payload construction logic|redact them before dispatch/i
   );
-  assert.equal(presentation.suggestedBestPractice?.label, "FTC");
-  assert.equal(presentation.confidenceScore, "0.8");
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.4");
 });
 
 test("uses session-replay copy and moderate confidence for detector-backed replay findings", () => {

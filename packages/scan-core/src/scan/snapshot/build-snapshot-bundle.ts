@@ -8,6 +8,7 @@ import {
   type ScanAccessibilityRuleExample,
   type ScanAccessibilityRuleCount,
   type ScanSnapshot,
+  type SensitivePayloadViolation,
   type ScanTrackerVendor,
   type SnapshotSignalItem
 } from "@website-signal-risk-scanner/shared";
@@ -188,6 +189,7 @@ type BrowserPassResult = {
   initialCookieDomains: string[];
   initialCookieNames: string[];
   preconsentEvidenceUrls: string[];
+  sensitivePayloadViolations: SensitivePayloadViolation[];
   scriptSrcDomains: string[];
   scriptTagCount: number;
   thirdPartyRequestCount: number;
@@ -1263,6 +1265,213 @@ function isFirstPartyHost(host: string | null, pageDomain: string) {
   return host === pageDomain || (host ? host.endsWith(`.${pageDomain}`) : false);
 }
 
+const EMAIL_PAYLOAD_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const PHONE_PAYLOAD_REGEX = /(?<!\w)(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\w)/g;
+const TEXT_CONTENT_TYPE_PATTERNS = [/json/i, /x-www-form-urlencoded/i, /text\//i, /javascript|ecmascript/i];
+const BINARY_CONTENT_TYPE_PATTERNS = [/multipart\/form-data/i, /octet-stream/i, /^image\//i, /^audio\//i, /^video\//i, /protobuf/i, /pdf/i];
+
+function safelyParseUrl(input: string) {
+  try {
+    return new URL(input);
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeTextPayload(value: string) {
+  if (!value.trim()) {
+    return false;
+  }
+
+  let nonPrintableCount = 0;
+  for (const character of value) {
+    const codePoint = character.charCodeAt(0);
+    if (codePoint === 9 || codePoint === 10 || codePoint === 13) {
+      continue;
+    }
+    if (codePoint < 32 || codePoint === 127) {
+      nonPrintableCount += 1;
+    }
+  }
+
+  return nonPrintableCount / Math.max(value.length, 1) < 0.05;
+}
+
+function extractJsonStringValues(input: unknown, output: string[]) {
+  if (typeof input === "string") {
+    output.push(input);
+    return;
+  }
+
+  if (Array.isArray(input)) {
+    for (const entry of input) {
+      extractJsonStringValues(entry, output);
+    }
+    return;
+  }
+
+  if (input && typeof input === "object") {
+    for (const value of Object.values(input)) {
+      extractJsonStringValues(value, output);
+    }
+  }
+}
+
+export function extractSensitivePayloadTexts(input: {
+  requestUrl: string;
+  postData: string | null;
+  headers?: Record<string, string>;
+}) {
+  const payloadTexts: string[] = [];
+
+  const parsedUrl = safelyParseUrl(input.requestUrl);
+  if (parsedUrl) {
+    const queryEntries = [...parsedUrl.searchParams.entries()]
+      .map(([key, value]) => `${key}=${value}`)
+      .filter((entry) => entry.trim().length > 0);
+    if (queryEntries.length > 0) {
+      payloadTexts.push(queryEntries.join("&"));
+    }
+  }
+
+  const postData = typeof input.postData === "string" ? input.postData.trim() : "";
+  if (!postData) {
+    return payloadTexts;
+  }
+
+  const contentTypeHeader = Object.entries(input.headers ?? {}).find(([key]) => key.toLowerCase() === "content-type");
+  const contentType = contentTypeHeader?.[1] ?? "";
+  if (BINARY_CONTENT_TYPE_PATTERNS.some((pattern) => pattern.test(contentType))) {
+    return payloadTexts;
+  }
+
+  if (!looksLikeTextPayload(postData)) {
+    return payloadTexts;
+  }
+
+  const lowered = contentType.toLowerCase();
+  if (TEXT_CONTENT_TYPE_PATTERNS.some((pattern) => pattern.test(lowered)) || /^[{\[]/.test(postData)) {
+    if (/json/i.test(lowered) || /^[{\[]/.test(postData)) {
+      try {
+        const parsed = JSON.parse(postData) as unknown;
+        const strings: string[] = [];
+        extractJsonStringValues(parsed, strings);
+        payloadTexts.push(...strings);
+        return payloadTexts;
+      } catch {
+        // Fall through to other textual parsing paths.
+      }
+    }
+
+    if (/x-www-form-urlencoded/i.test(lowered) || /^[^=\s]+=[^=]+(?:&[^=\s]+=[^=]*)*$/.test(postData)) {
+      const params = new URLSearchParams(postData);
+      const entries = [...params.entries()].map(([key, value]) => `${key}=${value}`);
+      if (entries.length > 0) {
+        payloadTexts.push(entries.join("&"));
+        return payloadTexts;
+      }
+    }
+  }
+
+  payloadTexts.push(postData);
+  return payloadTexts;
+}
+
+function redactEmail(value: string) {
+  const [localPart = "", domainPart = ""] = value.split("@");
+  const visibleLocal = localPart.slice(0, Math.min(localPart.length, 2));
+  return `${visibleLocal}${"*".repeat(Math.max(localPart.length - visibleLocal.length, 3))}@${domainPart}`;
+}
+
+function redactPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const tail = digits.slice(-4);
+  return `***-***-${tail || "****"}`;
+}
+
+function buildRedactedSnippet(payload: string, match: string, detectedType: SensitivePayloadViolation["detectedType"]) {
+  const redactedMatch = detectedType === "email_detected" ? redactEmail(match) : redactPhone(match);
+  const matchIndex = payload.indexOf(match);
+  if (matchIndex < 0) {
+    return redactedMatch;
+  }
+
+  const snippetStart = Math.max(0, matchIndex - 24);
+  const snippetEnd = Math.min(payload.length, matchIndex + match.length + 24);
+  const snippet = payload.slice(snippetStart, snippetEnd);
+  return snippet.replace(match, redactedMatch);
+}
+
+export function detectSensitivePayloadViolations(input: {
+  pageDomain: string;
+  requestMethod: string;
+  requestUrl: string;
+  postData: string | null;
+  headers?: Record<string, string>;
+  timestamp?: string;
+}) {
+  const parsedUrl = safelyParseUrl(input.requestUrl);
+  if (!parsedUrl || isFirstPartyHost(parsedUrl.hostname, input.pageDomain)) {
+    return [] as SensitivePayloadViolation[];
+  }
+
+  const timestamp = input.timestamp ?? new Date().toISOString();
+  const payloadTexts = extractSensitivePayloadTexts({
+    requestUrl: input.requestUrl,
+    postData: input.postData,
+    headers: input.headers
+  });
+
+  const violations: SensitivePayloadViolation[] = [];
+  const seen = new Set<string>();
+  for (const payloadText of payloadTexts) {
+    EMAIL_PAYLOAD_REGEX.lastIndex = 0;
+    for (const match of payloadText.matchAll(EMAIL_PAYLOAD_REGEX)) {
+      const value = match[0];
+      if (!value) {
+        continue;
+      }
+      const dedupeKey = `email:${input.requestUrl}:${value}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      violations.push({
+        detectedType: "email_detected",
+        matchSnippet: buildRedactedSnippet(payloadText, value, "email_detected").slice(0, 160),
+        requestMethod: input.requestMethod,
+        requestUrl: input.requestUrl,
+        timestamp,
+        vendorHost: parsedUrl.hostname
+      });
+    }
+
+    PHONE_PAYLOAD_REGEX.lastIndex = 0;
+    for (const match of payloadText.matchAll(PHONE_PAYLOAD_REGEX)) {
+      const value = match[0];
+      const digits = value?.replace(/\D/g, "") ?? "";
+      if (!value || (digits.length !== 10 && digits.length !== 11)) {
+        continue;
+      }
+      const dedupeKey = `phone:${input.requestUrl}:${digits}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      violations.push({
+        detectedType: "phone_detected",
+        matchSnippet: buildRedactedSnippet(payloadText, value, "phone_detected").slice(0, 160),
+        requestMethod: input.requestMethod,
+        requestUrl: input.requestUrl,
+        timestamp,
+        vendorHost: parsedUrl.hostname
+      });
+    }
+  }
+
+  return violations;
+}
+
 const PRECONSENT_STATE0_RESOURCE_TYPES = new Set(["xhr", "fetch", "script", "image"]);
 
 export function shouldCapturePreconsentState0Request(input: {
@@ -1602,6 +1811,7 @@ async function runBrowserPass(input: {
   const page = await browserHandle.context.newPage();
   const requestUrls = new Set<string>();
   const preconsentRequestUrls = new Set<string>();
+  const sensitivePayloadViolationMap = new Map<string, SensitivePayloadViolation>();
   let mixedContentDetected = false;
   let timedOut = false;
   let inflightRequests = 0;
@@ -1727,6 +1937,21 @@ async function runBrowserPass(input: {
     if (input.homepageUrl.startsWith("https://") && requestUrl.startsWith("http://")) {
       mixedContentDetected = true;
     }
+
+    const violations = detectSensitivePayloadViolations({
+      pageDomain: input.domain,
+      requestMethod: request.method(),
+      requestUrl,
+      postData: request.postData(),
+      headers: request.headers(),
+      timestamp: new Date().toISOString()
+    });
+    for (const violation of violations) {
+      const key = `${violation.detectedType}:${violation.requestUrl}:${violation.matchSnippet}`;
+      if (!sensitivePayloadViolationMap.has(key)) {
+        sensitivePayloadViolationMap.set(key, violation);
+      }
+    }
   };
 
   const capturePreconsentState0Request = (request: Request) => {
@@ -1827,6 +2052,7 @@ async function runBrowserPass(input: {
         initialCookieDomains: [],
         initialCookieNames: [],
         preconsentEvidenceUrls: [],
+        sensitivePayloadViolations: [],
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
@@ -1925,6 +2151,7 @@ async function runBrowserPass(input: {
   const cmpVendor = detectNamedVendor(content, browserScripts, CMP_VENDOR_SIGNATURES);
   const widgetVendor = detectNamedVendor(content, browserScripts, ACCESSIBILITY_WIDGET_SIGNATURES);
   const preconsentEvidenceUrls = [...preconsentRequestUrls];
+  const sensitivePayloadViolations = [...sensitivePayloadViolationMap.values()];
   const preconsentTrackerMatchingUrls = [...new Set([...preconsentEvidenceUrls, ...scriptUrls])];
   const trackerDiagnostics = TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
     const matchedUrls = preconsentTrackerMatchingUrls
@@ -2042,6 +2269,7 @@ async function runBrowserPass(input: {
       ? [...new Set(cookiesBeforeConsent.map((cookie) => cookie.name).filter((name): name is string => Boolean(name))).values()].sort()
       : [],
     preconsentEvidenceUrls,
+    sensitivePayloadViolations,
     scriptSrcDomains: [...new Set(scriptUrls.map((url) => {
       try {
         return new URL(url).hostname;
@@ -2591,6 +2819,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         initialCookieDomains: [],
         initialCookieNames: [],
         preconsentEvidenceUrls: [],
+        sensitivePayloadViolations: [],
         scriptSrcDomains: [],
         scriptTagCount: 0,
         thirdPartyRequestCount: 0,
@@ -2898,6 +3127,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   });
   const commercialSignals = deriveExpandedCommercialSignals(successfulPages);
   const trackerSummary = summarizeTrackers(allTrackers);
+  const directSensitivePayloadDetected = browserPass.sensitivePayloadViolations.length > 0;
   const sessionReplayDisclosurePresent = policyPages.some((page) =>
     /\bsession replay\b|record your interactions|replay your session/i.test(`${page.title ?? ""} ${page.textContent}`)
   );
@@ -2908,7 +3138,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         aiDisclosureTextPresent: aiSignals.aiDisclosureTextPresent,
         autoRenewDisclosurePresent: commercialSignals.autoRenewDisclosurePresent,
         freeTrialDetected: commercialSignals.freeTrialDetected,
-        highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected,
+        highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected || directSensitivePayloadDetected,
         policyBehaviorConflictCandidate: trackerSummary.advertisingTrackerCount > 0 && policySignals.doNotSellLinkPresent,
         sessionReplayWithoutDisclosureCandidate: trackerSummary.sessionReplayTrackerCount > 0 && !sessionReplayDisclosurePresent,
         subscriptionTermsPresent: commercialSignals.subscriptionTermsPresent
@@ -3168,6 +3398,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     consentPreconsentViolationCount: preconsentBaselineEvidence.violationCount > 0 ? preconsentBaselineEvidence.violationCount : null,
     consentBaselineTrackerEvidenceUrls: preconsentBaselineEvidence.trackerEvidenceUrls,
     consentBaselineTrackerVendorNames: preconsentBaselineEvidence.trackerVendorNames,
+    sensitivePayloadViolations: browserPass.sensitivePayloadViolations,
     keyPageDiscoverySummary,
     consentRejectPersistedTrackerVendorNames: consentInteractionAudit?.rejectPersistedTrackerVendorNames ?? [],
     consentRejectNewTrackerVendorNames: consentInteractionAudit?.rejectNewTrackerVendorNames ?? [],
@@ -3480,7 +3711,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     formsSignatureHash: formSignals.formsSignatureHash,
     formDataSensitivityScore: null,
     dataMinimizationScore: null,
-    highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected,
+    highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected || directSensitivePayloadDetected,
     privacyRequestFormPresent: policySignals.privacyRequestFormPresent || contactSignals.privacyRequestFormPresent,
     dataAccessRequestPresent: policySignals.dataAccessRequestPresent,
     dataDeletionRequestPresent: policySignals.dataDeletionRequestPresent,

@@ -116,6 +116,14 @@ type ScanRuntimeArtifactsRow = {
   consent_reject_reduced_tracking: boolean | null;
   consent_withdrawal_mechanism_present?: boolean | null;
   initial_cookie_count?: number | null;
+  sensitive_payload_violations?: Array<{
+    detectedType?: string | null;
+    matchSnippet?: string | null;
+    requestMethod?: string | null;
+    requestUrl?: string | null;
+    timestamp?: string | null;
+    vendorHost?: string | null;
+  }> | null;
   script_src_domains?: string[] | null;
   third_party_request_domains?: string[] | null;
 };
@@ -229,6 +237,14 @@ export type ValidationEvidencePacket = {
     };
   };
   runtimeEvidence: string[];
+  sensitivePayloadViolations?: Array<{
+    detectedType: string;
+    matchSnippet: string;
+    requestMethod: string;
+    requestUrl: string;
+    timestamp: string;
+    vendorHost: string | null;
+  }>;
   supportingSignals: Array<{
     category: ScanSignalRow["category"];
     key: string;
@@ -395,6 +411,16 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     severity: "high",
     subtype: "session_replay_disclosure",
     title: "Session replay without disclosure"
+  },
+  "commerce.high_sensitivity_data_collection_detected": {
+    buildEvidence: buildHighSensitivityPayloadEvidence,
+    category: "privacy",
+    description:
+      "Potential high-sensitivity data collection risk is present, with confidence increasing only when plaintext third-party payload matches are confirmed.",
+    ruleKey: "commerce.high_sensitivity_data_collection_detected",
+    severity: "medium",
+    subtype: "sensitive_data_collection",
+    title: "Potential high-sensitivity data collection risk"
   },
   "accessibility.wcag_error_count_total": {
     buildEvidence: buildAccessibilityEvidence,
@@ -960,6 +986,91 @@ function buildRejectPersistenceEvidence(row: ScanSignalRow, context: ValidationE
         key: "privacy.reject_interaction_completed",
         label: "Reject interaction completed",
         value: rejectWorked
+      }
+    ]
+  };
+}
+
+function buildHighSensitivityPayloadEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const payloadViolations = Array.isArray(context.runtimeArtifacts?.sensitive_payload_violations)
+    ? context.runtimeArtifacts.sensitive_payload_violations
+        .filter(
+          (
+            violation
+          ): violation is {
+            detectedType?: string | null;
+            matchSnippet?: string | null;
+            requestMethod?: string | null;
+            requestUrl?: string | null;
+            timestamp?: string | null;
+            vendorHost?: string | null;
+          } => Boolean(violation && typeof violation === "object")
+        )
+        .map((violation) => ({
+          detectedType: violation.detectedType ?? "unknown",
+          matchSnippet: violation.matchSnippet ?? "",
+          requestMethod: violation.requestMethod ?? "GET",
+          requestUrl: violation.requestUrl ?? "",
+          timestamp: violation.timestamp ?? "",
+          vendorHost: violation.vendorHost ?? null
+        }))
+        .filter((violation) => violation.requestUrl.length > 0)
+    : [];
+
+  const runtimeEvidence = payloadViolations.slice(0, 5).map((violation) => {
+    const dataType = violation.detectedType.replace(/_detected$/, "").replace(/_/g, " ");
+    return `${dataType} in ${violation.requestMethod} ${violation.requestUrl}`;
+  });
+
+  return {
+    claim:
+      payloadViolations.length > 0
+        ? "Plaintext email addresses or phone numbers appear to have been transmitted to third-party endpoints."
+        : "Potential high-sensitivity data collection risk is present, but direct payload exfiltration was not confirmed.",
+    confidenceBasis: payloadViolations.length > 0
+      ? [
+          "The site exposed a high-sensitivity data collection signal.",
+          `Confirmed payload inspection captured ${payloadViolations.length} third-party request${payloadViolations.length === 1 ? "" : "s"} containing plaintext email addresses or phone numbers.`,
+          "Captured evidence came from outbound request parameters or request bodies rather than inferred page structure alone."
+        ]
+      : [
+          "The site exposed a high-sensitivity data collection signal.",
+          "No plaintext email or phone match was confirmed in the retained third-party request payload evidence.",
+          "The signal may still indicate sensitive collection risk based on form or page context, but direct exfiltration proof is incomplete."
+        ],
+    missingEvidence:
+      payloadViolations.length > 0 ? [] : ["Confirmed third-party payload evidence showing plaintext email or phone transmission."],
+    pageUrls: [],
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["payload_redacted", "first_party_only_transmission"],
+      detectorStrength: payloadViolations.length > 0 ? "strong" : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: payloadViolations.length > 0 ? ["detector_signal", "request_or_cookie_evidence"] : ["detector_signal"],
+      rubric: {
+        inconclusiveIf: [
+          "Third-party payload timing or contents are unclear.",
+          "A high-sensitivity detector fired but no plaintext payload match was retained."
+        ],
+        notSupportedIf: [
+          "Observed payloads are first-party only.",
+          "The retained evidence does not show plaintext email addresses or phone numbers."
+        ],
+        supportedIf: [
+          "A high-sensitivity detector fired.",
+          "Third-party request evidence contains plaintext email addresses or phone numbers."
+        ]
+      }
+    },
+    runtimeEvidence,
+    sensitivePayloadViolations: payloadViolations.slice(0, 10),
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
       }
     ]
   };
@@ -1713,7 +1824,7 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("scan_runtime_artifacts")
       .select(
-        "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, third_party_request_domains, script_src_domains"
+        "consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
       )
       .eq("scan_id", scanId)
       .maybeSingle(),

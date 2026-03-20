@@ -283,15 +283,15 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
   {
     base: {
       bestPracticeLink: {
-        label: "FTC",
-        title: "FTC Privacy and Data Security Guidance",
-        url: "https://www.ftc.gov/business-guidance/privacy-security"
+        label: "W3C",
+        title: "Data Minimization - Web Privacy Principles",
+        url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       },
       suggestedFix:
-        "Perform a network-level audit to identify the specific payload triggering this signal. Monitor XHR and Fetch requests for the transmission of workspace IDs, source code fragments, or user identifiers to third-party analytics or marketing vendors. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to ensure no unmasked PII or proprietary metadata is exfiltrated.",
+        "Audit the relevant third-party requests and payload construction logic to determine whether user-entered or sensitive page-derived values are being transmitted. If so, block those fields from collection, redact them before dispatch, or prevent the third-party integration from loading on sensitive flows.",
       whyThisMatters:
-        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a developer-focused platform, this typically indicates the transmission of sensitive identifiers, such as authentication tokens, project metadata, or unmasked user input in code-related search fields, to third-party endpoints. This creates data privacy risks if these payloads are collected without proper hashing or explicit disclosure in the privacy policy.",
-      confidenceScore: "0.8"
+        "The scan observed requests to third-party endpoints associated with tracking or measurement behavior. Depending on implementation, these requests may carry identifiers or page-derived metadata, but the retained evidence does not by itself confirm transmission of high-sensitivity user input.",
+      confidenceScore: "0.4"
     },
     matches: [/high-sensitivity data collection detected/i, /high_sensitivity_data_collection_detected/i]
   },
@@ -672,6 +672,24 @@ function formatVendorList(vendors: string[]) {
   return `${distinct.slice(0, 3).join(", ")}, and other third-party vendors`;
 }
 
+function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
+  const directViolations = Array.isArray(evidence?.sensitivePayloadViolations)
+    ? evidence.sensitivePayloadViolations
+    : [];
+
+  return directViolations
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => ({
+      detectedType: typeof entry.detectedType === "string" ? entry.detectedType : "unknown_detected",
+      matchSnippet: typeof entry.matchSnippet === "string" ? entry.matchSnippet : "",
+      requestMethod: typeof entry.requestMethod === "string" ? entry.requestMethod : "GET",
+      requestUrl: typeof entry.requestUrl === "string" ? entry.requestUrl : "",
+      timestamp: typeof entry.timestamp === "string" ? entry.timestamp : "",
+      vendorHost: typeof entry.vendorHost === "string" ? entry.vendorHost : null
+    }))
+    .filter((entry) => entry.requestUrl.length > 0);
+}
+
 function computeSupportStrength(input: {
   evidence?: Record<string, unknown> | null;
   haystack: string;
@@ -884,8 +902,11 @@ function computeSupportStrength(input: {
     }
   }
   if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
-    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
-      score += 0.1;
+    const payloadViolations = getSensitivePayloadViolations(evidence);
+    if (payloadViolations.length > 0) {
+      score += 0.25;
+    } else if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.05;
     }
   }
   if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
@@ -1035,29 +1056,34 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   }
 
   if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
-    const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
-    if (/mcw\.edu|medical institution domain|clinical|health|phi|patient portal|appointment/i.test(evidenceText)) {
+    const payloadViolations = getSensitivePayloadViolations(input.evidence);
+    const firstViolation = payloadViolations[0] ?? null;
+    const detectedTypes = [...new Set(payloadViolations.map((violation) => violation.detectedType.replace(/_detected$/, "").replace(/_/g, " ")))];
+    if (payloadViolations.length > 0) {
+      const dataTypeLabel =
+        detectedTypes.length === 1 ? detectedTypes[0] : detectedTypes.length === 2 ? detectedTypes.join(" and ") : "multiple PII fields";
+      const vendorLabel = firstViolation?.vendorHost ?? "third-party endpoints";
       presentation.bestPracticeLink = {
-        label: "HHS",
-        title: "Use of Online Tracking Technologies by HIPAA Covered Entities",
-        url: "https://www.hhs.gov/hipaa/for-professionals/privacy/guidance/hipaa-online-tracking/index.html"
+        label: "W3C",
+        title: "Data Minimization - Web Privacy Principles",
+        url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       };
       presentation.whyThisMatters =
-        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a medical institution domain, this typically indicates the transmission of health-related identifiers, financial data, or specific user input to third-party endpoints. This creates significant HIPAA, GDPR, and CCPA exposure if the data is being collected without an active Business Associate Agreement or explicit user consent.";
+        `The scan confirmed plaintext ${dataTypeLabel} data in ${payloadViolations.length} third-party request${payloadViolations.length === 1 ? "" : "s"} sent to ${vendorLabel}. This is direct evidence that sensitive user-entered or page-derived data left the site without masking or hashing before transmission.`;
       presentation.suggestedFix =
-        "Perform an immediate network-level audit to identify the specific payload triggering this signal. Check for the transmission of health-related search terms, appointment scheduling data, or patient portal identifiers in unmasked XHR or Fetch requests. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to any third-party analytics or marketing vendors.";
-      presentation.confidenceScore = "0.85";
+        "Immediately inspect the affected third-party integrations and remove sensitive fields from request payloads. If the vendor truly needs the data, gate the integration appropriately and apply redaction or approved irreversible hashing before dispatch.";
+      presentation.confidenceScore = payloadViolations.length >= 2 ? "1.0" : "0.95";
     } else {
       presentation.bestPracticeLink = {
-        label: "FTC",
-        title: "FTC Privacy and Data Security Guidance",
-        url: "https://www.ftc.gov/business-guidance/privacy-security"
+        label: "W3C",
+        title: "Data Minimization - Web Privacy Principles",
+        url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       };
       presentation.whyThisMatters =
-        "The automated scan confirmed a High-Sensitivity Data Collection signal. On a developer-focused platform, this typically indicates the transmission of sensitive identifiers, such as authentication tokens, project metadata, or unmasked user input in code-related search fields, to third-party endpoints. This creates data privacy risks if these payloads are collected without proper hashing or explicit disclosure in the privacy policy.";
+        "The scan observed requests to third-party endpoints associated with tracking or measurement behavior. Depending on implementation, these requests may carry identifiers or page-derived metadata, but the retained evidence does not by itself confirm transmission of high-sensitivity user input.";
       presentation.suggestedFix =
-        "Perform a network-level audit to identify the specific payload triggering this signal. Monitor XHR and Fetch requests for the transmission of workspace IDs, source code fragments, or user identifiers to third-party analytics or marketing vendors. Reconfigure tracking scripts to redact or hash sensitive fields before transmission to ensure no unmasked PII or proprietary metadata is exfiltrated.";
-      presentation.confidenceScore = "0.8";
+        "Audit the relevant third-party requests and payload construction logic to determine whether user-entered or sensitive page-derived values are being transmitted. If so, block those fields from collection, redact them before dispatch, or prevent the third-party integration from loading on sensitive flows.";
+      presentation.confidenceScore = "0.4";
     }
   }
 

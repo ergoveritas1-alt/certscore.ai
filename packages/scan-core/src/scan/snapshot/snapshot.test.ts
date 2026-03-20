@@ -19,6 +19,8 @@ import {
   policyPresenceHash
 } from "./extractors";
 import {
+  detectSensitivePayloadViolations,
+  extractSensitivePayloadTexts,
   derivePolicyTermsConflictDetected,
   inferConsentDarkPatternFlags,
   shouldCapturePreconsentState0Request,
@@ -625,6 +627,99 @@ test("summarizePreconsentBaselineEvidence merges state-0 capture and consent bas
   assert.equal(summary.violationCount, 2);
 });
 
+test("extractSensitivePayloadTexts parses query strings, json bodies, and form bodies", () => {
+  assert.deepEqual(
+    extractSensitivePayloadTexts({
+      requestUrl: "https://tracker.example.net/collect?email=alice%40example.com",
+      postData: null
+    }),
+    ["email=alice@example.com"]
+  );
+
+  assert.deepEqual(
+    extractSensitivePayloadTexts({
+      requestUrl: "https://tracker.example.net/collect",
+      postData: JSON.stringify({ profile: { email: "alice@example.com", phone: "(555) 123-4567" } }),
+      headers: { "content-type": "application/json" }
+    }),
+    ["alice@example.com", "(555) 123-4567"]
+  );
+
+  assert.deepEqual(
+    extractSensitivePayloadTexts({
+      requestUrl: "https://tracker.example.net/collect",
+      postData: "email=alice%40example.com&phone=555-123-4567",
+      headers: { "content-type": "application/x-www-form-urlencoded" }
+    }),
+    ["email=alice@example.com&phone=555-123-4567"]
+  );
+});
+
+test("extractSensitivePayloadTexts skips binary or multipart payloads safely", () => {
+  assert.deepEqual(
+    extractSensitivePayloadTexts({
+      requestUrl: "https://tracker.example.net/upload",
+      postData: "------WebKitFormBoundary",
+      headers: { "content-type": "multipart/form-data; boundary=----WebKitFormBoundary" }
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    extractSensitivePayloadTexts({
+      requestUrl: "https://tracker.example.net/upload",
+      postData: "\u0000\u0001\u0002\u0003",
+      headers: { "content-type": "application/octet-stream" }
+    }),
+    []
+  );
+});
+
+test("detectSensitivePayloadViolations confirms third-party plaintext email and phone exfiltration only", () => {
+  const thirdPartyGetViolations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "GET",
+    requestUrl: "https://tracker.example.net/collect?email=alice%40example.com",
+    postData: null
+  });
+  assert.equal(thirdPartyGetViolations.length, 1);
+  assert.equal(thirdPartyGetViolations[0]?.detectedType, "email_detected");
+  assert.match(thirdPartyGetViolations[0]?.matchSnippet ?? "", /al\*+@example\.com/i);
+
+  const thirdPartyPostViolations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "POST",
+    requestUrl: "https://tracker.example.net/collect",
+    postData: JSON.stringify({ phone: "555-123-4567" }),
+    headers: { "content-type": "application/json" }
+  });
+  assert.equal(thirdPartyPostViolations.length, 1);
+  assert.equal(thirdPartyPostViolations[0]?.detectedType, "phone_detected");
+  assert.match(thirdPartyPostViolations[0]?.matchSnippet ?? "", /\*\*\*-\*\*\*-4567/);
+
+  assert.deepEqual(
+    detectSensitivePayloadViolations({
+      pageDomain: "example.com",
+      requestMethod: "POST",
+      requestUrl: "https://example.com/api/profile",
+      postData: JSON.stringify({ email: "alice@example.com" }),
+      headers: { "content-type": "application/json" }
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    detectSensitivePayloadViolations({
+      pageDomain: "example.com",
+      requestMethod: "POST",
+      requestUrl: "https://tracker.example.net/collect",
+      postData: JSON.stringify({ user_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb924" }),
+      headers: { "content-type": "application/json" }
+    }),
+    []
+  );
+});
+
 test("classifyScanAccess reports blocked legal coverage without treating it as policy weakness", () => {
   const classification = classifyScanAccess({
     snapshot: makeSnapshot({
@@ -658,6 +753,7 @@ test("classifyScanAccess reports blocked legal coverage without treating it as p
       consentPreconsentViolationCount: null,
       consentBaselineTrackerEvidenceUrls: [],
       consentBaselineTrackerVendorNames: [],
+      sensitivePayloadViolations: [],
       keyPageDiscoverySummary: null,
       consentRejectPersistedTrackerVendorNames: [],
       consentRejectNewTrackerVendorNames: [],

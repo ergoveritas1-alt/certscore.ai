@@ -589,7 +589,17 @@ export type ScanRuntimeArtifact = {
   consentPostAcceptThirdPartyCookieCount: number | null;
   consentPostAcceptTrackerEvidenceUrls: string[];
   consentPostAcceptTrackerVendorNames: string[];
+  sensitivePayloadViolations: SensitivePayloadViolation[];
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
+};
+
+export type SensitivePayloadViolation = {
+  detectedType: "email_detected" | "phone_detected";
+  matchSnippet: string;
+  requestMethod: string;
+  requestUrl: string;
+  timestamp: string;
+  vendorHost: string | null;
 };
 
 export type PolicyMention = {
