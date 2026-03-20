@@ -90,7 +90,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                       <div className="space-y-1">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Finding name</p>
                         <p className="font-semibold text-slate-950">
-                          #{row.automatedFinding.rank} · {row.automatedFinding.title}
+                          #{row.automatedFinding.rank} · {normalizeFindingName(row.automatedFinding.title)}
                         </p>
                         <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
                           {row.automatedFinding.ruleKey} · {row.automatedFinding.severity} · {detail.hostname}
