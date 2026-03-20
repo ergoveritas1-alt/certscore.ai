@@ -278,8 +278,14 @@ test("uses cookie-policy extraction copy and max confidence for structurally wea
   );
 
   assert.equal(presentation.findingName, "Extraction Cookie Policy");
-  assert.match(presentation.whyThisMatters, /total failure in cookie disclosure transparency|dark to automated auditing/i);
-  assert.match(presentation.suggestedFix, /Immediate manual verification is required|Cookie Name, Provider, Purpose, and Duration/i);
+  assert.match(
+    presentation.whyThisMatters,
+    /complete semantic obstruction regarding cookie disclosures|Policy Ambiguity Score of 90|technically dark to automated auditing|Essential, Performance, and Targeting/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Immediate manual verification is required|flattened table structure|semantic section tags|Cookie Name, Provider, Purpose, and Duration/i
+  );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
   assert.equal(presentation.confidenceScore, "1.0");
 });

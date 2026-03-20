@@ -99,9 +99,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         match: /cookie policy|low-confidence cookie policy extraction|extraction cookie policy/i,
         override: {
           suggestedFix:
-            "Immediate manual verification is required to identify and categorize active tracking technologies. To improve future scans, refactor the rendered HTML into a flattened table structure or semantic section blocks with explicit IDs for Cookie Name, Provider, Purpose, and Duration so those fields are not buried in weakly structured dynamic containers.",
+            "Immediate manual verification is required to identify and categorize active tracking technologies. To resolve this for future scans, refactor the rendered HTML to use a flattened table structure or semantic section tags with explicit IDs for Cookie Name, Provider, Purpose, and Duration, ensuring these fields are not buried in unstructured dynamic containers.",
           whyThisMatters:
-            "The automated scan confirmed a total failure in cookie disclosure transparency. With a high ambiguity score and zero extractable snippets, the tracking disclosures are effectively dark to automated auditing, which prevents reliable verification of cookie categories and retention periods."
+            "The automated scan confirmed a complete semantic obstruction regarding cookie disclosures. With a Policy Ambiguity Score of 90 and zero extractable snippets, the tracking disclosures are technically dark to automated auditing. This structural gap prevents the verification of mandatory metadata, including cookie categories such as Essential, Performance, and Targeting, and specific retention periods."
         }
       },
       {
