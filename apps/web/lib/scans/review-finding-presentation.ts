@@ -287,6 +287,15 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
     },
     evidenceAwareOverrides: [
       {
+        match: /high user-rights fulfillment friction/i,
+        override: {
+          suggestedFix:
+            "Perform a technical audit to achieve Functional Symmetry between opt-in and opt-out workflows. Refactor the privacy UI to ensure that revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, removing secondary barriers such as forced account creation or hidden navigation paths.",
+          whyThisMatters:
+            "The automated scan confirmed a high friction score of 90, signaling an objective technical barrier in the user-rights fulfillment path. This indicates a Functional Asymmetry where the effort required to revoke data permissions or exercise privacy rights is significantly higher than the initial data-ingestion path, which is classified as a technical dark pattern under modern privacy regulations."
+        }
+      },
+      {
         match: /critical user-rights fulfillment friction/i,
         override: {
           suggestedFix:
@@ -585,6 +594,14 @@ function computeSupportStrength(input: {
   if (/critical user-rights fulfillment friction/i.test(input.haystack)) {
     if (typeof evidence.signalValue === "number" && evidence.signalValue >= 100) {
       score += 0.25;
+    }
+    if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
+      score += 0.1;
+    }
+  }
+  if (/high user-rights fulfillment friction/i.test(input.haystack)) {
+    if (typeof evidence.signalValue === "number" && evidence.signalValue >= 90) {
+      score += 0.2;
     }
     if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.1;

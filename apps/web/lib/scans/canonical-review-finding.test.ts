@@ -126,6 +126,39 @@ test("uses max-strength score and hard-block copy for critical user-rights fulfi
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
+test("uses strong copy and high confidence for high user-rights fulfillment friction", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "fr-2",
+        ruleKey: "privacy.friction_score",
+        title: "High user-rights fulfillment friction",
+        evidence: {
+          runtimeEvidence: ["privacy-request path requires additional steps"],
+          signalValue: 90,
+          supportingSignals: ["high friction observed"]
+        }
+      }),
+      observedValue: "90",
+      severity: "high",
+      title: "High user-rights fulfillment friction"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "High user-rights fulfillment friction");
+  assert.match(
+    presentation.whyThisMatters,
+    /high friction score of 90|objective technical barrier|Functional Asymmetry|technical dark pattern/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Functional Symmetry|opt-in and opt-out workflows|same number of clicks as the initial consent|forced account creation|hidden navigation paths/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "CPPA");
+  assert.equal(presentation.confidenceScore, "0.95");
+});
+
 test("uses strong accessibility copy and high confidence for confirmed WCAG issues", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
