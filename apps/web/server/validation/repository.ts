@@ -205,6 +205,7 @@ async function listTrancoPreviewTargets(limit = 7) {
   const minRank = env.VALIDATION_TRANCO_MIN_RANK ?? 10_000;
   const maxRank = env.VALIDATION_TRANCO_MAX_RANK ?? 20_000;
   const rows: ValidationTargetRow[] = [];
+  let eligibleCount = 0;
 
   for (const line of body.split(/\r?\n/)) {
     if (!line) {
@@ -223,8 +224,9 @@ async function listTrancoPreviewTargets(limit = 7) {
       continue;
     }
 
+    let candidate: ValidationTargetRow;
     try {
-      rows.push({
+      candidate = {
         active: true,
         backoff_until: null,
         cooldown_until: null,
@@ -241,13 +243,21 @@ async function listTrancoPreviewTargets(limit = 7) {
         rank_band: rankBandForRank(rank),
         source: "tranco",
         tranco_rank: rank
-      });
+      };
     } catch {
       continue;
     }
 
-    if (rows.length >= limit) {
-      break;
+    eligibleCount += 1;
+
+    if (rows.length < limit) {
+      rows.push(candidate);
+      continue;
+    }
+
+    const replaceIndex = Math.floor(Math.random() * eligibleCount);
+    if (replaceIndex < limit) {
+      rows[replaceIndex] = candidate;
     }
   }
 
