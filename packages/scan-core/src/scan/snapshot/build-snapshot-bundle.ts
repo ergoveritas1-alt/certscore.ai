@@ -3787,6 +3787,401 @@ function buildKeyPageCoverageArtifacts(input: {
   };
 }
 
+function buildCompatibilitySignals(input: {
+  allTrackers: ScanTrackerVendor[];
+  keyPageCoverage: ReturnType<typeof summarizeKeyPageCoverage>;
+  keyPageDiscoverySummary: ReturnType<typeof buildKeyPageDiscoverySummary>;
+  policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
+  runtimeArtifacts: ScanRuntimeArtifact;
+  snapshotWithScores: ScanSnapshot;
+}) {
+  const compatibilitySignals = projectSnapshotSignals(input.snapshotWithScores, input.allTrackers);
+
+  for (const coverage of input.keyPageCoverage) {
+    if (!coverage.surfaceDetected) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: coverage.surfaceMissingSignalKey,
+          label: coverage.surfaceMissingSignalLabel,
+          value: true
+        })
+      );
+    } else if (!coverage.fetched && coverage.failedPageUrls.length > 0) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: coverage.fetchFailedSignalKey,
+          label: coverage.fetchFailedSignalLabel,
+          value: coverage.failedPageUrls
+        })
+      );
+    }
+  }
+
+  const unresolvedBoundedKeyPages = input.keyPageDiscoverySummary.pageSummaries
+    .filter(
+      (summary) =>
+        !summary.successfulUrl &&
+        (summary.surfaceDetected ||
+          summary.guessedOnly ||
+          summary.attemptCount > 0 ||
+          summary.stopReason === "no_surface" ||
+          summary.stopReason === "budget_exhausted")
+    )
+    .map((summary) => formatKeyPageTypeLabel(summary.pageType))
+    .sort();
+
+  if (unresolvedBoundedKeyPages.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        label: "Bounded key-page discovery unresolved",
+        value: unresolvedBoundedKeyPages
+      })
+    );
+  }
+
+  const sessionReplayDisclosurePages = input.policyEnrichmentBundle.enrichments
+    .filter((enrichment) =>
+      enrichment.policyMentions.some(
+        (mention) => mention.topic === "session_replay_disclosure" && Number(mention.confidence ?? 0) >= 0.55
+      )
+    )
+    .map((enrichment) => enrichment.pageUrl);
+  const sessionReplayRuntimeVendors = [
+    ...new Set(input.allTrackers.filter((tracker) => tracker.vendorCategory === "session_replay").map((tracker) => tracker.vendorName))
+  ];
+  const sessionReplayEvaluation = evaluateBehaviorDisclosure({
+    behaviorKey: "session_replay",
+    disclosureEvidence: sessionReplayDisclosurePages,
+    disclosurePresent: sessionReplayDisclosurePages.length > 0,
+    runtimeDetected:
+      input.snapshotWithScores.sessionReplayToolDetected || input.snapshotWithScores.sessionReplayTrackerCount > 0,
+    runtimeEvidence: sessionReplayRuntimeVendors,
+    vendors: sessionReplayRuntimeVendors
+  });
+
+  if (sessionReplayEvaluation.runtimeDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.session_replay_runtime_detected",
+        label: "Session replay runtime detected",
+        value: true
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.vendors.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.session_replay_runtime_vendors",
+        label: "Session replay runtime vendors",
+        value: sessionReplayEvaluation.vendors
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.disclosurePresent) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.session_replay_disclosure_present",
+        label: "Session replay disclosure present",
+        value: true
+      })
+    );
+  }
+
+  if (sessionReplayEvaluation.disclosureEvidence.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.session_replay_disclosure_pages",
+        label: "Session replay disclosure pages",
+        value: sessionReplayEvaluation.disclosureEvidence
+      })
+    );
+  }
+
+  if (input.runtimeArtifacts.consentAuditCompleted === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_audit_completed",
+        label: "Consent interaction audit completed",
+        value: true
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentRejectInteractionSucceeded === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_interaction_succeeded",
+        label: "Reject interaction succeeded",
+        value: true
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentAcceptInteractionSucceeded === true) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_interaction_succeeded",
+        label: "Accept interaction succeeded",
+        value: true
+      })
+    );
+  }
+  if (
+    input.runtimeArtifacts.consentRejectReducedTracking === false &&
+    input.runtimeArtifacts.consentRejectInteractionSucceeded === true
+  ) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_failed_to_reduce_tracking",
+        label: "Reject did not reduce tracking",
+        value: true
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentRejectPersistedTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_persisted_tracker_vendors",
+        label: "Trackers still present after reject",
+        value: input.runtimeArtifacts.consentRejectPersistedTrackerVendorNames
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentRejectNewTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_new_tracker_vendors",
+        label: "New trackers appeared after reject",
+        value: input.runtimeArtifacts.consentRejectNewTrackerVendorNames
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentAcceptNewTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_new_tracker_vendors",
+        label: "New trackers appeared after accept",
+        value: input.runtimeArtifacts.consentAcceptNewTrackerVendorNames
+      })
+    );
+  }
+  if ((input.runtimeArtifacts.consentPreconsentViolationCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_violation_count",
+        label: "Pre-consent tracker violations",
+        value: input.runtimeArtifacts.consentPreconsentViolationCount ?? 0
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentBaselineTrackerVendorNames.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_tracker_vendors",
+        label: "Pre-consent tracker vendors",
+        value: input.runtimeArtifacts.consentBaselineTrackerVendorNames
+      })
+    );
+  }
+  if (input.runtimeArtifacts.consentBaselineTrackerEvidenceUrls.length > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.preconsent_tracker_evidence_urls",
+        label: "Pre-consent tracker evidence URLs",
+        value: input.runtimeArtifacts.consentBaselineTrackerEvidenceUrls
+      })
+    );
+  }
+  if (
+    input.runtimeArtifacts.consentRejectReducedThirdPartyCookies === false &&
+    input.runtimeArtifacts.consentRejectInteractionSucceeded === true
+  ) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_failed_to_reduce_third_party_cookies",
+        label: "Reject did not reduce third-party cookies",
+        value: true
+      })
+    );
+  }
+  if ((input.runtimeArtifacts.consentOptOutClicks ?? input.runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_reject_click_count",
+        label: "Reject click count",
+        value: input.runtimeArtifacts.consentOptOutClicks ?? input.runtimeArtifacts.consentRejectClickCount ?? 0
+      })
+    );
+  }
+  if ((input.runtimeArtifacts.consentOptInClicks ?? input.runtimeArtifacts.consentAcceptClickCount ?? 0) > 0) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.consent_accept_click_count",
+        label: "Accept click count",
+        value: input.runtimeArtifacts.consentOptInClicks ?? input.runtimeArtifacts.consentAcceptClickCount ?? 0
+      })
+    );
+  }
+
+  const reviewReasonsByEnrichmentId = new Map<string, Set<string>>();
+  for (const row of input.policyEnrichmentBundle.reviewQueueItems) {
+    const enrichmentId = String(row.policyEnrichmentId ?? "");
+    if (!enrichmentId) {
+      continue;
+    }
+
+    const existing = reviewReasonsByEnrichmentId.get(enrichmentId) ?? new Set<string>();
+    existing.add(String(row.reason ?? ""));
+    reviewReasonsByEnrichmentId.set(enrichmentId, existing);
+  }
+
+  let functionalMisalignmentDetected =
+    input.runtimeArtifacts.consentRedirectOrAuthRequired === true ||
+    (typeof input.runtimeArtifacts.consentFrictionDelta === "number" && input.runtimeArtifacts.consentFrictionDelta > 0);
+  let missingTechnicalDisclosureDetected = false;
+  let disclosureLikelyObstructedDetected = false;
+
+  for (const enrichment of input.policyEnrichmentBundle.enrichments) {
+    const reasons = reviewReasonsByEnrichmentId.get(String(enrichment.id ?? "")) ?? new Set<string>();
+    if (!reasons.has("low_confidence_critical_fields")) {
+      continue;
+    }
+
+    const flags = Array.isArray(enrichment.policyActionableFlags)
+      ? enrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
+      : [];
+    const mentions = Array.isArray(enrichment.policyMentions) ? enrichment.policyMentions : [];
+
+    if ((input.snapshotWithScores.userRightsFrictionScore ?? 0) >= 100) {
+      functionalMisalignmentDetected = true;
+    }
+
+    if (
+      input.snapshotWithScores.retargetingPixelDetected === true ||
+      input.snapshotWithScores.sessionReplayWithoutDisclosureDetected === true
+    ) {
+      missingTechnicalDisclosureDetected = true;
+    }
+
+    if (
+      hasSparsePolicyExtraction({
+        confidence: enrichment.policySemanticConfidence,
+        coverageRatio: enrichment.policyCoverageRatio,
+        flags,
+        mentions,
+        snippetCount: enrichment.policySnippetCount,
+        structurallyWeak: enrichment.policyStructurallyWeak,
+        summaryShort: enrichment.policySummaryShort
+      })
+    ) {
+      disclosureLikelyObstructedDetected = true;
+    }
+  }
+
+  if (functionalMisalignmentDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.policy_runtime_functional_misalignment_detected",
+        label: "Policy/runtime functional misalignment detected",
+        value: true
+      })
+    );
+  }
+  if (missingTechnicalDisclosureDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.policy_runtime_missing_technical_disclosure_detected",
+        label: "Missing technical disclosure detected",
+        value: true
+      })
+    );
+  }
+  if (disclosureLikelyObstructedDetected) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "disclosure",
+        key: "disclosure.policy_runtime_disclosure_likely_obstructed",
+        label: "Policy disclosure likely obstructed",
+        value: true
+      })
+    );
+  }
+
+  const cookiePolicyEnrichment =
+    input.policyEnrichmentBundle.enrichments.find((enrichment) => enrichment.pageType === "cookie_policy") ?? null;
+  const runtimeCookieNames = [
+    ...new Set(
+      (input.runtimeArtifacts.initialCookieNames ?? [])
+        .map((value) => normalizeCookieName(value))
+        .filter((value): value is string => Boolean(value))
+    )
+  ];
+  if (cookiePolicyEnrichment && runtimeCookieNames.length > 0) {
+    const cookieDisclosures = Array.isArray(cookiePolicyEnrichment.policyCookieDisclosures)
+      ? cookiePolicyEnrichment.policyCookieDisclosures
+      : [];
+    const cookieFlags = Array.isArray(cookiePolicyEnrichment.policyActionableFlags)
+      ? cookiePolicyEnrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
+      : [];
+    const cookiePolicyStructurallyObstructed =
+      cookieDisclosures.length === 0 ||
+      (typeof cookiePolicyEnrichment.policySemanticConfidence === "number" &&
+        cookiePolicyEnrichment.policySemanticConfidence < 0.6) ||
+      cookieFlags.includes("low_confidence") ||
+      cookieFlags.includes("llm_provider_error");
+
+    if (cookiePolicyStructurallyObstructed) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: "disclosure.cookie_policy_structurally_obstructed",
+          label: "Cookie policy structurally obstructed",
+          value: true
+        })
+      );
+    } else {
+      const unmatchedCookieNames = runtimeCookieNames.filter(
+        (cookieName) => !matchCookieDisclosure({ cookieName, disclosures: cookieDisclosures })
+      );
+      if (unmatchedCookieNames.length > 0) {
+        compatibilitySignals.push(
+          toTaxonomySignal({
+            category: "privacy",
+            key: "privacy.cookie_runtime_disclosure_gap_detected",
+            label: "Cookie disclosure gap detected",
+            value: true
+          })
+        );
+      }
+    }
+  }
+
+  return compatibilitySignals;
+}
+
 export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
   const isPreviewScan = input.crawlSource === "preview";
   const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
@@ -4867,376 +5262,14 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       (snapshotWithScores.preconsentTrackingDetected ? 15 : 0) +
       (snapshotWithScores.sessionReplayTrackerCount > 0 ? 10 : 0)
   );
-  const compatibilitySignals = projectSnapshotSignals(snapshotWithScores, allTrackers);
-  for (const coverage of keyPageCoverage) {
-    if (!coverage.surfaceDetected) {
-      compatibilitySignals.push(
-        toTaxonomySignal({
-          category: "disclosure",
-          key: coverage.surfaceMissingSignalKey,
-          label: coverage.surfaceMissingSignalLabel,
-          value: true
-        })
-      );
-    } else if (!coverage.fetched && coverage.failedPageUrls.length > 0) {
-      compatibilitySignals.push(
-        toTaxonomySignal({
-          category: "disclosure",
-          key: coverage.fetchFailedSignalKey,
-          label: coverage.fetchFailedSignalLabel,
-          value: coverage.failedPageUrls
-        })
-      );
-    }
-  }
-  const unresolvedBoundedKeyPages = keyPageDiscoverySummary.pageSummaries
-    .filter(
-      (summary) =>
-        !summary.successfulUrl &&
-        (summary.surfaceDetected ||
-          summary.guessedOnly ||
-          summary.attemptCount > 0 ||
-          summary.stopReason === "no_surface" ||
-          summary.stopReason === "budget_exhausted")
-    )
-    .map((summary) => formatKeyPageTypeLabel(summary.pageType))
-    .sort();
-  if (unresolvedBoundedKeyPages.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.key_page_discovery_unresolved_after_bounded_search",
-        label: "Bounded key-page discovery unresolved",
-        value: unresolvedBoundedKeyPages
-      })
-    );
-  }
-  const sessionReplayDisclosurePages = policyEnrichmentBundle.enrichments
-    .filter((enrichment) =>
-      enrichment.policyMentions.some(
-        (mention) => mention.topic === "session_replay_disclosure" && Number(mention.confidence ?? 0) >= 0.55
-      )
-    )
-    .map((enrichment) => enrichment.pageUrl);
-  const sessionReplayRuntimeVendors = [
-    ...new Set(allTrackers.filter((tracker) => tracker.vendorCategory === "session_replay").map((tracker) => tracker.vendorName))
-  ];
-  const sessionReplayEvaluation = evaluateBehaviorDisclosure({
-    behaviorKey: "session_replay",
-    disclosureEvidence: sessionReplayDisclosurePages,
-    disclosurePresent: sessionReplayDisclosurePages.length > 0,
-    runtimeDetected: snapshotWithScores.sessionReplayToolDetected || snapshotWithScores.sessionReplayTrackerCount > 0,
-    runtimeEvidence: sessionReplayRuntimeVendors,
-    vendors: sessionReplayRuntimeVendors
+  const compatibilitySignals = buildCompatibilitySignals({
+    allTrackers,
+    keyPageCoverage,
+    keyPageDiscoverySummary,
+    policyEnrichmentBundle,
+    runtimeArtifacts,
+    snapshotWithScores
   });
-
-  if (sessionReplayEvaluation.runtimeDetected) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.session_replay_runtime_detected",
-        label: "Session replay runtime detected",
-        value: true
-      })
-    );
-  }
-
-  if (sessionReplayEvaluation.vendors.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.session_replay_runtime_vendors",
-        label: "Session replay runtime vendors",
-        value: sessionReplayEvaluation.vendors
-      })
-    );
-  }
-
-  if (sessionReplayEvaluation.disclosurePresent) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.session_replay_disclosure_present",
-        label: "Session replay disclosure present",
-        value: true
-      })
-    );
-  }
-
-  if (sessionReplayEvaluation.disclosureEvidence.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.session_replay_disclosure_pages",
-        label: "Session replay disclosure pages",
-        value: sessionReplayEvaluation.disclosureEvidence
-      })
-    );
-  }
-
-  if (runtimeArtifacts.consentAuditCompleted === true) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_audit_completed",
-        label: "Consent interaction audit completed",
-        value: true
-      })
-    );
-  }
-  if (runtimeArtifacts.consentRejectInteractionSucceeded === true) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_interaction_succeeded",
-        label: "Reject interaction succeeded",
-        value: true
-      })
-    );
-  }
-  if (runtimeArtifacts.consentAcceptInteractionSucceeded === true) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_accept_interaction_succeeded",
-        label: "Accept interaction succeeded",
-        value: true
-      })
-    );
-  }
-  if (runtimeArtifacts.consentRejectReducedTracking === false && runtimeArtifacts.consentRejectInteractionSucceeded === true) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_failed_to_reduce_tracking",
-        label: "Reject did not reduce tracking",
-        value: true
-      })
-    );
-  }
-  if (runtimeArtifacts.consentRejectPersistedTrackerVendorNames.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_persisted_tracker_vendors",
-        label: "Trackers still present after reject",
-        value: runtimeArtifacts.consentRejectPersistedTrackerVendorNames
-      })
-    );
-  }
-  if (runtimeArtifacts.consentRejectNewTrackerVendorNames.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_new_tracker_vendors",
-        label: "New trackers appeared after reject",
-        value: runtimeArtifacts.consentRejectNewTrackerVendorNames
-      })
-    );
-  }
-  if (runtimeArtifacts.consentAcceptNewTrackerVendorNames.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_accept_new_tracker_vendors",
-        label: "New trackers appeared after accept",
-        value: runtimeArtifacts.consentAcceptNewTrackerVendorNames
-      })
-    );
-  }
-  if ((runtimeArtifacts.consentPreconsentViolationCount ?? 0) > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.preconsent_violation_count",
-        label: "Pre-consent tracker violations",
-        value: runtimeArtifacts.consentPreconsentViolationCount ?? 0
-      })
-    );
-  }
-  if (runtimeArtifacts.consentBaselineTrackerVendorNames.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.preconsent_tracker_vendors",
-        label: "Pre-consent tracker vendors",
-        value: runtimeArtifacts.consentBaselineTrackerVendorNames
-      })
-    );
-  }
-  if (runtimeArtifacts.consentBaselineTrackerEvidenceUrls.length > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.preconsent_tracker_evidence_urls",
-        label: "Pre-consent tracker evidence URLs",
-        value: runtimeArtifacts.consentBaselineTrackerEvidenceUrls
-      })
-    );
-  }
-  if (
-    runtimeArtifacts.consentRejectReducedThirdPartyCookies === false &&
-    runtimeArtifacts.consentRejectInteractionSucceeded === true
-  ) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_failed_to_reduce_third_party_cookies",
-        label: "Reject did not reduce third-party cookies",
-        value: true
-      })
-    );
-  }
-  if ((runtimeArtifacts.consentOptOutClicks ?? runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_reject_click_count",
-        label: "Reject click count",
-        value: runtimeArtifacts.consentOptOutClicks ?? runtimeArtifacts.consentRejectClickCount ?? 0
-      })
-    );
-  }
-  if ((runtimeArtifacts.consentOptInClicks ?? runtimeArtifacts.consentAcceptClickCount ?? 0) > 0) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.consent_accept_click_count",
-        label: "Accept click count",
-        value: runtimeArtifacts.consentOptInClicks ?? runtimeArtifacts.consentAcceptClickCount ?? 0
-      })
-    );
-  }
-
-  const reviewReasonsByEnrichmentId = new Map<string, Set<string>>();
-  for (const row of policyEnrichmentBundle.reviewQueueItems) {
-    const enrichmentId = String(row.policyEnrichmentId ?? "");
-    if (!enrichmentId) {
-      continue;
-    }
-
-    const existing = reviewReasonsByEnrichmentId.get(enrichmentId) ?? new Set<string>();
-    existing.add(String(row.reason ?? ""));
-    reviewReasonsByEnrichmentId.set(enrichmentId, existing);
-  }
-
-  let functionalMisalignmentDetected =
-    runtimeArtifacts.consentRedirectOrAuthRequired === true ||
-    (typeof runtimeArtifacts.consentFrictionDelta === "number" && runtimeArtifacts.consentFrictionDelta > 0);
-  let missingTechnicalDisclosureDetected = false;
-  let disclosureLikelyObstructedDetected = false;
-
-  for (const enrichment of policyEnrichmentBundle.enrichments) {
-    const reasons = reviewReasonsByEnrichmentId.get(String(enrichment.id ?? "")) ?? new Set<string>();
-    if (!reasons.has("low_confidence_critical_fields")) {
-      continue;
-    }
-
-    const flags = Array.isArray(enrichment.policyActionableFlags)
-      ? enrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
-      : [];
-    const mentions = Array.isArray(enrichment.policyMentions) ? enrichment.policyMentions : [];
-
-    if ((snapshotWithScores.userRightsFrictionScore ?? 0) >= 100) {
-      functionalMisalignmentDetected = true;
-    }
-
-    if (
-      snapshotWithScores.retargetingPixelDetected === true ||
-      snapshotWithScores.sessionReplayWithoutDisclosureDetected === true
-    ) {
-      missingTechnicalDisclosureDetected = true;
-    }
-
-    if (
-      hasSparsePolicyExtraction({
-        confidence: enrichment.policySemanticConfidence,
-        coverageRatio: enrichment.policyCoverageRatio,
-        flags,
-        mentions,
-        snippetCount: enrichment.policySnippetCount,
-        structurallyWeak: enrichment.policyStructurallyWeak,
-        summaryShort: enrichment.policySummaryShort
-      })
-    ) {
-      disclosureLikelyObstructedDetected = true;
-    }
-  }
-
-  if (functionalMisalignmentDetected) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "privacy",
-        key: "privacy.policy_runtime_functional_misalignment_detected",
-        label: "Policy/runtime functional misalignment detected",
-        value: true
-      })
-    );
-  }
-
-  if (missingTechnicalDisclosureDetected) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.policy_runtime_missing_technical_disclosure_detected",
-        label: "Missing technical disclosure detected",
-        value: true
-      })
-    );
-  }
-
-  if (disclosureLikelyObstructedDetected) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.policy_runtime_disclosure_likely_obstructed",
-        label: "Policy disclosure likely obstructed",
-        value: true
-      })
-    );
-  }
-
-  const cookiePolicyEnrichment =
-    policyEnrichmentBundle.enrichments.find((enrichment) => enrichment.pageType === "cookie_policy") ?? null;
-  const runtimeCookieNames = [...new Set((runtimeArtifacts.initialCookieNames ?? []).map((value) => normalizeCookieName(value)).filter((value): value is string => Boolean(value)))];
-  if (cookiePolicyEnrichment && runtimeCookieNames.length > 0) {
-    const cookieDisclosures = Array.isArray(cookiePolicyEnrichment.policyCookieDisclosures)
-      ? cookiePolicyEnrichment.policyCookieDisclosures
-      : [];
-    const cookieFlags = Array.isArray(cookiePolicyEnrichment.policyActionableFlags)
-      ? cookiePolicyEnrichment.policyActionableFlags.filter((value): value is string => typeof value === "string")
-      : [];
-    const cookiePolicyStructurallyObstructed =
-      cookieDisclosures.length === 0 ||
-      (typeof cookiePolicyEnrichment.policySemanticConfidence === "number" && cookiePolicyEnrichment.policySemanticConfidence < 0.6) ||
-      cookieFlags.includes("low_confidence") ||
-      cookieFlags.includes("llm_provider_error");
-
-    if (cookiePolicyStructurallyObstructed) {
-      compatibilitySignals.push(
-        toTaxonomySignal({
-          category: "disclosure",
-          key: "disclosure.cookie_policy_structurally_obstructed",
-          label: "Cookie policy structurally obstructed",
-          value: true
-        })
-      );
-    } else {
-      const unmatchedCookieNames = runtimeCookieNames.filter(
-        (cookieName) => !matchCookieDisclosure({ cookieName, disclosures: cookieDisclosures })
-      );
-      if (unmatchedCookieNames.length > 0) {
-        compatibilitySignals.push(
-          toTaxonomySignal({
-            category: "privacy",
-            key: "privacy.cookie_runtime_disclosure_gap_detected",
-            label: "Cookie disclosure gap detected",
-            value: true
-          })
-        );
-      }
-    }
-  }
   const byCategory = compatibilitySignals.reduce<Record<string, number>>((accumulator, signal) => {
     accumulator[signal.category] = (accumulator[signal.category] ?? 0) + 1;
     return accumulator;
