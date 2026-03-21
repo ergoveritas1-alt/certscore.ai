@@ -53,6 +53,32 @@ type StageContext = {
   startedAt: Date;
 };
 
+type RunFullScanJobDeps = {
+  buildSnapshotBundle: typeof buildSnapshotBundle;
+  createAdminClient: typeof createAdminClient;
+  getPreviousCompletedScan: typeof getPreviousCompletedScan;
+  getSnapshotBundle: typeof getSnapshotBundle;
+  replaceScanSignals: typeof replaceScanSignals;
+  saveComplianceChangeEvents: typeof saveComplianceChangeEvents;
+  saveSnapshotBundle: typeof saveSnapshotBundle;
+};
+
+const defaultRunFullScanJobDeps: RunFullScanJobDeps = {
+  buildSnapshotBundle,
+  createAdminClient,
+  getPreviousCompletedScan,
+  getSnapshotBundle,
+  replaceScanSignals,
+  saveComplianceChangeEvents,
+  saveSnapshotBundle
+};
+
+let activeRunFullScanJobDeps: RunFullScanJobDeps = defaultRunFullScanJobDeps;
+
+function getRunFullScanJobDeps() {
+  return activeRunFullScanJobDeps;
+}
+
 class StageExecutionError extends Error {
   category: ScanExecutionErrorCategory;
   stage: ScanExecutionStage;
@@ -73,7 +99,7 @@ async function insertScanEvent(input: {
   message: string;
   metadata?: Record<string, unknown>;
 }) {
-  const supabase = createAdminClient();
+  const supabase = getRunFullScanJobDeps().createAdminClient();
   const { error } = await supabase.from("scan_events").insert({
     scan_id: input.scanId,
     domain_id: input.domainId,
@@ -253,7 +279,7 @@ async function persistExecutionSummary(input: {
   scanId: string;
   scanPlan?: SnapshotScanPlan | null;
 }) {
-  const supabase = createAdminClient();
+  const supabase = getRunFullScanJobDeps().createAdminClient();
   const nextScanConfig = buildExecutionScanConfig(input.scanConfig, {
     executionSummary: input.executionSummary,
     pagesRequested: input.requestedPageCount,
@@ -328,7 +354,7 @@ async function recordStageOutcome(input: {
 }
 
 async function markScanAsRunning(context: StageContext) {
-  const supabase = createAdminClient();
+  const supabase = getRunFullScanJobDeps().createAdminClient();
   const { error } = await supabase
     .from("scans")
     .update({
@@ -384,7 +410,8 @@ export const testInternals = {
   buildExecutionScanConfig,
   getRequestedPageCount,
   getTerminalFailureCategory,
-  retryTransientStageOperation
+  retryTransientStageOperation,
+  runFullScanJob
 };
 
 async function runSetupStage(input: {
@@ -460,6 +487,7 @@ async function runSetupStage(input: {
 async function runBaselineLookupStage(input: {
   context: StageContext;
   crawlSource: CrawlSource;
+  deps: RunFullScanJobDeps;
   isPreview: boolean;
   scanConfig: Record<string, unknown> | null;
 }) {
@@ -486,7 +514,7 @@ async function runBaselineLookupStage(input: {
 
   try {
     previousScan = await withTimeout(
-      getPreviousCompletedScan({
+      input.deps.getPreviousCompletedScan({
         currentScanId: input.context.scanId,
         domainId: input.context.domainRow.id,
         organizationId: input.context.scanRow.organization_id
@@ -494,7 +522,9 @@ async function runBaselineLookupStage(input: {
       20_000,
       "Baseline lookup"
     );
-    previousBundle = previousScan ? await withTimeout(getSnapshotBundle(previousScan.id), 20_000, "Baseline bundle load") : null;
+    previousBundle = previousScan
+      ? await withTimeout(input.deps.getSnapshotBundle(previousScan.id), 20_000, "Baseline bundle load")
+      : null;
 
     await insertScanEventSafely({
       scanId: input.context.scanId,
@@ -592,6 +622,7 @@ async function runBaselineLookupStage(input: {
 async function runCrawlDiscoveryStage(input: {
   context: StageContext;
   crawlSource: CrawlSource;
+  deps: RunFullScanJobDeps;
   isPreview: boolean;
   previousBundle: Awaited<ReturnType<typeof getSnapshotBundle>> | null;
   scanConfig: Record<string, unknown> | null;
@@ -633,7 +664,7 @@ async function runCrawlDiscoveryStage(input: {
       label: "Snapshot bundle build",
       maxAttempts: 2,
       operation: () =>
-        buildSnapshotBundle({
+        input.deps.buildSnapshotBundle({
           scanId: input.context.scanId,
           organizationId: input.context.scanRow.organization_id,
           domainId: input.context.domainRow.id,
@@ -990,19 +1021,20 @@ async function runPersistenceStage(input: {
       }>
     | null;
   context: StageContext;
+  deps: RunFullScanJobDeps;
   isPreview: boolean;
   previousBundle: Awaited<ReturnType<typeof getSnapshotBundle>> | null;
   previousScan: PreviousScanResult;
   scanConfig: Record<string, unknown> | null;
 }) {
-  const supabase = createAdminClient();
+  const supabase = input.deps.createAdminClient();
   const stage: ScanExecutionStage = "persistence_diff_finalization";
   const stageStartedAt = new Date();
   const degradedIssues: Array<{ category: ScanExecutionErrorCategory; message: string }> = [];
   let diff: SnapshotDiffResult | null = null;
 
   try {
-    await saveSnapshotBundle(input.bundle);
+    await input.deps.saveSnapshotBundle(input.bundle);
   } catch (error) {
     const category = categorizeScannerExecutionError(error) === "database" ? "persistence" : categorizeScannerExecutionError(error);
     await recordStageOutcome({
@@ -1025,7 +1057,7 @@ async function runPersistenceStage(input: {
 
   if (input.compatibilitySignals) {
     try {
-      await replaceScanSignals({
+      await input.deps.replaceScanSignals({
         scanId: input.context.scanId,
         signals: input.compatibilitySignals
       });
@@ -1097,7 +1129,7 @@ async function runPersistenceStage(input: {
 
   if (diff && input.context.scanRow.organization_id) {
     try {
-      await saveComplianceChangeEvents({
+      await input.deps.saveComplianceChangeEvents({
         scanIdCurrent: input.context.scanId,
         organizationId: input.context.scanRow.organization_id,
         domainId: input.context.domainRow.id,
@@ -1213,183 +1245,193 @@ async function runPersistenceStage(input: {
   };
 }
 
-export async function runFullScanJob(scanId: string) {
-  const supabase = createAdminClient();
-  const { data: scan, error } = await supabase
-    .from("scans")
-    .select("id, organization_id, domain_id, pages_requested, status, scan_config_json, scan_type")
-    .eq("id", scanId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load scan ${scanId}: ${error.message}`);
-  }
-
-  if (!scan) {
-    throw new Error(`Scan ${scanId} was not found.`);
-  }
-
-  const scanRow = scan as ScanRow;
-
-  if (!scanRow.domain_id) {
-    throw new Error(`Scan ${scanId} is missing a domain.`);
-  }
-
-  if (scanRow.status === "completed") {
-    return;
-  }
-
-  const { data: domain, error: domainError } = await supabase
-    .from("domains")
-    .select("id, hostname, normalized_url, max_pages_override")
-    .eq("id", scanRow.domain_id)
-    .maybeSingle();
-
-  if (domainError) {
-    throw new Error(`Failed to load domain for scan ${scanId}: ${domainError.message}`);
-  }
-
-  if (!domain) {
-    throw new Error(`Domain for scan ${scanId} was not found.`);
-  }
-
-  const domainRow = domain as DomainRow;
-  const requestedPageCount = getRequestedPageCount(scanRow, domainRow);
-  const startedAt = new Date();
-  const isPreview = scanRow.scan_type === "preview";
-  const startedEventType = scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.started : FULL_SCAN_EVENT_TYPES.started;
-  const completedEventType =
-    scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.completed : FULL_SCAN_EVENT_TYPES.completed;
-  const failedEventType = scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.failed : FULL_SCAN_EVENT_TYPES.failed;
-  const crawlSource: CrawlSource =
-    scanRow.scan_type === "scheduled" ? "scheduled" : scanRow.scan_type === "preview" ? "preview" : "manual";
-  const context: StageContext = {
-    domainRow,
-    executionSummary: createScannerExecutionSummary({
-      startedAt: startedAt.toISOString()
-    }),
-    requestedPageCount,
-    scanId,
-    scanRow,
-    startedAt
-  };
-  let currentScanConfig = scanRow.scan_config_json;
+export async function runFullScanJob(scanId: string, deps: RunFullScanJobDeps = defaultRunFullScanJobDeps) {
+  const previousDeps = activeRunFullScanJobDeps;
+  activeRunFullScanJobDeps = deps;
 
   try {
-    currentScanConfig = await runSetupStage({
-      context,
-      failedEventType,
-      scanConfig: currentScanConfig,
-      startedEventType
-    });
-
-    const baselineResult = await runBaselineLookupStage({
-      context,
-      crawlSource,
-      isPreview,
-      scanConfig: currentScanConfig
-    });
-    currentScanConfig = baselineResult.nextScanConfig;
-
-    const crawlResult = await runCrawlDiscoveryStage({
-      context,
-      crawlSource,
-      isPreview,
-      previousBundle: baselineResult.previousBundle,
-      scanConfig: currentScanConfig
-    });
-    currentScanConfig = crawlResult.nextScanConfig;
-
-    const runtimeResult = await runRuntimeSnapshotStage({
-      bundle: crawlResult.bundle,
-      context,
-      scanConfig: currentScanConfig
-    });
-    currentScanConfig = runtimeResult.nextScanConfig;
-
-    const signalResult = await runSignalDerivationStage({
-      bundle: crawlResult.bundle,
-      context,
-      isPreview,
-      scanConfig: currentScanConfig
-    });
-    currentScanConfig = signalResult.nextScanConfig;
-
-    const persistenceResult = await runPersistenceStage({
-      bundle: crawlResult.bundle,
-      compatibilitySignals: signalResult.compatibilitySignals,
-      context,
-      isPreview,
-      previousBundle: baselineResult.previousBundle,
-      previousScan: baselineResult.previousScan,
-      scanConfig: currentScanConfig
-    });
-    currentScanConfig = persistenceResult.nextScanConfig;
-
-    context.executionSummary = finalizeScannerExecutionSummary(context.executionSummary, {
-      completedAt: persistenceResult.completedAt.toISOString(),
-      lifecycle: "completed"
-    });
-    currentScanConfig = await persistExecutionSummarySafely({
-      executionSummary: context.executionSummary,
-      requestedPageCount,
-      scanConfig: currentScanConfig,
-      scanId,
-      scanPlan: crawlResult.bundle.scanPlan
-    });
-
-    await insertScanEventSafely({
-      scanId,
-      domainId: domainRow.id,
-      organizationId: scanRow.organization_id,
-      eventType: completedEventType,
-      message: scanRow.scan_type === "preview" ? "Live preview scan completed." : "Structured snapshot scan completed.",
-      metadata: {
-        changeSummary: persistenceResult.diff?.summary ?? null,
-        durationMs: persistenceResult.durationMs,
-        executionSummary: context.executionSummary,
-        pagesScanned: crawlResult.bundle.snapshot.pagesScanned,
-        totalSignals: crawlResult.bundle.snapshot.totalSignals,
-        certscoreOverall: crawlResult.bundle.snapshot.certscoreOverall
-      }
-    });
-  } catch (jobError) {
-    const errorMessage = jobError instanceof Error ? jobError.message : "Unknown full scan job error";
-    const failureCategory = getTerminalFailureCategory(jobError);
-
-    context.executionSummary = finalizeScannerExecutionSummary(context.executionSummary, {
-      completedAt: new Date().toISOString(),
-      failureCategory,
-      lifecycle: "failed"
-    });
-    currentScanConfig = await persistExecutionSummarySafely({
-      executionSummary: context.executionSummary,
-      requestedPageCount,
-      scanConfig: currentScanConfig,
-      scanId
-    });
-
-    await supabase
+    const supabase = deps.createAdminClient();
+    const { data: scan, error } = await supabase
       .from("scans")
-      .update({
-        status: "failed",
-        error_message: errorMessage
-      })
-      .eq("id", scanId);
+      .select("id, organization_id, domain_id, pages_requested, status, scan_config_json, scan_type")
+      .eq("id", scanId)
+      .maybeSingle();
 
-    await insertScanEventSafely({
+    if (error) {
+      throw new Error(`Failed to load scan ${scanId}: ${error.message}`);
+    }
+
+    if (!scan) {
+      throw new Error(`Scan ${scanId} was not found.`);
+    }
+
+    const scanRow = scan as ScanRow;
+
+    if (!scanRow.domain_id) {
+      throw new Error(`Scan ${scanId} is missing a domain.`);
+    }
+
+    if (scanRow.status === "completed") {
+      return;
+    }
+
+    const { data: domain, error: domainError } = await supabase
+      .from("domains")
+      .select("id, hostname, normalized_url, max_pages_override")
+      .eq("id", scanRow.domain_id)
+      .maybeSingle();
+
+    if (domainError) {
+      throw new Error(`Failed to load domain for scan ${scanId}: ${domainError.message}`);
+    }
+
+    if (!domain) {
+      throw new Error(`Domain for scan ${scanId} was not found.`);
+    }
+
+    const domainRow = domain as DomainRow;
+    const requestedPageCount = getRequestedPageCount(scanRow, domainRow);
+    const startedAt = new Date();
+    const isPreview = scanRow.scan_type === "preview";
+    const startedEventType = scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.started : FULL_SCAN_EVENT_TYPES.started;
+    const completedEventType =
+      scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.completed : FULL_SCAN_EVENT_TYPES.completed;
+    const failedEventType = scanRow.scan_type === "preview" ? PREVIEW_SCAN_EVENT_TYPES.failed : FULL_SCAN_EVENT_TYPES.failed;
+    const crawlSource: CrawlSource =
+      scanRow.scan_type === "scheduled" ? "scheduled" : scanRow.scan_type === "preview" ? "preview" : "manual";
+    const context: StageContext = {
+      domainRow,
+      executionSummary: createScannerExecutionSummary({
+        startedAt: startedAt.toISOString()
+      }),
+      requestedPageCount,
       scanId,
-      domainId: domainRow.id,
-      organizationId: scanRow.organization_id,
-      eventType: failedEventType,
-      message: scanRow.scan_type === "preview" ? "Live preview scan failed." : "Structured snapshot scan failed.",
-      metadata: {
-        error: errorMessage,
-        executionSummary: context.executionSummary,
-        failureCategory
-      }
-    });
+      scanRow,
+      startedAt
+    };
+    let currentScanConfig = scanRow.scan_config_json;
 
-    throw jobError;
+    try {
+      currentScanConfig = await runSetupStage({
+        context,
+        failedEventType,
+        scanConfig: currentScanConfig,
+        startedEventType
+      });
+
+      const baselineResult = await runBaselineLookupStage({
+        context,
+        crawlSource,
+        deps,
+        isPreview,
+        scanConfig: currentScanConfig
+      });
+      currentScanConfig = baselineResult.nextScanConfig;
+
+      const crawlResult = await runCrawlDiscoveryStage({
+        context,
+        crawlSource,
+        deps,
+        isPreview,
+        previousBundle: baselineResult.previousBundle,
+        scanConfig: currentScanConfig
+      });
+      currentScanConfig = crawlResult.nextScanConfig;
+
+      const runtimeResult = await runRuntimeSnapshotStage({
+        bundle: crawlResult.bundle,
+        context,
+        scanConfig: currentScanConfig
+      });
+      currentScanConfig = runtimeResult.nextScanConfig;
+
+      const signalResult = await runSignalDerivationStage({
+        bundle: crawlResult.bundle,
+        context,
+        isPreview,
+        scanConfig: currentScanConfig
+      });
+      currentScanConfig = signalResult.nextScanConfig;
+
+      const persistenceResult = await runPersistenceStage({
+        bundle: crawlResult.bundle,
+        compatibilitySignals: signalResult.compatibilitySignals,
+        context,
+        deps,
+        isPreview,
+        previousBundle: baselineResult.previousBundle,
+        previousScan: baselineResult.previousScan,
+        scanConfig: currentScanConfig
+      });
+      currentScanConfig = persistenceResult.nextScanConfig;
+
+      context.executionSummary = finalizeScannerExecutionSummary(context.executionSummary, {
+        completedAt: persistenceResult.completedAt.toISOString(),
+        lifecycle: "completed"
+      });
+      currentScanConfig = await persistExecutionSummarySafely({
+        executionSummary: context.executionSummary,
+        requestedPageCount,
+        scanConfig: currentScanConfig,
+        scanId,
+        scanPlan: crawlResult.bundle.scanPlan
+      });
+
+      await insertScanEventSafely({
+        scanId,
+        domainId: domainRow.id,
+        organizationId: scanRow.organization_id,
+        eventType: completedEventType,
+        message: scanRow.scan_type === "preview" ? "Live preview scan completed." : "Structured snapshot scan completed.",
+        metadata: {
+          changeSummary: persistenceResult.diff?.summary ?? null,
+          durationMs: persistenceResult.durationMs,
+          executionSummary: context.executionSummary,
+          pagesScanned: crawlResult.bundle.snapshot.pagesScanned,
+          totalSignals: crawlResult.bundle.snapshot.totalSignals,
+          certscoreOverall: crawlResult.bundle.snapshot.certscoreOverall
+        }
+      });
+    } catch (jobError) {
+      const errorMessage = jobError instanceof Error ? jobError.message : "Unknown full scan job error";
+      const failureCategory = getTerminalFailureCategory(jobError);
+
+      context.executionSummary = finalizeScannerExecutionSummary(context.executionSummary, {
+        completedAt: new Date().toISOString(),
+        failureCategory,
+        lifecycle: "failed"
+      });
+      currentScanConfig = await persistExecutionSummarySafely({
+        executionSummary: context.executionSummary,
+        requestedPageCount,
+        scanConfig: currentScanConfig,
+        scanId
+      });
+
+      await supabase
+        .from("scans")
+        .update({
+          status: "failed",
+          error_message: errorMessage
+        })
+        .eq("id", scanId);
+
+      await insertScanEventSafely({
+        scanId,
+        domainId: domainRow.id,
+        organizationId: scanRow.organization_id,
+        eventType: failedEventType,
+        message: scanRow.scan_type === "preview" ? "Live preview scan failed." : "Structured snapshot scan failed.",
+        metadata: {
+          error: errorMessage,
+          executionSummary: context.executionSummary,
+          failureCategory
+        }
+      });
+
+      throw jobError;
+    }
+  } finally {
+    activeRunFullScanJobDeps = previousDeps;
   }
 }

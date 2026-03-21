@@ -143,6 +143,10 @@ export function categorizeScannerExecutionError(error: unknown): ScanExecutionEr
     return "navigation_timeout";
   }
 
+  if (hasMatch(message, [/save snapshot bundle/, /persist/, /replace scan signals/])) {
+    return "persistence";
+  }
+
   if (hasMatch(message, [/runtime/, /snapshot/, /consent/, /cookie/, /tracker/])) {
     return "runtime_capture";
   }
@@ -157,10 +161,6 @@ export function categorizeScannerExecutionError(error: unknown): ScanExecutionEr
 
   if (hasMatch(message, [/change event/, /diff/, /changes computed/])) {
     return "diff";
-  }
-
-  if (hasMatch(message, [/save snapshot bundle/, /persist/, /replace scan signals/])) {
-    return "persistence";
   }
 
   return "unknown";

@@ -148,3 +148,205 @@ test("getRequestedPageCount prefers domain override before scan config and scan 
     14
   );
 });
+
+function createSupabaseStub(input: {
+  domain?: Record<string, unknown>;
+  scan: Record<string, unknown>;
+  updateErrors?: Partial<Record<string, string>>;
+}) {
+  const updates: Array<{ table: string; values: Record<string, unknown> }> = [];
+  const inserts: Array<{ table: string; values: Record<string, unknown> }> = [];
+
+  const client = {
+    from(table: string) {
+      return {
+        insert(values: Record<string, unknown>) {
+          inserts.push({ table, values });
+          return Promise.resolve({ error: null });
+        },
+        select() {
+          return {
+            eq(_column: string, value: string) {
+              return {
+                maybeSingle: async () => {
+                  if (table === "scans") {
+                    return {
+                      data: input.scan.id === value ? input.scan : null,
+                      error: null
+                    };
+                  }
+
+                  if (table === "domains") {
+                    return {
+                      data: input.domain && input.domain.id === value ? input.domain : null,
+                      error: null
+                    };
+                  }
+
+                  return { data: null, error: null };
+                }
+              };
+            }
+          };
+        },
+        update(values: Record<string, unknown>) {
+          updates.push({ table, values });
+          return {
+            eq: async () => ({
+              error: input.updateErrors?.[table] ? { message: input.updateErrors[table] } : null
+            })
+          };
+        }
+      };
+    }
+  };
+
+  return { client, inserts, updates };
+}
+
+function createBundle() {
+  return {
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    compatibilitySignals: [],
+    pages: [],
+    policyEnrichments: [],
+    policyEvidence: [],
+    policyReviewQueueItems: [],
+    runtimeArtifacts: {
+      consentAcceptInteractionSucceeded: false,
+      consentAuditCompleted: false,
+      consentRejectInteractionSucceeded: false
+    },
+    scanPlan: {
+      browserNavigationTimeoutMs: 30_000,
+      browserPostLoadWaitMs: 1_000,
+      blockStylesheetsInBrowser: false,
+      expansionTargetCount: 20,
+      prefetchTargetCount: 5,
+      profile: "balanced",
+      staticFetchConcurrency: 4
+    },
+    snapshot: {
+      accessibilityScore: 80,
+      certscoreOverall: 72,
+      contactPagePresent: true,
+      cookieBannerPresent: false,
+      cookieCountTotal: 0,
+      homepageFetchStatus: "ok",
+      pagesScanned: 3,
+      partialScan: false,
+      privacyPolicyPresent: true,
+      privacyScore: 68,
+      termsOfServicePresent: true,
+      thirdPartyCookieCount: 0,
+      totalSignals: 0,
+      trackerCountTotal: 0,
+      trackerVendorCount: 0,
+      trackingBeforeConsentDetected: false,
+      thirdPartyCookieSetBeforeConsent: false,
+      wcagErrorCountTotal: 0,
+      legalCoverageScore: 70
+    },
+    trackerVendors: []
+  } as never;
+}
+
+test("runFullScanJob completes with degraded baseline lookup when previous snapshot lookup fails", async () => {
+  const supabase = createSupabaseStub({
+    domain: {
+      hostname: "example.com",
+      id: "domain-1",
+      max_pages_override: null,
+      normalized_url: "https://example.com"
+    },
+    scan: {
+      domain_id: "domain-1",
+      id: "scan-1",
+      organization_id: "org-1",
+      pages_requested: 5,
+      scan_config_json: null,
+      scan_type: "full",
+      status: "queued"
+    }
+  });
+  const bundle = createBundle();
+
+  await testInternals.runFullScanJob("scan-1", {
+    buildSnapshotBundle: async () => bundle,
+    createAdminClient: () => supabase.client as never,
+    getPreviousCompletedScan: async () => {
+      throw new Error("Previous snapshot lookup failed");
+    },
+    getSnapshotBundle: async () => null as never,
+    replaceScanSignals: async () => undefined,
+    saveComplianceChangeEvents: async () => undefined,
+    saveSnapshotBundle: async () => undefined
+  });
+
+  const scanConfigUpdates = supabase.updates.filter(
+    (entry) => entry.table === "scans" && "scan_config_json" in entry.values
+  );
+  const scanConfigUpdate = scanConfigUpdates[scanConfigUpdates.length - 1]?.values.scan_config_json as
+    | { execution?: { summary?: ScannerExecutionSummary } }
+    | undefined;
+
+  assert.equal(scanConfigUpdate?.execution?.summary?.lifecycle, "completed");
+  assert.deepEqual(scanConfigUpdate?.execution?.summary?.degradedStages, ["baseline_lookup"]);
+  assert.equal(scanConfigUpdate?.execution?.summary?.failureCategory, null);
+
+  const completedUpdate = supabase.updates.find(
+    (entry) => entry.table === "scans" && entry.values.status === "completed"
+  );
+  assert.ok(completedUpdate);
+});
+
+test("runFullScanJob fails when snapshot persistence fails", async () => {
+  const supabase = createSupabaseStub({
+    domain: {
+      hostname: "example.com",
+      id: "domain-1",
+      max_pages_override: null,
+      normalized_url: "https://example.com"
+    },
+    scan: {
+      domain_id: "domain-1",
+      id: "scan-2",
+      organization_id: "org-1",
+      pages_requested: 5,
+      scan_config_json: null,
+      scan_type: "full",
+      status: "queued"
+    }
+  });
+  const bundle = createBundle();
+
+  await assert.rejects(() =>
+    testInternals.runFullScanJob("scan-2", {
+      buildSnapshotBundle: async () => bundle,
+      createAdminClient: () => supabase.client as never,
+      getPreviousCompletedScan: async () => null,
+      getSnapshotBundle: async () => null as never,
+      replaceScanSignals: async () => undefined,
+      saveComplianceChangeEvents: async () => undefined,
+      saveSnapshotBundle: async () => {
+        throw new Error("Failed to save snapshot bundle");
+      }
+    })
+  );
+
+  const failedUpdate = supabase.updates.find(
+    (entry) => entry.table === "scans" && entry.values.status === "failed"
+  );
+  assert.ok(failedUpdate);
+
+  const scanConfigUpdates = supabase.updates.filter(
+    (entry) => entry.table === "scans" && "scan_config_json" in entry.values
+  );
+  const scanConfigUpdate = scanConfigUpdates[scanConfigUpdates.length - 1]?.values.scan_config_json as
+    | { execution?: { summary?: ScannerExecutionSummary } }
+    | undefined;
+
+  assert.equal(scanConfigUpdate?.execution?.summary?.lifecycle, "failed");
+  assert.equal(scanConfigUpdate?.execution?.summary?.failureCategory, "persistence");
+});

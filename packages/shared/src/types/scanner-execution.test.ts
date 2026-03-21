@@ -15,6 +15,10 @@ test("categorizeScannerExecutionError maps timeout-style errors to transient nav
   assert.equal(isScannerExecutionErrorTransient("navigation_timeout"), true);
 });
 
+test("categorizeScannerExecutionError prefers persistence classification for snapshot save failures", () => {
+  assert.equal(categorizeScannerExecutionError(new Error("Failed to save snapshot bundle")), "persistence");
+});
+
 test("baseline lookup failures are treated as recoverable", () => {
   assert.equal(isScannerStageRecoverable("baseline_lookup", "baseline_lookup"), true);
   assert.equal(isScannerStageRecoverable("baseline_lookup", "database"), true);
