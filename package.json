@@ -23,6 +23,7 @@
     "dev:validation:worker:watch": "pnpm --filter @website-signal-risk-scanner/worker dev:validation:watch",
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/worker validation:scheduler",
     "gcloud:auth": "bash ./scripts/gcloud-auth-login.sh",
+    "ops:monitor:prod": "pnpm exec tsx ./scripts/monitor-prod-ops.ts",
     "restart:certscore": "bash ./scripts/restart-certscore.sh",
     "restart:validation:web": "bash ./scripts/restart-validation-web.sh",
     "restart:localhost": "bash ./scripts/restart-localhost.sh",

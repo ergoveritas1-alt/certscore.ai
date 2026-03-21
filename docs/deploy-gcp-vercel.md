@@ -118,6 +118,22 @@ Validate in this order:
 6. PDFs generate
 7. the hourly scheduler path runs successfully
 
+## 7. Monitor production worker health
+
+The repo includes a lightweight production ops monitor:
+
+```bash
+pnpm ops:monitor:prod
+```
+
+It checks:
+
+- validation worker heartbeat freshness from Supabase
+- Cloud Run readiness for `certscore-worker`
+- Cloud Run readiness for `certscore-validation-worker`
+
+If `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, and `OPS_ALERT_TO_EMAIL` are configured, it will email an alert and exit non-zero when a worker is stale or not ready.
+
 ## Validation Ops sibling deploy
 
 The validation-only deployment uses a different topology:
