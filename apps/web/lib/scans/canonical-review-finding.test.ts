@@ -390,6 +390,29 @@ test("uses strong copy and high evidence strength for functional misalignment", 
   assert.equal(presentation.confidenceScore, "0.85");
 });
 
+test("uses fallback runtime evidence for functional misalignment when validation linkage is absent", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        consentBlockerPageTitle: "Login Required",
+        consentBlockerTextSnippet: "Please sign in to manage your privacy choices.",
+        consentBlockerType: "auth_wall",
+        consentBlockerUrl: "https://example.com/privacy/login",
+        consentEvidencePassCount: 2,
+        consentRedirectOrAuthRequired: true
+      },
+      observedValue: "Yes",
+      severity: "high",
+      title: "Functional misalignment"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Functional misalignment");
+  assert.match(presentation.whyThisMatters, /Login Required|sign in to manage your privacy choices/i);
+  assert.equal(presentation.confidenceScore, "1.0");
+});
+
 test("uses max-strength score and hard-block copy for critical user-rights fulfillment friction", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -482,6 +505,28 @@ test("uses maximum confidence when the same friction blocker is reproduced twice
 
   assert.match(presentation.whyThisMatters, /Login Required|sign in to manage your privacy choices/i);
   assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses elevated heuristic confidence for critical user-rights friction score without runtime proof", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "fr-heuristic-1",
+        ruleKey: "scan_signal.privacy.user_rights_friction_score",
+        title: "Critical user-rights fulfillment friction",
+        evidence: {
+          signalValue: 100
+        }
+      }),
+      observedValue: "100",
+      severity: "high",
+      title: "Critical user-rights fulfillment friction"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Critical user-rights fulfillment friction");
+  assert.equal(presentation.confidenceScore, "0.70");
 });
 
 test("uses strong copy and high confidence for high user-rights fulfillment friction", () => {
@@ -897,6 +942,229 @@ test("uses landmark-specific accessibility copy and high confidence for landmark
   assert.ok(Number(presentation.confidenceScore) >= 0.95);
 });
 
+test("uses contrast-specific accessibility copy and confidence for contrast failures", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "contrast-1",
+        ruleKey: "accessibility.wcag_contrast_failures_count",
+        title: "Contrast failures",
+        evidence: {
+          supportingSignals: [
+            {
+              key: "accessibility.wcag_contrast_failures_count",
+              label: "Contrast failures",
+              value: 4,
+              category: "accessibility"
+            }
+          ]
+        }
+      }),
+      observedValue: "4",
+      severity: "high",
+      title: "Contrast failures"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Contrast failures detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /color-contrast failures|text, controls, and status messaging|low vision|color-vision deficiencies/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /WCAG contrast thresholds|foreground\/background color combinations|core navigation|buttons|form labels/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "WCAG 2.1 Success Criterion 1.4.3 Contrast (Minimum)");
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("uses form-label-specific accessibility copy and confidence for form label issues", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "form-label-1",
+        ruleKey: "accessibility.wcag_form_label_error_count",
+        title: "Form label issues",
+        evidence: {
+          supportingSignals: [
+            {
+              key: "accessibility.wcag_form_label_error_count",
+              label: "Form label issues",
+              value: 1,
+              category: "accessibility"
+            }
+          ]
+        }
+      }),
+      observedValue: "1",
+      severity: "high",
+      title: "Form label issues"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Form label issues detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /form-label issues|missing labels|screen-reader users|what information a field requests|privacy-rights workflows/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /Associate each form control|label\/for|aria-label|aria-labelledby|placeholders are not acting as the only field description/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "WCAG 2.1 Success Criterion 3.3.2 Labels or Instructions");
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("uses link-name-specific accessibility copy and confidence for link name issues", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "link-name-1",
+        ruleKey: "accessibility.wcag_link_name_error_count",
+        title: "Link name issues",
+        evidence: {
+          supportingSignals: [
+            {
+              key: "accessibility.wcag_link_name_error_count",
+              label: "Link name issues",
+              value: 11,
+              category: "accessibility"
+            }
+          ]
+        }
+      }),
+      observedValue: "11",
+      severity: "high",
+      title: "Link name issues"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Link name issues detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /link-name issues|announced ambiguously|screen readers|where navigation choices lead|core flows/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /descriptive accessible name|visible text|aria-label|aria-labelledby|click here|read more|icon-only links/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "WCAG 2.1 Success Criterion 2.4.4 Link Purpose (In Context)");
+  assert.equal(presentation.confidenceScore, "0.9");
+});
+
+test("surfaces representative accessibility examples for contrast findings when available", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        accessibilityRuleExamples: [
+          {
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["button.primary-cta"]
+          },
+          {
+            pageUrl: "https://example.com/signup",
+            representativeSelectors: ["a.hero-link"]
+          }
+        ],
+        signalKey: "accessibility.wcag_contrast_failures_count",
+        signalLabel: "Contrast failures",
+        signalValue: 4,
+        supportingSignals: [
+          {
+            key: "accessibility.wcag_contrast_failures_count",
+            label: "Contrast failures",
+            value: 4,
+            category: "accessibility"
+          }
+        ]
+      },
+      observedValue: "4",
+      severity: "high",
+      title: "Contrast failures"
+    },
+    []
+  );
+
+  assert.match(
+    presentation.whyThisMatters,
+    /Representative automated evidence included button\.primary-cta on https:\/\/example\.com\/ and a\.hero-link on https:\/\/example\.com\/signup\./i
+  );
+});
+
+test("surfaces representative accessibility examples for form-label findings when available", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        accessibilityRuleExamples: [
+          {
+            pageUrl: "https://example.com/account",
+            representativeSelectors: ["input[type=\"email\"]"]
+          }
+        ],
+        signalKey: "accessibility.wcag_form_label_error_count",
+        signalLabel: "Form label issues",
+        signalValue: 1,
+        supportingSignals: [
+          {
+            key: "accessibility.wcag_form_label_error_count",
+            label: "Form label issues",
+            value: 1,
+            category: "accessibility"
+          }
+        ]
+      },
+      observedValue: "1",
+      severity: "high",
+      title: "Form label issues"
+    },
+    []
+  );
+
+  assert.match(
+    presentation.whyThisMatters,
+    /Representative automated evidence included input\[type="email"\] on https:\/\/example\.com\/account\./i
+  );
+});
+
+test("surfaces representative accessibility examples for link-name findings when available", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        accessibilityRuleExamples: [
+          {
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["a.icon-only-link"]
+          }
+        ],
+        signalKey: "accessibility.wcag_link_name_error_count",
+        signalLabel: "Link name issues",
+        signalValue: 11,
+        supportingSignals: [
+          {
+            key: "accessibility.wcag_link_name_error_count",
+            label: "Link name issues",
+            value: 11,
+            category: "accessibility"
+          }
+        ]
+      },
+      observedValue: "11",
+      severity: "high",
+      title: "Link name issues"
+    },
+    []
+  );
+
+  assert.match(
+    presentation.whyThisMatters,
+    /Representative automated evidence included a\.icon-only-link on https:\/\/example\.com\/\./i
+  );
+});
+
 test("uses max-strength landmark copy for high-volume landmark issues", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -1225,9 +1493,13 @@ test("uses confirmed exfiltration copy when plaintext third-party payload eviden
           sensitivePayloadViolations: [
             {
               detectedType: "email_detected",
+              evidenceStrength: "confirmed",
               matchSnippet: "email=al***@example.com",
               requestMethod: "POST",
               requestUrl: "https://tracker.example.net/collect",
+              sourceField: "email",
+              sourceLocation: "request_body",
+              sourcePattern: "keyed_field",
               timestamp: "2026-03-20T14:19:44.000Z",
               vendorHost: "tracker.example.net"
             }
@@ -1244,7 +1516,7 @@ test("uses confirmed exfiltration copy when plaintext third-party payload eviden
   assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
   assert.match(
     presentation.whyThisMatters,
-    /confirmed plaintext email data|third-party request|tracker\.example\.net/i
+    /confirmed plaintext email data|third-party request|tracker\.example\.net|`email` field in the request body/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -1283,6 +1555,262 @@ test("uses low-confidence risk copy when no direct payload proof is retained", (
     /Audit the relevant third-party requests and payload construction logic|redact them before dispatch/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.4");
+});
+
+test("uses medium-high confidence risk copy for field-level sensitive payload indicators", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "sensitive-2b",
+        ruleKey: "high_sensitivity_data_collection_detected",
+        title: "Potential high-sensitivity data collection risk",
+        evidence: {
+          runtimeEvidence: ["insurance member id in POST https://tracker.example.net/collect"],
+          sensitivePayloadViolations: [
+            {
+              detectedType: "insurance_member_id_detected",
+              evidenceStrength: "suspected",
+              matchSnippet: "memberId=AB********34",
+              requestMethod: "POST",
+              requestUrl: "https://tracker.example.net/collect",
+              sourceField: "memberId",
+              sourceLocation: "request_body",
+              sourcePattern: "keyed_field",
+              timestamp: "2026-03-20T14:19:44.000Z",
+              vendorHost: "tracker.example.net"
+            }
+          ]
+        }
+      }),
+      observedValue: "Sensitive request payload",
+      severity: "high",
+      title: "Potential high-sensitivity data collection risk"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
+  assert.match(
+    presentation.whyThisMatters,
+    /field-level indicators of insurance member id data|does not yet prove plaintext exfiltration/i
+  );
+  assert.equal(presentation.confidenceScore, "0.7");
+});
+
+test("uses high-confidence payload copy from fallback evidence when validation linkage is absent", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalValue: true,
+        sensitivePayloadViolations: [
+          {
+            detectedType: "phone_detected",
+            evidenceStrength: "confirmed",
+            matchSnippet: "phone=***-***-4567",
+            requestMethod: "POST",
+            requestUrl: "https://tracker.example.net/collect",
+            sourceField: "phone",
+            sourceLocation: "request_body",
+            sourcePattern: "keyed_field",
+            timestamp: "2026-03-20T14:19:44.000Z",
+            vendorHost: "tracker.example.net"
+          }
+        ]
+      },
+      observedValue: "Sensitive request payload",
+      severity: "high",
+      title: "High-sensitivity data collection detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
+  assert.match(
+    presentation.whyThisMatters,
+    /confirmed plaintext phone data|third-party request|tracker\.example\.net/i
+  );
+  assert.equal(presentation.confidenceScore, "0.95");
+});
+
+test("uses disclosure-style copy for accessibility statement unavailable", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-statement-1",
+        ruleKey: "accessibility_statement_fetch_failed",
+        title: "Accessibility statement unavailable",
+        evidence: {
+          missingEvidence: ["Accessibility statement not found at candidate URLs."]
+        }
+      }),
+      observedValue: "404",
+      severity: "medium",
+      title: "Accessibility statement unavailable"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility statement not retrievable");
+  assert.match(presentation.whyThisMatters, /could not retrieve an accessibility statement|known limitations|support contact/i);
+  assert.match(presentation.suggestedFix, /verify whether an accessibility statement exists|publish one/i);
+  assert.equal(presentation.suggestedBestPractice?.title, "Accessibility Statement Generator and Requirements");
+  assert.equal(presentation.confidenceScore, "0.70");
+});
+
+test("uses linked validation fetch provenance for accessibility statement fetch failures", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "a11y-statement-2",
+        ruleKey: "disclosure.accessibility_statement_fetch_failed",
+        title: "Accessibility statement unavailable",
+        evidence: {
+          confidenceBasis: [
+            "The scan attempted to fetch 3 candidate URLs for this disclosure and none returned retrievable content.",
+            "Those targets were discovered via rendered footer links rather than guessed slugs."
+          ],
+          keyPageAttemptCount: 3,
+          keyPageAttemptedUrls: [
+            "https://example.com/accessibility",
+            "https://example.com/legal/accessibility",
+            "https://support.example.com/accessibility"
+          ],
+          keyPageDiscoverySource: "footer_link",
+          keyPageGuessedOnly: false,
+          keyPageStopReason: "all_attempts_failed",
+          missingEvidence: ["The disclosure could still exist at an untested, localized, or consolidated URL outside the bounded fetch."]
+        }
+      }),
+      observedValue: "3 candidate URLs",
+      severity: "medium",
+      title: "Accessibility statement unavailable"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility statement not retrievable");
+  assert.match(
+    presentation.whyThisMatters,
+    /3 specific candidate URLs|rendered footer links rather than guessed slugs|Every bounded fetch attempt|known limitations|support contact channel/i
+  );
+  assert.equal(presentation.confidenceScore, "0.80");
+});
+
+test("uses disclosure-style copy for cookie policy fetch failures without linked validation data", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        keyPageAttemptCount: 3,
+        keyPageDiscoverySource: "same_brand_subdomain",
+        keyPageGuessedOnly: false,
+        keyPageStopReason: "repeated_failures",
+        signalKey: "disclosure.cookie_policy_fetch_failed",
+        signalLabel: "Cookie policy unavailable",
+        signalValue: [
+          "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/cookies",
+          "http://wiki.liveinternet.ru/ServisDnevnikovLiveInternet/Cookies",
+          "https://www.liveinternet.ru/cookiebeleid"
+        ]
+      },
+      observedValue: "3 candidate URLs",
+      severity: "high",
+      title: "Cookie policy unavailable"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Cookie policy not retrievable");
+  assert.match(
+    presentation.whyThisMatters,
+    /3 specific candidate URLs|same-brand discovery rather than guessed slugs|repeated hard failures|ePrivacy Directive and GDPR|unmapped URL|primary privacy policy/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /standalone page or a dedicated section within the primary privacy policy|vendors, purposes, and lifespans/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "GDPR.eu");
+  assert.equal(presentation.confidenceScore, "0.75");
+});
+
+test("uses disclosure-style copy for privacy policy fetch failures without linked validation data", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        keyPageAttemptCount: 2,
+        keyPageDiscoverySource: "footer_link",
+        keyPageGuessedOnly: false,
+        keyPageStopReason: "all_attempts_failed",
+        signalKey: "disclosure.privacy_policy_fetch_failed",
+        signalLabel: "Privacy policy page unavailable",
+        signalValue: ["https://example.com/privacy", "https://example.com/legal/privacy"]
+      },
+      observedValue: "2 candidate URLs",
+      severity: "high",
+      title: "Privacy policy page unavailable"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Privacy policy not retrievable");
+  assert.match(
+    presentation.whyThisMatters,
+    /2 specific candidate URLs|rendered footer links rather than guessed slugs|Every bounded fetch attempt|data collection, sharing, retention, and contact mechanisms/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.label, "W3C");
+  assert.equal(presentation.confidenceScore, "0.80");
+});
+
+test("uses disclosure-style copy for accessibility statement fetch failures without linked validation data", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        keyPageAttemptCount: 2,
+        keyPageDiscoverySource: "same_brand_subdomain",
+        keyPageGuessedOnly: false,
+        keyPageStopReason: "repeated_failures",
+        signalKey: "disclosure.accessibility_statement_fetch_failed",
+        signalLabel: "Accessibility statement unavailable",
+        signalValue: ["https://example.com/accessibility", "https://support.example.com/accessibility"]
+      },
+      observedValue: "2 candidate URLs",
+      severity: "medium",
+      title: "Accessibility statement unavailable"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Accessibility statement not retrievable");
+  assert.match(
+    presentation.whyThisMatters,
+    /2 specific candidate URLs|same-brand discovery rather than guessed slugs|repeated hard failures|known limitations|support contact channel/i
+  );
+  assert.equal(presentation.suggestedBestPractice?.title, "Accessibility Statement Generator and Requirements");
+  assert.equal(presentation.confidenceScore, "0.75");
+});
+
+test("keeps potential wording for low-confidence high-sensitivity risk findings", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "sensitive-3",
+        ruleKey: "high_sensitivity_data_collection_detected",
+        title: "Potential high-sensitivity data collection risk",
+        evidence: {
+          runtimeEvidence: ["third-party request observed"],
+          supportingSignals: ["sensitive data collection signal triggered"]
+        }
+      }),
+      observedValue: "third-party payload risk",
+      severity: "high",
+      title: "Potential high-sensitivity data collection risk"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
   assert.equal(presentation.confidenceScore, "0.4");
 });
 
@@ -1470,6 +1998,15 @@ test("normalizeFindingName removes confidence-colored prefixes from display name
   assert.equal(normalizeFindingName("Low-confidence policy extraction"), "Policy extraction");
   assert.equal(normalizeFindingName("Automated accessibility issues detected"), "WCAG errors");
   assert.equal(normalizeFindingName("Pre-consent tracker vendors"), "Trackers observed before consent");
+  assert.equal(
+    normalizeFindingName("High-sensitivity data collection detected"),
+    "Potential high-sensitivity data collection risk"
+  );
+  assert.equal(normalizeFindingName("Privacy policy page unavailable"), "Privacy policy not retrievable");
+  assert.equal(normalizeFindingName("Terms page unavailable"), "Terms page not retrievable");
+  assert.equal(normalizeFindingName("Cookie policy unavailable"), "Cookie policy not retrievable");
+  assert.equal(normalizeFindingName("Accessibility statement unavailable"), "Accessibility statement not retrievable");
+  assert.equal(normalizeFindingName("Contact page unavailable"), "Contact page not retrievable");
   assert.equal(normalizeFindingName("Missing technical disclosure"), "Missing technical disclosure");
   assert.equal(normalizeFindingName({ type: "click" } as unknown as string), "");
 });

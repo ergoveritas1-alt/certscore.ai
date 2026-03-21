@@ -493,6 +493,10 @@ export type ScanPage = {
 };
 
 export type KeyPageDiscoverySource =
+  | "footer_link"
+  | "header_link"
+  | "body_link"
+  | "legal_hub"
   | "rendered_link"
   | "sitemap"
   | "guessed_slug"
@@ -590,6 +594,11 @@ export type ScanRuntimeArtifact = {
   consentAcceptClickCount: number | null;
   consentOptInClicks: number | null;
   consentOptOutClicks: number | null;
+  consentBlockerType: "auth_wall" | "external_redirect" | "extra_click_path" | null;
+  consentBlockerUrl: string | null;
+  consentBlockerPageTitle: string | null;
+  consentBlockerTextSnippet: string | null;
+  consentEvidencePassCount: number | null;
   consentFrictionDelta: number | null;
   consentRedirectOrAuthRequired: boolean | null;
   consentOptInEvidenceLog: ConsentInteractionEvidenceStep[];
@@ -608,10 +617,24 @@ export type ScanRuntimeArtifact = {
 };
 
 export type SensitivePayloadViolation = {
-  detectedType: "email_detected" | "phone_detected";
+  detectedType:
+    | "email_detected"
+    | "phone_detected"
+    | "postal_code_detected"
+    | "precise_geolocation_detected"
+    | "date_of_birth_detected"
+    | "ssn_detected"
+    | "insurance_member_id_detected"
+    | "health_condition_detected"
+    | "full_name_detected"
+    | "precise_address_detected";
+  evidenceStrength: "confirmed" | "suspected";
   matchSnippet: string;
   requestMethod: string;
   requestUrl: string;
+  sourceField: string | null;
+  sourceLocation: "request_body" | "url_query";
+  sourcePattern: "generic_pattern" | "keyed_field";
   timestamp: string;
   vendorHost: string | null;
 };

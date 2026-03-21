@@ -4,6 +4,9 @@ import { ValidationUnavailableNotice } from "../../../../../components/validatio
 import { requireValidationAdminContext } from "../../../../../server/validation/auth";
 import { isMissingValidationSchemaError } from "../../../../../server/validation/schema";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type ValidationRunPageProps = {
   params: Promise<{
     scanId: string;

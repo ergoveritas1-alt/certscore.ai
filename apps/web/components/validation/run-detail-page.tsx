@@ -2,11 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import Link from "next/link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
 import { getValidationRunDetail } from "../../server/validation/repository";
-import { submitValidationRescanAction } from "../../server/validation/actions";
 import { getReviewFindingPresentation } from "../../lib/scans/review-finding-presentation";
 import { normalizeFindingName } from "../../lib/scans/canonical-review-finding";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
+import { ValidationRescanForm } from "./validation-rescan-form";
+import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 type ValidationRunDetailPageProps = {
   runId: string;
@@ -17,6 +18,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
   if (!detail) {
     return <p className="text-sm text-slate-600">Validation run not found.</p>;
   }
+  const shouldAutoRefresh = ["queued", "collecting", "ranking", "validating"].includes(detail.status);
 
   const scanExecutionSummary = deriveScanExecutionSummary({
     ...(detail.scanExecution ?? {}),
@@ -27,31 +29,23 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
 
   return (
     <div className="space-y-8">
+      <ValidationRunsAutoRefresh enabled={shouldAutoRefresh} />
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">{detail.hostname}</h1>
           <p className="font-mono text-xs text-slate-500">scan_id {detail.scanId ?? "—"}</p>
           <p className="text-slate-600">
-            {detail.status} · {detail.triggerMode} · Rank {detail.trancoRank ?? "—"} · {detail.rankBand ?? "—"}
+            Validation {detail.status} · Scan {detail.scanStatus ?? "—"} · {detail.triggerMode} · Rank {detail.trancoRank ?? "—"} · {detail.rankBand ?? "—"}
           </p>
           <p className="text-sm text-slate-500">
-            Created <ViewerTimestamp value={detail.createdAt} /> · Completed <ViewerTimestamp value={detail.completedAt} fallback="In progress" />
+            Validation created <ViewerTimestamp value={detail.createdAt} /> · Validation completed <ViewerTimestamp value={detail.completedAt} fallback="In progress" />
+          </p>
+          <p className="text-sm text-slate-500">
+            Scan started <ViewerTimestamp value={detail.scanStartedAt} fallback="Not started" /> · Scan completed <ViewerTimestamp value={detail.scanCompletedAt} fallback="In progress" />
           </p>
         </div>
         {detail.domainId ? (
-          <form action={submitValidationRescanAction}>
-            <input name="domainId" type="hidden" value={detail.domainId} />
-            <button
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-              type="submit"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-              <span>Re-scan</span>
-            </button>
-          </form>
+          <ValidationRescanForm domainId={detail.domainId} />
         ) : null}
       </div>
 

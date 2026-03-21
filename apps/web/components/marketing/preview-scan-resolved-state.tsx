@@ -1,6 +1,12 @@
-import type { PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import Link from "next/link";
+import type { PreviewSampleFinding, PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { CollapsibleSectionCard } from "../scans/collapsible-section-card";
+import { InfoTip } from "../scans/info-tip";
+import { ReportExecutiveSummary } from "../scans/report-executive-summary";
+import {
+  SectionSubsection,
+} from "../scans/report-primitives";
 import { RegulatoryRelevanceSection } from "../scans/regulatory-relevance-section";
 import { RegulatoryRiskSection } from "../scans/regulatory-risk-section";
 
@@ -8,6 +14,52 @@ type PreviewScanResolvedStateProps = {
   loginHref: string;
   scan: PreviewScanStatusResponse;
 };
+
+function formatScore(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  const clamped = Math.min(100, Math.max(0, value));
+  const rating = Math.round((clamped / 20) * 10) / 10;
+  return `${rating.toFixed(1)}/5`;
+}
+
+function formatFindingCategory(value: PreviewSampleFinding["category"]) {
+  if (value === "legal") {
+    return "Privacy & disclosure";
+  }
+
+  if (value === "privacy") {
+    return "Consent & tracking";
+  }
+
+  if (value === "accessibility") {
+    return "Accessibility & consumer";
+  }
+
+  return value;
+}
+
+function groupFindings(findings: PreviewSampleFinding[]) {
+  return [
+    {
+      title: "Privacy & disclosure",
+      intro: "Public policy, disclosure, and contact-path issues surfaced from the lightweight homepage pass.",
+      items: findings.filter((finding) => finding.category === "legal")
+    },
+    {
+      title: "Consent & tracking",
+      intro: "Consent-surface and pre-consent tracking issues surfaced from the live browser pass.",
+      items: findings.filter((finding) => finding.category === "privacy")
+    },
+    {
+      title: "Accessibility & consumer",
+      intro: "Automated accessibility and user-facing trust signals surfaced from the scanned page surface.",
+      items: findings.filter((finding) => finding.category === "accessibility")
+    }
+  ];
+}
 
 export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolvedStateProps) {
   if (scan.status === "failed") {
@@ -17,7 +69,7 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
           <Badge tone="warning">Preview scan failed</Badge>
           <h1 className="text-4xl font-semibold tracking-tight">We could not complete that preview</h1>
           <p className="max-w-2xl text-lg text-slate-600">
-            The preview funnel is still lightweight. Try another website or start a new preview scan.
+            The preview funnel is still lightweight. Try another website or start a new homepage scan.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -42,69 +94,87 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
     );
   }
 
+  const groupedFindings = groupFindings(payload.sampleFindings);
+
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
-        <Badge tone="success">Preview scan complete</Badge>
-        <h1 className="text-4xl font-semibold tracking-tight">{scan.hostname}</h1>
-        <p className="max-w-3xl text-lg text-slate-600">
-          {payload.disclaimer} Create an account to save websites, run deeper scans, and track changes over time.
-        </p>
-        <p className="text-sm text-slate-500">This preview is intentionally lightweight and may scan only a very small site surface.</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-3">
+          <Badge tone="success">Preview complete</Badge>
+          <div className="flex flex-wrap items-end gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">Scan: {scan.hostname}</h1>
+          </div>
+          <p className="max-w-3xl text-sm text-slate-600">
+            {payload.disclaimer} Create an account to save websites, run deeper scans, and track changes over time.
+          </p>
+        </div>
+        <div className="flex justify-end md:pt-0.5">
+          <Button asChild>
+            <Link href={loginHref}>Create account to continue</Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Scan summary</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            <p>Homepage scanned: {scan.hostname}</p>
-            <p>Pages scanned: {scan.pagesScanned}</p>
-            <p>Observed findings: {payload.sampleFindings.length}</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">High</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{payload.issueCounts.high}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Medium</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{payload.issueCounts.medium}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Low</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{payload.issueCounts.low}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <ReportExecutiveSummary
+        titleTooltip="This mirrors the signed-in scan summary component, but only includes the lighter homepage preview evidence available before signup."
+        intro="The homepage preview is intentionally lightweight and may scan only a very small site surface."
+        metrics={[
+          { label: "Overall", value: formatScore(payload.scores?.overall) },
+          { label: "Privacy", value: formatScore(payload.scores?.privacy) },
+          { label: "Accessibility", value: formatScore(payload.scores?.accessibility) },
+          { label: "Pages scanned", value: scan.pagesScanned },
+          { label: "Observed findings", value: payload.sampleFindings.length }
+        ]}
+        badges={[
+          ...(payload.issueCounts.high > 0
+            ? [
+                {
+                  label: `${payload.issueCounts.high} high-severity finding${payload.issueCounts.high === 1 ? "" : "s"}`,
+                  tone: "warning" as const
+                }
+              ]
+            : []),
+          ...(scan.regulatoryRisk
+            ? [
+                {
+                  label: "Regulatory overlay available"
+                }
+              ]
+            : [])
+        ]}
+      />
 
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Sample findings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            {payload.sampleFindings.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <p className="font-medium text-slate-950">No high-confidence sample findings were derived</p>
-                <p className="mt-1 text-slate-600">
-                  This lightweight preview did not surface a strong accessibility, privacy, or disclosure issue from the scanned signals.
+      {groupedFindings.map((section) => (
+        <SectionSubsection
+          key={section.title}
+          title={section.title}
+          intro={section.intro}
+          tooltip={section.intro}
+        >
+          {section.items.length > 0 ? (
+            section.items.map((finding) => (
+              <div key={`${section.title}-${finding.title}`} className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{finding.title}</p>
+                    <p className="mt-1 text-sm text-slate-600">{finding.description}</p>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700">
+                    {finding.severity}
+                  </div>
+                </div>
+                <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                  {formatFindingCategory(finding.category)} · {finding.affectedPage}
                 </p>
               </div>
-            ) : (
-              payload.sampleFindings.map((finding) => (
-                <div key={`${finding.category}-${finding.title}`} className="rounded-2xl border border-slate-200 p-4">
-                  <p className="font-medium text-slate-950">{finding.title}</p>
-                  <p className="mt-1 text-slate-600">{finding.description}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                    {finding.category === "legal" ? "disclosure" : finding.category} · {finding.severity} · {finding.affectedPage}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-600">
+              This preview did not surface a strong finding for this section from the scanned homepage evidence.
+            </p>
+          )}
+        </SectionSubsection>
+      ))}
 
       <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.88)_100%)]">
         <div aria-hidden="true" className="pointer-events-none select-none blur-[3px] opacity-60">
@@ -113,24 +183,16 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
 
             <RegulatoryRelevanceSection mappings={scan.agencyMappings} />
 
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-              <Card className="border-slate-200 bg-ink text-white">
-                <CardHeader>
-                  <CardTitle>Saved scan workflow</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-slate-200">
-                  <p>Deeper scans, saved history, and change tracking continue inside the app.</p>
-                  <div className="rounded-2xl bg-white/5 p-4 text-sm">
-                    <p className="font-medium text-white">Full results include:</p>
-                    <ul className="mt-3 space-y-2">
-                      <li>Multi-page scan coverage based on your plan</li>
-                      <li>Saved signal summaries and recent changes</li>
-                      <li>Per-website scan history</li>
-                    </ul>
-                  </div>
-                </CardContent>
-              </Card>
-
+            <CollapsibleSectionCard
+              title={
+                <span className="flex items-center gap-1.5">
+                  <span>Advanced diagnostics</span>
+                  <InfoTip text="The signed-in scan page continues into lower-level diagnostics, event history, and deeper evidence tables after the primary review sections." />
+                </span>
+              }
+              defaultOpen
+              contentClassName="space-y-4"
+            >
               <Card className="border-slate-200 bg-white">
                 <CardHeader>
                   <CardTitle>Preview notes</CardTitle>
@@ -143,7 +205,7 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
                   <p>Saved scan history and change tracking are available inside the app.</p>
                 </CardContent>
               </Card>
-            </div>
+            </CollapsibleSectionCard>
           </div>
         </div>
 
@@ -153,13 +215,16 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
               <CardTitle>Create an account to view the rest of the results</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-600">
-              <p>You've seen the top preview findings. Sign up to unlock the remaining results, deeper scans, and saved scan history.</p>
+              <p>
+                The homepage preview now follows the same scan-page structure as the signed-in experience. Sign up to unlock the
+                remaining sections, deeper scans, and saved scan history.
+              </p>
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="font-medium text-slate-950">After signup you unlock:</p>
                 <ul className="mt-3 space-y-2">
-                  <li>Regulatory overlays and expanded result sections</li>
-                  <li>Multi-page scan coverage based on your plan</li>
-                  <li>Saved signal summaries and recent changes</li>
+                  <li>Full section-by-section review across the complete scan result page</li>
+                  <li>Regulatory overlays, richer evidence, and deeper diagnostics</li>
+                  <li>Multi-page scan coverage, saved summaries, and change tracking</li>
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">

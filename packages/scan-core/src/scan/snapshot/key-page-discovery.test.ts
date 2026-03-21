@@ -343,6 +343,46 @@ test("buildKeyPageDiscoveryState rejects unrelated external hosts", async () => 
   );
 });
 
+test("buildKeyPageDiscoveryState promotes footer, header, and legal-container links to stronger discovery sources", async () => {
+  const state = await buildKeyPageDiscoveryState({
+    homepageLanguage: "en",
+    homepageUrl: "https://example.com/",
+    renderedHtml: `
+      <html lang="en">
+        <body>
+          <header>
+            <nav>
+              <a href="/accessibility">Accessibility</a>
+            </nav>
+          </header>
+          <div class="legal-links">
+            <a href="/cookies">Cookie Policy</a>
+          </div>
+          <footer>
+            <a href="/privacy">Privacy Policy</a>
+          </footer>
+        </body>
+      </html>
+    `,
+    renderedLinks: [
+      { href: "https://example.com/privacy", text: "Privacy Policy" },
+      { href: "https://example.com/accessibility", text: "Accessibility" },
+      { href: "https://example.com/cookies", text: "Cookie Policy" }
+    ],
+    renderedSource: "rendered_link",
+    sitemapUrls: [],
+    sourceUrl: "https://example.com/"
+  });
+
+  const privacyCandidate = state.candidates.find((candidate) => candidate.candidateUrl === "https://example.com/privacy");
+  const accessibilityCandidate = state.candidates.find((candidate) => candidate.candidateUrl === "https://example.com/accessibility");
+  const cookieCandidate = state.candidates.find((candidate) => candidate.candidateUrl === "https://example.com/cookies");
+
+  assert.equal(privacyCandidate?.discoveredFrom, "footer_link");
+  assert.equal(accessibilityCandidate?.discoveredFrom, "header_link");
+  assert.equal(cookieCandidate?.discoveredFrom, "legal_hub");
+});
+
 test("toKeyPageFetchTargets prioritizes missing types and respects attempt caps", () => {
   const selected = toKeyPageFetchTargets({
     attemptedUrls: new Set(["https://example.com/privacy"]),

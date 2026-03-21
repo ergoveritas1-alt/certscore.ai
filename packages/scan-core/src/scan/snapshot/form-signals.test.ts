@@ -5,20 +5,18 @@ import type { StaticPageResult } from "./types";
 
 function makePage(overrides: Partial<StaticPageResult>): StaticPageResult {
   return {
-    accessibilityHeadings: [],
-    bodyTextSample: "",
-    buttons: [],
-    fetchError: null,
-    fetchHttpStatus: 200,
+    finalUrl: "https://example.com/",
+    headers: {},
     fetchStatus: "ok",
     forms: [],
     html: "<html></html>",
     language: null,
     links: [],
-    metaDescription: null,
     pageType: "other",
     pageUrl: "https://example.com/",
+    redirected: false,
     scripts: [],
+    statusCode: 200,
     textContent: "",
     title: null,
     ...overrides

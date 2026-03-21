@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { enqueueFullScanJob } from "../queue/full-scan-queue";
 import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
 import { requireValidationAdminContext } from "./auth";
+import { shouldSurfacePrimarySignalFinding } from "../../lib/scans/finding-evidence-gates";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
@@ -380,6 +381,23 @@ function buildSupplementalValidationFindingRows(existingFindings: ValidationRunF
     }
 
     const title = getSupplementalFindingTitle(row);
+    const fallbackEvidence = {
+      signalCategory: row.category,
+      signalKey: row.signal_key,
+      signalLabel: row.signal_label,
+      signalValue: row.signal_value_json
+    } satisfies Record<string, unknown>;
+
+    if (
+      !shouldSurfacePrimarySignalFinding({
+        fallbackEvidence,
+        key: row.signal_key,
+        linkedValidationEvidence: null
+      })
+    ) {
+      continue;
+    }
+
     if (existingRuleKeys.has(`scan_signal.${row.signal_key}`) || existingTitles.has(title.trim().toLowerCase())) {
       continue;
     }
@@ -647,6 +665,10 @@ async function loadSupplementalValidationFindings(input: {
   }));
 }
 
+function shouldLoadSupplementalFindingsForRunStatus(status: string | null | undefined) {
+  return status === "completed" || status === "failed";
+}
+
 async function ensureValidationDomainForOrganization(input: {
   organizationId: string;
   hostname: string;
@@ -892,8 +914,10 @@ export async function listValidationRuns(input?: {
 
   const rows = (data ?? []) as ValidationRunRow[];
   const runIds = rows.map((row) => row.id);
+  const scanIds = rows.map((row) => row.scan_id).filter((value): value is string => typeof value === "string" && value.length > 0);
   const findingCountByRun = new Map<string, number>();
   const existingFindingIdentitiesByRun = new Map<string, ExistingFindingIdentity[]>();
+  const scanStatusById = new Map<string, { completed_at: string | null; started_at: string | null; status: string }>();
 
   if (runIds.length > 0) {
     const { data: findings, error: findingsError } = await supabase
@@ -914,13 +938,30 @@ export async function listValidationRuns(input?: {
     }
   }
 
+  if (scanIds.length > 0) {
+    const { data: scans, error: scansError } = await supabase
+      .from("scans")
+      .select("id, status, started_at, completed_at")
+      .in("id", scanIds);
+
+    if (scansError) {
+      throw new Error(`Failed to load linked scans for validation runs: ${scansError.message}`);
+    }
+
+    for (const row of (scans ?? []) as Array<{ completed_at: string | null; id: string; started_at: string | null; status: string }>) {
+      scanStatusById.set(row.id, row);
+    }
+  }
+
   const supplementalCountByRun = new Map<string, number>();
   for (const row of rows) {
     const persistedCount = findingCountByRun.get(row.id) ?? row.finding_count;
-    const supplements = await loadSupplementalValidationFindings({
-      existingFindings: existingFindingIdentitiesByRun.get(row.id) ?? [],
-      scanId: row.scan_id
-    });
+    const supplements = shouldLoadSupplementalFindingsForRunStatus(row.status)
+      ? await loadSupplementalValidationFindings({
+          existingFindings: existingFindingIdentitiesByRun.get(row.id) ?? [],
+          scanId: row.scan_id
+        })
+      : [];
     supplementalCountByRun.set(row.id, persistedCount + supplements.length);
   }
 
@@ -937,7 +978,10 @@ export async function listValidationRuns(input?: {
       id: row.id,
       rankBand: row.rank_band,
       reviewedFindingCount: 0,
+      scanCompletedAt: row.scan_id ? (scanStatusById.get(row.scan_id)?.completed_at ?? null) : null,
       scanId: row.scan_id,
+      scanStartedAt: row.scan_id ? (scanStatusById.get(row.scan_id)?.started_at ?? null) : null,
+      scanStatus: row.scan_id ? (scanStatusById.get(row.scan_id)?.status ?? null) : null,
       status: row.status,
       trancoRank: row.tranco_rank,
       triggerMode: row.trigger_mode
@@ -965,7 +1009,14 @@ export async function getValidationRunDetail(validationRunId: string) {
     return null;
   }
 
-  const [{ data: scanSnapshot }, { data: runtimeArtifacts }, { count: accessibilityRuleCountTotal }] = await Promise.all([
+  const [{ data: scanRow }, { data: scanSnapshot }, { data: runtimeArtifacts }, { count: accessibilityRuleCountTotal }] = await Promise.all([
+    (run as ValidationRunRow).scan_id
+      ? supabase
+          .from("scans")
+          .select("status, started_at, completed_at")
+          .eq("id", (run as ValidationRunRow).scan_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     (run as ValidationRunRow).scan_id
       ? supabase
           .from("scan_snapshots")
@@ -1007,10 +1058,12 @@ export async function getValidationRunDetail(validationRunId: string) {
   }
 
   let normalizedFindings = (findings ?? []) as ValidationRunFindingRow[];
-  const supplementalFindings = await loadSupplementalValidationFindings({
-    existingFindings: normalizedFindings,
-    scanId: (run as ValidationRunRow).scan_id
-  });
+  const supplementalFindings = shouldLoadSupplementalFindingsForRunStatus((run as ValidationRunRow).status)
+    ? await loadSupplementalValidationFindings({
+        existingFindings: normalizedFindings,
+        scanId: (run as ValidationRunRow).scan_id
+      })
+    : [];
   normalizedFindings = [...normalizedFindings, ...supplementalFindings];
 
   return {
@@ -1024,7 +1077,19 @@ export async function getValidationRunDetail(validationRunId: string) {
     id: (run as ValidationRunRow).id,
     rankBand: (run as ValidationRunRow).rank_band,
     reviewedFindingCount: (run as ValidationRunRow).reviewed_finding_count,
+    scanCompletedAt:
+      scanRow && typeof (scanRow as { completed_at?: unknown }).completed_at === "string"
+        ? String((scanRow as { completed_at: string }).completed_at)
+        : null,
     scanId: (run as ValidationRunRow).scan_id,
+    scanStartedAt:
+      scanRow && typeof (scanRow as { started_at?: unknown }).started_at === "string"
+        ? String((scanRow as { started_at: string }).started_at)
+        : null,
+    scanStatus:
+      scanRow && typeof (scanRow as { status?: unknown }).status === "string"
+        ? String((scanRow as { status: string }).status)
+        : null,
     scanExecution: {
       accessibilityRuleCountTotal: accessibilityRuleCountTotal ?? 0,
       consentAuditCompleted:

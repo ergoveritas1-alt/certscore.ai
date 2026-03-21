@@ -16,11 +16,18 @@ export type PreviewIssueCounts = {
   low: number;
 };
 
+export type PreviewScoreSummary = {
+  overall: number;
+  privacy: number;
+  accessibility: number;
+};
+
 export type PreviewScanPayload = {
   version: "preview-v1";
   hostname: string;
   normalizedUrl: string;
   issueCounts: PreviewIssueCounts;
+  scores?: PreviewScoreSummary;
   summaryBullets: string[];
   sampleFindings: PreviewSampleFinding[];
   disclaimer: string;

@@ -99,8 +99,15 @@ type ScanSnapshotRow = {
   cmp_vendor_name: string | null;
   consent_withdrawal_mechanism_present: boolean | null;
   cookie_banner_present: boolean;
+  date_of_birth_input_present?: boolean | null;
   dark_pattern_reject_button_missing: boolean;
+  address_input_present?: boolean | null;
+  email_input_present?: boolean | null;
+  form_collects_geolocation?: boolean | null;
+  form_collects_health_information?: boolean | null;
+  form_collects_ssn?: boolean | null;
   legal_coverage_score: number | null;
+  phone_input_present?: boolean | null;
   preconsent_tracking_detected: boolean;
   privacy_policy_present: boolean;
   privacy_policy_word_count: number | null;
@@ -141,11 +148,25 @@ type ScanRuntimeArtifactsRow = {
   consent_reject_click_count?: number | null;
   consent_withdrawal_mechanism_present?: boolean | null;
   initial_cookie_count?: number | null;
+  key_page_discovery_summary?: {
+    pageSummaries?: Array<{
+      attemptCount?: number | null;
+      attemptedUrls?: string[] | null;
+      bestDiscoverySource?: string | null;
+      guessedOnly?: boolean | null;
+      pageType?: string | null;
+      stopReason?: string | null;
+    }> | null;
+  } | null;
   sensitive_payload_violations?: Array<{
     detectedType?: string | null;
+    evidenceStrength?: string | null;
     matchSnippet?: string | null;
     requestMethod?: string | null;
     requestUrl?: string | null;
+    sourceField?: string | null;
+    sourceLocation?: "request_body" | "url_query" | null;
+    sourcePattern?: "generic_pattern" | "keyed_field" | null;
     timestamp?: string | null;
     vendorHost?: string | null;
   }> | null;
@@ -254,6 +275,11 @@ export type ValidationEvidencePacket = {
   consentOptInClicks?: number | null;
   consentOptOutClicks?: number | null;
   consentRedirectOrAuthRequired?: boolean | null;
+  keyPageAttemptCount?: number | null;
+  keyPageAttemptedUrls?: string[];
+  keyPageDiscoverySource?: string | null;
+  keyPageGuessedOnly?: boolean | null;
+  keyPageStopReason?: string | null;
   confidenceBasis: string[];
   missingEvidence: string[];
   pageUrls: string[];
@@ -273,9 +299,15 @@ export type ValidationEvidencePacket = {
   runtimeEvidence: string[];
   sensitivePayloadViolations?: Array<{
     detectedType: string;
+    evidenceStrength?: "confirmed" | "suspected" | null;
     matchSnippet: string;
     requestMethod: string;
     requestUrl: string;
+    sourceField?: string | null;
+    sourceInputHint?: string | null;
+    sourceMatchesSensitiveInputHint?: boolean | null;
+    sourceLocation?: "request_body" | "url_query" | null;
+    sourcePattern?: "generic_pattern" | "keyed_field" | null;
     timestamp: string;
     vendorHost: string | null;
   }>;
@@ -493,7 +525,8 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Privacy policy surface not detected"
   },
   "disclosure.privacy_policy_fetch_failed": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The privacy policy target page was detected but could not be fetched successfully."),
+    buildEvidence: (row, context) =>
+      buildKeyPageFetchFailureEvidence(row, context, "The privacy policy target page was detected but could not be fetched successfully."),
     category: "legal",
     description: "The privacy policy target page was detected but could not be fetched successfully.",
     ruleKey: "disclosure.privacy_policy_fetch_failed",
@@ -511,7 +544,8 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Terms page surface not detected"
   },
   "disclosure.terms_of_service_fetch_failed": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The terms page target URL was detected but could not be fetched successfully."),
+    buildEvidence: (row, context) =>
+      buildKeyPageFetchFailureEvidence(row, context, "The terms page target URL was detected but could not be fetched successfully."),
     category: "legal",
     description: "The terms page target URL was detected but could not be fetched successfully.",
     ruleKey: "disclosure.terms_of_service_fetch_failed",
@@ -529,7 +563,8 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Cookie policy surface not detected"
   },
   "disclosure.cookie_policy_fetch_failed": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The cookie policy target URL was detected but could not be fetched successfully."),
+    buildEvidence: (row, context) =>
+      buildKeyPageFetchFailureEvidence(row, context, "The cookie policy target URL was detected but could not be fetched successfully."),
     category: "legal",
     description: "The cookie policy target URL was detected but could not be fetched successfully.",
     ruleKey: "disclosure.cookie_policy_fetch_failed",
@@ -547,7 +582,8 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Accessibility statement surface not detected"
   },
   "disclosure.accessibility_statement_fetch_failed": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The accessibility statement target URL was detected but could not be fetched successfully."),
+    buildEvidence: (row, context) =>
+      buildKeyPageFetchFailureEvidence(row, context, "The accessibility statement target URL was detected but could not be fetched successfully."),
     category: "accessibility",
     description: "The accessibility statement target URL was detected but could not be fetched successfully.",
     ruleKey: "disclosure.accessibility_statement_fetch_failed",
@@ -565,7 +601,8 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Contact page surface not detected"
   },
   "disclosure.contact_page_fetch_failed": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "The contact page target URL was detected but could not be fetched successfully."),
+    buildEvidence: (row, context) =>
+      buildKeyPageFetchFailureEvidence(row, context, "The contact page target URL was detected but could not be fetched successfully."),
     category: "legal",
     description: "The contact page target URL was detected but could not be fetched successfully.",
     ruleKey: "disclosure.contact_page_fetch_failed",
@@ -582,6 +619,74 @@ const PRECONSENT_FINDING_SIGNAL_KEYS = [
   "privacy.preconsent_tracker_vendors",
   "privacy.preconsent_tracker_evidence_urls"
 ] as const;
+
+function describeKeyPageDiscoverySource(source: string | null) {
+  switch (source) {
+    case "footer_link":
+      return "rendered footer links";
+    case "header_link":
+      return "rendered header links";
+    case "body_link":
+      return "rendered page links";
+    case "legal_hub":
+      return "a legal hub page";
+    case "same_brand_subdomain":
+      return "same-brand discovery";
+    case "rendered_link":
+      return "rendered site links";
+    case "sitemap":
+      return "the sitemap";
+    case "second_hop_legal_hub":
+      return "a secondary legal hub";
+    case "guessed_slug":
+      return "guessed slugs";
+    default:
+      return null;
+  }
+}
+
+function getKeyPageTypeForSignal(signalKey: string) {
+  if (signalKey === "disclosure.privacy_policy_fetch_failed") {
+    return "privacy_policy";
+  }
+  if (signalKey === "disclosure.terms_of_service_fetch_failed") {
+    return "terms_of_service";
+  }
+  if (signalKey === "disclosure.cookie_policy_fetch_failed") {
+    return "cookie_policy";
+  }
+  if (signalKey === "disclosure.accessibility_statement_fetch_failed") {
+    return "accessibility_statement";
+  }
+  if (signalKey === "disclosure.contact_page_fetch_failed") {
+    return "contact";
+  }
+  return null;
+}
+
+function getKeyPageDiscoverySummaryForSignal(context: ValidationEvidenceBuildContext, signalKey: string) {
+  const pageType = getKeyPageTypeForSignal(signalKey);
+  const pageSummaries = context.runtimeArtifacts?.key_page_discovery_summary?.pageSummaries;
+
+  if (!pageType || !Array.isArray(pageSummaries)) {
+    return null;
+  }
+
+  const match = pageSummaries.find((summary) => summary?.pageType === pageType);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    attemptCount: typeof match.attemptCount === "number" ? match.attemptCount : null,
+    attemptedUrls: Array.isArray(match.attemptedUrls)
+      ? match.attemptedUrls.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [],
+    bestDiscoverySource: typeof match.bestDiscoverySource === "string" ? match.bestDiscoverySource : null,
+    guessedOnly: match.guessedOnly === true,
+    stopReason: typeof match.stopReason === "string" ? match.stopReason : null
+  };
+}
 
 function isGenericValidationConcernSignal(row: ScanSignalRow) {
   const key = row.signal_key;
@@ -784,6 +889,100 @@ function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): Validati
         label: row.signal_label,
         value: row.signal_value_json
       }
+    ]
+  };
+}
+
+function buildKeyPageFetchFailureEvidence(
+  row: ScanSignalRow,
+  context: ValidationEvidenceBuildContext,
+  claim: string
+): ValidationEvidencePacket {
+  const summary = getKeyPageDiscoverySummaryForSignal(context, row.signal_key);
+  const attemptedUrlsFromSignal = Array.isArray(row.signal_value_json)
+    ? row.signal_value_json.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const attemptedUrls = attemptedUrlsFromSignal.length > 0 ? attemptedUrlsFromSignal : (summary?.attemptedUrls ?? []);
+  const attemptCount = summary?.attemptCount ?? (attemptedUrls.length > 0 ? attemptedUrls.length : null);
+  const discoverySource = summary?.bestDiscoverySource ?? null;
+  const discoverySourceText = describeKeyPageDiscoverySource(discoverySource);
+  const guessedOnly = summary?.guessedOnly === true;
+  const stopReason = summary?.stopReason ?? null;
+  const stopReasonText =
+    stopReason === "repeated_failures"
+      ? "The bounded fetch recorded repeated hard failures for those discovered targets."
+      : stopReason === "all_attempts_failed"
+        ? "Every bounded fetch attempt for those discovered targets failed."
+        : stopReason === "budget_exhausted"
+          ? "The bounded discovery budget was exhausted before a successful fetch."
+          : null;
+
+  return {
+    claim,
+    confidenceBasis: [
+      attemptCount
+        ? `The scan attempted to fetch ${attemptCount} candidate URL${attemptCount === 1 ? "" : "s"} for this disclosure and none returned retrievable content.`
+        : "The scan attempted to fetch candidate disclosure URLs and none returned retrievable content.",
+      discoverySourceText && !guessedOnly
+        ? `Those targets were discovered via ${discoverySourceText} rather than guessed slugs.`
+        : attemptedUrls.length > 0
+          ? "The retained evidence includes specific candidate URLs that were attempted during the bounded fetch."
+          : null,
+      stopReasonText
+    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    keyPageAttemptCount: attemptCount,
+    keyPageAttemptedUrls: attemptedUrls,
+    keyPageDiscoverySource: discoverySource,
+    keyPageGuessedOnly: guessedOnly,
+    keyPageStopReason: stopReason,
+    missingEvidence: ["The disclosure could still exist at an untested, localized, or consolidated URL outside the bounded fetch."],
+    pageUrls: attemptedUrls,
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["contrary_runtime_evidence", "contrary_policy_disclosure"],
+      detectorStrength: discoverySourceText && !guessedOnly ? "strong" : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["detector_signal", "bounded_fetch_failure_evidence"],
+      rubric: {
+        inconclusiveIf: [
+          "The page could exist at an untested or localized URL outside the bounded discovery scope.",
+          "Coverage gaps or route variation leave the page location uncertain."
+        ],
+        notSupportedIf: [
+          "The disclosure is retrievable at a confirmed site URL.",
+          "The failed candidate URLs are unrelated to the expected disclosure."
+        ],
+        supportedIf: [
+          "Specific candidate URLs were attempted during the bounded fetch and did not return retrievable content.",
+          "The scan retained discovery provenance showing how those candidate URLs were found."
+        ]
+      }
+    },
+    runtimeEvidence: [],
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
+      },
+      ...(attemptCount
+        ? [{
+            category: row.category,
+            key: `${row.signal_key}.attempt_count`,
+            label: "Bounded fetch attempt count",
+            value: attemptCount
+          } satisfies ValidationEvidencePacket["supportingSignals"][number]]
+        : []),
+      ...(discoverySource
+        ? [{
+            category: row.category,
+            key: `${row.signal_key}.discovery_source`,
+            label: "Discovery source",
+            value: discoverySource
+          } satisfies ValidationEvidencePacket["supportingSignals"][number]]
+        : [])
     ]
   };
 }
@@ -1075,62 +1274,175 @@ function buildRejectPersistenceEvidence(row: ScanSignalRow, context: ValidationE
 }
 
 function buildHighSensitivityPayloadEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
-  const payloadViolations = Array.isArray(context.runtimeArtifacts?.sensitive_payload_violations)
+  function inferSensitiveInputHint(violation: {
+    detectedType: string;
+    sourceField?: string | null;
+  }) {
+    const snapshot = context.snapshot;
+    const sourceField = violation.sourceField?.toLowerCase() ?? "";
+
+    if (violation.detectedType === "email_detected" && snapshot?.email_input_present) {
+      return "email input present on the page";
+    }
+    if (violation.detectedType === "phone_detected" && snapshot?.phone_input_present) {
+      return "phone input present on the page";
+    }
+    if (violation.detectedType === "date_of_birth_detected" && snapshot?.date_of_birth_input_present) {
+      return "date-of-birth input present on the page";
+    }
+    if (violation.detectedType === "ssn_detected" && snapshot?.form_collects_ssn) {
+      return "SSN or government ID collection hinted on the page";
+    }
+    if (violation.detectedType === "health_condition_detected" && snapshot?.form_collects_health_information) {
+      return "health-information collection hinted on the page";
+    }
+    if (violation.detectedType === "precise_address_detected" && snapshot?.address_input_present) {
+      return "address input present on the page";
+    }
+    if (violation.detectedType === "postal_code_detected" && snapshot?.address_input_present) {
+      return "address or postal input present on the page";
+    }
+    if (violation.detectedType === "precise_geolocation_detected" && snapshot?.form_collects_geolocation) {
+      return "geolocation collection hinted on the page";
+    }
+    if (sourceField.includes("email") && snapshot?.email_input_present) {
+      return "email input present on the page";
+    }
+    if ((sourceField.includes("phone") || sourceField.includes("tel") || sourceField.includes("mobile")) && snapshot?.phone_input_present) {
+      return "phone input present on the page";
+    }
+    if ((sourceField.includes("zip") || sourceField.includes("postal")) && snapshot?.address_input_present) {
+      return "address or postal input present on the page";
+    }
+    if ((sourceField.includes("lat") || sourceField.includes("lon") || sourceField.includes("lng")) && snapshot?.form_collects_geolocation) {
+      return "geolocation collection hinted on the page";
+    }
+
+    return null;
+  }
+
+  const payloadViolations: NonNullable<ValidationEvidencePacket["sensitivePayloadViolations"]> = Array.isArray(
+    context.runtimeArtifacts?.sensitive_payload_violations
+  )
     ? context.runtimeArtifacts.sensitive_payload_violations
         .filter(
           (
             violation
           ): violation is {
             detectedType?: string | null;
+            evidenceStrength?: string | null;
             matchSnippet?: string | null;
             requestMethod?: string | null;
             requestUrl?: string | null;
+            sourceField?: string | null;
+            sourceLocation?: "request_body" | "url_query" | null;
+            sourcePattern?: "generic_pattern" | "keyed_field" | null;
             timestamp?: string | null;
             vendorHost?: string | null;
           } => Boolean(violation && typeof violation === "object")
         )
-        .map((violation) => ({
-          detectedType: violation.detectedType ?? "unknown",
-          matchSnippet: violation.matchSnippet ?? "",
-          requestMethod: violation.requestMethod ?? "GET",
-          requestUrl: violation.requestUrl ?? "",
-          timestamp: violation.timestamp ?? "",
-          vendorHost: violation.vendorHost ?? null
-        }))
+        .map((violation) => {
+          const evidenceStrength: "confirmed" | "suspected" =
+            violation.evidenceStrength === "suspected" ? "suspected" : "confirmed";
+
+          return {
+            detectedType: violation.detectedType ?? "unknown",
+            evidenceStrength,
+            matchSnippet: violation.matchSnippet ?? "",
+            requestMethod: violation.requestMethod ?? "GET",
+            requestUrl: violation.requestUrl ?? "",
+            sourceField: violation.sourceField ?? null,
+            sourceInputHint: inferSensitiveInputHint({
+              detectedType: violation.detectedType ?? "unknown",
+              sourceField: violation.sourceField ?? null
+            }),
+            sourceMatchesSensitiveInputHint: inferSensitiveInputHint({
+              detectedType: violation.detectedType ?? "unknown",
+              sourceField: violation.sourceField ?? null
+            })
+              ? true
+              : false,
+            sourceLocation: violation.sourceLocation ?? null,
+            sourcePattern: violation.sourcePattern ?? null,
+            timestamp: violation.timestamp ?? "",
+            vendorHost: violation.vendorHost ?? null
+          };
+        })
         .filter((violation) => violation.requestUrl.length > 0)
     : [];
 
+  const confirmedPayloadViolations = payloadViolations.filter((violation) => violation.evidenceStrength === "confirmed");
+  const suspectedPayloadViolations = payloadViolations.filter((violation) => violation.evidenceStrength !== "confirmed");
+
   const runtimeEvidence = payloadViolations.slice(0, 5).map((violation) => {
     const dataType = violation.detectedType.replace(/_detected$/, "").replace(/_/g, " ");
-    return `${dataType} in ${violation.requestMethod} ${violation.requestUrl}`;
+    const strengthLabel = violation.evidenceStrength === "confirmed" ? "confirmed" : "suspected";
+    const sourceDetail = violation.sourceField
+      ? ` via ${violation.sourceField} in the ${violation.sourceLocation === "url_query" ? "request URL" : "request body"}`
+      : violation.sourceLocation === "url_query"
+        ? " via request URL parameters"
+        : violation.sourceLocation === "request_body"
+          ? " via request body"
+          : "";
+    const snippetDetail = violation.matchSnippet ? ` (${violation.matchSnippet})` : "";
+    const inputHintDetail = violation.sourceInputHint ? ` [${violation.sourceInputHint}]` : "";
+    return `${strengthLabel} ${dataType}${sourceDetail} in ${violation.requestMethod} ${violation.requestUrl}${snippetDetail}${inputHintDetail}`;
   });
+
+  const sourceFieldEvidence = payloadViolations.filter((violation) => typeof violation.sourceField === "string" && violation.sourceField.length > 0);
+  const hintedPayloadViolations = payloadViolations.filter((violation) => violation.sourceMatchesSensitiveInputHint === true);
 
   return {
     claim:
-      payloadViolations.length > 0
-        ? "Plaintext email addresses or phone numbers appear to have been transmitted to third-party endpoints."
+      confirmedPayloadViolations.length > 0
+        ? "Plaintext high-sensitivity values appear to have been transmitted to third-party endpoints."
+        : suspectedPayloadViolations.length > 0
+          ? "Third-party request payloads contain field-level indicators of high-sensitivity data collection risk."
         : "Potential high-sensitivity data collection risk is present, but direct payload exfiltration was not confirmed.",
-    confidenceBasis: payloadViolations.length > 0
+    confidenceBasis: confirmedPayloadViolations.length > 0
       ? [
           "The site exposed a high-sensitivity data collection signal.",
-          `Confirmed payload inspection captured ${payloadViolations.length} third-party request${payloadViolations.length === 1 ? "" : "s"} containing plaintext email addresses or phone numbers.`,
-          "Captured evidence came from outbound request parameters or request bodies rather than inferred page structure alone."
+          `Confirmed payload inspection captured ${confirmedPayloadViolations.length} third-party request${confirmedPayloadViolations.length === 1 ? "" : "s"} containing plaintext high-sensitivity values.`,
+          sourceFieldEvidence.length > 0
+            ? `Retained evidence ties the matched values to named outbound field${sourceFieldEvidence.length === 1 ? "" : "s"} such as ${sourceFieldEvidence.slice(0, 3).map((violation) => violation.sourceField).join(", ")}.`
+            : "Captured evidence came from outbound request parameters or request bodies rather than inferred page structure alone."
         ]
+      : suspectedPayloadViolations.length > 0
+        ? [
+            "The site exposed a high-sensitivity data collection signal.",
+            `Payload inspection retained ${suspectedPayloadViolations.length} third-party request${suspectedPayloadViolations.length === 1 ? "" : "s"} with field-level indicators of high-sensitivity data.`,
+            sourceFieldEvidence.length > 0
+              ? `Retained evidence ties the indicators to named outbound field${sourceFieldEvidence.length === 1 ? "" : "s"} such as ${sourceFieldEvidence.slice(0, 3).map((violation) => violation.sourceField).join(", ")}.`
+              : "The retained evidence is stronger than a raw detector signal, but it does not yet prove plaintext exfiltration with the same confidence as direct email or phone matches."
+          ,
+            hintedPayloadViolations.length > 0
+              ? `The site also exposed corresponding sensitive input hints, including ${hintedPayloadViolations
+                  .slice(0, 2)
+                  .map((violation) => violation.sourceInputHint)
+                  .filter((value): value is string => typeof value === "string" && value.length > 0)
+                  .join(" and ")}.`
+              : "The retained indicators may reflect user-input collection, but the evidence does not yet prove that the values were transmitted in plaintext."
+          ]
       : [
           "The site exposed a high-sensitivity data collection signal.",
           "No plaintext email or phone match was confirmed in the retained third-party request payload evidence.",
           "The signal may still indicate sensitive collection risk based on form or page context, but direct exfiltration proof is incomplete."
         ],
     missingEvidence:
-      payloadViolations.length > 0 ? [] : ["Confirmed third-party payload evidence showing plaintext email or phone transmission."],
+      confirmedPayloadViolations.length > 0
+        ? []
+        : suspectedPayloadViolations.length > 0
+          ? ["Confirmed plaintext third-party payload evidence showing that the retained indicators were transmitted as unmasked high-sensitivity values."]
+          : ["Confirmed third-party payload evidence showing plaintext high-sensitivity transmission."],
     pageUrls: [],
     policyEvidence: [],
     reviewPolicy: {
       claimType: "behavior_without_disclosure",
       contraryEvidenceTypes: ["payload_redacted", "first_party_only_transmission"],
-      detectorStrength: payloadViolations.length > 0 ? "strong" : "medium",
+      detectorStrength: confirmedPayloadViolations.length > 0 ? "strong" : suspectedPayloadViolations.length > 0 ? "medium" : "medium",
       gapTolerance: "medium",
-      requiredSupportTypes: payloadViolations.length > 0 ? ["detector_signal", "request_or_cookie_evidence"] : ["detector_signal"],
+      requiredSupportTypes:
+        payloadViolations.length > 0 ? ["detector_signal", "request_or_cookie_evidence"] : ["detector_signal"],
       rubric: {
         inconclusiveIf: [
           "Third-party payload timing or contents are unclear.",
@@ -1138,16 +1450,16 @@ function buildHighSensitivityPayloadEvidence(row: ScanSignalRow, context: Valida
         ],
         notSupportedIf: [
           "Observed payloads are first-party only.",
-          "The retained evidence does not show plaintext email addresses or phone numbers."
+          "The retained evidence does not show plaintext or field-level high-sensitivity payload indicators."
         ],
         supportedIf: [
           "A high-sensitivity detector fired.",
-          "Third-party request evidence contains plaintext email addresses or phone numbers."
+          "Third-party request evidence contains plaintext or strong field-level indicators of high-sensitivity data."
         ]
       }
     },
-    runtimeEvidence,
-    sensitivePayloadViolations: payloadViolations.slice(0, 10),
+    runtimeEvidence: runtimeEvidence.slice(0, 3),
+    sensitivePayloadViolations: payloadViolations.slice(0, 3),
     supportingSignals: [
       {
         category: row.category,
@@ -1157,6 +1469,40 @@ function buildHighSensitivityPayloadEvidence(row: ScanSignalRow, context: Valida
       }
     ]
   };
+}
+
+function shouldSuppressDetectorOnlyValidationFinding(input: {
+  evidencePacket: ValidationEvidencePacket;
+  signalKey: string;
+}) {
+  if (/commerce\.high_sensitivity_data_collection_detected/i.test(input.signalKey)) {
+    return (input.evidencePacket.sensitivePayloadViolations?.length ?? 0) === 0;
+  }
+
+  if (/privacy\.(policy_runtime_functional_misalignment_detected|user_rights_friction_score)/i.test(input.signalKey)) {
+    const optInClicks =
+      typeof input.evidencePacket.consentOptInClicks === "number" ? input.evidencePacket.consentOptInClicks : null;
+    const optOutClicks =
+      typeof input.evidencePacket.consentOptOutClicks === "number" ? input.evidencePacket.consentOptOutClicks : null;
+    const frictionDelta =
+      typeof input.evidencePacket.consentFrictionDelta === "number" ? input.evidencePacket.consentFrictionDelta : null;
+    const evidencePassCount =
+      typeof input.evidencePacket.consentEvidencePassCount === "number" ? input.evidencePacket.consentEvidencePassCount : null;
+    const blockerType =
+      typeof input.evidencePacket.consentBlockerType === "string" ? input.evidencePacket.consentBlockerType : null;
+    const runtimeEvidenceCount = input.evidencePacket.runtimeEvidence.length;
+
+    return !(
+      input.evidencePacket.consentRedirectOrAuthRequired === true ||
+      blockerType !== null ||
+      (typeof optInClicks === "number" && typeof optOutClicks === "number") ||
+      (typeof frictionDelta === "number" && frictionDelta > 0) ||
+      (typeof evidencePassCount === "number" && evidencePassCount > 0) ||
+      runtimeEvidenceCount > 0
+    );
+  }
+
+  return false;
 }
 
 function normalizeConsentEvidenceLog(
@@ -2074,7 +2420,7 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("scan_snapshots")
       .select(
-        "cmp_vendor_name, consent_withdrawal_mechanism_present, cookie_banner_present, dark_pattern_reject_button_missing, legal_coverage_score, preconsent_tracking_detected, privacy_policy_present, privacy_policy_word_count, reject_all_present, third_party_cookie_set_before_consent, tracking_before_consent_detected"
+        "cmp_vendor_name, consent_withdrawal_mechanism_present, cookie_banner_present, dark_pattern_reject_button_missing, legal_coverage_score, preconsent_tracking_detected, privacy_policy_present, privacy_policy_word_count, reject_all_present, third_party_cookie_set_before_consent, tracking_before_consent_detected, email_input_present, phone_input_present, address_input_present, date_of_birth_input_present, form_collects_ssn, form_collects_health_information, form_collects_geolocation"
       )
       .eq("scan_id", scanId)
       .maybeSingle(),
@@ -2184,10 +2530,16 @@ export async function loadRankableFindings(scanId: string) {
       continue;
     }
 
+    const evidencePacket = definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description);
+
+    if (shouldSuppressDetectorOnlyValidationFinding({ evidencePacket, signalKey: row.signal_key })) {
+      continue;
+    }
+
     findings.push({
       category: definition.category,
       description: definition.description,
-      evidence_json: definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description),
+      evidence_json: evidencePacket,
       finding_id: null,
       page_url: null,
       rule_key: definition.ruleKey,

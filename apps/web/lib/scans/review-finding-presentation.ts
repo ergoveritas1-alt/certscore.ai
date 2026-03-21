@@ -48,6 +48,16 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
     },
     evidenceAwareOverrides: [
       {
+        match: /pre-consent tracking detected/i,
+        override: {
+          suggestedFix:
+            "Configure the site's Tag Manager or header scripts to remain in a denied or decoupled state until a positive consent signal is received from the UI. Ensure that non-essential vendor SDKs are initialized only after the consent management platform (CMP) confirms an affirmative choice.",
+          whyThisMatters:
+            "The automated scan detected third-party network requests initiating before a consent choice could be recorded. This zero-delay execution indicates that tracking, analytics, or measurement scripts are firing by default upon page load. This sequence results in the transmission of device identifiers or metadata to external vendors before the user has exercised their right to opt-in or out, a core requirement of the ePrivacy Directive and GDPR.",
+          confidenceScore: "0.85"
+        }
+      },
+      {
         match: /trackers persisted after reject/i,
         override: {
           bestPracticeLink: {
@@ -162,7 +172,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       whyThisMatters:
         "The automated scan confirmed a definitive functional misalignment where the live rights-fulfillment workflow contradicts the site's stated privacy promises. This discrepancy indicates an asymmetric user experience, a technical dark pattern, where the friction required to exercise privacy rights is significantly higher than the initial data-ingestion path, creating direct CCPA and GDPR exposure."
     },
-    matches: [/policy_runtime\.functional_misalignment/i, /high-confidence functional misalignment/i]
+    matches: [/policy_runtime\.functional_misalignment/i, /high-confidence functional misalignment/i, /functional misalignment/i]
   },
   {
     base: {
@@ -270,6 +280,81 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
     base: {
       bestPracticeLink: {
         label: "W3C",
+        title: "Data Privacy Vocabulary (DPV) for Automated Policy Processing",
+        url: "https://www.w3.org/TR/dpv/"
+      },
+      suggestedFix:
+        "Manually verify whether a privacy policy exists at another stable site URL. If absent, publish one through a consistently linked legal surface and ensure the page is exposed through footer links, legal hubs, or sitemap entries so it can be discovered and retrieved reliably.",
+      whyThisMatters:
+        "The scan attempted to retrieve a privacy policy at candidate URLs but could not successfully fetch the page content. That leaves core disclosures about data collection, sharing, retention, and contact mechanisms unresolved for this run.",
+      confidenceScore: "0.70"
+    },
+    matches: [/privacy policy page unavailable/i, /privacy_policy_fetch_failed/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "OECD",
+        title: "Guidelines for Consumer Protection in Electronic Commerce (Transparent Terms)",
+        url: "https://legalinstruments.oecd.org/en/instruments/OECD-LEGAL-0303"
+      },
+      suggestedFix:
+        "Manually verify whether the terms page exists at another stable site URL. If absent, publish one through a consistently linked legal surface and expose it through footer links, legal hubs, or sitemap entries so contractual disclosures can be retrieved reliably.",
+      whyThisMatters:
+        "The scan attempted to retrieve a terms page at candidate URLs but could not successfully fetch the page content. That leaves contractual disclosures such as termination, dispute, and governing-law terms unresolved for this run.",
+      confidenceScore: "0.70"
+    },
+    matches: [/terms page unavailable/i, /terms_of_service_fetch_failed/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "GDPR.eu",
+        title: "Cookies, the GDPR, and the ePrivacy Directive",
+        url: "https://gdpr.eu/cookies/"
+      },
+      suggestedFix:
+        "Manually verify whether a cookie disclosure exists on the site, either as a standalone page or a dedicated section within the primary privacy policy. If absent, draft and publish a comprehensive policy detailing the vendors, purposes, and lifespans of the cookies deployed.",
+      whyThisMatters:
+        "The scan attempted to locate a dedicated cookie policy at specific candidate URLs and could not retrieve content at any of them. Clear disclosure of tracking technologies is a core transparency expectation under privacy frameworks like the ePrivacy Directive and GDPR, so this may indicate either a missing policy, an unmapped URL, or cookie disclosures that are folded into another policy surface.",
+      confidenceScore: "0.70"
+    },
+    matches: [/cookie policy unavailable/i, /cookie_policy_(surface_missing|fetch_failed)/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "Accessibility Statement Generator and Requirements",
+        url: "https://www.w3.org/WAI/planning/statements/"
+      },
+      suggestedFix:
+        "Manually verify whether an accessibility statement exists on the site. If absent, publish one that describes the site's conformance level, known limitations, and a contact path for users who encounter accessibility barriers.",
+      whyThisMatters:
+        "The scan could not retrieve an accessibility statement at the tested candidate URLs. For public-sector sites this may indicate a missing required disclosure, and more broadly it prevents users from easily finding the site's stated accessibility status, known limitations, and support contact channel.",
+      confidenceScore: "0.70"
+    },
+    matches: [/accessibility statement unavailable/i, /accessibility statement not retrievable/i, /accessibility_statement_(surface_missing|fetch_failed)/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "FTC",
+        title: "FTC privacy and data security guidance",
+        url: "https://www.ftc.gov/business-guidance/privacy-security"
+      },
+      suggestedFix:
+        "Manually verify whether a public contact page exists at another stable site URL. If absent, publish one through a consistently linked support or legal surface so users can reliably find a contact channel for questions or rights requests.",
+      whyThisMatters:
+        "The scan attempted to retrieve a public contact page at candidate URLs but could not successfully fetch the page content. That can make support and privacy contact channels harder for users to locate and verify.",
+      confidenceScore: "0.70"
+    },
+    matches: [/contact page unavailable/i, /contact_page_fetch_failed/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
         title: "Targeted Advertising and Privacy Technical Guidance",
         url: "https://www.w3.org/TR/tpa/"
       },
@@ -293,7 +378,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         "The scan observed requests to third-party endpoints associated with tracking or measurement behavior. Depending on implementation, these requests may carry identifiers or page-derived metadata, but the retained evidence does not by itself confirm transmission of high-sensitivity user input.",
       confidenceScore: "0.4"
     },
-    matches: [/high-sensitivity data collection detected/i, /high_sensitivity_data_collection_detected/i]
+    matches: [/high-sensitivity data collection detected/i, /high_sensitivity_data_collection_detected/i, /potential high-sensitivity data collection risk/i]
   },
   {
     base: {
@@ -410,6 +495,51 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       confidenceScore: "0.9"
     },
     matches: [/focus indicator issues/i, /wcag_focus_indicator_issue_count/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "WCAG 2.1 Success Criterion 1.4.3 Contrast (Minimum)",
+        url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html"
+      },
+      suggestedFix:
+        "Audit the affected text and UI elements against WCAG contrast thresholds and update foreground/background color combinations to meet minimum contrast requirements. Prioritize core navigation, buttons, form labels, and any small or low-weight text.",
+      whyThisMatters:
+        "The scan detected automated color-contrast failures. Insufficient contrast can make text, controls, and status messaging difficult or impossible to perceive for users with low vision or color-vision deficiencies, and it is a common WCAG accessibility barrier.",
+      confidenceScore: "0.85"
+    },
+    matches: [/contrast failures/i, /wcag_contrast_failures_count/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "WCAG 2.1 Success Criterion 3.3.2 Labels or Instructions",
+        url: "https://www.w3.org/WAI/WCAG21/Understanding/labels-or-instructions.html"
+      },
+      suggestedFix:
+        "Associate each form control with a clear visible or programmatic label using label/for, aria-label, or aria-labelledby as appropriate. Verify that placeholders are not acting as the only field description and that required inputs remain understandable to screen-reader users.",
+      whyThisMatters:
+        "The scan detected automated form-label issues. When inputs are missing labels or are labeled incorrectly, screen-reader users may not be able to determine what information a field requests, which can block account access, checkout, search, or privacy-rights workflows.",
+      confidenceScore: "0.85"
+    },
+    matches: [/form label issues/i, /wcag_form_label_error_count/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "WCAG 2.1 Success Criterion 2.4.4 Link Purpose (In Context)",
+        url: "https://www.w3.org/WAI/WCAG21/Understanding/link-purpose-in-context.html"
+      },
+      suggestedFix:
+        "Ensure every link has a descriptive accessible name through visible text, aria-label, or aria-labelledby. Replace repeated generic labels such as 'click here', 'read more', or icon-only links without text alternatives so screen-reader users can distinguish destinations before activating them.",
+      whyThisMatters:
+        "The scan detected automated link-name issues. Links without meaningful accessible names are announced ambiguously by screen readers, making it difficult for users to understand where navigation choices lead and increasing the risk of getting lost in core flows.",
+      confidenceScore: "0.9"
+    },
+    matches: [/link name issues/i, /wcag_link_name_error_count/i]
   },
   {
     base: {
@@ -637,7 +767,7 @@ function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null |
     : [];
   const violationCount = getNumericEvidence(
     evidence,
-    ["preconsent_violation_count", "count", "signalValue", "value"],
+    ["preconsent_tracker_violations", "preconsent_violation_count", "count", "signalValue", "value"],
     /preconsent_violation_count|pre-consent tracker violations/i
   );
   const requestCount =
@@ -675,19 +805,125 @@ function formatVendorList(vendors: string[]) {
 function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
   const directViolations = Array.isArray(evidence?.sensitivePayloadViolations)
     ? evidence.sensitivePayloadViolations
+    : Array.isArray(evidence?.sensitive_payload_violations)
+      ? evidence.sensitive_payload_violations
     : [];
 
   return directViolations
     .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
     .map((entry) => ({
       detectedType: typeof entry.detectedType === "string" ? entry.detectedType : "unknown_detected",
+      evidenceStrength: entry.evidenceStrength === "suspected" ? "suspected" : "confirmed",
       matchSnippet: typeof entry.matchSnippet === "string" ? entry.matchSnippet : "",
       requestMethod: typeof entry.requestMethod === "string" ? entry.requestMethod : "GET",
       requestUrl: typeof entry.requestUrl === "string" ? entry.requestUrl : "",
+      sourceField: typeof entry.sourceField === "string" ? entry.sourceField : null,
+      sourceInputHint: typeof entry.sourceInputHint === "string" ? entry.sourceInputHint : null,
+      sourceMatchesSensitiveInputHint: entry.sourceMatchesSensitiveInputHint === true,
+      sourceLocation:
+        entry.sourceLocation === "url_query" || entry.sourceLocation === "request_body" ? entry.sourceLocation : null,
+      sourcePattern: entry.sourcePattern === "keyed_field" ? "keyed_field" : "generic_pattern",
       timestamp: typeof entry.timestamp === "string" ? entry.timestamp : "",
       vendorHost: typeof entry.vendorHost === "string" ? entry.vendorHost : null
     }))
     .filter((entry) => entry.requestUrl.length > 0);
+}
+
+function getAccessibilityRepresentativeExamples(evidence: Record<string, unknown> | null | undefined) {
+  const directExamples = Array.isArray(evidence?.accessibilityRuleExamples) ? evidence.accessibilityRuleExamples : [];
+
+  return directExamples
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => ({
+      description: typeof entry.description === "string" ? entry.description : null,
+      help: typeof entry.help === "string" ? entry.help : null,
+      helpUrl: typeof entry.helpUrl === "string" ? entry.helpUrl : null,
+      pageUrl: typeof entry.pageUrl === "string" ? entry.pageUrl : null,
+      representativeSelectors: Array.isArray(entry.representativeSelectors)
+        ? entry.representativeSelectors.filter((value): value is string => typeof value === "string" && value.trim().length > 0).slice(0, 3)
+        : [],
+      ruleCode: typeof entry.ruleCode === "string" ? entry.ruleCode : null,
+      ruleGroup: typeof entry.ruleGroup === "string" ? entry.ruleGroup : null
+    }))
+    .filter((entry) => entry.representativeSelectors.length > 0 || entry.description || entry.pageUrl)
+    .slice(0, 3);
+}
+
+function formatAccessibilityRepresentativeExamples(examples: ReturnType<typeof getAccessibilityRepresentativeExamples>) {
+  if (examples.length === 0) {
+    return null;
+  }
+
+  const rendered = examples.map((example) => {
+    const selectorLabel = example.representativeSelectors[0] ?? "unlabeled node";
+    const pageLabel = example.pageUrl ? ` on ${example.pageUrl}` : "";
+    return `${selectorLabel}${pageLabel}`;
+  });
+
+  if (rendered.length === 1) {
+    return `Representative automated evidence included ${rendered[0]}.`;
+  }
+
+  if (rendered.length === 2) {
+    return `Representative automated evidence included ${rendered[0]} and ${rendered[1]}.`;
+  }
+
+  return `Representative automated evidence included ${rendered[0]}, ${rendered[1]}, and ${rendered[2]}.`;
+}
+
+function describeKeyPageDiscoverySource(source: string | null | undefined) {
+  switch (source) {
+    case "same_brand_subdomain":
+      return "same-brand discovery";
+    case "footer_link":
+      return "rendered footer links";
+    case "header_link":
+      return "rendered header links";
+    case "body_link":
+      return "rendered in-page links";
+    case "legal_hub":
+      return "a legal hub page";
+    case "sitemap":
+      return "the sitemap";
+    case "second_hop_legal_hub":
+      return "a secondary legal hub";
+    case "guessed_slug":
+      return "guessed paths";
+    default:
+      return null;
+  }
+}
+
+function getKeyPageFetchFailureEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const attemptedUrls =
+    Array.isArray(evidence?.signalValue)
+      ? evidence.signalValue.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : Array.isArray(evidence?.keyPageAttemptedUrls)
+        ? evidence.keyPageAttemptedUrls.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+  const attemptCount =
+    typeof evidence?.keyPageAttemptCount === "number" ? evidence.keyPageAttemptCount : attemptedUrls.length > 0 ? attemptedUrls.length : null;
+  const discoverySource = describeKeyPageDiscoverySource(
+    typeof evidence?.keyPageDiscoverySource === "string" ? evidence.keyPageDiscoverySource : null
+  );
+  const guessedOnly = evidence?.keyPageGuessedOnly === true;
+  const stopReason = typeof evidence?.keyPageStopReason === "string" ? evidence.keyPageStopReason : null;
+  const stopReasonText =
+    stopReason === "repeated_failures"
+      ? "The bounded fetch recorded repeated hard failures for those discovered targets."
+      : stopReason === "all_attempts_failed"
+        ? "Every bounded fetch attempt for those discovered targets failed."
+        : stopReason === "budget_exhausted"
+          ? "The bounded discovery budget was exhausted before a successful fetch."
+          : null;
+
+  return {
+    attemptCount,
+    attemptedUrls,
+    discoverySource,
+    guessedOnly,
+    stopReasonText
+  };
 }
 
 function getConsentFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
@@ -707,8 +943,43 @@ function getConsentFrictionEvidence(evidence: Record<string, unknown> | null | u
     evidence?.consentRedirectOrAuthRequired === true ||
     getSupportingSignalValue(evidence, /redirect or auth required/i) === true;
   const runtimeEvidence = getStringArrayEvidence(evidence, ["runtimeEvidence"]);
+  const blockerType =
+    typeof evidence?.consentBlockerType === "string"
+      ? evidence.consentBlockerType
+      : typeof evidence?.consent_blocker_type === "string"
+        ? evidence.consent_blocker_type
+        : null;
+  const blockerUrl =
+    typeof evidence?.consentBlockerUrl === "string"
+      ? evidence.consentBlockerUrl
+      : typeof evidence?.consent_blocker_url === "string"
+        ? evidence.consent_blocker_url
+        : null;
+  const blockerPageTitle =
+    typeof evidence?.consentBlockerPageTitle === "string"
+      ? evidence.consentBlockerPageTitle
+      : typeof evidence?.consent_blocker_page_title === "string"
+        ? evidence.consent_blocker_page_title
+        : null;
+  const blockerTextSnippet =
+    typeof evidence?.consentBlockerTextSnippet === "string"
+      ? evidence.consentBlockerTextSnippet
+      : typeof evidence?.consent_blocker_text_snippet === "string"
+        ? evidence.consent_blocker_text_snippet
+        : null;
+  const evidencePassCount =
+    typeof evidence?.consentEvidencePassCount === "number"
+      ? evidence.consentEvidencePassCount
+      : typeof evidence?.consent_evidence_pass_count === "number"
+        ? evidence.consent_evidence_pass_count
+        : null;
 
   return {
+    blockerPageTitle,
+    blockerTextSnippet,
+    blockerType,
+    blockerUrl,
+    evidencePassCount,
     frictionDelta:
       frictionDelta ??
       (typeof optInClicks === "number" && typeof optOutClicks === "number" ? optOutClicks - optInClicks : null),
@@ -932,8 +1203,12 @@ function computeSupportStrength(input: {
   }
   if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
     const payloadViolations = getSensitivePayloadViolations(evidence);
-    if (payloadViolations.length > 0) {
+    const confirmedViolations = payloadViolations.filter((violation) => violation.evidenceStrength === "confirmed");
+    const suspectedViolations = payloadViolations.filter((violation) => violation.evidenceStrength !== "confirmed");
+    if (confirmedViolations.length > 0) {
       score += 0.25;
+    } else if (suspectedViolations.length > 0) {
+      score += 0.15;
     } else if (evidenceArrayLength(evidence, "runtimeEvidence") > 0 || evidenceArrayLength(evidence, "supportingSignals") > 0) {
       score += 0.05;
     }
@@ -1052,7 +1327,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         "Audit the scripts and network calls that run during initial render, then suppress non-essential advertising, analytics, and measurement behavior until a positive consent state is present.";
       presentation.confidenceScore = "0.95";
     } else {
-      presentation.confidenceScore = "0.95";
+      presentation.confidenceScore = /pre-consent tracking detected/i.test(input.haystack) ? "0.85" : "0.95";
     }
   }
 
@@ -1069,6 +1344,12 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
   if (/functional misalignment|rights-fulfillment friction|user-rights fulfillment friction|friction_score/i.test(input.haystack)) {
     const frictionEvidence = getConsentFrictionEvidence(input.evidence);
+    const signalValue =
+      typeof input.evidence?.signalValue === "number"
+        ? input.evidence.signalValue
+        : typeof input.evidence?.value === "number"
+          ? input.evidence.value
+          : null;
     const hasConcreteFrictionEvidence =
       frictionEvidence.redirectOrAuthRequired ||
       (typeof frictionEvidence.optInClicks === "number" &&
@@ -1077,17 +1358,21 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (hasConcreteFrictionEvidence) {
       if (frictionEvidence.redirectOrAuthRequired) {
+        const blockerLocation = frictionEvidence.blockerPageTitle || frictionEvidence.blockerUrl;
+        const blockerSnippet = frictionEvidence.blockerTextSnippet ? ` The blocker surfaced with the text "${frictionEvidence.blockerTextSnippet}".` : "";
         presentation.whyThisMatters =
-          "The scan recorded an opt-out path that triggered a redirect or authentication barrier during the consent workflow. That is strong runtime evidence of functional asymmetry because the user had to clear an additional hurdle to refuse or withdraw consent.";
+          blockerLocation
+            ? `The scan recorded an opt-out path that triggered a ${frictionEvidence.blockerType === "external_redirect" ? "redirect" : "login or authentication"} barrier during the consent workflow at ${blockerLocation}. That is strong runtime evidence of functional asymmetry because the user had to clear an additional hurdle to refuse or withdraw consent.${blockerSnippet}`
+            : "The scan recorded an opt-out path that triggered a redirect or authentication barrier during the consent workflow. That is strong runtime evidence of functional asymmetry because the user had to clear an additional hurdle to refuse or withdraw consent.";
         presentation.suggestedFix =
           "Remove the redirect or authentication barrier from the basic opt-out path. Refusing or withdrawing consent should be accessible directly from the consent surface without requiring an account, a secondary login, or navigation away from the current page.";
-        presentation.confidenceScore = "0.95";
+        presentation.confidenceScore = (frictionEvidence.evidencePassCount ?? 0) >= 2 ? "1.0" : "0.95";
       } else if ((frictionEvidence.frictionDelta ?? 0) > 0) {
         presentation.whyThisMatters =
           `The scan completed both sides of the consent flow and found that opt-in required ${frictionEvidence.optInClicks} click${frictionEvidence.optInClicks === 1 ? "" : "s"}, while opt-out required ${frictionEvidence.optOutClicks} click${frictionEvidence.optOutClicks === 1 ? "" : "s"}. That click-distance gap is concrete runtime evidence of asymmetry in the site's privacy-choice workflow.`;
         presentation.suggestedFix =
           "Refactor the consent UI so the opt-out path is as direct as the opt-in path. If an accept button is available immediately, the reject or equivalent privacy-choice path should be reachable with the same number of clicks and without secondary hurdles.";
-        presentation.confidenceScore = (frictionEvidence.frictionDelta ?? 0) >= 2 ? "0.95" : "0.85";
+        presentation.confidenceScore = (frictionEvidence.evidencePassCount ?? 0) >= 2 ? "1.0" : "0.85";
       } else {
         presentation.whyThisMatters =
           "The scan completed both sides of the consent flow and retained click-path evidence, but it did not confirm a material asymmetry. This finding still merits review because the detector fired, yet the runtime evidence was not strong enough to prove friction.";
@@ -1100,7 +1385,15 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         "An automated detector flagged a potential mismatch between the site's stated privacy-rights process and its observed runtime behavior. The detector has now been paired with a bounded click-path audit, but the retained traversal did not conclusively prove asymmetric friction.";
       presentation.suggestedFix =
         "Manual review recommended: navigate the consent path and the rights-request path on the live site, then document click counts, authentication requirements, and any barriers not disclosed in the privacy policy.";
-      presentation.confidenceScore = "0.35";
+      if (typeof signalValue === "number" && signalValue >= 100) {
+        presentation.confidenceScore = "0.70";
+      } else if (typeof signalValue === "number" && signalValue >= 90) {
+        presentation.confidenceScore = "0.60";
+      } else if (typeof signalValue === "number" && signalValue >= 75) {
+        presentation.confidenceScore = "0.50";
+      } else {
+        presentation.confidenceScore = "0.35";
+      }
     }
   }
 
@@ -1127,11 +1420,76 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     }
   }
 
+  if (
+    /privacy policy page unavailable|privacy_policy_fetch_failed|terms page unavailable|terms_of_service_fetch_failed|cookie policy unavailable|cookie_policy_fetch_failed|accessibility statement unavailable|accessibility statement not retrievable|accessibility_statement_fetch_failed|contact page unavailable|contact_page_fetch_failed/i.test(
+      input.haystack
+    )
+  ) {
+    const fetchEvidence = getKeyPageFetchFailureEvidence(input.evidence);
+    const attemptLabel = fetchEvidence.attemptCount ?? fetchEvidence.attemptedUrls.length;
+    const provenanceSuffix =
+      fetchEvidence.discoverySource && !fetchEvidence.guessedOnly
+        ? `, even though those targets were discovered via ${fetchEvidence.discoverySource} rather than guessed slugs`
+        : "";
+    const stopReasonSuffix = fetchEvidence.stopReasonText ? `${fetchEvidence.stopReasonText} ` : "";
+
+    if (/privacy policy page unavailable|privacy_policy_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
+      presentation.whyThisMatters =
+        `The scan attempted to retrieve a privacy policy at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}That leaves core disclosures about data collection, sharing, retention, and contact mechanisms unresolved for this run.`;
+    }
+
+    if (/terms page unavailable|terms_of_service_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
+      presentation.whyThisMatters =
+        `The scan attempted to retrieve a terms page at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}That leaves contractual disclosures such as termination, dispute, and governing-law terms unresolved for this run.`;
+    }
+
+    if (/cookie policy unavailable|cookie_policy_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
+      presentation.whyThisMatters =
+        `The scan attempted to locate a dedicated cookie policy at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to retrieve content at any of them${provenanceSuffix}. ${stopReasonSuffix}Clear disclosure of tracking technologies is a core requirement under privacy frameworks like the ePrivacy Directive and GDPR. The absence of a policy at these standard paths suggests it either does not exist, is located at an unmapped URL, or is consolidated within the primary privacy policy.`;
+    }
+
+    if (/accessibility statement unavailable|accessibility statement not retrievable|accessibility_statement_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
+      presentation.whyThisMatters =
+        `The scan attempted to retrieve an accessibility statement at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}For public-sector sites this may indicate a missing required disclosure, and more broadly it prevents users from easily finding the site's stated accessibility status, known limitations, and support contact channel.`;
+    }
+
+    if (/contact page unavailable|contact_page_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
+      presentation.whyThisMatters =
+        `The scan attempted to retrieve a public contact page at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}That can make support and privacy contact channels harder for users to locate and verify.`;
+    }
+
+    const strongerRenderedDiscovery =
+      fetchEvidence.discoverySource === "rendered footer links" ||
+      fetchEvidence.discoverySource === "rendered header links" ||
+      fetchEvidence.discoverySource === "a legal hub page";
+    presentation.confidenceScore =
+      fetchEvidence.discoverySource && !fetchEvidence.guessedOnly ? (strongerRenderedDiscovery ? "0.80" : "0.75") : "0.70";
+  }
+
   if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
     const payloadViolations = getSensitivePayloadViolations(input.evidence);
-    const firstViolation = payloadViolations[0] ?? null;
-    const detectedTypes = [...new Set(payloadViolations.map((violation) => violation.detectedType.replace(/_detected$/, "").replace(/_/g, " ")))];
-    if (payloadViolations.length > 0) {
+    const confirmedViolations = payloadViolations.filter((violation) => violation.evidenceStrength === "confirmed");
+    const suspectedViolations = payloadViolations.filter((violation) => violation.evidenceStrength !== "confirmed");
+    const firstViolation = (confirmedViolations[0] ?? suspectedViolations[0]) ?? null;
+    const detectedTypes = [
+      ...new Set(
+        (confirmedViolations.length > 0 ? confirmedViolations : suspectedViolations).map((violation) =>
+          violation.detectedType.replace(/_detected$/, "").replace(/_/g, " ")
+        )
+      )
+    ];
+    const sourceContext =
+      firstViolation?.sourceField
+        ? ` The retained evidence ties the value to the \`${firstViolation.sourceField}\` field in the ${firstViolation.sourceLocation === "url_query" ? "request URL" : "request body"}.`
+        : firstViolation?.sourceLocation === "url_query"
+          ? " The retained evidence came from outbound request URL parameters."
+          : firstViolation?.sourceLocation === "request_body"
+            ? " The retained evidence came from an outbound request body."
+            : "";
+    const inputHintContext = firstViolation?.sourceInputHint
+      ? ` The page also exposed a corresponding sensitive input hint: ${firstViolation.sourceInputHint}.`
+      : "";
+    if (confirmedViolations.length > 0) {
       const dataTypeLabel =
         detectedTypes.length === 1 ? detectedTypes[0] : detectedTypes.length === 2 ? detectedTypes.join(" and ") : "multiple PII fields";
       const vendorLabel = firstViolation?.vendorHost ?? "third-party endpoints";
@@ -1141,10 +1499,24 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       };
       presentation.whyThisMatters =
-        `The scan confirmed plaintext ${dataTypeLabel} data in ${payloadViolations.length} third-party request${payloadViolations.length === 1 ? "" : "s"} sent to ${vendorLabel}. This is direct evidence that sensitive user-entered or page-derived data left the site without masking or hashing before transmission.`;
+        `The scan confirmed plaintext ${dataTypeLabel} data in ${confirmedViolations.length} third-party request${confirmedViolations.length === 1 ? "" : "s"} sent to ${vendorLabel}. This is direct evidence that sensitive user-entered or page-derived data left the site without masking or hashing before transmission.${sourceContext}${inputHintContext}`;
       presentation.suggestedFix =
         "Immediately inspect the affected third-party integrations and remove sensitive fields from request payloads. If the vendor truly needs the data, gate the integration appropriately and apply redaction or approved irreversible hashing before dispatch.";
-      presentation.confidenceScore = payloadViolations.length >= 2 ? "1.0" : "0.95";
+      presentation.confidenceScore = confirmedViolations.length >= 2 ? "1.0" : "0.95";
+    } else if (suspectedViolations.length > 0) {
+      const dataTypeLabel =
+        detectedTypes.length === 1 ? detectedTypes[0] : detectedTypes.length === 2 ? detectedTypes.join(" and ") : "multiple sensitive fields";
+      const vendorLabel = firstViolation?.vendorHost ?? "third-party endpoints";
+      presentation.bestPracticeLink = {
+        label: "W3C",
+        title: "Data Minimization - Web Privacy Principles",
+        url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
+      };
+      presentation.whyThisMatters =
+        `The scan retained third-party payload evidence with field-level indicators of ${dataTypeLabel} data sent to ${vendorLabel}. This is stronger than a generic tracker signal, but the retained evidence does not yet prove plaintext exfiltration with the same confidence as a direct email or phone match.${sourceContext}${inputHintContext}`;
+      presentation.suggestedFix =
+        "Inspect the affected third-party payload construction logic and remove high-sensitivity fields from outbound requests by default. If the integration truly requires them, gate dispatch appropriately and apply redaction or approved irreversible hashing before transmission.";
+      presentation.confidenceScore = "0.7";
     } else {
       presentation.bestPracticeLink = {
         label: "W3C",
@@ -1164,6 +1536,30 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   }
 
   if (/focus indicator issues|wcag_focus_indicator_issue_count/i.test(input.haystack)) {
+    presentation.confidenceScore = "0.9";
+  }
+
+  if (/contrast failures|wcag_contrast_failures_count/i.test(input.haystack)) {
+    const exampleText = formatAccessibilityRepresentativeExamples(getAccessibilityRepresentativeExamples(input.evidence));
+    if (exampleText) {
+      presentation.whyThisMatters = `${presentation.whyThisMatters} ${exampleText}`;
+    }
+    presentation.confidenceScore = "0.85";
+  }
+
+  if (/form label issues|wcag_form_label_error_count/i.test(input.haystack)) {
+    const exampleText = formatAccessibilityRepresentativeExamples(getAccessibilityRepresentativeExamples(input.evidence));
+    if (exampleText) {
+      presentation.whyThisMatters = `${presentation.whyThisMatters} ${exampleText}`;
+    }
+    presentation.confidenceScore = "0.85";
+  }
+
+  if (/link name issues|wcag_link_name_error_count/i.test(input.haystack)) {
+    const exampleText = formatAccessibilityRepresentativeExamples(getAccessibilityRepresentativeExamples(input.evidence));
+    if (exampleText) {
+      presentation.whyThisMatters = `${presentation.whyThisMatters} ${exampleText}`;
+    }
     presentation.confidenceScore = "0.9";
   }
 

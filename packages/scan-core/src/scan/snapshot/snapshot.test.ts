@@ -642,7 +642,7 @@ test("extractSensitivePayloadTexts parses query strings, json bodies, and form b
       postData: JSON.stringify({ profile: { email: "alice@example.com", phone: "(555) 123-4567" } }),
       headers: { "content-type": "application/json" }
     }),
-    ["alice@example.com", "(555) 123-4567"]
+    ["profile.email=alice@example.com", "alice@example.com", "profile.phone=(555) 123-4567", "(555) 123-4567"]
   );
 
   assert.deepEqual(
@@ -675,7 +675,7 @@ test("extractSensitivePayloadTexts skips binary or multipart payloads safely", (
   );
 });
 
-test("detectSensitivePayloadViolations confirms third-party plaintext email and phone exfiltration only", () => {
+test("detectSensitivePayloadViolations captures deterministic confirmed and suspected high-sensitivity payload matches", () => {
   const thirdPartyGetViolations = detectSensitivePayloadViolations({
     pageDomain: "example.com",
     requestMethod: "GET",
@@ -684,6 +684,7 @@ test("detectSensitivePayloadViolations confirms third-party plaintext email and 
   });
   assert.equal(thirdPartyGetViolations.length, 1);
   assert.equal(thirdPartyGetViolations[0]?.detectedType, "email_detected");
+  assert.equal(thirdPartyGetViolations[0]?.evidenceStrength, "confirmed");
   assert.match(thirdPartyGetViolations[0]?.matchSnippet ?? "", /al\*+@example\.com/i);
 
   const thirdPartyPostViolations = detectSensitivePayloadViolations({
@@ -695,7 +696,66 @@ test("detectSensitivePayloadViolations confirms third-party plaintext email and 
   });
   assert.equal(thirdPartyPostViolations.length, 1);
   assert.equal(thirdPartyPostViolations[0]?.detectedType, "phone_detected");
+  assert.equal(thirdPartyPostViolations[0]?.evidenceStrength, "confirmed");
   assert.match(thirdPartyPostViolations[0]?.matchSnippet ?? "", /\*\*\*-\*\*\*-4567/);
+
+  const keyedInternationalPhoneViolations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "POST",
+    requestUrl: "https://tracker.example.net/collect",
+    postData: JSON.stringify({ phone: "+44 20 7946 0958" }),
+    headers: { "content-type": "application/json" }
+  });
+  assert.equal(keyedInternationalPhoneViolations.length, 1);
+  assert.equal(keyedInternationalPhoneViolations[0]?.detectedType, "phone_detected");
+  assert.equal(keyedInternationalPhoneViolations[0]?.evidenceStrength, "confirmed");
+  assert.match(keyedInternationalPhoneViolations[0]?.matchSnippet ?? "", /\*\*\*-\*\*\*-0958/);
+
+  const thirdPartyJsonViolations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "POST",
+    requestUrl: "https://tracker.example.net/collect",
+    postData: JSON.stringify({
+      profile: {
+        dob: "1985-03-01",
+        memberId: "ABC12345",
+        diagnosis: "diabetes"
+      }
+    }),
+    headers: { "content-type": "application/json" }
+  });
+  assert.equal(thirdPartyJsonViolations.length, 3);
+  assert.deepEqual(
+    thirdPartyJsonViolations.map((violation) => [violation.detectedType, violation.evidenceStrength]),
+    [
+      ["date_of_birth_detected", "confirmed"],
+      ["insurance_member_id_detected", "suspected"],
+      ["health_condition_detected", "suspected"]
+    ]
+  );
+  assert.match(thirdPartyJsonViolations[0]?.matchSnippet ?? "", /do\*+01|19\*+/i);
+
+  const keyedLocationViolations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "POST",
+    requestUrl: "https://tracker.example.net/collect",
+    postData: JSON.stringify({
+      shipping: {
+        postal_code: "94107",
+        lat: "37.7879",
+        lon: "-122.4075"
+      }
+    }),
+    headers: { "content-type": "application/json" }
+  });
+  assert.deepEqual(
+    keyedLocationViolations.map((violation) => [violation.detectedType, violation.evidenceStrength]),
+    [
+      ["postal_code_detected", "suspected"],
+      ["precise_geolocation_detected", "suspected"],
+      ["precise_geolocation_detected", "suspected"]
+    ]
+  );
 
   assert.deepEqual(
     detectSensitivePayloadViolations({
@@ -718,6 +778,18 @@ test("detectSensitivePayloadViolations confirms third-party plaintext email and 
     }),
     []
   );
+});
+
+test("detectSensitivePayloadViolations ignores ad-tech numeric identifiers that are not phone-context fields", () => {
+  const violations = detectSensitivePayloadViolations({
+    pageDomain: "example.com",
+    requestMethod: "GET",
+    requestUrl:
+      "https://ads.example.net/collect?pr=3129245882&pr1=1068201288&ad-session-id=3020611774052430935&correlator=495124551979",
+    postData: null
+  });
+
+  assert.deepEqual(violations, []);
 });
 
 test("classifyScanAccess reports blocked legal coverage without treating it as policy weakness", () => {
@@ -761,6 +833,11 @@ test("classifyScanAccess reports blocked legal coverage without treating it as p
       consentAcceptClickCount: null,
       consentOptInClicks: null,
       consentOptOutClicks: null,
+      consentBlockerType: null,
+      consentBlockerUrl: null,
+      consentBlockerPageTitle: null,
+      consentBlockerTextSnippet: null,
+      consentEvidencePassCount: null,
       consentFrictionDelta: null,
       consentRedirectOrAuthRequired: null,
       consentOptInEvidenceLog: [],

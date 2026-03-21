@@ -177,6 +177,11 @@ export function buildPreviewPayloadFromSnapshot(input: {
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
     issueCounts,
+    scores: {
+      overall: input.snapshot.certscoreOverall,
+      privacy: input.snapshot.privacyScore,
+      accessibility: input.snapshot.accessibilityScore
+    },
     summaryBullets: [
       `${input.snapshot.totalSignals} structured signals were observed in this live preview.`,
       `Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`,

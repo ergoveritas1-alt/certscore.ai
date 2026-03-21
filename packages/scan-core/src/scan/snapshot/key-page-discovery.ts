@@ -81,6 +81,12 @@ type LinkLike = {
   text: string;
 };
 
+type RenderedLinkSource = Exclude<KeyPageDiscoverySource, "guessed_slug" | "sitemap" | "same_brand_subdomain">;
+
+type ScopedLinkLike = LinkLike & {
+  discoveredFrom: RenderedLinkSource;
+};
+
 type DiscoveryCandidateDraft = Omit<KeyPageDiscoveryCandidate, "fetchAttempted" | "fetchOutcome">;
 
 export type KeyPageFetchAttempt = {
@@ -153,6 +159,121 @@ function extractLanguage(html: string) {
 
 function stripTags(input: string) {
   return input.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractFragmentLinks(html: string, baseUrl: string, discoveredFrom: RenderedLinkSource): ScopedLinkLike[] {
+  return extractLinks(html, baseUrl).map((link) => ({ ...link, discoveredFrom }));
+}
+
+function extractTaggedSectionLinks(input: {
+  baseUrl: string;
+  discoveredFrom: RenderedLinkSource;
+  html: string;
+  tags: string[];
+}) {
+  const links: ScopedLinkLike[] = [];
+
+  for (const tag of input.tags) {
+    const pattern = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi");
+    for (const match of input.html.matchAll(pattern)) {
+      links.push(...extractFragmentLinks(match[0], input.baseUrl, input.discoveredFrom));
+    }
+  }
+
+  return links;
+}
+
+function extractKeywordSectionLinks(input: {
+  attrKeywords: string[];
+  baseUrl: string;
+  discoveredFrom: RenderedLinkSource;
+  html: string;
+  tags: string[];
+}) {
+  const links: ScopedLinkLike[] = [];
+  const keywordPattern = input.attrKeywords.map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const pattern = new RegExp(
+    `<(${input.tags.join("|")})\\b[^>]*(?:id|class|aria-label|data-testid|role)=["'][^"']*(?:${keywordPattern})[^"']*["'][^>]*>[\\s\\S]*?<\\/\\1>`,
+    "gi"
+  );
+
+  for (const match of input.html.matchAll(pattern)) {
+    links.push(...extractFragmentLinks(match[0], input.baseUrl, input.discoveredFrom));
+  }
+
+  return links;
+}
+
+function getRenderedLinkSourcePriority(source: RenderedLinkSource) {
+  switch (source) {
+    case "footer_link":
+      return 6;
+    case "header_link":
+      return 5;
+    case "legal_hub":
+      return 4;
+    case "body_link":
+      return 3;
+    case "second_hop_legal_hub":
+      return 2;
+    case "rendered_link":
+    default:
+      return 1;
+  }
+}
+
+function buildScopedRenderedLinks(input: {
+  baseUrl: string;
+  html?: string | null;
+  links: LinkLike[];
+  renderedSource: RenderedLinkSource;
+}) {
+  const merged = new Map<string, ScopedLinkLike>();
+
+  const addLink = (link: ScopedLinkLike) => {
+    const key = `${link.href}::${normalizeLegalMatchText(link.text)}`;
+    const existing = merged.get(key);
+    if (!existing || getRenderedLinkSourcePriority(link.discoveredFrom) > getRenderedLinkSourcePriority(existing.discoveredFrom)) {
+      merged.set(key, link);
+    }
+  };
+
+  for (const link of input.links) {
+    addLink({
+      ...link,
+      discoveredFrom: input.renderedSource
+    });
+  }
+
+  if (input.html) {
+    const scopedLinks = [
+      ...extractTaggedSectionLinks({
+        baseUrl: input.baseUrl,
+        discoveredFrom: "footer_link",
+        html: input.html,
+        tags: ["footer"]
+      }),
+      ...extractTaggedSectionLinks({
+        baseUrl: input.baseUrl,
+        discoveredFrom: "header_link",
+        html: input.html,
+        tags: ["nav", "header"]
+      }),
+      ...extractKeywordSectionLinks({
+        attrKeywords: ["legal", "policy", "privacy", "cookie", "accessib", "terms", "contact", "help", "support"],
+        baseUrl: input.baseUrl,
+        discoveredFrom: "legal_hub",
+        html: input.html,
+        tags: ["section", "div", "aside", "ul", "nav", "footer"]
+      })
+    ];
+
+    for (const link of scopedLinks) {
+      addLink(link);
+    }
+  }
+
+  return [...merged.values()];
 }
 
 function extractLinks(html: string, baseUrl: string): LinkLike[] {
@@ -653,6 +774,18 @@ function scoreCandidate(input: {
 
   let sourceBonus = 0;
   switch (input.discoveredFrom) {
+    case "footer_link":
+      sourceBonus = 30;
+      break;
+    case "header_link":
+      sourceBonus = 28;
+      break;
+    case "legal_hub":
+      sourceBonus = 26;
+      break;
+    case "body_link":
+      sourceBonus = 20;
+      break;
     case "rendered_link":
       sourceBonus = 22;
       break;
@@ -934,12 +1067,23 @@ function buildRenderedLinkCandidates(input: {
   homepageUrl: string;
   links: LinkLike[];
   localeHints: string[];
+  renderedHtml?: string | null;
   sourceUrl: string | null;
 }) {
   const candidates: DiscoveryCandidateDraft[] = [];
   const legalHubCandidates: KeyPageDiscoveryState["legalHubCandidates"] = [];
 
-  for (const link of input.links) {
+  const renderedLinks =
+    input.discoveredFrom === "same_brand_subdomain"
+      ? input.links.map((link) => ({ ...link, discoveredFrom: input.discoveredFrom }))
+      : buildScopedRenderedLinks({
+          baseUrl: input.sourceUrl ?? input.homepageUrl,
+          html: input.renderedHtml,
+          links: input.links,
+          renderedSource: input.discoveredFrom
+        });
+
+  for (const link of renderedLinks) {
     const pageType = classifyKeyPageType({
       anchorText: link.text,
       candidateUrl: link.href,
@@ -950,7 +1094,7 @@ function buildRenderedLinkCandidates(input: {
       const scored = scoreCandidate({
         anchorText: link.text,
         candidateUrl: link.href,
-        discoveredFrom: input.discoveredFrom,
+        discoveredFrom: link.discoveredFrom,
         localeHints: input.localeHints,
         pageType,
         sourceUrl: input.sourceUrl
@@ -959,7 +1103,7 @@ function buildRenderedLinkCandidates(input: {
         anchorText: link.text,
         candidateScore: scored.candidateScore,
         candidateUrl: link.href,
-        discoveredFrom: input.discoveredFrom,
+        discoveredFrom: link.discoveredFrom,
         hostRelation: getHostRelation(link.href, input.homepageUrl) === "same_brand_subdomain" ? "same_brand_subdomain" : "same_host",
         localeHints: input.localeHints,
         pageType,
@@ -984,7 +1128,7 @@ function buildRenderedLinkCandidates(input: {
         anchorText: link.text,
         candidateScore: hubScore,
         candidateUrl: link.href,
-        discoveredFrom: input.discoveredFrom,
+        discoveredFrom: link.discoveredFrom,
         localeHints: input.localeHints,
         sourceUrl: input.sourceUrl
       });
@@ -1135,12 +1279,13 @@ async function fetchSitemapCandidates(input: {
 export async function buildKeyPageDiscoveryState(input: {
   homepageLanguage?: string | null;
   homepageUrl: string;
+  renderedHtml?: string | null;
   renderedLinks: LinkLike[];
   robotsPolicy?: RobotsPolicy | null;
   robotsTxtBody?: string | null;
   sitemapUrls?: string[] | null;
   sourceUrl?: string | null;
-  renderedSource: Exclude<KeyPageDiscoverySource, "guessed_slug" | "sitemap">;
+  renderedSource: RenderedLinkSource;
 }) : Promise<KeyPageDiscoveryState> {
   const localeHints = inferLocaleHints({
     homepageLanguage: input.homepageLanguage,
@@ -1153,6 +1298,7 @@ export async function buildKeyPageDiscoveryState(input: {
     homepageUrl: input.homepageUrl,
     links: input.renderedLinks,
     localeHints,
+    renderedHtml: input.renderedHtml,
     sourceUrl: input.sourceUrl ?? input.homepageUrl
   });
   const sitemapDiscovery = explicitSitemapUrls.length

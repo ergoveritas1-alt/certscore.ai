@@ -2,10 +2,10 @@
 
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { useEffect, useMemo, useState } from "react";
-import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
+import { formatMetadataPreview } from "../../lib/scans/activity-feed";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
-import { LiveActivityLine, useRotatingActivityLine } from "./live-activity-line";
+import { LiveActivityLine } from "./live-activity-line";
 
 type FullScanProgressCardProps = {
   createdAt: string;
@@ -19,6 +19,42 @@ type FullScanProgressCardProps = {
 };
 
 type StageKey = "queued" | "collecting" | "persisting";
+
+function formatEventTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short"
+  }).format(new Date(value));
+}
+
+function formatEventMetadata(metadata: unknown) {
+  if (metadata == null) {
+    return "—";
+  }
+
+  if (Array.isArray(metadata)) {
+    return metadata.slice(0, 3).map((value) => String(value)).join(", ") || "—";
+  }
+
+  if (typeof metadata !== "object") {
+    return String(metadata);
+  }
+
+  const entries = Object.entries(metadata);
+  if (entries.length === 0) {
+    return "—";
+  }
+
+  return entries
+    .slice(0, 4)
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : String(value)}`)
+    .join(" · ");
+}
 
 const STAGE_RANGES: Record<StageKey, { max: number; min: number }> = {
   queued: { min: 10, max: 28 },
@@ -114,19 +150,7 @@ function getStepState(eventTypes: string[], status: string) {
   return { step1Complete, step2Complete, step3Complete };
 }
 
-function getStepLabel(status: string, eventTypes: string[]) {
-  if (status === "queued") {
-    return "step[1/3]";
-  }
-
-  if (eventTypes.includes(SCAN_EVENT_TYPES.changesComputed) || eventTypes.includes(SCAN_EVENT_TYPES.signalsPersisted)) {
-    return "step[3/3]";
-  }
-
-  return "step[2/3]";
-}
-
-function buildActivityFeed(input: {
+function buildLatestActivityLine(input: {
   createdAt: string;
   events: Array<{
     createdAt: string;
@@ -138,20 +162,26 @@ function buildActivityFeed(input: {
 }) {
   if (input.events.length === 0) {
     return input.status === "queued"
-      ? ["step[1/3] event> Scan queued and awaiting worker processing.", "data> evt=full_scan.queued"]
-      : ["step[2/3] event> Full scan activity feed is initializing.", "data> evt=full_scan.pending"];
+      ? "step[1/3] evt=full_scan.queued · Scan queued and awaiting worker processing."
+      : "step[2/3] evt=full_scan.pending · Full scan activity feed is initializing.";
+  }
+
+  const latestEvent = input.events.at(-1);
+  if (!latestEvent) {
+    return "evt=full_scan.pending";
   }
 
   const eventTypes = input.events.map((event) => event.eventType);
-  const stepLabel = getStepLabel(input.status, eventTypes);
-  return buildEventActivityFeed({
-    events: input.events,
-    fallbackLines:
-      input.status === "queued"
-        ? ["step[1/3] event> Scan queued and awaiting worker processing.", "data> evt=full_scan.queued"]
-        : ["step[2/3] event> Full scan activity feed is initializing.", "data> evt=full_scan.pending"],
-    latestLabel: stepLabel
-  });
+  const stepLabel =
+    input.status === "queued"
+      ? "step[1/3]"
+      : eventTypes.includes(SCAN_EVENT_TYPES.changesComputed) || eventTypes.includes(SCAN_EVENT_TYPES.signalsPersisted)
+        ? "step[3/3]"
+        : "step[2/3]";
+  const metadata = formatMetadataPreview(latestEvent.metadataJson).join(" · ");
+  return metadata.length > 0
+    ? `${stepLabel} evt=${latestEvent.eventType} · ${latestEvent.message} · ${metadata}`
+    : `${stepLabel} evt=${latestEvent.eventType} · ${latestEvent.message}`;
 }
 
 export function FullScanProgressCard({ createdAt, events, status }: FullScanProgressCardProps) {
@@ -173,7 +203,7 @@ export function FullScanProgressCard({ createdAt, events, status }: FullScanProg
   }, [status]);
 
   const eventTypes = useMemo(() => events.map((event) => event.eventType), [events]);
-  const activityFeed = useMemo(() => buildActivityFeed({ createdAt, events, status }), [createdAt, events, status]);
+  const latestActivityLine = useMemo(() => buildLatestActivityLine({ createdAt, events, status }), [createdAt, events, status]);
   const progressValue = getInterpolatedProgress({
     createdAt,
     events,
@@ -181,17 +211,6 @@ export function FullScanProgressCard({ createdAt, events, status }: FullScanProg
     status
   });
   const stepState = getStepState(eventTypes, status);
-  const fallbackLine =
-    status === "queued"
-      ? "step[1/3] event> Scan queued and awaiting worker processing."
-      : "step[2/3] event> Full scan activity feed is initializing.";
-  const fallbackDataLine = status === "queued" ? "data> evt=full_scan.queued" : "data> evt=full_scan.pending";
-  const fallbackWaitingLine = `log evt=${events.at(-1)?.eventType ?? "full_scan.pending"} · waiting for next scan event...`;
-  const { activeLine } = useRotatingActivityLine({
-    fallbackLines: [fallbackLine, fallbackDataLine],
-    lines: activityFeed.length === 1 ? [activityFeed[0] ?? fallbackLine, fallbackWaitingLine] : activityFeed,
-    running: status === "queued" || status === "running"
-  });
 
   return (
     <CollapsibleSectionCard
@@ -213,7 +232,32 @@ export function FullScanProgressCard({ createdAt, events, status }: FullScanProg
         </div>
         <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
           <div className="min-w-0 max-w-full overflow-hidden rounded-xl bg-white/60 px-3 py-2 font-mono text-[13px] text-slate-600">
-            <LiveActivityLine line={activeLine} />
+            <LiveActivityLine line={latestActivityLine} />
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="grid grid-cols-[180px_170px_minmax(280px,1fr)_minmax(220px,0.9fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <p>Time</p>
+            <p>Event</p>
+            <p>Message</p>
+            <p>Metadata</p>
+          </div>
+          <div className="max-h-[168px] overflow-y-auto">
+            {events.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-slate-500">Waiting for the first scan event.</div>
+            ) : (
+              events.map((event) => (
+                <div
+                  key={`${event.createdAt}-${event.eventType}-${event.message}`}
+                  className="grid grid-cols-[180px_170px_minmax(280px,1fr)_minmax(220px,0.9fr)] gap-3 border-b border-slate-100 px-4 py-2 text-[13px] text-slate-700 last:border-b-0"
+                >
+                  <p className="whitespace-nowrap text-slate-500">{formatEventTime(event.createdAt)}</p>
+                  <p className="font-mono text-[12px] text-slate-600">{event.eventType}</p>
+                  <p className="min-w-0">{event.message}</p>
+                  <p className="min-w-0 text-slate-500">{formatEventMetadata(event.metadataJson)}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-3">

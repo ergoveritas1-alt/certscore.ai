@@ -1267,7 +1267,27 @@ function isFirstPartyHost(host: string | null, pageDomain: string) {
 }
 
 const EMAIL_PAYLOAD_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const PHONE_PAYLOAD_REGEX = /(?<!\w)(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\w)/g;
+const PHONE_PAYLOAD_REGEX = /(?<!\w)(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}(?!\w)/g;
+const PHONE_VALUE_REGEX = /^(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}$/;
+const INTERNATIONAL_KEYED_PHONE_VALUE_REGEX = /^\+?(?:\d[\s().-]?){7,16}\d$/;
+const DOB_VALUE_REGEX = /\b(?:19|20)\d{2}-\d{2}-\d{2}\b|\b\d{1,2}[/-]\d{1,2}[/-](?:19|20)?\d{2}\b/;
+const SSN_VALUE_REGEX = /\b\d{3}-?\d{2}-?\d{4}\b/;
+const POSTAL_CODE_VALUE_REGEX = /^(?:\d{5}(?:-\d{4})?|[A-Z]\d[A-Z][\s-]?\d[A-Z]\d|[A-Z]{1,2}\d[A-Z\d]?[\s-]?\d[A-Z]{2})$/i;
+const GEOLOCATION_VALUE_REGEX = /^-?(?:180(?:\.0+)?|(?:1[0-7]\d|\d?\d)(?:\.\d{3,})?)$/;
+const FULL_NAME_VALUE_REGEX = /\b[A-Za-z][A-Za-z' -]{1,30}\s+[A-Za-z][A-Za-z' -]{1,30}\b/;
+const STREET_ADDRESS_VALUE_REGEX = /\b\d{1,6}\s+[A-Za-z0-9.' -]{2,40}\s(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd|court|ct|way)\b/i;
+const MEMBER_ID_VALUE_REGEX = /\b[A-Z0-9-]{6,24}\b/i;
+const HEALTH_CONDITION_VALUE_REGEX = /\b(?:diabetes|depression|anxiety|pregnan|cancer|asthma|adhd|hypertension|migraine|covid|arthritis|prescription|medication|diagnosis|symptom)\w*\b/i;
+const PHONE_KEY_PATTERN = /(phone|tel(?:ephone)?|mobile|cell(?:phone)?|contact[_-]?number|msisdn)/i;
+const DOB_KEY_PATTERN = /(dob|date[_-]?of[_-]?birth|birth[_-]?date|birthday)/i;
+const SSN_KEY_PATTERN = /(ssn|social[_-]?security|national[_-]?id|tax[_-]?id)/i;
+const POSTAL_CODE_KEY_PATTERN = /(zip|zip[_-]?code|postal(?:[_-]?code)?|postcode)/i;
+const LATITUDE_KEY_PATTERN = /(?:^|[_.-])(lat|latitude)(?:$|[_.-])/i;
+const LONGITUDE_KEY_PATTERN = /(?:^|[_.-])(lon|lng|long|longitude)(?:$|[_.-])/i;
+const MEMBER_ID_KEY_PATTERN = /(member[_-]?id|subscriber[_-]?id|insurance[_-]?(?:id|member)|policy[_-]?number|group[_-]?number)/i;
+const HEALTH_KEY_PATTERN = /(diagnosis|condition|symptom|medication|prescription|treatment|patient[_-]?status|health[_-]?condition)/i;
+const FULL_NAME_KEY_PATTERN = /(full[_-]?name|first[_-]?name|last[_-]?name|patient[_-]?name|member[_-]?name)/i;
+const ADDRESS_KEY_PATTERN = /(street|address(?:1|2)?|mailing[_-]?address|shipping[_-]?address|home[_-]?address)/i;
 const TEXT_CONTENT_TYPE_PATTERNS = [/json/i, /x-www-form-urlencoded/i, /text\//i, /javascript|ecmascript/i];
 const BINARY_CONTENT_TYPE_PATTERNS = [/multipart\/form-data/i, /octet-stream/i, /^image\//i, /^audio\//i, /^video\//i, /protobuf/i, /pdf/i];
 
@@ -1298,56 +1318,67 @@ function looksLikeTextPayload(value: string) {
   return nonPrintableCount / Math.max(value.length, 1) < 0.05;
 }
 
-function extractJsonStringValues(input: unknown, output: string[]) {
-  if (typeof input === "string") {
-    output.push(input);
+function extractJsonStringValues(input: unknown, output: string[], path: string[] = []) {
+  if (typeof input === "string" || typeof input === "number" || typeof input === "boolean") {
+    const scalarValue = String(input);
+    if (path.length > 0) {
+      output.push(`${path.join(".")}=${scalarValue}`);
+    }
+    output.push(scalarValue);
     return;
   }
 
   if (Array.isArray(input)) {
-    for (const entry of input) {
-      extractJsonStringValues(entry, output);
+    for (const [index, entry] of input.entries()) {
+      extractJsonStringValues(entry, output, [...path, String(index)]);
     }
     return;
   }
 
   if (input && typeof input === "object") {
-    for (const value of Object.values(input)) {
-      extractJsonStringValues(value, output);
+    for (const [key, value] of Object.entries(input)) {
+      extractJsonStringValues(value, output, [...path, key]);
     }
   }
 }
 
-export function extractSensitivePayloadTexts(input: {
+type ExtractedSensitivePayloadEntry = {
+  payloadText: string;
+  sourceLocation: "request_body" | "url_query";
+};
+
+function extractSensitivePayloadEntries(input: {
   requestUrl: string;
   postData: string | null;
   headers?: Record<string, string>;
 }) {
-  const payloadTexts: string[] = [];
-
+  const payloadEntries: ExtractedSensitivePayloadEntry[] = [];
   const parsedUrl = safelyParseUrl(input.requestUrl);
   if (parsedUrl) {
     const queryEntries = [...parsedUrl.searchParams.entries()]
       .map(([key, value]) => `${key}=${value}`)
       .filter((entry) => entry.trim().length > 0);
     if (queryEntries.length > 0) {
-      payloadTexts.push(queryEntries.join("&"));
+      payloadEntries.push({
+        payloadText: queryEntries.join("&"),
+        sourceLocation: "url_query"
+      });
     }
   }
 
   const postData = typeof input.postData === "string" ? input.postData.trim() : "";
   if (!postData) {
-    return payloadTexts;
+    return payloadEntries;
   }
 
   const contentTypeHeader = Object.entries(input.headers ?? {}).find(([key]) => key.toLowerCase() === "content-type");
   const contentType = contentTypeHeader?.[1] ?? "";
   if (BINARY_CONTENT_TYPE_PATTERNS.some((pattern) => pattern.test(contentType))) {
-    return payloadTexts;
+    return payloadEntries;
   }
 
   if (!looksLikeTextPayload(postData)) {
-    return payloadTexts;
+    return payloadEntries;
   }
 
   const lowered = contentType.toLowerCase();
@@ -1357,8 +1388,13 @@ export function extractSensitivePayloadTexts(input: {
         const parsed = JSON.parse(postData) as unknown;
         const strings: string[] = [];
         extractJsonStringValues(parsed, strings);
-        payloadTexts.push(...strings);
-        return payloadTexts;
+        payloadEntries.push(
+          ...strings.map((payloadText) => ({
+            payloadText,
+            sourceLocation: "request_body" as const
+          }))
+        );
+        return payloadEntries;
       } catch {
         // Fall through to other textual parsing paths.
       }
@@ -1368,14 +1404,28 @@ export function extractSensitivePayloadTexts(input: {
       const params = new URLSearchParams(postData);
       const entries = [...params.entries()].map(([key, value]) => `${key}=${value}`);
       if (entries.length > 0) {
-        payloadTexts.push(entries.join("&"));
-        return payloadTexts;
+        payloadEntries.push({
+          payloadText: entries.join("&"),
+          sourceLocation: "request_body"
+        });
+        return payloadEntries;
       }
     }
   }
 
-  payloadTexts.push(postData);
-  return payloadTexts;
+  payloadEntries.push({
+    payloadText: postData,
+    sourceLocation: "request_body"
+  });
+  return payloadEntries;
+}
+
+export function extractSensitivePayloadTexts(input: {
+  requestUrl: string;
+  postData: string | null;
+  headers?: Record<string, string>;
+}) {
+  return extractSensitivePayloadEntries(input).map((entry) => entry.payloadText);
 }
 
 function redactEmail(value: string) {
@@ -1390,8 +1440,38 @@ function redactPhone(value: string) {
   return `***-***-${tail || "****"}`;
 }
 
+function redactGenericValue(value: string) {
+  if (value.includes("@")) {
+    return redactEmail(value);
+  }
+
+  const digits = value.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    return redactPhone(value);
+  }
+
+  if (value.length <= 4) {
+    return "*".repeat(value.length);
+  }
+
+  return `${value.slice(0, 2)}${"*".repeat(Math.max(value.length - 4, 3))}${value.slice(-2)}`;
+}
+
+function safelyDecodePayloadComponent(value: string) {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    return value;
+  }
+}
+
 function buildRedactedSnippet(payload: string, match: string, detectedType: SensitivePayloadViolation["detectedType"]) {
-  const redactedMatch = detectedType === "email_detected" ? redactEmail(match) : redactPhone(match);
+  const redactedMatch =
+    detectedType === "email_detected"
+      ? redactEmail(match)
+      : detectedType === "phone_detected"
+        ? redactPhone(match)
+        : redactGenericValue(match);
   const matchIndex = payload.indexOf(match);
   if (matchIndex < 0) {
     return redactedMatch;
@@ -1401,6 +1481,26 @@ function buildRedactedSnippet(payload: string, match: string, detectedType: Sens
   const snippetEnd = Math.min(payload.length, matchIndex + match.length + 24);
   const snippet = payload.slice(snippetStart, snippetEnd);
   return snippet.replace(match, redactedMatch);
+}
+
+function normalizePhoneDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function looksLikeConfirmedPhoneValue(value: string) {
+  const digits = normalizePhoneDigits(value);
+  if (digits.length !== 10 && digits.length !== 11) {
+    return false;
+  }
+  return PHONE_VALUE_REGEX.test(value);
+}
+
+function looksLikeKeyedPhoneValue(key: string, value: string) {
+  const digits = normalizePhoneDigits(value);
+  if (!PHONE_KEY_PATTERN.test(key) || digits.length < 8 || digits.length > 15) {
+    return false;
+  }
+  return PHONE_VALUE_REGEX.test(value) || /^\+?1?\d{10}$/.test(value) || INTERNATIONAL_KEYED_PHONE_VALUE_REGEX.test(value);
 }
 
 export function detectSensitivePayloadViolations(input: {
@@ -1415,9 +1515,10 @@ export function detectSensitivePayloadViolations(input: {
   if (!parsedUrl || isFirstPartyHost(parsedUrl.hostname, input.pageDomain)) {
     return [] as SensitivePayloadViolation[];
   }
+  const vendorHost = parsedUrl.hostname;
 
   const timestamp = input.timestamp ?? new Date().toISOString();
-  const payloadTexts = extractSensitivePayloadTexts({
+  const payloadEntries = extractSensitivePayloadEntries({
     requestUrl: input.requestUrl,
     postData: input.postData,
     headers: input.headers
@@ -1425,47 +1526,199 @@ export function detectSensitivePayloadViolations(input: {
 
   const violations: SensitivePayloadViolation[] = [];
   const seen = new Set<string>();
-  for (const payloadText of payloadTexts) {
+
+  function pushViolation(inputViolation: {
+    detectedType: SensitivePayloadViolation["detectedType"];
+    evidenceStrength: SensitivePayloadViolation["evidenceStrength"];
+    payloadText: string;
+    sourceField: string | null;
+    sourceLocation: SensitivePayloadViolation["sourceLocation"];
+    sourcePattern: SensitivePayloadViolation["sourcePattern"];
+    value: string;
+    dedupeValue: string;
+  }) {
+    const dedupeKey = `${inputViolation.detectedType}:${input.requestUrl}:${inputViolation.dedupeValue}`;
+    if (seen.has(dedupeKey)) {
+      return;
+    }
+    seen.add(dedupeKey);
+    violations.push({
+      detectedType: inputViolation.detectedType,
+      evidenceStrength: inputViolation.evidenceStrength,
+      matchSnippet: buildRedactedSnippet(inputViolation.payloadText, inputViolation.value, inputViolation.detectedType).slice(0, 160),
+      requestMethod: input.requestMethod,
+      requestUrl: input.requestUrl,
+      sourceField: inputViolation.sourceField,
+      sourceLocation: inputViolation.sourceLocation,
+      sourcePattern: inputViolation.sourcePattern,
+      timestamp,
+      vendorHost
+    });
+  }
+
+  for (const payloadEntry of payloadEntries) {
+    const payloadText = payloadEntry.payloadText;
     EMAIL_PAYLOAD_REGEX.lastIndex = 0;
     for (const match of payloadText.matchAll(EMAIL_PAYLOAD_REGEX)) {
       const value = match[0];
       if (!value) {
         continue;
       }
-      const dedupeKey = `email:${input.requestUrl}:${value}`;
-      if (seen.has(dedupeKey)) {
+      pushViolation({
+        detectedType: "email_detected",
+        evidenceStrength: "confirmed",
+        payloadText,
+        sourceField: null,
+        sourceLocation: payloadEntry.sourceLocation,
+        sourcePattern: "generic_pattern",
+        value,
+        dedupeValue: value
+      });
+    }
+
+    const keyValuePairs = [...payloadText.matchAll(/([A-Za-z0-9_.-]{2,64})=([^&\n\r]+)/g)].map((match) => ({
+      key: match[1] ?? "",
+      value: safelyDecodePayloadComponent(match[2] ?? "").trim()
+    }));
+
+    for (const { key, value } of keyValuePairs) {
+      if (!value) {
         continue;
       }
-      seen.add(dedupeKey);
-      violations.push({
-        detectedType: "email_detected",
-        matchSnippet: buildRedactedSnippet(payloadText, value, "email_detected").slice(0, 160),
-        requestMethod: input.requestMethod,
-        requestUrl: input.requestUrl,
-        timestamp,
-        vendorHost: parsedUrl.hostname
-      });
+
+      if (looksLikeKeyedPhoneValue(key, value)) {
+        pushViolation({
+          detectedType: "phone_detected",
+          evidenceStrength: "confirmed",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: normalizePhoneDigits(value)
+        });
+      }
+
+      if (DOB_KEY_PATTERN.test(key) && DOB_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "date_of_birth_detected",
+          evidenceStrength: "confirmed",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (SSN_KEY_PATTERN.test(key) && SSN_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "ssn_detected",
+          evidenceStrength: "confirmed",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (POSTAL_CODE_KEY_PATTERN.test(key) && POSTAL_CODE_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "postal_code_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if ((LATITUDE_KEY_PATTERN.test(key) || LONGITUDE_KEY_PATTERN.test(key)) && GEOLOCATION_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "precise_geolocation_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (MEMBER_ID_KEY_PATTERN.test(key) && MEMBER_ID_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "insurance_member_id_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (HEALTH_KEY_PATTERN.test(key) && HEALTH_CONDITION_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "health_condition_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (FULL_NAME_KEY_PATTERN.test(key) && FULL_NAME_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "full_name_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
+
+      if (ADDRESS_KEY_PATTERN.test(key) && STREET_ADDRESS_VALUE_REGEX.test(value)) {
+        pushViolation({
+          detectedType: "precise_address_detected",
+          evidenceStrength: "suspected",
+          payloadText,
+          sourceField: key,
+          sourceLocation: payloadEntry.sourceLocation,
+          sourcePattern: "keyed_field",
+          value,
+          dedupeValue: `${key}:${value}`
+        });
+      }
     }
 
     PHONE_PAYLOAD_REGEX.lastIndex = 0;
     for (const match of payloadText.matchAll(PHONE_PAYLOAD_REGEX)) {
       const value = match[0];
-      const digits = value?.replace(/\D/g, "") ?? "";
-      if (!value || (digits.length !== 10 && digits.length !== 11)) {
+      if (!value || !looksLikeConfirmedPhoneValue(value)) {
         continue;
       }
-      const dedupeKey = `phone:${input.requestUrl}:${digits}`;
-      if (seen.has(dedupeKey)) {
-        continue;
-      }
-      seen.add(dedupeKey);
-      violations.push({
+      pushViolation({
         detectedType: "phone_detected",
-        matchSnippet: buildRedactedSnippet(payloadText, value, "phone_detected").slice(0, 160),
-        requestMethod: input.requestMethod,
-        requestUrl: input.requestUrl,
-        timestamp,
-        vendorHost: parsedUrl.hostname
+        evidenceStrength: "confirmed",
+        payloadText,
+        sourceField: null,
+        sourceLocation: payloadEntry.sourceLocation,
+        sourcePattern: "generic_pattern",
+        value,
+        dedupeValue: normalizePhoneDigits(value)
       });
     }
   }
@@ -2810,6 +3063,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   };
   const preBrowserKeyPageDiscovery = await buildKeyPageDiscoveryState({
     homepageLanguage: homepage.language,
+    renderedHtml: homepage.html,
     homepageUrl,
     renderedLinks: homepage.links,
     renderedSource: "rendered_link",
@@ -3108,6 +3362,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         await buildKeyPageDiscoveryState({
           homepageLanguage: legalHubPage.language ?? homepage.language,
           homepageUrl,
+          renderedHtml: legalHubPage.html,
           renderedLinks: legalHubPage.links,
           renderedSource: "second_hop_legal_hub",
           robotsPolicy: robotsState.policy,
@@ -3426,11 +3681,25 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     status: "start",
     metadata: {
       cookieBannerPresent: browserPass.cookieBannerPresent,
-      cmpVendorName: cmpVendor?.name ?? null
+      cmpVendorName: cmpVendor?.name ?? null,
+      baselineRightsFrictionScore: consentAuditBaselineRightsFrictionScore,
+      consentWithdrawalMechanismPresent: formSignals.consentWithdrawalMechanismPresent,
+      shouldAttemptConsentAudit:
+        !isPreviewScan &&
+        (browserPass.cookieBannerPresent ||
+          Boolean(cmpVendor?.name) ||
+          formSignals.consentWithdrawalMechanismPresent ||
+          consentAuditBaselineRightsFrictionScore >= 75)
     }
   });
+  const shouldAttemptConsentAudit =
+    !isPreviewScan &&
+    (browserPass.cookieBannerPresent ||
+      Boolean(cmpVendor?.name) ||
+      formSignals.consentWithdrawalMechanismPresent ||
+      consentAuditBaselineRightsFrictionScore >= 75);
   const consentInteractionAudit =
-    !isPreviewScan && (browserPass.cookieBannerPresent || cmpVendor?.name)
+    shouldAttemptConsentAudit
       ? await runConsentInteractionAudit(homepageUrl, {
           baselineRightsFrictionScore: consentAuditBaselineRightsFrictionScore,
           domainId: input.domainId,
@@ -3439,6 +3708,27 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
           scanId: input.scanId
         }).catch(() => null)
       : null;
+  if (!consentInteractionAudit) {
+    await persistRuntimeArtifactsPatch({
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      runtimeArtifacts: {
+        consentAuditCompleted: false
+      },
+      scanId: input.scanId
+    }).catch(async (error) => {
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "consent_audit_persist",
+        status: "error",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown consent audit completion persistence error"
+        }
+      });
+    });
+  }
   if (consentInteractionAudit) {
     await persistRuntimeArtifactsPatch({
       domainId: input.domainId,
@@ -3499,7 +3789,8 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     phase: "consent_audit_entry",
     status: "ok",
     metadata: {
-      consentAuditCompleted: Boolean(consentInteractionAudit)
+      consentAuditCompleted: Boolean(consentInteractionAudit),
+      shouldAttemptConsentAudit
     }
   });
   const consentSurfaceDetected =

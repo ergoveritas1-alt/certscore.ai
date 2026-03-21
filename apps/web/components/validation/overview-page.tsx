@@ -4,11 +4,12 @@ import { listValidationRuns, listValidationTargets, getValidationSettings } from
 import { getValidationQueueAvailability } from "../../server/queue/validation-queue";
 import {
   submitManualValidationRunAction,
-  submitValidationRescanAction,
   submitValidationSettingsAction,
   submitValidationTargetAction,
   submitValidationTargetAddAction
 } from "../../server/validation/actions";
+import { ValidationRescanForm } from "./validation-rescan-form";
+import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 function formatStateLabel(value: string) {
   return value.replace(/_/g, " ");
@@ -27,9 +28,11 @@ export async function ValidationOverviewPage() {
     (settings.queueHealth?.rank.waiting ?? 0) +
     (settings.queueHealth?.rank.active ?? 0);
   const showWorkerHeartbeatWarning = !settings.workerHealthy && queuedOrActiveValidationJobs > 0;
+  const hasActiveRuns = recentRuns.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status));
 
   return (
     <div className="space-y-8">
+      <ValidationRunsAutoRefresh enabled={hasActiveRuns} />
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Validation control center</h1>
       </div>
@@ -184,12 +187,7 @@ export async function ValidationOverviewPage() {
                               View
                             </a>
                             {run.domainId ? (
-                              <form action={submitValidationRescanAction}>
-                                <input name="domainId" type="hidden" value={run.domainId} />
-                                <button className="text-sm font-medium text-slate-900 underline underline-offset-4" type="submit">
-                                  Re-scan
-                                </button>
-                              </form>
+                              <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
                             ) : null}
                           </div>
                         </td>

@@ -3,6 +3,7 @@ import type { ConsentInteractionEvidenceStep } from "@website-signal-risk-scanne
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createBrowser } from "../browser/create-browser";
 import { navigateWithPolicy } from "../browser/navigate-with-policy";
+import { persistRuntimeArtifactsPatch } from "../persistence/save-snapshot-bundle";
 import { shouldContinueRuntimeWait } from "./browser-stability";
 import { classifyConsentButtonRole } from "./consent-ui";
 import { getConsentProbeProfiles } from "./consent-profiles";
@@ -11,6 +12,7 @@ import { analyzeVendorRequestMatch, TRACKER_VENDOR_SIGNATURES } from "./signatur
 import { fetchStaticPage } from "./extractors";
 
 export type ConsentInteractionStage = "baseline" | "post_reject" | "post_accept";
+export type ConsentBlockerType = "auth_wall" | "external_redirect" | "extra_click_path";
 
 export type ConsentInteractionStageResult = {
   cookieCount: number;
@@ -27,6 +29,11 @@ export type ConsentInteractionAudit = {
   authWallDetected: boolean;
   baseline: ConsentInteractionStageResult;
   acceptNewTrackerVendorNames: string[];
+  consentBlockerPageTitle: string | null;
+  consentBlockerTextSnippet: string | null;
+  consentBlockerType: ConsentBlockerType | null;
+  consentBlockerUrl: string | null;
+  consentEvidencePassCount: number | null;
   consentFrictionDelta: number | null;
   consentRedirectOrAuthRequired: boolean | null;
   evidenceLog: string[];
@@ -59,6 +66,10 @@ type ConsentToggleCandidate = {
 
 type ConsentPathExecutionResult = {
   authWallDetected: boolean;
+  blockerPageTitle: string | null;
+  blockerTextSnippet: string | null;
+  blockerType: ConsentBlockerType | null;
+  blockerUrl: string | null;
   clicked: boolean;
   clickCount: number | null;
   evidenceLog: ConsentInteractionEvidenceStep[];
@@ -93,6 +104,35 @@ const NON_ESSENTIAL_CATEGORY_PATTERNS = [
 const AUTH_WALL_PATTERNS =
   /sign in|log in|login|create account|authentication required|member access|continue with account|account required/i;
 
+function buildAuthWallSnippet(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const sentences = normalized.split(/(?<=[.!?])\s+/);
+  const matchedSentence = sentences.find((sentence) => AUTH_WALL_PATTERNS.test(sentence));
+  if (matchedSentence) {
+    return matchedSentence.slice(0, 220);
+  }
+
+  const match = normalized.match(AUTH_WALL_PATTERNS);
+  if (!match || typeof match.index !== "number") {
+    return normalized.slice(0, 220);
+  }
+
+  const start = Math.max(0, match.index - 60);
+  const end = Math.min(normalized.length, match.index + match[0].length + 120);
+  return normalized.slice(start, end).trim();
+}
+
+function normalizeAuditEntrypoints(primaryUrl: string, fallbackUrls: string[]) {
+  return [primaryUrl, ...fallbackUrls]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim())
+    .filter((value, index, values) => values.indexOf(value) === index);
+}
+
 function difference(left: string[], right: string[]) {
   const rightSet = new Set(right);
   return left.filter((value) => !rightSet.has(value)).sort();
@@ -104,21 +144,130 @@ function intersection(left: string[], right: string[]) {
 }
 
 export const __test = {
+  buildAuthWallSnippet,
+  buildConsentRuntimeArtifactsPatch,
   difference,
   intersection,
+  countMatchingEvidencePasses,
   detectPathBlockers,
+  deriveConcreteFrictionEvidence,
+  finalizeConsentAudit,
   isAuthWallText(text: string) {
     return AUTH_WALL_PATTERNS.test(text);
   },
+  normalizeAuditEntrypoints,
   isNonEssentialToggleLabel(text: string) {
     return NON_ESSENTIAL_CATEGORY_PATTERNS.some((pattern) => pattern.test(text.toLowerCase()));
   },
   isSaveAction(text: string) {
     return SAVE_PATTERNS.some((pattern) => pattern.test(text.toLowerCase()));
   },
+  chooseBestAudit,
+  chooseBestAvailableAudit,
   performAcceptPath,
   performRejectPath
 };
+
+function chooseBestAvailableAudit(
+  audits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile"> | null>
+) {
+  const completedAudits = audits.filter(
+    (audit): audit is Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile"> => Boolean(audit)
+  );
+
+  if (completedAudits.length === 0) {
+    return null;
+  }
+
+  return chooseBestAudit(completedAudits);
+}
+
+function finalizeConsentAudit(input: {
+  attemptedProbeProfiles: string[];
+  audits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">>;
+  winningAudit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">;
+  winningProbeProfile: string | null;
+}): ConsentInteractionAudit {
+  const evidencePassCount = countMatchingEvidencePasses(input.audits, input.winningAudit);
+
+  return {
+    ...input.winningAudit,
+    consentEvidencePassCount: evidencePassCount > 0 ? evidencePassCount : null,
+    attemptedProbeProfiles: input.attemptedProbeProfiles,
+    winningProbeProfile: input.winningProbeProfile
+  };
+}
+
+function buildConsentRuntimeArtifactsPatch(audit: ConsentInteractionAudit) {
+  return {
+    consentAcceptClickCount: audit.postAccept.clickCount,
+    consentAcceptInteractionSucceeded: audit.postAccept.interactionSucceeded,
+    consentAcceptNewTrackerVendorNames: audit.acceptNewTrackerVendorNames,
+    consentAuditCompleted: true,
+    consentBaselineCookieCount: audit.baseline.cookieCount,
+    consentBaselineThirdPartyCookieCount: audit.baseline.thirdPartyCookieCount,
+    consentBlockerPageTitle: audit.consentBlockerPageTitle,
+    consentBlockerTextSnippet: audit.consentBlockerTextSnippet,
+    consentBlockerType: audit.consentBlockerType,
+    consentBlockerUrl: audit.consentBlockerUrl,
+    consentEvidencePassCount: audit.consentEvidencePassCount,
+    consentFrictionDelta: audit.consentFrictionDelta,
+    consentOptInClicks: audit.optInClicks,
+    consentOptInEvidenceLog: audit.optInEvidenceLog,
+    consentOptOutClicks: audit.optOutClicks,
+    consentOptOutEvidenceLog: audit.optOutEvidenceLog,
+    consentPostAcceptCookieCount: audit.postAccept.cookieCount,
+    consentPostAcceptThirdPartyCookieCount: audit.postAccept.thirdPartyCookieCount,
+    consentPostAcceptTrackerEvidenceUrls: audit.postAccept.trackerEvidenceUrls,
+    consentPostAcceptTrackerVendorNames: audit.postAccept.trackerVendorNames,
+    consentPostRejectCookieCount: audit.postReject.cookieCount,
+    consentPostRejectThirdPartyCookieCount: audit.postReject.thirdPartyCookieCount,
+    consentPostRejectTrackerEvidenceUrls: audit.postReject.trackerEvidenceUrls,
+    consentPostRejectTrackerVendorNames: audit.postReject.trackerVendorNames,
+    consentRedirectOrAuthRequired: audit.consentRedirectOrAuthRequired,
+    consentRejectClickCount: audit.postReject.clickCount,
+    consentRejectInteractionSucceeded: audit.postReject.interactionSucceeded,
+    consentRejectNewTrackerVendorNames: audit.rejectNewTrackerVendorNames,
+    consentRejectPersistedTrackerVendorNames: audit.rejectPersistedTrackerVendorNames,
+    consentRejectReducedThirdPartyCookies: audit.postReject.thirdPartyCookieCount < audit.baseline.thirdPartyCookieCount,
+    consentRejectReducedTracking: audit.postReject.trackerVendorNames.length < audit.baseline.trackerVendorNames.length
+  };
+}
+
+async function persistBestEffortConsentAudit(input: {
+  attemptedProbeProfiles: string[];
+  audits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">>;
+  domainId?: string;
+  organizationId?: string | null;
+  scanId?: string;
+  winningProbeProfile: string | null;
+}) {
+  if (!input.scanId || input.audits.length === 0) {
+    return;
+  }
+
+  const winningAudit = chooseBestAudit(input.audits);
+  const finalizedAudit = finalizeConsentAudit({
+    attemptedProbeProfiles: input.attemptedProbeProfiles,
+    audits: input.audits,
+    winningAudit,
+    winningProbeProfile: input.winningProbeProfile
+  });
+
+  try {
+    await persistRuntimeArtifactsPatch({
+      domainId: input.domainId ?? null,
+      organizationId: input.organizationId ?? null,
+      runtimeArtifacts: buildConsentRuntimeArtifactsPatch(finalizedAudit),
+      scanId: input.scanId
+    });
+  } catch (error) {
+    console.error("[consent-audit] failed to persist best-effort consent evidence", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      scanId: input.scanId
+    });
+  }
+}
 
 async function persistConsentAuditDiagnostic(input: {
   scanId?: string;
@@ -345,7 +494,18 @@ async function collectToggleCandidates(page: Page): Promise<ConsentToggleCandida
     .catch(() => []);
 }
 
-async function detectPathBlockers(page: Page, startHost: string) {
+async function detectPathBlockers(
+  page: Page,
+  startHost: string
+): Promise<{
+  authWallDetected: boolean;
+  blockerPageTitle: string | null;
+  blockerTextSnippet: string | null;
+  blockerType: ConsentBlockerType | null;
+  blockerUrl: string | null;
+  externalRedirectDetected: boolean;
+  redirectOrAuthRequired: boolean;
+}> {
   const currentUrl = page.url();
   let externalRedirectDetected = false;
 
@@ -356,8 +516,9 @@ async function detectPathBlockers(page: Page, startHost: string) {
     externalRedirectDetected = false;
   }
 
-  const authWallDetected = await page
-    .evaluate(() => {
+  const pageSignals = await page
+    .evaluate((authWallPatternSource) => {
+      const authWallPattern = new RegExp(authWallPatternSource, "i");
       const bodyText = document.body?.innerText?.replace(/\s+/g, " ").trim() ?? "";
       const passwordInputVisible = [...document.querySelectorAll("input[type='password']")].some((element) => {
         const htmlElement = element as HTMLElement;
@@ -370,12 +531,27 @@ async function detectPathBlockers(page: Page, startHost: string) {
         );
       });
 
-      return passwordInputVisible || AUTH_WALL_PATTERNS.test(bodyText);
-    })
-    .catch(() => false);
+      return {
+        authWallDetected: passwordInputVisible || authWallPattern.test(bodyText),
+        bodyText,
+        title: document.title?.trim() ?? ""
+      };
+    }, AUTH_WALL_PATTERNS.source)
+    .catch(() => ({
+      authWallDetected: false,
+      bodyText: "",
+      title: ""
+    }));
+
+  const authWallDetected = pageSignals.authWallDetected;
+  const blockerType: ConsentBlockerType | null = authWallDetected ? "auth_wall" : externalRedirectDetected ? "external_redirect" : null;
 
   return {
     authWallDetected,
+    blockerPageTitle: pageSignals.title.length > 0 ? pageSignals.title : null,
+    blockerTextSnippet: authWallDetected ? buildAuthWallSnippet(pageSignals.bodyText) : null,
+    blockerType,
+    blockerUrl: blockerType ? currentUrl : null,
     externalRedirectDetected,
     redirectOrAuthRequired: authWallDetected || externalRedirectDetected
   };
@@ -416,6 +592,10 @@ async function performAcceptPath(
 ): Promise<ConsentPathExecutionResult> {
   const evidenceLog: ConsentInteractionEvidenceStep[] = [];
   let authWallDetected = false;
+  let blockerPageTitle: string | null = null;
+  let blockerTextSnippet: string | null = null;
+  let blockerType: ConsentBlockerType | null = null;
+  let blockerUrl: string | null = null;
   let externalRedirectDetected = false;
   let redirectOrAuthRequired = false;
 
@@ -435,10 +615,18 @@ async function performAcceptPath(
       });
       const blockers = await detectPathBlockers(page, startHost);
       authWallDetected = blockers.authWallDetected;
+      blockerPageTitle = blockers.blockerPageTitle;
+      blockerTextSnippet = blockers.blockerTextSnippet;
+      blockerType = blockers.blockerType;
+      blockerUrl = blockers.blockerUrl;
       externalRedirectDetected = blockers.externalRedirectDetected;
       redirectOrAuthRequired = blockers.redirectOrAuthRequired;
       return {
         authWallDetected,
+        blockerPageTitle,
+        blockerTextSnippet,
+        blockerType,
+        blockerUrl,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
@@ -452,6 +640,10 @@ async function performAcceptPath(
 
   return {
     authWallDetected,
+    blockerPageTitle,
+    blockerTextSnippet,
+    blockerType,
+    blockerUrl,
     clicked: false,
     clickCount: null,
     evidenceLog,
@@ -467,6 +659,10 @@ async function performRejectPath(
 ): Promise<ConsentPathExecutionResult> {
   const evidenceLog: ConsentInteractionEvidenceStep[] = [];
   let authWallDetected = false;
+  let blockerPageTitle: string | null = null;
+  let blockerTextSnippet: string | null = null;
+  let blockerType: ConsentBlockerType | null = null;
+  let blockerUrl: string | null = null;
   let externalRedirectDetected = false;
   let redirectOrAuthRequired = false;
   let preferencesDescents = 0;
@@ -488,6 +684,10 @@ async function performRejectPath(
         });
         const blockers = await detectPathBlockers(page, startHost);
         authWallDetected ||= blockers.authWallDetected;
+        blockerPageTitle ||= blockers.blockerPageTitle;
+        blockerTextSnippet ||= blockers.blockerTextSnippet;
+        blockerType ||= blockers.blockerType;
+        blockerUrl ||= blockers.blockerUrl;
         externalRedirectDetected ||= blockers.externalRedirectDetected;
         redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
         return true;
@@ -502,6 +702,10 @@ async function performRejectPath(
   if (await clickDirectReject()) {
     return {
       authWallDetected,
+      blockerPageTitle,
+      blockerTextSnippet,
+      blockerType,
+      blockerUrl,
       clicked: true,
       clickCount: evidenceLog.length,
       evidenceLog,
@@ -527,6 +731,10 @@ async function performRejectPath(
       });
       const blockers = await detectPathBlockers(page, startHost);
       authWallDetected ||= blockers.authWallDetected;
+      blockerPageTitle ||= blockers.blockerPageTitle;
+      blockerTextSnippet ||= blockers.blockerTextSnippet;
+      blockerType ||= blockers.blockerType;
+      blockerUrl ||= blockers.blockerUrl;
       externalRedirectDetected ||= blockers.externalRedirectDetected;
       redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       preferencesDescents += 1;
@@ -537,6 +745,10 @@ async function performRejectPath(
     if (await clickDirectReject()) {
       return {
         authWallDetected,
+        blockerPageTitle,
+        blockerTextSnippet,
+        blockerType,
+        blockerUrl,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
@@ -564,6 +776,10 @@ async function performRejectPath(
         });
         const blockers = await detectPathBlockers(page, startHost);
         authWallDetected ||= blockers.authWallDetected;
+        blockerPageTitle ||= blockers.blockerPageTitle;
+        blockerTextSnippet ||= blockers.blockerTextSnippet;
+        blockerType ||= blockers.blockerType;
+        blockerUrl ||= blockers.blockerUrl;
         externalRedirectDetected ||= blockers.externalRedirectDetected;
         redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       } catch {
@@ -591,10 +807,18 @@ async function performRejectPath(
       });
       const blockers = await detectPathBlockers(page, startHost);
       authWallDetected ||= blockers.authWallDetected;
+      blockerPageTitle ||= blockers.blockerPageTitle;
+      blockerTextSnippet ||= blockers.blockerTextSnippet;
+      blockerType ||= blockers.blockerType;
+      blockerUrl ||= blockers.blockerUrl;
       externalRedirectDetected ||= blockers.externalRedirectDetected;
       redirectOrAuthRequired ||= blockers.redirectOrAuthRequired;
       return {
         authWallDetected,
+        blockerPageTitle,
+        blockerTextSnippet,
+        blockerType,
+        blockerUrl,
         clicked: true,
         clickCount: evidenceLog.length,
         evidenceLog,
@@ -608,6 +832,10 @@ async function performRejectPath(
 
   return {
     authWallDetected,
+    blockerPageTitle,
+    blockerTextSnippet,
+    blockerType,
+    blockerUrl,
     clicked: evidenceLog.some((step) => step.action !== "preferences"),
     clickCount: evidenceLog.length > 0 ? evidenceLog.length : null,
     evidenceLog,
@@ -745,10 +973,12 @@ async function runSingleConsentInteractionAudit(input: {
   organizationId?: string | null;
   profileName?: string;
   scanId?: string;
+  startUrl?: string;
 }): Promise<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">> {
   const startedAt = Date.now();
   const startUrl =
-    input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
+    input.startUrl ??
+    (input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`);
   const homepage = await fetchStaticPage({
     pageType: "homepage",
     url: startUrl
@@ -852,6 +1082,23 @@ async function runSingleConsentInteractionAudit(input: {
     authWallDetected: rejectSession.path.authWallDetected,
     acceptNewTrackerVendorNames: difference(acceptSession.postStage.trackerVendorNames, acceptSession.baseline.trackerVendorNames),
     baseline: rejectSession.baseline,
+    consentBlockerPageTitle: rejectSession.path.blockerPageTitle,
+    consentBlockerTextSnippet: rejectSession.path.blockerTextSnippet,
+    consentBlockerType: rejectSession.path.redirectOrAuthRequired
+      ? rejectSession.path.blockerType
+      : rejectSession.path.clickCount !== null &&
+          acceptSession.path.clickCount !== null &&
+          rejectSession.path.clickCount > acceptSession.path.clickCount
+        ? "extra_click_path"
+        : null,
+    consentBlockerUrl: rejectSession.path.redirectOrAuthRequired
+      ? rejectSession.path.blockerUrl
+      : rejectSession.path.clickCount !== null &&
+          acceptSession.path.clickCount !== null &&
+          rejectSession.path.clickCount > acceptSession.path.clickCount
+        ? rejectSession.finalUrl
+        : null,
+    consentEvidencePassCount: null,
     consentFrictionDelta:
       rejectSession.path.clickCount !== null && acceptSession.path.clickCount !== null
         ? rejectSession.path.clickCount - acceptSession.path.clickCount
@@ -874,46 +1121,91 @@ async function runSingleConsentInteractionAudit(input: {
   };
 }
 
+function deriveConcreteFrictionEvidence(audit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">) {
+  return (
+    audit.consentRedirectOrAuthRequired === true ||
+    (typeof audit.consentFrictionDelta === "number" &&
+      audit.consentFrictionDelta > 0 &&
+      typeof audit.optInClicks === "number" &&
+      typeof audit.optOutClicks === "number")
+  );
+}
+
+function buildBlockerSignature(audit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">) {
+  if (audit.consentBlockerType === "auth_wall" || audit.consentBlockerType === "external_redirect") {
+    return `${audit.consentBlockerType}:${audit.consentBlockerUrl ?? audit.finalUrl}`;
+  }
+
+  if (
+    audit.consentBlockerType === "extra_click_path" &&
+    typeof audit.optInClicks === "number" &&
+    typeof audit.optOutClicks === "number"
+  ) {
+    return `${audit.consentBlockerType}:${audit.optInClicks}:${audit.optOutClicks}`;
+  }
+
+  return null;
+}
+
+function countMatchingEvidencePasses(
+  audits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">>,
+  selected: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">
+) {
+  const selectedSignature = buildBlockerSignature(selected);
+  if (!selectedSignature) {
+    return deriveConcreteFrictionEvidence(selected) ? 1 : 0;
+  }
+
+  return audits.filter((audit) => buildBlockerSignature(audit) === selectedSignature).length;
+}
+
+function chooseBestAudit(audits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">>) {
+  if (audits.length === 0) {
+    throw new Error("chooseBestAudit requires at least one audit.");
+  }
+
+  return [...audits].sort((left, right) => {
+    const leftStrength = left.consentRedirectOrAuthRequired ? 3 : left.consentBlockerType === "extra_click_path" ? 2 : 0;
+    const rightStrength = right.consentRedirectOrAuthRequired ? 3 : right.consentBlockerType === "extra_click_path" ? 2 : 0;
+    if (rightStrength !== leftStrength) {
+      return rightStrength - leftStrength;
+    }
+
+    const leftDelta = typeof left.consentFrictionDelta === "number" ? left.consentFrictionDelta : -1;
+    const rightDelta = typeof right.consentFrictionDelta === "number" ? right.consentFrictionDelta : -1;
+    if (rightDelta !== leftDelta) {
+      return rightDelta - leftDelta;
+    }
+
+    const leftInteractions = Number(left.postReject.interactionSucceeded) + Number(left.postAccept.interactionSucceeded);
+    const rightInteractions = Number(right.postReject.interactionSucceeded) + Number(right.postAccept.interactionSucceeded);
+    return rightInteractions - leftInteractions;
+  })[0]!;
+}
+
 export async function runConsentInteractionAudit(
   domain: string,
   input?: {
+    baselineRightsFrictionScore?: number | null;
     domainId?: string;
+    fallbackStartUrls?: string[];
     organizationId?: string | null;
     profileSweep?: boolean;
     scanId?: string;
   }
 ): Promise<ConsentInteractionAudit> {
+  const primaryStartUrl = domain.startsWith("http://") || domain.startsWith("https://") ? domain : `https://${domain}`;
+  const entrypoints = normalizeAuditEntrypoints(primaryStartUrl, input?.fallbackStartUrls ?? []);
+  const initialEntrypoint = entrypoints[0];
+  if (!initialEntrypoint) {
+    throw new Error("Consent interaction audit did not have a valid entrypoint.");
+  }
   const profiles = input?.profileSweep === false ? [{ name: "desktop_default", contextOptions: {} }] : getConsentProbeProfiles();
   const attemptedProbeProfiles: string[] = [];
   let winningProbeProfile = profiles[0]?.name ?? null;
-  let winningAudit = await runSingleConsentInteractionAudit({
-    domain,
-    contextOptions: profiles[0]?.contextOptions,
-    domainId: input?.domainId,
-    organizationId: input?.organizationId ?? null,
-    profileName: profiles[0]?.name,
-    scanId: input?.scanId
-  });
-  if (profiles[0]) {
-    attemptedProbeProfiles.push(profiles[0].name);
-  }
-
-  const winnerScore = (audit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">) =>
-    (audit.postReject.interactionSucceeded ? 4 : 0) +
-    (audit.postAccept.interactionSucceeded ? 2 : 0) +
-    (audit.optOutClicks ? 1 : 0) +
-    ((audit.consentFrictionDelta ?? 0) > 0 ? 2 : 0) +
-    (audit.consentRedirectOrAuthRequired ? 2 : 0) +
-    audit.postReject.trackerVendorNames.length;
-
-  if (
-    input?.profileSweep !== false &&
-    !winningAudit.postReject.interactionSucceeded &&
-    !winningAudit.postAccept.interactionSucceeded
-  ) {
-    let bestScore = winnerScore(winningAudit);
-
-    for (const profile of profiles.slice(1)) {
+  const completedAudits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">> = [];
+  try {
+    const runProfileAudit = async (profile: (typeof profiles)[number], startUrl: string) => {
       attemptedProbeProfiles.push(profile.name);
       const candidateAudit = await runSingleConsentInteractionAudit({
         domain,
@@ -921,26 +1213,150 @@ export async function runConsentInteractionAudit(
         domainId: input?.domainId,
         organizationId: input?.organizationId ?? null,
         profileName: profile.name,
-        scanId: input?.scanId
-      });
-      const candidateScore = winnerScore(candidateAudit);
-      if (candidateScore > bestScore) {
-        bestScore = candidateScore;
-        winningAudit = candidateAudit;
-        winningProbeProfile = profile.name;
+        scanId: input?.scanId,
+        startUrl
+      }).catch(() => null);
+
+      if (candidateAudit) {
+        completedAudits.push(candidateAudit);
+        await persistBestEffortConsentAudit({
+          attemptedProbeProfiles,
+          audits: completedAudits,
+          domainId: input?.domainId,
+          organizationId: input?.organizationId ?? null,
+          scanId: input?.scanId,
+          winningProbeProfile
+        });
       }
 
-      if (candidateAudit.postReject.interactionSucceeded || candidateAudit.postAccept.interactionSucceeded) {
+      return candidateAudit;
+    };
+
+    let winningAudit = profiles[0] ? await runProfileAudit(profiles[0], initialEntrypoint) : null;
+    if (!winningAudit) {
+      for (const profile of profiles.slice(1)) {
+        const candidateAudit = await runProfileAudit(profile, initialEntrypoint);
+        if (candidateAudit) {
+          winningAudit = candidateAudit;
+          winningProbeProfile = profile.name;
+          break;
+        }
+      }
+    }
+
+    if (!winningAudit) {
+      throw new Error("Consent interaction audit did not produce any completed profile runs.");
+    }
+
+    const winnerScore = (audit: Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">) =>
+      (audit.postReject.interactionSucceeded ? 4 : 0) +
+      (audit.postAccept.interactionSucceeded ? 2 : 0) +
+      (audit.optOutClicks ? 1 : 0) +
+      ((audit.consentFrictionDelta ?? 0) > 0 ? 2 : 0) +
+      (audit.consentRedirectOrAuthRequired ? 2 : 0) +
+      audit.postReject.trackerVendorNames.length;
+
+    if (
+      input?.profileSweep !== false &&
+      !winningAudit.postReject.interactionSucceeded &&
+      !winningAudit.postAccept.interactionSucceeded
+    ) {
+      let bestScore = winnerScore(winningAudit);
+
+      for (const profile of profiles.slice(1)) {
+        if (attemptedProbeProfiles.includes(profile.name)) {
+          continue;
+        }
+
+        const candidateAudit = await runProfileAudit(profile, initialEntrypoint);
+        if (!candidateAudit) {
+          continue;
+        }
+        const candidateScore = winnerScore(candidateAudit);
+        if (candidateScore > bestScore) {
+          bestScore = candidateScore;
+          winningAudit = candidateAudit;
+          winningProbeProfile = profile.name;
+          await persistBestEffortConsentAudit({
+            attemptedProbeProfiles,
+            audits: completedAudits,
+            domainId: input?.domainId,
+            organizationId: input?.organizationId ?? null,
+            scanId: input?.scanId,
+            winningProbeProfile
+          });
+        }
+
+        if (candidateAudit.postReject.interactionSucceeded || candidateAudit.postAccept.interactionSucceeded) {
+          break;
+        }
+      }
+    }
+
+    const highBaselineFriction = (input?.baselineRightsFrictionScore ?? 0) >= 75;
+    const initialEvidencePassCount = countMatchingEvidencePasses(completedAudits, winningAudit);
+    const shouldCompleteEvidence = highBaselineFriction && !deriveConcreteFrictionEvidence(winningAudit);
+    const shouldConfirmBlocker =
+      highBaselineFriction && deriveConcreteFrictionEvidence(winningAudit) && initialEvidencePassCount < 2;
+    const followupEntrypoints =
+      shouldCompleteEvidence || shouldConfirmBlocker
+        ? entrypoints.slice(1).length > 0
+          ? entrypoints.slice(1)
+          : [entrypoints[0]]
+        : [];
+
+    for (const startUrl of followupEntrypoints) {
+      const candidateAudit = await runSingleConsentInteractionAudit({
+        domain,
+        contextOptions: profiles[0]?.contextOptions,
+        domainId: input?.domainId,
+        organizationId: input?.organizationId ?? null,
+        profileName: profiles[0]?.name,
+        scanId: input?.scanId,
+        startUrl
+      }).catch(() => null);
+
+      if (!candidateAudit) {
+        continue;
+      }
+
+      completedAudits.push(candidateAudit);
+      winningAudit = chooseBestAudit(completedAudits);
+      await persistBestEffortConsentAudit({
+        attemptedProbeProfiles,
+        audits: completedAudits,
+        domainId: input?.domainId,
+        organizationId: input?.organizationId ?? null,
+        scanId: input?.scanId,
+        winningProbeProfile
+      });
+      if (deriveConcreteFrictionEvidence(winningAudit) && countMatchingEvidencePasses(completedAudits, winningAudit) >= 2) {
+        break;
+      }
+      if (deriveConcreteFrictionEvidence(winningAudit) && shouldCompleteEvidence) {
         break;
       }
     }
-  }
 
-  return {
-    ...winningAudit,
-    attemptedProbeProfiles,
-    winningProbeProfile
-  };
+    return finalizeConsentAudit({
+      attemptedProbeProfiles,
+      audits: completedAudits,
+      winningAudit,
+      winningProbeProfile
+    });
+  } catch (error) {
+    const fallbackAudit = chooseBestAvailableAudit(completedAudits);
+    if (fallbackAudit) {
+      return finalizeConsentAudit({
+        attemptedProbeProfiles,
+        audits: completedAudits,
+        winningAudit: fallbackAudit,
+        winningProbeProfile
+      });
+    }
+
+    throw error;
+  }
 }
 export type ConsentSymmetryEvidence = {
   authWallDetected: boolean;

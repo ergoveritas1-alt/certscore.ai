@@ -56,9 +56,13 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       sensitivePayloadViolations: [
         {
           detectedType: "email_detected",
+          evidenceStrength: "confirmed",
           matchSnippet: "email=al***@example.com",
           requestMethod: "POST",
           requestUrl: "https://tracker.example.net/collect",
+          sourceField: "email",
+          sourceLocation: "request_body",
+          sourcePattern: "keyed_field",
           timestamp: "2026-03-20T14:19:44.000Z",
           vendorHost: "tracker.example.net"
         }
@@ -100,6 +104,11 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentAcceptClickCount: 0,
       consentOptInClicks: 1,
       consentOptOutClicks: 3,
+      consentBlockerType: "extra_click_path",
+      consentBlockerUrl: "https://example.com/",
+      consentBlockerPageTitle: "Privacy Preferences",
+      consentBlockerTextSnippet: "Manage preferences",
+      consentEvidencePassCount: 1,
       consentFrictionDelta: 2,
       consentRedirectOrAuthRequired: false,
       consentOptInEvidenceLog: [
@@ -176,9 +185,13 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     sensitive_payload_violations: [
       {
         detectedType: "email_detected",
+        evidenceStrength: "confirmed",
         matchSnippet: "email=al***@example.com",
         requestMethod: "POST",
         requestUrl: "https://tracker.example.net/collect",
+        sourceField: "email",
+        sourceLocation: "request_body",
+        sourcePattern: "keyed_field",
         timestamp: "2026-03-20T14:19:44.000Z",
         vendorHost: "tracker.example.net"
       }
@@ -220,6 +233,11 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_accept_click_count: 0,
     consent_opt_in_clicks: 1,
     consent_opt_out_clicks: 3,
+    consent_blocker_type: "extra_click_path",
+    consent_blocker_url: "https://example.com/",
+    consent_blocker_page_title: "Privacy Preferences",
+    consent_blocker_text_snippet: "Manage preferences",
+    consent_evidence_pass_count: 1,
     consent_friction_delta: 2,
     consent_redirect_or_auth_required: false,
     consent_opt_in_evidence_log: [

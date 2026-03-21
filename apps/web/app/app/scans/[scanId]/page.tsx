@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import {
   REPORT_PRIMARY_PILLARS,
@@ -14,12 +13,28 @@ import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
 import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
+import { ReportExecutiveSummary } from "../../../../components/scans/report-executive-summary";
+import {
+  EMPHASIS_METRIC_CARD_CLASS,
+  EMPHASIS_METRIC_CARD_VALUE_CLASS,
+  METRIC_CARD_CLASS,
+  METRIC_CARD_VALUE_CLASS,
+  METRIC_GRID_CLASS,
+  PrimaryPillarGroup,
+  SectionSubsection,
+  StaticSubsection,
+  SummaryMetricTile
+} from "../../../../components/scans/report-primitives";
 import { RescanDomainForm } from "../../../../components/scans/rescan-domain-form";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
   buildCanonicalReviewFindingPresentation,
   type CanonicalReviewFindingPresentation
 } from "../../../../lib/scans/canonical-review-finding";
+import {
+  isRightsFrictionSignal,
+  shouldSurfacePrimarySignalFinding
+} from "../../../../lib/scans/finding-evidence-gates";
 import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
@@ -800,6 +815,37 @@ function deriveAccessibilityRuleEvidenceRows(input: {
   });
 }
 
+function getRepresentativeAccessibilityExamplesForSignal(input: {
+  rows: AccessibilityRuleEvidenceRow[];
+  signalKey: string;
+}) {
+  const matches = input.rows.filter((row) => {
+    if (/wcag_contrast_failures_count/i.test(input.signalKey)) {
+      return row.ruleCode === "color-contrast" || row.ruleGroup === "contrast";
+    }
+
+    if (/wcag_form_label_error_count/i.test(input.signalKey)) {
+      return row.ruleCode === "label" || row.ruleGroup === "label";
+    }
+
+    if (/wcag_link_name_error_count/i.test(input.signalKey)) {
+      return row.ruleCode === "link-name" || row.ruleGroup === "link";
+    }
+
+    return false;
+  });
+
+  return matches.slice(0, 3).map((row) => ({
+    description: row.description,
+    help: row.help,
+    helpUrl: row.helpUrl,
+    pageUrl: row.pageUrl,
+    representativeSelectors: row.representativeSelectors.slice(0, 3),
+    ruleCode: row.ruleCode,
+    ruleGroup: row.ruleGroup
+  }));
+}
+
 function hasTruthySignal(
   signals: Array<{ key: string; value: boolean | number | string | string[] }>,
   key: string
@@ -901,70 +947,6 @@ type ResultDetail = {
   value: unknown;
 };
 
-const METRIC_GRID_CLASS = "grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
-const METRIC_CARD_CLASS = "rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5";
-const METRIC_CARD_VALUE_CLASS = "mt-1 text-sm font-semibold text-slate-950";
-const EMPHASIS_METRIC_CARD_CLASS = "rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2.5";
-const EMPHASIS_METRIC_CARD_VALUE_CLASS = "mt-1 text-sm font-semibold text-amber-950";
-
-function SectionSubsection(input: {
-  title: string;
-  intro?: string;
-  tooltip?: string;
-  children: ReactNode;
-  defaultOpen?: boolean;
-}) {
-  return (
-    <CollapsibleSectionCard
-      title={
-        <span className="flex items-center gap-1.5">
-          <span>{input.title}</span>
-          {input.tooltip ? <InfoTip text={input.tooltip} /> : null}
-        </span>
-      }
-      subtitle={input.intro}
-      defaultOpen={input.defaultOpen ?? true}
-      contentClassName="space-y-4"
-    >
-      {input.children}
-    </CollapsibleSectionCard>
-  );
-}
-
-function StaticSubsection(input: {
-  title: string;
-  intro?: string;
-  tooltip?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-      <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium text-slate-900">{input.title}</p>
-          {input.tooltip ? <InfoTip text={input.tooltip} /> : null}
-        </div>
-        {input.intro ? <p className="text-sm text-slate-600">{input.intro}</p> : null}
-      </div>
-      {input.children}
-    </div>
-  );
-}
-
-function PrimaryPillarGroup(input: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold text-slate-950">{input.title}</h2>
-      </div>
-      <div className="space-y-4">{input.children}</div>
-    </section>
-  );
-}
-
 type CanonicalReviewIssue = {
   description: string;
   evidence?: string[];
@@ -977,6 +959,7 @@ type CanonicalReviewFinding = {
   categoryId?: string;
   description: string;
   evidence?: string[];
+  fallbackEvidence?: Record<string, unknown>;
   id: string;
   linkedValidationFinding?: ScanValidationFinding | null;
   observedValue: string | null;
@@ -1404,31 +1387,181 @@ function severityRank(severity: CanonicalReviewFinding["severity"]) {
   }
 }
 
+function getKeyPageTypeForSignal(key: string) {
+  if (/disclosure\.privacy_policy_fetch_failed/i.test(key)) {
+    return "privacy_policy";
+  }
+  if (/disclosure\.terms_of_service_fetch_failed/i.test(key)) {
+    return "terms_of_service";
+  }
+  if (/disclosure\.cookie_policy_fetch_failed/i.test(key)) {
+    return "cookie_policy";
+  }
+  if (/disclosure\.accessibility_statement_fetch_failed/i.test(key)) {
+    return "accessibility_statement";
+  }
+  if (/disclosure\.contact_page_fetch_failed/i.test(key)) {
+    return "contact";
+  }
+  return null;
+}
+
+function getKeyPageDiscoveryPageSummary(
+  summary: unknown,
+  pageType: string
+): {
+  attemptCount: number | null;
+  attemptedUrls: string[];
+  bestDiscoverySource: string | null;
+  guessedOnly: boolean;
+  stopReason: string | null;
+} | null {
+  if (!summary || typeof summary !== "object") {
+    return null;
+  }
+
+  const pageSummaries = (summary as { pageSummaries?: unknown }).pageSummaries;
+  if (!Array.isArray(pageSummaries)) {
+    return null;
+  }
+
+  const match = pageSummaries.find(
+    (entry): entry is Record<string, unknown> =>
+      Boolean(entry) && typeof entry === "object" && entry.pageType === pageType
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    attemptCount: typeof match.attemptCount === "number" ? match.attemptCount : null,
+    attemptedUrls: Array.isArray(match.attemptedUrls)
+      ? match.attemptedUrls.filter((value): value is string => typeof value === "string")
+      : [],
+    bestDiscoverySource: typeof match.bestDiscoverySource === "string" ? match.bestDiscoverySource : null,
+    guessedOnly: match.guessedOnly === true
+    ,
+    stopReason: typeof match.stopReason === "string" ? match.stopReason : null
+  };
+}
+
 function buildReviewFindings(input: {
   categoryId?: string;
   issues: CanonicalReviewIssue[];
+  prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
+  runtimeArtifacts?: Record<string, unknown> | null;
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
   validationFindingLookup?: Map<string, ScanValidationFinding>;
 }) {
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
     .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
-    .map((item) => ({
-      categoryId: input.categoryId,
-      description: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention.",
-      id: `${input.sectionId}-signal-${item.key}`,
-      linkedValidationFinding: input.validationFindingLookup
+    .flatMap((item): CanonicalReviewFinding[] => {
+      const linkedValidationFinding = input.validationFindingLookup
         ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
-        : null,
-      observedValue: formatCompactValue(item.value),
-      presentation: {
-        findingName: item.label,
-        suggestedFix: "Review the flagged evidence in this section and confirm whether the signal needs follow-up.",
-        whyThisMatters: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention."
-      },
-      severity: getSignalFindingSeverity(item.key, item.value),
-      title: item.label
-    }));
+        : null;
+      const keyPageType = getKeyPageTypeForSignal(item.key);
+      const keyPageSummary =
+        keyPageType
+          ? getKeyPageDiscoveryPageSummary(input.runtimeArtifacts?.key_page_discovery_summary, keyPageType)
+          : null;
+      const accessibilityRuleExamples = getRepresentativeAccessibilityExamplesForSignal({
+        rows: input.prioritizedAccessibilityRuleRows,
+        signalKey: item.key
+      });
+
+      const fallbackEvidence =
+        isRightsFrictionSignal(item.key)
+          ? {
+              consentBlockerPageTitle:
+                typeof input.runtimeArtifacts?.consent_blocker_page_title === "string"
+                  ? input.runtimeArtifacts.consent_blocker_page_title
+                  : null,
+              consentBlockerTextSnippet:
+                typeof input.runtimeArtifacts?.consent_blocker_text_snippet === "string"
+                  ? input.runtimeArtifacts.consent_blocker_text_snippet
+                  : null,
+              consentBlockerType:
+                typeof input.runtimeArtifacts?.consent_blocker_type === "string"
+                  ? input.runtimeArtifacts.consent_blocker_type
+                  : null,
+              consentBlockerUrl:
+                typeof input.runtimeArtifacts?.consent_blocker_url === "string"
+                  ? input.runtimeArtifacts.consent_blocker_url
+                  : null,
+              consentEvidencePassCount:
+                typeof input.runtimeArtifacts?.consent_evidence_pass_count === "number"
+                  ? input.runtimeArtifacts.consent_evidence_pass_count
+                  : null,
+              consentFrictionDelta:
+                typeof input.runtimeArtifacts?.consent_friction_delta === "number"
+                  ? input.runtimeArtifacts.consent_friction_delta
+                  : null,
+              consentOptInClicks:
+                typeof input.runtimeArtifacts?.consent_opt_in_clicks === "number"
+                  ? input.runtimeArtifacts.consent_opt_in_clicks
+                  : null,
+              consentOptOutClicks:
+                typeof input.runtimeArtifacts?.consent_opt_out_clicks === "number"
+                  ? input.runtimeArtifacts.consent_opt_out_clicks
+                  : null,
+              consentRedirectOrAuthRequired: input.runtimeArtifacts?.consent_redirect_or_auth_required === true,
+              signalKey: item.key,
+              signalLabel: item.label,
+              signalValue: item.value
+            }
+          : /commerce\.high_sensitivity_data_collection_detected/i.test(item.key)
+            ? {
+                sensitivePayloadViolations: Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
+                  ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
+                  : [],
+                signalKey: item.key,
+                signalLabel: item.label,
+                signalValue: item.value
+              }
+            : keyPageType
+              ? {
+                  keyPageAttemptCount: keyPageSummary?.attemptCount ?? null,
+                  keyPageDiscoverySource: keyPageSummary?.bestDiscoverySource ?? null,
+                  keyPageGuessedOnly: keyPageSummary?.guessedOnly ?? null,
+                  keyPageAttemptedUrls: keyPageSummary?.attemptedUrls ?? [],
+                  keyPageStopReason: keyPageSummary?.stopReason ?? null,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                }
+              : {
+                  accessibilityRuleExamples,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                };
+
+      if (!shouldSurfacePrimarySignalFinding({
+        fallbackEvidence,
+        key: item.key,
+        linkedValidationEvidence: linkedValidationFinding?.evidence ?? null
+      })) {
+        return [];
+      }
+
+      return [{
+        categoryId: input.categoryId,
+        description: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention.",
+        fallbackEvidence,
+        id: `${input.sectionId}-signal-${item.key}`,
+        linkedValidationFinding,
+        observedValue: formatCompactValue(item.value),
+        presentation: {
+          findingName: item.label,
+          suggestedFix: "Review the flagged evidence in this section and confirm whether the signal needs follow-up.",
+          whyThisMatters: getSignalConcernReason(item.key, item.value) ?? "This signal is worth reviewer attention."
+        },
+        severity: getSignalFindingSeverity(item.key, item.value),
+        title: item.label
+      }];
+    });
 
   const issueFindings: CanonicalReviewFinding[] = input.issues.map((issue, index) => ({
     categoryId: input.categoryId ?? getDefaultIssueCategoryId(input.sectionId),
@@ -1466,6 +1599,7 @@ function enrichReviewFindingsPresentation(findings: CanonicalReviewFinding[]) {
     const presentation = buildCanonicalReviewFindingPresentation(
       {
         evidence: finding.evidence,
+        fallbackEvidence: finding.fallbackEvidence,
         linkedValidationFinding: finding.linkedValidationFinding,
         observedValue: finding.observedValue,
         severity: finding.severity,
@@ -1473,6 +1607,7 @@ function enrichReviewFindingsPresentation(findings: CanonicalReviewFinding[]) {
       },
       siblingFindings.map((candidate) => ({
         evidence: candidate.evidence,
+        fallbackEvidence: candidate.fallbackEvidence,
         linkedValidationFinding: candidate.linkedValidationFinding,
         observedValue: candidate.observedValue,
         severity: candidate.severity,
@@ -1737,6 +1872,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                 const reviewFindings = buildReviewFindings({
                   categoryId: category.id,
                   issues: [],
+                  prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
+                  runtimeArtifacts: input.scanRecord.runtimeArtifacts,
                   sectionId: section.id,
                   sectionItems: items,
                   validationFindingLookup
@@ -1761,6 +1898,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             });
             const reviewFindings = buildReviewFindings({
               issues,
+              prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
+              runtimeArtifacts: input.scanRecord.runtimeArtifacts,
               sectionId: section.id,
               sectionItems: [],
               validationFindingLookup
@@ -1970,13 +2109,12 @@ function ResultCategorySection(input: {
     <>
       <div className={METRIC_GRID_CLASS}>
         {input.metrics.map((metric) => (
-          <div key={`${input.title}-${metric.label}`} className={METRIC_CARD_CLASS}>
-            <div className="flex items-center gap-1.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{metric.label}</p>
-              <InfoTip align="start" text={metric.tooltip} />
-            </div>
-            <p className={METRIC_CARD_VALUE_CLASS}>{metric.value}</p>
-          </div>
+          <SummaryMetricTile
+            key={`${input.title}-${metric.label}`}
+            label={metric.label}
+            tooltip={metric.tooltip}
+            value={metric.value}
+          />
         ))}
       </div>
 
@@ -1985,20 +2123,22 @@ function ResultCategorySection(input: {
           <CollapsibleSectionCard title={input.detailsTitle ?? "Detail signals"} defaultOpen={false}>
               <div className={METRIC_GRID_CLASS}>
                 {visibleDetails.map((detail) => (
-                <div key={`${input.title}-${detail.label}`} className={METRIC_CARD_CLASS}>
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{detail.label}</p>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(detail.value)}</p>
-                </div>
+                <SummaryMetricTile
+                  key={`${input.title}-${detail.label}`}
+                  label={detail.label}
+                  value={formatCompactValue(detail.value)}
+                />
               ))}
             </div>
           </CollapsibleSectionCard>
         ) : (
           <div className={METRIC_GRID_CLASS}>
             {visibleDetails.map((detail) => (
-              <div key={`${input.title}-${detail.label}`} className={METRIC_CARD_CLASS}>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{detail.label}</p>
-                <p className={METRIC_CARD_VALUE_CLASS}>{formatCompactValue(detail.value)}</p>
-              </div>
+              <SummaryMetricTile
+                key={`${input.title}-${detail.label}`}
+                label={detail.label}
+                value={formatCompactValue(detail.value)}
+              />
             ))}
           </div>
         )
@@ -2252,108 +2392,87 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       ) : null}
 
       {snapshot ? (
-        <div className="grid gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-base font-semibold text-slate-900">Executive summary</p>
-                  <InfoTip
-                    align="start"
-                    text="These ratings mirror the five primary evidence sections and use a 0.0 to 5.0 higher-is-better scale."
-                  />
-                </div>
-              </div>
-
-              {scanExecutionSummary ? (
-                <div
-                  className={
-                    scanExecutionSummary.tone === "danger"
-                      ? "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950"
-                      : scanExecutionSummary.tone === "success"
-                        ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
-                        : "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        <ReportExecutiveSummary
+          titleTooltip="These ratings mirror the five primary evidence sections and use a 0.0 to 5.0 higher-is-better scale."
+          statusCallout={
+            scanExecutionSummary
+              ? {
+                  title: scanExecutionSummary.title,
+                  details: scanExecutionSummary.details,
+                  tone: scanExecutionSummary.tone
+                }
+              : null
+          }
+          metrics={[
+            {
+              label: "Privacy & disclosure",
+              tooltip:
+                "Combined 1 to 5 section rating for privacy-policy quality, policy-page coverage, and consumer-facing disclosure posture.",
+              value: formatRating(privacyLegalSectionScore)
+            },
+            {
+              label: "Consent",
+              tooltip:
+                "Combined 1 to 5 section rating for banner visibility, choice quality, CMP posture, and consent-flow behavior.",
+              value: formatRating(cookieConsentSectionScore)
+            },
+            {
+              label: "Trackers",
+              tooltip:
+                "Combined 1 to 5 section rating for tracker risk, third-party collection surface, and the observed vendor ecosystem.",
+              value: formatRating(trackerSectionScore)
+            },
+            {
+              label: "Pre-consent",
+              tooltip:
+                "Combined 1 to 5 section rating for whether trackers fired before consent and whether the consent audit showed enforcement failures.",
+              value: formatRating(preconsentSectionScore)
+            },
+            {
+              label: "Accessibility & consumer",
+              tooltip:
+                "Combined 1 to 5 section rating for accessibility posture, WCAG-oriented findings, and broader consumer-facing signals.",
+              value: formatRating(accessibilityConsumerSectionScore)
+            }
+          ]}
+          badges={[
+            ...(policyBehaviorContradictions.length > 0
+              ? [
+                  {
+                    label: `${policyBehaviorContradictions.length} contradiction${policyBehaviorContradictions.length === 1 ? "" : "s"}`,
+                    tone: "warning" as const,
+                    tooltip:
+                      "Number of policy-versus-behavior contradictions surfaced from comparing public claims with observed runtime behavior."
                   }
-                >
-                  <p className="font-semibold">{scanExecutionSummary.title}</p>
-                  <ul
-                    className={
-                      scanExecutionSummary.tone === "danger"
-                        ? "mt-2 space-y-1 text-rose-900"
-                        : scanExecutionSummary.tone === "success"
-                          ? "mt-2 space-y-1 text-emerald-900"
-                          : "mt-2 space-y-1 text-amber-900"
-                    }
-                  >
-                    {scanExecutionSummary.details.map((detail) => (
-                      <li key={detail}>• {detail}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div className={METRIC_GRID_CLASS}>
-                <div className={METRIC_CARD_CLASS}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Privacy & disclosure</p>
-                    <InfoTip align="start" text="Combined 1 to 5 section rating for privacy-policy quality, policy-page coverage, and consumer-facing disclosure posture." />
-                  </div>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatRating(privacyLegalSectionScore)}</p>
-                </div>
-                <div className={METRIC_CARD_CLASS}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Consent</p>
-                    <InfoTip align="start" text="Combined 1 to 5 section rating for banner visibility, choice quality, CMP posture, and consent-flow behavior." />
-                  </div>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatRating(cookieConsentSectionScore)}</p>
-                </div>
-                <div className={METRIC_CARD_CLASS}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Trackers</p>
-                    <InfoTip align="start" text="Combined 1 to 5 section rating for tracker risk, third-party collection surface, and the observed vendor ecosystem." />
-                  </div>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatRating(trackerSectionScore)}</p>
-                </div>
-                <div className={METRIC_CARD_CLASS}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Pre-consent</p>
-                    <InfoTip align="start" text="Combined 1 to 5 section rating for whether trackers fired before consent and whether the consent audit showed enforcement failures." />
-                  </div>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatRating(preconsentSectionScore)}</p>
-                </div>
-                <div className={METRIC_CARD_CLASS}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Accessibility & consumer</p>
-                    <InfoTip align="start" text="Combined 1 to 5 section rating for accessibility posture, WCAG-oriented findings, and broader consumer-facing signals." />
-                  </div>
-                  <p className={METRIC_CARD_VALUE_CLASS}>{formatRating(accessibilityConsumerSectionScore)}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {policyBehaviorContradictions.length > 0 ? (
-                  <div className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
-                    <span>{policyBehaviorContradictions.length} contradiction{policyBehaviorContradictions.length === 1 ? "" : "s"}</span>
-                    <InfoTip align="start" text="Number of policy-versus-behavior contradictions surfaced from comparing public claims with observed runtime behavior." />
-                  </div>
-                ) : null}
-                {(consentPreconsentViolationCount ?? 0) > 0 ? (
-                  <div className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
-                    <span>{consentPreconsentViolationCount} pre-consent conflict{consentPreconsentViolationCount === 1 ? "" : "s"}</span>
-                    <InfoTip align="start" text="Number of tracker vendors with persisted evidence showing they fired before a consent interaction was completed." />
-                  </div>
-                ) : null}
-                {consentAuditCompleted ? (
-                  <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700">
-                    <span>reject {consentRejectReducedTracking === false ? "failed" : consentRejectReducedTracking === true ? "reduced tracking" : "audit completed"}</span>
-                    <InfoTip align="start" text="Outcome of the consent interaction audit after attempting a reject path. This shows whether tracking activity actually changed after the choice." />
-                  </div>
-                ) : null}
-              </div>
-
-            </div>
-          </div>
-        </div>
+                ]
+              : []),
+            ...((consentPreconsentViolationCount ?? 0) > 0
+              ? [
+                  {
+                    label: `${consentPreconsentViolationCount} pre-consent conflict${consentPreconsentViolationCount === 1 ? "" : "s"}`,
+                    tone: "warning" as const,
+                    tooltip:
+                      "Number of tracker vendors with persisted evidence showing they fired before a consent interaction was completed."
+                  }
+                ]
+              : []),
+            ...(consentAuditCompleted
+              ? [
+                  {
+                    label: `reject ${
+                      consentRejectReducedTracking === false
+                        ? "failed"
+                        : consentRejectReducedTracking === true
+                          ? "reduced tracking"
+                          : "audit completed"
+                    }`,
+                    tooltip:
+                      "Outcome of the consent interaction audit after attempting a reject path. This shows whether tracking activity actually changed after the choice."
+                  }
+                ]
+              : [])
+          ]}
+        />
       ) : null}
 
       {snapshot ? (

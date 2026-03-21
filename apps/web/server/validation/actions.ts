@@ -2,6 +2,7 @@
 
 import type { ValidationRunMode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
+import { getValidationQueueAvailability } from "../queue/validation-queue";
 import {
   addValidationTargetAction,
   queueManualValidationRunAction,
@@ -10,6 +11,10 @@ import {
   updateValidationSettingsAction,
   updateValidationTargetStateAction
 } from "./repository";
+
+export type ValidationRescanActionState = {
+  error: string | null;
+};
 
 export async function submitValidationSettingsAction(formData: FormData) {
   const runMode = String(formData.get("runMode") ?? "manual") === "automatic" ? "automatic" : "manual";
@@ -88,6 +93,32 @@ export async function submitValidationRescanAction(formData: FormData) {
   const domainId = String(formData.get("domainId") ?? "").trim();
   if (!domainId) {
     throw new Error("Missing validation domain.");
+  }
+
+  const result = await queueValidationRescanAction({ domainId });
+  redirect(`/app/scans/${result.scanId}`);
+}
+
+const initialValidationRescanState: ValidationRescanActionState = {
+  error: null
+};
+
+export async function submitValidationRescanFormAction(
+  _previousState: ValidationRescanActionState = initialValidationRescanState,
+  formData: FormData
+): Promise<ValidationRescanActionState> {
+  const queueAvailability = getValidationQueueAvailability();
+  if (!queueAvailability.enabled) {
+    return {
+      error: queueAvailability.reason
+    };
+  }
+
+  const domainId = String(formData.get("domainId") ?? "").trim();
+  if (!domainId) {
+    return {
+      error: "Missing validation domain."
+    };
   }
 
   const result = await queueValidationRescanAction({ domainId });

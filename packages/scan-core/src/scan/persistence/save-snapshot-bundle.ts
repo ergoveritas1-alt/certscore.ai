@@ -3,6 +3,21 @@ import type { SnapshotBundle } from "../snapshot/types";
 import { camelToSnakeRecord } from "../snapshot/case";
 import { TRACKER_VENDOR_SIGNATURES } from "../snapshot/signature-registry";
 
+type AccessibilityEvidencePersistenceInput = {
+  accessibilityRuleCounts: SnapshotBundle["accessibilityRuleCounts"];
+  accessibilityRuleExamples: SnapshotBundle["accessibilityRuleExamples"];
+  domainId: string | null;
+  organizationId: string | null;
+  scanId: string;
+};
+
+type RuntimeArtifactsPatchInput = {
+  domainId: string | null;
+  organizationId: string | null;
+  runtimeArtifacts: Record<string, unknown>;
+  scanId: string;
+};
+
 export function buildRuntimeArtifactRow(bundle: SnapshotBundle) {
   return {
     ...camelToSnakeRecord(bundle.runtimeArtifacts),
@@ -185,6 +200,65 @@ export function buildAccessibilityRuleExampleRows(bundle: SnapshotBundle) {
   }));
 }
 
+export async function persistAccessibilityEvidence(input: AccessibilityEvidencePersistenceInput) {
+  const supabase = createAdminClient();
+
+  if (input.accessibilityRuleCounts.length > 0) {
+    const ruleRows = input.accessibilityRuleCounts.map((rule) => ({
+      ...camelToSnakeRecord(rule),
+      organization_id: input.organizationId,
+      domain_id: input.domainId
+    }));
+    const { error: rulesError } = await supabase.from("scan_accessibility_rule_counts").upsert(ruleRows, {
+      onConflict: "scan_id,rule_code"
+    });
+
+    if (rulesError) {
+      throw new Error(`Failed to persist scan accessibility rule counts: ${rulesError.message}`);
+    }
+  }
+
+  const { error: deleteRuleExamplesError } = await supabase
+    .from("scan_accessibility_rule_examples")
+    .delete()
+    .eq("scan_id", input.scanId);
+  if (deleteRuleExamplesError) {
+    throw new Error(`Failed to clear scan accessibility rule examples: ${deleteRuleExamplesError.message}`);
+  }
+
+  if (input.domainId && input.accessibilityRuleExamples.length > 0) {
+    const ruleExampleRows = input.accessibilityRuleExamples.map((example) => ({
+      ...camelToSnakeRecord(example),
+      organization_id: input.organizationId,
+      domain_id: input.domainId
+    }));
+    const { error: ruleExamplesError } = await supabase.from("scan_accessibility_rule_examples").insert(ruleExampleRows);
+
+    if (ruleExamplesError) {
+      throw new Error(`Failed to persist scan accessibility rule examples: ${ruleExamplesError.message}`);
+    }
+  }
+}
+
+export async function persistRuntimeArtifactsPatch(input: RuntimeArtifactsPatchInput) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("scan_runtime_artifacts").upsert(
+    {
+      ...camelToSnakeRecord(input.runtimeArtifacts),
+      domain_id: input.domainId,
+      organization_id: input.organizationId,
+      scan_id: input.scanId
+    },
+    {
+      onConflict: "scan_id"
+    }
+  );
+
+  if (error) {
+    throw new Error(`Failed to persist scan runtime artifacts patch: ${error.message}`);
+  }
+}
+
 export async function saveSnapshotBundle(bundle: SnapshotBundle) {
   const supabase = createAdminClient();
   const snapshotInsert = buildSnapshotInsert(bundle, {
@@ -249,13 +323,12 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
     }
   }
 
-  const { error: runtimeArtifactsError } = await supabase.from("scan_runtime_artifacts").upsert(buildRuntimeArtifactRow(bundle), {
-    onConflict: "scan_id"
+  await persistRuntimeArtifactsPatch({
+    domainId: bundle.snapshot.domainId,
+    organizationId: bundle.snapshot.organizationId,
+    runtimeArtifacts: bundle.runtimeArtifacts,
+    scanId: bundle.snapshot.scanId
   });
-
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to persist scan runtime artifacts: ${runtimeArtifactsError.message}`);
-  }
 
   const { error: deletePreconsentViolationsError } = await supabase
     .from("scan_preconsent_violations")
@@ -294,43 +367,13 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
     }
   }
 
-  const { error: deleteRulesError } = await supabase
-    .from("scan_accessibility_rule_counts")
-    .delete()
-    .eq("scan_id", bundle.snapshot.scanId);
-  if (deleteRulesError) {
-    throw new Error(`Failed to clear scan accessibility rule counts: ${deleteRulesError.message}`);
-  }
-
-  if (bundle.accessibilityRuleCounts.length > 0) {
-    const ruleRows = bundle.accessibilityRuleCounts.map((rule) => ({
-      ...camelToSnakeRecord(rule),
-      organization_id: bundle.snapshot.organizationId,
-      domain_id: bundle.snapshot.domainId
-    }));
-    const { error: rulesError } = await supabase.from("scan_accessibility_rule_counts").insert(ruleRows);
-
-    if (rulesError) {
-      throw new Error(`Failed to persist scan accessibility rule counts: ${rulesError.message}`);
-    }
-  }
-
-  const { error: deleteRuleExamplesError } = await supabase
-    .from("scan_accessibility_rule_examples")
-    .delete()
-    .eq("scan_id", bundle.snapshot.scanId);
-  if (deleteRuleExamplesError) {
-    throw new Error(`Failed to clear scan accessibility rule examples: ${deleteRuleExamplesError.message}`);
-  }
-
-  const ruleExampleRows = buildAccessibilityRuleExampleRows(bundle);
-  if (ruleExampleRows.length > 0) {
-    const { error: ruleExamplesError } = await supabase.from("scan_accessibility_rule_examples").insert(ruleExampleRows);
-
-    if (ruleExamplesError) {
-      throw new Error(`Failed to persist scan accessibility rule examples: ${ruleExamplesError.message}`);
-    }
-  }
+  await persistAccessibilityEvidence({
+    accessibilityRuleCounts: bundle.accessibilityRuleCounts,
+    accessibilityRuleExamples: bundle.accessibilityRuleExamples,
+    domainId: bundle.snapshot.domainId,
+    organizationId: bundle.snapshot.organizationId,
+    scanId: bundle.snapshot.scanId
+  });
 
   const { error: deletePagesError } = await supabase.from("scan_pages").delete().eq("scan_id", bundle.snapshot.scanId);
   if (deletePagesError) {

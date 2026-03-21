@@ -13,6 +13,7 @@ export type ReviewFindingSeverity = "high" | "medium" | "low";
 
 export type ReviewFindingPresentationSource = {
   evidence?: string[];
+  fallbackEvidence?: Record<string, unknown> | null;
   linkedValidationFinding?: Pick<ScanValidationFinding, "evidence" | "pageUrl" | "ruleKey" | "title"> | null;
   observedValue: string | null;
   severity: ReviewFindingSeverity;
@@ -49,6 +50,42 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
     return "Bounded key-page discovery unresolved";
   }
 
+  if (/^high-sensitivity data collection detected$/i.test(normalized)) {
+    return "Potential high-sensitivity data collection risk";
+  }
+
+  if (/^contrast failures$/i.test(normalized)) {
+    return "Contrast failures detected";
+  }
+
+  if (/^form label issues$/i.test(normalized)) {
+    return "Form label issues detected";
+  }
+
+  if (/^link name issues$/i.test(normalized)) {
+    return "Link name issues detected";
+  }
+
+  if (/^cookie policy unavailable$/i.test(normalized)) {
+    return "Cookie policy not retrievable";
+  }
+
+  if (/^privacy policy page unavailable$/i.test(normalized)) {
+    return "Privacy policy not retrievable";
+  }
+
+  if (/^terms page unavailable$/i.test(normalized)) {
+    return "Terms page not retrievable";
+  }
+
+  if (/^accessibility statement unavailable$/i.test(normalized)) {
+    return "Accessibility statement not retrievable";
+  }
+
+  if (/^contact page unavailable$/i.test(normalized)) {
+    return "Contact page not retrievable";
+  }
+
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
@@ -56,6 +93,7 @@ function buildFallbackEvidence(input: ReviewFindingPresentationSource) {
   const pageUrls = (input.evidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim()));
 
   return {
+    ...(input.fallbackEvidence ?? {}),
     observedValue: input.observedValue,
     pageUrls,
     severity: input.severity,

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
-import { submitValidationRescanAction } from "../../server/validation/actions";
 import { listValidationRuns } from "../../server/validation/repository";
+import { ValidationRescanForm } from "./validation-rescan-form";
+import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 type ValidationScansPageProps = {
   page?: number;
@@ -16,9 +17,11 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
     rankBand,
     status
   });
+  const hasActiveRuns = result.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status));
 
   return (
     <div className="space-y-8">
+      <ValidationRunsAutoRefresh enabled={hasActiveRuns} />
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">All validation scans</h1>
         <p className="max-w-3xl text-slate-600">Most recent runs first, showing persisted automated CertScore findings.</p>
@@ -90,7 +93,12 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                     <td className="py-4 pr-4 text-slate-600">
                       {run.trancoRank ?? "—"} · {run.rankBand ?? "—"}
                     </td>
-                    <td className="py-4 pr-4 text-slate-600">{run.status}</td>
+                    <td className="py-4 pr-4 text-slate-600">
+                      <div>
+                        <p>Validation: {run.status}</p>
+                        <p className="text-xs text-slate-500">Scan: {run.scanStatus ?? "—"}</p>
+                      </div>
+                    </td>
                     <td className="py-4 pr-4 text-slate-600">
                       {run.findingCount} flagged
                     </td>
@@ -100,12 +108,7 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                           View results
                         </Link>
                         {run.domainId ? (
-                          <form action={submitValidationRescanAction}>
-                            <input name="domainId" type="hidden" value={run.domainId} />
-                            <button className="text-sm font-medium text-slate-900 underline underline-offset-4" type="submit">
-                              Re-scan
-                            </button>
-                          </form>
+                          <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
                         ) : null}
                       </div>
                     </td>
