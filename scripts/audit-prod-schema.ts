@@ -55,12 +55,18 @@ const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
     "last_worker_heartbeat_at",
     "last_worker_host"
   ],
+  validation_audit_events: ["metadata_json"],
   validation_run_findings: [
     "finding_family",
     "finding_source",
     "finding_scope",
     "finding_subject"
   ],
+  validation_runs: [
+    "domain_id",
+    "triggered_by_user_id"
+  ],
+  validation_targets: ["consecutive_failures"],
   validation_verdicts: [
     "id",
     "validation_run_finding_id",
