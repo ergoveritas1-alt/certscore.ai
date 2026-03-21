@@ -62,9 +62,6 @@ The repo includes a helper script that:
 - refuses to run if `REDIS_URL` still points at `localhost` or the old Upstash host
 
 ```bash
-set -a
-source .env.prod.ops
-set +a
 PROJECT_ID=<project-id> REGION=us-central1 ./deploy.sh
 ```
 
@@ -72,7 +69,7 @@ Best practice:
 
 - Vercel remains the source of truth for production web env vars.
 - Cloud Run worker pools should bind sensitive worker values from GCP Secret Manager, not from a repo-local env file.
-- Keep `.env.prod.ops` only as a temporary operator file for audits, migrations, and initial secret seeding.
+- The deploy scripts have production-safe defaults for non-secret Supabase/storage config, so a repo-local prod env file is no longer part of the normal deploy path.
 
 Optional values the script forwards if present:
 
