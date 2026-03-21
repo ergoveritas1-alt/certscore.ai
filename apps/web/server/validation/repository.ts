@@ -1761,11 +1761,43 @@ export async function updateValidationTargetStateAction(input: {
   clearBackoff?: boolean;
   denyReason?: string | null;
   denylisted?: boolean;
+  hostname?: string;
+  normalizedUrl?: string;
+  source?: string;
   targetId: string;
+  trancoRank?: number;
 }) {
   const context = await requireAdmin();
   const supabase = createAdminClient();
   const patch: Record<string, string | boolean | null> = {};
+  const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
+
+  let resolvedTargetId = input.targetId;
+  if (isSyntheticPreviewTarget && input.hostname && input.normalizedUrl) {
+    const materializedSource = input.source === "tranco" ? "tranco" : "manual";
+    const { data: insertedTarget, error: insertError } = await supabase
+      .from("validation_targets")
+      .upsert(
+        {
+          active: true,
+          denylisted: false,
+          hostname: input.hostname,
+          normalized_url: input.normalizedUrl,
+          rank_band: rankBandForRank(input.trancoRank ?? null),
+          source: materializedSource,
+          tranco_rank: input.trancoRank ?? null
+        },
+        { onConflict: "hostname" }
+      )
+      .select("id")
+      .single();
+
+    if (insertError || !insertedTarget) {
+      throw new Error(`Failed to materialize validation target: ${insertError?.message ?? "Unknown error"}`);
+    }
+
+    resolvedTargetId = (insertedTarget as { id: string }).id;
+  }
 
   if (input.clearBackoff) {
     patch.backoff_until = null;
@@ -1778,7 +1810,7 @@ export async function updateValidationTargetStateAction(input: {
     patch.deny_reason = input.denylisted ? input.denyReason ?? "Suppressed by operator." : null;
   }
 
-  const { error } = await supabase.from("validation_targets").update(patch).eq("id", input.targetId);
+  const { error } = await supabase.from("validation_targets").update(patch).eq("id", resolvedTargetId);
   if (error) {
     throw new Error(`Failed to update validation target: ${error.message}`);
   }
@@ -1786,7 +1818,10 @@ export async function updateValidationTargetStateAction(input: {
   await supabase.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: input.denylisted ? "validation.target_suppressed" : input.clearBackoff ? "validation.target_backoff_cleared" : "validation.target_updated",
-    metadata_json: input
+    metadata_json: {
+      ...input,
+      targetId: resolvedTargetId
+    }
   });
 
   revalidatePath("/app");

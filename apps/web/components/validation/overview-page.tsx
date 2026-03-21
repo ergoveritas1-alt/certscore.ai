@@ -239,15 +239,28 @@ export async function ValidationOverviewPage() {
                             Manual run
                           </button>
                         </form>
-                        {target.isPersisted ? (
-                          <form action={submitValidationTargetAction}>
-                            <input name="targetId" type="hidden" value={target.id} />
-                            <input name="targetAction" type="hidden" value="remove" />
-                            <button className="rounded-full border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 transition hover:border-rose-400 hover:text-rose-800" type="submit">
-                              Remove
-                            </button>
-                          </form>
-                        ) : null}
+                        <form action={submitValidationTargetAction}>
+                          <input name="hostname" type="hidden" value={target.hostname} />
+                          <input name="normalizedUrl" type="hidden" value={target.normalizedUrl} />
+                          <input name="source" type="hidden" value={target.source ?? ""} />
+                          <input name="targetId" type="hidden" value={target.id} />
+                          <input name="targetAction" type="hidden" value={target.denylisted ? "restore" : "deny"} />
+                          <input name="trancoRank" type="hidden" value={target.trancoRank ?? ""} />
+                          <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
+                            {target.denylisted ? "Re-include" : "Exclude"}
+                          </button>
+                        </form>
+                        <form action={submitValidationTargetAction}>
+                          <input name="hostname" type="hidden" value={target.hostname} />
+                          <input name="normalizedUrl" type="hidden" value={target.normalizedUrl} />
+                          <input name="source" type="hidden" value={target.source ?? ""} />
+                          <input name="targetId" type="hidden" value={target.id} />
+                          <input name="targetAction" type="hidden" value="clear-backoff" />
+                          <input name="trancoRank" type="hidden" value={target.trancoRank ?? ""} />
+                          <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
+                            Reset backoff
+                          </button>
+                        </form>
                       </div>
                     </div>
                     {target.lastError ? <p className="mt-3 text-sm text-rose-700">Last error: {target.lastError}</p> : null}

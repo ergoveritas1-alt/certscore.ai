@@ -52,10 +52,21 @@ export async function submitValidationTargetAction(formData: FormData) {
     throw new Error("Missing validation target action.");
   }
 
+  const sharedInput = {
+    hostname: String(formData.get("hostname") ?? "").trim() || undefined,
+    normalizedUrl: String(formData.get("normalizedUrl") ?? "").trim() || undefined,
+    source: String(formData.get("source") ?? "").trim() || undefined,
+    targetId,
+    trancoRank: (() => {
+      const value = Number.parseInt(String(formData.get("trancoRank") ?? "").trim(), 10);
+      return Number.isFinite(value) ? value : undefined;
+    })()
+  };
+
   if (action === "clear-backoff") {
     await updateValidationTargetStateAction({
       clearBackoff: true,
-      targetId
+      ...sharedInput
     });
     return;
   }
@@ -64,7 +75,7 @@ export async function submitValidationTargetAction(formData: FormData) {
     await updateValidationTargetStateAction({
       denyReason: String(formData.get("denyReason") ?? "").trim() || "Suppressed by operator.",
       denylisted: true,
-      targetId
+      ...sharedInput
     });
     return;
   }
@@ -72,7 +83,7 @@ export async function submitValidationTargetAction(formData: FormData) {
   if (action === "restore") {
     await updateValidationTargetStateAction({
       denylisted: false,
-      targetId
+      ...sharedInput
     });
     return;
   }
