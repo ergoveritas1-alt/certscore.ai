@@ -47,7 +47,7 @@ const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
     "consent_evidence_pass_count"
   ],
   validation_settings: [
-    "singleton",
+    "singleton_key",
     "pipeline_enabled",
     "run_mode",
     "automatic_interval_minutes",
