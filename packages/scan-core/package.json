@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm --filter @website-signal-risk-scanner/shared build && node --import tsx --test src/**/*.test.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

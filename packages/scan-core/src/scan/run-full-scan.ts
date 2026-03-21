@@ -380,6 +380,13 @@ async function retryTransientStageOperation<T>(input: {
   };
 }
 
+export const testInternals = {
+  buildExecutionScanConfig,
+  getRequestedPageCount,
+  getTerminalFailureCategory,
+  retryTransientStageOperation
+};
+
 async function runSetupStage(input: {
   context: StageContext;
   failedEventType: string;
