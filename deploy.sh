@@ -43,6 +43,10 @@ if [[ "${redis_host}" == *.upstash.io ]]; then
   exit 1
 fi
 
+export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-wgfhzyrysztmtrjbcsgy}"
+echo "Running production schema audit for ${SUPABASE_PROJECT_REF}..."
+pnpm supabase:audit:prod
+
 cleanup() {
   rm -f "${cloudbuild_config}"
 }
