@@ -3570,6 +3570,183 @@ async function runDiscoveryExpansionPhase(input: {
   };
 }
 
+async function runPolicyEnrichmentPhase(input: {
+  browserPass: BrowserPassResult;
+  buildPhaseSummaries: SnapshotBuildPhaseSummary[];
+  domainId: string;
+  homepage: StaticPageResult;
+  isPreviewScan: boolean;
+  jurisdictionSignals: ReturnType<typeof deriveJurisdictionAndIndustry>;
+  organizationId: string | null;
+  policyPages: StaticPageResult[];
+  policySignals: ReturnType<typeof derivePolicySignals>;
+  scanId: string;
+  techSignals: ReturnType<typeof deriveTechSignals>;
+  trackerSummary: ReturnType<typeof summarizeTrackers>;
+  formSignals: ReturnType<typeof deriveFormSignals>;
+  successfulPages: StaticPageResult[];
+}) {
+  const directSensitivePayloadDetected = input.browserPass.sensitivePayloadViolations.length > 0;
+  const sessionReplayDisclosurePresent = input.policyPages.some((page) =>
+    /\bsession replay\b|record your interactions|replay your session/i.test(`${page.title ?? ""} ${page.textContent}`)
+  );
+  const policyLlmTriggerReasons = input.isPreviewScan
+    ? []
+    : derivePolicyLlmTriggerReasons({
+        aiAssistantWidgetDetected: deriveAiInfrastructureSignals({
+          pages: input.successfulPages,
+          chatSupportVendor: input.techSignals.chatSupportVendor
+        }).aiAssistantWidgetDetected,
+        aiDisclosureTextPresent: deriveAiInfrastructureSignals({
+          pages: input.successfulPages,
+          chatSupportVendor: input.techSignals.chatSupportVendor
+        }).aiDisclosureTextPresent,
+        autoRenewDisclosurePresent: deriveExpandedCommercialSignals(input.successfulPages).autoRenewDisclosurePresent,
+        freeTrialDetected: deriveExpandedCommercialSignals(input.successfulPages).freeTrialDetected,
+        highSensitivityDataCollectionDetected:
+          input.formSignals.highSensitivityDataCollectionDetected || directSensitivePayloadDetected,
+        policyBehaviorConflictCandidate:
+          input.trackerSummary.advertisingTrackerCount > 0 && input.policySignals.doNotSellLinkPresent,
+        sessionReplayWithoutDisclosureCandidate:
+          input.trackerSummary.sessionReplayTrackerCount > 0 && !sessionReplayDisclosurePresent,
+        subscriptionTermsPresent: deriveExpandedCommercialSignals(input.successfulPages).subscriptionTermsPresent
+      });
+  const policyEnrichmentTimeoutMs = Math.max(
+    5_000,
+    Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000
+  );
+  let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
+  try {
+    policyEnrichmentBundle = await runSnapshotBuildPhase({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "policy_enrichment",
+      summaries: input.buildPhaseSummaries,
+      metadata: {
+        policyPageCount: input.policyPages.length,
+        triggerReasonCount: policyLlmTriggerReasons.length
+      },
+      operation: async () =>
+        withStepTimeout(policyEnrichmentTimeoutMs, "Policy enrichment", () =>
+          enrichPolicyPages({
+            scanId: input.scanId,
+            organizationId: input.organizationId,
+            domainId: input.domainId,
+            pages: input.policyPages,
+            advertisingTrackerCount: input.trackerSummary.advertisingTrackerCount,
+            sessionReplayTrackerCount: input.trackerSummary.sessionReplayTrackerCount,
+            euExposureLikely: input.jurisdictionSignals.euExposureLikely,
+            californiaExposureLikely: input.jurisdictionSignals.californiaExposureLikely,
+            allowLlm: !input.isPreviewScan,
+            archiveSource: null,
+            forceLlm: false,
+            llmTriggerReasons: policyLlmTriggerReasons
+          })
+        ),
+      onSuccess: async (_summary, result) => {
+        await persistBuildPhaseDiagnostic({
+          scanId: input.scanId,
+          domainId: input.domainId,
+          organizationId: input.organizationId,
+          phase: "policy_enrichment_details",
+          status: "ok",
+          metadata: {
+            diagnosticCount: result.diagnostics.length,
+            snapshotOverrideKeys: Object.keys(result.snapshotOverrides ?? {}).length
+          }
+        });
+      }
+    });
+  } catch {
+    const latestPhase = input.buildPhaseSummaries[input.buildPhaseSummaries.length - 1];
+    if (latestPhase?.phase === "policy_enrichment") {
+      latestPhase.outcome = "degraded";
+    }
+    policyEnrichmentBundle = {
+      diagnostics: [],
+      enrichments: [],
+      evidences: [],
+      primaryPolicyEnrichmentId: null,
+      reviewQueueItems: [],
+      snapshotOverrides: {}
+    };
+  }
+
+  for (const diagnostic of policyEnrichmentBundle.diagnostics) {
+    await persistPolicyLlmDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      message: "Policy LLM chunk selection and execution summary recorded.",
+      metadata: diagnostic
+    });
+  }
+
+  const privacyCookieNoTrackingClaimed = policyEnrichmentBundle.enrichments.some(
+    (enrichment) =>
+      (enrichment.pageType === "privacy_policy" || enrichment.pageType === "cookie_policy") &&
+      enrichment.policyClaimNoTracking === true
+  );
+  const privacyCookiePolicyConflictDetected =
+    privacyCookieNoTrackingClaimed &&
+    (input.trackerSummary.trackerCountTotal > 0 ||
+      input.trackerSummary.advertisingTrackerCount > 0 ||
+      input.trackerSummary.sessionReplayTrackerCount > 0 ||
+      input.browserPass.preconsentTrackingDetected);
+  const policyTermsConflictDetected = derivePolicyTermsConflictDetected({
+    policyPages: input.policyPages,
+    policyEnrichments: policyEnrichmentBundle.enrichments
+  });
+
+  await persistBuildPhaseDiagnostic({
+    scanId: input.scanId,
+    domainId: input.domainId,
+    organizationId: input.organizationId,
+    phase: "tracker_diagnostic_persist",
+    status: "start",
+    metadata: {
+      diagnosticCount: input.browserPass.trackerDiagnostics.length + buildStaticTrackerDiagnostics(input.successfulPages).length
+    }
+  });
+  const staticTrackerDiagnostics = buildStaticTrackerDiagnostics(input.successfulPages);
+  for (const diagnostic of [...input.browserPass.trackerDiagnostics, ...staticTrackerDiagnostics]) {
+    await persistTrackerVendorDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      message: `Tracker vendor ${diagnostic.vendorName} detection samples recorded.`,
+      metadata: diagnostic
+    });
+  }
+  await persistBuildPhaseDiagnostic({
+    scanId: input.scanId,
+    domainId: input.domainId,
+    organizationId: input.organizationId,
+    phase: "tracker_diagnostic_persist",
+    status: "ok",
+    metadata: {
+      diagnosticCount: input.browserPass.trackerDiagnostics.length + staticTrackerDiagnostics.length
+    }
+  });
+
+  const accessibilitySummary = buildAccessibilitySummary(input.browserPass.ruleCounts);
+  const accessibilityWidget = detectAccessibilityWidgetFromPages(input.successfulPages);
+  const cmpVendor = input.browserPass.cmpVendorName
+    ? { name: input.browserPass.cmpVendorName, confidence: input.browserPass.cmpVendorConfidence }
+    : detectCmpVendorFromPage(input.homepage);
+
+  return {
+    accessibilitySummary,
+    accessibilityWidget,
+    cmpVendor,
+    policyEnrichmentBundle,
+    policyTermsConflictDetected,
+    privacyCookiePolicyConflictDetected,
+    staticTrackerDiagnostics
+  };
+}
+
 export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
   const isPreviewScan = input.crawlSource === "preview";
   const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
@@ -3735,135 +3912,29 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   const commercialSignals = deriveExpandedCommercialSignals(successfulPages);
   const trackerSummary = summarizeTrackers(allTrackers);
   const directSensitivePayloadDetected = browserPass.sensitivePayloadViolations.length > 0;
-  const sessionReplayDisclosurePresent = policyPages.some((page) =>
-    /\bsession replay\b|record your interactions|replay your session/i.test(`${page.title ?? ""} ${page.textContent}`)
-  );
-  const policyLlmTriggerReasons = isPreviewScan
-    ? []
-    : derivePolicyLlmTriggerReasons({
-        aiAssistantWidgetDetected: aiSignals.aiAssistantWidgetDetected,
-        aiDisclosureTextPresent: aiSignals.aiDisclosureTextPresent,
-        autoRenewDisclosurePresent: commercialSignals.autoRenewDisclosurePresent,
-        freeTrialDetected: commercialSignals.freeTrialDetected,
-        highSensitivityDataCollectionDetected: formSignals.highSensitivityDataCollectionDetected || directSensitivePayloadDetected,
-        policyBehaviorConflictCandidate: trackerSummary.advertisingTrackerCount > 0 && policySignals.doNotSellLinkPresent,
-        sessionReplayWithoutDisclosureCandidate: trackerSummary.sessionReplayTrackerCount > 0 && !sessionReplayDisclosurePresent,
-        subscriptionTermsPresent: commercialSignals.subscriptionTermsPresent
-      });
-  const policyEnrichmentTimeoutMs = Math.max(5_000, Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000);
-  let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
-  try {
-    policyEnrichmentBundle = await runSnapshotBuildPhase({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: "policy_enrichment",
-      summaries: buildPhaseSummaries,
-      metadata: {
-        policyPageCount: policyPages.length,
-        triggerReasonCount: policyLlmTriggerReasons.length
-      },
-      operation: async () =>
-        withStepTimeout(policyEnrichmentTimeoutMs, "Policy enrichment", () =>
-          enrichPolicyPages({
-            scanId: input.scanId,
-            organizationId: input.organizationId,
-            domainId: input.domainId,
-            pages: policyPages,
-            advertisingTrackerCount: trackerSummary.advertisingTrackerCount,
-            sessionReplayTrackerCount: trackerSummary.sessionReplayTrackerCount,
-            euExposureLikely: jurisdictionSignals.euExposureLikely,
-            californiaExposureLikely: jurisdictionSignals.californiaExposureLikely,
-            allowLlm: !isPreviewScan,
-            archiveSource: null,
-            forceLlm: false,
-            llmTriggerReasons: policyLlmTriggerReasons
-          })
-        ),
-      onSuccess: async (_summary, result) => {
-        await persistBuildPhaseDiagnostic({
-          scanId: input.scanId,
-          domainId: input.domainId,
-          organizationId: input.organizationId,
-          phase: "policy_enrichment_details",
-          status: "ok",
-          metadata: {
-            diagnosticCount: result.diagnostics.length,
-            snapshotOverrideKeys: Object.keys(result.snapshotOverrides ?? {}).length
-          }
-        });
-      }
-    });
-  } catch (error) {
-    const latestPhase = buildPhaseSummaries[buildPhaseSummaries.length - 1];
-    if (latestPhase?.phase === "policy_enrichment") {
-      latestPhase.outcome = "degraded";
-    }
-    policyEnrichmentBundle = {
-      diagnostics: [],
-      enrichments: [],
-      evidences: [],
-      primaryPolicyEnrichmentId: null,
-      reviewQueueItems: [],
-      snapshotOverrides: {}
-    };
-  }
-  for (const diagnostic of policyEnrichmentBundle.diagnostics) {
-    await persistPolicyLlmDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      message: "Policy LLM chunk selection and execution summary recorded.",
-      metadata: diagnostic
-    });
-  }
-  const privacyCookieNoTrackingClaimed = policyEnrichmentBundle.enrichments.some(
-    (enrichment) =>
-      (enrichment.pageType === "privacy_policy" || enrichment.pageType === "cookie_policy") &&
-      enrichment.policyClaimNoTracking === true
-  );
-  const privacyCookiePolicyConflictDetected =
-    privacyCookieNoTrackingClaimed &&
-    (trackerSummary.trackerCountTotal > 0 ||
-      trackerSummary.advertisingTrackerCount > 0 ||
-      trackerSummary.sessionReplayTrackerCount > 0 ||
-      browserPass.preconsentTrackingDetected);
-  const policyTermsConflictDetected = derivePolicyTermsConflictDetected({
+  const {
+    accessibilitySummary,
+    accessibilityWidget,
+    cmpVendor,
+    policyEnrichmentBundle,
+    policyTermsConflictDetected,
+    privacyCookiePolicyConflictDetected
+  } = await runPolicyEnrichmentPhase({
+    browserPass,
+    buildPhaseSummaries,
+    domainId: input.domainId,
+    formSignals,
+    homepage,
+    isPreviewScan,
+    jurisdictionSignals,
+    organizationId: input.organizationId,
     policyPages,
-    policyEnrichments: policyEnrichmentBundle.enrichments
-  });
-  await persistBuildPhaseDiagnostic({
+    policySignals,
     scanId: input.scanId,
-    domainId: input.domainId,
-    organizationId: input.organizationId,
-    phase: "tracker_diagnostic_persist",
-    status: "start",
-    metadata: {
-      diagnosticCount: browserPass.trackerDiagnostics.length + staticTrackerDiagnostics.length
-    }
+    successfulPages,
+    techSignals,
+    trackerSummary
   });
-  for (const diagnostic of [...browserPass.trackerDiagnostics, ...staticTrackerDiagnostics]) {
-    await persistTrackerVendorDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      message: `Tracker vendor ${diagnostic.vendorName} detection samples recorded.`,
-      metadata: diagnostic
-    });
-  }
-  await persistBuildPhaseDiagnostic({
-    scanId: input.scanId,
-    domainId: input.domainId,
-    organizationId: input.organizationId,
-    phase: "tracker_diagnostic_persist",
-    status: "ok",
-    metadata: {
-      diagnosticCount: browserPass.trackerDiagnostics.length + staticTrackerDiagnostics.length
-    }
-  });
-  const accessibilitySummary = buildAccessibilitySummary(browserPass.ruleCounts);
-  const accessibilityWidget = detectAccessibilityWidgetFromPages(successfulPages);
-  const cmpVendor = browserPass.cmpVendorName ? { name: browserPass.cmpVendorName, confidence: browserPass.cmpVendorConfidence } : detectCmpVendorFromPage(homepage);
   let securityTxt = null;
   if (!isPreviewScan) {
     const securityTxtUrl = new URL("/.well-known/security.txt", homepageUrl).toString();
