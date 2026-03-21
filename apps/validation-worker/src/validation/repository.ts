@@ -10,6 +10,8 @@ import { getCrawlerProductToken, getCrawlerPublicUrl, getCrawlerUserAgent } from
 import { extractHostname, getPlanDefinition, normalizeUrl } from "@website-signal-risk-scanner/shared";
 import { getWorkerEnv } from "../env";
 
+const VALIDATION_SETTINGS_KEY = "default";
+
 type ValidationTargetRow = {
   active: boolean;
   backoff_until: string | null;
@@ -83,7 +85,7 @@ export async function ensureValidationSettings() {
     .select(
       "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
     )
-    .eq("singleton", true)
+    .eq("singleton_key", VALIDATION_SETTINGS_KEY)
     .maybeSingle();
 
   if (error) {
@@ -97,7 +99,7 @@ export async function ensureValidationSettings() {
   const { data: inserted, error: insertError } = await supabase
     .from("validation_settings")
     .insert({
-      singleton: true,
+      singleton_key: VALIDATION_SETTINGS_KEY,
       pipeline_enabled: true,
       run_mode: env.VALIDATION_DEFAULT_RUN_MODE,
       automatic_interval_minutes: env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES
@@ -310,7 +312,7 @@ export async function syncTrancoTargets(force = false) {
     .update({
       last_tranco_sync_at: now.toISOString()
     })
-    .eq("singleton", true);
+    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
 
   if (updateError) {
     throw new Error(`Failed to update validation Tranco sync state: ${updateError.message}`);
@@ -878,7 +880,7 @@ export async function markValidationSchedule(input: {
       last_scheduled_at: input.now.toISOString(),
       next_due_at: input.nextDueAt.toISOString()
     })
-    .eq("singleton", true);
+    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
 
   if (error) {
     throw new Error(`Failed to update validation scheduler state: ${error.message}`);
@@ -891,6 +893,36 @@ export function normalizeValidationTargetInput(value: string) {
 
 export function isAllowedValidationInterval(minutes: number) {
   return VALIDATION_INTERVAL_OPTIONS.includes(minutes as (typeof VALIDATION_INTERVAL_OPTIONS)[number]);
+}
+
+export async function recordValidationWorkerHeartbeat(input: {
+  host: string;
+  startedAt?: Date;
+  heartbeatAt?: Date;
+}) {
+  const supabase = createAdminClient();
+  const patch: Record<string, string | null> = {
+    last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
+    last_worker_host: input.host
+  };
+
+  if (input.startedAt) {
+    patch.last_worker_started_at = input.startedAt.toISOString();
+  }
+
+  const { error } = await supabase
+    .from("validation_settings")
+    .upsert(
+      {
+        singleton_key: VALIDATION_SETTINGS_KEY,
+        ...patch
+      },
+      { onConflict: "singleton_key" }
+    );
+
+  if (error) {
+    throw new Error(`Failed to record validation worker heartbeat: ${error.message}`);
+  }
 }
 
 export async function addManualValidationTarget(hostnameOrUrl: string) {
