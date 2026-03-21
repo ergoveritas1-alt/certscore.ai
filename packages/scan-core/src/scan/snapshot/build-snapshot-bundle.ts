@@ -3267,6 +3267,309 @@ async function runBrowserRuntimeCapturePhase(input: {
   });
 }
 
+async function runDiscoveryExpansionPhase(input: {
+  attemptedTargetUrls: Set<string>;
+  browserPass: BrowserPassResult;
+  buildPhaseSummaries: SnapshotBuildPhaseSummary[];
+  domainId: string;
+  homepage: StaticPageResult;
+  homepageUrl: string;
+  isPreviewScan: boolean;
+  keyPageFetchAttempts: Map<string, KeyPageFetchAttempt>;
+  organizationId: string | null;
+  preBrowserKeyPageDiscovery: Awaited<ReturnType<typeof buildKeyPageDiscoveryState>>;
+  prefetchedPages: StaticPageResult[];
+  recordKeyPageFetchAttempt: (result: {
+    fetchOutcome: StaticPageResult["fetchStatus"];
+    finalUrl: string | null;
+    pageType: StaticPageResult["pageType"];
+    statusCode: number | null;
+    targetUrl: string;
+  }) => void;
+  robotsState: FetchedRobotsState;
+  scanId: string;
+  scanPlan: ScanPlan;
+  staticFetchConcurrency: number;
+  expansionTargetCount: number;
+}) {
+  let keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
+    input.preBrowserKeyPageDiscovery,
+    await buildKeyPageDiscoveryState({
+      homepageLanguage: input.homepage.language,
+      homepageUrl: input.homepageUrl,
+      renderedLinks: input.browserPass.discoveredLinks,
+      renderedSource: "rendered_link",
+      robotsPolicy: input.robotsState.policy,
+      sourceUrl: input.homepageUrl
+    })
+  ]);
+
+  const candidates = mergeCandidateTargets(
+    discoverCandidatePages(input.homepageUrl, [...input.homepage.links, ...input.browserPass.discoveredLinks]),
+    keyPageDiscoveryState.candidates
+  )
+    .filter(
+      (target) => !sameHostname(target.url, input.homepageUrl) || isUrlAllowedByRobots(target.url, input.robotsState.policy)
+    )
+    .sort((left, right) => right.priority - left.priority)
+    .sort((left, right) => priorityForPage(right.pageType) - priorityForPage(left.pageType));
+
+  const fetchedPagesByUrl = new Map(input.prefetchedPages.map((page) => [page.pageUrl, page]));
+  const prioritizedCandidates = prioritizeUncoveredTargets({
+    candidates,
+    fetchedPages: [...fetchedPagesByUrl.values()]
+  });
+  const expansionTargets = selectTargets(prioritizedCandidates, input.expansionTargetCount);
+  const expansionCoverageTargetTypes = getCoverageTargetTypes(candidates, input.expansionTargetCount);
+
+  if (
+    input.expansionTargetCount > 0 &&
+    !hasCoverageForTargetTypes([...fetchedPagesByUrl.values()], expansionCoverageTargetTypes)
+  ) {
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "expansion_fetch",
+      status: "start",
+      metadata: {
+        targetCount: expansionTargets.length,
+        coverageTargetTypes: [...expansionCoverageTargetTypes.values()].sort()
+      }
+    });
+    await fetchTargetsWithConcurrency({
+      coverageTargetTypes: expansionCoverageTargetTypes,
+      homepageUrl: input.homepageUrl,
+      concurrency: input.staticFetchConcurrency,
+      domainId: input.domainId,
+      fetchedPagesByUrl,
+      organizationId: input.organizationId,
+      robotsPolicy: input.robotsState.policy,
+      scanId: input.scanId,
+      attemptedTargetUrls: input.attemptedTargetUrls,
+      onTargetResult: input.recordKeyPageFetchAttempt,
+      targets: expansionTargets
+    });
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "expansion_fetch",
+      status: "ok",
+      metadata: {
+        fetchedPageCount: fetchedPagesByUrl.size
+      }
+    });
+  }
+
+  if (!input.isPreviewScan) {
+    let remainingAdditionalFetchAttempts: number = KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts;
+    const attemptedLegalHubUrls = new Set<string>();
+    const secondHopUsageByType = new Map<string, number>();
+
+    while (remainingAdditionalFetchAttempts > 0) {
+      const currentPages = [...fetchedPagesByUrl.values()];
+      const missingKeyPageTypes = getMissingKeyPageTypes(currentPages);
+      if (missingKeyPageTypes.length === 0) {
+        break;
+      }
+
+      const additionalTargets = toKeyPageFetchTargets({
+        attemptedUrls: input.attemptedTargetUrls,
+        candidates: keyPageDiscoveryState.candidates.filter((candidate) => missingKeyPageTypes.includes(candidate.pageType)),
+        fetchedPages: currentPages,
+        maxAttemptsPerType: KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
+        maxTotalAttempts: Math.min(remainingAdditionalFetchAttempts, KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts)
+      }).map((candidate) => ({
+        pageType: candidate.pageType,
+        priority: priorityForPage(candidate.pageType) + candidate.candidateScore,
+        url: candidate.candidateUrl
+      }));
+
+      if (additionalTargets.length > 0) {
+        await fetchTargetsWithConcurrency({
+          coverageTargetTypes: new Set(missingKeyPageTypes),
+          homepageUrl: input.homepageUrl,
+          concurrency: input.staticFetchConcurrency,
+          domainId: input.domainId,
+          fetchedPagesByUrl,
+          organizationId: input.organizationId,
+          robotsPolicy: input.robotsState.policy,
+          scanId: input.scanId,
+          attemptedTargetUrls: input.attemptedTargetUrls,
+          onTargetResult: input.recordKeyPageFetchAttempt,
+          phase: "key_page_coverage_fetch_target",
+          targets: additionalTargets
+        });
+        remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - additionalTargets.length);
+        continue;
+      }
+
+      const hubCandidate = keyPageDiscoveryState.legalHubCandidates.find((candidate) => {
+        if (attemptedLegalHubUrls.has(candidate.candidateUrl)) {
+          return false;
+        }
+
+        return missingKeyPageTypes.some(
+          (pageType) =>
+            (secondHopUsageByType.get(pageType) ?? 0) < KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
+        );
+      });
+
+      if (!hubCandidate) {
+        break;
+      }
+
+      attemptedLegalHubUrls.add(hubCandidate.candidateUrl);
+      remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - 1);
+      for (const pageType of missingKeyPageTypes) {
+        secondHopUsageByType.set(pageType, (secondHopUsageByType.get(pageType) ?? 0) + 1);
+      }
+
+      const hubPhaseMetadata = {
+        sourceUrl: hubCandidate.sourceUrl,
+        targetUrl: hubCandidate.candidateUrl
+      } satisfies Record<string, unknown>;
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "key_page_legal_hub_fetch",
+        status: "start",
+        metadata: hubPhaseMetadata
+      });
+      const hubStartedAt = Date.now();
+      const legalHubPage = await withStepTimeout(
+        STATIC_FETCH_TARGET_TIMEOUT_MS,
+        `Static fetch ${hubCandidate.candidateUrl}`,
+        () =>
+          fetchStaticPage({
+            pageType: "other",
+            robotsPolicy: sameHostname(hubCandidate.candidateUrl, input.homepageUrl) ? input.robotsState.policy : null,
+            url: hubCandidate.candidateUrl
+          })
+      ).catch(async (error) => {
+        await persistBuildPhaseDiagnostic({
+          scanId: input.scanId,
+          domainId: input.domainId,
+          organizationId: input.organizationId,
+          phase: "key_page_legal_hub_fetch",
+          status: "error",
+          metadata: {
+            ...hubPhaseMetadata,
+            elapsedMs: Date.now() - hubStartedAt,
+            error: error instanceof Error ? error.message : "Unknown error"
+          }
+        });
+        return null;
+      });
+
+      if (!legalHubPage) {
+        continue;
+      }
+
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "key_page_legal_hub_fetch",
+        status: "ok",
+        metadata: {
+          ...hubPhaseMetadata,
+          elapsedMs: Date.now() - hubStartedAt,
+          fetchStatus: legalHubPage.fetchStatus,
+          finalUrl: legalHubPage.finalUrl,
+          statusCode: legalHubPage.statusCode
+        }
+      });
+
+      keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
+        keyPageDiscoveryState,
+        await buildKeyPageDiscoveryState({
+          homepageLanguage: legalHubPage.language ?? input.homepage.language,
+          homepageUrl: input.homepageUrl,
+          renderedHtml: legalHubPage.html,
+          renderedLinks: legalHubPage.links,
+          renderedSource: "second_hop_legal_hub",
+          robotsPolicy: input.robotsState.policy,
+          sourceUrl: legalHubPage.finalUrl ?? hubCandidate.candidateUrl
+        })
+      ]);
+    }
+  }
+
+  if (!input.isPreviewScan) {
+    await persistBuildPhaseDiagnostic({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      phase: "upgrade_thin_policy_pages",
+      status: "start",
+      metadata: {
+        fetchedPageCount: fetchedPagesByUrl.size
+      }
+    });
+    const thinPolicyUpgradeTimeoutMs = Math.max(
+      5_000,
+      Number.parseInt(process.env.THIN_POLICY_UPGRADE_TIMEOUT_MS ?? "30000", 10) || 30_000
+    );
+    try {
+      await withStepTimeout(thinPolicyUpgradeTimeoutMs, "Thin policy upgrade", () =>
+        upgradeThinPolicyPages({
+          domainId: input.domainId,
+          fetchedPagesByUrl,
+          organizationId: input.organizationId,
+          plan: input.scanPlan,
+          robotsPolicy: input.robotsState.policy,
+          scanId: input.scanId
+        })
+      );
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "upgrade_thin_policy_pages",
+        status: "ok",
+        metadata: {
+          fetchedPageCount: fetchedPagesByUrl.size
+        }
+      });
+    } catch (error) {
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: "upgrade_thin_policy_pages",
+        status: "error",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          fetchedPageCount: fetchedPagesByUrl.size
+        }
+      });
+    }
+  }
+
+  const fetchedPages = [...fetchedPagesByUrl.values()];
+  const keyPageDiscoverySummary = buildKeyPageDiscoverySummary({
+    attemptedUrls: input.attemptedTargetUrls,
+    candidates: keyPageDiscoveryState.candidates,
+    fetchAttempts: input.keyPageFetchAttempts,
+    fetchedPages,
+    homepageUrl: input.homepageUrl,
+    localeHints: keyPageDiscoveryState.localeHints,
+    sameBrandSubdomainHostsInspected: keyPageDiscoveryState.sameBrandSubdomainHostsInspected,
+    sitemapFilesFetched: keyPageDiscoveryState.sitemapFilesFetched,
+    sitemapIndexUrlsFetched: keyPageDiscoveryState.sitemapIndexUrlsFetched,
+    sitemapUrls: keyPageDiscoveryState.sitemapUrls
+  });
+
+  return {
+    fetchedPages,
+    keyPageDiscoveryState,
+    keyPageDiscoverySummary
+  };
+}
+
 export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
   const isPreviewScan = input.crawlSource === "preview";
   const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
@@ -3376,259 +3679,26 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     scanPlan
   });
 
-  let keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
+  const discoveryExpansionResult = await runDiscoveryExpansionPhase({
+    attemptedTargetUrls,
+    browserPass,
+    buildPhaseSummaries,
+    domainId: input.domainId,
+    homepage,
+    homepageUrl,
+    isPreviewScan,
+    keyPageFetchAttempts,
+    organizationId: input.organizationId,
     preBrowserKeyPageDiscovery,
-    await buildKeyPageDiscoveryState({
-      homepageLanguage: homepage.language,
-      homepageUrl,
-      renderedLinks: browserPass.discoveredLinks,
-      renderedSource: "rendered_link",
-      robotsPolicy: robotsState.policy,
-      sourceUrl: homepageUrl
-    })
-  ]);
-
-  const candidates = mergeCandidateTargets(
-    discoverCandidatePages(homepageUrl, [...homepage.links, ...browserPass.discoveredLinks]),
-    keyPageDiscoveryState.candidates
-  )
-    .filter((target) => !sameHostname(target.url, homepageUrl) || isUrlAllowedByRobots(target.url, robotsState.policy))
-    .sort((left, right) => right.priority - left.priority)
-    .sort((left, right) => priorityForPage(right.pageType) - priorityForPage(left.pageType));
-
-  const fetchedPagesByUrl = new Map(prefetchedPages.map((page) => [page.pageUrl, page]));
-  const prioritizedCandidates = prioritizeUncoveredTargets({
-    candidates,
-    fetchedPages: [...fetchedPagesByUrl.values()]
+    prefetchedPages,
+    recordKeyPageFetchAttempt,
+    robotsState,
+    scanId: input.scanId,
+    scanPlan,
+    staticFetchConcurrency,
+    expansionTargetCount
   });
-  const expansionTargets = selectTargets(prioritizedCandidates, expansionTargetCount);
-  const expansionCoverageTargetTypes = getCoverageTargetTypes(candidates, expansionTargetCount);
-
-  if (expansionTargetCount > 0 && !hasCoverageForTargetTypes([...fetchedPagesByUrl.values()], expansionCoverageTargetTypes)) {
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: "expansion_fetch",
-      status: "start",
-      metadata: {
-        targetCount: expansionTargets.length,
-        coverageTargetTypes: [...expansionCoverageTargetTypes.values()].sort()
-      }
-    });
-    await fetchTargetsWithConcurrency({
-      coverageTargetTypes: expansionCoverageTargetTypes,
-      homepageUrl,
-      concurrency: staticFetchConcurrency,
-      domainId: input.domainId,
-      fetchedPagesByUrl,
-      organizationId: input.organizationId,
-      robotsPolicy: robotsState.policy,
-      scanId: input.scanId,
-      attemptedTargetUrls,
-      onTargetResult: recordKeyPageFetchAttempt,
-      targets: expansionTargets
-    });
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: "expansion_fetch",
-      status: "ok",
-      metadata: {
-        fetchedPageCount: fetchedPagesByUrl.size
-      }
-    });
-  }
-
-  if (!isPreviewScan) {
-    let remainingAdditionalFetchAttempts: number = KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts;
-    const attemptedLegalHubUrls = new Set<string>();
-    const secondHopUsageByType = new Map<string, number>();
-
-    while (remainingAdditionalFetchAttempts > 0) {
-      const currentPages = [...fetchedPagesByUrl.values()];
-      const missingKeyPageTypes = getMissingKeyPageTypes(currentPages);
-      if (missingKeyPageTypes.length === 0) {
-        break;
-      }
-
-      const additionalTargets = toKeyPageFetchTargets({
-        attemptedUrls: attemptedTargetUrls,
-        candidates: keyPageDiscoveryState.candidates.filter((candidate) => missingKeyPageTypes.includes(candidate.pageType)),
-        fetchedPages: currentPages,
-        maxAttemptsPerType: KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
-        maxTotalAttempts: Math.min(remainingAdditionalFetchAttempts, KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts)
-      }).map((candidate) => ({
-        pageType: candidate.pageType,
-        priority: priorityForPage(candidate.pageType) + candidate.candidateScore,
-        url: candidate.candidateUrl
-      }));
-
-      if (additionalTargets.length > 0) {
-        await fetchTargetsWithConcurrency({
-          coverageTargetTypes: new Set(missingKeyPageTypes),
-          homepageUrl,
-          concurrency: staticFetchConcurrency,
-          domainId: input.domainId,
-          fetchedPagesByUrl,
-          organizationId: input.organizationId,
-          robotsPolicy: robotsState.policy,
-          scanId: input.scanId,
-          attemptedTargetUrls,
-          onTargetResult: recordKeyPageFetchAttempt,
-          phase: "key_page_coverage_fetch_target",
-          targets: additionalTargets
-        });
-        remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - additionalTargets.length);
-        continue;
-      }
-
-      const hubCandidate = keyPageDiscoveryState.legalHubCandidates.find((candidate) => {
-        if (attemptedLegalHubUrls.has(candidate.candidateUrl)) {
-          return false;
-        }
-
-        return missingKeyPageTypes.some(
-          (pageType) =>
-            (secondHopUsageByType.get(pageType) ?? 0) < KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
-        );
-      });
-
-      if (!hubCandidate) {
-        break;
-      }
-
-      attemptedLegalHubUrls.add(hubCandidate.candidateUrl);
-      remainingAdditionalFetchAttempts = Math.max(0, remainingAdditionalFetchAttempts - 1);
-      for (const pageType of missingKeyPageTypes) {
-        secondHopUsageByType.set(pageType, (secondHopUsageByType.get(pageType) ?? 0) + 1);
-      }
-
-      const hubPhaseMetadata = {
-        sourceUrl: hubCandidate.sourceUrl,
-        targetUrl: hubCandidate.candidateUrl
-      } satisfies Record<string, unknown>;
-      await persistBuildPhaseDiagnostic({
-        scanId: input.scanId,
-        domainId: input.domainId,
-        organizationId: input.organizationId,
-        phase: "key_page_legal_hub_fetch",
-        status: "start",
-        metadata: hubPhaseMetadata
-      });
-      const hubStartedAt = Date.now();
-      const legalHubPage = await withStepTimeout(
-        STATIC_FETCH_TARGET_TIMEOUT_MS,
-        `Static fetch ${hubCandidate.candidateUrl}`,
-        () =>
-          fetchStaticPage({
-            pageType: "other",
-            robotsPolicy: sameHostname(hubCandidate.candidateUrl, homepageUrl) ? robotsState.policy : null,
-            url: hubCandidate.candidateUrl
-          })
-      ).catch(async (error) => {
-        await persistBuildPhaseDiagnostic({
-          scanId: input.scanId,
-          domainId: input.domainId,
-          organizationId: input.organizationId,
-          phase: "key_page_legal_hub_fetch",
-          status: "error",
-          metadata: {
-            ...hubPhaseMetadata,
-            elapsedMs: Date.now() - hubStartedAt,
-            error: error instanceof Error ? error.message : "Unknown error"
-          }
-        });
-        return null;
-      });
-
-      if (!legalHubPage) {
-        continue;
-      }
-
-      await persistBuildPhaseDiagnostic({
-        scanId: input.scanId,
-        domainId: input.domainId,
-        organizationId: input.organizationId,
-        phase: "key_page_legal_hub_fetch",
-        status: "ok",
-        metadata: {
-          ...hubPhaseMetadata,
-          elapsedMs: Date.now() - hubStartedAt,
-          fetchStatus: legalHubPage.fetchStatus,
-          finalUrl: legalHubPage.finalUrl,
-          statusCode: legalHubPage.statusCode
-        }
-      });
-
-      keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
-        keyPageDiscoveryState,
-        await buildKeyPageDiscoveryState({
-          homepageLanguage: legalHubPage.language ?? homepage.language,
-          homepageUrl,
-          renderedHtml: legalHubPage.html,
-          renderedLinks: legalHubPage.links,
-          renderedSource: "second_hop_legal_hub",
-          robotsPolicy: robotsState.policy,
-          sourceUrl: legalHubPage.finalUrl ?? hubCandidate.candidateUrl
-        })
-      ]);
-    }
-  }
-
-  if (!isPreviewScan) {
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: "upgrade_thin_policy_pages",
-      status: "start",
-      metadata: {
-        fetchedPageCount: fetchedPagesByUrl.size
-      }
-    });
-    const thinPolicyUpgradeTimeoutMs = Math.max(
-      5_000,
-      Number.parseInt(process.env.THIN_POLICY_UPGRADE_TIMEOUT_MS ?? "30000", 10) || 30_000
-    );
-    try {
-      await withStepTimeout(thinPolicyUpgradeTimeoutMs, "Thin policy upgrade", () =>
-        upgradeThinPolicyPages({
-          domainId: input.domainId,
-          fetchedPagesByUrl,
-          organizationId: input.organizationId,
-          plan: scanPlan,
-          robotsPolicy: robotsState.policy,
-          scanId: input.scanId
-        })
-      );
-      await persistBuildPhaseDiagnostic({
-        scanId: input.scanId,
-        domainId: input.domainId,
-        organizationId: input.organizationId,
-        phase: "upgrade_thin_policy_pages",
-        status: "ok",
-        metadata: {
-          fetchedPageCount: fetchedPagesByUrl.size
-        }
-      });
-    } catch (error) {
-      await persistBuildPhaseDiagnostic({
-        scanId: input.scanId,
-        domainId: input.domainId,
-        organizationId: input.organizationId,
-        phase: "upgrade_thin_policy_pages",
-        status: "error",
-        metadata: {
-          error: error instanceof Error ? error.message : "Unknown error",
-          fetchedPageCount: fetchedPagesByUrl.size
-        }
-      });
-    }
-  }
-
-  const fetchedPages = [...fetchedPagesByUrl.values()];
+  const { fetchedPages, keyPageDiscoveryState, keyPageDiscoverySummary } = discoveryExpansionResult;
   const successfulPages = fetchedPages.filter((page) => page.fetchStatus === "ok" || page.fetchStatus === "redirected");
   const browserDiscoveredUrls = new Set(browserPass.discoveredLinks.map((link) => link.href));
   const browserDiscoveredPageTypes = new Set(
@@ -3637,18 +3707,6 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       .map((candidate) => candidate.pageType)
       .filter((pageType) => pageType !== "homepage" && pageType !== "other")
   );
-  const keyPageDiscoverySummary = buildKeyPageDiscoverySummary({
-    attemptedUrls: attemptedTargetUrls,
-    candidates: keyPageDiscoveryState.candidates,
-    fetchAttempts: keyPageFetchAttempts,
-    fetchedPages,
-    homepageUrl,
-    localeHints: keyPageDiscoveryState.localeHints,
-    sameBrandSubdomainHostsInspected: keyPageDiscoveryState.sameBrandSubdomainHostsInspected,
-    sitemapFilesFetched: keyPageDiscoveryState.sitemapFilesFetched,
-    sitemapIndexUrlsFetched: keyPageDiscoveryState.sitemapIndexUrlsFetched,
-    sitemapUrls: keyPageDiscoveryState.sitemapUrls
-  });
   const policyPages = policyPagesFromFetchedPages(successfulPages);
   const contactSignals = deriveContactSignals(successfulPages);
   const jurisdictionSignals = deriveJurisdictionAndIndustry(successfulPages, new URL(homepageUrl).hostname);
