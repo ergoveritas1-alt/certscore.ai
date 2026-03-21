@@ -1049,9 +1049,16 @@ export async function listValidationTargets(limit = 25) {
   }
 
   const rows = (data ?? []) as ValidationTargetRow[];
-  const displayRows = rows.length > 0
-    ? sortValidationTargetsForDisplay(rows).slice(0, limit)
-    : getUpcomingTargets(await listTrancoPreviewTargets(limit), limit);
+  const persistedRows = sortValidationTargetsForDisplay(rows).slice(0, limit);
+  const persistedHostnames = new Set(persistedRows.map((row) => row.hostname));
+
+  let displayRows = persistedRows;
+  if (displayRows.length < limit) {
+    const previewRows = getUpcomingTargets(await listTrancoPreviewTargets(limit * 2), limit * 2).filter(
+      (row) => !persistedHostnames.has(row.hostname)
+    );
+    displayRows = [...persistedRows, ...previewRows].slice(0, limit);
+  }
 
   return displayRows.map((row) => ({
     active: row.active,
