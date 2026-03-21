@@ -350,3 +350,98 @@ test("runFullScanJob fails when snapshot persistence fails", async () => {
   assert.equal(scanConfigUpdate?.execution?.summary?.lifecycle, "failed");
   assert.equal(scanConfigUpdate?.execution?.summary?.failureCategory, "persistence");
 });
+
+test("runFullScanJob degrades when signal derivation fails but persistence can continue", async () => {
+  const supabase = createSupabaseStub({
+    domain: {
+      hostname: "example.com",
+      id: "domain-1",
+      max_pages_override: null,
+      normalized_url: "https://example.com"
+    },
+    scan: {
+      domain_id: "domain-1",
+      id: "scan-3",
+      organization_id: "org-1",
+      pages_requested: 5,
+      scan_config_json: null,
+      scan_type: "full",
+      status: "queued"
+    }
+  });
+  const bundle = createBundle() as Record<string, unknown>;
+
+  Object.defineProperty(bundle, "compatibilitySignals", {
+    get() {
+      throw new Error("Signal taxonomy projection failed");
+    }
+  });
+
+  await testInternals.runFullScanJob("scan-3", {
+    buildSnapshotBundle: async () => bundle as never,
+    createAdminClient: () => supabase.client as never,
+    getPreviousCompletedScan: async () => null,
+    getSnapshotBundle: async () => null as never,
+    replaceScanSignals: async () => undefined,
+    saveComplianceChangeEvents: async () => undefined,
+    saveSnapshotBundle: async () => undefined
+  });
+
+  const scanConfigUpdates = supabase.updates.filter(
+    (entry) => entry.table === "scans" && "scan_config_json" in entry.values
+  );
+  const scanConfigUpdate = scanConfigUpdates[scanConfigUpdates.length - 1]?.values.scan_config_json as
+    | { execution?: { summary?: ScannerExecutionSummary } }
+    | undefined;
+
+  assert.equal(scanConfigUpdate?.execution?.summary?.lifecycle, "completed");
+  assert.deepEqual(scanConfigUpdate?.execution?.summary?.degradedStages, [
+    "signal_derivation",
+    "persistence_diff_finalization"
+  ]);
+  assert.equal(scanConfigUpdate?.execution?.summary?.failureCategory, null);
+});
+
+test("runFullScanJob degrades when compatibility signal persistence fails after snapshot save", async () => {
+  const supabase = createSupabaseStub({
+    domain: {
+      hostname: "example.com",
+      id: "domain-1",
+      max_pages_override: null,
+      normalized_url: "https://example.com"
+    },
+    scan: {
+      domain_id: "domain-1",
+      id: "scan-4",
+      organization_id: "org-1",
+      pages_requested: 5,
+      scan_config_json: null,
+      scan_type: "full",
+      status: "queued"
+    }
+  });
+  const bundle = createBundle();
+
+  await testInternals.runFullScanJob("scan-4", {
+    buildSnapshotBundle: async () => bundle,
+    createAdminClient: () => supabase.client as never,
+    getPreviousCompletedScan: async () => null,
+    getSnapshotBundle: async () => null as never,
+    replaceScanSignals: async () => {
+      throw new Error("replace scan signals failed");
+    },
+    saveComplianceChangeEvents: async () => undefined,
+    saveSnapshotBundle: async () => undefined
+  });
+
+  const scanConfigUpdates = supabase.updates.filter(
+    (entry) => entry.table === "scans" && "scan_config_json" in entry.values
+  );
+  const scanConfigUpdate = scanConfigUpdates[scanConfigUpdates.length - 1]?.values.scan_config_json as
+    | { execution?: { summary?: ScannerExecutionSummary } }
+    | undefined;
+
+  assert.equal(scanConfigUpdate?.execution?.summary?.lifecycle, "completed");
+  assert.deepEqual(scanConfigUpdate?.execution?.summary?.degradedStages, ["persistence_diff_finalization"]);
+  assert.equal(scanConfigUpdate?.execution?.summary?.failureCategory, null);
+});
