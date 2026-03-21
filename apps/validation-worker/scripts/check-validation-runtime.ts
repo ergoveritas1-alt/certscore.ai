@@ -86,7 +86,13 @@ async function main() {
   const result = runtimeSchema.safeParse(process.env);
   if (!result.success) {
     for (const issue of result.error.issues) {
-      fail(issue.path.join("."), issue.message);
+      const label = issue.path.join(".");
+      if (label === "OPENAI_API_KEY") {
+        fail(label, "Set OPENAI_API_KEY in apps/web/.env.local for local validation worker runs.");
+        continue;
+      }
+
+      fail(label, issue.message);
     }
 
     process.exitCode = 1;

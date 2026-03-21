@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check-env": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-env.ts",
-    "check-runtime": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-runtime.ts",
-    "dev": "node --env-file=../web/.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
+    "check-env": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-env.ts",
+    "check-runtime": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-runtime.ts",
+    "dev": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
     "start": "node --enable-source-maps ./dist/apps/validation-worker/src/index.js",
     "start:scheduler": "node --enable-source-maps ./dist/apps/validation-worker/src/validation/run-scheduler.js",
-    "scheduler": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./src/validation/run-scheduler.ts --once",
+    "scheduler": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./src/validation/run-scheduler.ts --once",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist"
   },

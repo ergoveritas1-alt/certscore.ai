@@ -105,12 +105,25 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown Supabase connectivity error.";
+    const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+    const causeCode =
+      typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+        ? cause.code
+        : null;
+    const causeHostname =
+      typeof cause === "object" && cause !== null && "hostname" in cause && typeof cause.hostname === "string"
+        ? cause.hostname
+        : null;
+    const actionableError =
+      causeCode === "ENOTFOUND" && causeHostname
+        ? `Unable to resolve ${causeHostname}. Check NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local.`
+        : errorMessage;
     const missingTables = REQUIRED_AUTH_TABLES.filter((tableName) => errorMessage.includes(tableName));
 
     return {
       ok: false,
       timestamp,
-      error: errorMessage,
+      error: actionableError,
       checks: {
         publicEnv: true,
         adminEnv: true,
