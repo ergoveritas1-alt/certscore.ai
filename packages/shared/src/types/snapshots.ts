@@ -614,6 +614,21 @@ export type ScanRuntimeArtifact = {
   consentPostAcceptTrackerVendorNames: string[];
   sensitivePayloadViolations: SensitivePayloadViolation[];
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
+  buildPhaseSummaries?: Array<{
+    attempts: number;
+    completedAt: string;
+    durationMs: number;
+    error: string | null;
+    outcome: "success" | "degraded" | "failed";
+    phase:
+      | "robots_homepage_setup"
+      | "page_discovery_fetch"
+      | "browser_runtime_capture"
+      | "policy_enrichment"
+      | "runtime_artifact_assembly"
+      | "network_snapshot_assembly";
+    startedAt: string;
+  }>;
 };
 
 export type SensitivePayloadViolation = {

@@ -71,6 +71,24 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  if (value < 1_000) {
+    return `${Math.round(value)} ms`;
+  }
+
+  if (value < 60_000) {
+    return `${(value / 1_000).toFixed(1)} s`;
+  }
+
+  const minutes = Math.floor(value / 60_000);
+  const seconds = Math.round((value % 60_000) / 1_000);
+  return `${minutes}m ${seconds}s`;
+}
+
 function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -229,6 +247,46 @@ function getRecordNumber(record: Record<string, unknown> | null | undefined, key
 function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function getBuildPhaseSummaries(record: Record<string, unknown> | null | undefined) {
+  const value = record?.build_phase_summaries;
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => ({
+      attempts: typeof entry.attempts === "number" ? entry.attempts : null,
+      completedAt: typeof entry.completedAt === "string" ? entry.completedAt : null,
+      durationMs: typeof entry.durationMs === "number" ? entry.durationMs : null,
+      error: typeof entry.error === "string" ? entry.error : null,
+      outcome: typeof entry.outcome === "string" ? entry.outcome : "unknown",
+      phase: typeof entry.phase === "string" ? entry.phase : "unknown",
+      startedAt: typeof entry.startedAt === "string" ? entry.startedAt : null
+    }));
+}
+
+function formatScannerPhaseLabel(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function getPhaseTone(outcome: string): "success" | "warning" | "neutral" {
+  if (outcome === "success") {
+    return "success";
+  }
+
+  if (outcome === "degraded") {
+    return "warning";
+  }
+
+  return "neutral";
 }
 
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
@@ -2221,6 +2279,8 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           : null
       : null;
   const executionPlan = getExecutionPlan(scanRecord.scan.scanConfigJson);
+  const executionSummary = scanRecord.scan.executionSummary;
+  const buildPhaseSummaries = getBuildPhaseSummaries(runtimeArtifacts);
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
   let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
@@ -2648,6 +2708,86 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           <p>Browser post-load wait: {formatValue(executionPlan.browserPostLoadWaitMs)}</p>
           <p>Block stylesheets: {formatValue(executionPlan.blockStylesheetsInBrowser)}</p>
         </CollapsibleSectionCard>
+
+        {executionSummary ? (
+          <CollapsibleSectionCard
+            title={
+              <span className="flex items-center gap-1.5">
+                <span>Execution stages</span>
+                <InfoTip text="Top-level scanner stages captured by the shared execution contract. This is the orchestration-level view of where the scan succeeded, degraded, or failed." />
+              </span>
+            }
+          >
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {executionSummary.stages.map((stage) => (
+                <div key={stage.stage} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium text-slate-900">{formatScannerPhaseLabel(stage.stage)}</p>
+                    <Badge
+                      tone={getPhaseTone(stage.outcome)}
+                    >
+                      {stage.outcome}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm text-slate-600">
+                    <p>Started: {formatDateTime(stage.startedAt)}</p>
+                    <p>Completed: {formatDateTime(stage.completedAt)}</p>
+                    <p>Duration: {formatDurationMs(stage.durationMs)}</p>
+                    <p>Attempts: {formatValue(stage.attempts)}</p>
+                    <p>Error category: {formatValue(stage.errorCategory)}</p>
+                  </div>
+                  {stage.message ? <p className="mt-3 text-sm text-slate-700">{stage.message}</p> : null}
+                </div>
+              ))}
+            </div>
+          </CollapsibleSectionCard>
+        ) : null}
+
+        {buildPhaseSummaries.length > 0 ? (
+          <CollapsibleSectionCard
+            title={
+              <span className="flex items-center gap-1.5">
+                <span>Bundle build phases</span>
+                <InfoTip text="Lower-level timing inside snapshot bundle construction. This helps pinpoint where the crawler, browser pass, enrichment, or assembly work spent time or degraded." />
+              </span>
+            }
+          >
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="pb-2 pr-4 font-medium">Phase</th>
+                    <th className="pb-2 pr-4 font-medium">Outcome</th>
+                    <th className="pb-2 pr-4 font-medium">Started</th>
+                    <th className="pb-2 pr-4 font-medium">Completed</th>
+                    <th className="pb-2 pr-4 font-medium">Duration</th>
+                    <th className="pb-2 pr-4 font-medium">Attempts</th>
+                    <th className="pb-2 font-medium">Error</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {buildPhaseSummaries.map((phase) => (
+                    <tr key={`${phase.phase}-${phase.startedAt ?? "na"}`} className="align-top">
+                      <td className="py-2 pr-4 font-medium text-slate-900">{formatScannerPhaseLabel(phase.phase)}</td>
+                      <td className="py-2 pr-4">
+                        <Badge
+                          tone={getPhaseTone(phase.outcome)}
+                        >
+                          {phase.outcome}
+                        </Badge>
+                      </td>
+                      <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.startedAt)}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.completedAt)}</td>
+                      <td className="py-2 pr-4 text-slate-700">{formatDurationMs(phase.durationMs)}</td>
+                      <td className="py-2 pr-4 text-slate-700">{formatValue(phase.attempts)}</td>
+                      <td className="py-2 text-slate-700">{phase.error ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CollapsibleSectionCard>
+        ) : null}
 
         {snapshot ? (
           <div className="grid gap-6 xl:grid-cols-2">
