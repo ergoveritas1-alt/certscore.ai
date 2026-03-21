@@ -7,6 +7,7 @@ import {
   SCAN_EVENT_TYPES,
   type ScanAccessibilityRuleExample,
   type ScanAccessibilityRuleCount,
+  type ScanRuntimeArtifact,
   type ScanSnapshot,
   type SensitivePayloadViolation,
   type ScanTrackerVendor,
@@ -3747,6 +3748,45 @@ async function runPolicyEnrichmentPhase(input: {
   };
 }
 
+function buildKeyPageCoverageArtifacts(input: {
+  browserDiscoveredPageTypes: Set<string>;
+  fetchedPages: StaticPageResult[];
+  keyPageDiscoverySummary: ReturnType<typeof buildKeyPageDiscoverySummary>;
+  policyPages: StaticPageResult[];
+}) {
+  const keyPageCoverage = summarizeKeyPageCoverage({
+    discoveredPageTypes: new Set(
+      input.keyPageDiscoverySummary.pageSummaries.filter((summary) => summary.surfaceDetected).map((summary) => summary.pageType)
+    ),
+    failedAttemptedUrlsByPageType: Object.fromEntries(
+      input.keyPageDiscoverySummary.pageSummaries.map((summary) => [summary.pageType, summary.successfulUrl ? [] : summary.attemptedUrls])
+    ) as Partial<Record<StaticPageResult["pageType"], string[]>>,
+    fetchedPages: input.fetchedPages
+  });
+
+  return {
+    accessibilityStatementPresent: keyPageCoverage.find((row) => row.pageType === "accessibility_statement")?.fetched === true,
+    advertisingDisclosurePresent:
+      input.policyPages.some((page) => page.pageType === "advertising_disclosure") ||
+      input.browserDiscoveredPageTypes.has("advertising_disclosure"),
+    affiliateDisclosurePresent:
+      input.policyPages.some((page) => page.pageType === "affiliate_disclosure") ||
+      input.browserDiscoveredPageTypes.has("affiliate_disclosure"),
+    contactPagePresent: keyPageCoverage.find((row) => row.pageType === "contact")?.fetched === true,
+    cookiePolicyPresent: keyPageCoverage.find((row) => row.pageType === "cookie_policy")?.fetched === true,
+    keyPageCoverage,
+    privacyPolicyPresent: keyPageCoverage.find((row) => row.pageType === "privacy_policy")?.fetched === true,
+    refundPolicyPresent:
+      input.policyPages.some((page) => page.pageType === "refund_policy") || input.browserDiscoveredPageTypes.has("refund_policy"),
+    shippingPolicyPresent:
+      input.policyPages.some((page) => page.pageType === "shipping_policy") || input.browserDiscoveredPageTypes.has("shipping_policy"),
+    subscriptionTermsPresent:
+      input.policyPages.some((page) => page.pageType === "subscription_terms") ||
+      input.browserDiscoveredPageTypes.has("subscription_terms"),
+    termsOfServicePresent: keyPageCoverage.find((row) => row.pageType === "terms_of_service")?.fetched === true
+  };
+}
+
 export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
   const isPreviewScan = input.crawlSource === "preview";
   const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
@@ -4261,32 +4301,24 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
           ])
   });
   const allText = successfulPages.map((page) => page.textContent).join("\n");
-  const keyPageCoverage = summarizeKeyPageCoverage({
-    discoveredPageTypes: new Set(
-      keyPageDiscoverySummary.pageSummaries.filter((summary) => summary.surfaceDetected).map((summary) => summary.pageType)
-    ),
-    failedAttemptedUrlsByPageType: Object.fromEntries(
-      keyPageDiscoverySummary.pageSummaries.map((summary) => [summary.pageType, summary.successfulUrl ? [] : summary.attemptedUrls])
-    ) as Partial<Record<StaticPageResult["pageType"], string[]>>,
-    fetchedPages
+  const {
+    accessibilityStatementPresent,
+    advertisingDisclosurePresent,
+    affiliateDisclosurePresent,
+    contactPagePresent,
+    cookiePolicyPresent,
+    keyPageCoverage,
+    privacyPolicyPresent,
+    refundPolicyPresent,
+    shippingPolicyPresent,
+    subscriptionTermsPresent,
+    termsOfServicePresent
+  } = buildKeyPageCoverageArtifacts({
+    browserDiscoveredPageTypes,
+    fetchedPages,
+    keyPageDiscoverySummary,
+    policyPages
   });
-  const privacyPolicyPresent = keyPageCoverage.find((row) => row.pageType === "privacy_policy")?.fetched === true;
-  const termsOfServicePresent = keyPageCoverage.find((row) => row.pageType === "terms_of_service")?.fetched === true;
-  const cookiePolicyPresent = keyPageCoverage.find((row) => row.pageType === "cookie_policy")?.fetched === true;
-  const accessibilityStatementPresent = keyPageCoverage.find((row) => row.pageType === "accessibility_statement")?.fetched === true;
-  const refundPolicyPresent =
-    policyPages.some((page) => page.pageType === "refund_policy") || browserDiscoveredPageTypes.has("refund_policy");
-  const shippingPolicyPresent =
-    policyPages.some((page) => page.pageType === "shipping_policy") || browserDiscoveredPageTypes.has("shipping_policy");
-  const subscriptionTermsPresent =
-    policyPages.some((page) => page.pageType === "subscription_terms") || browserDiscoveredPageTypes.has("subscription_terms");
-  const affiliateDisclosurePresent =
-    policyPages.some((page) => page.pageType === "affiliate_disclosure") ||
-    browserDiscoveredPageTypes.has("affiliate_disclosure");
-  const advertisingDisclosurePresent =
-    policyPages.some((page) => page.pageType === "advertising_disclosure") ||
-    browserDiscoveredPageTypes.has("advertising_disclosure");
-  const contactPagePresent = keyPageCoverage.find((row) => row.pageType === "contact")?.fetched === true;
   const snapshotBase: Omit<
     ScanSnapshot,
     | "accessibilityScore"
