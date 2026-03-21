@@ -18,7 +18,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
   if (!detail) {
     return <p className="text-sm text-slate-600">Validation run not found.</p>;
   }
-  const shouldAutoRefresh = ["queued", "collecting", "ranking", "validating"].includes(detail.status);
+  const shouldAutoRefresh = ["queued", "collecting", "ranking", "validating"].includes(detail.status ?? "");
 
   const scanExecutionSummary = deriveScanExecutionSummary({
     ...(detail.scanExecution ?? {}),

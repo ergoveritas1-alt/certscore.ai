@@ -17,7 +17,7 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
     rankBand,
     status
   });
-  const hasActiveRuns = result.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status));
+  const hasActiveRuns = result.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status ?? ""));
 
   return (
     <div className="space-y-8">

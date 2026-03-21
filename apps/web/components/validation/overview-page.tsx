@@ -28,7 +28,7 @@ export async function ValidationOverviewPage() {
     (settings.queueHealth?.rank.waiting ?? 0) +
     (settings.queueHealth?.rank.active ?? 0);
   const showWorkerHeartbeatWarning = !settings.workerHealthy && queuedOrActiveValidationJobs > 0;
-  const hasActiveRuns = recentRuns.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status));
+  const hasActiveRuns = recentRuns.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status ?? ""));
 
   return (
     <div className="space-y-8">

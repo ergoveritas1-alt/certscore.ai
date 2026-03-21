@@ -823,6 +823,29 @@ function shouldLoadSupplementalFindingsForRunStatus(status: string | null | unde
   return status === "completed" || status === "failed";
 }
 
+function getEffectiveValidationRunStatus(input: {
+  scanStatus?: string | null;
+  status: string | null | undefined;
+}) {
+  if (input.status === "completed" || input.status === "failed") {
+    return input.status;
+  }
+
+  if (input.scanStatus === "completed") {
+    return "completed";
+  }
+
+  if (input.scanStatus === "failed") {
+    return "failed";
+  }
+
+  if (input.scanStatus === "running" || input.scanStatus === "processing") {
+    return "collecting";
+  }
+
+  return input.status ?? null;
+}
+
 async function ensureValidationDomainForOrganization(input: {
   organizationId: string;
   hostname: string;
@@ -1116,8 +1139,12 @@ export async function listValidationRuns(input?: {
 
   const supplementalCountByRun = new Map<string, number>();
   for (const row of rows) {
+    const effectiveStatus = getEffectiveValidationRunStatus({
+      scanStatus: row.scan_id ? (scanStatusById.get(row.scan_id)?.status ?? null) : null,
+      status: row.status
+    });
     const persistedCount = findingCountByRun.get(row.id) ?? row.finding_count;
-    const supplements = shouldLoadSupplementalFindingsForRunStatus(row.status)
+    const supplements = shouldLoadSupplementalFindingsForRunStatus(effectiveStatus)
       ? await loadSupplementalValidationFindings({
           existingFindings: existingFindingIdentitiesByRun.get(row.id) ?? [],
           scanId: row.scan_id
@@ -1143,7 +1170,10 @@ export async function listValidationRuns(input?: {
       scanId: row.scan_id,
       scanStartedAt: row.scan_id ? (scanStatusById.get(row.scan_id)?.started_at ?? null) : null,
       scanStatus: row.scan_id ? (scanStatusById.get(row.scan_id)?.status ?? null) : null,
-      status: row.status,
+      status: getEffectiveValidationRunStatus({
+        scanStatus: row.scan_id ? (scanStatusById.get(row.scan_id)?.status ?? null) : null,
+        status: row.status
+      }),
       trancoRank: row.tranco_rank,
       triggerMode: row.trigger_mode
     })),
@@ -1219,7 +1249,15 @@ export async function getValidationRunDetail(validationRunId: string) {
   }
 
   let normalizedFindings = (findings ?? []) as ValidationRunFindingRow[];
-  const supplementalFindings = shouldLoadSupplementalFindingsForRunStatus((run as ValidationRunRow).status)
+  const scanStatus =
+    scanRow && typeof (scanRow as { status?: unknown }).status === "string"
+      ? String((scanRow as { status: string }).status)
+      : null;
+  const effectiveStatus = getEffectiveValidationRunStatus({
+    scanStatus,
+    status: (run as ValidationRunRow).status
+  });
+  const supplementalFindings = shouldLoadSupplementalFindingsForRunStatus(effectiveStatus)
     ? await loadSupplementalValidationFindings({
         existingFindings: normalizedFindings,
         scanId: (run as ValidationRunRow).scan_id
@@ -1229,7 +1267,11 @@ export async function getValidationRunDetail(validationRunId: string) {
 
   return {
     averageAgreementScore: (run as ValidationRunRow).average_agreement_score,
-    completedAt: (run as ValidationRunRow).completed_at,
+    completedAt:
+      (run as ValidationRunRow).completed_at ??
+      (scanRow && typeof (scanRow as { completed_at?: unknown }).completed_at === "string"
+        ? String((scanRow as { completed_at: string }).completed_at)
+        : null),
     createdAt: (run as ValidationRunRow).created_at,
     domainId: (run as ValidationRunRow).domain_id,
     errorMessage: (run as ValidationRunRow).error_message,
@@ -1248,9 +1290,7 @@ export async function getValidationRunDetail(validationRunId: string) {
         ? String((scanRow as { started_at: string }).started_at)
         : null,
     scanStatus:
-      scanRow && typeof (scanRow as { status?: unknown }).status === "string"
-        ? String((scanRow as { status: string }).status)
-        : null,
+      scanStatus,
     scanExecution: {
       accessibilityRuleCountTotal: accessibilityRuleCountTotal ?? 0,
       consentAuditCompleted:
@@ -1306,7 +1346,7 @@ export async function getValidationRunDetail(validationRunId: string) {
       message: event.message,
       metadataJson: event.metadata_json
     })),
-    status: (run as ValidationRunRow).status,
+    status: effectiveStatus,
     trancoRank: (run as ValidationRunRow).tranco_rank,
     triggerMode: (run as ValidationRunRow).trigger_mode,
     rows: normalizedFindings.map((finding) => {
