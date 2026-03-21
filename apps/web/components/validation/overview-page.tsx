@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
+import { ValidationViewLink } from "./validation-view-link";
+import { PendingSubmitButton } from "../ui/pending-submit-button";
 import { listValidationRuns, listValidationTargets, getValidationSettings } from "../../server/validation/repository";
 import { getValidationQueueAvailability } from "../../server/queue/validation-queue";
 import {
@@ -125,9 +127,7 @@ export async function ValidationOverviewPage() {
                   Pipeline enabled
                 </label>
 
-                <button className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800" type="submit">
-                  Save controls
-                </button>
+                <PendingSubmitButton className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800" idleContent="Save controls" pendingContent="Saving..." />
               </div>
             </form>
 
@@ -141,9 +141,7 @@ export async function ValidationOverviewPage() {
                   placeholder="example.com"
                   type="text"
                 />
-                <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
-                  Add target
-                </button>
+                <PendingSubmitButton className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" idleContent="Add target" pendingContent="Adding..." variant="secondary" />
               </div>
             </form>
           </CardContent>
@@ -183,9 +181,7 @@ export async function ValidationOverviewPage() {
                         </td>
                         <td className="py-3">
                           <div className="flex flex-wrap items-center gap-3">
-                            <a className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
-                              View
-                            </a>
+                            <ValidationViewLink href={`/app/validation/scans/${run.id}`} />
                             {run.domainId ? (
                               <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
                             ) : null}
@@ -225,7 +221,7 @@ export async function ValidationOverviewPage() {
                           <input name="source" type="hidden" value={target.source ?? ""} />
                           <input name="targetId" type="hidden" value={target.id} />
                           <input name="trancoRank" type="hidden" value={target.trancoRank ?? ""} />
-                          <button
+                          <PendingSubmitButton
                             className={[
                               "rounded-full px-4 py-2 text-sm font-medium transition",
                               queueAvailability.enabled
@@ -233,11 +229,9 @@ export async function ValidationOverviewPage() {
                                 : "cursor-not-allowed bg-slate-200 text-slate-500"
                             ].join(" ")}
                             disabled={!queueAvailability.enabled}
-                            title={queueAvailability.reason ?? undefined}
-                            type="submit"
-                          >
-                            Manual run
-                          </button>
+                            idleContent="Manual run"
+                            pendingContent="Starting..."
+                          />
                         </form>
                         <form action={submitValidationTargetAction}>
                           <input name="hostname" type="hidden" value={target.hostname} />
@@ -246,9 +240,12 @@ export async function ValidationOverviewPage() {
                           <input name="targetId" type="hidden" value={target.id} />
                           <input name="targetAction" type="hidden" value={target.denylisted ? "restore" : "deny"} />
                           <input name="trancoRank" type="hidden" value={target.trancoRank ?? ""} />
-                          <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
-                            {target.denylisted ? "Re-include" : "Exclude"}
-                          </button>
+                          <PendingSubmitButton
+                            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                            idleContent={target.denylisted ? "Re-include" : "Exclude"}
+                            pendingContent={target.denylisted ? "Restoring..." : "Excluding..."}
+                            variant="secondary"
+                          />
                         </form>
                         <form action={submitValidationTargetAction}>
                           <input name="hostname" type="hidden" value={target.hostname} />
@@ -257,9 +254,12 @@ export async function ValidationOverviewPage() {
                           <input name="targetId" type="hidden" value={target.id} />
                           <input name="targetAction" type="hidden" value="clear-backoff" />
                           <input name="trancoRank" type="hidden" value={target.trancoRank ?? ""} />
-                          <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
-                            Reset backoff
-                          </button>
+                          <PendingSubmitButton
+                            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                            idleContent="Reset backoff"
+                            pendingContent="Resetting..."
+                            variant="secondary"
+                          />
                         </form>
                       </div>
                     </div>

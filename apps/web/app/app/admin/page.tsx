@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
 import { listAdminUsers } from "../../../server/admin/list-admin-users";
 
@@ -100,9 +101,7 @@ export default async function AdminOverviewPage() {
                 </p>
               </div>
             ))}
-            <Button asChild variant="secondary">
-              <Link href="/app/admin/users">Open user admin</Link>
-            </Button>
+            <PendingButtonLink href="/app/admin/users" idleContent="Open user admin" pendingContent="Opening..." variant="secondary" />
           </CardContent>
         </Card>
 
@@ -121,15 +120,11 @@ export default async function AdminOverviewPage() {
                   Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatDateTime(scan.completedAt)}
                 </p>
                 <div className="mt-3">
-                  <Button asChild size="sm" variant="secondary">
-                    <Link href={`/app/admin/scans/${scan.scanId}`}>Inspect snapshot</Link>
-                  </Button>
+                  <PendingButtonLink href={`/app/admin/scans/${scan.scanId}`} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
                 </div>
               </div>
             ))}
-            <Button asChild variant="secondary">
-              <Link href="/app/admin/scans">Open scan admin</Link>
-            </Button>
+            <PendingButtonLink href="/app/admin/scans" idleContent="Open scan admin" pendingContent="Opening..." variant="secondary" />
           </CardContent>
         </Card>
       </div>

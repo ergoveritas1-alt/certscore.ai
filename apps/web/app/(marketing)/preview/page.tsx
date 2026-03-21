@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { DomainScanForm } from "../../../components/marketing/domain-scan-form";
 import { SiteHeader } from "../../../components/layout/site-header";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 
 export default function PreviewPage() {
   return (
@@ -59,9 +60,7 @@ export default function PreviewPage() {
         </div>
 
         <div className="mt-10">
-          <Button asChild>
-            <Link href="/login?next=/app">Create account to continue</Link>
-          </Button>
+          <PendingButtonLink href="/login?next=/app" idleContent="Create account to continue" pendingContent="Opening..." />
         </div>
       </section>
     </main>

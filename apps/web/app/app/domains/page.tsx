@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AddDomainForm } from "../../../components/domains/add-domain-form";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationDomains } from "../../../server/domains/get-organization-domains";
 import { getPlanLimits } from "../../../server/plans/get-plan-limits";
@@ -77,12 +78,8 @@ export default async function DomainsPage() {
               Websites are the unit of scan history, signal tracking, and scheduled rescans.
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/how-it-works">How scanning works</Link>
-              </Button>
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/pricing">Compare plans</Link>
-              </Button>
+              <PendingButtonLink href="/how-it-works" idleContent="How scanning works" pendingContent="Opening..." size="sm" variant="secondary" />
+              <PendingButtonLink href="/pricing" idleContent="Compare plans" pendingContent="Opening..." size="sm" variant="secondary" />
             </div>
           </CardContent>
         </Card>
@@ -122,9 +119,7 @@ export default async function DomainsPage() {
                     <td className="py-4 pr-4 text-slate-600">{formatStatus(domain.latestScanStatus)}</td>
                     <td className="py-4 pr-4 text-slate-600">{formatDateTime(domain.latestScanCreatedAt)}</td>
                     <td className="py-4">
-                      <Button asChild size="sm" variant="secondary">
-                        <Link href={`/app/domains/${domain.id}`}>View website</Link>
-                      </Button>
+                      <PendingButtonLink href={`/app/domains/${domain.id}`} idleContent="View website" pendingContent="Opening..." size="sm" variant="secondary" />
                     </td>
                   </tr>
                 ))}

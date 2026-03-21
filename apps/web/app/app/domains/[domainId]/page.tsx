@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getPlanDefinition } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { QueueFullScanForm } from "../../../../components/scans/queue-full-scan-form";
+import { PendingButtonLink } from "../../../../components/ui/pending-link";
+import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
 import { getDashboardContext } from "../../../../server/auth";
 import { getDomainById } from "../../../../server/domains/get-domain-by-id";
 import { updateDomainScanFrequencyFormAction } from "../../../../server/domains/update-domain-scan-frequency";
@@ -124,9 +126,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                 <p>Added: {latestScan.addedCount}</p>
                 <p>Removed: {latestScan.removedCount}</p>
                 <p>Changed: {latestScan.changedCount}</p>
-                <Button asChild size="sm" variant="secondary">
-                  <Link href={`/app/scans/${latestScan.id}`}>Open latest scan</Link>
-                </Button>
+                <PendingButtonLink href={`/app/scans/${latestScan.id}`} idleContent="Open latest scan" pendingContent="Opening..." size="sm" variant="secondary" />
               </>
             ) : (
               <>
@@ -178,7 +178,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
               </select>
             </div>
             <div className="md:self-end">
-              <Button type="submit" variant="secondary">Save frequency</Button>
+              <PendingSubmitButton idleContent="Save frequency" pendingContent="Saving..." variant="secondary" />
             </div>
           </form>
         </CardContent>

@@ -9,6 +9,7 @@ import {
 } from "../scans/report-primitives";
 import { RegulatoryRelevanceSection } from "../scans/regulatory-relevance-section";
 import { RegulatoryRiskSection } from "../scans/regulatory-risk-section";
+import { PendingButtonLink } from "../ui/pending-link";
 
 type PreviewScanResolvedStateProps = {
   loginHref: string;
@@ -73,12 +74,8 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild>
-            <Link href="/">Try another website</Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link href="/login?next=/app">Log in</Link>
-          </Button>
+          <PendingButtonLink href="/" idleContent="Try another website" pendingContent="Opening..." />
+          <PendingButtonLink href="/login?next=/app" idleContent="Log in" pendingContent="Opening..." variant="secondary" />
         </div>
       </div>
     );
@@ -109,9 +106,7 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
           </p>
         </div>
         <div className="flex justify-end md:pt-0.5">
-          <Button asChild>
-            <Link href={loginHref}>Create account to continue</Link>
-          </Button>
+          <PendingButtonLink href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />
         </div>
       </div>
 
@@ -228,12 +223,8 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
                 </ul>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild className="flex-1">
-                  <Link href={loginHref}>Create account to continue</Link>
-                </Button>
-                <Button asChild className="flex-1" variant="secondary">
-                  <Link href={loginHref}>Already have an account? Sign in</Link>
-                </Button>
+                <PendingButtonLink className="flex-1" href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />
+                <PendingButtonLink className="flex-1" href={loginHref} idleContent="Already have an account? Sign in" pendingContent="Opening..." variant="secondary" />
               </div>
             </CardContent>
           </Card>

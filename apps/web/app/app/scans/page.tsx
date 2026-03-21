@@ -3,6 +3,7 @@ import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationScans } from "../../../server/scans/get-organization-scans";
@@ -210,19 +211,20 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       <td className="py-4 pr-4 text-slate-600">{formatDateTime(scan.createdAt)}</td>
                       <td className="py-4">
                         <div className="flex items-center gap-2">
-                          <Button
-                            asChild
+                          <PendingButtonLink
+                            ariaLabel="View scan details"
                             className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
-                            size="sm"
-                            variant="secondary"
-                          >
-                            <Link aria-label="View scan details" href={`/app/scans/${scan.id}`}>
+                            href={`/app/scans/${scan.id}`}
+                            idleContent={
                               <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M12 19V5" />
                                 <path d="m5 12 7-7 7 7" />
                               </svg>
-                            </Link>
-                          </Button>
+                            }
+                            pendingContent={<span className="text-[10px] font-semibold uppercase tracking-[0.12em]">...</span>}
+                            size="sm"
+                            variant="secondary"
+                          />
                           {canRescan && scan.domainId && rescanAvailability ? (
                             <RescanDomainForm
                               cooldownMessage={cooldownMessage}
@@ -277,19 +279,20 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                           <p className="text-sm text-slate-500">{getStatusCopy(scan.status)}</p>
                         </div>
                       </div>
-                      <Button
-                        asChild
+                      <PendingButtonLink
+                        ariaLabel="View scan details"
                         className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
-                        size="sm"
-                        variant="secondary"
-                      >
-                        <Link aria-label="View scan details" href={`/app/scans/${scan.id}`}>
+                        href={`/app/scans/${scan.id}`}
+                        idleContent={
                           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 19V5" />
                             <path d="m5 12 7-7 7 7" />
                           </svg>
-                        </Link>
-                      </Button>
+                        }
+                        pendingContent={<span className="text-[10px] font-semibold uppercase tracking-[0.12em]">...</span>}
+                        size="sm"
+                        variant="secondary"
+                      />
                     </div>
 
                     <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">

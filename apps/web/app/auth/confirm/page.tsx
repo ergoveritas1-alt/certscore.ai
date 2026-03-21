@@ -1,4 +1,5 @@
 import { Button } from "@website-signal-risk-scanner/ui";
+import { PendingSubmitButton } from "../../../components/ui/pending-submit-button";
 import { confirmMagicLinkAction } from "./actions";
 
 function getSafeRedirectPath(nextParam: string | string[] | undefined) {
@@ -36,9 +37,7 @@ export default async function AuthConfirmPage({
           <form action={confirmMagicLinkAction} className="space-y-4">
             <input name="token_hash" type="hidden" value={tokenHash} />
             <input name="next" type="hidden" value={nextPath} />
-            <Button className="w-full" type="submit">
-              Continue to workspace
-            </Button>
+            <PendingSubmitButton className="w-full" idleContent="Continue to workspace" pendingContent="Continuing..." />
           </form>
         ) : (
           <p className="text-sm text-red-600">This sign-in link is missing required token data.</p>

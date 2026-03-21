@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Button } from "@website-signal-risk-scanner/ui";
 import CertScoreLogo from "../brand/CertScoreLogo";
+import { PendingButtonLink } from "../ui/pending-link";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -25,16 +25,14 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          <Button asChild size="sm" variant="secondary">
-            <Link href="/login">Sign in</Link>
-          </Button>
-          <Button
-            asChild
-            size="sm"
+          <PendingButtonLink href="/login" idleContent="Sign in" pendingContent="Opening..." size="sm" variant="secondary" />
+          <PendingButtonLink
             className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-          >
-            <Link href="/contact-sales">Contact us</Link>
-          </Button>
+            href="/contact-sales"
+            idleContent="Contact us"
+            pendingContent="Opening..."
+            size="sm"
+          />
         </nav>
 
         <details className="relative md:hidden">
@@ -61,16 +59,14 @@ export function SiteHeader() {
               ))}
 
               <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
-                <Button asChild size="sm" variant="secondary" className="w-full justify-center">
-                  <Link href="/login">Sign in</Link>
-                </Button>
-                <Button
-                  asChild
-                  size="sm"
+                <PendingButtonLink className="w-full justify-center" href="/login" idleContent="Sign in" pendingContent="Opening..." size="sm" variant="secondary" />
+                <PendingButtonLink
                   className="w-full justify-center border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-                >
-                  <Link href="/contact-sales">Contact us</Link>
-                </Button>
+                  href="/contact-sales"
+                  idleContent="Contact us"
+                  pendingContent="Opening..."
+                  size="sm"
+                />
               </div>
             </nav>
           </div>

@@ -4,6 +4,7 @@ import { Badge, Button } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { DomainScanForm } from "../../../components/marketing/domain-scan-form";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -111,15 +112,19 @@ export default function HomepageTrialPage() {
               CertScore helps teams catch pre-consent tracking, broken user controls, and policy-to-runtime mismatches with evidence from the live site.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button
-                asChild
+              <PendingButtonLink
                 className="border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0ea5e9_54%,#7dd3fc_100%)] px-6 text-white shadow-[0_18px_35px_rgba(37,99,235,0.24)] hover:brightness-[1.04]"
-              >
-                <Link href="/preview">Run a scan</Link>
-              </Button>
-              <Button asChild variant="secondary" className="border-white/80 bg-white/80 px-6 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <Link href="/how-it-works">See how it works</Link>
-              </Button>
+                href="/preview"
+                idleContent="Run a scan"
+                pendingContent="Opening..."
+              />
+              <PendingButtonLink
+                className="border-white/80 bg-white/80 px-6 shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
+                href="/how-it-works"
+                idleContent="See how it works"
+                pendingContent="Opening..."
+                variant="secondary"
+              />
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               {proofPoints.map((item) => (
@@ -265,12 +270,8 @@ export default function HomepageTrialPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="border-0 bg-white text-slate-950 hover:bg-slate-100">
-                <Link href="/homepage-trial">Refresh trial page</Link>
-              </Button>
-              <Button asChild variant="secondary" className="border-white/20 bg-white/10 text-white hover:bg-white/15">
-                <Link href="/">View current homepage</Link>
-              </Button>
+              <PendingButtonLink className="border-0 bg-white text-slate-950 hover:bg-slate-100" href="/homepage-trial" idleContent="Refresh trial page" pendingContent="Opening..." />
+              <PendingButtonLink className="border-white/20 bg-white/10 text-white hover:bg-white/15" href="/" idleContent="View current homepage" pendingContent="Opening..." variant="secondary" />
             </div>
           </div>
         </div>

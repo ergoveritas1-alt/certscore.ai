@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
+import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -138,19 +139,19 @@ export default function PricingPage() {
             Start with a full scan, then move into expanded domain coverage, change tracking, and scan history as your review needs grow.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button
-              asChild
+            <PendingButtonLink
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-            >
-              <Link href="/preview">Run a scan</Link>
-            </Button>
-            <Button
-              asChild
-              variant="secondary"
+              href="/preview"
+              idleContent="Run a scan"
+              pendingContent="Opening..."
+            />
+            <PendingButtonLink
               className="border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50"
-            >
-              <Link href="/#sample-report">View sample report</Link>
-            </Button>
+              href="/#sample-report"
+              idleContent="View sample report"
+              pendingContent="Opening..."
+              variant="secondary"
+            />
           </div>
         </div>
 
@@ -233,9 +234,12 @@ export default function PricingPage() {
 
                   <div className="space-y-2.5">
                     <p className="text-[12px] leading-[1.35rem] text-slate-600">{planCardContent[plan.code].footerNote}</p>
-                    <Button asChild className={`w-full ${planCardContent[plan.code].ctaClassName}`}>
-                      <Link href={planCardContent[plan.code].ctaHref}>{planCardContent[plan.code].ctaLabel}</Link>
-                    </Button>
+                    <PendingButtonLink
+                      className={`w-full ${planCardContent[plan.code].ctaClassName}`}
+                      href={planCardContent[plan.code].ctaHref}
+                      idleContent={planCardContent[plan.code].ctaLabel}
+                      pendingContent="Opening..."
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -289,12 +293,12 @@ export default function PricingPage() {
               <p className="text-sm leading-6 text-slate-600 md:max-w-sm">
                 Talk to us if you need procurement support, portfolio-scale monitoring, or a tailored rollout beyond the standard plans.
               </p>
-              <Button
-                asChild
+              <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#63c864_58%,#8add89_100%)] text-slate-950 shadow-[0_14px_32px_rgba(71,181,74,0.18)] hover:brightness-[1.03] md:w-auto md:min-w-[180px]"
-              >
-                <Link href="/contact-sales">Contact us</Link>
-              </Button>
+                href="/contact-sales"
+                idleContent="Contact us"
+                pendingContent="Opening..."
+              />
             </div>
           </CardContent>
         </Card>

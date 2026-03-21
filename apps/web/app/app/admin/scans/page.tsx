@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PendingButtonLink } from "../../../../components/ui/pending-link";
 import { listAdminScans } from "../../../../server/admin/list-admin-scans";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 
@@ -61,9 +62,7 @@ export default async function AdminScansPage() {
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.completedAt)}</td>
                   <td className="py-4">
-                    <Button asChild size="sm" variant="secondary">
-                      <Link href={`/app/admin/scans/${scan.scanId}`}>Inspect snapshot</Link>
-                    </Button>
+                    <PendingButtonLink href={`/app/admin/scans/${scan.scanId}`} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
                   </td>
                 </tr>
               ))}

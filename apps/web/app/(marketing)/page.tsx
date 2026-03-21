@@ -4,6 +4,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@websit
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
+import { PendingButtonLink } from "../../components/ui/pending-link";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -245,19 +246,19 @@ export default async function MarketingHomePage() {
               Automated telemetry for pre-consent tracking, consent flow failures, third-party data collection, and policy-to-behavior contradictions. Built for teams that need scan evidence, not checklists.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Button
-                asChild
+              <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04] sm:w-auto"
-              >
-                <Link href="/preview">Run a scan</Link>
-              </Button>
-              <Button
-                asChild
-                variant="secondary"
+                href="/preview"
+                idleContent="Run a scan"
+                pendingContent="Opening..."
+              />
+              <PendingButtonLink
                 className="w-full border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50 sm:w-auto"
-              >
-                <Link href="http://localhost:3000/how-it-works">How it works</Link>
-              </Button>
+                href="/how-it-works"
+                idleContent="How it works"
+                pendingContent="Opening..."
+                variant="secondary"
+              />
             </div>
             <p className="text-sm text-slate-500">
               CertScore.ai provides automated telemetry on publicly observable website signals related to frameworks such as GDPR, WCAG accessibility standards, CCPA/CPRA, cookie consent systems, and privacy disclosures.

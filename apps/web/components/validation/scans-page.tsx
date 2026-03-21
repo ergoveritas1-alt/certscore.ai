@@ -4,6 +4,8 @@ import { ViewerTimestamp } from "../time/viewer-timestamp";
 import { listValidationRuns } from "../../server/validation/repository";
 import { ValidationRescanForm } from "./validation-rescan-form";
 import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
+import { ValidationViewLink } from "./validation-view-link";
+import { PendingSubmitButton } from "../ui/pending-submit-button";
 
 type ValidationScansPageProps = {
   page?: number;
@@ -56,9 +58,12 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
               </select>
             </label>
             <div className="flex items-end">
-              <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950" type="submit">
-                Apply filters
-              </button>
+              <PendingSubmitButton
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                idleContent="Apply filters"
+                pendingContent="Applying..."
+                variant="secondary"
+              />
             </div>
           </form>
 
@@ -104,9 +109,7 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
                     </td>
                     <td className="py-4">
                       <div className="flex flex-wrap items-center gap-3">
-                        <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/validation/scans/${run.id}`}>
-                          View results
-                        </Link>
+                        <ValidationViewLink href={`/app/validation/scans/${run.id}`} idleLabel="View results" />
                         {run.domainId ? (
                           <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
                         ) : null}

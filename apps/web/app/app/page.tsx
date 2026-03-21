@@ -2,6 +2,7 @@ import Link from "next/link";
 import { type PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
+import { PendingButtonLink } from "../../components/ui/pending-link";
 import { RescanDomainForm } from "../../components/scans/rescan-domain-form";
 import { getDashboardContext } from "../../server/auth";
 import { listOrganizationChanges } from "../../server/changes/list-organization-changes";
