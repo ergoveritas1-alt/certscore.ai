@@ -248,6 +248,16 @@ export type SnapshotBuildPhaseSummary = {
   startedAt: string;
 };
 
+function shouldRetryBrowserRuntimeCapture(error: unknown) {
+  const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
+  return /timeout|timed out|browser|context|playwright|page closed|target page|navigation|econn|socket|network/.test(message);
+}
+
+function shouldRetryPolicyEnrichment(error: unknown) {
+  const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
+  return /timeout|timed out|provider|fetch|network|socket|econn|5\d\d|rate limit|overloaded|unavailable/.test(message);
+}
+
 const KEY_PAGE_TYPES = [
   "privacy_policy",
   "terms_of_service",
@@ -682,7 +692,9 @@ async function runSnapshotBuildPhase<T>(input: {
 }
 
 export const testInternals = {
-  runSnapshotBuildPhase
+  runSnapshotBuildPhase,
+  shouldRetryBrowserRuntimeCapture,
+  shouldRetryPolicyEnrichment
 };
 
 async function withStepTimeout<T>(
@@ -3266,11 +3278,6 @@ async function runBrowserRuntimeCapturePhase(input: {
   scanId: string;
   scanPlan: ScanPlan;
 }) {
-  const shouldRetryBrowserRuntimeCapture = (error: unknown) => {
-    const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
-    return /timeout|timed out|browser|context|playwright|page closed|target page|navigation|econn|socket|network/.test(message);
-  };
-
   return runSnapshotBuildPhase({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -3651,10 +3658,6 @@ async function runPolicyEnrichmentPhase(input: {
     5_000,
     Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000
   );
-  const shouldRetryPolicyEnrichment = (error: unknown) => {
-    const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
-    return /timeout|timed out|provider|fetch|network|socket|econn|5\d\d|rate limit|overloaded|unavailable/.test(message);
-  };
   let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
   try {
     policyEnrichmentBundle = await runSnapshotBuildPhase({

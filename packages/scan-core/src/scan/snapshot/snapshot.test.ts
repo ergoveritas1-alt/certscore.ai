@@ -455,6 +455,28 @@ test("runSnapshotBuildPhase records failed attempts when retries are exhausted",
   assert.equal(summaries[0]?.error, "policy provider timed out");
 });
 
+test("browser runtime retry classifier keeps retries to transient browser/navigation failures", () => {
+  assert.equal(
+    buildSnapshotBundleTestInternals.shouldRetryBrowserRuntimeCapture(new Error("Playwright page closed during navigation timeout")),
+    true
+  );
+  assert.equal(
+    buildSnapshotBundleTestInternals.shouldRetryBrowserRuntimeCapture(new Error("Missing scan record")),
+    false
+  );
+});
+
+test("policy enrichment retry classifier retries provider/network faults but not content gaps", () => {
+  assert.equal(
+    buildSnapshotBundleTestInternals.shouldRetryPolicyEnrichment(new Error("Provider overloaded with 503 unavailable response")),
+    true
+  );
+  assert.equal(
+    buildSnapshotBundleTestInternals.shouldRetryPolicyEnrichment(new Error("No policy pages available for enrichment")),
+    false
+  );
+});
+
 test("discoverCandidatePages prioritizes legal and contact routes", () => {
   const candidates = discoverCandidatePages("https://example.com/", [
     { href: "https://example.com/privacy-policy", text: "Privacy" },
