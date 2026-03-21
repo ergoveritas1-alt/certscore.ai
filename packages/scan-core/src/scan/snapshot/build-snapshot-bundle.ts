@@ -238,7 +238,7 @@ const SNAPSHOT_BUILD_PHASES = [
 
 type SnapshotBuildPhaseName = (typeof SNAPSHOT_BUILD_PHASES)[number];
 
-type SnapshotBuildPhaseSummary = {
+export type SnapshotBuildPhaseSummary = {
   attempts: number;
   completedAt: string;
   durationMs: number;
@@ -586,13 +586,16 @@ async function runSnapshotBuildPhase<T>(input: {
   operation: () => Promise<T>;
   organizationId: string | null;
   phase: SnapshotBuildPhaseName;
+  persistDiagnostic?: typeof persistBuildPhaseDiagnostic;
   scanId: string;
   shouldRetry?: (error: unknown, attempt: number) => boolean;
   summaries: SnapshotBuildPhaseSummary[];
 }) {
   const startedAt = new Date();
   const maxAttempts = Math.max(1, input.maxAttempts ?? 1);
-  await persistBuildPhaseDiagnostic({
+  const persistDiagnostic = input.persistDiagnostic ?? persistBuildPhaseDiagnostic;
+
+  await persistDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
     organizationId: input.organizationId,
@@ -623,7 +626,7 @@ async function runSnapshotBuildPhase<T>(input: {
         startedAt: startedAt.toISOString()
       };
       input.summaries.push(summary);
-      await persistBuildPhaseDiagnostic({
+      await persistDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
         organizationId: input.organizationId,
@@ -641,7 +644,7 @@ async function runSnapshotBuildPhase<T>(input: {
     } catch (error) {
       const shouldRetry = attempt < maxAttempts && (input.shouldRetry?.(error, attempt) ?? false);
 
-      await persistBuildPhaseDiagnostic({
+      await persistDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
         organizationId: input.organizationId,
@@ -677,6 +680,10 @@ async function runSnapshotBuildPhase<T>(input: {
 
   throw new Error(`Build phase ${input.phase} failed unexpectedly`);
 }
+
+export const testInternals = {
+  runSnapshotBuildPhase
+};
 
 async function withStepTimeout<T>(
   timeoutMs: number,

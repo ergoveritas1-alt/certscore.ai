@@ -23,6 +23,8 @@ import {
   extractSensitivePayloadTexts,
   derivePolicyTermsConflictDetected,
   inferConsentDarkPatternFlags,
+  type SnapshotBuildPhaseSummary,
+  testInternals as buildSnapshotBundleTestInternals,
   shouldCapturePreconsentState0Request,
   summarizePreconsentBaselineEvidence
 } from "./build-snapshot-bundle";
@@ -395,6 +397,63 @@ function makeSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     ...overrides
   };
 }
+
+test("runSnapshotBuildPhase retries once and records attempts on success", async () => {
+  const summaries: SnapshotBuildPhaseSummary[] = [];
+  let attempts = 0;
+
+  const result = await buildSnapshotBundleTestInternals.runSnapshotBuildPhase({
+    domainId: "domain-1",
+    maxAttempts: 2,
+    operation: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("browser navigation timed out");
+      }
+      return "ok";
+    },
+    organizationId: "org-1",
+    persistDiagnostic: async () => undefined,
+    phase: "browser_runtime_capture",
+    scanId: "scan-1",
+    shouldRetry: () => true,
+    summaries
+  });
+
+  assert.equal(result, "ok");
+  assert.equal(attempts, 2);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.attempts, 2);
+  assert.equal(summaries[0]?.outcome, "success");
+  assert.equal(summaries[0]?.error, null);
+});
+
+test("runSnapshotBuildPhase records failed attempts when retries are exhausted", async () => {
+  const summaries: SnapshotBuildPhaseSummary[] = [];
+  let attempts = 0;
+
+  await assert.rejects(() =>
+    buildSnapshotBundleTestInternals.runSnapshotBuildPhase({
+      domainId: "domain-1",
+      maxAttempts: 2,
+      operation: async () => {
+        attempts += 1;
+        throw new Error("policy provider timed out");
+      },
+      organizationId: "org-1",
+      persistDiagnostic: async () => undefined,
+      phase: "policy_enrichment",
+      scanId: "scan-1",
+      shouldRetry: () => true,
+      summaries
+    })
+  );
+
+  assert.equal(attempts, 2);
+  assert.equal(summaries[0]?.attempts, 2);
+  assert.equal(summaries[0]?.outcome, "failed");
+  assert.equal(summaries[0]?.error, "policy provider timed out");
+});
 
 test("discoverCandidatePages prioritizes legal and contact routes", () => {
   const candidates = discoverCandidatePages("https://example.com/", [
