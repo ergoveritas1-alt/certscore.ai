@@ -20,6 +20,7 @@ const CONSENT_SCHEMA_CHECKS = [
   {
     table: "scan_runtime_artifacts",
     columns: [
+      "build_phase_summaries",
       "consent_audit_completed",
       "consent_reject_click_count",
       "consent_accept_click_count",

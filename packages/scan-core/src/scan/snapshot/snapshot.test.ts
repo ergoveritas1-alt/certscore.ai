@@ -521,6 +521,61 @@ test("consent visibility comparison only treats materially better consent eviden
   );
 });
 
+test("quick scan discovery budget limits second-wave fetch attempts", () => {
+  assert.deepEqual(
+    buildSnapshotBundleTestInternals.getAdditionalDiscoveryFetchBudget({
+      requestedPageCount: 3,
+      scanPlan: {
+        blockStylesheetsInBrowser: false,
+        browserNavigationTimeoutMs: 18000,
+        browserPostLoadWaitMs: 2000,
+        expansionTargetCount: 5,
+        prefetchTargetCount: 4,
+        profile: "js_heavy",
+        staticFetchConcurrency: 2
+      }
+    }),
+    {
+      maxAdditionalFetchAttempts: 3,
+      maxFetchAttemptsPerType: 1,
+      maxSecondHopLegalHubFetchesPerMissingType: 0
+    }
+  );
+});
+
+test("non-quick scan discovery budget preserves broader fallback coverage", () => {
+  assert.deepEqual(
+    buildSnapshotBundleTestInternals.getAdditionalDiscoveryFetchBudget({
+      requestedPageCount: 5,
+      scanPlan: {
+        blockStylesheetsInBrowser: true,
+        browserNavigationTimeoutMs: 16000,
+        browserPostLoadWaitMs: 1400,
+        expansionTargetCount: 5,
+        prefetchTargetCount: 4,
+        profile: "balanced",
+        staticFetchConcurrency: 2
+      }
+    }),
+    {
+      maxAdditionalFetchAttempts: 8,
+      maxFetchAttemptsPerType: 3,
+      maxSecondHopLegalHubFetchesPerMissingType: 1
+    }
+  );
+});
+
+test("isQuickScanPlan recognizes the reduced quick-scan budget shape", () => {
+  assert.equal(
+    buildSnapshotBundleTestInternals.isQuickScanPlan(3),
+    true
+  );
+});
+
+test("isQuickScanPlan rejects broader scan plans", () => {
+  assert.equal(buildSnapshotBundleTestInternals.isQuickScanPlan(5), false);
+});
+
 test("discoverCandidatePages prioritizes legal and contact routes", () => {
   const candidates = discoverCandidatePages("https://example.com/", [
     { href: "https://example.com/privacy-policy", text: "Privacy" },

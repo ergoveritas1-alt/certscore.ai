@@ -5,7 +5,8 @@ import {
   buildAccessibilityRuleExampleRows,
   buildPreconsentViolationRows,
   buildRuntimeArtifactRow,
-  buildSnapshotInsert
+  buildSnapshotInsert,
+  omitOptionalRuntimeArtifactsColumn
 } from "./save-snapshot-bundle";
 
 test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", () => {
@@ -151,7 +152,23 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentPostAcceptCookieCount: 10,
       consentPostAcceptThirdPartyCookieCount: 8,
       consentPostAcceptTrackerEvidenceUrls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
-      consentPostAcceptTrackerVendorNames: ["Google Ads", "LinkedIn Insight Tag"]
+      consentPostAcceptTrackerVendorNames: ["Google Ads", "LinkedIn Insight Tag"],
+      buildPhaseSummaries: [
+        {
+          attempts: 1,
+          completedAt: "2026-03-20T14:20:05.000Z",
+          durationMs: 1200,
+          errorCategory: null,
+          message: null,
+          metadata: {
+            homepageUrl: "https://example.com/"
+          },
+          outcome: "success",
+          phase: "browser_runtime_capture",
+          recoverable: false,
+          startedAt: "2026-03-20T14:20:03.800Z"
+        }
+      ]
     }
   } as unknown as SnapshotBundle;
 
@@ -280,7 +297,39 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_post_accept_cookie_count: 10,
     consent_post_accept_third_party_cookie_count: 8,
     consent_post_accept_tracker_evidence_urls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
-    consent_post_accept_tracker_vendor_names: ["Google Ads", "LinkedIn Insight Tag"]
+    consent_post_accept_tracker_vendor_names: ["Google Ads", "LinkedIn Insight Tag"],
+    build_phase_summaries: [
+      {
+        attempts: 1,
+        completedAt: "2026-03-20T14:20:05.000Z",
+        durationMs: 1200,
+        errorCategory: null,
+        message: null,
+        metadata: {
+          homepageUrl: "https://example.com/"
+        },
+        outcome: "success",
+        phase: "browser_runtime_capture",
+        recoverable: false,
+        startedAt: "2026-03-20T14:20:03.800Z"
+      }
+    ]
+  });
+});
+
+test("omitOptionalRuntimeArtifactsColumn removes unsupported optional runtime fields", () => {
+  const strippedRow = omitOptionalRuntimeArtifactsColumn(
+    {
+      build_phase_summaries: [{ phase: "browser_runtime_capture" }],
+      scan_id: "scan-1",
+      third_party_request_count: 1
+    },
+    "Could not find the 'build_phase_summaries' column of 'scan_runtime_artifacts' in the schema cache"
+  );
+
+  assert.deepEqual(strippedRow, {
+    scan_id: "scan-1",
+    third_party_request_count: 1
   });
 });
 

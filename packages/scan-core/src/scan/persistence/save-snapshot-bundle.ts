@@ -18,6 +18,27 @@ type RuntimeArtifactsPatchInput = {
   scanId: string;
 };
 
+const OPTIONAL_RUNTIME_ARTIFACT_COLUMNS = ["build_phase_summaries"] as const;
+
+function getMissingColumnName(errorMessage: string) {
+  const match = errorMessage.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
+export function omitOptionalRuntimeArtifactsColumn(
+  row: Record<string, unknown>,
+  errorMessage: string
+): Record<string, unknown> | null {
+  const missingColumn = getMissingColumnName(errorMessage);
+  if (!missingColumn || !OPTIONAL_RUNTIME_ARTIFACT_COLUMNS.includes(missingColumn as (typeof OPTIONAL_RUNTIME_ARTIFACT_COLUMNS)[number])) {
+    return null;
+  }
+
+  const nextRow = { ...row };
+  delete nextRow[missingColumn];
+  return nextRow;
+}
+
 export function buildRuntimeArtifactRow(bundle: SnapshotBundle) {
   return {
     ...camelToSnakeRecord(bundle.runtimeArtifacts),
@@ -242,17 +263,31 @@ export async function persistAccessibilityEvidence(input: AccessibilityEvidenceP
 
 export async function persistRuntimeArtifactsPatch(input: RuntimeArtifactsPatchInput) {
   const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_runtime_artifacts").upsert(
-    {
-      ...camelToSnakeRecord(input.runtimeArtifacts),
-      domain_id: input.domainId,
-      organization_id: input.organizationId,
-      scan_id: input.scanId
-    },
-    {
-      onConflict: "scan_id"
+  const runtimeArtifactsRow = {
+    ...camelToSnakeRecord(input.runtimeArtifacts),
+    domain_id: input.domainId,
+    organization_id: input.organizationId,
+    scan_id: input.scanId
+  };
+  const { error } = await supabase.from("scan_runtime_artifacts").upsert(runtimeArtifactsRow, {
+    onConflict: "scan_id"
+  });
+
+  if (error) {
+    const fallbackRow = omitOptionalRuntimeArtifactsColumn(runtimeArtifactsRow, error.message);
+
+    if (fallbackRow) {
+      const { error: fallbackError } = await supabase.from("scan_runtime_artifacts").upsert(fallbackRow, {
+        onConflict: "scan_id"
+      });
+
+      if (!fallbackError) {
+        return;
+      }
+
+      throw new Error(`Failed to persist scan runtime artifacts patch: ${fallbackError.message}`);
     }
-  );
+  }
 
   if (error) {
     throw new Error(`Failed to persist scan runtime artifacts patch: ${error.message}`);

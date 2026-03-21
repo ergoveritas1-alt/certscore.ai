@@ -717,7 +717,9 @@ async function runSnapshotBuildPhase<T>(input: {
 
 export const testInternals = {
   doesCandidateImproveConsentVisibility,
+  getAdditionalDiscoveryFetchBudget,
   hasConsentVisibilitySignal,
+  isQuickScanPlan,
   runSnapshotBuildPhase,
   shouldRetryBrowserRuntimeCapture,
   shouldRetryPolicyEnrichment
@@ -3332,6 +3334,20 @@ async function runBrowserRuntimeCapturePhase(input: {
   });
 }
 
+function getAdditionalDiscoveryFetchBudget(input: { requestedPageCount: number; scanPlan: ScanPlan }) {
+  const quickScan = isQuickScanPlan(input.requestedPageCount);
+
+  return {
+    maxAdditionalFetchAttempts: quickScan ? 3 : KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts,
+    maxFetchAttemptsPerType: quickScan ? 1 : KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
+    maxSecondHopLegalHubFetchesPerMissingType: quickScan ? 0 : KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
+  };
+}
+
+function isQuickScanPlan(requestedPageCount: number) {
+  return requestedPageCount <= 3;
+}
+
 async function runDiscoveryExpansionPhase(input: {
   attemptedTargetUrls: Set<string>;
   browserPass: BrowserPassResult;
@@ -3344,6 +3360,7 @@ async function runDiscoveryExpansionPhase(input: {
   organizationId: string | null;
   preBrowserKeyPageDiscovery: Awaited<ReturnType<typeof buildKeyPageDiscoveryState>>;
   prefetchedPages: StaticPageResult[];
+  requestedPageCount: number;
   recordKeyPageFetchAttempt: (result: {
     fetchOutcome: StaticPageResult["fetchStatus"];
     finalUrl: string | null;
@@ -3357,6 +3374,10 @@ async function runDiscoveryExpansionPhase(input: {
   staticFetchConcurrency: number;
   expansionTargetCount: number;
 }) {
+  const additionalDiscoveryBudget = getAdditionalDiscoveryFetchBudget({
+    requestedPageCount: input.requestedPageCount,
+    scanPlan: input.scanPlan
+  });
   let keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
     input.preBrowserKeyPageDiscovery,
     await buildKeyPageDiscoveryState({
@@ -3428,7 +3449,7 @@ async function runDiscoveryExpansionPhase(input: {
   }
 
   if (!input.isPreviewScan) {
-    let remainingAdditionalFetchAttempts: number = KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts;
+    let remainingAdditionalFetchAttempts: number = additionalDiscoveryBudget.maxAdditionalFetchAttempts;
     const attemptedLegalHubUrls = new Set<string>();
     const secondHopUsageByType = new Map<string, number>();
 
@@ -3443,8 +3464,8 @@ async function runDiscoveryExpansionPhase(input: {
         attemptedUrls: input.attemptedTargetUrls,
         candidates: keyPageDiscoveryState.candidates.filter((candidate) => missingKeyPageTypes.includes(candidate.pageType)),
         fetchedPages: currentPages,
-        maxAttemptsPerType: KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
-        maxTotalAttempts: Math.min(remainingAdditionalFetchAttempts, KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts)
+        maxAttemptsPerType: additionalDiscoveryBudget.maxFetchAttemptsPerType,
+        maxTotalAttempts: Math.min(remainingAdditionalFetchAttempts, additionalDiscoveryBudget.maxAdditionalFetchAttempts)
       }).map((candidate) => ({
         pageType: candidate.pageType,
         priority: priorityForPage(candidate.pageType) + candidate.candidateScore,
@@ -3477,7 +3498,7 @@ async function runDiscoveryExpansionPhase(input: {
 
         return missingKeyPageTypes.some(
           (pageType) =>
-            (secondHopUsageByType.get(pageType) ?? 0) < KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
+            (secondHopUsageByType.get(pageType) ?? 0) < additionalDiscoveryBudget.maxSecondHopLegalHubFetchesPerMissingType
         );
       });
 
@@ -4393,6 +4414,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     organizationId: input.organizationId,
     preBrowserKeyPageDiscovery,
     prefetchedPages,
+    requestedPageCount: input.requestedPageCount,
     recordKeyPageFetchAttempt,
     robotsState,
     scanId: input.scanId,
@@ -4560,6 +4582,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
           domainId: input.domainId,
           fallbackStartUrls: consentFallbackStartUrls,
           organizationId: input.organizationId,
+          profileSweep: !isQuickScanPlan(input.requestedPageCount),
           scanId: input.scanId
         }).catch(() => null)
       : null;

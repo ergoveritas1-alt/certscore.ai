@@ -16,6 +16,20 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function buildQuickDiscoveryBudget(input: {
+  expansionMax: number;
+  prefetchMax: number;
+  requested: number;
+}) {
+  const requested = Math.max(1, input.requested);
+  const quickScan = requested <= 3;
+
+  return {
+    prefetchTargetCount: quickScan ? clamp(requested - 1, 1, input.prefetchMax) : Math.min(requested + 1, input.prefetchMax),
+    expansionTargetCount: quickScan ? clamp(requested, 2, input.expansionMax) : Math.min(requested + 2, input.expansionMax)
+  };
+}
+
 export function buildScanPlan(input: {
   homepage: StaticPageResult;
   requestedPageCount: number;
@@ -48,8 +62,11 @@ export function buildScanPlan(input: {
     case "high_block_risk":
       return {
         profile,
-        prefetchTargetCount: Math.min(requested + 1, 3),
-        expansionTargetCount: Math.min(requested + 2, 5),
+        ...buildQuickDiscoveryBudget({
+          requested,
+          prefetchMax: 3,
+          expansionMax: 5
+        }),
         staticFetchConcurrency: 1,
         browserNavigationTimeoutMs: 12_000,
         browserPostLoadWaitMs: 1_000,
@@ -78,8 +95,11 @@ export function buildScanPlan(input: {
     case "static_light":
       return {
         profile,
-        prefetchTargetCount: clamp(requested, 1, 4),
-        expansionTargetCount: clamp(requested + 1, 2, 5),
+        ...buildQuickDiscoveryBudget({
+          requested,
+          prefetchMax: 4,
+          expansionMax: 5
+        }),
         staticFetchConcurrency: crawlDelayHeavy ? 1 : 3,
         browserNavigationTimeoutMs: 14_000,
         browserPostLoadWaitMs: 900,
@@ -88,8 +108,11 @@ export function buildScanPlan(input: {
     default:
       return {
         profile: "balanced",
-        prefetchTargetCount: Math.min(requested + 1, 4),
-        expansionTargetCount: Math.min(requested + 2, 5),
+        ...buildQuickDiscoveryBudget({
+          requested,
+          prefetchMax: 4,
+          expansionMax: 5
+        }),
         staticFetchConcurrency: crawlDelayHeavy ? 1 : 2,
         browserNavigationTimeoutMs: 16_000,
         browserPostLoadWaitMs: 1_400,
