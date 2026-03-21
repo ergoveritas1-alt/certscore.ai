@@ -579,6 +579,7 @@ async function persistBuildPhaseDiagnostic(input: {
 async function runSnapshotBuildPhase<T>(input: {
   degraded?: boolean;
   domainId: string;
+  maxAttempts?: number;
   metadata?: Record<string, unknown>;
   onError?: (error: unknown, summary: SnapshotBuildPhaseSummary) => Promise<void> | void;
   onSuccess?: (summary: SnapshotBuildPhaseSummary, result: T) => Promise<void> | void;
@@ -586,9 +587,11 @@ async function runSnapshotBuildPhase<T>(input: {
   organizationId: string | null;
   phase: SnapshotBuildPhaseName;
   scanId: string;
+  shouldRetry?: (error: unknown, attempt: number) => boolean;
   summaries: SnapshotBuildPhaseSummary[];
 }) {
   const startedAt = new Date();
+  const maxAttempts = Math.max(1, input.maxAttempts ?? 1);
   await persistBuildPhaseDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -596,65 +599,83 @@ async function runSnapshotBuildPhase<T>(input: {
     phase: input.phase,
     status: "start",
     metadata: {
+      maxAttempts,
       startedAt: startedAt.toISOString(),
       ...(input.metadata ?? {})
     }
   });
 
-  try {
-    const result = await input.operation();
-    const completedAt = new Date();
-    const summary: SnapshotBuildPhaseSummary = {
-      attempts: 1,
-      completedAt: completedAt.toISOString(),
-      durationMs: completedAt.getTime() - startedAt.getTime(),
-      error: null,
-      outcome: input.degraded ? "degraded" : "success",
-      phase: input.phase,
-      startedAt: startedAt.toISOString()
-    };
-    input.summaries.push(summary);
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: input.phase,
-      status: "ok",
-      metadata: {
-        completedAt: summary.completedAt,
-        durationMs: summary.durationMs,
-        outcome: summary.outcome
+  let attempt = 0;
+
+  while (attempt < maxAttempts) {
+    attempt += 1;
+
+    try {
+      const result = await input.operation();
+      const completedAt = new Date();
+      const summary: SnapshotBuildPhaseSummary = {
+        attempts: attempt,
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        error: null,
+        outcome: input.degraded ? "degraded" : "success",
+        phase: input.phase,
+        startedAt: startedAt.toISOString()
+      };
+      input.summaries.push(summary);
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: input.phase,
+        status: "ok",
+        metadata: {
+          attempts: summary.attempts,
+          completedAt: summary.completedAt,
+          durationMs: summary.durationMs,
+          outcome: summary.outcome
+        }
+      });
+      await input.onSuccess?.(summary, result);
+      return result;
+    } catch (error) {
+      const shouldRetry = attempt < maxAttempts && (input.shouldRetry?.(error, attempt) ?? false);
+
+      await persistBuildPhaseDiagnostic({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        phase: input.phase,
+        status: "error",
+        metadata: {
+          attempt,
+          error: error instanceof Error ? error.message : "Unknown error",
+          willRetry: shouldRetry
+        }
+      });
+
+      if (shouldRetry) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(750, 250 * attempt)));
+        continue;
       }
-    });
-    await input.onSuccess?.(summary, result);
-    return result;
-  } catch (error) {
-    const completedAt = new Date();
-    const summary: SnapshotBuildPhaseSummary = {
-      attempts: 1,
-      completedAt: completedAt.toISOString(),
-      durationMs: completedAt.getTime() - startedAt.getTime(),
-      error: error instanceof Error ? error.message : "Unknown error",
-      outcome: "failed",
-      phase: input.phase,
-      startedAt: startedAt.toISOString()
-    };
-    input.summaries.push(summary);
-    await persistBuildPhaseDiagnostic({
-      scanId: input.scanId,
-      domainId: input.domainId,
-      organizationId: input.organizationId,
-      phase: input.phase,
-      status: "error",
-      metadata: {
-        completedAt: summary.completedAt,
-        durationMs: summary.durationMs,
-        error: summary.error
-      }
-    });
-    await input.onError?.(error, summary);
-    throw error;
+
+      const completedAt = new Date();
+      const summary: SnapshotBuildPhaseSummary = {
+        attempts: attempt,
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        error: error instanceof Error ? error.message : "Unknown error",
+        outcome: "failed",
+        phase: input.phase,
+        startedAt: startedAt.toISOString()
+      };
+      input.summaries.push(summary);
+      await input.onError?.(error, summary);
+      throw error;
+    }
   }
+
+  throw new Error(`Build phase ${input.phase} failed unexpectedly`);
 }
 
 async function withStepTimeout<T>(
@@ -3238,15 +3259,22 @@ async function runBrowserRuntimeCapturePhase(input: {
   scanId: string;
   scanPlan: ScanPlan;
 }) {
+  const shouldRetryBrowserRuntimeCapture = (error: unknown) => {
+    const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
+    return /timeout|timed out|browser|context|playwright|page closed|target page|navigation|econn|socket|network/.test(message);
+  };
+
   return runSnapshotBuildPhase({
     scanId: input.scanId,
     domainId: input.domainId,
     organizationId: input.organizationId,
+    maxAttempts: 2,
     phase: "browser_runtime_capture",
     summaries: input.buildPhaseSummaries,
     metadata: {
       homepageUrl: input.homepageUrl
     },
+    shouldRetry: (error) => shouldRetryBrowserRuntimeCapture(error),
     operation: async () =>
       runBestBrowserPass({
         domain: new URL(input.homepageUrl).hostname,
@@ -3616,18 +3644,24 @@ async function runPolicyEnrichmentPhase(input: {
     5_000,
     Number.parseInt(process.env.POLICY_ENRICHMENT_TIMEOUT_MS ?? "60000", 10) || 60_000
   );
+  const shouldRetryPolicyEnrichment = (error: unknown) => {
+    const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
+    return /timeout|timed out|provider|fetch|network|socket|econn|5\d\d|rate limit|overloaded|unavailable/.test(message);
+  };
   let policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
   try {
     policyEnrichmentBundle = await runSnapshotBuildPhase({
       scanId: input.scanId,
       domainId: input.domainId,
       organizationId: input.organizationId,
+      maxAttempts: 2,
       phase: "policy_enrichment",
       summaries: input.buildPhaseSummaries,
       metadata: {
         policyPageCount: input.policyPages.length,
         triggerReasonCount: policyLlmTriggerReasons.length
       },
+      shouldRetry: (error) => shouldRetryPolicyEnrichment(error),
       operation: async () =>
         withStepTimeout(policyEnrichmentTimeoutMs, "Policy enrichment", () =>
           enrichPolicyPages({
