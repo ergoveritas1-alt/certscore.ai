@@ -14,6 +14,7 @@ import { normalizeUrl, extractHostname } from "@website-signal-risk-scanner/shar
 import { revalidatePath } from "next/cache";
 import { enqueueFullScanJob } from "../queue/full-scan-queue";
 import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
+import { getWebServerEnv } from "../../lib/env";
 import { requireValidationAdminContext } from "./auth";
 import { shouldSurfacePrimarySignalFinding } from "../../lib/scans/finding-evidence-gates";
 
@@ -63,12 +64,16 @@ type ValidationTargetRow = {
   cooldown_until: string | null;
   deny_reason: string | null;
   denylisted: boolean;
+  failure_count?: number;
   hostname: string;
   id: string;
+  last_completed_at?: string | null;
   last_error: string | null;
+  last_run_at?: string | null;
   last_status: string | null;
   normalized_url: string;
   rank_band: string | null;
+  source?: string;
   tranco_rank: number | null;
 };
 
@@ -134,6 +139,155 @@ type PolicyEnrichmentLookupRow = {
   policy_cancellation_or_refund_present?: boolean | null;
   policy_arbitration_present?: boolean | null;
 };
+
+const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+
+function rankBandForRank(rank: number | null) {
+  if (!rank) {
+    return null;
+  }
+
+  if (rank <= 5_000) {
+    return "1k-5k";
+  }
+
+  if (rank <= 20_000) {
+    return "5k-20k";
+  }
+
+  if (rank <= 50_000) {
+    return "20k-50k";
+  }
+
+  if (rank <= 100_000) {
+    return "50k-100k";
+  }
+
+  return null;
+}
+
+async function listTrancoPreviewTargets(limit = 7) {
+  const env = getWebServerEnv();
+  const response = await fetch(env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL, {
+    headers: {
+      "User-Agent": "ValidationOpsCrawler/1.0"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Tranco source: ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  let body = await response.text();
+
+  if (contentType.includes("text/html") || body.includes("/download/")) {
+    const match = body.match(/href="(\/download\/[^"]+\/1000000)"/i);
+
+    if (!match?.[1]) {
+      throw new Error("Failed to resolve Tranco CSV download URL.");
+    }
+
+    const csvUrl = new URL(match[1], "https://tranco-list.eu").toString();
+    const csvResponse = await fetch(csvUrl, {
+      headers: {
+        "User-Agent": "ValidationOpsCrawler/1.0"
+      }
+    });
+
+    if (!csvResponse.ok) {
+      throw new Error(`Failed to fetch Tranco CSV: ${csvResponse.status}`);
+    }
+
+    body = await csvResponse.text();
+  }
+
+  const minRank = env.VALIDATION_TRANCO_MIN_RANK ?? 1000;
+  const maxRank = env.VALIDATION_TRANCO_MAX_RANK ?? 100000;
+  const rows: ValidationTargetRow[] = [];
+
+  for (const line of body.split(/\r?\n/)) {
+    if (!line) {
+      continue;
+    }
+
+    const [rankText, hostText] = line.split(",");
+    const rank = Number(rankText);
+    const hostname = hostText?.trim().toLowerCase();
+
+    if (!Number.isFinite(rank) || !hostname) {
+      continue;
+    }
+
+    if (rank < minRank || rank > maxRank) {
+      continue;
+    }
+
+    try {
+      rows.push({
+        active: true,
+        backoff_until: null,
+        cooldown_until: null,
+        deny_reason: null,
+        denylisted: false,
+        failure_count: 0,
+        hostname,
+        id: `tranco-preview-${rank}`,
+        last_completed_at: null,
+        last_error: null,
+        last_run_at: null,
+        last_status: null,
+        normalized_url: normalizeUrl(hostname),
+        rank_band: rankBandForRank(rank),
+        source: "tranco",
+        tranco_rank: rank
+      });
+    } catch {
+      continue;
+    }
+
+    if (rows.length >= limit) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
+function getUpcomingTargets(targets: ValidationTargetRow[], limit = 7) {
+  const now = new Date();
+  const eligibleTargets = targets.filter((target) => {
+    if (!target.active || target.denylisted) {
+      return false;
+    }
+
+    const cooldownOk = !target.cooldown_until || new Date(target.cooldown_until) <= now;
+    const backoffOk = !target.backoff_until || new Date(target.backoff_until) <= now;
+    return cooldownOk && backoffOk;
+  });
+
+  const manualTargets = eligibleTargets
+    .filter((target) => target.source === "manual")
+    .sort((left, right) => {
+      const leftRunAt = left.last_run_at ? new Date(left.last_run_at).getTime() : 0;
+      const rightRunAt = right.last_run_at ? new Date(right.last_run_at).getTime() : 0;
+
+      if (leftRunAt !== rightRunAt) {
+        return leftRunAt - rightRunAt;
+      }
+
+      return left.hostname.localeCompare(right.hostname);
+    });
+
+  const shuffledTrancoTargets = eligibleTargets
+    .filter((target) => {
+      const rank = target.tranco_rank;
+      return target.source === "tranco" && rank !== null && rank >= 1000 && rank <= 20000;
+    })
+    .sort(() => Math.random() - 0.5);
+
+  return [...manualTargets, ...shuffledTrancoTargets].slice(0, limit);
+}
 
 function isPopulatedValidationSignal(key: string, value: ScanSignalRow["signal_value_json"]) {
   if (value === null || value === undefined || value === "") {
@@ -830,7 +984,9 @@ export async function listValidationTargets(limit = 25) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("validation_targets")
-    .select("id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error")
+    .select(
+      "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source"
+    )
     .order("tranco_rank", { ascending: true, nullsFirst: true })
     .limit(limit);
 
@@ -838,7 +994,10 @@ export async function listValidationTargets(limit = 25) {
     throw new Error(`Failed to load validation targets: ${error.message}`);
   }
 
-  return ((data ?? []) as ValidationTargetRow[]).map((row) => ({
+  const rows = (data ?? []) as ValidationTargetRow[];
+  const fallbackRows = rows.length > 0 ? rows : await listTrancoPreviewTargets(limit);
+
+  return getUpcomingTargets(fallbackRows, limit).map((row) => ({
     active: row.active,
     backoffUntil: row.backoff_until,
     cooldownUntil: row.cooldown_until,
