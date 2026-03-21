@@ -3102,52 +3102,116 @@ function estimateSeverityCounts(snapshot: ScanSnapshot) {
   };
 }
 
-export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
-  const isPreviewScan = input.crawlSource === "preview";
-  const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
-  const buildPhaseSummaries: SnapshotBuildPhaseSummary[] = [];
-  const setupResult = await runSnapshotBuildPhase({
+function buildFallbackHomepage(startUrl: string): StaticPageResult {
+  return {
+    blockedByPolicy: false,
+    pageUrl: startUrl,
+    pageType: "homepage",
+    fetchStatus: "error",
+    finalUrl: startUrl,
+    headers: {},
+    html: "",
+    language: null,
+    links: [],
+    redirected: false,
+    scripts: [],
+    statusCode: null,
+    textContent: "",
+    title: null,
+    forms: []
+  };
+}
+
+function buildFallbackBrowserPass(): BrowserPassResult {
+  return {
+    acceptAllPresent: false,
+    consentBannerLayoutType: "unknown",
+    consentBannerPosition: "unknown",
+    consentPersistenceMechanismDetected: null,
+    cookieCategoryCount: null,
+    cookieCountTotal: null,
+    cmpVendorConfidence: null,
+    cmpVendorName: null,
+    consentAcceptButtonCount: null,
+    consentModeDetected: false,
+    consentInteractionModel: null,
+    consentPreferencesButtonCount: null,
+    cookieBannerPresent: false,
+    cookiePolicyLinkedFromBanner: false,
+    consentRejectButtonCount: null,
+    defaultTrackingState: "unknown",
+    darkPatternAcceptEmphasis: false,
+    darkPatternRejectHidden: false,
+    darkPatternRejectButtonMissing: false,
+    darkPatternAcceptButtonProminence: false,
+    darkPatternForcedConsentWall: false,
+    darkPatternAcceptOnlyBanner: false,
+    darkPatternDismissWithoutReject: false,
+    darkPatternCountdownTimerPresent: false,
+    darkPatternFakeScarcityLanguage: false,
+    firstPartyCookieSetBeforeConsent: null,
+    granularPreferencesPresent: false,
+    mixedContentDetected: false,
+    precheckedConsentBoxes: false,
+    preconsentTrackingDetected: false,
+    rejectAllPresent: false,
+    serviceWorkerDetected: null,
+    thirdPartyCookieCount: null,
+    thirdPartyCookieSetBeforeConsent: null,
+    trackingBeforeConsentDetected: null,
+    timedOut: true,
+    trackerVendors: [],
+    widgetVendor: null,
+    ruleCounts: [],
+    ruleExamples: [],
+    discoveredLinks: [],
+    domNodeCount: null,
+    domStructureHash: null,
+    initialCookieCount: null,
+    initialCookieDomains: [],
+    initialCookieNames: [],
+    preconsentEvidenceUrls: [],
+    sensitivePayloadViolations: [],
+    scriptSrcDomains: [],
+    scriptTagCount: 0,
+    thirdPartyRequestCount: 0,
+    thirdPartyRequestDomains: [],
+    trackerDiagnostics: []
+  };
+}
+
+async function runRobotsHomepageSetupPhase(input: {
+  crawlSource: ScanSnapshot["crawlSource"];
+  domainId: string;
+  organizationId: string | null;
+  requestedPageCount: number;
+  scanId: string;
+  startUrl: string;
+  summaries: SnapshotBuildPhaseSummary[];
+}) {
+  return runSnapshotBuildPhase({
     scanId: input.scanId,
     domainId: input.domainId,
     organizationId: input.organizationId,
     phase: "robots_homepage_setup",
-    summaries: buildPhaseSummaries,
+    summaries: input.summaries,
     metadata: {
       crawlSource: input.crawlSource,
       requestedPageCount: input.requestedPageCount,
-      startUrl
+      startUrl: input.startUrl
     },
     operation: async () => {
       const robotsState = await fetchRobotsState({
-        startUrl,
+        startUrl: input.startUrl,
         scanId: input.scanId,
         domainId: input.domainId
       });
       const homepage = await fetchStaticPage({
         pageType: "homepage",
         robotsPolicy: robotsState.policy,
-        url: startUrl
-      }).catch(
-        () =>
-          ({
-            blockedByPolicy: false,
-            pageUrl: startUrl,
-            pageType: "homepage",
-            fetchStatus: "error",
-            finalUrl: startUrl,
-            headers: {},
-            html: "",
-            language: null,
-            links: [],
-            redirected: false,
-            scripts: [],
-            statusCode: null,
-            textContent: "",
-            title: null,
-            forms: []
-          }) satisfies StaticPageResult
-      );
-      const homepageUrl = homepage.finalUrl ?? startUrl;
+        url: input.startUrl
+      }).catch(() => buildFallbackHomepage(input.startUrl));
+      const homepageUrl = homepage.finalUrl ?? input.startUrl;
       const scanPlan = buildScanPlan({
         homepage,
         requestedPageCount: input.requestedPageCount,
@@ -3161,6 +3225,60 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
         scanPlan
       };
     }
+  });
+}
+
+async function runBrowserRuntimeCapturePhase(input: {
+  buildPhaseSummaries: SnapshotBuildPhaseSummary[];
+  domainId: string;
+  homepageUrl: string;
+  organizationId: string | null;
+  robotsPolicy: RobotsPolicy | null;
+  scanId: string;
+  scanPlan: ScanPlan;
+}) {
+  return runSnapshotBuildPhase({
+    scanId: input.scanId,
+    domainId: input.domainId,
+    organizationId: input.organizationId,
+    phase: "browser_runtime_capture",
+    summaries: input.buildPhaseSummaries,
+    metadata: {
+      homepageUrl: input.homepageUrl
+    },
+    operation: async () =>
+      runBestBrowserPass({
+        domain: new URL(input.homepageUrl).hostname,
+        domainId: input.domainId,
+        homepageUrl: input.homepageUrl,
+        organizationId: input.organizationId,
+        plan: input.scanPlan,
+        robotsPolicy: input.robotsPolicy,
+        scanId: input.scanId
+      }).catch(() => buildFallbackBrowserPass()),
+    onSuccess: async (_summary, result) => {
+      if (result.timedOut) {
+        const latestSummary = input.buildPhaseSummaries[input.buildPhaseSummaries.length - 1];
+        if (latestSummary) {
+          latestSummary.outcome = "degraded";
+        }
+      }
+    }
+  });
+}
+
+export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
+  const isPreviewScan = input.crawlSource === "preview";
+  const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
+  const buildPhaseSummaries: SnapshotBuildPhaseSummary[] = [];
+  const setupResult = await runRobotsHomepageSetupPhase({
+    crawlSource: input.crawlSource,
+    domainId: input.domainId,
+    organizationId: input.organizationId,
+    requestedPageCount: input.requestedPageCount,
+    scanId: input.scanId,
+    startUrl,
+    summaries: buildPhaseSummaries
   });
   let { homepage } = setupResult;
   const { homepageUrl, robotsState, scanPlan } = setupResult;
@@ -3248,91 +3366,14 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
   });
   const { preBrowserKeyPageDiscovery, prefetchedPages } = preDiscoveryResult;
 
-  const browserPass = await runSnapshotBuildPhase({
-    scanId: input.scanId,
+  const browserPass = await runBrowserRuntimeCapturePhase({
+    buildPhaseSummaries,
     domainId: input.domainId,
+    homepageUrl,
     organizationId: input.organizationId,
-    phase: "browser_runtime_capture",
-    summaries: buildPhaseSummaries,
-    metadata: {
-      homepageUrl
-    },
-    degraded: false,
-    operation: async () =>
-      runBestBrowserPass({
-        domain: new URL(homepageUrl).hostname,
-        domainId: input.domainId,
-        homepageUrl,
-        organizationId: input.organizationId,
-        plan: scanPlan,
-        robotsPolicy: robotsState.policy,
-        scanId: input.scanId
-      }).catch(
-        () =>
-          ({
-            acceptAllPresent: false,
-            consentBannerLayoutType: "unknown",
-            consentBannerPosition: "unknown",
-            consentPersistenceMechanismDetected: null,
-            cookieCategoryCount: null,
-            cookieCountTotal: null,
-            cmpVendorConfidence: null,
-            cmpVendorName: null,
-            consentAcceptButtonCount: null,
-            consentModeDetected: false,
-            consentInteractionModel: null,
-            consentPreferencesButtonCount: null,
-            cookieBannerPresent: false,
-            cookiePolicyLinkedFromBanner: false,
-            consentRejectButtonCount: null,
-            defaultTrackingState: "unknown",
-            darkPatternAcceptEmphasis: false,
-            darkPatternRejectHidden: false,
-            darkPatternRejectButtonMissing: false,
-            darkPatternAcceptButtonProminence: false,
-            darkPatternForcedConsentWall: false,
-            darkPatternAcceptOnlyBanner: false,
-            darkPatternDismissWithoutReject: false,
-            darkPatternCountdownTimerPresent: false,
-            darkPatternFakeScarcityLanguage: false,
-            firstPartyCookieSetBeforeConsent: null,
-            granularPreferencesPresent: false,
-            mixedContentDetected: false,
-            precheckedConsentBoxes: false,
-            preconsentTrackingDetected: false,
-            rejectAllPresent: false,
-            serviceWorkerDetected: null,
-            thirdPartyCookieCount: null,
-            thirdPartyCookieSetBeforeConsent: null,
-            trackingBeforeConsentDetected: null,
-            timedOut: true,
-            trackerVendors: [],
-            widgetVendor: null,
-            ruleCounts: [],
-            ruleExamples: [],
-            discoveredLinks: [],
-            domNodeCount: null,
-            domStructureHash: null,
-            initialCookieCount: null,
-            initialCookieDomains: [],
-            initialCookieNames: [],
-            preconsentEvidenceUrls: [],
-            sensitivePayloadViolations: [],
-            scriptSrcDomains: [],
-            scriptTagCount: 0,
-            thirdPartyRequestCount: 0,
-            thirdPartyRequestDomains: [],
-            trackerDiagnostics: []
-          }) satisfies BrowserPassResult
-      ),
-    onSuccess: async (_summary, result) => {
-      if (result.timedOut) {
-        const latestSummary = buildPhaseSummaries[buildPhaseSummaries.length - 1];
-        if (latestSummary) {
-          latestSummary.outcome = "degraded";
-        }
-      }
-    }
+    robotsPolicy: robotsState.policy,
+    scanId: input.scanId,
+    scanPlan
   });
 
   let keyPageDiscoveryState = mergeKeyPageDiscoveryStates([
