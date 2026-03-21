@@ -4182,6 +4182,30 @@ function buildCompatibilitySignals(input: {
   return compatibilitySignals;
 }
 
+function buildFinalSnapshot(input: {
+  allTrackers: ScanTrackerVendor[];
+  compatibilitySignals: SnapshotSignalItem[];
+  snapshotWithScores: ScanSnapshot;
+}) {
+  const byCategory = input.compatibilitySignals.reduce<Record<string, number>>((accumulator, signal) => {
+    accumulator[signal.category] = (accumulator[signal.category] ?? 0) + 1;
+    return accumulator;
+  }, {});
+  const severityCounts = estimateSeverityCounts(input.snapshotWithScores);
+
+  return {
+    ...input.snapshotWithScores,
+    totalSignals: input.compatibilitySignals.length,
+    accessibilitySignalCount: byCategory.accessibility ?? 0,
+    privacySignalCount: byCategory.privacy ?? 0,
+    disclosureSignalCount: byCategory.disclosure ?? 0,
+    highSeverityCount: severityCounts.highSeverityCount,
+    mediumSeverityCount: severityCounts.mediumSeverityCount,
+    lowSeverityCount: severityCounts.lowSeverityCount,
+    trackerVendorCount: input.allTrackers.length
+  } satisfies ScanSnapshot;
+}
+
 export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Promise<SnapshotBundle> {
   const isPreviewScan = input.crawlSource === "preview";
   const startUrl = input.domain.startsWith("http://") || input.domain.startsWith("https://") ? input.domain : `https://${input.domain}`;
@@ -5270,22 +5294,11 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     runtimeArtifacts,
     snapshotWithScores
   });
-  const byCategory = compatibilitySignals.reduce<Record<string, number>>((accumulator, signal) => {
-    accumulator[signal.category] = (accumulator[signal.category] ?? 0) + 1;
-    return accumulator;
-  }, {});
-  const severityCounts = estimateSeverityCounts(snapshotWithScores);
-  const finalSnapshot: ScanSnapshot = {
-    ...snapshotWithScores,
-    totalSignals: compatibilitySignals.length,
-    accessibilitySignalCount: byCategory.accessibility ?? 0,
-    privacySignalCount: byCategory.privacy ?? 0,
-    disclosureSignalCount: byCategory.disclosure ?? 0,
-    highSeverityCount: severityCounts.highSeverityCount,
-    mediumSeverityCount: severityCounts.mediumSeverityCount,
-    lowSeverityCount: severityCounts.lowSeverityCount,
-    trackerVendorCount: allTrackers.length
-  };
+  const finalSnapshot = buildFinalSnapshot({
+    allTrackers,
+    compatibilitySignals,
+    snapshotWithScores
+  });
 
   return {
     runtimeArtifacts,
