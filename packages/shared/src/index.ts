@@ -6,6 +6,7 @@ export * from "./constants/validation";
 export * from "./types/entities";
 export * from "./types/signals";
 export * from "./types/preview";
+export * from "./types/scanner-execution";
 export * from "./types/snapshots";
 export * from "./policy-review-notes";
 export * from "./validation-finding-taxonomy";

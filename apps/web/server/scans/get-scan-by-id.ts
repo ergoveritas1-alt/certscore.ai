@@ -1,6 +1,13 @@
 "use server";
 
-import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
+import {
+  buildAgencyMappings,
+  buildRegulatoryRiskAssessment,
+  getScannerExecutionSummary,
+  type AgencyMapping,
+  type RegulatoryRiskAssessment,
+  type ScannerExecutionSummary
+} from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
@@ -17,6 +24,7 @@ export type ScanDetailRecord = {
   pagesRequested: number;
   pagesScanned: number;
   scanConfigJson: Record<string, unknown> | null;
+  executionSummary: ScannerExecutionSummary | null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -861,6 +869,7 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       pagesRequested: scanRow.pages_requested,
       pagesScanned: scanRow.pages_scanned,
       scanConfigJson: scanRow.scan_config_json,
+      executionSummary: getScannerExecutionSummary(scanRow.scan_config_json),
       createdAt: scanRow.created_at,
       startedAt: scanRow.started_at,
       completedAt: scanRow.completed_at,
