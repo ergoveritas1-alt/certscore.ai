@@ -1965,44 +1965,97 @@ async function addRandomTrancoValidationTarget(params: {
   supabase: ReturnType<typeof createAdminClient>;
 }) {
   const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, supabase } = params;
-  const { candidate, targetRank } = await pickRandomTrancoValidationTarget(supabase, excludedHostnames);
+  try {
+    const { candidate, targetRank } = await pickRandomTrancoValidationTarget(supabase, excludedHostnames);
 
-  const hostname = extractHostname(candidate.normalized_url);
-  const normalizedUrl = normalizeUrl(candidate.normalized_url);
+    const hostname = extractHostname(candidate.normalized_url);
+    const normalizedUrl = normalizeUrl(candidate.normalized_url);
 
-  const { error } = await supabase.from("validation_targets").upsert(
-    {
-      active: true,
-      denylisted: false,
+    const { error } = await supabase.from("validation_targets").upsert(
+      {
+        active: true,
+        denylisted: false,
+        hostname,
+        normalized_url: normalizedUrl,
+        rank_band: rankBandForRank(candidate.tranco_rank ?? null),
+        source: "tranco",
+        tranco_rank: candidate.tranco_rank ?? null
+      },
+      { onConflict: "hostname" }
+    );
+
+    if (error) {
+      throw new Error(`Failed to add validation target: ${error.message}`);
+    }
+
+    await supabase.from("validation_audit_events").insert({
+      actor_user_id: actorUserId,
+      event_type: eventType,
+      metadata_json: {
+        hostname,
+        ...metadata,
+        normalizedUrl,
+        selectedRank: candidate.tranco_rank,
+        targetRank
+      }
+    });
+
+    return {
       hostname,
-      normalized_url: normalizedUrl,
-      source: "manual"
-    },
-    { onConflict: "hostname" }
-  );
-
-  if (error) {
-    throw new Error(`Failed to add validation target: ${error.message}`);
-  }
-
-  await supabase.from("validation_audit_events").insert({
-    actor_user_id: actorUserId,
-    event_type: eventType,
-    metadata_json: {
-      hostname,
-      ...metadata,
       normalizedUrl,
       selectedRank: candidate.tranco_rank,
       targetRank
-    }
-  });
+    };
+  } catch (error) {
+    const previews = await listTrancoPreviewTargets(32);
+    const excluded = new Set((excludedHostnames ?? []).filter(Boolean));
+    const fallback = previews.find((target) => !excluded.has(target.hostname));
 
-  return {
-    hostname,
-    normalizedUrl,
-    selectedRank: candidate.tranco_rank,
-    targetRank
-  };
+    if (!fallback) {
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error("No Tranco validation target is available.");
+    }
+
+    const { error: insertError } = await supabase.from("validation_targets").upsert(
+      {
+        active: true,
+        denylisted: false,
+        hostname: fallback.hostname,
+        normalized_url: fallback.normalized_url,
+        rank_band: rankBandForRank(fallback.tranco_rank ?? null),
+        source: "tranco",
+        tranco_rank: fallback.tranco_rank ?? null
+      },
+      { onConflict: "hostname" }
+    );
+
+    if (insertError) {
+      throw new Error(`Failed to add validation target: ${insertError.message}`);
+    }
+
+    await supabase.from("validation_audit_events").insert({
+      actor_user_id: actorUserId,
+      event_type: eventType,
+      metadata_json: {
+        hostname: fallback.hostname,
+        ...metadata,
+        normalizedUrl: fallback.normalized_url,
+        selectedRank: fallback.tranco_rank,
+        targetRank: fallback.tranco_rank,
+        replacementSource: "tranco_preview_fallback"
+      }
+    });
+
+    return {
+      hostname: fallback.hostname,
+      normalizedUrl: fallback.normalized_url,
+      selectedRank: fallback.tranco_rank,
+      targetRank: fallback.tranco_rank
+    };
+  }
 }
 
 export async function addValidationTargetAction(input: { hostname: string }) {
