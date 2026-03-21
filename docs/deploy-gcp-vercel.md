@@ -71,6 +71,7 @@ Best practice:
 - Cloud Run worker pools should bind sensitive worker values from GCP Secret Manager, not from a repo-local env file.
 - The deploy scripts have production-safe defaults for non-secret Supabase/storage config, so a repo-local prod env file is no longer part of the normal deploy path.
 - The worker pools should run under dedicated runtime service accounts rather than the default compute service account.
+- Cloud Build should use a dedicated build service account with image push, storage, and logging permissions instead of the default compute service account.
 
 Optional values the script forwards if present:
 

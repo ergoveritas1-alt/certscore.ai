@@ -7,6 +7,7 @@ REPOSITORY="${REPOSITORY:-certscore}"
 WORKER_POOL_NAME="${WORKER_POOL_NAME:-certscore-validation-worker}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/validation-worker:${IMAGE_TAG}"
+build_service_account="${BUILD_SERVICE_ACCOUNT:-certscore-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
 service_account="${SERVICE_ACCOUNT:-certscore-validation-worker-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
 prod_supabase_url="${NEXT_PUBLIC_SUPABASE_URL:-https://wgfhzyrysztmtrjbcsgy.supabase.co}"
 prod_supabase_anon_key="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-sb_publishable_5IJ4sZwcahADQtkyMq2rgA_g6NaYJxS}"
@@ -62,6 +63,8 @@ if ! gcloud artifacts repositories describe "${REPOSITORY}" \
 fi
 
 cat > "${cloudbuild_config}" <<EOF
+options:
+  logging: CLOUD_LOGGING_ONLY
 steps:
   - name: gcr.io/cloud-builders/docker
     args:
@@ -77,6 +80,7 @@ EOF
 
 gcloud builds submit \
   --project "${PROJECT_ID}" \
+  --service-account "projects/${PROJECT_ID}/serviceAccounts/${build_service_account}" \
   --config "${cloudbuild_config}" \
   .
 
