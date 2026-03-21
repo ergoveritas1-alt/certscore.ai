@@ -248,6 +248,30 @@ export type SnapshotBuildPhaseSummary = {
   startedAt: string;
 };
 
+function hasConsentVisibilitySignal(browserPass: BrowserPassResult) {
+  return (
+    browserPass.cookieBannerPresent ||
+    Boolean(browserPass.cmpVendorName) ||
+    (browserPass.consentAcceptButtonCount ?? 0) > 0 ||
+    (browserPass.consentRejectButtonCount ?? 0) > 0 ||
+    (browserPass.consentPreferencesButtonCount ?? 0) > 0 ||
+    browserPass.cookiePolicyLinkedFromBanner ||
+    browserPass.consentModeDetected
+  );
+}
+
+function doesCandidateImproveConsentVisibility(currentPass: BrowserPassResult, candidatePass: BrowserPassResult) {
+  return (
+    candidatePass.cookieBannerPresent ||
+    (!currentPass.cmpVendorName && Boolean(candidatePass.cmpVendorName)) ||
+    (candidatePass.consentAcceptButtonCount ?? 0) > (currentPass.consentAcceptButtonCount ?? 0) ||
+    (candidatePass.consentRejectButtonCount ?? 0) > (currentPass.consentRejectButtonCount ?? 0) ||
+    (candidatePass.consentPreferencesButtonCount ?? 0) > (currentPass.consentPreferencesButtonCount ?? 0) ||
+    (!currentPass.cookiePolicyLinkedFromBanner && candidatePass.cookiePolicyLinkedFromBanner) ||
+    (!currentPass.consentModeDetected && candidatePass.consentModeDetected)
+  );
+}
+
 function shouldRetryBrowserRuntimeCapture(error: unknown) {
   const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error ?? "").toLowerCase();
   return /timeout|timed out|browser|context|playwright|page closed|target page|navigation|econn|socket|network/.test(message);
@@ -692,6 +716,8 @@ async function runSnapshotBuildPhase<T>(input: {
 }
 
 export const testInternals = {
+  doesCandidateImproveConsentVisibility,
+  hasConsentVisibilitySignal,
   runSnapshotBuildPhase,
   shouldRetryBrowserRuntimeCapture,
   shouldRetryPolicyEnrichment
@@ -2860,10 +2886,7 @@ async function runBestBrowserPass(input: {
   });
 
   if (!browserPass.cookieBannerPresent && shouldSweepProfiles) {
-    const shouldRetryForVisibility =
-      browserPass.cookieBannerPresent ||
-      Boolean(browserPass.cmpVendorName) ||
-      browserPass.trackerVendors.length > 0;
+    const shouldRetryForVisibility = hasConsentVisibilitySignal(browserPass);
     await persistBuildPhaseDiagnostic({
       scanId: input.scanId,
       domainId: input.domainId,
@@ -2920,12 +2943,7 @@ async function runBestBrowserPass(input: {
           }
         });
 
-        const candidateImprovesVisibility =
-          candidatePass.cookieBannerPresent ||
-          (!browserPass.cmpVendorName && Boolean(candidatePass.cmpVendorName)) ||
-          candidatePass.consentAcceptButtonCount !== browserPass.consentAcceptButtonCount ||
-          candidatePass.consentRejectButtonCount !== browserPass.consentRejectButtonCount ||
-          candidatePass.consentPreferencesButtonCount !== browserPass.consentPreferencesButtonCount;
+        const candidateImprovesVisibility = doesCandidateImproveConsentVisibility(browserPass, candidatePass);
         await persistBuildPhaseDiagnostic({
           scanId: input.scanId,
           domainId: input.domainId,
@@ -2944,6 +2962,10 @@ async function runBestBrowserPass(input: {
         }
 
         if (candidatePass.cookieBannerPresent) {
+          break;
+        }
+
+        if (!candidateImprovesVisibility) {
           break;
         }
       }
@@ -5422,10 +5444,7 @@ export async function runConsentProbe(input: {
   }
 
   if (!browserPass.cookieBannerPresent && shouldSweepProfiles) {
-    const shouldRetryForVisibility =
-      browserPass.cookieBannerPresent ||
-      Boolean(browserPass.cmpVendorName) ||
-      browserPass.trackerVendors.length > 0;
+    const shouldRetryForVisibility = hasConsentVisibilitySignal(browserPass);
 
     if (shouldRetryForVisibility) {
       for (const profile of probeProfiles.slice(1)) {
@@ -5441,12 +5460,7 @@ export async function runConsentProbe(input: {
           browserContextOptions: profile.contextOptions
         });
 
-        const candidateImprovesVisibility =
-          candidatePass.cookieBannerPresent ||
-          (!browserPass.cmpVendorName && Boolean(candidatePass.cmpVendorName)) ||
-          candidatePass.consentAcceptButtonCount !== browserPass.consentAcceptButtonCount ||
-          candidatePass.consentRejectButtonCount !== browserPass.consentRejectButtonCount ||
-          candidatePass.consentPreferencesButtonCount !== browserPass.consentPreferencesButtonCount;
+        const candidateImprovesVisibility = doesCandidateImproveConsentVisibility(browserPass, candidatePass);
 
         if (candidateImprovesVisibility) {
           browserPass = candidatePass;
@@ -5454,6 +5468,10 @@ export async function runConsentProbe(input: {
         }
 
         if (candidatePass.cookieBannerPresent) {
+          break;
+        }
+
+        if (!candidateImprovesVisibility) {
           break;
         }
       }

@@ -477,6 +477,50 @@ test("policy enrichment retry classifier retries provider/network faults but not
   );
 });
 
+test("consent visibility gate does not trigger profile sweep for tracker-only signal", () => {
+  const trackerOnlyPass = {
+    cookieBannerPresent: false,
+    cmpVendorName: null,
+    consentAcceptButtonCount: 0,
+    consentRejectButtonCount: 0,
+    consentPreferencesButtonCount: 0,
+    cookiePolicyLinkedFromBanner: false,
+    consentModeDetected: false
+  };
+
+  assert.equal(buildSnapshotBundleTestInternals.hasConsentVisibilitySignal(trackerOnlyPass as never), false);
+});
+
+test("consent visibility comparison only treats materially better consent evidence as an improvement", () => {
+  const baselinePass = {
+    cookieBannerPresent: false,
+    cmpVendorName: null,
+    consentAcceptButtonCount: 0,
+    consentRejectButtonCount: 0,
+    consentPreferencesButtonCount: 0,
+    cookiePolicyLinkedFromBanner: false,
+    consentModeDetected: false
+  };
+
+  const unchangedCandidate = {
+    ...baselinePass,
+    cookieCountTotal: 1
+  };
+  const improvedCandidate = {
+    ...baselinePass,
+    consentPreferencesButtonCount: 1
+  };
+
+  assert.equal(
+    buildSnapshotBundleTestInternals.doesCandidateImproveConsentVisibility(baselinePass as never, unchangedCandidate as never),
+    false
+  );
+  assert.equal(
+    buildSnapshotBundleTestInternals.doesCandidateImproveConsentVisibility(baselinePass as never, improvedCandidate as never),
+    true
+  );
+});
+
 test("discoverCandidatePages prioritizes legal and contact routes", () => {
   const candidates = discoverCandidatePages("https://example.com/", [
     { href: "https://example.com/privacy-policy", text: "Privacy" },
