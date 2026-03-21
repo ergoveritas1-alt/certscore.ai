@@ -1482,17 +1482,22 @@ export async function queueManualValidationRunAction(input: {
   }
 
   const supabase = createAdminClient();
-  const { data: target, error } = await supabase
-    .from("validation_targets")
-    .select("id, hostname, normalized_url, tranco_rank")
-    .eq("id", input.targetId)
-    .maybeSingle();
+  const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
+  let resolvedTarget: { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null = null;
 
-  if (error) {
-    throw new Error(`Failed to load validation target: ${error.message}`);
+  if (!isSyntheticPreviewTarget) {
+    const { data: target, error } = await supabase
+      .from("validation_targets")
+      .select("id, hostname, normalized_url, tranco_rank")
+      .eq("id", input.targetId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to load validation target: ${error.message}`);
+    }
+
+    resolvedTarget = (target as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
   }
-
-  let resolvedTarget = (target as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
 
   if (!resolvedTarget && input.hostname && input.normalizedUrl) {
     const materializedSource = input.source === "tranco" ? "tranco" : "manual";
