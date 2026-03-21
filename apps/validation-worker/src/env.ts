@@ -29,11 +29,11 @@ const workerEnvSchema = z.object({
   ),
   VALIDATION_TRANCO_MIN_RANK: z.preprocess(
     emptyStringToUndefined,
-    z.coerce.number().int().min(1).default(1000)
+    z.coerce.number().int().min(1).default(10_000)
   ),
   VALIDATION_TRANCO_MAX_RANK: z.preprocess(
     emptyStringToUndefined,
-    z.coerce.number().int().min(1000).default(100000)
+    z.coerce.number().int().min(1000).default(20_000)
   ),
   VALIDATION_TRANCO_SOURCE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_OPENAI_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4")),

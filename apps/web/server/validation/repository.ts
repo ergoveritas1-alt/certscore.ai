@@ -202,8 +202,8 @@ async function listTrancoPreviewTargets(limit = 7) {
     body = await csvResponse.text();
   }
 
-  const minRank = env.VALIDATION_TRANCO_MIN_RANK ?? 1000;
-  const maxRank = env.VALIDATION_TRANCO_MAX_RANK ?? 100000;
+  const minRank = env.VALIDATION_TRANCO_MIN_RANK ?? 10_000;
+  const maxRank = env.VALIDATION_TRANCO_MAX_RANK ?? 20_000;
   const rows: ValidationTargetRow[] = [];
 
   for (const line of body.split(/\r?\n/)) {
