@@ -109,13 +109,15 @@ Compatibility note:
 9. Provision a Redis instance and set `REDIS_URL`.
 10. Install Playwright Chromium for the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
-11. Start the web app:
+11. Start the main local app:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-12. Start the validation web app on a separate port when needed:
+12. Start validation local development with a watched validation worker:
+   - `pnpm dev:validation`
+13. Start the validation-only web app on a separate port when needed:
    - `pnpm dev:validation:web`
-13. Start the worker:
+14. Start the main scan worker when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker dev`
-14. Run a scheduler sweep manually when needed:
+15. Run a scheduler sweep manually when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification

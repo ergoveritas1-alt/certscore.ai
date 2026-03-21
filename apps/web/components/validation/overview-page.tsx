@@ -87,7 +87,7 @@ export async function ValidationOverviewPage() {
 
             {showWorkerHeartbeatWarning ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                Validation worker heartbeat is stale. New validation jobs may remain queued until a worker is running.
+                Validation worker heartbeat is stale. New validation jobs may remain queued until a worker is running. Start `pnpm dev:validation` for the supported local validation flow.
               </div>
             ) : null}
 
