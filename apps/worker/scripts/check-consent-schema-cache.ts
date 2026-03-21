@@ -60,10 +60,18 @@ function formatError(error: unknown) {
 }
 
 function schemaReloadInstructions(host: string) {
+  const projectRef = host.split(".")[0] ?? host;
+  const scriptedCommand =
+    projectRef === "ibjxttgmvdkbuqllbazj"
+      ? "pnpm supabase:reload-schema:dev"
+      : projectRef === "wgfhzyrysztmtrjbcsgy"
+        ? "pnpm supabase:reload-schema:prod"
+        : `pnpm exec tsx ./scripts/reload-supabase-schema-cache.ts --project-ref ${projectRef}`;
+
   return [
     `Supabase REST schema cache looks stale for ${host}.`,
-    "In the Supabase SQL editor for this project, run:",
-    "NOTIFY pgrst, 'reload schema';",
+    "Run:",
+    scriptedCommand,
     "If the REST API still serves the old schema, restart the project/API once."
   ].join(" ");
 }

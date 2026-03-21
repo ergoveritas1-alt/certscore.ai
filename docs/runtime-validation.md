@@ -28,7 +28,9 @@ If a check fails:
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
-- schema cache failure: in the correct Supabase project, run `NOTIFY pgrst, 'reload schema';` and restart the project/API if the REST layer is still stale
+- schema cache failure on dev (`ibjxttgmvdkbuqllbazj`): run `pnpm supabase:reload-schema:dev`
+- schema cache failure on prod (`wgfhzyrysztmtrjbcsgy`): run `pnpm supabase:reload-schema:prod`
+- if the REST layer is still stale after the reload notification, restart the affected Supabase project/API once
 
 ## 2. Auth validation
 

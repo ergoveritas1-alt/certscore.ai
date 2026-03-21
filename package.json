@@ -30,6 +30,8 @@
     "supabase:login": "npx supabase@latest login",
     "supabase:link": "npx supabase@latest link --project-ref ibjxttgmvdkbuqllbazj",
     "supabase:link:prod": "npx supabase@latest link --project-ref wgfhzyrysztmtrjbcsgy",
+    "supabase:reload-schema:dev": "pnpm exec tsx ./scripts/reload-supabase-schema-cache.ts --project-ref ibjxttgmvdkbuqllbazj",
+    "supabase:reload-schema:prod": "pnpm exec tsx ./scripts/reload-supabase-schema-cache.ts --project-ref wgfhzyrysztmtrjbcsgy",
     "supabase:audit:prod": "pnpm exec tsx ./scripts/audit-prod-schema.ts",
     "supabase:push": "npx supabase@latest db push",
     "supabase:status": "npx supabase@latest status",
