@@ -1122,7 +1122,7 @@ type SensitiveFormSignals = {
   formCollectsSsn: boolean;
 };
 
-function deriveSensitiveCollectionSignals(forms: ExtractedForm[], pageText: string): SensitiveFormSignals {
+function deriveSensitiveCollectionSignals(forms: ExtractedForm[]): SensitiveFormSignals {
   const formHaystack = forms
     .map((form) =>
       normalizeMatchingText(
@@ -1139,7 +1139,7 @@ function deriveSensitiveCollectionSignals(forms: ExtractedForm[], pageText: stri
       )
     )
     .join("\n");
-  const combinedText = normalizeMatchingText(pageText, formHaystack);
+  const combinedText = normalizeMatchingText(formHaystack);
 
   return {
     formCollectsSsn: matchesKeywordSet(combinedText, [/\bssn\b/i, /social security/i, /taxpayer identification/i]),
@@ -1440,7 +1440,23 @@ export function deriveFormSignals(pages: StaticPageResult[]) {
   const forms = pages.flatMap((page) => page.forms);
   const allInputs = forms.flatMap((form) => form.inputs);
   const pageText = pages.map((page) => page.textContent).join("\n");
-  const sensitiveCollectionSignals = deriveSensitiveCollectionSignals(forms, pageText);
+  const formOnlyText = normalizeMatchingText(
+    ...forms.map((form) =>
+      normalizeMatchingText(
+        form.textSample,
+        ...form.inputs.flatMap((input) => [
+          input.type,
+          input.name,
+          input.labelText,
+          input.autocomplete,
+          input.placeholder,
+          input.ariaLabel,
+          input.id
+        ])
+      )
+    )
+  );
+  const sensitiveCollectionSignals = deriveSensitiveCollectionSignals(forms);
 
   const ageVerificationMechanismType: AgeVerificationMechanismType = allInputs.some((input) => inputMatches(input, "date_of_birth"))
     ? "date_of_birth"
@@ -1470,9 +1486,8 @@ export function deriveFormSignals(pages: StaticPageResult[]) {
     ageGatePresent: /age gate|must be 13|must be 16|confirm your age/i.test(pageText),
     ageVerificationMechanismType,
     parentalConsentReferencePresent: /parental consent|parent or guardian/i.test(pageText),
-    sensitiveDataFormHintsPresent: /health|medical|biometric|social security|ssn/i.test(pageText),
+    sensitiveDataFormHintsPresent: /health|medical|biometric|social security|ssn/i.test(formOnlyText),
     highSensitivityDataCollectionDetected:
-      /health|medical|biometric|social security|ssn/i.test(pageText) ||
       sensitiveCollectionSignals.formCollectsSsn ||
       sensitiveCollectionSignals.formCollectsGovernmentId ||
       sensitiveCollectionSignals.formCollectsHealthInformation ||
