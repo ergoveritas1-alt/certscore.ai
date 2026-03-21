@@ -289,6 +289,37 @@ function getUpcomingTargets(targets: ValidationTargetRow[], limit = 7) {
   return [...manualTargets, ...shuffledTrancoTargets].slice(0, limit);
 }
 
+function sortValidationTargetsForDisplay(targets: ValidationTargetRow[]) {
+  return [...targets].sort((left, right) => {
+    const leftManual = left.source === "manual";
+    const rightManual = right.source === "manual";
+
+    if (leftManual !== rightManual) {
+      return leftManual ? -1 : 1;
+    }
+
+    const leftDenylisted = left.denylisted === true;
+    const rightDenylisted = right.denylisted === true;
+    if (leftDenylisted !== rightDenylisted) {
+      return leftDenylisted ? 1 : -1;
+    }
+
+    const leftCooldown = left.cooldown_until ? new Date(left.cooldown_until).getTime() : 0;
+    const rightCooldown = right.cooldown_until ? new Date(right.cooldown_until).getTime() : 0;
+    if (leftCooldown !== rightCooldown) {
+      return leftCooldown - rightCooldown;
+    }
+
+    const leftRank = left.tranco_rank ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = right.tranco_rank ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return left.hostname.localeCompare(right.hostname);
+  });
+}
+
 function isPopulatedValidationSignal(key: string, value: ScanSignalRow["signal_value_json"]) {
   if (value === null || value === undefined || value === "") {
     return false;
@@ -1018,9 +1049,11 @@ export async function listValidationTargets(limit = 25) {
   }
 
   const rows = (data ?? []) as ValidationTargetRow[];
-  const fallbackRows = rows.length > 0 ? rows : await listTrancoPreviewTargets(limit);
+  const displayRows = rows.length > 0
+    ? sortValidationTargetsForDisplay(rows).slice(0, limit)
+    : getUpcomingTargets(await listTrancoPreviewTargets(limit), limit);
 
-  return getUpcomingTargets(fallbackRows, limit).map((row) => ({
+  return displayRows.map((row) => ({
     active: row.active,
     backoffUntil: row.backoff_until,
     cooldownUntil: row.cooldown_until,
