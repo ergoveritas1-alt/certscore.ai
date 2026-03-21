@@ -62,6 +62,7 @@ type ValidationTargetRow = {
   active: boolean;
   backoff_until: string | null;
   cooldown_until: string | null;
+  created_at?: string | null;
   deny_reason: string | null;
   denylisted: boolean;
   failure_count?: number;
@@ -75,6 +76,7 @@ type ValidationTargetRow = {
   rank_band: string | null;
   source?: string;
   tranco_rank: number | null;
+  updated_at?: string | null;
 };
 
 type ValidationRunFindingRow = {
@@ -306,6 +308,14 @@ function sortValidationTargetsForDisplay(targets: ValidationTargetRow[]) {
 
     if (leftManual !== rightManual) {
       return leftManual ? -1 : 1;
+    }
+
+    if (leftManual && rightManual) {
+      const leftUpdatedAt = left.updated_at ? new Date(left.updated_at).getTime() : 0;
+      const rightUpdatedAt = right.updated_at ? new Date(right.updated_at).getTime() : 0;
+      if (leftUpdatedAt !== rightUpdatedAt) {
+        return rightUpdatedAt - leftUpdatedAt;
+      }
     }
 
     const leftDenylisted = left.denylisted === true;
@@ -1046,19 +1056,37 @@ export async function getValidationSettings() {
 export async function listValidationTargets(limit = 25) {
   await requireAdmin();
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_targets")
-    .select(
-      "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source"
-    )
-    .order("tranco_rank", { ascending: true, nullsFirst: true })
-    .limit(limit);
+  const [manualResult, trancoResult] = await Promise.all([
+    supabase
+      .from("validation_targets")
+      .select(
+        "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
+      )
+      .eq("source", "manual")
+      .order("updated_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("validation_targets")
+      .select(
+        "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
+      )
+      .neq("source", "manual")
+      .order("tranco_rank", { ascending: true, nullsFirst: true })
+      .limit(Math.max(limit * 20, 100))
+  ]);
 
-  if (error) {
-    throw new Error(`Failed to load validation targets: ${error.message}`);
+  if (manualResult.error) {
+    throw new Error(`Failed to load manual validation targets: ${manualResult.error.message}`);
   }
 
-  const rows = (data ?? []) as ValidationTargetRow[];
+  if (trancoResult.error) {
+    throw new Error(`Failed to load Tranco validation targets: ${trancoResult.error.message}`);
+  }
+
+  const rows = [
+    ...((manualResult.data ?? []) as ValidationTargetRow[]),
+    ...((trancoResult.data ?? []) as ValidationTargetRow[])
+  ];
   const persistedRows = sortValidationTargetsForDisplay(rows).slice(0, limit);
   const persistedHostnames = new Set(persistedRows.map((row) => row.hostname));
 
