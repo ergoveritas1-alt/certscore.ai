@@ -1,0 +1,30 @@
+alter table if exists public.scan_snapshots
+  add column if not exists discount_claim_present boolean not null default false,
+  add column if not exists original_price_comparison_present boolean not null default false,
+  add column if not exists limited_time_offer_language_present boolean not null default false,
+  add column if not exists refund_policy_window_days integer,
+  add column if not exists refund_policy_conditions_present boolean not null default false,
+  add column if not exists refund_request_method_present boolean not null default false,
+  add column if not exists store_credit_only_policy_present boolean not null default false,
+  add column if not exists exchange_policy_present boolean not null default false,
+  add column if not exists renewal_notice_period_present boolean not null default false,
+  add column if not exists termination_for_cause_clause_present boolean not null default false,
+  add column if not exists account_deletion_terms_present boolean not null default false,
+  add column if not exists service_suspension_or_termination_terms_present boolean not null default false,
+  add column if not exists privacy_cookie_policy_conflict_detected boolean,
+  add column if not exists policy_terms_conflict_detected boolean;
+
+alter table if exists public.scan_runtime_artifacts
+  add column if not exists key_page_discovery_summary jsonb,
+  add column if not exists sensitive_payload_violations jsonb not null default '[]'::jsonb,
+  add column if not exists consent_opt_in_clicks integer,
+  add column if not exists consent_opt_out_clicks integer,
+  add column if not exists consent_friction_delta integer,
+  add column if not exists consent_redirect_or_auth_required boolean,
+  add column if not exists consent_opt_in_evidence_log jsonb not null default '[]'::jsonb,
+  add column if not exists consent_opt_out_evidence_log jsonb not null default '[]'::jsonb,
+  add column if not exists consent_blocker_type text,
+  add column if not exists consent_blocker_url text,
+  add column if not exists consent_blocker_page_title text,
+  add column if not exists consent_blocker_text_snippet text,
+  add column if not exists consent_evidence_pass_count integer;
