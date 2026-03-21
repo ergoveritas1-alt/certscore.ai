@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { addValidationTargetAndStartAction } from "../../server/validation/actions";
 import { listValidationRuns } from "../../server/validation/repository";
+import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
@@ -53,9 +54,11 @@ export async function ValidationScansPage(input: {
     rankBand: params.rankBand ?? null,
     status: params.status ?? null
   });
+  const hasActiveRuns = data.rows.some((run) => ["queued", "collecting", "ranking", "validating"].includes(String(run.status ?? "")));
 
   return (
     <div className="space-y-8">
+      <ValidationRunsAutoRefresh enabled={hasActiveRuns} />
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight text-white">All scans</h1>
         <p className="text-sm text-slate-300">

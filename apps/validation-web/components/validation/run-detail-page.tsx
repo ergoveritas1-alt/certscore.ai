@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getValidationFindingFamily } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getValidationRunDetail } from "../../server/validation/repository";
+import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
@@ -45,6 +46,7 @@ export async function ValidationRunDetailPage(input: {
   if (!detail) {
     notFound();
   }
+  const shouldAutoRefresh = ["queued", "collecting", "ranking", "validating"].includes(String(detail.run.status ?? ""));
 
   const findingsByCategory = detail.findings.reduce(
     (counts, finding) => {
@@ -69,6 +71,7 @@ export async function ValidationRunDetailPage(input: {
 
   return (
     <div className="space-y-8">
+      <ValidationRunsAutoRefresh enabled={shouldAutoRefresh} />
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight text-white">{String(detail.run.hostname)}</h1>
         <p className="text-sm text-slate-300">
