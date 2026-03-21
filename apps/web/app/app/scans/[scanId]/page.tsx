@@ -289,6 +289,18 @@ function getPhaseTone(outcome: string): "success" | "warning" | "neutral" {
   return "neutral";
 }
 
+function formatAttemptLabel(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "Not observed";
+  }
+
+  if (value <= 1) {
+    return "1";
+  }
+
+  return `${value} (retried)`;
+}
+
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
   if (!record) {
     return null;
@@ -2733,9 +2745,12 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
                     <p>Started: {formatDateTime(stage.startedAt)}</p>
                     <p>Completed: {formatDateTime(stage.completedAt)}</p>
                     <p>Duration: {formatDurationMs(stage.durationMs)}</p>
-                    <p>Attempts: {formatValue(stage.attempts)}</p>
+                    <p>Attempts: {formatAttemptLabel(stage.attempts)}</p>
                     <p>Error category: {formatValue(stage.errorCategory)}</p>
                   </div>
+                  {typeof stage.attempts === "number" && stage.attempts > 1 ? (
+                    <p className="mt-3 text-sm text-amber-700">Recovered after {stage.attempts - 1} retry attempt{stage.attempts - 1 === 1 ? "" : "s"}.</p>
+                  ) : null}
                   {stage.message ? <p className="mt-3 text-sm text-slate-700">{stage.message}</p> : null}
                 </div>
               ))}
@@ -2779,7 +2794,12 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
                       <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.startedAt)}</td>
                       <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.completedAt)}</td>
                       <td className="py-2 pr-4 text-slate-700">{formatDurationMs(phase.durationMs)}</td>
-                      <td className="py-2 pr-4 text-slate-700">{formatValue(phase.attempts)}</td>
+                      <td className="py-2 pr-4 text-slate-700">
+                        <div>{formatAttemptLabel(phase.attempts)}</div>
+                        {typeof phase.attempts === "number" && phase.attempts > 1 ? (
+                          <div className="text-xs text-amber-700">Recovered after retry</div>
+                        ) : null}
+                      </td>
                       <td className="py-2 text-slate-700">{phase.error ?? "—"}</td>
                     </tr>
                   ))}
