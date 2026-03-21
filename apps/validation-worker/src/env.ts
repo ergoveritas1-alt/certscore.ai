@@ -11,6 +11,7 @@ const workerEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OPENAI_API_KEY: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+  REDIS_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_REDIS_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_PIPELINE_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
     .transform((value) => value !== "0"),
@@ -44,6 +45,10 @@ const workerEnvSchema = z.object({
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema> & SupabaseAdminEnv;
+
+export function getConfiguredValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
+  return env.VALIDATION_REDIS_URL?.trim() || env.REDIS_URL?.trim() || "";
+}
 
 export function getWorkerEnv(env: NodeJS.ProcessEnv = process.env): WorkerEnv {
   const values = parseEnvironment({

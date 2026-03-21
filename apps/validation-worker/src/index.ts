@@ -1,13 +1,13 @@
 import { QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
-import { getWorkerEnv } from "./env";
+import { getConfiguredValidationRedisUrl, getWorkerEnv } from "./env";
 import { createValidationWorkers } from "./validation/workers";
 
 function bootstrapValidationWorker() {
   const env = getWorkerEnv();
-  const redisUrl = env.VALIDATION_REDIS_URL;
+  const redisUrl = getConfiguredValidationRedisUrl();
 
   if (!redisUrl) {
-    throw new Error("VALIDATION_REDIS_URL is not configured.");
+    throw new Error("Validation Redis is not configured.");
   }
 
   const workers = createValidationWorkers();

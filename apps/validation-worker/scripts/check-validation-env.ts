@@ -5,7 +5,8 @@ const validationWorkerCheckSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  VALIDATION_REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
+  VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional(),
   VALIDATION_SCHEDULER_POLL_MINUTES: z.string().optional(),
   VALIDATION_DEFAULT_RUN_MODE: z.enum(["manual", "automatic"]).optional(),
@@ -43,9 +44,16 @@ function main() {
   }
 
   const values = result.data;
+  const validationRedisUrl = values.VALIDATION_REDIS_URL ?? values.REDIS_URL;
+  if (!validationRedisUrl) {
+    fail("validation redis", "Provide VALIDATION_REDIS_URL or REDIS_URL.");
+    process.exitCode = 1;
+    return;
+  }
+
   pass("validation worker env", "All required validation worker environment variables are present.");
   info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
-  info("validation redis host", new URL(values.VALIDATION_REDIS_URL).host);
+  info("validation redis host", new URL(validationRedisUrl).host);
   info("pipeline enabled", values.VALIDATION_PIPELINE_ENABLED ?? "1");
   info("default run mode", values.VALIDATION_DEFAULT_RUN_MODE ?? "manual");
   info("default interval", values.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES ?? "20");

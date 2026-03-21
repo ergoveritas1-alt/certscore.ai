@@ -7,7 +7,8 @@ const runtimeSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  VALIDATION_REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
+  VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional()
 });
 
@@ -92,8 +93,15 @@ async function main() {
     return;
   }
 
+  const validationRedisUrl = result.data.VALIDATION_REDIS_URL ?? result.data.REDIS_URL;
+  if (!validationRedisUrl) {
+    fail("validation redis", "Provide VALIDATION_REDIS_URL or REDIS_URL.");
+    process.exitCode = 1;
+    return;
+  }
+
   const checks = await Promise.all([
-    checkRedis(result.data.VALIDATION_REDIS_URL),
+    checkRedis(validationRedisUrl),
     checkSupabase(result.data.NEXT_PUBLIC_SUPABASE_URL),
     checkChromium()
   ]);

@@ -1005,10 +1005,12 @@ export async function listValidationTargets(limit = 25) {
     denylisted: row.denylisted,
     hostname: row.hostname,
     id: row.id,
+    isPersisted: !row.id.startsWith("tranco-preview-"),
     lastError: row.last_error,
     lastStatus: row.last_status,
     normalizedUrl: row.normalized_url,
     rankBand: row.rank_band,
+    source: row.source ?? "tranco",
     trancoRank: row.tranco_rank
   }));
 }
@@ -1466,7 +1468,13 @@ export async function updateValidationSettingsAction(input: {
   revalidatePath("/app/issues");
 }
 
-export async function queueManualValidationRunAction(input: { targetId: string }) {
+export async function queueManualValidationRunAction(input: {
+  hostname?: string;
+  normalizedUrl?: string;
+  source?: string;
+  targetId: string;
+  trancoRank?: number;
+}) {
   const context = await requireAdmin();
   const availability = getValidationQueueAvailability();
   if (!availability.enabled) {
@@ -1484,7 +1492,46 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     throw new Error(`Failed to load validation target: ${error.message}`);
   }
 
-  if (!target) {
+  let resolvedTarget = (target as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
+
+  if (!resolvedTarget && input.hostname && input.normalizedUrl) {
+    const materializedSource = input.source === "tranco" ? "tranco" : "manual";
+    const { data: insertedTarget, error: insertError } = await supabase
+      .from("validation_targets")
+      .upsert(
+        {
+          active: true,
+          denylisted: false,
+          hostname: input.hostname,
+          normalized_url: input.normalizedUrl,
+          rank_band: rankBandForRank(input.trancoRank ?? null),
+          source: materializedSource,
+          tranco_rank: input.trancoRank ?? null
+        },
+        { onConflict: "hostname" }
+      )
+      .select("id, hostname, normalized_url, tranco_rank")
+      .single();
+
+    if (insertError || !insertedTarget) {
+      throw new Error(`Failed to materialize validation target: ${insertError?.message ?? "Unknown error"}`);
+    }
+
+    await supabase.from("validation_audit_events").insert({
+      actor_user_id: context.user.id,
+      event_type: "validation.target_added",
+      metadata_json: {
+        hostname: input.hostname,
+        normalizedUrl: input.normalizedUrl,
+        source: `${materializedSource}_fallback_materialized`,
+        trancoRank: input.trancoRank ?? null
+      }
+    });
+
+    resolvedTarget = insertedTarget as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null };
+  }
+
+  if (!resolvedTarget) {
     throw new Error("Validation target not found.");
   }
 
@@ -1503,14 +1550,14 @@ export async function queueManualValidationRunAction(input: { targetId: string }
   }
 
   const domain = await ensureValidationDomainForOrganization({
-    hostname: (target as { hostname: string }).hostname,
-    normalizedUrl: (target as { normalized_url: string }).normalized_url,
+    hostname: resolvedTarget.hostname,
+    normalizedUrl: resolvedTarget.normalized_url,
     organizationId: context.organization.id
   });
   const scanId = await createValidationScan({
     domainId: domain.id,
-    hostname: (target as { hostname: string }).hostname,
-    normalizedUrl: (target as { normalized_url: string }).normalized_url,
+    hostname: resolvedTarget.hostname,
+    normalizedUrl: resolvedTarget.normalized_url,
     organizationId: context.organization.id,
     submittedByUserId: context.user.id
   });
@@ -1519,24 +1566,24 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     .from("validation_runs")
     .insert({
       domain_id: domain.id,
-      hostname: (target as { hostname: string }).hostname,
-      normalized_url: (target as { normalized_url: string }).normalized_url,
+      hostname: resolvedTarget.hostname,
+      normalized_url: resolvedTarget.normalized_url,
       rank_band:
-        typeof (target as { tranco_rank: number | null }).tranco_rank === "number"
-          ? (target as { tranco_rank: number }).tranco_rank <= 5_000
+        typeof resolvedTarget.tranco_rank === "number"
+          ? resolvedTarget.tranco_rank <= 5_000
             ? "1k-5k"
-            : (target as { tranco_rank: number }).tranco_rank <= 20_000
+            : resolvedTarget.tranco_rank <= 20_000
               ? "5k-20k"
-              : (target as { tranco_rank: number }).tranco_rank <= 50_000
+              : resolvedTarget.tranco_rank <= 50_000
                 ? "20k-50k"
                 : "50k-100k"
           : null,
       scan_id: scanId,
       status: "queued",
-      tranco_rank: (target as { tranco_rank: number | null }).tranco_rank,
+      tranco_rank: resolvedTarget.tranco_rank,
       trigger_mode: "manual",
       triggered_by_user_id: context.user.id,
-      validation_target_id: (target as { id: string }).id
+      validation_target_id: resolvedTarget.id
     })
     .select("id")
     .single();
@@ -1552,7 +1599,7 @@ export async function queueManualValidationRunAction(input: { targetId: string }
       last_run_at: new Date().toISOString(),
       last_status: "queued"
     })
-    .eq("id", (target as { id: string }).id);
+    .eq("id", resolvedTarget.id);
 
   if (targetError) {
     throw new Error(`Failed to mark validation target queued: ${targetError.message}`);
@@ -1564,13 +1611,13 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
     metadata_json: {
-      hostname: (target as { hostname: string }).hostname,
-      targetId: input.targetId,
+      hostname: resolvedTarget.hostname,
+      targetId: resolvedTarget.id,
       validationRunId: (run as { id: string }).id
     }
   });
 
-  const { error: removeError } = await supabase.from("validation_targets").delete().eq("id", (target as { id: string }).id);
+  const { error: removeError } = await supabase.from("validation_targets").delete().eq("id", resolvedTarget.id);
   if (removeError) {
     throw new Error(`Failed to consume validation target from queue: ${removeError.message}`);
   }
@@ -1579,9 +1626,9 @@ export async function queueManualValidationRunAction(input: { targetId: string }
     actor_user_id: context.user.id,
     event_type: "validation.target_removed",
     metadata_json: {
-      hostname: (target as { hostname: string }).hostname,
+      hostname: resolvedTarget.hostname,
       reason: "queued_for_manual_run",
-      targetId: input.targetId,
+      targetId: resolvedTarget.id,
       validationRunId: (run as { id: string }).id
     }
   });
@@ -1589,9 +1636,9 @@ export async function queueManualValidationRunAction(input: { targetId: string }
   await addRandomTrancoValidationTarget({
     actorUserId: context.user.id,
     eventType: "validation.target_added",
-    excludedHostnames: [(target as { hostname: string }).hostname],
+    excludedHostnames: [resolvedTarget.hostname],
     metadata: {
-      replacedHostname: (target as { hostname: string }).hostname,
+      replacedHostname: resolvedTarget.hostname,
       validationRunId: (run as { id: string }).id
     },
     supabase

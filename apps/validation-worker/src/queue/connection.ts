@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from "bullmq";
-import { getWorkerEnv } from "../env";
+import { getConfiguredValidationRedisUrl } from "../env";
 
 let validationRedisConnection: ConnectionOptions | null = null;
 
@@ -24,11 +24,10 @@ export function getValidationRedisConnection() {
     return validationRedisConnection;
   }
 
-  const env = getWorkerEnv();
-  const redisUrl = env.VALIDATION_REDIS_URL;
+  const redisUrl = getConfiguredValidationRedisUrl();
 
   if (!redisUrl) {
-    throw new Error("VALIDATION_REDIS_URL is not configured.");
+    throw new Error("Validation Redis is not configured.");
   }
 
   validationRedisConnection = createRedisConnection(redisUrl);

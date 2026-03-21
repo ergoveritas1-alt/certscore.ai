@@ -2,7 +2,7 @@ import "server-only";
 
 import { Queue, type ConnectionOptions } from "bullmq";
 import { VALIDATION_COLLECT_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
-import { getConfiguredValidationRedisUrl, getWebServerEnv } from "../../lib/env";
+import { getConfiguredValidationRedisUrl } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
 let collectQueue: Queue<{ validationRunId: string }> | null = null;
@@ -29,10 +29,9 @@ function getRedisConnection() {
     return connection;
   }
 
-  const env = getWebServerEnv();
-  const redisUrl = env.VALIDATION_REDIS_URL;
+  const redisUrl = getConfiguredValidationRedisUrl();
   if (!redisUrl) {
-    throw new Error("VALIDATION_REDIS_URL is not configured.");
+    throw new Error("Validation Redis is not configured.");
   }
 
   connection = createRedisConnection(redisUrl);
@@ -76,7 +75,7 @@ export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.
   if (!redisUrl) {
     return {
       enabled: false,
-      reason: "Validation queueing is unavailable until VALIDATION_REDIS_URL is configured."
+      reason: "Validation queueing is unavailable until VALIDATION_REDIS_URL or REDIS_URL is configured."
     } as const;
   }
 

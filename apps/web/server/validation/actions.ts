@@ -34,7 +34,14 @@ export async function submitManualValidationRunAction(formData: FormData) {
     throw new Error("Missing validation target.");
   }
 
-  const result = await queueManualValidationRunAction({ targetId });
+  const trancoRank = Number.parseInt(String(formData.get("trancoRank") ?? "").trim(), 10);
+  const result = await queueManualValidationRunAction({
+    hostname: String(formData.get("hostname") ?? "").trim() || undefined,
+    normalizedUrl: String(formData.get("normalizedUrl") ?? "").trim() || undefined,
+    source: String(formData.get("source") ?? "").trim() || undefined,
+    targetId,
+    trancoRank: Number.isFinite(trancoRank) ? trancoRank : undefined
+  });
   redirect(`/app/scans/${result.scanId}`);
 }
 
