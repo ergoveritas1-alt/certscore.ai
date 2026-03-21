@@ -43,13 +43,12 @@ website-signal-risk-scanner/
 
 ## Environment variables
 
-This monorepo should use separate environment files per app in local development:
+This monorepo should use [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local) as the single local development runtime env:
 
 - copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
 - copy [apps/web/.env.validation.example](/Users/benmasek/WC01/apps/web/.env.validation.example) to [apps/web/.env.validation.local](/Users/benmasek/WC01/apps/web/.env.validation.local) for the validation-only web app
-- copy [apps/worker/.env.example](/Users/benmasek/WC01/apps/worker/.env.example) to [apps/worker/.env.local](/Users/benmasek/WC01/apps/worker/.env.local)
 
-Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a single root `.env.local` for app runtime configuration.
+Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a root `.env.local` for app runtime configuration.
 
 Recommended environment split:
 
@@ -93,7 +92,6 @@ Compatibility note:
 2. Copy the environment template:
    - `cp apps/web/.env.example apps/web/.env.local`
    - `cp apps/web/.env.validation.example apps/web/.env.validation.local`
-   - `cp apps/worker/.env.example apps/worker/.env.local`
 3. Create a dedicated Supabase dev project.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
 5. In Supabase Auth, enable:
@@ -133,7 +131,7 @@ Accessibility-specific validation:
 - `node --import tsx --test /Users/benmasek/WC01/apps/worker/src/scan/accessibility-validation.test.ts`
 - `pnpm --filter @website-signal-risk-scanner/worker benchmark:accessibility:assert`
 
-The live benchmark assertion command requires `apps/worker/.env.local` with the worker runtime variables and will execute real scans against the demo workspace.
+The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
 
 ## CI accessibility validation
 

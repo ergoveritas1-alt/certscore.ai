@@ -63,7 +63,7 @@ The repo includes a helper script that:
 
 ```bash
 set -a
-source .env.local
+source .env.prod.ops
 set +a
 PROJECT_ID=<project-id> REGION=us-central1 ./deploy.sh
 ```

@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "pnpm check-runtime:build && next build",
+    "build": "pnpm check-runtime:build && node --env-file=../web/.env.local ./node_modules/next/dist/bin/next build",
     "check-env": "node --enable-source-maps ./scripts/check-validation-env.ts",
-    "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
-    "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts",
-    "dev": "next dev --port 3001",
+    "check-runtime": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
+    "check-runtime:build": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
+    "dev": "node --env-file=../web/.env.local ./node_modules/next/dist/bin/next dev --port 3001",
     "typecheck": "next typegen . && tsc --noEmit",
     "clean": "rm -rf .next"
   },

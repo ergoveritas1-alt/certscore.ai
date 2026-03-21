@@ -23,7 +23,7 @@ Expected result:
 
 If a check fails:
 
-- missing env var: update `.env.local` or deployment settings
+- missing env var: update `apps/web/.env.local` or deployment settings
 - Redis failure: verify `REDIS_URL` and network access
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`

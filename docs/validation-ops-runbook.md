@@ -43,7 +43,7 @@ Build and publish the validation worker image:
 
 ```bash
 set -a
-source apps/worker/.env.local
+source apps/web/.env.local
 set +a
 PROJECT_ID=<project-id> REGION=us-central1 ./deploy-validation.sh
 ```
