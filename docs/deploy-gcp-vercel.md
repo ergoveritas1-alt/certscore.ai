@@ -68,6 +68,12 @@ set +a
 PROJECT_ID=<project-id> REGION=us-central1 ./deploy.sh
 ```
 
+Best practice:
+
+- Vercel remains the source of truth for production web env vars.
+- Cloud Run worker pools should bind sensitive worker values from GCP Secret Manager, not from a repo-local env file.
+- Keep `.env.prod.ops` only as a temporary operator file for audits, migrations, and initial secret seeding.
+
 Optional values the script forwards if present:
 
 - `SUPABASE_STORAGE_BUCKET_SCREENSHOTS`
@@ -121,5 +127,7 @@ The validation-only deployment uses a different topology:
 - separate Redis via `VALIDATION_REDIS_URL`
 - separate VM for `start:validation` and `start:validation:scheduler`
 - optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
+
+For the Cloud Run validation worker pool path, prefer `deploy-validation-worker.sh` with Secret Manager-backed bindings rather than shell-exporting prod secrets into the deploy command.
 
 See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.
