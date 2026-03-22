@@ -6,12 +6,43 @@ import { getReviewFindingPresentation } from "../../lib/scans/review-finding-pre
 import { normalizeFindingName } from "../../lib/scans/canonical-review-finding";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
+import {
+  buildUnifiedFindingDisplayPackets,
+  type UnifiedFindingDisplayPacket
+} from "../../lib/scans/unified-findings";
+import {
+  buildValidationFindingLookup,
+  type ScanValidationFinding
+} from "../../lib/scans/validation-review-linking";
 import { ValidationRescanForm } from "./validation-rescan-form";
 import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
+import { ValidationFindingJsonPane } from "./validation-finding-json-pane";
 
 type ValidationRunDetailPageProps = {
   runId: string;
 };
+
+function getConfidenceTone(band: UnifiedFindingDisplayPacket["confidenceBand"]) {
+  switch (band) {
+    case "high":
+      return "bg-emerald-100 text-emerald-900";
+    case "moderate":
+      return "bg-amber-100 text-amber-900";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+function getSeverityTone(severity: UnifiedFindingDisplayPacket["severity"]) {
+  switch (severity) {
+    case "high":
+      return "bg-rose-100 text-rose-900";
+    case "medium":
+      return "bg-amber-100 text-amber-900";
+    default:
+      return "bg-sky-100 text-sky-900";
+  }
+}
 
 export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPageProps) {
   const detail = await getValidationRunDetail(runId);
@@ -25,6 +56,35 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
     errorMessage: detail.errorMessage,
     events: detail.scanEvents,
     status: detail.status
+  });
+  const validationFindings: ScanValidationFinding[] = detail.rows.map((row) => ({
+    agreementScore: null,
+    category: row.automatedFinding.category ?? null,
+    description: row.automatedFinding.description ?? null,
+    evidence: row.automatedFinding.evidence ?? null,
+    findingFamily: null,
+    findingScope: null,
+    findingSource: null,
+    findingSubject: null,
+    id: `${row.automatedFinding.ruleKey}-${row.automatedFinding.rank}`,
+    model: null,
+    modelConfidence: row.automatedFinding.modelConfidence ?? null,
+    pageUrl: row.automatedFinding.pageUrl ?? null,
+    promptVersion: null,
+    rationale: null,
+    ruleKey: row.automatedFinding.ruleKey,
+    severity: row.automatedFinding.severity ?? null,
+    subtype: row.automatedFinding.subtype ?? null,
+    systemConfidenceBand: null,
+    systemConfidenceExplanation: null,
+    systemConfidenceScore: null,
+    title: row.automatedFinding.title,
+    verdict: null
+  }));
+  const unifiedPackets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings,
+    validationFindingLookup: buildValidationFindingLookup(validationFindings)
   });
 
   return (
@@ -92,6 +152,96 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
 
       <Card className="border-slate-200 bg-white">
         <CardHeader>
+          <CardTitle>Unified findings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {unifiedPackets.map((packet) => {
+              const relatedRows = detail.rows.filter((row) =>
+                packet.sourceRefs.some(
+                  (sourceRef) => sourceRef.kind === "validation" && sourceRef.ruleKey === row.automatedFinding.ruleKey
+                )
+              );
+              const combinedJson = JSON.stringify(
+                {
+                  unifiedFinding: {
+                    id: packet.unifiedFindingId,
+                    title: packet.title,
+                    severity: packet.severity,
+                    confidenceBand: packet.confidenceBand,
+                    confidenceInputs: packet.confidenceInputs,
+                    summary: packet.summary,
+                    details: packet.details,
+                    sourceRefs: packet.sourceRefs,
+                    evidence: compactEvidenceJsonForDisplay(packet.evidence ?? {})
+                  },
+                  rawFindings: relatedRows.map((row) => ({
+                    rank: row.automatedFinding.rank,
+                    ruleKey: row.automatedFinding.ruleKey,
+                    title: row.automatedFinding.title,
+                    severity: row.automatedFinding.severity,
+                    pageUrl: row.automatedFinding.pageUrl,
+                    evidence: compactEvidenceJsonForDisplay(row.automatedFinding.evidence)
+                  }))
+                },
+                null,
+                2
+              );
+
+              return (
+                <div key={packet.unifiedFindingId} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-950">{packet.presentation.findingName}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getSeverityTone(packet.severity)}`}>
+                          {packet.severity}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getConfidenceTone(packet.confidenceBand)}`}>
+                          {packet.confidenceBand} confidence
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700">{packet.presentation.whyThisMatters}</p>
+                      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                        <span>{packet.confidenceInputs.sourceCount} source refs</span>
+                        <span>{packet.confidenceInputs.signalCount} signals</span>
+                        <span>{packet.confidenceInputs.validationCount} validation findings</span>
+                        <span>{packet.confidenceInputs.issueCount} issue syntheses</span>
+                      </div>
+                      {packet.evidence?.entities ? (
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                          {Object.entries(packet.evidence.entities)
+                            .slice(0, 3)
+                            .map(([key, values]) =>
+                              values.length > 0 ? (
+                                <span key={key} className="rounded-full bg-white px-2 py-1">
+                                  {key}: {values.slice(0, 3).join(", ")}
+                                </span>
+                              ) : null
+                            )}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-slate-500 md:text-right">
+                      <p>{packet.unifiedFindingId}</p>
+                      <p>{relatedRows.length} raw finding{relatedRows.length === 1 ? "" : "s"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <ValidationFindingJsonPane payload={combinedJson} />
+                  </div>
+                </div>
+              );
+            })}
+            {unifiedPackets.length === 0 ? (
+              <p className="text-sm text-slate-500">No unified findings were derived for this validation run.</p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardHeader>
           <CardTitle>Automated findings</CardTitle>
         </CardHeader>
         <CardContent>
@@ -124,6 +274,14 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                         }
                       : null
                   };
+                  const combinedJson = JSON.stringify(
+                    {
+                      finding: summaryJson,
+                      evidence: compactEvidenceJsonForDisplay(row.automatedFinding.evidence)
+                    },
+                    null,
+                    2
+                  );
 
                   return (
                     <div className="space-y-2">
@@ -140,12 +298,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                           {row.automatedFinding.ruleKey} · {row.automatedFinding.severity} · {detail.hostname}
                         </p>
                       </div>
-                      <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
-                        {JSON.stringify(summaryJson, null, 2)}
-                      </pre>
-                      <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
-                        {JSON.stringify(compactEvidenceJsonForDisplay(row.automatedFinding.evidence), null, 2)}
-                      </pre>
+                      <ValidationFindingJsonPane payload={combinedJson} />
                     </div>
                   );
                 })()}
