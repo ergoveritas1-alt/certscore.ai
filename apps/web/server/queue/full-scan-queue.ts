@@ -1,5 +1,6 @@
 "use server";
 
+import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
 import { FULL_SCAN_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
 import { getConfiguredRedisUrl, getWebServerEnv } from "../../lib/env";
@@ -63,4 +64,55 @@ export async function enqueueFullScanJob(scanId: string) {
       attempts: 3
     }
   );
+}
+
+const FULL_SCAN_WORKER_HEARTBEAT_WINDOW_MS = 90_000;
+
+export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: string | null, nowMs = Date.now()) {
+  const heartbeatAgeMs = lastHeartbeatAt ? nowMs - new Date(lastHeartbeatAt).getTime() : null;
+  const workerHealthy = typeof heartbeatAgeMs === "number" && Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= FULL_SCAN_WORKER_HEARTBEAT_WINDOW_MS;
+
+  if (!workerHealthy) {
+    return {
+      enabled: false as const,
+      reason:
+        "Full scan queueing is unavailable because no healthy full-scan worker heartbeat was detected. Start `pnpm dev:certscore:worker`."
+    };
+  }
+
+  return {
+    enabled: true as const,
+    reason: null as string | null
+  };
+}
+
+export async function getFullScanQueueAvailability() {
+  const redisUrl = getConfiguredRedisUrl();
+
+  if (!redisUrl) {
+    return {
+      enabled: false as const,
+      reason: "Queueing is unavailable until REDIS_URL is configured."
+    };
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("worker_heartbeats")
+    .select("last_heartbeat_at")
+    .eq("worker_type", "full_scan")
+    .maybeSingle();
+
+  if (error) {
+    return {
+      enabled: false as const,
+      reason: `Full scan worker health check failed: ${error.message}`
+    };
+  }
+
+  const lastHeartbeatAt =
+    data && typeof (data as { last_heartbeat_at?: unknown }).last_heartbeat_at === "string"
+      ? String((data as { last_heartbeat_at: string }).last_heartbeat_at)
+      : null;
+  return getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt);
 }

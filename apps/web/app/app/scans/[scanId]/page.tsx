@@ -25,7 +25,7 @@ import {
   StaticSubsection,
   SummaryMetricTile
 } from "../../../../components/scans/report-primitives";
-import { RescanDomainForm } from "../../../../components/scans/rescan-domain-form";
+import { ScanViewActions } from "../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import {
   buildCanonicalReviewFindingPresentation,
@@ -66,6 +66,7 @@ function formatDateTime(value: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    second: "2-digit",
     hour12: true,
     timeZoneName: "short"
   }).format(new Date(value));
@@ -2419,7 +2420,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     trackerEvidenceUrlCount: consentBaselineTrackerEvidenceUrls.length,
     wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total")
   });
-
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2437,31 +2437,28 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           </div>
           <ScanStatusAutoRefresh status={scanRecord.scan.status} />
         </div>
-        {canRescan && scanRecord.scan.domainId && rescanAvailability ? (
-          <div className="flex justify-end md:pt-0.5">
-            <RescanDomainForm
-              compact
-              cooldownMessage={rescanCooldownMessage}
-              disabled={!rescanAvailability.allowed}
-              domainId={scanRecord.scan.domainId}
-              showLabel
-            />
-          </div>
-        ) : null}
+        <ScanViewActions
+          alternateHref={`/app/scans/${scanRecord.scan.id}/json`}
+          alternateLabel="json-view"
+          canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
+          cooldownMessage={rescanCooldownMessage}
+          domainId={scanRecord.scan.domainId}
+          rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
+        />
       </div>
 
-      {isInProgress ? (
-        <FullScanProgressCard
-          createdAt={scanRecord.scan.createdAt}
-          events={scanRecord.events.map((event) => ({
-            createdAt: event.createdAt,
-            eventType: event.eventType,
-            message: event.message,
-            metadataJson: event.metadataJson
-          }))}
-          status={scanRecord.scan.status}
-        />
-      ) : null}
+      <FullScanProgressCard
+        buildPhaseSummaries={buildPhaseSummaries}
+        createdAt={scanRecord.scan.createdAt}
+        executionSummary={executionSummary}
+        events={scanRecord.events.map((event) => ({
+          createdAt: event.createdAt,
+          eventType: event.eventType,
+          message: event.message,
+          metadataJson: event.metadataJson
+        }))}
+        status={scanRecord.scan.status}
+      />
 
       {snapshot ? (
         <ReportExecutiveSummary
@@ -2721,7 +2718,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           <p>Block stylesheets: {formatValue(executionPlan.blockStylesheetsInBrowser)}</p>
         </CollapsibleSectionCard>
 
-        {executionSummary ? (
+        {executionSummary && !isInProgress ? (
           <CollapsibleSectionCard
             title={
               <span className="flex items-center gap-1.5">
@@ -2758,7 +2755,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           </CollapsibleSectionCard>
         ) : null}
 
-        {buildPhaseSummaries.length > 0 ? (
+        {buildPhaseSummaries.length > 0 && !isInProgress ? (
           <CollapsibleSectionCard
             title={
               <span className="flex items-center gap-1.5">
