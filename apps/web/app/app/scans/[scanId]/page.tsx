@@ -1528,7 +1528,7 @@ function buildReviewFindings(input: {
             : getValidationMatchKeysForTitle(issue.title)
         )
       : null,
-    observedValue: issue.evidence && issue.evidence.length > 0 ? summarizeReviewIssueEvidence(issue.evidence) : `${issue.severity} severity`,
+    observedValue: summarizeObservedIssueEvidence(issue.evidence, issue.severity),
     severity: issue.severity,
     sourceType: "issue",
     title: issue.title
@@ -1619,6 +1619,19 @@ function formatValidationSupport(finding: UnifiedFindingDisplayPacket) {
   ].filter((part): part is string => Boolean(part));
 
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function summarizeObservedIssueEvidence(evidence: string[] | undefined, severity: CanonicalReviewFinding["severity"]) {
+  if (!evidence || evidence.length === 0) {
+    return `${severity} severity`;
+  }
+
+  const nonUrlEvidence = evidence.filter((entry) => !/^https?:\/\//i.test(entry.trim()));
+  if (nonUrlEvidence.length > 0) {
+    return summarizeReviewIssueEvidence(nonUrlEvidence);
+  }
+
+  return evidence.length === 1 ? "Linked evidence available" : `${evidence.length} linked evidence items`;
 }
 
 function getFindingToneClasses(severity: UnifiedFindingDisplayPacket["severity"]) {
@@ -1714,11 +1727,6 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
             </Link>
           ) : null}
           <ReviewFindingLinks finding={input.finding} />
-          {input.finding.evidence?.pageUrls && input.finding.evidence.pageUrls.length > 0 ? (
-            <p className="break-all text-xs text-slate-600">
-              {summarizeReviewIssueEvidence(input.finding.evidence.pageUrls)}
-            </p>
-          ) : null}
         </div>
       </div>
     </div>
