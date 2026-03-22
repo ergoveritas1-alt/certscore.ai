@@ -21,7 +21,6 @@ import {
   METRIC_CARD_CLASS,
   METRIC_CARD_VALUE_CLASS,
   METRIC_GRID_CLASS,
-  PrimaryPillarGroup,
   SectionSubsection,
   StaticSubsection,
   SummaryMetricTile
@@ -1176,45 +1175,6 @@ function getSignalConcernReason(key: string, value: unknown) {
   return "This signal is worth reviewer attention.";
 }
 
-function partitionSignals(items: CanonicalSignalItem[]) {
-  const flagged: CanonicalSignalItem[] = [];
-  const normal: CanonicalSignalItem[] = [];
-
-  for (const item of items) {
-    if (item.relation === "primary" && isConcerningSignal(item.key, item.value)) {
-      flagged.push(item);
-    } else {
-      normal.push(item);
-    }
-  }
-
-  return { flagged, normal };
-}
-
-function getSectionStatus(input: { findingCount: number; items: CanonicalSignalItem[] }) {
-  if (input.findingCount > 0) {
-    return {
-      badgeClass: "rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-900",
-      description: `${input.findingCount} finding${input.findingCount === 1 ? "" : "s"}`,
-      label: "Needs review"
-    };
-  }
-
-  if (input.items.length > 0) {
-    return {
-      badgeClass: "rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-sky-900",
-      description: `Evidence present · ${input.items.length} signal${input.items.length === 1 ? "" : "s"}`,
-      label: "Evidence present"
-    };
-  }
-
-  return {
-    badgeClass: "rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700",
-    description: "No material evidence surfaced",
-    label: "No material evidence"
-  };
-}
-
 function buildSectionReviewIssues(input: {
   accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
   consentAuditFindings: PreviewSampleFinding[];
@@ -1895,22 +1855,6 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   );
 }
 
-function ReviewFindingMirrorRow(input: { finding: UnifiedFindingDisplayPacket }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-950">{input.finding.presentation.findingName}</p>
-          <p className="mt-1 text-sm text-slate-700">{input.finding.presentation.whyThisMatters}</p>
-        </div>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700">
-          Related
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function formatReviewFindingSummaryTitle(title: string) {
   const normalized = title
     .replace(/^Possible /i, "")
@@ -1965,6 +1909,89 @@ function summarizeSectionFindingCoverage(findings: UnifiedFindingDisplayPacket[]
   }
 
   return summarizeSectionFindings(findings);
+}
+
+function getMatrixCountTone(count: number) {
+  if (count >= 3) {
+    return "bg-rose-100 text-rose-900";
+  }
+  if (count >= 1) {
+    return "bg-amber-100 text-amber-900";
+  }
+  return "bg-slate-100 text-slate-600";
+}
+
+function CoverageMatrix(input: {
+  pillarSections: Array<{
+    pillar: (typeof REPORT_PRIMARY_PILLARS)[number];
+    sections: Array<{
+      ownerReviewFindings: UnifiedFindingDisplayPacket[];
+      section: ReturnType<typeof getReportSectionsForPillar>[number];
+      visibleCategories: Array<{
+        category: ReturnType<typeof getReportEvidenceCategoriesForSection>[number];
+        items: CanonicalSignalItem[];
+      }>;
+    }>;
+  }>;
+}) {
+  return (
+    <CollapsibleSectionCard
+      title="Coverage matrix"
+      subtitle="A compact map of where surfaced findings landed across the report taxonomy."
+      defaultOpen={false}
+      contentClassName="space-y-6"
+    >
+      {input.pillarSections.map(({ pillar, sections }) => {
+        const pillarFindingCount = sections.reduce((sum, section) => sum + section.ownerReviewFindings.length, 0);
+
+        return (
+          <div key={pillar.id} className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-900">{pillar.label}</p>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(pillarFindingCount)}`}>
+                {pillarFindingCount} finding{pillarFindingCount === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {sections.map(({ ownerReviewFindings, section, visibleCategories }) => (
+                <div key={section.id} className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">{section.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">{summarizeSectionFindingCoverage(ownerReviewFindings)}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(ownerReviewFindings.length)}`}>
+                      {ownerReviewFindings.length}
+                    </span>
+                  </div>
+
+                  {visibleCategories.length > 0 ? (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {visibleCategories.map(({ category }) => {
+                        const categoryCount = ownerReviewFindings.filter(
+                          (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
+                        ).length;
+
+                        return (
+                          <div key={category.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                            <p className="text-sm text-slate-700">{category.label}</p>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(categoryCount)}`}>
+                              {categoryCount > 0 ? `${categoryCount}` : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </CollapsibleSectionCard>
+  );
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
@@ -2097,126 +2124,16 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       <AgencyAdvisorySummary findings={reviewFindings} />
       <FindingsOverview findings={reviewFindings} />
 
-      <CollapsibleSectionCard
-        title="Evidence by category"
-        subtitle="Use this view when you want to trace a surfaced finding back through the taxonomy and supporting signals."
-        defaultOpen={false}
-        contentClassName="space-y-6"
-      >
-        {pillarSections.map(({ pillar, sections }) => (
-          <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
-            {sections.map(({ ownerReviewFindings, reviewFindings, section, sectionItems, unifiedFindings, visibleCategories }) => {
-              const status = getSectionStatus({ findingCount: ownerReviewFindings.length, items: sectionItems });
-
-              return (
-                <CollapsibleSectionCard
-                  key={section.id}
-                  title={
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span>{section.label}</span>
-                      <span className={status.badgeClass}>{status.label}</span>
-                    </span>
-                  }
-                  subtitle={
-                    <p className="text-sm text-slate-600">{summarizeSectionFindingCoverage(ownerReviewFindings)}</p>
-                  }
-                  defaultOpen={ownerReviewFindings.length > 0}
-                  contentClassName="space-y-4"
-                >
-                  {visibleCategories.length > 0 ? (
-                  <div className="grid gap-3 xl:grid-cols-2">
-                    {visibleCategories.map(({ category, items }) => (
-                      <div key={category.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{category.label}</p>
-                        </div>
-
-                        {(() => {
-                          const { normal } = partitionSignals(items);
-                          const ownerFindings = unifiedFindings.filter(
-                            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
-                          );
-                          const mirrorFindings = unifiedFindings.filter(
-                            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "mirror"
-                          );
-                          const overlayFindings = unifiedFindings.filter(
-                            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
-                          );
-                          const relatedFindingCount = mirrorFindings.length + overlayFindings.length;
-                          const ownerReviewFindings = reviewFindings.filter(
-                            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
-                          );
-                          const categoryFindingCount = ownerReviewFindings.length;
-
-                          return (
-                            <div className="mt-4 space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700">
-                                  {categoryFindingCount} finding{categoryFindingCount === 1 ? "" : "s"}
-                                </span>
-                                {relatedFindingCount > 0 ? (
-                                  <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                    {relatedFindingCount} related
-                                  </span>
-                                ) : null}
-                                {normal.length > 0 ? (
-                                  <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                    {normal.length} supporting signal{normal.length === 1 ? "" : "s"}
-                                  </span>
-                                ) : null}
-                              </div>
-
-                              {ownerReviewFindings.map((finding) => (
-                                <ReviewFindingCard key={finding.unifiedFindingId} finding={finding} />
-                              ))}
-
-                              {mirrorFindings.map((finding) => (
-                                <ReviewFindingMirrorRow key={`${finding.unifiedFindingId}-mirror`} finding={finding} />
-                              ))}
-
-                              {overlayFindings.map((finding) => (
-                                <ReviewFindingMirrorRow key={`${finding.unifiedFindingId}-overlay`} finding={finding} />
-                              ))}
-
-                              {categoryFindingCount === 0 && normal.length === 0 ? (
-                                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3">
-                                  <p className="text-sm text-slate-600">No material evidence surfaced for this category in this scan.</p>
-                                </div>
-                              ) : null}
-
-                              {normal.length > 0 ? (
-                                <div className="grid gap-2 lg:grid-cols-3">
-                                  {normal.map((item) => (
-                                    <div
-                                      key={`${category.id}-${item.key}-${item.relation}`}
-                                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                                    >
-                                      <p className="text-sm text-slate-950">
-                                        <span className="font-medium text-slate-700">{item.label}</span>{" "}
-                                        <span className="font-semibold text-slate-950">{formatCompactValue(item.value)}</span>
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-sm text-slate-600">No surfaced findings or supporting signals were grouped into this section.</p>
-                    </div>
-                  )}
-
-                </CollapsibleSectionCard>
-              );
-            })}
-          </PrimaryPillarGroup>
-        ))}
-      </CollapsibleSectionCard>
+      <CoverageMatrix
+        pillarSections={pillarSections.map(({ pillar, sections }) => ({
+          pillar,
+          sections: sections.map(({ ownerReviewFindings, section, visibleCategories }) => ({
+            ownerReviewFindings,
+            section,
+            visibleCategories
+          }))
+        }))}
+      />
     </div>
   );
 }
