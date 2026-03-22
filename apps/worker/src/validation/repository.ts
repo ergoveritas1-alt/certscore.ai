@@ -2408,19 +2408,17 @@ function shouldSuppressDetectorOnlyValidationFinding(input: {
       typeof input.evidencePacket.consentOptOutClicks === "number" ? input.evidencePacket.consentOptOutClicks : null;
     const frictionDelta =
       typeof input.evidencePacket.consentFrictionDelta === "number" ? input.evidencePacket.consentFrictionDelta : null;
-    const evidencePassCount =
-      typeof input.evidencePacket.consentEvidencePassCount === "number" ? input.evidencePacket.consentEvidencePassCount : null;
     const blockerType =
       typeof input.evidencePacket.consentBlockerType === "string" ? input.evidencePacket.consentBlockerType : null;
-    const runtimeEvidenceCount = input.evidencePacket.runtimeEvidence.length;
+    const blockerUrl =
+      typeof input.evidencePacket.consentBlockerUrl === "string" ? input.evidencePacket.consentBlockerUrl : null;
 
     return !(
       input.evidencePacket.consentRedirectOrAuthRequired === true ||
       blockerType !== null ||
-      (typeof optInClicks === "number" && typeof optOutClicks === "number") ||
+      blockerUrl !== null ||
       (typeof frictionDelta === "number" && frictionDelta > 0) ||
-      (typeof evidencePassCount === "number" && evidencePassCount > 0) ||
-      runtimeEvidenceCount > 0
+      (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks)
     );
   }
 
@@ -2461,6 +2459,8 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
   const concreteEvidenceAvailable =
     (typeof optInClicks === "number" && typeof optOutClicks === "number") ||
     redirectOrAuthRequired ||
+    blockerType !== null ||
+    blockerUrl !== null ||
     optInEvidenceLog.length > 0 ||
     optOutEvidenceLog.length > 0;
 
@@ -2534,7 +2534,11 @@ function buildRightsFrictionEvidence(row: ScanSignalRow, context: ValidationEvid
   }
 
   const strongEvidence =
-    redirectOrAuthRequired || (typeof frictionDelta === "number" && frictionDelta > 0 && typeof optInClicks === "number" && typeof optOutClicks === "number");
+    redirectOrAuthRequired ||
+    blockerType !== null ||
+    blockerUrl !== null ||
+    (typeof frictionDelta === "number" && frictionDelta > 0) ||
+    (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks);
   const claim = row.signal_key === "privacy.policy_runtime_functional_misalignment_detected"
     ? strongEvidence
       ? "The observed consent workflow appears functionally asymmetric: opting out required more friction than opting in."

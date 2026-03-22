@@ -1795,7 +1795,13 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
 
 function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
   const parts = [
-    packet.evidence?.pageUrls?.length ? `${packet.evidence.pageUrls.length} page${packet.evidence.pageUrls.length === 1 ? "" : "s"}` : null,
+    packet.primaryPageUrl
+      ? packet.affectedPageCount > 1
+        ? `${packet.affectedPageCount} pages including ${formatFindingPageLabel(packet.primaryPageUrl)}`
+        : `page ${formatFindingPageLabel(packet.primaryPageUrl)}`
+      : packet.affectedPageCount > 0
+        ? `${packet.affectedPageCount} page${packet.affectedPageCount === 1 ? "" : "s"}`
+        : null,
     packet.confidenceInputs.signalCount > 0 ? `${packet.confidenceInputs.signalCount} signal${packet.confidenceInputs.signalCount === 1 ? "" : "s"}` : null,
     packet.confidenceInputs.validationCount > 0
       ? `${packet.confidenceInputs.validationCount} validation row${packet.confidenceInputs.validationCount === 1 ? "" : "s"}`

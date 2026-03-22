@@ -44,6 +44,36 @@ export function hasConcreteConsentEvidence(evidence: Record<string, unknown> | n
   );
 }
 
+export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  const optInClicks =
+    typeof evidence.consentOptInClicks === "number"
+      ? evidence.consentOptInClicks
+      : typeof evidence.consent_accept_click_count === "number"
+        ? evidence.consent_accept_click_count
+        : null;
+  const optOutClicks =
+    typeof evidence.consentOptOutClicks === "number"
+      ? evidence.consentOptOutClicks
+      : typeof evidence.consent_reject_click_count === "number"
+        ? evidence.consent_reject_click_count
+        : null;
+  const frictionDelta = typeof evidence.consentFrictionDelta === "number" ? evidence.consentFrictionDelta : null;
+  const blockerType = typeof evidence.consentBlockerType === "string" ? evidence.consentBlockerType : null;
+  const blockerUrl = typeof evidence.consentBlockerUrl === "string" ? evidence.consentBlockerUrl : null;
+
+  return (
+    evidence.consentRedirectOrAuthRequired === true ||
+    blockerType !== null ||
+    blockerUrl !== null ||
+    (typeof frictionDelta === "number" && frictionDelta > 0) ||
+    (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks)
+  );
+}
+
 export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -71,7 +101,8 @@ export function shouldSurfacePrimarySignalFinding(input: {
 }) {
   if (isRightsFrictionSignal(input.key)) {
     return (
-      hasConcreteConsentEvidence(input.linkedValidationEvidence) || hasConcreteConsentEvidence(input.fallbackEvidence)
+      hasStrongRightsFrictionEvidence(input.linkedValidationEvidence) ||
+      hasStrongRightsFrictionEvidence(input.fallbackEvidence)
     );
   }
 

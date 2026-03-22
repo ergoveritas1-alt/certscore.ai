@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  hasStrongRightsFrictionEvidence,
   hasSensitivePayloadEvidence,
   shouldSurfacePrimarySignalFinding
 } from "./finding-evidence-gates";
@@ -60,6 +61,60 @@ test("shouldSurfacePrimarySignalFinding keeps suspected-evidence high-sensitivit
         ]
       },
       key: "commerce.high_sensitivity_data_collection_detected",
+      linkedValidationEvidence: null
+    }),
+    true
+  );
+});
+
+test("hasStrongRightsFrictionEvidence ignores bare score-only friction packets", () => {
+  assert.equal(
+    hasStrongRightsFrictionEvidence({
+      consentEvidencePassCount: 2,
+      signalKey: "privacy.user_rights_friction_score",
+      signalValue: 100
+    }),
+    false
+  );
+});
+
+test("hasStrongRightsFrictionEvidence keeps blocker-backed friction packets", () => {
+  assert.equal(
+    hasStrongRightsFrictionEvidence({
+      consentBlockerType: "email_capture",
+      consentBlockerUrl: "https://example.com/privacy-request",
+      signalKey: "privacy.user_rights_friction_score",
+      signalValue: 100
+    }),
+    true
+  );
+});
+
+test("shouldSurfacePrimarySignalFinding hides score-only rights-friction findings", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        consentEvidencePassCount: 1,
+        signalKey: "privacy.user_rights_friction_score",
+        signalValue: 100
+      },
+      key: "privacy.user_rights_friction_score",
+      linkedValidationEvidence: null
+    }),
+    false
+  );
+});
+
+test("shouldSurfacePrimarySignalFinding keeps rights-friction findings with a concrete barrier", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        consentBlockerType: "auth_wall",
+        consentRedirectOrAuthRequired: true,
+        signalKey: "privacy.user_rights_friction_score",
+        signalValue: 100
+      },
+      key: "privacy.user_rights_friction_score",
       linkedValidationEvidence: null
     }),
     true
