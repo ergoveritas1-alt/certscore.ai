@@ -94,12 +94,23 @@ test("buildExecutionScanConfig preserves existing execution fields and attaches 
       executionSummary,
       pagesRequested: 12,
       scanPlan: {
+        additionalDiscoveryMaxAdditionalFetchAttempts: 8,
+        additionalDiscoveryMaxFetchAttemptsPerType: 3,
+        additionalDiscoveryMaxSecondHopLegalHubFetchesPerMissingType: 1,
+        browserProfileSweepEnabled: false,
         browserNavigationTimeoutMs: 30_000,
         browserPostLoadWaitMs: 1_000,
+        browserRuntimeCaptureMaxAttempts: 1,
+        browserRuntimeStabilityMinWaitMs: 300,
+        browserRuntimeStabilityQuietWindowMs: 300,
         blockStylesheetsInBrowser: false,
+        consentAcceptPathStrategy: "reject_then_accept_on_escalation",
+        consentProfileSweepEnabled: false,
         expansionTargetCount: 20,
         prefetchTargetCount: 5,
         profile: "balanced",
+        runPostrunCookiesDiagnostic: false,
+        runServiceWorkerCheck: false,
         staticFetchConcurrency: 4
       }
     }

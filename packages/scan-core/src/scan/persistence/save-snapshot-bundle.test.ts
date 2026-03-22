@@ -36,6 +36,17 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       initialCookieNames: ["_ga", "consent"],
       initialCookieDomains: [".example.com", ".tracker.example.net"],
       initialCookieCount: 2,
+      cookieAttributeSummary: {
+        totalCookiesAnalyzed: 2,
+        missingSecureCount: 1,
+        missingHttpOnlyCount: 1,
+        weakSameSiteCount: 1,
+        thirdPartyWeakAttributeCount: 1,
+        missingSecureCookieNames: ["_ga"],
+        missingHttpOnlyCookieNames: ["consent"],
+        weakSameSiteCookieNames: ["_ga"],
+        thirdPartyWeakAttributeCookieNames: ["_ga"]
+      },
       scriptSrcDomains: ["cdn.example.com"],
       scriptTagCount: 3,
       responseHeaders: {
@@ -153,6 +164,16 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       consentPostAcceptThirdPartyCookieCount: 8,
       consentPostAcceptTrackerEvidenceUrls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
       consentPostAcceptTrackerVendorNames: ["Google Ads", "LinkedIn Insight Tag"],
+      gpcVerification: {
+        status: "ignored",
+        baselineTrackerCount: 2,
+        baselineThirdPartyCookieCount: 7,
+        gpcTrackerCount: 2,
+        gpcThirdPartyCookieCount: 7,
+        trackerCountDelta: 0,
+        thirdPartyCookieCountDelta: 0,
+        evidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"]
+      },
       buildPhaseSummaries: [
         {
           attempts: 1,
@@ -181,6 +202,17 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     initial_cookie_names: ["_ga", "consent"],
     initial_cookie_domains: [".example.com", ".tracker.example.net"],
     initial_cookie_count: 2,
+    cookie_attribute_summary: {
+      totalCookiesAnalyzed: 2,
+      missingSecureCount: 1,
+      missingHttpOnlyCount: 1,
+      weakSameSiteCount: 1,
+      thirdPartyWeakAttributeCount: 1,
+      missingSecureCookieNames: ["_ga"],
+      missingHttpOnlyCookieNames: ["consent"],
+      weakSameSiteCookieNames: ["_ga"],
+      thirdPartyWeakAttributeCookieNames: ["_ga"]
+    },
     script_src_domains: ["cdn.example.com"],
     script_tag_count: 3,
     response_headers: {
@@ -298,6 +330,16 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     consent_post_accept_third_party_cookie_count: 8,
     consent_post_accept_tracker_evidence_urls: ["https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123"],
     consent_post_accept_tracker_vendor_names: ["Google Ads", "LinkedIn Insight Tag"],
+    gpc_verification: {
+      status: "ignored",
+      baselineTrackerCount: 2,
+      baselineThirdPartyCookieCount: 7,
+      gpcTrackerCount: 2,
+      gpcThirdPartyCookieCount: 7,
+      trackerCountDelta: 0,
+      thirdPartyCookieCountDelta: 0,
+      evidenceUrls: ["https://snap.licdn.com/li.lms-analytics/insight.min.js"]
+    },
     build_phase_summaries: [
       {
         attempts: 1,
@@ -321,6 +363,7 @@ test("omitOptionalRuntimeArtifactsColumn removes unsupported optional runtime fi
   const strippedRow = omitOptionalRuntimeArtifactsColumn(
     {
       build_phase_summaries: [{ phase: "browser_runtime_capture" }],
+      cookie_attribute_summary: { totalCookiesAnalyzed: 1 },
       scan_id: "scan-1",
       third_party_request_count: 1
     },
@@ -328,6 +371,7 @@ test("omitOptionalRuntimeArtifactsColumn removes unsupported optional runtime fi
   );
 
   assert.deepEqual(strippedRow, {
+    cookie_attribute_summary: { totalCookiesAnalyzed: 1 },
     scan_id: "scan-1",
     third_party_request_count: 1
   });

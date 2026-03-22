@@ -87,11 +87,19 @@ function deriveObservation(finding: JsonViewFindingInput) {
   }
 
   if (/missing$/i.test(normalizedTitle)) {
-    return `The scan could not find a clear ${normalizedTitle.toLowerCase()} page during its bounded discovery pass.`;
+    const missingPageLabel = normalizedTitle.toLowerCase().replace(/ missing$/i, "");
+    if (evidence.keyPageGuessedOnly === true) {
+      return `The scan could not confidently confirm a clear ${missingPageLabel} page because bounded discovery relied on guessed candidate paths rather than confirmed site links.`;
+    }
+    return `The scan could not find a clear ${missingPageLabel} page during its bounded discovery pass.`;
   }
 
   if (/unavailable$/i.test(normalizedTitle)) {
-    return `The scan found what looked like a ${normalizedTitle.toLowerCase().replace(/ unavailable$/i, "")} page, but it could not retrieve it successfully.`;
+    const pageLabel = normalizedTitle.toLowerCase().replace(/ unavailable$/i, "");
+    if (evidence.keyPageGuessedOnly === true) {
+      return `The scan found candidate paths for a ${pageLabel} page, but discovery relied on guessed targets and the page could not be retrieved successfully.`;
+    }
+    return `The scan found what looked like a ${pageLabel} page, but it could not retrieve it successfully.`;
   }
 
   const runtimeEvidence = getStringArray("runtimeEvidence");

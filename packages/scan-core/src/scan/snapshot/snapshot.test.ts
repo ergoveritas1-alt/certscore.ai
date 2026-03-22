@@ -526,12 +526,23 @@ test("quick scan discovery budget limits second-wave fetch attempts", () => {
     buildSnapshotBundleTestInternals.getAdditionalDiscoveryFetchBudget({
       requestedPageCount: 3,
       scanPlan: {
+        additionalDiscoveryMaxAdditionalFetchAttempts: 3,
+        additionalDiscoveryMaxFetchAttemptsPerType: 1,
+        additionalDiscoveryMaxSecondHopLegalHubFetchesPerMissingType: 0,
         blockStylesheetsInBrowser: false,
+        browserProfileSweepEnabled: false,
         browserNavigationTimeoutMs: 18000,
         browserPostLoadWaitMs: 2000,
+        browserRuntimeCaptureMaxAttempts: 1,
+        browserRuntimeStabilityMinWaitMs: 300,
+        browserRuntimeStabilityQuietWindowMs: 450,
+        consentAcceptPathStrategy: "reject_then_accept_on_escalation",
+        consentProfileSweepEnabled: false,
         expansionTargetCount: 5,
         prefetchTargetCount: 4,
         profile: "js_heavy",
+        runPostrunCookiesDiagnostic: false,
+        runServiceWorkerCheck: false,
         staticFetchConcurrency: 2
       }
     }),
@@ -548,12 +559,23 @@ test("non-quick scan discovery budget preserves broader fallback coverage", () =
     buildSnapshotBundleTestInternals.getAdditionalDiscoveryFetchBudget({
       requestedPageCount: 5,
       scanPlan: {
+        additionalDiscoveryMaxAdditionalFetchAttempts: 8,
+        additionalDiscoveryMaxFetchAttemptsPerType: 3,
+        additionalDiscoveryMaxSecondHopLegalHubFetchesPerMissingType: 1,
         blockStylesheetsInBrowser: true,
+        browserProfileSweepEnabled: true,
         browserNavigationTimeoutMs: 16000,
         browserPostLoadWaitMs: 1400,
+        browserRuntimeCaptureMaxAttempts: 2,
+        browserRuntimeStabilityMinWaitMs: 500,
+        browserRuntimeStabilityQuietWindowMs: 500,
+        consentAcceptPathStrategy: "reject_then_accept",
+        consentProfileSweepEnabled: true,
         expansionTargetCount: 5,
         prefetchTargetCount: 4,
         profile: "balanced",
+        runPostrunCookiesDiagnostic: true,
+        runServiceWorkerCheck: true,
         staticFetchConcurrency: 2
       }
     }),

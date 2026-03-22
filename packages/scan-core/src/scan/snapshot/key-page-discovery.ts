@@ -572,8 +572,7 @@ async function fetchSameBrandSubdomainCandidates(input: {
 
   for (const originUrl of hosts) {
     const fetched = await fetchTextPage(originUrl, 2, {
-      bypassRobots: true,
-      robotsPolicy: null
+      robotsPolicy: input.robotsPolicy
     }).catch(() => null);
 
     if (!fetched || (fetched.status ?? 0) < 200 || (fetched.status ?? 0) >= 400 || !fetched.body.trim()) {
@@ -623,8 +622,7 @@ async function fetchSameBrandSubdomainCandidates(input: {
     const eligibleGuessedSourceUrls = new Set<string>();
     for (const secondHopHub of secondHopHubs) {
       const secondHopFetched = await fetchTextPage(secondHopHub.href, 2, {
-        bypassRobots: true,
-        robotsPolicy: null
+        robotsPolicy: input.robotsPolicy
       }).catch(() => null);
 
       if (
@@ -1204,7 +1202,6 @@ async function fetchSitemapCandidates(input: {
     }
 
     const fetched = await fetchTextPage(currentUrl, 2, {
-      bypassRobots: true,
       robotsPolicy: sameHostname(currentUrl, input.homepageUrl) ? input.robotsPolicy : null
     }).catch(() => null);
 

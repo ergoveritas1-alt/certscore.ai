@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 64);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 66);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -252,6 +252,14 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForValidationRule("scan_signal.disclosure.cookie_policy_fetch_failed")?.id,
     "cookie_policy_unavailable"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_signal_not_honored")?.id,
+    "gpc_signal_not_honored"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.weak_cookie_security_attributes_detected")?.id,
+    "weak_cookie_security_attributes"
   );
 });
 

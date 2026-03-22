@@ -34,7 +34,7 @@ export default function AdaWebsiteComplianceGuidePage() {
       automatedScanningHelp={[
         "Automated scanning can detect many recurring accessibility signals such as color contrast concerns, missing labels, image-alt gaps, and structural issues.",
         "It can highlight which public pages show repeatable problem patterns so remediation starts with the right areas.",
-        "Automated analysis does not replace manual testing, but it is a strong first pass for triage, monitoring, and documentation."
+        "Automated analysis is a strong first pass for triage, monitoring, and documentation, but it does not determine full accessibility conformance on its own and still needs manual review."
       ]}
       certScoreHelp={[
         "CertScore.ai runs automated accessibility checks across selected public pages and surfaces recurring issue patterns in structured scan output.",

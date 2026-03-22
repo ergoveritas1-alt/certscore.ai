@@ -1511,6 +1511,22 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "runtime_artifact_signal",
+    "privacy.gpc_signal_not_honored",
+    "GPC signal not honored",
+    "enforcement_outcomes_after_user_choice",
+    ["third_party_network_cookie_surface"],
+    ["consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.weak_cookie_security_attributes_detected",
+    "Weak cookie security attributes detected",
+    "third_party_network_cookie_surface",
+    [],
+    ["tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
     "consent_reject_persisted_tracker_vendor_names",
     "Persisted tracker vendors after reject",
     "enforcement_outcomes_after_user_choice",
@@ -1975,6 +1991,23 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["consent_lawful_basis_user_choice"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "consent_reject_reduced_third_party_cookies" }],
     aliases: ["Reject interaction did not reduce third-party cookies"]
+  }),
+  defineReportUnifiedFinding({
+    id: "gpc_signal_not_honored",
+    label: "GPC signal not honored",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_signal_not_honored" }],
+    aliases: ["Global Privacy Control signal not honored", "GPC signal ignored"]
+  }),
+  defineReportUnifiedFinding({
+    id: "weak_cookie_security_attributes",
+    label: "Weak cookie security attributes",
+    owner: "third_party_network_cookie_surface",
+    overlays: ["tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.weak_cookie_security_attributes_detected" }],
+    aliases: ["Weak cookie security posture", "Cookie security attributes need review"]
   }),
   defineReportUnifiedFinding({
     id: "consent_surface_required_deeper_sweep",

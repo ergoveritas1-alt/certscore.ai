@@ -71,3 +71,15 @@ export const CONSENT_PROBE_PROFILES: ConsentProbeProfile[] = [
 export function getConsentProbeProfiles() {
   return CONSENT_PROBE_PROFILES;
 }
+
+export function getPrimaryConsentProbeProfile(): ConsentProbeProfile {
+  return getConsentProbeProfiles().find((profile) => profile.name === "desktop_us") ?? { name: "desktop_default", contextOptions: {} };
+}
+
+export function getSelectedConsentProbeProfiles(profileSweepEnabled: boolean | undefined): ConsentProbeProfile[] {
+  if (profileSweepEnabled === false) {
+    return [getPrimaryConsentProbeProfile()];
+  }
+
+  return getConsentProbeProfiles();
+}

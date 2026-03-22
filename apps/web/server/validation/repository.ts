@@ -142,6 +142,19 @@ type PolicyEnrichmentLookupRow = {
   policy_arbitration_present?: boolean | null;
 };
 
+type ScanAccessibilityRuleExampleRow = {
+  description: string;
+  help: string;
+  help_url: string;
+  impact: string | null;
+  node_count: number;
+  page_url: string;
+  representative_selectors: string[] | null;
+  rule_code: string;
+  rule_group: string;
+  severity: string;
+};
+
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 
 function rankBandForRank(rank: number | null) {
@@ -657,6 +670,119 @@ function buildPolicyReviewDescription(reason: string) {
   }
 }
 
+function buildPolicyReviewEvidencePayload(input: {
+  policyEnrichmentId: string | null;
+  enrichment?: PolicyEnrichmentLookupRow;
+  reason: string;
+  reviewStatus: string | null;
+}) {
+  const summary = input.enrichment?.policy_summary_short?.trim() ?? null;
+  const pageUrl = input.enrichment?.page_url ?? null;
+  const policyCoverageRatio = input.enrichment?.policy_coverage_ratio ?? null;
+  const policySemanticConfidence = input.enrichment?.policy_semantic_confidence ?? null;
+  const policyAmbiguityScore = input.enrichment?.policy_ambiguity_score ?? null;
+  const policySnippetCount = input.enrichment?.policy_snippet_count ?? null;
+  const policyStructurallyWeak = input.enrichment?.policy_structurally_weak ?? null;
+
+  return {
+    claim:
+      input.reason === "policy_behavior_conflict_candidate"
+        ? "Observed site behavior may conflict with the site’s public-facing policy language."
+        : buildPolicyReviewDescription(input.reason),
+    confidenceBasis: [
+      input.reason === "policy_behavior_conflict_candidate"
+        ? "Policy review logic flagged a possible mismatch between public-facing policy language and observed site behavior."
+        : input.reason === "low_confidence_critical_fields"
+          ? "Policy extraction retained low-confidence critical fields that need manual review."
+          : buildPolicyReviewDescription(input.reason),
+      summary ? `Retained policy summary: ${summary}` : null,
+      typeof policyCoverageRatio === "number"
+        ? `Policy coverage ratio: ${Math.round(policyCoverageRatio * 100)}%.`
+        : null,
+      typeof policySemanticConfidence === "number"
+        ? `Policy semantic confidence: ${policySemanticConfidence.toFixed(2)}.`
+        : null,
+      typeof policyAmbiguityScore === "number"
+        ? `Policy ambiguity score: ${policyAmbiguityScore.toFixed(2)}.`
+        : null,
+      typeof policySnippetCount === "number"
+        ? `Policy snippet count retained: ${policySnippetCount}.`
+        : null,
+      policyStructurallyWeak === true ? "The policy surface also showed structural weakness signals." : null
+    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    missingEvidence: [
+      input.reason === "policy_behavior_conflict_candidate"
+        ? "Concrete runtime evidence or direct policy excerpts proving the specific conflict on a live page."
+        : null,
+      input.reason === "low_confidence_critical_fields"
+        ? "Higher-confidence extraction or direct excerpts for the affected policy fields."
+        : null,
+      input.reason === "session_replay_without_disclosure_detected"
+        ? "Direct runtime page evidence showing the replay behavior that lacks matching disclosure."
+        : null,
+      input.reason === "missing_dsar_high_exposure"
+        ? "Direct disclosure excerpts confirming whether a DSAR path is actually present."
+        : null
+    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    pageUrls: pageUrl ? [pageUrl] : [],
+    policyEvidence: summary ? [summary] : [],
+    reviewQueueReason: input.reason,
+    reviewStatus: input.reviewStatus,
+    pageType: input.enrichment?.page_type ?? null,
+    pageUrl,
+    policyEnrichmentId: input.policyEnrichmentId,
+    policyAmbiguityScore,
+    policyArbitrationPresent: input.enrichment?.policy_arbitration_present ?? null,
+    policyCancellationOrRefundPresent: input.enrichment?.policy_cancellation_or_refund_present ?? null,
+    policyCoverageRatio,
+    policyEffectiveDate: input.enrichment?.policy_effective_date ?? null,
+    policyFieldCoverage: input.enrichment?.policy_field_coverage ?? {},
+    policyGoverningLaw: input.enrichment?.policy_governing_law ?? null,
+    policyNoticeContactPresent: input.enrichment?.policy_notice_contact_present ?? null,
+    policySemanticConfidence,
+    policySnippetCount,
+    policyStructurallyWeak,
+    policySummaryShort: summary,
+    policyTerminationOrSuspensionPresent: input.enrichment?.policy_termination_or_suspension_present ?? null
+  };
+}
+
+function buildAccessibilityRiskSnapshotEvidence(score: number) {
+  return buildAccessibilityRiskSnapshotEvidenceWithExamples(score, []);
+}
+
+function buildAccessibilityRiskSnapshotEvidenceWithExamples(
+  score: number,
+  examples: ScanAccessibilityRuleExampleRow[]
+) {
+  const pageUrls = [...new Set(examples.map((example) => example.page_url))];
+  const exampleSnippets = examples.map((example) => {
+    const selector = Array.isArray(example.representative_selectors) ? example.representative_selectors[0] : null;
+    return selector
+      ? `${example.rule_code} on ${example.page_url} (${selector})`
+      : `${example.rule_code} on ${example.page_url}`;
+  });
+
+  return {
+    claim: "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
+    confidenceBasis: [
+      `Accessibility risk score: ${score}.`,
+      "This score helps prioritize review, but automated accessibility testing does not determine full conformance on its own.",
+      examples.length > 0
+        ? `Representative page-level accessibility examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`
+        : "Representative page-level accessibility examples were not retained with this score."
+    ],
+    missingEvidence: examples.length > 0
+      ? []
+      : ["Affected page URLs or representative rule examples for the highest-priority accessibility barriers."],
+    pageUrls,
+    policyEvidence: [],
+    runtimeEvidence: exampleSnippets,
+    snapshotField: "accessibility_litigation_risk_score",
+    value: score
+  };
+}
+
 function buildSupplementalPolicyQueueFindings(input: {
   existingFindings: ExistingFindingIdentity[];
   policyEnrichmentById: Map<string, PolicyEnrichmentLookupRow>;
@@ -684,26 +810,12 @@ function buildSupplementalPolicyQueueFindings(input: {
     supplements.push({
       category: "legal",
       description: buildPolicyReviewDescription(row.reason),
-      evidence_json: {
-        pageType: enrichment?.page_type ?? null,
-        pageUrl: enrichment?.page_url ?? null,
+      evidence_json: buildPolicyReviewEvidencePayload({
+        enrichment,
         policyEnrichmentId: row.policy_enrichment_id,
-        policyAmbiguityScore: enrichment?.policy_ambiguity_score ?? null,
-        policyArbitrationPresent: enrichment?.policy_arbitration_present ?? null,
-        policyCancellationOrRefundPresent: enrichment?.policy_cancellation_or_refund_present ?? null,
-        policyCoverageRatio: enrichment?.policy_coverage_ratio ?? null,
-        policyEffectiveDate: enrichment?.policy_effective_date ?? null,
-        policyFieldCoverage: enrichment?.policy_field_coverage ?? {},
-        policyGoverningLaw: enrichment?.policy_governing_law ?? null,
-        policyNoticeContactPresent: enrichment?.policy_notice_contact_present ?? null,
-        reviewQueueReason: row.reason,
-        reviewStatus: row.review_status,
-        policySemanticConfidence: enrichment?.policy_semantic_confidence ?? null,
-        policySnippetCount: enrichment?.policy_snippet_count ?? null,
-        policyStructurallyWeak: enrichment?.policy_structurally_weak ?? null,
-        policySummaryShort: enrichment?.policy_summary_short ?? null,
-        policyTerminationOrSuspensionPresent: enrichment?.policy_termination_or_suspension_present ?? null
-      },
+        reason: row.reason,
+        reviewStatus: row.review_status
+      }),
       finding_rank: input.startingRank + supplements.length + 1,
       id: `supplemental:policy_review:${row.id}`,
       page_url: enrichment?.page_url ?? null,
@@ -718,6 +830,7 @@ function buildSupplementalPolicyQueueFindings(input: {
 }
 
 function buildSupplementalSnapshotFindings(input: {
+  accessibilityRuleExamples: ScanAccessibilityRuleExampleRow[];
   existingFindings: ExistingFindingIdentity[];
   snapshot: SnapshotSupplementRow | null;
   startingRank: number;
@@ -762,10 +875,10 @@ function buildSupplementalSnapshotFindings(input: {
       supplements.push({
         category: "accessibility",
         description: "Scanner-derived risk indicator is elevated.",
-        evidence_json: {
-          snapshotField: "accessibility_litigation_risk_score",
-          value: snapshot.accessibility_litigation_risk_score
-        },
+        evidence_json: buildAccessibilityRiskSnapshotEvidenceWithExamples(
+          snapshot.accessibility_litigation_risk_score,
+          input.accessibilityRuleExamples.slice(0, 5)
+        ),
         finding_rank: input.startingRank + supplements.length + 1,
         id: "supplemental:snapshot:accessibility_risk_score",
         page_url: null,
@@ -789,7 +902,12 @@ async function loadSupplementalValidationFindings(input: {
   }
 
   const supabase = createAdminClient();
-  const [{ data: scanSignals, error: scanSignalsError }, { data: snapshot, error: snapshotError }, { data: policyQueue, error: policyQueueError }] =
+  const [
+    { data: scanSignals, error: scanSignalsError },
+    { data: snapshot, error: snapshotError },
+    { data: policyQueue, error: policyQueueError },
+    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
+  ] =
     await Promise.all([
       supabase
         .from("scan_signals")
@@ -803,7 +921,13 @@ async function loadSupplementalValidationFindings(input: {
       supabase
         .from("policy_review_queue")
         .select("id, policy_enrichment_id, reason, review_status, scan_id")
+        .eq("scan_id", input.scanId),
+      supabase
+        .from("scan_accessibility_rule_examples")
+        .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
         .eq("scan_id", input.scanId)
+        .order("node_count", { ascending: false })
+        .limit(10)
     ]);
 
   if (scanSignalsError) {
@@ -816,6 +940,10 @@ async function loadSupplementalValidationFindings(input: {
 
   if (policyQueueError) {
     throw new Error(`Failed to load supplemental policy review queue for ${input.scanId}: ${policyQueueError.message}`);
+  }
+
+  if (accessibilityRuleExamplesError) {
+    throw new Error(`Failed to load supplemental accessibility examples for ${input.scanId}: ${accessibilityRuleExamplesError.message}`);
   }
 
   const queueRows = (policyQueue ?? []) as PolicyReviewQueueRow[];
@@ -859,6 +987,7 @@ async function loadSupplementalValidationFindings(input: {
     startingRank: input.existingFindings.length + signalSupplements.length
   });
   const snapshotSupplements = buildSupplementalSnapshotFindings({
+    accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as ScanAccessibilityRuleExampleRow[],
     existingFindings: [...input.existingFindings, ...signalSupplements, ...policySupplements],
     snapshot: (snapshot as SnapshotSupplementRow | null) ?? null,
     startingRank: input.existingFindings.length + signalSupplements.length + policySupplements.length
@@ -867,6 +996,47 @@ async function loadSupplementalValidationFindings(input: {
   return [...signalSupplements, ...policySupplements, ...snapshotSupplements].map((row, index) => ({
     ...row,
     finding_rank: input.existingFindings.length + index + 1
+  }));
+}
+
+export async function loadSupplementalValidationFindingsForScan(input: {
+  existingFindings: Array<{
+    title: string;
+    ruleKey: string;
+  }>;
+  scanId: string | null;
+}) {
+  const supplementalRows = await loadSupplementalValidationFindings({
+    existingFindings: input.existingFindings.map((finding) => ({
+      rule_key: finding.ruleKey,
+      title: finding.title
+    })),
+    scanId: input.scanId
+  });
+
+  return supplementalRows.map((row) => ({
+    agreementScore: null,
+    category: row.category,
+    description: row.description,
+    evidence: row.evidence_json ?? null,
+    findingFamily: null,
+    findingScope: null,
+    findingSource: null,
+    findingSubject: null,
+    id: row.id,
+    model: null,
+    modelConfidence: null,
+    pageUrl: row.page_url,
+    promptVersion: null,
+    rationale: null,
+    ruleKey: row.rule_key,
+    severity: row.severity,
+    subtype: row.subtype,
+    systemConfidenceBand: null,
+    systemConfidenceExplanation: null,
+    systemConfidenceScore: null,
+    title: row.title,
+    verdict: null
   }));
 }
 

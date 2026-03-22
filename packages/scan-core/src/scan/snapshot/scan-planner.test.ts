@@ -34,8 +34,12 @@ test("buildScanPlan trims discovery budget for quick static-light scans", () => 
   });
 
   assert.equal(plan.profile, "static_light");
-  assert.equal(plan.prefetchTargetCount, 2);
-  assert.equal(plan.expansionTargetCount, 3);
+  assert.equal(plan.prefetchTargetCount, 1);
+  assert.equal(plan.expansionTargetCount, 2);
+  assert.equal(plan.browserProfileSweepEnabled, false);
+  assert.equal(plan.consentProfileSweepEnabled, false);
+  assert.equal(plan.browserRuntimeCaptureMaxAttempts, 1);
+  assert.equal(plan.additionalDiscoveryMaxFetchAttemptsPerType, 1);
 });
 
 test("buildScanPlan keeps larger discovery budget for non-quick balanced scans", () => {
@@ -58,6 +62,28 @@ test("buildScanPlan keeps larger discovery budget for non-quick balanced scans",
     robotsCrawlDelayMs: null
   });
 
-  assert.equal(plan.prefetchTargetCount, 4);
-  assert.equal(plan.expansionTargetCount, 5);
+  assert.equal(plan.prefetchTargetCount, 3);
+  assert.equal(plan.expansionTargetCount, 4);
+});
+
+test("buildScanPlan keeps richer runtime policy for deep scans", () => {
+  const plan = buildScanPlan({
+    homepage: makeHomepage({
+      html: "<html><body><script src='/app.js'></script><a href='/privacy'>Privacy</a></body></html>",
+      scripts: [
+        {
+          contentSample: null,
+          host: "example.com",
+          src: "https://example.com/app.js"
+        }
+      ]
+    }),
+    requestedPageCount: 12,
+    robotsCrawlDelayMs: null
+  });
+
+  assert.equal(plan.browserProfileSweepEnabled, true);
+  assert.equal(plan.consentProfileSweepEnabled, true);
+  assert.equal(plan.browserRuntimeCaptureMaxAttempts, 2);
+  assert.equal(plan.additionalDiscoveryMaxFetchAttemptsPerType, 3);
 });

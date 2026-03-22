@@ -221,9 +221,12 @@ test("rolls structured validation evidence into unified finding packets", () => 
 
   assert.equal(packet?.unifiedFindingId, "session_replay_undisclosed");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://example.com/privacy"]);
+  assert.equal(packet?.primaryPageUrl, "https://example.com/privacy");
+  assert.equal(packet?.affectedPageCount, 1);
   assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Microsoft Clarity"]);
   assert.ok(packet?.evidence?.snippets?.includes("Replay script observed during homepage load"));
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.equal(packet?.confidenceInputs.hasPageAttribution, true);
   assert.equal(packet?.confidenceInputs.hasPolicyTextEvidence, true);
   assert.equal(packet?.confidenceBand, "high");
 });
@@ -363,4 +366,149 @@ test("keeps strong corroborated findings surfaced with a confidence rationale", 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentationDecision.confidenceRationale ?? "", /high confidence/i);
   assert.match(packet?.presentation.suggestedFix ?? "", /block non-essential trackers/i);
+});
+
+test("keeps page-specific findings in audit only when page attribution is still missing", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-8",
+    ruleKey: "privacy.session_replay_without_disclosure_detected",
+    severity: "high",
+    title: "Possible undisclosed session replay",
+    evidence: {
+      claim: "Policy does not clearly disclose replay tooling.",
+      relatedVendors: ["Microsoft Clarity"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.match(packet?.presentationDecision.rationale ?? "", /affected pages/i);
+});
+
+test("surfaces GPC failures as runtime-backed unified findings", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A browser-level opt-out preference signal appears not to have been honored during the scan.",
+        fallbackEvidence: {
+          gpcVerification: {
+            status: "ignored",
+            baselineTrackerCount: 3,
+            baselineThirdPartyCookieCount: 4,
+            gpcTrackerCount: 3,
+            gpcThirdPartyCookieCount: 4,
+            trackerCountDelta: 0,
+            thirdPartyCookieCountDelta: 0,
+            evidenceUrls: ["https://example.com/collect"]
+          },
+          signalKey: "privacy.gpc_signal_not_honored",
+          signalLabel: "GPC signal not honored",
+          signalValue: true,
+          sourceUrls: ["https://example.com/collect"]
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.gpc_signal_not_honored",
+        signalLabel: "GPC signal not honored",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "GPC signal not honored"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.suggestedFix ?? "", /browser-level opt-out/i);
+});
+
+test("surfaces weak cookie security attributes from runtime artifact evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed cookies appear to rely on weaker security attributes than expected.",
+        fallbackEvidence: {
+          cookieAttributeSummary: {
+            totalCookiesAnalyzed: 5,
+            missingSecureCount: 2,
+            missingHttpOnlyCount: 3,
+            weakSameSiteCount: 1,
+            thirdPartyWeakAttributeCount: 2,
+            missingSecureCookieNames: ["_ga"],
+            missingHttpOnlyCookieNames: ["_ga", "consent"],
+            weakSameSiteCookieNames: ["_ga"],
+            thirdPartyWeakAttributeCookieNames: ["_ga"]
+          },
+          signalKey: "privacy.weak_cookie_security_attributes_detected",
+          signalLabel: "Weak cookie security attributes detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "privacy.weak_cookie_security_attributes_detected",
+        signalLabel: "Weak cookie security attributes detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Weak cookie security attributes detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.evidence?.counts?.missingSecureCount, 2);
+});
+
+test("surfaces minors-related context without requiring page-level attribution", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The site shows youth-directed or age-related privacy cues that merit closer review.",
+        fallbackEvidence: {
+          ageGatePresent: true,
+          childrenAudienceLikely: true,
+          childrenPrivacyRiskScore: 68,
+          dateOfBirthInputPresent: true,
+          formCollectsBirthdate: true,
+          mentionsCoppa: true,
+          mentionsUnder13: true,
+          parentalConsentReferencePresent: true,
+          policyChildrenReference: "The policy references services for children under 13.",
+          signalKey: "context.children_audience_likely",
+          signalLabel: "Children audience likely",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "context.children_audience_likely",
+        signalLabel: "Children audience likely",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Children audience likely"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "minors_or_age_gated_collection_context");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
+  assert.equal(packet?.evidence?.counts?.childrenPrivacyRiskScore, 68);
+  assert.ok(packet?.evidence?.flags?.includes("children_audience_likely"));
+  assert.ok(packet?.details?.family === "sensitive_data");
+  assert.ok(packet?.details?.dataTypes?.includes("birthdate"));
+  assert.ok(packet?.details?.dataTypes?.includes("youth_directed_context"));
 });

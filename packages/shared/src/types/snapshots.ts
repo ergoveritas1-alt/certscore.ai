@@ -566,6 +566,29 @@ export type ConsentInteractionEvidenceStep = {
   urlAfterClick: string | null;
 };
 
+export type CookieAttributeSummary = {
+  totalCookiesAnalyzed: number;
+  missingSecureCount: number;
+  missingHttpOnlyCount: number;
+  weakSameSiteCount: number;
+  thirdPartyWeakAttributeCount: number;
+  missingSecureCookieNames: string[];
+  missingHttpOnlyCookieNames: string[];
+  weakSameSiteCookieNames: string[];
+  thirdPartyWeakAttributeCookieNames: string[];
+};
+
+export type GpcVerification = {
+  status: "honored" | "ignored" | "inconclusive";
+  baselineTrackerCount: number | null;
+  baselineThirdPartyCookieCount: number | null;
+  gpcTrackerCount: number | null;
+  gpcThirdPartyCookieCount: number | null;
+  trackerCountDelta: number | null;
+  thirdPartyCookieCountDelta: number | null;
+  evidenceUrls: string[];
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -614,6 +637,8 @@ export type ScanRuntimeArtifact = {
   consentPostAcceptTrackerVendorNames: string[];
   sensitivePayloadViolations: SensitivePayloadViolation[];
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
+  cookieAttributeSummary?: CookieAttributeSummary | null;
+  gpcVerification?: GpcVerification | null;
   buildPhaseSummaries?: Array<{
     attempts: number;
     completedAt: string;

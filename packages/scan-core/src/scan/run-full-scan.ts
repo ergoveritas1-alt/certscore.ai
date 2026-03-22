@@ -158,6 +158,28 @@ function buildStageMetadata(
   } satisfies Record<string, unknown>;
 }
 
+function buildStageEventMetadata(input: {
+  completedAt?: string | null;
+  context: StageContext;
+  errorCategory?: ScanExecutionErrorCategory | null;
+  metadata?: Record<string, unknown>;
+  phase: StagePhase;
+  stage: ScanExecutionStage;
+  stageStartedAt: Date;
+}) {
+  const completedAt = input.completedAt ?? new Date().toISOString();
+  return buildStageMetadata(input.stage, input.phase, {
+    errorCategory: input.errorCategory ?? null,
+    metadata: {
+      startedAt: input.stageStartedAt.toISOString(),
+      completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - input.stageStartedAt.getTime()),
+      stepKey: input.stage,
+      ...(input.metadata ?? {})
+    }
+  });
+}
+
 function getRequestedPageCount(scan: ScanRow, domain: DomainRow) {
   const configMaxPages =
     typeof scan.scan_config_json?.maxPages === "number" && Number.isFinite(scan.scan_config_json.maxPages)
@@ -432,7 +454,11 @@ async function runSetupStage(input: {
       eventType: input.startedEventType,
       message:
         input.context.scanRow.scan_type === "preview" ? "Live preview scan started." : "Structured snapshot scan started.",
-      metadata: buildStageMetadata(stage, "started", {
+      metadata: buildStageEventMetadata({
+        context: input.context,
+        phase: "started",
+        stage,
+        stageStartedAt,
         metadata: {
           pagesRequested: input.context.requestedPageCount
         }
@@ -504,7 +530,11 @@ async function runBaselineLookupStage(input: {
     message: input.isPreview
       ? "Looking for a previous completed snapshot so this preview can anchor itself against any existing baseline."
       : "Looking for a previous completed snapshot so this scan can compare against the latest baseline.",
-    metadata: buildStageMetadata(stage, "started", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
+      phase: "started",
+      stage,
+      stageStartedAt,
       metadata: {
         requestedPageCount: input.context.requestedPageCount,
         scanType: input.context.scanRow.scan_type
@@ -526,6 +556,7 @@ async function runBaselineLookupStage(input: {
       ? await withTimeout(input.deps.getSnapshotBundle(previousScan.id), 20_000, "Baseline bundle load")
       : null;
 
+    const completedAt = new Date().toISOString();
     await insertScanEventSafely({
       scanId: input.context.scanId,
       domainId: input.context.domainRow.id,
@@ -536,7 +567,12 @@ async function runBaselineLookupStage(input: {
         : input.isPreview
           ? "No previous snapshot context found. This preview run is creating the first baseline for this domain."
           : "No previous snapshot context found. This run is creating the first baseline for this domain.",
-      metadata: buildStageMetadata(stage, "completed", {
+      metadata: buildStageEventMetadata({
+        completedAt,
+        context: input.context,
+        phase: "completed",
+        stage,
+        stageStartedAt,
         metadata: {
           hasPreviousSnapshot: Boolean(previousScan),
           previousScanId: previousScan?.id ?? null
@@ -636,7 +672,11 @@ async function runCrawlDiscoveryStage(input: {
     organizationId: input.context.scanRow.organization_id,
     eventType: SCAN_EVENT_TYPES.crawlStarted,
     message: "Stage 1 started: crawl setup, robots, homepage fetch, and page discovery.",
-    metadata: buildStageMetadata(stage, "started", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
+      phase: "started",
+      stage,
+      stageStartedAt,
       metadata: {
         requestedPageCount: input.context.requestedPageCount
       }
@@ -651,7 +691,11 @@ async function runCrawlDiscoveryStage(input: {
     message: input.isPreview
       ? "Starting the lightweight live pass: homepage fetch, runtime/privacy checks, legal-link discovery, and signal normalization."
       : "Starting the full scan pass: homepage fetch, runtime/privacy checks, legal-link discovery, targeted page fetches, and signal normalization.",
-    metadata: buildStageMetadata(stage, "started", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
+      phase: "started",
+      stage,
+      stageStartedAt,
       metadata: {
         crawlSource: input.crawlSource,
         requestedPageCount: input.context.requestedPageCount
@@ -676,15 +720,21 @@ async function runCrawlDiscoveryStage(input: {
       timeoutMs: 240_000
     });
 
+    const completedAt = new Date().toISOString();
     await insertScanEventSafely({
       scanId: input.context.scanId,
       domainId: input.context.domainRow.id,
       organizationId: input.context.scanRow.organization_id,
       eventType: SCAN_EVENT_TYPES.pageDiscoveryCompleted,
       message: "Stages 1-6 completed: static extraction, policy normalization, browser checks, enrichment, and scoring.",
-      metadata: buildStageMetadata(stage, "completed", {
-        attempts,
+      metadata: buildStageEventMetadata({
+        completedAt,
+        context: input.context,
+        phase: "completed",
+        stage,
+        stageStartedAt,
         metadata: {
+          attempts,
           expansionTargetCount: bundle.scanPlan.expansionTargetCount,
           homepageFetchStatus: bundle.snapshot.homepageFetchStatus,
           pagesScanned: bundle.snapshot.pagesScanned,
@@ -778,7 +828,11 @@ async function runRuntimeSnapshotStage(input: {
       organizationId: input.context.scanRow.organization_id,
       eventType: SCAN_EVENT_TYPES.homepageLoaded,
       message: "Homepage fetch and lightweight runtime pass completed.",
-      metadata: buildStageMetadata(stage, "completed", {
+      metadata: buildStageEventMetadata({
+        context: input.context,
+        phase: "completed",
+        stage,
+        stageStartedAt,
         metadata: {
           cookieBannerPresent: input.bundle.snapshot.cookieBannerPresent,
           cookieCountTotal: input.bundle.snapshot.cookieCountTotal,
@@ -895,7 +949,11 @@ async function runSignalDerivationStage(input: {
     message: input.isPreview
       ? "Runtime checks are back. Folding privacy-policy, terms, contact, and disclosure evidence into the preview bundle now."
       : "Runtime checks are back. Folding privacy-policy, terms, contact, and disclosure evidence into the full scan bundle now.",
-    metadata: buildStageMetadata(stage, "started", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
+      phase: "started",
+      stage,
+      stageStartedAt,
       metadata: {
         contactPagePresent: input.bundle.snapshot.contactPagePresent,
         pagesScanned: input.bundle.snapshot.pagesScanned,
@@ -921,7 +979,11 @@ async function runSignalDerivationStage(input: {
       message: input.isPreview
         ? "Canonical preview bundle assembled successfully. Persisting the snapshot rows and score summaries next."
         : "Canonical full scan bundle assembled successfully. Persisting the snapshot rows and score summaries next.",
-      metadata: buildStageMetadata(stage, "completed", {
+      metadata: buildStageEventMetadata({
+        context: input.context,
+        phase: "completed",
+        stage,
+        stageStartedAt,
         metadata: {
           accessibilityScore: input.bundle.snapshot.accessibilityScore,
           certscoreOverall: input.bundle.snapshot.certscoreOverall,
@@ -1082,7 +1144,11 @@ async function runPersistenceStage(input: {
     message: input.isPreview
       ? "Privacy and consent normalization completed. Persisting the preview snapshot next."
       : "Privacy and consent normalization completed. Persisting the full scan snapshot next.",
-    metadata: buildStageMetadata(stage, "started", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
+      phase: "started",
+      stage,
+      stageStartedAt,
       metadata: {
         privacyPolicyPresent: input.bundle.snapshot.privacyPolicyPresent,
         thirdPartyCookieSetBeforeConsent: input.bundle.snapshot.thirdPartyCookieSetBeforeConsent,
@@ -1097,8 +1163,12 @@ async function runPersistenceStage(input: {
     organizationId: input.context.scanRow.organization_id,
     eventType: SCAN_EVENT_TYPES.signalsPersisted,
     message: "Stage 7 completed: canonical snapshot, page metadata, vendor rows, accessibility counts, and compatibility signals persisted.",
-    metadata: buildStageMetadata(stage, degradedIssues.length > 0 ? "degraded" : "completed", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
       errorCategory: degradedIssues[0]?.category ?? null,
+      phase: degradedIssues.length > 0 ? "degraded" : "completed",
+      stage,
+      stageStartedAt,
       metadata: {
         accessibilityRuleRowsPersisted: input.bundle.accessibilityRuleCounts.length,
         pagesPersisted: input.bundle.pages.length,
@@ -1151,8 +1221,12 @@ async function runPersistenceStage(input: {
     message: input.isPreview
       ? "Accessibility and disclosure summaries were finalized for the preview result."
       : "Accessibility and disclosure summaries were finalized for the full scan result.",
-    metadata: buildStageMetadata(stage, diff ? "completed" : "degraded", {
+    metadata: buildStageEventMetadata({
+      context: input.context,
       errorCategory: diff ? null : "diff",
+      phase: diff ? "completed" : "degraded",
+      stage,
+      stageStartedAt,
       metadata: {
         accessibilityScore: input.bundle.snapshot.accessibilityScore,
         legalCoverageScore: input.bundle.snapshot.legalCoverageScore,
@@ -1168,7 +1242,11 @@ async function runPersistenceStage(input: {
       organizationId: input.context.scanRow.organization_id,
       eventType: SCAN_EVENT_TYPES.changesComputed,
       message: diff.summary.isBaseline ? "Baseline snapshot recorded." : "Stage 8 completed: rich snapshot diff and change events recorded.",
-      metadata: buildStageMetadata(stage, "completed", {
+      metadata: buildStageEventMetadata({
+        context: input.context,
+        phase: "completed",
+        stage,
+        stageStartedAt,
         metadata: diff.summary
       })
     });
@@ -1385,9 +1463,12 @@ export async function runFullScanJob(scanId: string, deps: RunFullScanJobDeps = 
         message: scanRow.scan_type === "preview" ? "Live preview scan completed." : "Structured snapshot scan completed.",
         metadata: {
           changeSummary: persistenceResult.diff?.summary ?? null,
+          completedAt: persistenceResult.completedAt.toISOString(),
           durationMs: persistenceResult.durationMs,
           executionSummary: context.executionSummary,
           pagesScanned: crawlResult.bundle.snapshot.pagesScanned,
+          startedAt: context.startedAt.toISOString(),
+          stepKey: "full_scan",
           totalSignals: crawlResult.bundle.snapshot.totalSignals,
           certscoreOverall: crawlResult.bundle.snapshot.certscoreOverall
         }

@@ -1085,6 +1085,8 @@ function isConcerningSignal(key: string, value: unknown) {
   const negativePatterns = [
     /dark_pattern/,
     /preconsent/,
+    /gpc_signal_not_honored/,
+    /weak_cookie_security_attributes_detected/,
     /conflict/,
     /mismatch/,
     /litigation_risk_score/,
@@ -1108,7 +1110,11 @@ function isConcerningSignal(key: string, value: unknown) {
     /high_sensitivity_data_collection_detected/,
     /limited_time_offer_language_present/,
     /discount_claim_present/,
-    /original_price_comparison_present/
+    /original_price_comparison_present/,
+    /children_audience_likely/,
+    /kid_directed_content_detected/,
+    /form_collects_birthdate/,
+    /policyChildrenReference/
   ];
 
   if (negativePatterns.some((pattern) => pattern.test(key))) {
@@ -1134,6 +1140,18 @@ function getSignalConcernReason(key: string, value: unknown) {
 
   if (/preconsent|tracking_before_consent/i.test(key)) {
     return "Observed before a clear user choice was made.";
+  }
+
+  if (/gpc_signal_not_honored/i.test(key)) {
+    return "A browser-level opt-out preference signal appears not to have been honored during the scan.";
+  }
+
+  if (/children_audience_likely|kid_directed_content_detected|form_collects_birthdate|policyChildrenReference/i.test(key)) {
+    return "The scan retained age-related or youth-directed context that may raise children’s privacy review expectations.";
+  }
+
+  if (/weak_cookie_security_attributes_detected/i.test(key)) {
+    return "Observed cookies appear to rely on weaker security attributes than expected.";
   }
 
   if (/surface_missing/i.test(key)) {
@@ -1364,6 +1382,7 @@ function buildReviewFindings(input: {
   issues: CanonicalReviewIssue[];
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
+  snapshot?: Record<string, unknown> | null;
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
   validationFindingLookup?: Map<string, ScanValidationFinding>;
@@ -1424,15 +1443,61 @@ function buildReviewFindings(input: {
               signalLabel: item.label,
               signalValue: item.value
             }
-          : /commerce\.high_sensitivity_data_collection_detected/i.test(item.key)
+          : /privacy\.gpc_signal_not_honored/i.test(item.key)
             ? {
-                sensitivePayloadViolations: Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
-                  ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
-                  : [],
+                gpcVerification:
+                  input.runtimeArtifacts?.gpc_verification && typeof input.runtimeArtifacts.gpc_verification === "object"
+                    ? input.runtimeArtifacts.gpc_verification
+                    : null,
                 signalKey: item.key,
                 signalLabel: item.label,
-                signalValue: item.value
+                signalValue: item.value,
+                sourceUrls:
+                  input.runtimeArtifacts?.gpc_verification &&
+                  typeof input.runtimeArtifacts.gpc_verification === "object" &&
+                  Array.isArray((input.runtimeArtifacts.gpc_verification as { evidenceUrls?: unknown }).evidenceUrls)
+                    ? ((input.runtimeArtifacts.gpc_verification as { evidenceUrls: string[] }).evidenceUrls)
+                    : []
               }
+            : /privacy\.weak_cookie_security_attributes_detected/i.test(item.key)
+              ? {
+                  cookieAttributeSummary:
+                    input.runtimeArtifacts?.cookie_attribute_summary && typeof input.runtimeArtifacts.cookie_attribute_summary === "object"
+                      ? input.runtimeArtifacts.cookie_attribute_summary
+                      : null,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                }
+            : /commerce\.high_sensitivity_data_collection_detected/i.test(item.key)
+              ? {
+                  sensitivePayloadViolations: Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
+                  ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
+                  : [],
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                }
+            : /children_audience_likely|kid_directed_content_detected|form_collects_birthdate|policyChildrenReference/i.test(item.key)
+              ? {
+                  ageGatePresent: input.snapshot?.age_gate_present === true,
+                  childrenAudienceLikely: input.snapshot?.children_audience_likely === true,
+                  childrenPrivacyRiskScore:
+                    typeof input.snapshot?.children_privacy_risk_score === "number"
+                      ? input.snapshot.children_privacy_risk_score
+                      : null,
+                  dateOfBirthInputPresent: input.snapshot?.date_of_birth_input_present === true,
+                  formCollectsBirthdate: input.snapshot?.form_collects_birthdate === true,
+                  kidDirectedContentDetected: input.snapshot?.kid_directed_content_detected === true,
+                  mentionsCoppa: input.snapshot?.mentions_coppa === true,
+                  mentionsUnder13: input.snapshot?.mentions_under_13 === true,
+                  mentionsUnder16: input.snapshot?.mentions_under_16 === true,
+                  parentalConsentReferencePresent: input.snapshot?.parental_consent_reference_present === true,
+                  policyChildrenReference: typeof item.value === "string" ? item.value : null,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                }
             : keyPageType
               ? {
                   keyPageAttemptCount: keyPageSummary?.attemptCount ?? null,
@@ -1513,11 +1578,15 @@ function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewF
     return "high";
   }
 
+  if (/gpc_signal_not_honored/i.test(key)) {
+    return "high";
+  }
+
   if (/privacy_policy_(surface_missing|fetch_failed)/i.test(key)) {
     return "high";
   }
 
-  if (/key_page_discovery_unresolved_after_bounded_search|surface_missing|fetch_failed|dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
+  if (/weak_cookie_security_attributes_detected|key_page_discovery_unresolved_after_bounded_search|surface_missing|fetch_failed|dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
     return "medium";
   }
 
@@ -1581,6 +1650,35 @@ function formatValidationSupport(finding: UnifiedFindingDisplayPacket) {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+function formatFindingPageLabel(pageUrl: string) {
+  try {
+    const parsed = new URL(pageUrl);
+    const path = `${parsed.pathname}${parsed.search}`.trim();
+    if (!path || path === "/") {
+      return parsed.hostname;
+    }
+    return path;
+  } catch {
+    return pageUrl;
+  }
+}
+
+function getFindingPageAttributionSummary(finding: UnifiedFindingDisplayPacket) {
+  if (finding.primaryPageUrl) {
+    const pageLabel = formatFindingPageLabel(finding.primaryPageUrl);
+    if (finding.affectedPageCount > 1) {
+      return `Seen on ${finding.affectedPageCount} pages including ${pageLabel}.`;
+    }
+    return `Seen on ${pageLabel}.`;
+  }
+
+  if (finding.affectedPageCount > 0) {
+    return `Seen on ${finding.affectedPageCount} page${finding.affectedPageCount === 1 ? "" : "s"}.`;
+  }
+
+  return null;
+}
+
 function summarizeObservedIssueEvidence(evidence: string[] | undefined, severity: CanonicalReviewFinding["severity"]) {
   if (!evidence || evidence.length === 0) {
     return `${severity} severity`;
@@ -1640,6 +1738,7 @@ function getConfidenceBadgeClasses(band: UnifiedFindingDisplayPacket["confidence
 
 function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const validationSupport = formatValidationSupport(input.finding);
+  const pageAttribution = getFindingPageAttributionSummary(input.finding);
 
   return (
     <div className={`rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding.severity)}`}>
@@ -1660,6 +1759,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-700">{input.finding.observedValue ?? `${input.finding.severity} severity`}</p>
+            {pageAttribution ? <p className="mt-1 text-xs text-slate-500">{pageAttribution}</p> : null}
           </div>
           {input.finding.presentation.confidenceScore ? (
             <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Confidence {input.finding.presentation.confidenceScore}</p>
@@ -1786,6 +1886,122 @@ function AgencyAdvisorySummary(input: { findings: UnifiedFindingDisplayPacket[] 
                 <li key={bullet}>• {bullet}</li>
               ))}
             </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function deriveInfrastructureContext(snapshot: Record<string, unknown>) {
+  const items = [
+    typeof snapshot.hosting_or_cdn_provider === "string" && snapshot.hosting_or_cdn_provider.trim().length > 0
+      ? `Hosting/CDN: ${snapshot.hosting_or_cdn_provider}`
+      : null,
+    typeof snapshot.cdn_provider === "string" && snapshot.cdn_provider.trim().length > 0
+      ? `CDN: ${snapshot.cdn_provider}`
+      : null,
+    typeof snapshot.tls_version_min_supported === "string" && snapshot.tls_version_min_supported.trim().length > 0
+      ? `TLS minimum: ${snapshot.tls_version_min_supported}`
+      : null,
+    typeof snapshot.certificate_authority === "string" && snapshot.certificate_authority.trim().length > 0
+      ? `Certificate authority: ${snapshot.certificate_authority}`
+      : null,
+    typeof snapshot.domain_age_years === "number"
+      ? `Domain age: ${snapshot.domain_age_years.toFixed(1)} year${snapshot.domain_age_years === 1 ? "" : "s"}`
+      : null,
+    snapshot.domain_privacy_protection_enabled === true
+      ? "Domain privacy protection is enabled."
+      : snapshot.domain_privacy_protection_enabled === false
+        ? "Domain privacy protection is not enabled."
+        : null,
+    typeof snapshot.country_inferred === "string" && snapshot.country_inferred.trim().length > 0
+      ? `Country inferred: ${snapshot.country_inferred}`
+      : null,
+    typeof snapshot.jurisdiction_guess === "string" && snapshot.jurisdiction_guess.trim().length > 0
+      ? `Jurisdiction guess: ${snapshot.jurisdiction_guess}`
+      : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  return items.slice(0, 6);
+}
+
+function deriveAudienceSensitivityContext(snapshot: Record<string, unknown>) {
+  const items = [
+    snapshot.children_audience_likely === true
+      ? "The site appears likely to target or attract children or younger audiences."
+      : null,
+    snapshot.kid_directed_content_detected === true
+      ? "Kid-directed content cues were detected in the scanned pages."
+      : null,
+    snapshot.age_gate_present === true
+      ? "An age gate was present in the scanned experience."
+      : null,
+    snapshot.parental_consent_reference_present === true
+      ? "Parental-consent language was detected."
+      : null,
+    snapshot.mentions_coppa === true
+      ? "COPPA-related policy language was detected."
+      : null,
+    snapshot.mentions_under_13 === true
+      ? "Under-13 policy language was detected."
+      : null,
+    snapshot.mentions_under_16 === true
+      ? "Under-16 policy language was detected."
+      : null,
+    typeof snapshot.children_privacy_risk_score === "number" && snapshot.children_privacy_risk_score > 0
+      ? `Children’s privacy risk score: ${snapshot.children_privacy_risk_score}.`
+      : null,
+    snapshot.form_collects_birthdate === true || snapshot.date_of_birth_input_present === true
+      ? "Birthdate or age-related collection cues were present."
+      : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  return items.slice(0, 6);
+}
+
+function OperationalContextSummary(input: { snapshot: Record<string, unknown> }) {
+  const infrastructureItems = deriveInfrastructureContext(input.snapshot);
+  const audienceItems = deriveAudienceSensitivityContext(input.snapshot);
+
+  if (infrastructureItems.length === 0 && audienceItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-base font-semibold text-slate-900">Operational context</p>
+          <p className="text-sm text-slate-500">
+            A compact view of infrastructure and audience-sensitive context that can affect how the site owner prioritizes remediation and risk discussions.
+          </p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Infrastructure profile</p>
+            {infrastructureItems.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {infrastructureItems.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">No compact infrastructure context was retained for this scan.</p>
+            )}
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Audience & sensitive context</p>
+            {audienceItems.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {audienceItems.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">No children’s-privacy or age-gate context was retained for this scan.</p>
+            )}
           </div>
         </div>
       </div>
@@ -2567,6 +2783,10 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
               : [])
           ]}
         />
+      ) : null}
+
+      {snapshot ? (
+        <OperationalContextSummary snapshot={snapshot} />
       ) : null}
 
       {snapshot ? (

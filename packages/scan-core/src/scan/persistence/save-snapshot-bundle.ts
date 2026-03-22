@@ -18,7 +18,7 @@ type RuntimeArtifactsPatchInput = {
   scanId: string;
 };
 
-const OPTIONAL_RUNTIME_ARTIFACT_COLUMNS = ["build_phase_summaries"] as const;
+const OPTIONAL_RUNTIME_ARTIFACT_COLUMNS = ["build_phase_summaries", "cookie_attribute_summary", "gpc_verification"] as const;
 
 function getMissingColumnName(errorMessage: string) {
   const match = errorMessage.match(/Could not find the '([^']+)' column/i);

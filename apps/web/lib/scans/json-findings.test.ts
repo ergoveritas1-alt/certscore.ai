@@ -57,3 +57,27 @@ test("maps every finding row for the JSON view without collapsing duplicates", (
     "The automated accessibility check found WCAG issues that could affect how people use the site."
   );
 });
+
+test("uses inconclusive wording for guessed-only missing-page evidence in the JSON view", () => {
+  const [finding] = mapFindingsForJsonView({
+    domainHostname: "example.com",
+    findings: [
+      {
+        evidence: {
+          keyPageGuessedOnly: true
+        },
+        id: "missing-1",
+        pageUrl: null,
+        ruleKey: "disclosure.privacy_policy_missing",
+        severity: "medium",
+        title: "Privacy policy missing"
+      }
+    ]
+  });
+
+  const summary = JSON.parse(finding?.summaryJson ?? "{}");
+  assert.equal(
+    summary.observation,
+    "The scan could not confidently confirm a clear privacy policy page because bounded discovery relied on guessed candidate paths rather than confirmed site links."
+  );
+});

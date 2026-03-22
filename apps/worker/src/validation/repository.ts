@@ -5,6 +5,7 @@ import {
   VALIDATION_DEFAULT_RUN_MODE,
   type FindingCategory,
   type FindingSeverity,
+  type ScanPage,
   type ValidationPipelineState,
   type ValidationRunMode,
   type ValidationRunStatus,
@@ -174,6 +175,19 @@ type ScanRuntimeArtifactsRow = {
   third_party_request_domains?: string[] | null;
 };
 
+type ScanAccessibilityRuleExampleRow = {
+  description: string;
+  help: string;
+  help_url: string;
+  impact: string | null;
+  node_count: number;
+  page_url: string;
+  representative_selectors: string[] | null;
+  rule_code: string;
+  rule_group: string;
+  severity: string;
+};
+
 type ValidationSnapshotFallbackRow = {
   cookie_banner_present: boolean;
   dark_pattern_reject_button_missing: boolean;
@@ -319,11 +333,56 @@ export type ValidationEvidencePacket = {
   }>;
 };
 
+type ValidationEvidencePolicyReviewPayload = ValidationEvidencePacket & {
+  pageType: string | null;
+  pageUrl: string | null;
+  policyEnrichmentId: string | null;
+  policyAmbiguityScore: number | null;
+  policyArbitrationPresent: boolean | null;
+  policyCancellationOrRefundPresent: boolean | null;
+  policyCoverageRatio: number | null;
+  policyEffectiveDate: string | null;
+  policyFieldCoverage: Record<string, unknown>;
+  policyGoverningLaw: string | null;
+  policyNoticeContactPresent: boolean | null;
+  reviewQueueReason: string;
+  reviewStatus: string | null;
+  policySemanticConfidence: number | null;
+  policySnippetCount: number | null;
+  policyStructurallyWeak: boolean | null;
+  policySummaryShort: string | null;
+  policyTerminationOrSuspensionPresent: boolean | null;
+};
+
 type ValidationEvidenceBuildContext = {
+  accessibilityRuleExamples: ScanAccessibilityRuleExampleRow[];
   runtimeArtifacts: ScanRuntimeArtifactsRow | null;
   scanSignalsByKey: Map<string, ScanSignalRow>;
   snapshot: ScanSnapshotRow | null;
 };
+
+type ValidationEvidenceAugmentation = {
+  confidenceBasis?: string[];
+  keyPageAttemptCount?: number | null;
+  keyPageAttemptedUrls?: string[];
+  keyPageDiscoverySource?: string | null;
+  keyPageGuessedOnly?: boolean | null;
+  keyPageStopReason?: string | null;
+  missingEvidence?: string[];
+  pageUrls?: string[];
+  policyEvidence?: string[];
+  reviewPolicy?: Omit<Partial<ValidationEvidencePacket["reviewPolicy"]>, "rubric"> & {
+    rubric?: Partial<ValidationEvidencePacket["reviewPolicy"]["rubric"]>;
+  };
+  runtimeEvidence?: string[];
+  supportingSignals?: ValidationEvidencePacket["supportingSignals"];
+};
+
+type ValidationEvidenceAugmenter = (input: {
+  context: ValidationEvidenceBuildContext;
+  packet: ValidationEvidencePacket;
+  row: ScanSignalRow;
+}) => ValidationEvidenceAugmentation | null;
 
 type ValidationFindingDefinition = {
   buildEvidence?: (row: ScanSignalRow, context: ValidationEvidenceBuildContext) => ValidationEvidencePacket;
@@ -402,12 +461,134 @@ function summarizePreconsentEvidenceUrls(evidenceUrls: string[], trackerVendors:
   };
 }
 
+function mergeSupportingSignals(
+  current: ValidationEvidencePacket["supportingSignals"],
+  next: ValidationEvidencePacket["supportingSignals"] | undefined
+) {
+  if (!next || next.length === 0) {
+    return current;
+  }
+
+  const merged = [...current];
+  const seen = new Set(current.map((signal) => `${signal.category}:${signal.key}:${JSON.stringify(signal.value)}`));
+  for (const signal of next) {
+    const key = `${signal.category}:${signal.key}:${JSON.stringify(signal.value)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(signal);
+  }
+  return merged;
+}
+
+function mergeReviewPolicy(
+  current: ValidationEvidencePacket["reviewPolicy"],
+  next: ValidationEvidenceAugmentation["reviewPolicy"]
+): ValidationEvidencePacket["reviewPolicy"] {
+  if (!next) {
+    return current;
+  }
+
+  return {
+    claimType: next.claimType ?? current.claimType,
+    contraryEvidenceTypes: uniqueStrings([...(current.contraryEvidenceTypes ?? []), ...(next.contraryEvidenceTypes ?? [])]),
+    detectorStrength: next.detectorStrength ?? current.detectorStrength,
+    gapTolerance: next.gapTolerance ?? current.gapTolerance,
+    requiredSupportTypes: uniqueStrings([...(current.requiredSupportTypes ?? []), ...(next.requiredSupportTypes ?? [])]),
+    rubric: {
+      inconclusiveIf: uniqueStrings([...(current.rubric.inconclusiveIf ?? []), ...(next.rubric?.inconclusiveIf ?? [])]),
+      notSupportedIf: uniqueStrings([...(current.rubric.notSupportedIf ?? []), ...(next.rubric?.notSupportedIf ?? [])]),
+      supportedIf: uniqueStrings([...(current.rubric.supportedIf ?? []), ...(next.rubric?.supportedIf ?? [])])
+    }
+  };
+}
+
+function applyEvidenceAugmentation(
+  packet: ValidationEvidencePacket,
+  augmentation: ValidationEvidenceAugmentation | null
+): ValidationEvidencePacket {
+  if (!augmentation) {
+    return packet;
+  }
+
+  return {
+    ...packet,
+    confidenceBasis: uniqueStrings([...(packet.confidenceBasis ?? []), ...(augmentation.confidenceBasis ?? [])]),
+    keyPageAttemptCount:
+      augmentation.keyPageAttemptCount !== undefined ? augmentation.keyPageAttemptCount : packet.keyPageAttemptCount,
+    keyPageAttemptedUrls: uniqueStrings([...(packet.keyPageAttemptedUrls ?? []), ...(augmentation.keyPageAttemptedUrls ?? [])]),
+    keyPageDiscoverySource:
+      augmentation.keyPageDiscoverySource !== undefined ? augmentation.keyPageDiscoverySource : packet.keyPageDiscoverySource,
+    keyPageGuessedOnly:
+      augmentation.keyPageGuessedOnly !== undefined ? augmentation.keyPageGuessedOnly : packet.keyPageGuessedOnly,
+    keyPageStopReason:
+      augmentation.keyPageStopReason !== undefined ? augmentation.keyPageStopReason : packet.keyPageStopReason,
+    missingEvidence: uniqueStrings([...(packet.missingEvidence ?? []), ...(augmentation.missingEvidence ?? [])]),
+    pageUrls: uniqueStrings([...(packet.pageUrls ?? []), ...(augmentation.pageUrls ?? [])]),
+    policyEvidence: uniqueStrings([...(packet.policyEvidence ?? []), ...(augmentation.policyEvidence ?? [])]),
+    reviewPolicy: mergeReviewPolicy(packet.reviewPolicy, augmentation.reviewPolicy),
+    runtimeEvidence: uniqueStrings([...(packet.runtimeEvidence ?? []), ...(augmentation.runtimeEvidence ?? [])]),
+    supportingSignals: mergeSupportingSignals(packet.supportingSignals, augmentation.supportingSignals)
+  };
+}
+
+function composeEvidencePacket(input: {
+  augmenters?: ValidationEvidenceAugmenter[];
+  basePacket: ValidationEvidencePacket;
+  context?: ValidationEvidenceBuildContext;
+  row: ScanSignalRow;
+}) {
+  if (!input.context || !input.augmenters || input.augmenters.length === 0) {
+    return input.basePacket;
+  }
+
+  return input.augmenters.reduce(
+    (packet, augmenter) => applyEvidenceAugmentation(packet, augmenter({ context: input.context!, packet, row: input.row })),
+    input.basePacket
+  );
+}
+
+function toSupportingSignal(
+  row: ScanSignalRow,
+  overrides?: Partial<Pick<ValidationEvidencePacket["supportingSignals"][number], "key" | "label" | "value">>
+) {
+  return {
+    category: row.category,
+    key: overrides?.key ?? row.signal_key,
+    label: overrides?.label ?? row.signal_label,
+    value: overrides?.value ?? row.signal_value_json
+  } satisfies ValidationEvidencePacket["supportingSignals"][number];
+}
+
+const KEY_PAGE_SURFACE_MISSING_MISSING_EVIDENCE =
+  "The disclosure could still exist at an untested, localized, or consolidated URL outside the bounded discovery scope.";
+
+function buildKeyPageSurfaceMissingEvidence(input: {
+  claim: string;
+  context: ValidationEvidenceBuildContext;
+  extraAugmenters?: ValidationEvidenceAugmenter[];
+  pageType: ScanPage["pageType"];
+  row: ScanSignalRow;
+}) {
+  return buildDefaultEvidencePacket(input.row, input.claim, {
+    augmenters: [augmentWithKeyPageCoverageContext(input.pageType), ...(input.extraAugmenters ?? [])],
+    context: input.context,
+    missingEvidence: [KEY_PAGE_SURFACE_MISSING_MISSING_EVIDENCE]
+  });
+}
+
 const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
   string,
   ValidationFindingDefinition
 > = {
   "privacy.reject_control_missing_detected": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A consent experience was detected without a clear reject-all control."),
+    buildEvidence: (row, context) =>
+      buildDefaultEvidencePacket(row, "A consent experience was detected without a clear reject-all control.", {
+        augmenters: [augmentWithConsentControlSnapshotContext()],
+        context,
+        missingEvidence: ["Banner HTML or page-level consent UI evidence was not retained in this packet."]
+      }),
     category: "privacy",
     description: "A consent experience was detected without a clear reject-all control.",
     ruleKey: "privacy.reject_control_missing_detected",
@@ -452,7 +633,12 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Trackers persisted after reject"
   },
   "disclosure.privacy_policy_limited": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A privacy policy was detected, but its coverage appeared limited or incomplete."),
+    buildEvidence: (row, context) =>
+      buildDefaultEvidencePacket(row, "A privacy policy was detected, but its coverage appeared limited or incomplete.", {
+        augmenters: [augmentWithPrivacyPolicyCoverageSnapshotContext()],
+        context,
+        missingEvidence: ["Policy excerpts or structured coverage diagnostics were not retained in this packet."]
+      }),
     category: "legal",
     description: "A privacy policy was detected, but its coverage appeared limited or incomplete.",
     ruleKey: "disclosure.privacy_policy_limited",
@@ -477,6 +663,24 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     severity: "high",
     subtype: "session_replay_disclosure",
     title: "Session replay without disclosure"
+  },
+  "context.policy_behavior_conflict_detected": {
+    buildEvidence: buildPolicyBehaviorConflictEvidence,
+    category: "privacy",
+    description: "Observed site behavior may conflict with the site’s public-facing policy language.",
+    ruleKey: "context.policy_behavior_conflict_detected",
+    severity: "high",
+    subtype: "policy_behavior_conflict",
+    title: "Policy/behavior conflict"
+  },
+  "privacy.cookie_runtime_disclosure_gap_detected": {
+    buildEvidence: buildCookieDisclosureGapEvidence,
+    category: "privacy",
+    description: "Observed cookie or tracker activity may not be fully reflected in the current cookie disclosure surface.",
+    ruleKey: "cookie_runtime.disclosure_gap",
+    severity: "high",
+    subtype: "cookie_disclosure_gap",
+    title: "Cookie disclosure gap"
   },
   "commerce.high_sensitivity_data_collection_detected": {
     buildEvidence: buildHighSensitivityPayloadEvidence,
@@ -515,8 +719,23 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     subtype: "automated_accessibility",
     title: "Automated accessibility issues detected"
   },
+  "accessibility.accessibility_risk_score": {
+    buildEvidence: buildAccessibilityRiskSignalEvidence,
+    category: "accessibility",
+    description: "Scanner-derived accessibility risk indicator is elevated.",
+    ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
+    severity: "medium",
+    subtype: "snapshot_review",
+    title: "Accessibility risk score"
+  },
   "disclosure.privacy_policy_surface_missing": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A privacy policy surface was not detected during the scan."),
+    buildEvidence: (row, context) =>
+      buildKeyPageSurfaceMissingEvidence({
+        claim: "A privacy policy surface was not detected during the scan.",
+        context,
+        pageType: "privacy_policy",
+        row
+      }),
     category: "legal",
     description: "A privacy policy surface was not detected during the scan.",
     ruleKey: "disclosure.privacy_policy_surface_missing",
@@ -535,7 +754,13 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Privacy policy page unavailable"
   },
   "disclosure.terms_of_service_surface_missing": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A terms page surface was not detected during the scan."),
+    buildEvidence: (row, context) =>
+      buildKeyPageSurfaceMissingEvidence({
+        claim: "A terms page surface was not detected during the scan.",
+        context,
+        pageType: "terms_of_service",
+        row
+      }),
     category: "legal",
     description: "A terms page surface was not detected during the scan.",
     ruleKey: "disclosure.terms_of_service_surface_missing",
@@ -554,7 +779,14 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Terms page unavailable"
   },
   "disclosure.cookie_policy_surface_missing": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A cookie policy surface was not detected during the scan."),
+    buildEvidence: (row, context) =>
+      buildKeyPageSurfaceMissingEvidence({
+        claim: "A cookie policy surface was not detected during the scan.",
+        context,
+        extraAugmenters: [augmentWithCookieRuntimeCorroboration()],
+        pageType: "cookie_policy",
+        row
+      }),
     category: "legal",
     description: "A cookie policy surface was not detected during the scan.",
     ruleKey: "disclosure.cookie_policy_surface_missing",
@@ -573,7 +805,13 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Cookie policy unavailable"
   },
   "disclosure.accessibility_statement_surface_missing": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "An accessibility statement surface was not detected during the scan."),
+    buildEvidence: (row, context) =>
+      buildKeyPageSurfaceMissingEvidence({
+        claim: "An accessibility statement surface was not detected during the scan.",
+        context,
+        pageType: "accessibility_statement",
+        row
+      }),
     category: "accessibility",
     description: "An accessibility statement surface was not detected during the scan.",
     ruleKey: "disclosure.accessibility_statement_surface_missing",
@@ -592,7 +830,13 @@ const VALIDATION_SIGNAL_FINDING_DEFINITIONS: Record<
     title: "Accessibility statement unavailable"
   },
   "disclosure.contact_page_surface_missing": {
-    buildEvidence: (row) => buildDefaultEvidencePacket(row, "A contact page surface was not detected during the scan."),
+    buildEvidence: (row, context) =>
+      buildKeyPageSurfaceMissingEvidence({
+        claim: "A contact page surface was not detected during the scan.",
+        context,
+        pageType: "contact",
+        row
+      }),
     category: "legal",
     description: "A contact page surface was not detected during the scan.",
     ruleKey: "disclosure.contact_page_surface_missing",
@@ -645,7 +889,38 @@ function describeKeyPageDiscoverySource(source: string | null) {
   }
 }
 
+function describeKeyPageStopReason(stopReason: string | null) {
+  if (stopReason === "repeated_failures") {
+    return "The bounded fetch recorded repeated hard failures for those discovered targets.";
+  }
+
+  if (stopReason === "all_attempts_failed") {
+    return "Every bounded fetch attempt for those discovered targets failed.";
+  }
+
+  if (stopReason === "budget_exhausted") {
+    return "The bounded discovery budget was exhausted before a successful fetch.";
+  }
+
+  return null;
+}
+
 function getKeyPageTypeForSignal(signalKey: string) {
+  if (signalKey === "disclosure.privacy_policy_surface_missing") {
+    return "privacy_policy";
+  }
+  if (signalKey === "disclosure.terms_of_service_surface_missing") {
+    return "terms_of_service";
+  }
+  if (signalKey === "disclosure.cookie_policy_surface_missing") {
+    return "cookie_policy";
+  }
+  if (signalKey === "disclosure.accessibility_statement_surface_missing") {
+    return "accessibility_statement";
+  }
+  if (signalKey === "disclosure.contact_page_surface_missing") {
+    return "contact";
+  }
   if (signalKey === "disclosure.privacy_policy_fetch_failed") {
     return "privacy_policy";
   }
@@ -664,8 +939,10 @@ function getKeyPageTypeForSignal(signalKey: string) {
   return null;
 }
 
-function getKeyPageDiscoverySummaryForSignal(context: ValidationEvidenceBuildContext, signalKey: string) {
-  const pageType = getKeyPageTypeForSignal(signalKey);
+function getKeyPageDiscoverySummaryForPageType(
+  context: ValidationEvidenceBuildContext,
+  pageType: ScanPage["pageType"] | null
+) {
   const pageSummaries = context.runtimeArtifacts?.key_page_discovery_summary?.pageSummaries;
 
   if (!pageType || !Array.isArray(pageSummaries)) {
@@ -686,6 +963,10 @@ function getKeyPageDiscoverySummaryForSignal(context: ValidationEvidenceBuildCon
     guessedOnly: match.guessedOnly === true,
     stopReason: typeof match.stopReason === "string" ? match.stopReason : null
   };
+}
+
+function getKeyPageDiscoverySummaryForSignal(context: ValidationEvidenceBuildContext, signalKey: string) {
+  return getKeyPageDiscoverySummaryForPageType(context, getKeyPageTypeForSignal(signalKey));
 }
 
 function isGenericValidationConcernSignal(row: ScanSignalRow) {
@@ -855,11 +1136,36 @@ function buildGenericValidationFinding(row: ScanSignalRow): ValidationFindingDef
   } satisfies ValidationFindingDefinition;
 }
 
-function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): ValidationEvidencePacket {
-  return {
+function getValidationFindingDefinitionForSignal(row: ScanSignalRow) {
+  return (
+    VALIDATION_SIGNAL_FINDING_DEFINITIONS[row.signal_key as keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS] ??
+    (isGenericValidationConcernSignal(row) ? buildGenericValidationFinding(row) : null)
+  );
+}
+
+export function buildValidationEvidencePacketForSignal(row: ScanSignalRow, context: ValidationEvidenceBuildContext) {
+  const definition = getValidationFindingDefinitionForSignal(row);
+  if (!definition) {
+    return null;
+  }
+
+  return definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description);
+}
+
+function buildDefaultEvidencePacket(
+  row: ScanSignalRow,
+  claim: string,
+  options?: {
+    augmenters?: ValidationEvidenceAugmenter[];
+    context?: ValidationEvidenceBuildContext;
+    missingEvidence?: string[];
+    reviewPolicy?: ValidationEvidenceAugmentation["reviewPolicy"];
+  }
+): ValidationEvidencePacket {
+  const basePacket: ValidationEvidencePacket = {
     claim,
     confidenceBasis: ["Automated detector fired for this signal."],
-    missingEvidence: ["No rule-specific evidence builder has been configured yet."],
+    missingEvidence: options?.missingEvidence ?? ["No rule-specific evidence builder has been configured yet."],
     pageUrls: [],
     policyEvidence: [],
     reviewPolicy: {
@@ -883,13 +1189,288 @@ function buildDefaultEvidencePacket(row: ScanSignalRow, claim: string): Validati
     },
     runtimeEvidence: [],
     supportingSignals: [
-      {
-        category: row.category,
-        key: row.signal_key,
-        label: row.signal_label,
-        value: row.signal_value_json
-      }
+      toSupportingSignal(row)
     ]
+  };
+
+  const packetWithReviewPolicy = options?.reviewPolicy
+    ? applyEvidenceAugmentation(basePacket, { reviewPolicy: options.reviewPolicy })
+    : basePacket;
+
+  return composeEvidencePacket({
+    augmenters: options?.augmenters,
+    basePacket: packetWithReviewPolicy,
+    context: options?.context,
+    row
+  });
+}
+
+function augmentWithKeyPageCoverageContext(pageType: ScanPage["pageType"]): ValidationEvidenceAugmenter {
+  return ({ context, row }) => {
+    const summary = getKeyPageDiscoverySummaryForPageType(context, pageType);
+    if (!summary) {
+      return null;
+    }
+
+    const attemptedUrls = summary.attemptedUrls ?? [];
+    const attemptCount = summary.attemptCount ?? (attemptedUrls.length > 0 ? attemptedUrls.length : null);
+    const discoverySource = summary.bestDiscoverySource ?? null;
+    const discoverySourceText = describeKeyPageDiscoverySource(discoverySource);
+    const guessedOnly = summary.guessedOnly === true;
+    const stopReasonText = describeKeyPageStopReason(summary.stopReason ?? null);
+    const hasCoverageContext =
+      attemptCount !== null || attemptedUrls.length > 0 || discoverySource !== null || summary.stopReason !== null;
+
+    if (!hasCoverageContext) {
+      return null;
+    }
+
+    return {
+      confidenceBasis: [
+        attemptCount
+          ? `Bounded discovery evaluated ${attemptCount} candidate URL${attemptCount === 1 ? "" : "s"} while looking for this disclosure surface.`
+          : "Bounded discovery context was retained while looking for this disclosure surface.",
+        discoverySourceText && !guessedOnly
+          ? `The retained discovery context shows those candidate locations came from ${discoverySourceText}.`
+          : attemptedUrls.length > 0
+            ? "The retained discovery context includes specific candidate URLs considered during the scan."
+            : null,
+        guessedOnly ? "Discovery relied on guessed candidate paths rather than confirmed site links." : null,
+        stopReasonText
+      ].filter((value): value is string => typeof value === "string" && value.length > 0),
+      keyPageAttemptCount: attemptCount,
+      keyPageAttemptedUrls: attemptedUrls,
+      keyPageDiscoverySource: discoverySource,
+      keyPageGuessedOnly: guessedOnly,
+      keyPageStopReason: summary.stopReason ?? null,
+      pageUrls: attemptedUrls,
+      reviewPolicy: {
+        detectorStrength: guessedOnly ? "weak" : discoverySourceText && !guessedOnly ? "strong" : "medium",
+        requiredSupportTypes: ["key_page_coverage_context"],
+        rubric: {
+          inconclusiveIf: [
+            "The bounded discovery context is too thin to show how thoroughly the surface was searched.",
+            ...(guessedOnly ? ["Discovery relied on guessed paths rather than confirmed site links."] : [])
+          ],
+          supportedIf: [
+            "Retained key-page discovery context shows the scan searched for the disclosure surface and did not confirm it."
+          ]
+        }
+      },
+      supportingSignals: [
+        ...(attemptCount
+          ? [
+              {
+                category: row.category,
+                key: `${row.signal_key}.attempt_count`,
+                label: "Key-page discovery attempt count",
+                value: attemptCount
+              } satisfies ValidationEvidencePacket["supportingSignals"][number]
+            ]
+          : []),
+        ...(discoverySource
+          ? [
+              {
+                category: row.category,
+                key: `${row.signal_key}.discovery_source`,
+                label: "Key-page discovery source",
+                value: discoverySource
+              } satisfies ValidationEvidencePacket["supportingSignals"][number]
+            ]
+          : [])
+      ]
+    };
+  };
+}
+
+function augmentWithCookieRuntimeCorroboration(): ValidationEvidenceAugmenter {
+  return ({ context }) => {
+    const trackerSignals = [
+      context.scanSignalsByKey.get("privacy.third_party_cookie_count"),
+      context.scanSignalsByKey.get("privacy.tracker_vendors"),
+      context.scanSignalsByKey.get("privacy.preconsent_tracking_detected"),
+      context.scanSignalsByKey.get("privacy.preconsent_tracker_vendors")
+    ].filter((signal): signal is ScanSignalRow => Boolean(signal));
+
+    const thirdPartyCookieCount =
+      typeof context.scanSignalsByKey.get("privacy.third_party_cookie_count")?.signal_value_json === "number"
+        ? (context.scanSignalsByKey.get("privacy.third_party_cookie_count")?.signal_value_json as number)
+        : null;
+    const trackerVendors = trackerSignals.flatMap((signal) =>
+      Array.isArray(signal.signal_value_json)
+        ? signal.signal_value_json.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : []
+    );
+    const runtimeDomains = uniqueStrings([
+      ...(context.runtimeArtifacts?.third_party_request_domains ?? []),
+      ...(context.runtimeArtifacts?.script_src_domains ?? [])
+    ]).slice(0, 5);
+    const preconsentTrackingDetected = context.scanSignalsByKey.get("privacy.preconsent_tracking_detected")?.signal_value_json === true;
+
+    if (
+      trackerSignals.length === 0 &&
+      runtimeDomains.length === 0 &&
+      thirdPartyCookieCount === null &&
+      !preconsentTrackingDetected
+    ) {
+      return null;
+    }
+
+    return {
+      confidenceBasis: [
+        typeof thirdPartyCookieCount === "number" && thirdPartyCookieCount > 0
+          ? `Separate runtime signals observed ${thirdPartyCookieCount} third-party cookie${thirdPartyCookieCount === 1 ? "" : "s"} during the scan.`
+          : null,
+        trackerVendors.length > 0
+          ? `Tracker or vendor evidence was also present elsewhere in the scan, including ${trackerVendors.slice(0, 4).join(", ")}.`
+          : null,
+        preconsentTrackingDetected ? "A separate pre-consent tracking detector also fired during the scan." : null
+      ].filter((value): value is string => typeof value === "string" && value.length > 0),
+      runtimeEvidence: runtimeDomains.map((domain) => `observed runtime domain: ${domain}`),
+      supportingSignals: trackerSignals.map((signal) => toSupportingSignal(signal))
+    };
+  };
+}
+
+function augmentWithConsentControlSnapshotContext(): ValidationEvidenceAugmenter {
+  return ({ context }) => {
+    const snapshot = context.snapshot;
+    if (!snapshot || !snapshot.cookie_banner_present) {
+      return null;
+    }
+
+    const rejectMissing = !snapshot.reject_all_present || snapshot.dark_pattern_reject_button_missing;
+    if (!rejectMissing) {
+      return null;
+    }
+
+    const hasWithdrawalSignal = typeof snapshot.consent_withdrawal_mechanism_present === "boolean";
+
+    return {
+      confidenceBasis: [
+        "Snapshot signals recorded a visible consent surface.",
+        snapshot.dark_pattern_reject_button_missing
+          ? "The snapshot explicitly flagged a missing reject control."
+          : "The snapshot did not record a reject-all control on the detected banner.",
+        hasWithdrawalSignal
+          ? snapshot.consent_withdrawal_mechanism_present
+            ? "A withdrawal mechanism was present elsewhere in the experience, but the initial reject control still appeared incomplete."
+            : "The snapshot did not record a separate withdrawal mechanism."
+          : null
+      ].filter((value): value is string => typeof value === "string" && value.length > 0),
+      reviewPolicy: {
+        detectorStrength: "strong",
+        requiredSupportTypes: ["consent_snapshot_context"],
+        rubric: {
+          inconclusiveIf: [
+            "The snapshot context does not clearly show whether a reject control was present on the initial consent surface."
+          ],
+          supportedIf: [
+            "Snapshot evidence shows a consent surface with no clear reject-all control or a missing reject button."
+          ]
+        }
+      },
+      supportingSignals: [
+        {
+          category: "privacy",
+          key: "privacy.cookie_banner_present",
+          label: "Cookie banner present",
+          value: snapshot.cookie_banner_present
+        },
+        {
+          category: "privacy",
+          key: "privacy.reject_all_present",
+          label: "Reject all present",
+          value: snapshot.reject_all_present
+        },
+        {
+          category: "privacy",
+          key: "privacy.dark_pattern_reject_button_missing",
+          label: "Reject button missing",
+          value: snapshot.dark_pattern_reject_button_missing
+        },
+        ...(hasWithdrawalSignal
+          ? [
+              {
+                category: "privacy",
+                key: "privacy.consent_withdrawal_mechanism_present",
+                label: "Consent withdrawal mechanism present",
+                value: snapshot.consent_withdrawal_mechanism_present
+              } satisfies ValidationEvidencePacket["supportingSignals"][number]
+            ]
+          : [])
+      ]
+    };
+  };
+}
+
+function augmentWithPrivacyPolicyCoverageSnapshotContext(): ValidationEvidenceAugmenter {
+  return ({ context }) => {
+    const snapshot = context.snapshot;
+    if (!snapshot || !snapshot.privacy_policy_present) {
+      return null;
+    }
+
+    const wordCount = snapshot.privacy_policy_word_count;
+    const legalCoverageScore = snapshot.legal_coverage_score;
+    const lowWordCount = typeof wordCount === "number" && wordCount > 0 && wordCount < 250;
+    const lowCoverageScore = typeof legalCoverageScore === "number" && legalCoverageScore > 0 && legalCoverageScore < 70;
+
+    if (!lowWordCount && !lowCoverageScore) {
+      return null;
+    }
+
+    return {
+      confidenceBasis: [
+        "Snapshot signals confirmed that a privacy policy surface was present.",
+        lowWordCount
+          ? `The retained snapshot estimated only ${wordCount} word${wordCount === 1 ? "" : "s"} on the privacy policy.`
+          : null,
+        lowCoverageScore
+          ? `The retained legal coverage score was ${legalCoverageScore}, below the current completeness threshold.`
+          : null
+      ].filter((value): value is string => typeof value === "string" && value.length > 0),
+      reviewPolicy: {
+        detectorStrength: lowWordCount && lowCoverageScore ? "strong" : "medium",
+        requiredSupportTypes: ["policy_coverage_snapshot_context"],
+        rubric: {
+          inconclusiveIf: [
+            "The snapshot context does not include enough policy-size or policy-coverage detail to judge completeness."
+          ],
+          supportedIf: [
+            "Snapshot evidence shows the privacy policy was present but materially thin or weak on coverage metrics."
+          ]
+        }
+      },
+      supportingSignals: [
+        {
+          category: "disclosure",
+          key: "disclosure.privacy_policy_present",
+          label: "Privacy policy present",
+          value: snapshot.privacy_policy_present
+        },
+        ...(typeof legalCoverageScore === "number"
+          ? [
+              {
+                category: "context",
+                key: "context.legal_coverage_score",
+                label: "Legal coverage score",
+                value: legalCoverageScore
+              } satisfies ValidationEvidencePacket["supportingSignals"][number]
+            ]
+          : []),
+        ...(typeof wordCount === "number"
+          ? [
+              {
+                category: "disclosure",
+                key: "disclosure.privacy_policy_word_count",
+                label: "Privacy policy word count",
+                value: wordCount
+              } satisfies ValidationEvidencePacket["supportingSignals"][number]
+            ]
+          : [])
+      ]
+    };
   };
 }
 
@@ -908,14 +1489,7 @@ function buildKeyPageFetchFailureEvidence(
   const discoverySourceText = describeKeyPageDiscoverySource(discoverySource);
   const guessedOnly = summary?.guessedOnly === true;
   const stopReason = summary?.stopReason ?? null;
-  const stopReasonText =
-    stopReason === "repeated_failures"
-      ? "The bounded fetch recorded repeated hard failures for those discovered targets."
-      : stopReason === "all_attempts_failed"
-        ? "Every bounded fetch attempt for those discovered targets failed."
-        : stopReason === "budget_exhausted"
-          ? "The bounded discovery budget was exhausted before a successful fetch."
-          : null;
+  const stopReasonText = describeKeyPageStopReason(stopReason);
 
   return {
     claim,
@@ -928,6 +1502,7 @@ function buildKeyPageFetchFailureEvidence(
         : attemptedUrls.length > 0
           ? "The retained evidence includes specific candidate URLs that were attempted during the bounded fetch."
           : null,
+      guessedOnly ? "The attempted targets came from guessed candidate paths rather than confirmed site links." : null,
       stopReasonText
     ].filter((value): value is string => typeof value === "string" && value.length > 0),
     keyPageAttemptCount: attemptCount,
@@ -941,7 +1516,7 @@ function buildKeyPageFetchFailureEvidence(
     reviewPolicy: {
       claimType: "behavior_without_disclosure",
       contraryEvidenceTypes: ["contrary_runtime_evidence", "contrary_policy_disclosure"],
-      detectorStrength: discoverySourceText && !guessedOnly ? "strong" : "medium",
+      detectorStrength: guessedOnly ? "weak" : discoverySourceText && !guessedOnly ? "strong" : "medium",
       gapTolerance: "medium",
       requiredSupportTypes: ["detector_signal", "bounded_fetch_failure_evidence"],
       rubric: {
@@ -1015,40 +1590,261 @@ function buildPolicyReviewDescription(reason: string) {
   }
 }
 
+function buildPolicyReviewEvidencePayload(input: {
+  policyEnrichmentId: string | null;
+  enrichment?: PolicyEnrichmentLookupRow;
+  reason: string;
+  reviewStatus: string | null;
+}): ValidationEvidencePolicyReviewPayload {
+  const summary = input.enrichment?.policy_summary_short?.trim() ?? null;
+  const pageUrl = input.enrichment?.page_url ?? null;
+  const pageType = input.enrichment?.page_type ?? null;
+  const policyCoverageRatio = input.enrichment?.policy_coverage_ratio ?? null;
+  const policySemanticConfidence = input.enrichment?.policy_semantic_confidence ?? null;
+  const policyAmbiguityScore = input.enrichment?.policy_ambiguity_score ?? null;
+  const policySnippetCount = input.enrichment?.policy_snippet_count ?? null;
+  const policyStructurallyWeak = input.enrichment?.policy_structurally_weak ?? null;
+
+  const confidenceBasis = [
+    input.reason === "policy_behavior_conflict_candidate"
+      ? "Policy review logic flagged a possible mismatch between public-facing policy language and observed site behavior."
+      : input.reason === "low_confidence_critical_fields"
+        ? "Policy extraction retained low-confidence critical fields that need manual review."
+        : buildPolicyReviewDescription(input.reason),
+    summary ? `Retained policy summary: ${summary}` : null,
+    typeof policyCoverageRatio === "number"
+      ? `Policy coverage ratio: ${Math.round(policyCoverageRatio * 100)}%.`
+      : null,
+    typeof policySemanticConfidence === "number"
+      ? `Policy semantic confidence: ${policySemanticConfidence.toFixed(2)}.`
+      : null,
+    typeof policyAmbiguityScore === "number"
+      ? `Policy ambiguity score: ${policyAmbiguityScore.toFixed(2)}.`
+      : null,
+    typeof policySnippetCount === "number"
+      ? `Policy snippet count retained: ${policySnippetCount}.`
+      : null,
+    policyStructurallyWeak === true ? "The policy surface also showed structural weakness signals." : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const missingEvidence = [
+    input.reason === "policy_behavior_conflict_candidate"
+      ? "Concrete runtime evidence or direct policy excerpts proving the specific conflict on a live page."
+      : null,
+    input.reason === "low_confidence_critical_fields"
+      ? "Higher-confidence extraction or direct excerpts for the affected policy fields."
+      : null,
+    input.reason === "session_replay_without_disclosure_detected"
+      ? "Direct runtime page evidence showing the replay behavior that lacks matching disclosure."
+      : null,
+    input.reason === "missing_dsar_high_exposure"
+      ? "Direct disclosure excerpts confirming whether a DSAR path is actually present."
+      : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  return {
+    claim:
+      input.reason === "policy_behavior_conflict_candidate"
+        ? "Observed site behavior may conflict with the site’s public-facing policy language."
+        : buildPolicyReviewDescription(input.reason),
+    confidenceBasis,
+    missingEvidence,
+    pageUrls: pageUrl ? [pageUrl] : [],
+    policyEvidence: summary ? [summary] : [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["contrary_runtime_evidence", "contrary_policy_disclosure"],
+      detectorStrength:
+        input.reason === "policy_behavior_conflict_candidate" &&
+        typeof policySemanticConfidence === "number" &&
+        policySemanticConfidence >= 0.7
+          ? "strong"
+          : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["policy_review_queue_context", ...(summary ? ["policy_summary"] : [])],
+      rubric: {
+        inconclusiveIf: [
+          "The retained policy summary is too thin to show the exact conflicting claim.",
+          "Runtime evidence of the suspected conflicting behavior is missing or ambiguous."
+        ],
+        notSupportedIf: [
+          "Direct policy excerpts and runtime evidence show no actual mismatch."
+        ],
+        supportedIf: [
+          "Policy review queue context flagged the issue.",
+          "Retained policy context is specific enough to understand what needs review."
+        ]
+      }
+    },
+    runtimeEvidence: [],
+    supportingSignals: [],
+    pageType,
+    pageUrl,
+    policyEnrichmentId: input.policyEnrichmentId,
+    policyAmbiguityScore,
+    policyArbitrationPresent: input.enrichment?.policy_arbitration_present ?? null,
+    policyCancellationOrRefundPresent: input.enrichment?.policy_cancellation_or_refund_present ?? null,
+    policyCoverageRatio,
+    policyEffectiveDate: input.enrichment?.policy_effective_date ?? null,
+    policyFieldCoverage: input.enrichment?.policy_field_coverage ?? {},
+    policyGoverningLaw: input.enrichment?.policy_governing_law ?? null,
+    policyNoticeContactPresent: input.enrichment?.policy_notice_contact_present ?? null,
+    reviewQueueReason: input.reason,
+    reviewStatus: input.reviewStatus,
+    policySemanticConfidence,
+    policySnippetCount,
+    policyStructurallyWeak,
+    policySummaryShort: summary,
+    policyTerminationOrSuspensionPresent: input.enrichment?.policy_termination_or_suspension_present ?? null
+  };
+}
+
+function buildAccessibilityRiskSnapshotEvidence(score: number): ValidationEvidencePacket & {
+  snapshotField: string;
+  value: number;
+} {
+  return {
+    claim: "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
+    confidenceBasis: [
+      `Accessibility risk score: ${score}.`,
+      "This score helps prioritize review, but automated accessibility testing does not determine full conformance on its own."
+    ],
+    missingEvidence: [
+      "Affected page URLs or representative rule examples for the highest-priority accessibility barriers."
+    ],
+    pageUrls: [],
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "automated_accessibility",
+      contraryEvidenceTypes: ["scan_coverage_too_thin", "score_not_supported_by_rule_output"],
+      detectorStrength: "medium",
+      gapTolerance: "high",
+      requiredSupportTypes: ["summary_risk_score"],
+      rubric: {
+        inconclusiveIf: [
+          "The score is present but no representative page or rule evidence is retained."
+        ],
+        notSupportedIf: [
+          "The retained automated rule output does not support the score."
+        ],
+        supportedIf: [
+          "The score is elevated and used as a prioritization signal for manual accessibility review."
+        ]
+      }
+    },
+    runtimeEvidence: [],
+    supportingSignals: [
+      {
+        category: "accessibility",
+        key: "accessibility.accessibility_risk_score",
+        label: "Accessibility risk score",
+        value: score
+      }
+    ],
+    snapshotField: "accessibility_litigation_risk_score",
+    value: score
+  };
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean))];
+}
+
+function getRelevantAccessibilityExamples(
+  context: ValidationEvidenceBuildContext,
+  row: ScanSignalRow
+) {
+  const examples = context.accessibilityRuleExamples;
+  if (examples.length === 0) {
+    return [] as ScanAccessibilityRuleExampleRow[];
+  }
+
+  const groupFilters: string[] = [];
+  if (row.signal_key === "accessibility.wcag_aria_error_count") {
+    groupFilters.push("aria");
+  }
+  if (row.signal_key === "accessibility.wcag_focus_indicator_issue_count") {
+    groupFilters.push("focus");
+  }
+  if (row.signal_key === "accessibility.wcag_keyboard_navigation_issue_count") {
+    groupFilters.push("keyboard");
+  }
+  if (row.signal_key === "accessibility.wcag_link_name_error_count") {
+    groupFilters.push("link-name");
+  }
+  if (row.signal_key === "accessibility.wcag_form_label_error_count") {
+    groupFilters.push("label", "form");
+  }
+  if (row.signal_key === "accessibility.wcag_landmark_issue_count") {
+    groupFilters.push("landmark");
+  }
+  if (row.signal_key === "accessibility.wcag_contrast_failures_count") {
+    groupFilters.push("contrast", "color-contrast");
+  }
+
+  const filtered =
+    groupFilters.length === 0
+      ? examples
+      : examples.filter((example) =>
+          groupFilters.some((filter) => example.rule_group.toLowerCase().includes(filter))
+        );
+
+  return filtered.slice(0, 5);
 }
 
 function buildSessionReplayEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
   const trackerSignals = [
     context.scanSignalsByKey.get("privacy.tracker_vendors"),
-    context.scanSignalsByKey.get("commerce.session_replay_tool_detected")
+    context.scanSignalsByKey.get("commerce.session_replay_tool_detected"),
+    context.scanSignalsByKey.get("privacy.session_replay_runtime_detected"),
+    context.scanSignalsByKey.get("privacy.session_replay_runtime_vendors"),
+    context.scanSignalsByKey.get("disclosure.session_replay_disclosure_present"),
+    context.scanSignalsByKey.get("disclosure.session_replay_disclosure_pages")
   ].filter(Boolean) as ScanSignalRow[];
   const vendors = Array.isArray(context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json)
     ? (context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json as string[])
     : [];
-  const likelyReplayVendors = vendors.filter((vendor) => /fullstory|session/i.test(vendor));
+  const runtimeReplayVendors = Array.isArray(context.scanSignalsByKey.get("privacy.session_replay_runtime_vendors")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("privacy.session_replay_runtime_vendors")?.signal_value_json as string[])
+    : [];
+  const likelyReplayVendors = uniqueStrings([
+    ...vendors.filter((vendor) => /fullstory|session|replay/i.test(vendor)),
+    ...runtimeReplayVendors
+  ]);
   const requestDomains = context.runtimeArtifacts?.third_party_request_domains ?? [];
   const scriptDomains = context.runtimeArtifacts?.script_src_domains ?? [];
+  const disclosurePages = Array.isArray(context.scanSignalsByKey.get("disclosure.session_replay_disclosure_pages")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("disclosure.session_replay_disclosure_pages")?.signal_value_json as string[])
+    : [];
+  const disclosurePresent = context.scanSignalsByKey.get("disclosure.session_replay_disclosure_present")?.signal_value_json === true;
 
   return {
     claim: "Session replay behavior appears present without a corresponding disclosure on the site.",
     confidenceBasis: [
       "A context-level detector flagged session replay without disclosure.",
-      likelyReplayVendors.length > 0 ? `Likely replay vendors detected: ${likelyReplayVendors.join(", ")}.` : "Replay vendor names were not isolated with high confidence."
+      likelyReplayVendors.length > 0 ? `Likely replay vendors detected: ${likelyReplayVendors.join(", ")}.` : "Replay vendor names were not isolated with high confidence.",
+      disclosurePresent
+        ? "A separate disclosure-presence signal also exists, so the wording and scope of that disclosure should be checked manually."
+        : disclosurePages.length > 0
+          ? `Possible session-replay disclosure mentions were retained on ${disclosurePages.length} page${disclosurePages.length === 1 ? "" : "s"}.`
+          : "No dedicated session-replay disclosure pages were retained with this packet."
     ],
     missingEvidence: [
       "Direct disclosure excerpt or explicit no-disclosure policy excerpt.",
       "Page-level evidence URL showing the replay script on a specific page."
     ],
     pageUrls: [],
-    policyEvidence: [],
+    policyEvidence: disclosurePages,
     reviewPolicy: {
       claimType: "behavior_without_disclosure",
       contraryEvidenceTypes: ["explicit_session_replay_disclosure", "evidence_detector_is_misfiring"],
-      detectorStrength: "strong",
+      detectorStrength: likelyReplayVendors.length > 0 ? "strong" : "medium",
       gapTolerance: "medium",
-      requiredSupportTypes: ["derived_mismatch_detector", "vendor_evidence"],
+      requiredSupportTypes: [
+        "derived_mismatch_detector",
+        ...(likelyReplayVendors.length > 0 ? ["vendor_evidence"] : []),
+        ...(disclosurePages.length > 0 || disclosurePresent ? ["disclosure_context"] : [])
+      ],
       rubric: {
         inconclusiveIf: [
           "Replay vendor evidence is weak or ambiguous.",
@@ -1071,18 +1867,144 @@ function buildSessionReplayEvidence(row: ScanSignalRow, context: ValidationEvide
       ...scriptDomains.filter((domain) => /fullstory|replay/i.test(domain))
     ]),
     supportingSignals: [
-      {
-        category: row.category,
-        key: row.signal_key,
-        label: row.signal_label,
-        value: row.signal_value_json
-      },
-      ...trackerSignals.map((signal) => ({
-        category: signal.category,
-        key: signal.signal_key,
-        label: signal.signal_label,
-        value: signal.signal_value_json
-      }))
+      toSupportingSignal(row),
+      ...trackerSignals.map((signal) => toSupportingSignal(signal))
+    ]
+  };
+}
+
+function buildPolicyBehaviorConflictEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const relatedSignals = [
+    context.scanSignalsByKey.get("context.policy_terms_conflict_detected"),
+    context.scanSignalsByKey.get("context.privacy_cookie_policy_conflict_detected"),
+    context.scanSignalsByKey.get("context.session_replay_without_disclosure_detected"),
+    context.scanSignalsByKey.get("privacy.cookie_runtime_disclosure_gap_detected"),
+    context.scanSignalsByKey.get("privacy.policy_runtime_functional_misalignment_detected")
+  ].filter(Boolean) as ScanSignalRow[];
+
+  const conflictLabels = relatedSignals.map((signal) => signal.signal_label).slice(0, 3);
+
+  return {
+    claim: "Observed site behavior may conflict with the site’s public-facing policy language.",
+    confidenceBasis: [
+      "A policy-versus-behavior conflict detector fired during the scan.",
+      conflictLabels.length > 0
+        ? `Related contradiction signals also surfaced: ${conflictLabels.join(", ")}.`
+        : "No narrower contradiction sibling was retained with this packet."
+    ],
+    missingEvidence: [
+      "Direct policy excerpts and page-level runtime evidence showing the exact mismatch."
+    ],
+    pageUrls: [],
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["contrary_runtime_evidence", "contrary_policy_disclosure"],
+      detectorStrength: relatedSignals.length > 0 ? "strong" : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: ["detector_signal", ...(relatedSignals.length > 0 ? ["related_conflict_signals"] : [])],
+      rubric: {
+        inconclusiveIf: [
+          "The detector fired, but the exact conflicting policy statement is not yet retained.",
+          "Runtime evidence of the suspected mismatch remains incomplete."
+        ],
+        notSupportedIf: [
+          "Direct policy excerpts and runtime evidence show no meaningful contradiction."
+        ],
+        supportedIf: [
+          "The detector fired and related contradiction signals support the concern.",
+          "There is no meaningful contrary evidence showing the behavior aligns with the public policy language."
+        ]
+      }
+    },
+    runtimeEvidence: [],
+    supportingSignals: [
+      toSupportingSignal(row),
+      ...relatedSignals.map((signal) => toSupportingSignal(signal))
+    ]
+  };
+}
+
+function buildCookieDisclosureGapEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const relatedSignals = [
+    context.scanSignalsByKey.get("privacy.third_party_cookie_count"),
+    context.scanSignalsByKey.get("privacy.tracker_vendors"),
+    context.scanSignalsByKey.get("disclosure.cookie_policy_surface_missing"),
+    context.scanSignalsByKey.get("disclosure.cookie_policy_fetch_failed"),
+    context.scanSignalsByKey.get("disclosure.cookie_policy_structurally_obstructed")
+  ].filter(Boolean) as ScanSignalRow[];
+
+  const trackerVendors = Array.isArray(context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json)
+    ? (context.scanSignalsByKey.get("privacy.tracker_vendors")?.signal_value_json as string[])
+    : [];
+  const thirdPartyCookieCount =
+    typeof context.scanSignalsByKey.get("privacy.third_party_cookie_count")?.signal_value_json === "number"
+      ? (context.scanSignalsByKey.get("privacy.third_party_cookie_count")?.signal_value_json as number)
+      : null;
+  const runtimeDomains = uniqueStrings([
+    ...(context.runtimeArtifacts?.third_party_request_domains ?? []),
+    ...(context.runtimeArtifacts?.script_src_domains ?? [])
+  ]).slice(0, 5);
+  const cookiePolicyState = relatedSignals
+    .filter((signal) => /cookie_policy_(surface_missing|fetch_failed|structurally_obstructed)/i.test(signal.signal_key))
+    .map((signal) => signal.signal_label)
+    .slice(0, 2);
+  const cookiePolicySummary = getKeyPageDiscoverySummaryForPageType(context, "cookie_policy");
+
+  return {
+    claim: "Observed cookie or tracker activity may not be fully reflected in the current cookie disclosure surface.",
+    confidenceBasis: [
+      "A cookie runtime-versus-disclosure gap detector fired during the scan.",
+      typeof thirdPartyCookieCount === "number"
+        ? `Separate scan signals observed ${thirdPartyCookieCount} third-party cookie${thirdPartyCookieCount === 1 ? "" : "s"}.`
+        : "Separate third-party cookie count evidence was not retained.",
+      trackerVendors.length > 0
+        ? `Tracker or vendor evidence included ${trackerVendors.slice(0, 4).join(", ")}.`
+        : "Specific tracker vendors were not isolated in this packet.",
+      cookiePolicyState.length > 0
+        ? `The cookie disclosure surface also showed related issues: ${cookiePolicyState.join(", ")}.`
+        : null
+    ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    missingEvidence: [
+      "A direct mapping between the observed cookies or vendors and the site’s named cookie disclosures.",
+      ...(cookiePolicySummary?.guessedOnly ? ["Confirmed cookie policy page retrieval rather than guessed-path discovery context."] : [])
+    ],
+    keyPageAttemptCount: cookiePolicySummary?.attemptCount ?? null,
+    keyPageAttemptedUrls: cookiePolicySummary?.attemptedUrls ?? [],
+    keyPageDiscoverySource: cookiePolicySummary?.bestDiscoverySource ?? null,
+    keyPageGuessedOnly: cookiePolicySummary?.guessedOnly ?? null,
+    keyPageStopReason: cookiePolicySummary?.stopReason ?? null,
+    pageUrls: cookiePolicySummary?.attemptedUrls ?? [],
+    policyEvidence: [],
+    reviewPolicy: {
+      claimType: "behavior_without_disclosure",
+      contraryEvidenceTypes: ["complete_cookie_disclosure", "observed_activity_not_tracking_related"],
+      detectorStrength: trackerVendors.length > 0 || runtimeDomains.length > 0 ? "strong" : "medium",
+      gapTolerance: "medium",
+      requiredSupportTypes: [
+        "detector_signal",
+        ...(typeof thirdPartyCookieCount === "number" && thirdPartyCookieCount > 0 ? ["cookie_count_evidence"] : []),
+        ...(trackerVendors.length > 0 ? ["tracker_vendor_evidence"] : [])
+      ],
+      rubric: {
+        inconclusiveIf: [
+          "The detector fired but the specific mismatch between runtime activity and disclosure text is not yet retained.",
+          "Cookie policy discovery remains too weak to confirm whether the disclosure surface was fully reviewed."
+        ],
+        notSupportedIf: [
+          "The current cookie disclosures clearly name the observed cookies, vendors, and purposes.",
+          "The observed runtime activity is not reasonably cookie or tracker related."
+        ],
+        supportedIf: [
+          "A cookie disclosure-gap detector fired.",
+          "Separate cookie, vendor, or runtime evidence supports the presence of undisclosed cookie activity."
+        ]
+      }
+    },
+    runtimeEvidence: runtimeDomains.map((domain) => `observed runtime domain: ${domain}`),
+    supportingSignals: [
+      toSupportingSignal(row),
+      ...relatedSignals.map((signal) => toSupportingSignal(signal))
     ]
   };
 }
@@ -1685,21 +2607,32 @@ function buildAccessibilityEvidence(row: ScanSignalRow, context: ValidationEvide
     context.scanSignalsByKey.get("accessibility.wcag_aria_error_count"),
     context.scanSignalsByKey.get("accessibility.wcag_focus_indicator_issue_count")
   ].filter(Boolean) as ScanSignalRow[];
+  const examples = getRelevantAccessibilityExamples(context, row);
+  const pageUrls = uniqueStrings(examples.map((example) => example.page_url));
+  const exampleSnippets = examples.map((example) => {
+    const selector = Array.isArray(example.representative_selectors) ? example.representative_selectors[0] : null;
+    return selector
+      ? `${example.rule_code} on ${example.page_url} (${selector})`
+      : `${example.rule_code} on ${example.page_url}`;
+  });
 
   return {
     claim: "Automated accessibility testing surfaced WCAG rule violations on this site.",
     confidenceBasis: [
-      typeof row.signal_value_json === "number" ? `Automated WCAG error count: ${row.signal_value_json}.` : "Automated accessibility rule violations were recorded."
+      typeof row.signal_value_json === "number" ? `Automated WCAG error count: ${row.signal_value_json}.` : "Automated accessibility rule violations were recorded.",
+      examples.length > 0
+        ? `Representative page-level examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`
+        : "Representative page-level accessibility examples were not retained with this packet."
     ],
-    missingEvidence: ["Rule-level example rows or affected page URLs for the highest-priority violations."],
-    pageUrls: [],
+    missingEvidence: examples.length > 0 ? [] : ["Rule-level example rows or affected page URLs for the highest-priority violations."],
+    pageUrls,
     policyEvidence: [],
     reviewPolicy: {
       claimType: "automated_accessibility",
       contraryEvidenceTypes: ["rule_output_invalidated", "scan_coverage_too_thin"],
       detectorStrength: "strong",
       gapTolerance: "high",
-      requiredSupportTypes: ["automated_rule_counts"],
+      requiredSupportTypes: ["automated_rule_counts", ...(examples.length > 0 ? ["page_level_rule_examples"] : [])],
       rubric: {
         inconclusiveIf: [
           "The automated findings are too sparse or coverage is materially incomplete."
@@ -1713,13 +2646,81 @@ function buildAccessibilityEvidence(row: ScanSignalRow, context: ValidationEvide
         ]
       }
     },
-    runtimeEvidence: [],
-    supportingSignals: relatedSignals.map((signal) => ({
-      category: signal.category,
-      key: signal.signal_key,
-      label: signal.signal_label,
-      value: signal.signal_value_json
-    }))
+    runtimeEvidence: exampleSnippets,
+    supportingSignals: [
+      ...relatedSignals.map((signal) => ({
+        category: signal.category,
+        key: signal.signal_key,
+        label: signal.signal_label,
+        value: signal.signal_value_json
+      })),
+      ...(examples.length > 0
+        ? [{
+            category: row.category,
+            key: `${row.signal_key}.page_examples`,
+            label: "Representative accessibility examples",
+            value: exampleSnippets
+          } satisfies ValidationEvidencePacket["supportingSignals"][number]]
+        : [])
+    ]
+  };
+}
+
+function buildAccessibilityRiskSignalEvidence(row: ScanSignalRow, context: ValidationEvidenceBuildContext): ValidationEvidencePacket {
+  const relatedSignals = [
+    context.scanSignalsByKey.get("accessibility.wcag_error_count_total"),
+    context.scanSignalsByKey.get("accessibility.wcag_aria_error_count"),
+    context.scanSignalsByKey.get("accessibility.wcag_focus_indicator_issue_count"),
+    context.scanSignalsByKey.get("accessibility.wcag_keyboard_navigation_issue_count"),
+    context.scanSignalsByKey.get("accessibility.wcag_link_name_error_count")
+  ].filter(Boolean) as ScanSignalRow[];
+
+  const packet = buildAccessibilityRiskSnapshotEvidence(
+    typeof row.signal_value_json === "number" ? row.signal_value_json : 0
+  );
+  const examples = getRelevantAccessibilityExamples(context, row);
+  const pageUrls = uniqueStrings(examples.map((example) => example.page_url));
+  const exampleSnippets = examples.map((example) => {
+    const selector = Array.isArray(example.representative_selectors) ? example.representative_selectors[0] : null;
+    return selector
+      ? `${example.rule_code} on ${example.page_url} (${selector})`
+      : `${example.rule_code} on ${example.page_url}`;
+  });
+
+  return {
+    ...packet,
+    confidenceBasis: [
+      ...(packet.confidenceBasis ?? []),
+      examples.length > 0
+        ? `Representative page-level accessibility examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`
+        : "Representative page-level accessibility examples were not retained with this score.",
+      relatedSignals.length > 0
+        ? `Related automated accessibility signals were also retained: ${relatedSignals
+            .map((signal) => `${signal.signal_label} (${String(signal.signal_value_json)})`)
+            .slice(0, 3)
+            .join(", ")}.`
+        : "No additional automated rule-family signals were retained with this score."
+    ],
+    missingEvidence: examples.length > 0 ? [] : packet.missingEvidence,
+    pageUrls,
+    runtimeEvidence: exampleSnippets,
+    supportingSignals: [
+      {
+        category: row.category,
+        key: row.signal_key,
+        label: row.signal_label,
+        value: row.signal_value_json
+      },
+      ...relatedSignals.map((signal) => toSupportingSignal(signal)),
+      ...(examples.length > 0
+        ? [{
+            category: row.category,
+            key: `${row.signal_key}.page_examples`,
+            label: "Representative accessibility examples",
+            value: exampleSnippets
+          } satisfies ValidationEvidencePacket["supportingSignals"][number]]
+        : [])
+    ]
   };
 }
 
@@ -2411,7 +3412,8 @@ export async function loadRankableFindings(scanId: string) {
     { data: snapshot, error: snapshotError },
     { data: runtimeArtifacts, error: runtimeArtifactsError },
     { data: snapshotSupplements, error: snapshotSupplementError },
-    { data: policyQueue, error: policyQueueError }
+    { data: policyQueue, error: policyQueueError },
+    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
   ] = await Promise.all([
     supabase
       .from("scan_signals")
@@ -2427,7 +3429,7 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("scan_runtime_artifacts")
       .select(
-        "consent_accept_click_count, consent_blocker_page_title, consent_blocker_text_snippet, consent_blocker_type, consent_blocker_url, consent_evidence_pass_count, consent_friction_delta, consent_opt_in_clicks, consent_opt_in_evidence_log, consent_opt_out_clicks, consent_opt_out_evidence_log, consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_redirect_or_auth_required, consent_reject_click_count, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, sensitive_payload_violations, third_party_request_domains, script_src_domains"
+        "consent_accept_click_count, consent_blocker_page_title, consent_blocker_text_snippet, consent_blocker_type, consent_blocker_url, consent_evidence_pass_count, consent_friction_delta, consent_opt_in_clicks, consent_opt_in_evidence_log, consent_opt_out_clicks, consent_opt_out_evidence_log, consent_post_reject_tracker_evidence_urls, consent_post_reject_tracker_vendor_names, consent_redirect_or_auth_required, consent_reject_click_count, consent_reject_persisted_tracker_vendor_names, consent_reject_reduced_tracking, key_page_discovery_summary, sensitive_payload_violations, third_party_request_domains, script_src_domains"
       )
       .eq("scan_id", scanId)
       .maybeSingle(),
@@ -2439,7 +3441,13 @@ export async function loadRankableFindings(scanId: string) {
     supabase
       .from("policy_review_queue")
       .select("id, policy_enrichment_id, reason, review_status, scan_id")
+      .eq("scan_id", scanId),
+    supabase
+      .from("scan_accessibility_rule_examples")
+      .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
       .eq("scan_id", scanId)
+      .order("node_count", { ascending: false })
+      .limit(10)
   ]);
 
   if (error) {
@@ -2462,8 +3470,13 @@ export async function loadRankableFindings(scanId: string) {
     throw new Error(`Failed to load validation policy review queue for scan ${scanId}: ${policyQueueError.message}`);
   }
 
+  if (accessibilityRuleExamplesError) {
+    throw new Error(`Failed to load validation accessibility examples for scan ${scanId}: ${accessibilityRuleExamplesError.message}`);
+  }
+
   const rows = (signalRows ?? []) as ScanSignalRow[];
   const context: ValidationEvidenceBuildContext = {
+    accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as ScanAccessibilityRuleExampleRow[],
     runtimeArtifacts: (runtimeArtifacts as ScanRuntimeArtifactsRow | null) ?? null,
     scanSignalsByKey: new Map(rows.map((row) => [row.signal_key, row])),
     snapshot: (snapshot as ScanSnapshotRow | null) ?? null
@@ -2522,15 +3535,12 @@ export async function loadRankableFindings(scanId: string) {
       continue;
     }
 
-    const definition =
-      VALIDATION_SIGNAL_FINDING_DEFINITIONS[row.signal_key as keyof typeof VALIDATION_SIGNAL_FINDING_DEFINITIONS] ??
-      (isGenericValidationConcernSignal(row) ? buildGenericValidationFinding(row) : null);
-
+    const definition = getValidationFindingDefinitionForSignal(row);
     if (!definition) {
       continue;
     }
 
-    const evidencePacket = definition.buildEvidence ? definition.buildEvidence(row, context) : buildDefaultEvidencePacket(row, definition.description);
+    const evidencePacket = buildValidationEvidencePacketForSignal(row, context)!;
 
     if (shouldSuppressDetectorOnlyValidationFinding({ evidencePacket, signalKey: row.signal_key })) {
       continue;
@@ -2590,26 +3600,12 @@ export async function loadRankableFindings(scanId: string) {
     findings.push({
       category: "legal",
       description: buildPolicyReviewDescription(row.reason),
-      evidence_json: {
-        pageType: enrichment?.page_type ?? null,
-        pageUrl: enrichment?.page_url ?? null,
+      evidence_json: buildPolicyReviewEvidencePayload({
+        enrichment,
         policyEnrichmentId: row.policy_enrichment_id,
-        policyAmbiguityScore: enrichment?.policy_ambiguity_score ?? null,
-        policyArbitrationPresent: enrichment?.policy_arbitration_present ?? null,
-        policyCancellationOrRefundPresent: enrichment?.policy_cancellation_or_refund_present ?? null,
-        policyCoverageRatio: enrichment?.policy_coverage_ratio ?? null,
-        policyEffectiveDate: enrichment?.policy_effective_date ?? null,
-        policyFieldCoverage: enrichment?.policy_field_coverage ?? {},
-        policyGoverningLaw: enrichment?.policy_governing_law ?? null,
-        policyNoticeContactPresent: enrichment?.policy_notice_contact_present ?? null,
-        reviewQueueReason: row.reason,
-        reviewStatus: row.review_status,
-        policySemanticConfidence: enrichment?.policy_semantic_confidence ?? null,
-        policySnippetCount: enrichment?.policy_snippet_count ?? null,
-        policyStructurallyWeak: enrichment?.policy_structurally_weak ?? null,
-        policySummaryShort: enrichment?.policy_summary_short ?? null,
-        policyTerminationOrSuspensionPresent: enrichment?.policy_termination_or_suspension_present ?? null
-      },
+        reason: row.reason,
+        reviewStatus: row.review_status
+      }),
       finding_id: null,
       page_url: enrichment?.page_url ?? null,
       rule_key: ruleKey,
@@ -2654,10 +3650,7 @@ export async function loadRankableFindings(scanId: string) {
       findings.push({
         category: "accessibility",
         description: "Scanner-derived risk indicator is elevated.",
-        evidence_json: {
-          snapshotField: "accessibility_litigation_risk_score",
-          value: snapshotSupplement.accessibility_litigation_risk_score
-        },
+        evidence_json: buildAccessibilityRiskSnapshotEvidence(snapshotSupplement.accessibility_litigation_risk_score),
         finding_id: null,
         page_url: null,
         rule_key: ruleKey,

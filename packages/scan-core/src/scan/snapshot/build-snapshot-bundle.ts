@@ -80,9 +80,17 @@ import {
 } from "./scan-optimization";
 import { classifyConsentButtonRole } from "./consent-ui";
 import { runConsentInteractionAudit } from "./consent-interaction";
-import { getConsentProbeProfiles } from "./consent-profiles";
+import { getSelectedConsentProbeProfiles } from "./consent-profiles";
 import { persistAccessibilityEvidence, persistRuntimeArtifactsPatch } from "../persistence/save-snapshot-bundle";
-import { buildScanPlan, type ScanPlan } from "./scan-planner";
+import {
+  buildScanPlan,
+  shouldRunGpcVerification,
+  shouldRunPostrunCookiesDiagnostic,
+  shouldRunServiceWorkerDiagnostic,
+  shouldSweepBrowserProfiles,
+  shouldSweepConsentAuditProfiles,
+  type ScanPlan
+} from "./scan-planner";
 import {
   ACCESSIBILITY_WIDGET_SIGNATURES,
   analyzeVendorRequestMatch,
@@ -190,6 +198,7 @@ type BrowserPassResult = {
   initialCookieCount: number | null;
   initialCookieDomains: string[];
   initialCookieNames: string[];
+  cookieAttributeSummary: ScanRuntimeArtifact["cookieAttributeSummary"];
   preconsentEvidenceUrls: string[];
   sensitivePayloadViolations: SensitivePayloadViolation[];
   scriptSrcDomains: string[];
@@ -207,6 +216,14 @@ type BrowserPassResult = {
     vendorCategory: string;
     vendorName: string;
   }>;
+};
+
+type BrowserCookieRecord = {
+  domain: string;
+  httpOnly?: boolean;
+  name: string;
+  sameSite?: "Lax" | "None" | "Strict" | null;
+  secure?: boolean;
 };
 
 type FetchedRobotsState = {
@@ -529,12 +546,14 @@ async function persistBrowserPassDiagnostic(input: {
   homepageUrl: string;
   stage: string;
   status: "start" | "ok" | "timeout" | "error";
+  stepKey?: string;
   metadata?: Record<string, unknown>;
 }) {
   const payload = {
     homepageUrl: input.homepageUrl,
     stage: input.stage,
     status: input.status,
+    stepKey: input.stepKey ?? input.stage,
     ...(input.metadata ?? {})
   } satisfies Record<string, unknown>;
 
@@ -572,12 +591,14 @@ async function persistBuildPhaseDiagnostic(input: {
   organizationId: string | null;
   phase: string;
   status: "start" | "ok" | "error";
+  stepKey?: string;
   metadata?: Record<string, unknown>;
 }) {
   console.info("[build-phase]", {
     metadata: {
       phase: input.phase,
       status: input.status,
+      stepKey: input.stepKey ?? input.phase,
       ...(input.metadata ?? {})
     },
     scanId: input.scanId
@@ -594,6 +615,7 @@ async function persistBuildPhaseDiagnostic(input: {
       metadata_json: {
         phase: input.phase,
         status: input.status,
+        stepKey: input.stepKey ?? input.phase,
         ...(input.metadata ?? {})
       }
     });
@@ -628,6 +650,7 @@ async function runSnapshotBuildPhase<T>(input: {
   const startedAt = new Date();
   const maxAttempts = Math.max(1, input.maxAttempts ?? 1);
   const persistDiagnostic = input.persistDiagnostic ?? persistBuildPhaseDiagnostic;
+  const stepKey = input.phase;
 
   await persistDiagnostic({
     scanId: input.scanId,
@@ -635,6 +658,7 @@ async function runSnapshotBuildPhase<T>(input: {
     organizationId: input.organizationId,
     phase: input.phase,
     status: "start",
+    stepKey,
     metadata: {
       maxAttempts,
       startedAt: startedAt.toISOString(),
@@ -666,8 +690,10 @@ async function runSnapshotBuildPhase<T>(input: {
         organizationId: input.organizationId,
         phase: input.phase,
         status: "ok",
+        stepKey,
         metadata: {
           attempts: summary.attempts,
+          startedAt: summary.startedAt,
           completedAt: summary.completedAt,
           durationMs: summary.durationMs,
           outcome: summary.outcome
@@ -684,8 +710,12 @@ async function runSnapshotBuildPhase<T>(input: {
         organizationId: input.organizationId,
         phase: input.phase,
         status: "error",
+        stepKey,
         metadata: {
           attempt,
+          startedAt: startedAt.toISOString(),
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt.getTime(),
           error: error instanceof Error ? error.message : "Unknown error",
           willRetry: shouldRetry
         }
@@ -1435,6 +1465,246 @@ function buildAccessibilityRuleExamples(input: {
 
 function isFirstPartyHost(host: string | null, pageDomain: string) {
   return host === pageDomain || (host ? host.endsWith(`.${pageDomain}`) : false);
+}
+
+function summarizeCookieAttributePosture(input: {
+  cookies: BrowserCookieRecord[] | null;
+  pageDomain: string;
+}): ScanRuntimeArtifact["cookieAttributeSummary"] {
+  if (!input.cookies || input.cookies.length === 0) {
+    return null;
+  }
+
+  const missingSecureCookieNames = new Set<string>();
+  const missingHttpOnlyCookieNames = new Set<string>();
+  const weakSameSiteCookieNames = new Set<string>();
+  const thirdPartyWeakAttributeCookieNames = new Set<string>();
+
+  for (const cookie of input.cookies) {
+    const cookieName = typeof cookie.name === "string" && cookie.name.trim().length > 0 ? cookie.name.trim() : null;
+    if (!cookieName) {
+      continue;
+    }
+
+    const sameSite = cookie.sameSite ?? null;
+    const thirdParty = !isFirstPartyHost(cookie.domain ?? null, input.pageDomain);
+    const missingSecure = cookie.secure !== true;
+    const missingHttpOnly = cookie.httpOnly !== true;
+    const weakSameSite = sameSite === null || sameSite === "None";
+
+    if (missingSecure) {
+      missingSecureCookieNames.add(cookieName);
+    }
+    if (missingHttpOnly) {
+      missingHttpOnlyCookieNames.add(cookieName);
+    }
+    if (weakSameSite) {
+      weakSameSiteCookieNames.add(cookieName);
+    }
+    if (thirdParty && (missingSecure || missingHttpOnly || weakSameSite)) {
+      thirdPartyWeakAttributeCookieNames.add(cookieName);
+    }
+  }
+
+  return {
+    totalCookiesAnalyzed: input.cookies.length,
+    missingSecureCount: missingSecureCookieNames.size,
+    missingHttpOnlyCount: missingHttpOnlyCookieNames.size,
+    weakSameSiteCount: weakSameSiteCookieNames.size,
+    thirdPartyWeakAttributeCount: thirdPartyWeakAttributeCookieNames.size,
+    missingSecureCookieNames: [...missingSecureCookieNames].sort().slice(0, 10),
+    missingHttpOnlyCookieNames: [...missingHttpOnlyCookieNames].sort().slice(0, 10),
+    weakSameSiteCookieNames: [...weakSameSiteCookieNames].sort().slice(0, 10),
+    thirdPartyWeakAttributeCookieNames: [...thirdPartyWeakAttributeCookieNames].sort().slice(0, 10)
+  };
+}
+
+function classifyGpcVerification(input: {
+  baselineThirdPartyCookieCount: number | null;
+  baselineTrackerCount: number;
+  gpcThirdPartyCookieCount: number | null;
+  gpcTrackerCount: number;
+}): NonNullable<ScanRuntimeArtifact["gpcVerification"]>["status"] {
+  const baselineCookieCount = input.baselineThirdPartyCookieCount ?? 0;
+  const baselineTrackerCount = input.baselineTrackerCount;
+
+  if (baselineTrackerCount === 0 && baselineCookieCount === 0) {
+    return "inconclusive";
+  }
+
+  if (input.gpcTrackerCount === 0 && (input.gpcThirdPartyCookieCount ?? 0) === 0) {
+    return "honored";
+  }
+
+  const trackerReduced = input.gpcTrackerCount < baselineTrackerCount;
+  const cookiesReduced = (input.gpcThirdPartyCookieCount ?? baselineCookieCount) < baselineCookieCount;
+
+  if (!trackerReduced && !cookiesReduced) {
+    return "ignored";
+  }
+
+  return "inconclusive";
+}
+
+async function runGpcVerificationPass(input: {
+  baselineThirdPartyCookieCount: number | null;
+  baselineTrackerCount: number;
+  browserContextOptions?: import("playwright").BrowserContextOptions;
+  domain: string;
+  homepageUrl: string;
+  plan: ScanPlan;
+  robotsPolicy?: RobotsPolicy | null;
+}): Promise<ScanRuntimeArtifact["gpcVerification"]> {
+  const browserHandle = await createBrowser({
+    contextOptions: {
+      ...input.browserContextOptions,
+      extraHTTPHeaders: {
+        ...(input.browserContextOptions?.extraHTTPHeaders ?? {}),
+        "Sec-GPC": "1"
+      }
+    }
+  });
+
+  const page = await browserHandle.context.newPage();
+  const requestUrls = new Set<string>();
+  const scriptUrls = new Set<string>();
+  let inflightRequests = 0;
+  let lastNetworkActivityAt = Date.now();
+
+  await browserHandle.context
+    .addInitScript(() => {
+      try {
+        Object.defineProperty(navigator, "globalPrivacyControl", {
+          configurable: true,
+          get: () => true
+        });
+      } catch {
+        // Ignore init-script failures; the HTTP signal is still sent.
+      }
+    })
+    .catch(() => undefined);
+
+  await page.route("**/*", async (route) => {
+    const resourceType = route.request().resourceType();
+    const requestUrl = route.request().url();
+
+    if (["image", "media", "font"].includes(resourceType) || (resourceType === "stylesheet" && input.plan.blockStylesheetsInBrowser)) {
+      await route.abort("blockedbyclient");
+      return;
+    }
+
+    if (/^https?:\/\//i.test(requestUrl) && !isUrlAllowedByRobots(requestUrl, input.robotsPolicy)) {
+      await route.abort("blockedbyclient");
+      return;
+    }
+
+    await route.continue();
+  });
+
+  page.on("request", (request) => {
+    inflightRequests += 1;
+    lastNetworkActivityAt = Date.now();
+    const requestUrl = request.url();
+    requestUrls.add(requestUrl);
+    if (request.resourceType() === "script") {
+      scriptUrls.add(requestUrl);
+    }
+  });
+  const markRequestCompleted = () => {
+    inflightRequests = Math.max(0, inflightRequests - 1);
+    lastNetworkActivityAt = Date.now();
+  };
+  page.on("requestfinished", markRequestCompleted);
+  page.on("requestfailed", markRequestCompleted);
+
+  try {
+    page.setDefaultNavigationTimeout(input.plan.browserNavigationTimeoutMs);
+    page.setDefaultTimeout(input.plan.browserNavigationTimeoutMs);
+    const navigation = await navigateWithPolicy({
+      page,
+      robotsPolicy: input.robotsPolicy,
+      url: input.homepageUrl
+    });
+
+    if (navigation.blockedByPolicy) {
+      return null;
+    }
+
+    await waitForBrowserRuntimeStability({
+      getInflightRequests: () => inflightRequests,
+      getLastNetworkActivityAt: () => lastNetworkActivityAt,
+      maxWaitMs: input.plan.browserPostLoadWaitMs,
+      minWaitMs: input.plan.browserRuntimeStabilityMinWaitMs,
+      page,
+      quietWindowMs: input.plan.browserRuntimeStabilityQuietWindowMs
+    });
+
+    const browserCookies = await browserHandle.context.cookies().catch(() => []);
+    const gpcTrackerMatches = dedupeTrackers(
+      TRACKER_VENDOR_SIGNATURES.flatMap((signature) => {
+        const matchedRequest = [...new Set([...requestUrls, ...scriptUrls])]
+          .map((url) => ({ url, match: analyzeVendorRequestMatch(url, signature, input.domain) }))
+          .find((entry) => entry.match);
+        if (!matchedRequest?.match) {
+          return [];
+        }
+
+        return [
+          {
+            scanId: "gpc-verification",
+            vendorName: signature.name,
+            vendorCategory: signature.category,
+            detectionSource: "request",
+            confidence: signature.confidence,
+            firstPartyOrThirdParty: isFirstPartyHost(matchedRequest.match.requestHost, input.domain) ? "first_party" : "third_party",
+            collectionEndpointType: matchedRequest.match.collectionEndpointType,
+            beforeConsent: true,
+            scriptHost: matchedRequest.match.requestHost,
+            matchedSignatureId: signature.id
+          } satisfies ScanTrackerVendor
+        ];
+      })
+    );
+
+    const gpcThirdPartyCookieCount = browserCookies.filter(
+      (cookie) => !isFirstPartyHost(cookie.domain ?? null, input.domain)
+    ).length;
+    const evidenceUrls = [...requestUrls].filter((requestUrl) =>
+      TRACKER_VENDOR_SIGNATURES.some((signature) => Boolean(analyzeVendorRequestMatch(requestUrl, signature, input.domain)))
+    );
+
+    return {
+      status: classifyGpcVerification({
+        baselineThirdPartyCookieCount: input.baselineThirdPartyCookieCount,
+        baselineTrackerCount: input.baselineTrackerCount,
+        gpcThirdPartyCookieCount,
+        gpcTrackerCount: gpcTrackerMatches.length
+      }),
+      baselineTrackerCount: input.baselineTrackerCount,
+      baselineThirdPartyCookieCount: input.baselineThirdPartyCookieCount,
+      gpcTrackerCount: gpcTrackerMatches.length,
+      gpcThirdPartyCookieCount,
+      trackerCountDelta: input.baselineTrackerCount - gpcTrackerMatches.length,
+      thirdPartyCookieCountDelta:
+        input.baselineThirdPartyCookieCount === null ? null : input.baselineThirdPartyCookieCount - gpcThirdPartyCookieCount,
+      evidenceUrls: evidenceUrls.slice(0, 10)
+    };
+  } catch {
+    return {
+      status: "inconclusive",
+      baselineTrackerCount: input.baselineTrackerCount,
+      baselineThirdPartyCookieCount: input.baselineThirdPartyCookieCount,
+      gpcTrackerCount: null,
+      gpcThirdPartyCookieCount: null,
+      trackerCountDelta: null,
+      thirdPartyCookieCountDelta: null,
+      evidenceUrls: []
+    };
+  } finally {
+    await page.close().catch(() => undefined);
+    await browserHandle.context.close().catch(() => undefined);
+    await browserHandle.browser.close().catch(() => undefined);
+  }
 }
 
 const EMAIL_PAYLOAD_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -2190,11 +2460,11 @@ async function waitForBrowserRuntimeStability(input: {
   getInflightRequests: () => number;
   getLastNetworkActivityAt: () => number;
   maxWaitMs: number;
+  minWaitMs: number;
   page: Page;
+  quietWindowMs: number;
 }) {
   const startedAt = Date.now();
-  const minWaitMs = Math.min(500, input.maxWaitMs);
-  const quietWindowMs = input.maxWaitMs >= 1_800 ? 700 : 500;
   const pollIntervalMs = 100;
 
   while (true) {
@@ -2207,8 +2477,8 @@ async function waitForBrowserRuntimeStability(input: {
       inflightRequests: input.getInflightRequests(),
       lastActivityElapsedMs: now - input.getLastNetworkActivityAt(),
       maxWaitMs: input.maxWaitMs,
-      minWaitMs,
-      quietWindowMs
+      minWaitMs: input.minWaitMs,
+      quietWindowMs: input.quietWindowMs
     });
 
     if (!shouldContinue) {
@@ -2292,6 +2562,7 @@ async function runBrowserPass(input: {
     timeoutMs = BROWSER_PASS_STEP_TIMEOUT_MS,
     metadata?: Record<string, unknown>
   ) => {
+    const stepStartedAt = new Date();
     await ensureWithinHardTimeout(`${stage}:before`);
     await persistBrowserPassDiagnostic({
       scanId: input.scanId,
@@ -2300,16 +2571,19 @@ async function runBrowserPass(input: {
       homepageUrl: input.homepageUrl,
       stage,
       status: "start",
+      stepKey: stage,
       metadata: {
         currentUrl: page.url() || null,
         elapsedMs: Date.now() - startedAt,
         inflightRequests,
+        startedAt: stepStartedAt.toISOString(),
         ...(metadata ?? {})
       }
     });
 
     try {
       const result = await withStepTimeout(timeoutMs, `Browser pass ${stage}`, callback);
+      const completedAt = new Date();
       await persistBrowserPassDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
@@ -2317,10 +2591,14 @@ async function runBrowserPass(input: {
         homepageUrl: input.homepageUrl,
         stage,
         status: "ok",
+        stepKey: stage,
         metadata: {
           currentUrl: page.url() || null,
           elapsedMs: Date.now() - startedAt,
+          durationMs: completedAt.getTime() - stepStartedAt.getTime(),
+          completedAt: completedAt.toISOString(),
           inflightRequests,
+          startedAt: stepStartedAt.toISOString(),
           ...(metadata ?? {})
         }
       });
@@ -2329,6 +2607,7 @@ async function runBrowserPass(input: {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown browser pass error";
       const status = /timed out/i.test(message) ? "timeout" : "error";
+      const completedAt = new Date();
       await persistBrowserPassDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
@@ -2336,12 +2615,16 @@ async function runBrowserPass(input: {
         homepageUrl: input.homepageUrl,
         stage,
         status,
+        stepKey: stage,
         metadata: {
           currentUrl: page.url() || null,
           elapsedMs: Date.now() - startedAt,
+          durationMs: completedAt.getTime() - stepStartedAt.getTime(),
+          completedAt: completedAt.toISOString(),
           error: message,
           inflightRequests,
           lastActivityElapsedMs: Date.now() - lastNetworkActivityAt,
+          startedAt: stepStartedAt.toISOString(),
           ...(metadata ?? {})
         }
       });
@@ -2534,6 +2817,7 @@ async function runBrowserPass(input: {
         initialCookieCount: null,
         initialCookieDomains: [],
         initialCookieNames: [],
+        cookieAttributeSummary: null,
         preconsentEvidenceUrls: [],
         sensitivePayloadViolations: [],
         scriptSrcDomains: [],
@@ -2551,7 +2835,9 @@ async function runBrowserPass(input: {
           getInflightRequests: () => inflightRequests,
           getLastNetworkActivityAt: () => lastNetworkActivityAt,
           maxWaitMs: input.plan.browserPostLoadWaitMs,
-          page
+          minWaitMs: input.plan.browserRuntimeStabilityMinWaitMs,
+          page,
+          quietWindowMs: input.plan.browserRuntimeStabilityQuietWindowMs
         }),
       timeoutMs: Math.max(BROWSER_PASS_STEP_TIMEOUT_MS, input.plan.browserPostLoadWaitMs + 2_000),
       recoveryCallback: () =>
@@ -2559,7 +2845,9 @@ async function runBrowserPass(input: {
           getInflightRequests: () => inflightRequests,
           getLastNetworkActivityAt: () => lastNetworkActivityAt,
           maxWaitMs: browserRecoverySettings.runtimeStabilityWaitMs,
-          page
+          minWaitMs: input.plan.browserRuntimeStabilityMinWaitMs,
+          page,
+          quietWindowMs: input.plan.browserRuntimeStabilityQuietWindowMs
         }),
       recoveryTimeoutMs: browserRecoverySettings.runtimeStabilityStepTimeoutMs
     });
@@ -2695,17 +2983,31 @@ async function runBrowserPass(input: {
     ? null
     : await runInstrumentedStep("axe_audit", () => runAxe(page).catch(() => null), BROWSER_PASS_AXE_TIMEOUT_MS);
   const normalizedViolations = axeResults ? normalizeAxeResults(axeResults) : [];
-  const browserCookies = await runInstrumentedStep("postrun_cookies", () =>
-    browserHandle.context.cookies().catch(() => {
-      browserSessionUsable = false;
-      return [];
-    })
-  );
-  const serviceWorkerDetected = await runInstrumentedStep("service_worker_check", () =>
-    page
-      .evaluate(() => ("serviceWorker" in navigator ? navigator.serviceWorker.getRegistrations().then((registrations) => registrations.length > 0) : false))
-      .catch(() => null)
-  );
+  const shouldCollectPostrunCookies = shouldRunPostrunCookiesDiagnostic({
+    cookieBannerPresent: consentState.cookieBannerPresent,
+    plan: input.plan,
+    trackerVendorCount: trackerVendors.length
+  });
+  const browserCookies = shouldCollectPostrunCookies
+    ? await runInstrumentedStep("postrun_cookies", () =>
+        browserHandle.context.cookies().catch(() => {
+          browserSessionUsable = false;
+          return [];
+        })
+      )
+    : null;
+  const shouldCollectServiceWorker = shouldRunServiceWorkerDiagnostic({
+    cookieBannerPresent: consentState.cookieBannerPresent,
+    plan: input.plan,
+    trackerVendorCount: trackerVendors.length
+  });
+  const serviceWorkerDetected = shouldCollectServiceWorker
+    ? await runInstrumentedStep("service_worker_check", () =>
+        page
+          .evaluate(() => ("serviceWorker" in navigator ? navigator.serviceWorker.getRegistrations().then((registrations) => registrations.length > 0) : false))
+          .catch(() => null)
+      )
+    : null;
   const ruleCounts = dedupeRuleCounts(
     normalizedViolations.map((violation) => ({
       scanId: input.scanId,
@@ -2747,12 +3049,17 @@ async function runBrowserPass(input: {
   await browserHandle.context.close().catch(() => undefined);
   await browserHandle.browser.close().catch(() => undefined);
 
+  const cookieAttributeSummary = summarizeCookieAttributePosture({
+    cookies: browserSessionUsable ? ((browserCookies ?? cookiesBeforeConsent) as BrowserCookieRecord[]) : null,
+    pageDomain: input.domain
+  });
+
   return {
     ...consentState,
     cmpVendorName: cmpVendor?.name ?? null,
     cmpVendorConfidence: cmpVendor?.confidence ?? null,
-    cookieCountTotal: browserSessionUsable ? browserCookies.length : null,
-    thirdPartyCookieCount: browserSessionUsable
+    cookieCountTotal: browserSessionUsable && browserCookies ? browserCookies.length : null,
+    thirdPartyCookieCount: browserSessionUsable && browserCookies
       ? browserCookies.filter((cookie) => !(cookie.domain === input.domain || cookie.domain.endsWith(`.${input.domain}`))).length
       : null,
     firstPartyCookieSetBeforeConsent: browserSessionUsable ? firstPartyCookieSetBeforeConsent : null,
@@ -2781,6 +3088,7 @@ async function runBrowserPass(input: {
     initialCookieNames: browserSessionUsable
       ? [...new Set(cookiesBeforeConsent.map((cookie) => cookie.name).filter((name): name is string => Boolean(name))).values()].sort()
       : [],
+    cookieAttributeSummary,
     preconsentEvidenceUrls,
     sensitivePayloadViolations,
     scriptSrcDomains: [...new Set(scriptUrls.map((url) => {
@@ -2847,8 +3155,8 @@ async function runBestBrowserPass(input: {
     throw new Error(`Browser pass profile sweep exceeded ${BROWSER_PASS_PROFILE_SWEEP_TIMEOUT_MS}ms during ${phase}.`);
   };
 
-  const shouldSweepProfiles = input.profileSweep ?? true;
-  const probeProfiles = shouldSweepProfiles ? getConsentProbeProfiles() : [{ name: "desktop_default", contextOptions: {} }];
+  const shouldSweepProfiles = input.profileSweep ?? shouldSweepBrowserProfiles(input.plan);
+  const probeProfiles = getSelectedConsentProbeProfiles(shouldSweepProfiles);
   await persistBuildPhaseDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -2879,7 +3187,7 @@ async function runBestBrowserPass(input: {
     status: "ok",
     metadata: {
       elapsedMs: Date.now() - startedAt,
-      profileName: probeProfiles[0]?.name ?? "desktop_default",
+      profileName: probeProfiles[0]?.name ?? "desktop_us",
       cookieBannerPresent: browserPass.cookieBannerPresent,
       cmpVendorName: browserPass.cmpVendorName,
       cookieCountTotal: browserPass.cookieCountTotal,
@@ -3235,6 +3543,7 @@ function buildFallbackBrowserPass(): BrowserPassResult {
     initialCookieCount: null,
     initialCookieDomains: [],
     initialCookieNames: [],
+    cookieAttributeSummary: null,
     preconsentEvidenceUrls: [],
     sensitivePayloadViolations: [],
     scriptSrcDomains: [],
@@ -3306,13 +3615,14 @@ async function runBrowserRuntimeCapturePhase(input: {
     scanId: input.scanId,
     domainId: input.domainId,
     organizationId: input.organizationId,
-    maxAttempts: 2,
+    maxAttempts: input.scanPlan.browserRuntimeCaptureMaxAttempts,
     phase: "browser_runtime_capture",
     summaries: input.buildPhaseSummaries,
     metadata: {
       homepageUrl: input.homepageUrl
     },
-    shouldRetry: (error) => shouldRetryBrowserRuntimeCapture(error),
+    shouldRetry: (error) =>
+      input.scanPlan.browserRuntimeCaptureMaxAttempts > 1 && shouldRetryBrowserRuntimeCapture(error),
     operation: async () =>
       runBestBrowserPass({
         domain: new URL(input.homepageUrl).hostname,
@@ -3335,12 +3645,10 @@ async function runBrowserRuntimeCapturePhase(input: {
 }
 
 function getAdditionalDiscoveryFetchBudget(input: { requestedPageCount: number; scanPlan: ScanPlan }) {
-  const quickScan = isQuickScanPlan(input.requestedPageCount);
-
   return {
-    maxAdditionalFetchAttempts: quickScan ? 3 : KEY_PAGE_DISCOVERY_BUDGETS.maxAdditionalFetchAttempts,
-    maxFetchAttemptsPerType: quickScan ? 1 : KEY_PAGE_DISCOVERY_BUDGETS.maxFetchAttemptsPerType,
-    maxSecondHopLegalHubFetchesPerMissingType: quickScan ? 0 : KEY_PAGE_DISCOVERY_BUDGETS.maxSecondHopLegalHubFetchesPerMissingType
+    maxAdditionalFetchAttempts: input.scanPlan.additionalDiscoveryMaxAdditionalFetchAttempts,
+    maxFetchAttemptsPerType: input.scanPlan.additionalDiscoveryMaxFetchAttemptsPerType,
+    maxSecondHopLegalHubFetchesPerMissingType: input.scanPlan.additionalDiscoveryMaxSecondHopLegalHubFetchesPerMissingType
   };
 }
 
@@ -4110,6 +4418,30 @@ function buildCompatibilitySignals(input: {
       })
     );
   }
+  if (input.runtimeArtifacts.gpcVerification?.status === "ignored") {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.gpc_signal_not_honored",
+        label: "GPC signal not honored",
+        value: true
+      })
+    );
+  }
+  if (
+    (input.runtimeArtifacts.cookieAttributeSummary?.missingSecureCount ?? 0) > 0 ||
+    (input.runtimeArtifacts.cookieAttributeSummary?.missingHttpOnlyCount ?? 0) > 0 ||
+    (input.runtimeArtifacts.cookieAttributeSummary?.weakSameSiteCount ?? 0) > 0
+  ) {
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: "privacy",
+        key: "privacy.weak_cookie_security_attributes_detected",
+        label: "Weak cookie security attributes detected",
+        value: true
+      })
+    );
+  }
   if ((input.runtimeArtifacts.consentOptOutClicks ?? input.runtimeArtifacts.consentRejectClickCount ?? 0) > 0) {
     compatibilitySignals.push(
       toTaxonomySignal({
@@ -4401,6 +4733,23 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     scanId: input.scanId,
     scanPlan
   });
+  const gpcVerification = !isPreviewScan &&
+    shouldRunGpcVerification({
+      cookieBannerPresent: browserPass.cookieBannerPresent,
+      plan: scanPlan,
+      thirdPartyCookieCount: browserPass.thirdPartyCookieCount,
+      trackerVendorCount: browserPass.trackerVendors.length
+    })
+    ? await runGpcVerificationPass({
+        baselineThirdPartyCookieCount: browserPass.thirdPartyCookieCount,
+        baselineTrackerCount: browserPass.trackerVendors.length,
+        browserContextOptions: getSelectedConsentProbeProfiles(shouldSweepBrowserProfiles(scanPlan))[0]?.contextOptions,
+        domain: new URL(homepageUrl).hostname,
+        homepageUrl,
+        plan: scanPlan,
+        robotsPolicy: robotsState.policy
+      })
+    : null;
 
   const discoveryExpansionResult = await runDiscoveryExpansionPhase({
     attemptedTargetUrls,
@@ -4550,6 +4899,13 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       .map((summary) => summary.successfulUrl)
       .filter((url): url is string => typeof url === "string" && url.length > 0)
   ].filter((url, index, urls) => url !== homepageUrl && urls.indexOf(url) === index);
+  const consentProfileSweepEnabled = shouldSweepConsentAuditProfiles({
+    acceptAllPresent: browserPass.acceptAllPresent,
+    baselineRightsFrictionScore: consentAuditBaselineRightsFrictionScore,
+    cookieBannerPresent: browserPass.cookieBannerPresent,
+    plan: scanPlan,
+    rejectAllPresent: browserPass.rejectAllPresent
+  });
   await persistBuildPhaseDiagnostic({
     scanId: input.scanId,
     domainId: input.domainId,
@@ -4561,6 +4917,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       cmpVendorName: cmpVendor?.name ?? null,
       baselineRightsFrictionScore: consentAuditBaselineRightsFrictionScore,
       consentWithdrawalMechanismPresent: formSignals.consentWithdrawalMechanismPresent,
+      consentProfileSweepEnabled,
       shouldAttemptConsentAudit:
         !isPreviewScan &&
         (browserPass.cookieBannerPresent ||
@@ -4582,7 +4939,8 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
           domainId: input.domainId,
           fallbackStartUrls: consentFallbackStartUrls,
           organizationId: input.organizationId,
-          profileSweep: !isQuickScanPlan(input.requestedPageCount),
+          profileSweep: consentProfileSweepEnabled,
+          scanPlan,
           scanId: input.scanId
         }).catch(() => null)
       : null;
@@ -4717,6 +5075,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       initialCookieNames: browserPass.initialCookieNames,
       initialCookieDomains: browserPass.initialCookieDomains,
       initialCookieCount: browserPass.initialCookieCount ?? 0,
+      cookieAttributeSummary: browserPass.cookieAttributeSummary ?? null,
       scriptSrcDomains: browserPass.scriptSrcDomains,
       scriptTagCount: browserPass.scriptTagCount,
       responseHeaders: homepageHeaders,
@@ -4762,6 +5121,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
       consentPostAcceptThirdPartyCookieCount: consentInteractionAudit?.postAccept.thirdPartyCookieCount ?? null,
       consentPostAcceptTrackerEvidenceUrls: consentInteractionAudit?.postAccept.trackerEvidenceUrls ?? [],
       consentPostAcceptTrackerVendorNames: consentInteractionAudit?.postAccept.trackerVendorNames ?? [],
+      gpcVerification,
       buildPhaseSummaries
     })
   });
@@ -5448,8 +5808,8 @@ export async function runConsentProbe(input: {
     robotsCrawlDelayMs: robotsState.policy?.crawlDelayMs() ?? null
   });
   const homepageUrl = homepage.finalUrl ?? startUrl;
-  const shouldSweepProfiles = input.profileSweep ?? true;
-  const probeProfiles = shouldSweepProfiles ? getConsentProbeProfiles() : [{ name: "desktop_default", contextOptions: {} }];
+  const shouldSweepProfiles = input.profileSweep ?? shouldSweepBrowserProfiles(plan);
+  const probeProfiles = getSelectedConsentProbeProfiles(shouldSweepProfiles);
   const attemptedProbeProfiles: string[] = [];
   let browserPass = await runBrowserPass({
     plan,

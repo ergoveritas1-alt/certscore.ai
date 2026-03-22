@@ -6,8 +6,8 @@ import { navigateWithPolicy } from "../browser/navigate-with-policy";
 import { persistRuntimeArtifactsPatch } from "../persistence/save-snapshot-bundle";
 import { shouldContinueRuntimeWait } from "./browser-stability";
 import { classifyConsentButtonRole } from "./consent-ui";
-import { getConsentProbeProfiles } from "./consent-profiles";
-import { buildScanPlan } from "./scan-planner";
+import { getSelectedConsentProbeProfiles } from "./consent-profiles";
+import { buildScanPlan, shouldRunConsentAcceptPath, type ScanPlan } from "./scan-planner";
 import { analyzeVendorRequestMatch, TRACKER_VENDOR_SIGNATURES } from "./signature-registry";
 import { fetchStaticPage } from "./extractors";
 
@@ -275,12 +275,14 @@ async function persistConsentAuditDiagnostic(input: {
   organizationId?: string | null;
   stage: string;
   status: "start" | "ok" | "timeout" | "error";
+  stepKey?: string;
   metadata?: Record<string, unknown>;
 }) {
   console.info("[consent-audit]", {
     metadata: {
       stage: input.stage,
       status: input.status,
+      stepKey: input.stepKey ?? input.stage,
       ...(input.metadata ?? {})
     },
     scanId: input.scanId ?? null
@@ -301,6 +303,7 @@ async function persistConsentAuditDiagnostic(input: {
       metadata_json: {
         stage: input.stage,
         status: input.status,
+        stepKey: input.stepKey ?? input.stage,
         ...(input.metadata ?? {})
       }
     });
@@ -967,11 +970,13 @@ async function runConsentPathSession(input: {
 }
 
 async function runSingleConsentInteractionAudit(input: {
+  baselineRightsFrictionScore?: number | null;
   contextOptions?: BrowserContextOptions;
   domain: string;
   domainId?: string;
   organizationId?: string | null;
   profileName?: string;
+  scanPlan?: ScanPlan;
   scanId?: string;
   startUrl?: string;
 }): Promise<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">> {
@@ -988,9 +993,12 @@ async function runSingleConsentInteractionAudit(input: {
     requestedPageCount: 1,
     robotsCrawlDelayMs: null
   });
+  const consentPolicyPlan = input.scanPlan ?? plan;
   const finalUrl = homepage.finalUrl ?? startUrl;
 
   const runStage = async <T>(stage: string, callback: () => Promise<T>, timeoutMs = CONSENT_AUDIT_STAGE_TIMEOUT_MS) => {
+    const stepStartedAt = new Date();
+    const stepKey = `${input.profileName ?? "default"}:${stage}`;
     const elapsedMs = Date.now() - startedAt;
     if (elapsedMs > CONSENT_AUDIT_HARD_TIMEOUT_MS) {
       await persistConsentAuditDiagnostic({
@@ -999,6 +1007,7 @@ async function runSingleConsentInteractionAudit(input: {
         organizationId: input.organizationId ?? null,
         stage,
         status: "timeout",
+        stepKey,
         metadata: {
           elapsedMs,
           profileName: input.profileName ?? null
@@ -1013,37 +1022,49 @@ async function runSingleConsentInteractionAudit(input: {
       organizationId: input.organizationId ?? null,
       stage,
       status: "start",
+      stepKey,
       metadata: {
         elapsedMs,
-        profileName: input.profileName ?? null
+        profileName: input.profileName ?? null,
+        startedAt: stepStartedAt.toISOString()
       }
     });
 
     try {
       const result = await withConsentTimeout(timeoutMs, `Consent audit ${stage}`, callback);
+      const completedAt = new Date();
       await persistConsentAuditDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
         organizationId: input.organizationId ?? null,
         stage,
         status: "ok",
+        stepKey,
         metadata: {
           elapsedMs: Date.now() - startedAt,
-          profileName: input.profileName ?? null
+          durationMs: completedAt.getTime() - stepStartedAt.getTime(),
+          completedAt: completedAt.toISOString(),
+          profileName: input.profileName ?? null,
+          startedAt: stepStartedAt.toISOString()
         }
       });
       return result;
     } catch (error) {
+      const completedAt = new Date();
       await persistConsentAuditDiagnostic({
         scanId: input.scanId,
         domainId: input.domainId,
         organizationId: input.organizationId ?? null,
         stage,
         status: /timed out/i.test(error instanceof Error ? error.message : "") ? "timeout" : "error",
+        stepKey,
         metadata: {
           elapsedMs: Date.now() - startedAt,
+          durationMs: completedAt.getTime() - stepStartedAt.getTime(),
+          completedAt: completedAt.toISOString(),
           error: error instanceof Error ? error.message : "Unknown error",
-          profileName: input.profileName ?? null
+          profileName: input.profileName ?? null,
+          startedAt: stepStartedAt.toISOString()
         }
       });
       throw error;
@@ -1064,19 +1085,55 @@ async function runSingleConsentInteractionAudit(input: {
     })
   );
 
-  const acceptSession = await runStage("accept_path_session", () =>
-    runConsentPathSession({
-      contextOptions: input.contextOptions,
-      domain: input.domain,
-      domainId: input.domainId,
-      organizationId: input.organizationId ?? null,
-      path: "accept",
-      planWaitMs: plan.browserPostLoadWaitMs,
-      profileName: input.profileName,
-      scanId: input.scanId,
-      startUrl: finalUrl
-    })
-  );
+  const shouldRunAcceptPath = shouldRunConsentAcceptPath({
+    baselineRightsFrictionScore: input.baselineRightsFrictionScore ?? null,
+    baselineTrackerVendorCount: rejectSession.baseline.trackerVendorNames.length,
+    plan: consentPolicyPlan,
+    rejectClickCount: rejectSession.path.clickCount,
+    rejectInteractionSucceeded: rejectSession.postStage.interactionSucceeded,
+    rejectRedirectOrAuthRequired: rejectSession.path.redirectOrAuthRequired,
+    rejectTrackerVendorCount: rejectSession.postStage.trackerVendorNames.length
+  });
+
+  const acceptSession = shouldRunAcceptPath
+    ? await runStage("accept_path_session", () =>
+        runConsentPathSession({
+          contextOptions: input.contextOptions,
+          domain: input.domain,
+          domainId: input.domainId,
+          organizationId: input.organizationId ?? null,
+          path: "accept",
+          planWaitMs: plan.browserPostLoadWaitMs,
+          profileName: input.profileName,
+          scanId: input.scanId,
+          startUrl: finalUrl
+        })
+      )
+    : {
+        baseline: rejectSession.baseline,
+        finalUrl: rejectSession.finalUrl,
+        path: {
+          authWallDetected: false,
+          blockerPageTitle: null,
+          blockerTextSnippet: null,
+          blockerType: null,
+          blockerUrl: null,
+          clicked: false,
+          clickCount: null,
+          evidenceLog: [],
+          externalRedirectDetected: false,
+          redirectOrAuthRequired: false
+        },
+        postStage: {
+          cookieCount: rejectSession.baseline.cookieCount,
+          clickCount: null,
+          interactionSucceeded: false,
+          stage: "post_accept" as const,
+          thirdPartyCookieCount: rejectSession.baseline.thirdPartyCookieCount,
+          trackerEvidenceUrls: [],
+          trackerVendorNames: []
+        }
+      };
 
   return {
     authWallDetected: rejectSession.path.authWallDetected,
@@ -1191,6 +1248,7 @@ export async function runConsentInteractionAudit(
     fallbackStartUrls?: string[];
     organizationId?: string | null;
     profileSweep?: boolean;
+    scanPlan?: ScanPlan;
     scanId?: string;
   }
 ): Promise<ConsentInteractionAudit> {
@@ -1200,7 +1258,7 @@ export async function runConsentInteractionAudit(
   if (!initialEntrypoint) {
     throw new Error("Consent interaction audit did not have a valid entrypoint.");
   }
-  const profiles = input?.profileSweep === false ? [{ name: "desktop_default", contextOptions: {} }] : getConsentProbeProfiles();
+  const profiles = getSelectedConsentProbeProfiles(input?.profileSweep);
   const attemptedProbeProfiles: string[] = [];
   let winningProbeProfile = profiles[0]?.name ?? null;
   const completedAudits: Array<Omit<ConsentInteractionAudit, "attemptedProbeProfiles" | "winningProbeProfile">> = [];
@@ -1208,11 +1266,13 @@ export async function runConsentInteractionAudit(
     const runProfileAudit = async (profile: (typeof profiles)[number], startUrl: string) => {
       attemptedProbeProfiles.push(profile.name);
       const candidateAudit = await runSingleConsentInteractionAudit({
+        baselineRightsFrictionScore: input?.baselineRightsFrictionScore,
         domain,
         contextOptions: profile.contextOptions,
         domainId: input?.domainId,
         organizationId: input?.organizationId ?? null,
         profileName: profile.name,
+        scanPlan: input?.scanPlan,
         scanId: input?.scanId,
         startUrl
       }).catch(() => null);
@@ -1307,11 +1367,13 @@ export async function runConsentInteractionAudit(
 
     for (const startUrl of followupEntrypoints) {
       const candidateAudit = await runSingleConsentInteractionAudit({
+        baselineRightsFrictionScore: input?.baselineRightsFrictionScore,
         domain,
         contextOptions: profiles[0]?.contextOptions,
         domainId: input?.domainId,
         organizationId: input?.organizationId ?? null,
         profileName: profiles[0]?.name,
+        scanPlan: input?.scanPlan,
         scanId: input?.scanId,
         startUrl
       }).catch(() => null);

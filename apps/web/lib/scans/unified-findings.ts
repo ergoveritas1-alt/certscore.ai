@@ -75,11 +75,14 @@ export type UnifiedFindingPacket = {
   severity: ReviewFindingSeverity;
   summary: string;
   confidenceBand: "high" | "moderate" | "low";
+  primaryPageUrl: string | null;
+  affectedPageCount: number;
   confidenceInputs: {
     evidenceQualityFlags: string[];
     hasConcretePayloadEvidence: boolean;
     hasDirectRuntimeEvidence: boolean;
     hasKeyPageDiscoveryEvidence: boolean;
+    hasPageAttribution: boolean;
     hasPolicyTextEvidence: boolean;
     hasStructuredValidationEvidence: boolean;
     isFallbackOnly: boolean;
@@ -185,6 +188,8 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "preconsent_tracking",
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
+  "gpc_signal_not_honored",
+  "weak_cookie_security_attributes",
   "consent_surface_required_deeper_sweep",
   "accept_flow_unavailable_after_reject",
   "reject_button_missing",
@@ -398,16 +403,29 @@ function buildUnifiedFindingDetails(input: {
   }
 
   if (family === "sensitive_data") {
+    const derivedDataTypes = uniqueStrings([
+      ...(Array.isArray(input.fallbackEvidence?.sensitivePayloadViolations)
+        ? (input.fallbackEvidence?.sensitivePayloadViolations as Array<Record<string, unknown>>).map((row) =>
+            typeof row.detectedType === "string" ? row.detectedType : null
+          )
+        : []),
+      input.fallbackEvidence?.formCollectsBirthdate === true || input.fallbackEvidence?.dateOfBirthInputPresent === true
+        ? "birthdate"
+        : null,
+      input.fallbackEvidence?.childrenAudienceLikely === true || input.fallbackEvidence?.kidDirectedContentDetected === true
+        ? "youth_directed_context"
+        : null,
+      input.fallbackEvidence?.mentionsCoppa === true ||
+      input.fallbackEvidence?.mentionsUnder13 === true ||
+      input.fallbackEvidence?.mentionsUnder16 === true
+        ? "children_privacy_context"
+        : null
+    ]);
+
     return {
       family,
       kind: input.findingId,
-      dataTypes: uniqueStrings(
-        Array.isArray(input.fallbackEvidence?.sensitivePayloadViolations)
-          ? (input.fallbackEvidence?.sensitivePayloadViolations as Array<Record<string, unknown>>).map((row) =>
-              typeof row.detectedType === "string" ? row.detectedType : null
-            )
-          : []
-      )
+      dataTypes: derivedDataTypes
     } satisfies UnifiedFindingDetails;
   }
 
@@ -451,11 +469,14 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
 
   const sourceUrls = uniqueStrings([
+    ...(Array.isArray(fallbackEvidence.sourceUrls) ? (fallbackEvidence.sourceUrls as string[]) : []),
     ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : [])
   ]);
 
   const snippets = uniqueStrings([
-    typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null
+    typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null,
+    typeof fallbackEvidence.policyChildrenReference === "string" ? fallbackEvidence.policyChildrenReference : null,
+    typeof fallbackEvidence.signalValue === "string" ? fallbackEvidence.signalValue : null
   ]);
 
   const counts: Record<string, number> = {};
@@ -470,15 +491,76 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       counts[key] = value;
     }
   }
+  if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
+    const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
+    for (const key of [
+      "totalCookiesAnalyzed",
+      "missingSecureCount",
+      "missingHttpOnlyCount",
+      "weakSameSiteCount",
+      "thirdPartyWeakAttributeCount"
+    ]) {
+      const value = summary[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        counts[key] = value;
+      }
+    }
+  }
+  if (fallbackEvidence.gpcVerification && typeof fallbackEvidence.gpcVerification === "object") {
+    const verification = fallbackEvidence.gpcVerification as Record<string, unknown>;
+    for (const key of [
+      "baselineTrackerCount",
+      "baselineThirdPartyCookieCount",
+      "gpcTrackerCount",
+      "gpcThirdPartyCookieCount",
+      "trackerCountDelta",
+      "thirdPartyCookieCountDelta"
+    ]) {
+      const value = verification[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        counts[key] = value;
+      }
+    }
+  }
+  if (typeof fallbackEvidence.childrenPrivacyRiskScore === "number" && Number.isFinite(fallbackEvidence.childrenPrivacyRiskScore)) {
+    counts.childrenPrivacyRiskScore = fallbackEvidence.childrenPrivacyRiskScore;
+  }
 
   const entities: Record<string, string[]> = {};
   if (Array.isArray(fallbackEvidence.keyPageAttemptedUrls)) {
     entities.attemptedUrls = uniqueStrings(fallbackEvidence.keyPageAttemptedUrls as string[]);
   }
+  if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
+    const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
+    for (const key of [
+      "missingSecureCookieNames",
+      "missingHttpOnlyCookieNames",
+      "weakSameSiteCookieNames",
+      "thirdPartyWeakAttributeCookieNames"
+    ]) {
+      if (Array.isArray(summary[key])) {
+        entities[key] = uniqueStrings(summary[key] as string[]);
+      }
+    }
+  }
 
   const flags = uniqueStrings([
     fallbackEvidence.keyPageGuessedOnly === true ? "guessed_only" : null,
     fallbackEvidence.consentRedirectOrAuthRequired === true ? "redirect_or_auth_required" : null,
+    fallbackEvidence.gpcVerification &&
+    typeof fallbackEvidence.gpcVerification === "object" &&
+    (fallbackEvidence.gpcVerification as { status?: unknown }).status === "ignored"
+      ? "gpc_ignored"
+      : null,
+    fallbackEvidence.ageGatePresent === true ? "age_gate_present" : null,
+    fallbackEvidence.childrenAudienceLikely === true ? "children_audience_likely" : null,
+    fallbackEvidence.kidDirectedContentDetected === true ? "kid_directed_content_detected" : null,
+    fallbackEvidence.parentalConsentReferencePresent === true ? "parental_consent_reference_present" : null,
+    fallbackEvidence.mentionsCoppa === true ? "mentions_coppa" : null,
+    fallbackEvidence.mentionsUnder13 === true ? "mentions_under_13" : null,
+    fallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
+    fallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
+    fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
     typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
   ]);
 
@@ -618,7 +700,7 @@ function mergeEvidence(
 }
 
 function getSourceUrl(packet: UnifiedFindingPacket) {
-  return packet.evidence?.pageUrls?.[0];
+  return packet.primaryPageUrl ?? packet.evidence?.pageUrls?.[0] ?? packet.evidence?.sourceUrls?.[0];
 }
 
 function hasConcretePayloadEvidence(fallbackEvidence?: Record<string, unknown> | null) {
@@ -657,8 +739,9 @@ function deriveConfidenceInputs(input: {
   ]);
 
   const hasDirectRuntimeEvidence =
+    input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
     validationEvidenceRows.some((row) =>
-      Object.keys(row).some((key) => /runtime|request|network|tracker|vendor/i.test(key))
+      Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
     );
 
   const hasPolicyTextEvidence = allEvidenceRows.some((row) =>
@@ -672,12 +755,15 @@ function deriveConfidenceInputs(input: {
   const hasStructuredValidationEvidence = validationEvidenceRows.length > 0;
   const concretePayloadEvidence = input.fallbackEvidenceRows.some((row) => hasConcretePayloadEvidence(row));
   const isFallbackOnly = validationCount === 0 && !hasDirectRuntimeEvidence && signalCount > 0;
+  const hasPageAttribution =
+    (input.packet.affectedPageCount ?? 0) > 0 || (input.packet.evidence?.sourceUrls?.length ?? 0) > 0;
 
   return {
     evidenceQualityFlags,
     hasConcretePayloadEvidence: concretePayloadEvidence,
     hasDirectRuntimeEvidence,
     hasKeyPageDiscoveryEvidence,
+    hasPageAttribution,
     hasPolicyTextEvidence,
     hasStructuredValidationEvidence,
     isFallbackOnly,
@@ -850,6 +936,18 @@ function buildPresentationCopy(
         suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
         whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
       };
+    case "gpc_signal_not_honored":
+      return {
+        ...base,
+        suggestedFix: "Honor browser-level opt-out preference signals by suppressing the non-essential tracking or cookie activity that still fired under GPC.",
+        whyThisMatters: "If the site ignores a browser-level privacy preference signal, users may not get the choice outcome they expected."
+      };
+    case "weak_cookie_security_attributes":
+      return {
+        ...base,
+        suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",
+        whyThisMatters: "Weak cookie attributes can make it easier for cookies to be handled in less protective ways than expected."
+      };
     case "session_replay_undisclosed":
       return {
         ...base,
@@ -861,6 +959,12 @@ function buildPresentationCopy(
         ...base,
         suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
         whyThisMatters: "When runtime cookie activity outpaces the disclosure, users cannot easily understand what is actually being set and why."
+      };
+    case "minors_or_age_gated_collection_context":
+      return {
+        ...base,
+        suggestedFix: "Review whether the site is collecting age-related or youth-directed data cues, and make sure any age-gate, parental-consent, or children’s privacy disclosures match the live experience.",
+        whyThisMatters: "If the site looks youth-directed or collects age-related data, privacy expectations and regulatory scrutiny can rise quickly."
       };
     case "low_confidence_policy_extraction":
       return {
@@ -877,6 +981,25 @@ function buildPresentationDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
 }): UnifiedFindingPresentationDecision {
+  const isDomainLevelSensitiveContext = input.packet.unifiedFindingId === "minors_or_age_gated_collection_context";
+  const minorsContextEvidenceCount = [
+    "age_gate_present",
+    "children_audience_likely",
+    "kid_directed_content_detected",
+    "parental_consent_reference_present",
+    "mentions_coppa",
+    "mentions_under_13",
+    "mentions_under_16",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
+  const needsPageAttribution =
+    input.packet.details?.family === "accessibility" ||
+    (input.packet.details?.family === "consent_tracking" &&
+      !["gpc_signal_not_honored", "weak_cookie_security_attributes"].includes(input.packet.unifiedFindingId)) ||
+    input.packet.details?.family === "contradiction" ||
+    (input.packet.details?.family === "sensitive_data" && !isDomainLevelSensitiveContext);
+
   if (
     input.packet.unifiedFindingId === "policy_behavior_conflict" &&
     input.siblingRows.some(
@@ -887,6 +1010,30 @@ function buildPresentationDecision(input: {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Suppressed because a more specific contradiction finding already explains this concern.",
       status: "suppress"
+    };
+  }
+
+  if (
+    isDomainLevelSensitiveContext &&
+    (minorsContextEvidenceCount >= 2 || typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because multiple youth-directed or age-related context cues make this domain-level privacy context worth reviewer attention.",
+      status: "surface"
+    };
+  }
+
+  if (
+    needsPageAttribution &&
+    !input.packet.confidenceInputs.hasPageAttribution &&
+    !input.packet.confidenceInputs.hasKeyPageDiscoveryEvidence &&
+    !input.packet.confidenceInputs.hasDirectRuntimeEvidence
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because the current evidence does not yet identify concrete affected pages clearly enough for customer-facing surfacing.",
+      status: "audit_only"
     };
   }
 
@@ -1021,11 +1168,14 @@ export function buildUnifiedFindingPackets(input: {
       severity: candidate.severity,
       summary: candidate.description,
       confidenceBand: "low",
+      primaryPageUrl: null,
+      affectedPageCount: 0,
       confidenceInputs: {
         evidenceQualityFlags: [],
         hasConcretePayloadEvidence: false,
         hasDirectRuntimeEvidence: false,
         hasKeyPageDiscoveryEvidence: false,
+        hasPageAttribution: false,
         hasPolicyTextEvidence: false,
         hasStructuredValidationEvidence: false,
         isFallbackOnly: false,
@@ -1075,6 +1225,13 @@ export function buildUnifiedFindingPackets(input: {
     ]);
 
     nextPacket.evidence = mergeEvidence(nextPacket.evidence, fallbackEvidence, candidate.evidence, linkedValidationFinding);
+    const attributedUrls = uniqueStrings([
+      ...(nextPacket.evidence?.pageUrls ?? []),
+      ...(nextPacket.evidence?.sourceUrls ?? []),
+      linkedValidationFinding?.pageUrl ?? null
+    ]);
+    nextPacket.primaryPageUrl = attributedUrls[0] ?? null;
+    nextPacket.affectedPageCount = attributedUrls.length;
     nextPacket.details = buildUnifiedFindingDetails({
       fallbackEvidence: candidate.fallbackEvidence ?? null,
       findingId,
@@ -1094,7 +1251,8 @@ export function buildUnifiedFindingPackets(input: {
   for (const candidate of input.reviewFindingCandidates) {
     const mappedFinding =
       candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
-        ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey)
+        ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey) ??
+          getReportUnifiedFindingByAlias(candidate.title)
         : getReportUnifiedFindingByAlias(candidate.title) ??
           (candidate.linkedValidationFinding
             ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)
