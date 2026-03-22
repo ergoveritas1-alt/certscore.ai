@@ -6,6 +6,8 @@ import {
   getReportEvidenceCategoriesForSection,
   getReportSectionsForPillar,
   getReportSignalsForEvidenceCategory,
+  getReportUnifiedFindingByAlias,
+  getReportUnifiedFindingForValidationRule,
   type PreviewSampleFinding,
   type ReportSignalDefinition
 } from "@website-signal-risk-scanner/shared";
@@ -1834,31 +1836,19 @@ function formatReviewFindingSummaryTitle(title: string) {
   }
 }
 
-function formatReviewFindingSummaryValue(value: string | null) {
-  if (!value) {
-    return "";
+function summarizeSectionFindings(findings: UnifiedFindingDisplayPacket[]) {
+  if (findings.length === 0) {
+    return "No surfaced findings in this section.";
   }
 
-  const normalized = value.trim();
+  const labels = findings
+    .slice(0, 3)
+    .map((finding) => formatReviewFindingSummaryTitle(finding.presentation.findingName));
+  const remainder = findings.length - labels.length;
 
-  if (/^https?:\/\//i.test(normalized)) {
-    const lowered = normalized.toLowerCase();
-    if (lowered.includes("/terms")) {
-      return "TOS";
-    }
-    if (lowered.includes("/privacy")) {
-      return "Privacy Policy";
-    }
-    if (lowered.includes("/cookie")) {
-      return "Cookie Policy";
-    }
-    if (lowered.includes("/refund")) {
-      return "Refund Policy";
-    }
-    return "Linked page";
-  }
-
-  return normalized;
+  return `${findings.length} surfaced finding${findings.length === 1 ? "" : "s"}${
+    labels.length > 0 ? `: ${labels.join(", ")}${remainder > 0 ? `, +${remainder} more` : ""}` : ""
+  }.`;
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
@@ -1869,6 +1859,9 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       {REPORT_PRIMARY_PILLARS.map((pillar) => {
         const sections = getReportSectionsForPillar(pillar.id)
           .map((section) => {
+            const sectionCategoryIds = new Set(
+              getReportEvidenceCategoriesForSection(section.id).map((category) => category.id)
+            );
             const categories = getReportEvidenceCategoriesForSection(section.id)
               .map((category) => {
                 const items = getReportSignalsForEvidenceCategory(category.id)
@@ -1926,14 +1919,30 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               sectionItems: [],
               validationFindingLookup
             });
+            const sectionValidationFindings = input.scanRecord.validationFindings.filter((finding) => {
+              const mappedFinding =
+                getReportUnifiedFindingForValidationRule(finding.ruleKey) ??
+                getReportUnifiedFindingByAlias(finding.title);
+
+              return (
+                mappedFinding?.categoryAlignments.some((alignment) =>
+                  sectionCategoryIds.has(alignment.evidenceCategoryId)
+                ) ?? false
+              );
+            });
             const unifiedFindings = buildUnifiedFindingDisplayPackets({
               reviewFindingCandidates: [...categories.flatMap((category) => category.reviewFindings), ...issueFindings],
-              validationFindings: input.scanRecord.validationFindings,
+              validationFindings: sectionValidationFindings,
               validationFindingLookup
             }).filter((finding) => finding.presentationDecision.status === "surface");
             const sectionItems = categories.flatMap((category) => category.items);
+            const ownerFindings = unifiedFindings.filter((finding) => {
+              const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
+              return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
+            });
 
             return {
+              ownerFindings,
               section,
               sectionItems,
               unifiedFindings,
@@ -1943,8 +1952,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
 
         return (
           <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
-            {sections.map(({ section, sectionItems, unifiedFindings, visibleCategories }) => {
-              const status = getSectionStatus({ findingCount: unifiedFindings.length, items: sectionItems });
+            {sections.map(({ ownerFindings, section, sectionItems, unifiedFindings, visibleCategories }) => {
+              const status = getSectionStatus({ findingCount: ownerFindings.length, items: sectionItems });
 
               return (
                 <CollapsibleSectionCard
@@ -1956,20 +1965,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                     </span>
                   }
                   subtitle={
-                    <div className="flex flex-wrap items-center gap-2">
-                      {unifiedFindings.length > 0 ? (
-                        unifiedFindings.map((finding) => (
-                          <div
-                            key={`${section.id}-${finding.unifiedFindingId}-summary`}
-                            className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1"
-                          >
-                            <p className="truncate text-xs font-semibold text-slate-950">
-                              {formatReviewFindingSummaryTitle(finding.presentation.findingName)} {formatReviewFindingSummaryValue(finding.observedValue)}
-                            </p>
-                          </div>
-                        ))
-                      ) : null}
-                    </div>
+                    <p className="text-sm text-slate-600">{summarizeSectionFindings(ownerFindings)}</p>
                   }
                   defaultOpen={false}
                   contentClassName="space-y-4"
@@ -1992,7 +1988,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                           const overlayFindings = unifiedFindings.filter(
                             (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
                           );
-                          const categoryFindingCount = ownerFindings.length + mirrorFindings.length + overlayFindings.length;
+                          const relatedFindingCount = mirrorFindings.length + overlayFindings.length;
+                          const categoryFindingCount = ownerFindings.length;
 
                           return (
                             <div className="mt-4 space-y-3">
@@ -2000,6 +1997,11 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-700">
                                   {categoryFindingCount} finding{categoryFindingCount === 1 ? "" : "s"}
                                 </span>
+                                {relatedFindingCount > 0 ? (
+                                  <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    {relatedFindingCount} related
+                                  </span>
+                                ) : null}
                                 {normal.length > 0 ? (
                                   <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                     {normal.length} supporting signal{normal.length === 1 ? "" : "s"}
