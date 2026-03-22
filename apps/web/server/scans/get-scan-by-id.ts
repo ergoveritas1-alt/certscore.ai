@@ -14,6 +14,7 @@ import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source"
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
+import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
 
 export type ScanDetailRecord = {
   id: string;
@@ -627,6 +628,16 @@ export async function getScanById(input: { organizationId: string; scanId: strin
         verdict: verdict?.verdict ?? null
       } satisfies ScanValidationFindingRecord;
     });
+
+    const supplementalValidationFindings = await loadSupplementalValidationFindingsForScan({
+      existingFindings: validationFindings.map((finding) => ({
+        ruleKey: finding.ruleKey,
+        title: finding.title
+      })),
+      scanId: input.scanId
+    });
+
+    validationFindings = [...validationFindings, ...supplementalValidationFindings];
   }
 
   const previousSnapshot = previousScan?.id

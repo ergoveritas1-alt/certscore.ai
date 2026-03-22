@@ -161,7 +161,7 @@ export async function ValidationOverviewPage() {
                       <th className="pb-3 pr-4 font-medium">Scan ID</th>
                       <th className="pb-3 pr-4 font-medium">Mode</th>
                       <th className="pb-3 pr-4 font-medium">Status</th>
-                      <th className="pb-3 pr-4 font-medium">Score</th>
+                      <th className="pb-3 pr-4 font-medium">Findings</th>
                       <th className="pb-3 pr-4 font-medium">Created</th>
                       <th className="pb-3 font-medium">Action</th>
                     </tr>
@@ -175,7 +175,7 @@ export async function ValidationOverviewPage() {
                         </td>
                         <td className="py-3 pr-4 text-slate-600">{run.triggerMode}</td>
                         <td className="py-3 pr-4 text-slate-600">{run.status}</td>
-                        <td className="py-3 pr-4 text-slate-600">{run.averageAgreementScore ?? "—"}</td>
+                        <td className="py-3 pr-4 text-slate-600">{run.findingCount ?? "—"}</td>
                         <td className="py-3 pr-4 text-slate-600">
                           <ViewerTimestamp value={run.createdAt} />
                         </td>
