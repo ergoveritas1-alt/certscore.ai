@@ -1925,6 +1925,7 @@ function CoverageMatrix(input: {
   pillarSections: Array<{
     pillar: (typeof REPORT_PRIMARY_PILLARS)[number];
     sections: Array<{
+      alignedReviewFindings: UnifiedFindingDisplayPacket[];
       ownerReviewFindings: UnifiedFindingDisplayPacket[];
       section: ReturnType<typeof getReportSectionsForPillar>[number];
       visibleCategories: Array<{
@@ -1942,7 +1943,7 @@ function CoverageMatrix(input: {
       contentClassName="space-y-6"
     >
       {input.pillarSections.map(({ pillar, sections }) => {
-        const pillarFindingCount = sections.reduce((sum, section) => sum + section.ownerReviewFindings.length, 0);
+        const pillarFindingCount = sections.reduce((sum, section) => sum + section.alignedReviewFindings.length, 0);
 
         return (
           <div key={pillar.id} className="space-y-3">
@@ -1954,23 +1955,23 @@ function CoverageMatrix(input: {
             </div>
 
             <div className="space-y-3">
-              {sections.map(({ ownerReviewFindings, section, visibleCategories }) => (
+              {sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => (
                 <div key={section.id} className="rounded-xl border border-slate-200 bg-white px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-900">{section.label}</p>
-                      <p className="mt-1 text-xs text-slate-500">{summarizeSectionFindingCoverage(ownerReviewFindings)}</p>
+                      <p className="mt-1 text-xs text-slate-500">{summarizeSectionFindingCoverage(alignedReviewFindings)}</p>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(ownerReviewFindings.length)}`}>
-                      {ownerReviewFindings.length}
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(alignedReviewFindings.length)}`}>
+                      {alignedReviewFindings.length}
                     </span>
                   </div>
 
                   {visibleCategories.length > 0 ? (
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {visibleCategories.map(({ category }) => {
-                        const categoryCount = ownerReviewFindings.filter(
-                          (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
+                        const categoryCount = alignedReviewFindings.filter(
+                          (finding) => getUnifiedFindingCategoryRelation(finding, category.id) !== null
                         ).length;
 
                         return (
@@ -2077,6 +2078,9 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             }).filter((finding) => finding.presentationDecision.status !== "suppress");
             const reviewFindings = unifiedFindings;
             const sectionItems = categories.flatMap((category) => category.items);
+            const alignedReviewFindings = reviewFindings.filter((finding) =>
+              finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
+            );
             const ownerReviewFindings = reviewFindings.filter((finding) => {
               const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
               return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
@@ -2101,6 +2105,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             });
 
             return {
+              alignedReviewFindings,
               ownerReviewFindings,
               reviewFindings,
               section,
@@ -2127,7 +2132,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       <CoverageMatrix
         pillarSections={pillarSections.map(({ pillar, sections }) => ({
           pillar,
-          sections: sections.map(({ ownerReviewFindings, section, visibleCategories }) => ({
+          sections: sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => ({
+            alignedReviewFindings,
             ownerReviewFindings,
             section,
             visibleCategories
