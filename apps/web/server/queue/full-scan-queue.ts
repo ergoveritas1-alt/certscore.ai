@@ -1,8 +1,6 @@
-"use server";
-
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
-import { FULL_SCAN_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_JOB, QUEUE_NAMES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { getConfiguredRedisUrl, getWebServerEnv } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
@@ -98,9 +96,12 @@ export async function getFullScanQueueAvailability() {
 
   const supabase = createAdminClient();
   const { data, error } = await supabase
-    .from("worker_heartbeats")
-    .select("last_heartbeat_at")
-    .eq("worker_type", "full_scan")
+    .from("scan_events")
+    .select("created_at")
+    .is("scan_id", null)
+    .eq("event_type", SCAN_EVENT_TYPES.fullWorkerHeartbeat)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) {
@@ -111,8 +112,8 @@ export async function getFullScanQueueAvailability() {
   }
 
   const lastHeartbeatAt =
-    data && typeof (data as { last_heartbeat_at?: unknown }).last_heartbeat_at === "string"
-      ? String((data as { last_heartbeat_at: string }).last_heartbeat_at)
+    data && typeof (data as { created_at?: unknown }).created_at === "string"
+      ? String((data as { created_at: string }).created_at)
       : null;
   return getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt);
 }

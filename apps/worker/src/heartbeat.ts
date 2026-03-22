@@ -1,4 +1,5 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 
 export async function recordWorkerHeartbeat(input: {
   heartbeatAt?: Date;
@@ -8,21 +9,18 @@ export async function recordWorkerHeartbeat(input: {
 }) {
   const supabase = createAdminClient();
   const heartbeatAt = (input.heartbeatAt ?? new Date()).toISOString();
-  const startedAt = input.startedAt?.toISOString();
-  const payload = startedAt
-    ? {
-        host: input.host ?? null,
-        last_heartbeat_at: heartbeatAt,
-        started_at: startedAt,
-        worker_type: input.workerType
-      }
-    : {
-        host: input.host ?? null,
-        last_heartbeat_at: heartbeatAt,
-        worker_type: input.workerType
-      };
-  const { error } = await supabase.from("worker_heartbeats").upsert(payload, {
-    onConflict: "worker_type"
+  const { error } = await supabase.from("scan_events").insert({
+    scan_id: null,
+    domain_id: null,
+    organization_id: null,
+    event_type: SCAN_EVENT_TYPES.fullWorkerHeartbeat,
+    message: "Full-scan worker heartbeat recorded.",
+    metadata_json: {
+      heartbeatAt,
+      host: input.host ?? null,
+      startedAt: input.startedAt?.toISOString() ?? null,
+      workerType: input.workerType
+    }
   });
 
   if (error) {

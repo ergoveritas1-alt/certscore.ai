@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
 import { getPlanLimits } from "../plans/get-plan-limits";
-import { enqueueFullScanJob } from "../queue/full-scan-queue";
+import { enqueueFullScanJob, getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getQueueAvailability } from "../../lib/env";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 
@@ -66,6 +66,15 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   error: string | null;
   scanId: string | null;
 }> {
+  const fullScanQueueAvailability = await getFullScanQueueAvailability();
+
+  if (!fullScanQueueAvailability.enabled) {
+    return {
+      error: fullScanQueueAvailability.reason,
+      scanId: null
+    };
+  }
+
   const planLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
   const planDefinition = getPlanDefinition(planLimits.planCode);
   const domainRecord = input.domainContext
@@ -292,6 +301,14 @@ export async function createFullScanAction(
   if (!queueAvailability.enabled) {
     return {
       error: queueAvailability.reason
+    };
+  }
+
+  const fullScanQueueAvailability = await getFullScanQueueAvailability();
+
+  if (!fullScanQueueAvailability.enabled) {
+    return {
+      error: fullScanQueueAvailability.reason
     };
   }
 
