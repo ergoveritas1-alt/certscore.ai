@@ -55,7 +55,7 @@ async function main() {
     throw new Error("OPENAI_API_KEY is required");
   }
 
-  const fetched = await fetchTextPage(policyUrl, 5, { bypassRobots: true });
+  const fetched = await fetchTextPage(policyUrl, 5);
   if (!fetched.body) {
     throw new Error(`Failed to fetch policy page ${policyUrl}`);
   }
