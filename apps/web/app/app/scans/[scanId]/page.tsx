@@ -1741,15 +1741,71 @@ function formatValidationSupport(finding: UnifiedFindingDisplayPacket) {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+function getFindingToneClasses(severity: UnifiedFindingDisplayPacket["severity"]) {
+  switch (severity) {
+    case "high":
+      return "border-rose-200 bg-rose-50";
+    case "medium":
+      return "border-amber-200 bg-amber-50";
+    default:
+      return "border-sky-200 bg-sky-50";
+  }
+}
+
+function getFindingBadgeClasses(severity: UnifiedFindingDisplayPacket["severity"]) {
+  switch (severity) {
+    case "high":
+      return "bg-rose-100 text-rose-900";
+    case "medium":
+      return "bg-amber-100 text-amber-900";
+    default:
+      return "bg-sky-100 text-sky-900";
+  }
+}
+
+function getScanFindingSeverityWeight(severity: UnifiedFindingDisplayPacket["severity"]) {
+  switch (severity) {
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function getConfidenceBadgeClasses(band: UnifiedFindingDisplayPacket["confidenceBand"]) {
+  switch (band) {
+    case "high":
+      return "bg-emerald-100 text-emerald-900";
+    case "moderate":
+      return "bg-amber-100 text-amber-900";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
 function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const validationSupport = formatValidationSupport(input.finding);
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+    <div className={`rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding.severity)}`}>
       <div className="grid gap-4 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
         <div className="min-w-0 space-y-2">
           <div>
-            <p className="text-sm font-semibold text-slate-950">{input.finding.presentation.findingName}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-slate-950">{input.finding.presentation.findingName}</p>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding.severity)}`}
+              >
+                {input.finding.severity}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getConfidenceBadgeClasses(input.finding.confidenceBand)}`}
+              >
+                {input.finding.confidenceBand} confidence
+              </span>
+            </div>
             <p className="mt-1 text-sm text-slate-700">{input.finding.observedValue ?? `${input.finding.severity} severity`}</p>
           </div>
           {input.finding.presentation.confidenceScore ? (
@@ -1784,6 +1840,81 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
             </p>
           ) : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
+  const parts = [
+    packet.evidence?.pageUrls?.length ? `${packet.evidence.pageUrls.length} page${packet.evidence.pageUrls.length === 1 ? "" : "s"}` : null,
+    packet.confidenceInputs.signalCount > 0 ? `${packet.confidenceInputs.signalCount} signal${packet.confidenceInputs.signalCount === 1 ? "" : "s"}` : null,
+    packet.confidenceInputs.validationCount > 0
+      ? `${packet.confidenceInputs.validationCount} validation row${packet.confidenceInputs.validationCount === 1 ? "" : "s"}`
+      : null,
+    packet.confidenceInputs.issueCount > 0 ? `${packet.confidenceInputs.issueCount} synthesized issue${packet.confidenceInputs.issueCount === 1 ? "" : "s"}` : null
+  ].filter((value): value is string => Boolean(value));
+
+  return parts.length > 0 ? parts.join(" · ") : "Evidence packet assembled for this finding.";
+}
+
+function PriorityFindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
+  const sortedFindings = [...input.findings].sort((left, right) => {
+    const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+
+    const confidenceWeight = { high: 3, moderate: 2, low: 1 } as const;
+    const confidenceDelta = confidenceWeight[right.confidenceBand] - confidenceWeight[left.confidenceBand];
+    if (confidenceDelta !== 0) {
+      return confidenceDelta;
+    }
+
+    return left.presentation.findingName.localeCompare(right.presentation.findingName);
+  });
+  const highPriorityCount = sortedFindings.filter((finding) => finding.severity === "high").length;
+  const mediumPriorityCount = sortedFindings.filter((finding) => finding.severity === "medium").length;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-base font-semibold text-slate-900">Priority findings</p>
+          <p className="text-sm text-slate-500">
+            Start here. These are the clearest surfaced issues for this site, ordered to help you decide what your team should review first.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
+            {highPriorityCount} high priority
+          </span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
+            {mediumPriorityCount} medium priority
+          </span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700">
+            {sortedFindings.length} surfaced finding{sortedFindings.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {sortedFindings.length > 0 ? (
+          <div className="space-y-4">
+            {sortedFindings.map((finding) => (
+              <div key={`priority-${finding.unifiedFindingId}`} className="space-y-2">
+                <ReviewFindingCard finding={finding} />
+                <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                  <span>{summarizeEvidence(finding)}</span>
+                  <span>{finding.presentationDecision.confidenceRationale}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm text-slate-600">No surfaced unified findings were promoted for this scan.</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1853,11 +1984,8 @@ function summarizeSectionFindings(findings: UnifiedFindingDisplayPacket[]) {
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
-
-  return (
-    <div className="space-y-6">
-      {REPORT_PRIMARY_PILLARS.map((pillar) => {
-        const sections = getReportSectionsForPillar(pillar.id)
+  const pillarSections = REPORT_PRIMARY_PILLARS.map((pillar) => {
+    const sections = getReportSectionsForPillar(pillar.id)
           .map((section) => {
             const sectionCategoryIds = new Set(
               getReportEvidenceCategoriesForSection(section.id).map((category) => category.id)
@@ -1940,17 +2068,54 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
               return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
             });
+            const visibleCategories = categories.filter(({ category, items }) => {
+              const ownerFindingsForCategory = unifiedFindings.filter(
+                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
+              );
+              const mirrorFindingsForCategory = unifiedFindings.filter(
+                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "mirror"
+              );
+              const overlayFindingsForCategory = unifiedFindings.filter(
+                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
+              );
+
+              return (
+                ownerFindingsForCategory.length > 0 ||
+                mirrorFindingsForCategory.length > 0 ||
+                overlayFindingsForCategory.length > 0 ||
+                items.length > 0
+              );
+            });
 
             return {
               ownerFindings,
               section,
               sectionItems,
               unifiedFindings,
-              visibleCategories: categories
+              visibleCategories
             };
           });
+    return { pillar, sections };
+  });
+  const priorityFindings = [
+    ...new Map(
+      pillarSections
+        .flatMap(({ sections }) => sections.flatMap((section) => section.ownerFindings))
+        .map((finding) => [finding.unifiedFindingId, finding])
+    ).values()
+  ];
 
-        return (
+  return (
+    <div className="space-y-6">
+      <PriorityFindingsOverview findings={priorityFindings} />
+
+      <CollapsibleSectionCard
+        title="Evidence by category"
+        subtitle="Use this view when you want to trace a surfaced finding back through the taxonomy and supporting signals."
+        defaultOpen={false}
+        contentClassName="space-y-6"
+      >
+        {pillarSections.map(({ pillar, sections }) => (
           <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
             {sections.map(({ ownerFindings, section, sectionItems, unifiedFindings, visibleCategories }) => {
               const status = getSectionStatus({ findingCount: ownerFindings.length, items: sectionItems });
@@ -1967,9 +2132,10 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                   subtitle={
                     <p className="text-sm text-slate-600">{summarizeSectionFindings(ownerFindings)}</p>
                   }
-                  defaultOpen={false}
+                  defaultOpen={ownerFindings.length > 0}
                   contentClassName="space-y-4"
                 >
+                  {visibleCategories.length > 0 ? (
                   <div className="grid gap-3 xl:grid-cols-2">
                     {visibleCategories.map(({ category, items }) => (
                       <div key={category.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -2048,13 +2214,18 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                       </div>
                     ))}
                   </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
+                      <p className="text-sm text-slate-600">No surfaced findings or supporting signals were grouped into this section.</p>
+                    </div>
+                  )}
 
                 </CollapsibleSectionCard>
               );
             })}
           </PrimaryPillarGroup>
-        );
-      })}
+        ))}
+      </CollapsibleSectionCard>
     </div>
   );
 }
