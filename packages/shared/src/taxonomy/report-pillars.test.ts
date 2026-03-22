@@ -8,11 +8,19 @@ import {
   getReportSignalBySourceAndKey,
   getReportSignalEvidenceCategoryLinks,
   getReportSignalsForEvidenceCategory,
+  getReportUnifiedFinding,
+  getReportUnifiedFindingByAlias,
+  getReportUnifiedFindingForSignal,
+  getReportUnifiedFindingForValidationRule,
+  getReportUnifiedFindingsForEvidenceCategory,
+  getReportUnifiedFindingsForPillar,
+  getReportUnifiedFindingsForSection,
   getReportSection,
   getReportSectionsForPillar,
   REPORT_EVIDENCE_CATEGORIES,
   REPORT_PRIMARY_PILLARS,
   REPORT_SIGNALS,
+  REPORT_UNIFIED_FINDINGS,
   REPORT_SECTIONS
 } from "./report-pillars";
 
@@ -53,6 +61,15 @@ test("defines a source-aware signal registry", () => {
   assert.ok(REPORT_SIGNALS.length >= 70);
   assert.ok(
     REPORT_SIGNALS.every((signal) => signal.primaryEvidenceCategoryId.length > 0 && signal.id === `${signal.source}:${signal.key}`)
+  );
+});
+
+test("defines the unified-finding registry with one owner alignment", () => {
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 64);
+  assert.ok(
+    REPORT_UNIFIED_FINDINGS.every(
+      (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
+    )
   );
 });
 
@@ -203,9 +220,88 @@ test("returns signals attached to an evidence category by relation", () => {
       "snapshot_signal:privacy.consent_withdrawal_mechanism_present",
       "snapshot_signal:privacy.user_rights_friction_score",
       "policy_enrichment_signal:policyDsarMechanism",
-      "policy_enrichment_signal:policyDoNotSell"
+      "policy_enrichment_signal:policyDoNotSell",
+      "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected"
     ]
   );
+});
+
+test("maps signals and validation rules into unified findings", () => {
+  assert.deepEqual(getReportUnifiedFindingForSignal("snapshot_signal", "disclosure.cookie_policy_fetch_failed"), {
+    id: "cookie_policy_unavailable",
+    label: "Cookie policy unavailable",
+    categoryAlignments: [
+      { evidenceCategoryId: "data_handling_disclosures", relation: "owner" },
+      { evidenceCategoryId: "transparency_notice_data_subject_rights", relation: "overlay" },
+      { evidenceCategoryId: "notice_rights_baseline", relation: "overlay" }
+    ],
+    signalMappings: [{ source: "snapshot_signal", key: "disclosure.cookie_policy_fetch_failed" }],
+    validationRuleKeys: [],
+    aliases: [],
+    presentationKey: undefined
+  });
+
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("section_review.missing_dsar_high_exposure")?.id,
+    "missing_dsar_high_exposure"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("section_review.clarity_risk_68")?.id,
+    "policy_clarity_risk"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("scan_signal.disclosure.cookie_policy_fetch_failed")?.id,
+    "cookie_policy_unavailable"
+  );
+});
+
+test("returns category-, section-, and pillar-scoped unified findings from derived indexes", () => {
+  assert.deepEqual(
+    getReportUnifiedFindingsForEvidenceCategory("choice_symmetry_dark_pattern_indicators", "owner").map(
+      ({ finding }) => finding.id
+    ),
+    [
+      "reject_button_missing",
+      "accept_more_prominent_than_reject",
+      "forced_consent_wall",
+      "accept_only_banner",
+      "dismiss_without_reject"
+    ]
+  );
+
+  assert.ok(
+    getReportUnifiedFindingsForSection("tracking_third_party_ecosystem").some(
+      ({ finding }) => finding.id === "preconsent_tracking"
+    )
+  );
+  assert.ok(
+    getReportUnifiedFindingsForPillar("accessibility").some(
+      ({ finding }) => finding.id === "accessibility_claim_mismatch"
+    )
+  );
+});
+
+test("returns unified findings by id and alias", () => {
+  assert.equal(getReportUnifiedFinding("policy_behavior_conflict")?.label, "Policy/behavior conflict");
+  assert.equal(getReportUnifiedFindingByAlias("Possible undisclosed session replay")?.id, "session_replay_undisclosed");
+});
+
+test("keeps unified-finding signal and validation mappings unique", () => {
+  const signalKeys = new Set<string>();
+  const validationKeys = new Set<string>();
+
+  for (const finding of REPORT_UNIFIED_FINDINGS) {
+    for (const mapping of finding.signalMappings) {
+      const key = `${mapping.source}:${mapping.key}`;
+      assert.equal(signalKeys.has(key), false, `duplicate unified-finding signal mapping for ${key}`);
+      signalKeys.add(key);
+    }
+
+    for (const ruleKey of finding.validationRuleKeys) {
+      assert.equal(validationKeys.has(ruleKey), false, `duplicate unified-finding validation mapping for ${ruleKey}`);
+      validationKeys.add(ruleKey);
+    }
+  }
 });
 
 test("unknown ids return null or an empty list", () => {
