@@ -232,3 +232,22 @@ test("treats concrete payload evidence as a confidence booster for sensitive-dat
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
   assert.equal(packet?.confidenceBand, "moderate");
 });
+
+test("keeps the unified finding name canonical even when validation titles add judgment language", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-5",
+    ruleKey: "scan_signal.privacy.policy_runtime_functional_misalignment_detected",
+    severity: "high",
+    title: "High-confidence functional misalignment"
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "functional_misalignment");
+  assert.equal(packet?.title, "Functional misalignment");
+  assert.equal(packet?.presentation.findingName, "Functional misalignment");
+});

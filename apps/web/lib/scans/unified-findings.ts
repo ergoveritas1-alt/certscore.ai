@@ -8,6 +8,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import {
   buildCanonicalReviewFindingPresentation,
+  normalizeFindingName,
   type CanonicalReviewFindingPresentation,
   type ReviewFindingSeverity
 } from "./canonical-review-finding";
@@ -992,7 +993,10 @@ export function buildUnifiedFindingDisplayPackets(input: {
       ...packet,
       linkedValidationFinding,
       observedValue: getBestObservedValue([packet.evidence?.snippets?.[0] ?? null, packet.summary]),
-      presentation,
+      presentation: {
+        ...presentation,
+        findingName: normalizeFindingName(packet.title)
+      },
       referenceLabel: presentation.suggestedBestPractice?.label,
       referenceUrl: presentation.suggestedBestPractice?.url,
       sourceLabel: getSourceLabel(packet),
