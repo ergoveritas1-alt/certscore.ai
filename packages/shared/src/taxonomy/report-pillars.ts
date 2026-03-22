@@ -1694,7 +1694,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
 export const REPORT_UNIFIED_FINDINGS = [
   defineReportUnifiedFinding({
     id: "privacy_policy_missing_surface",
-    label: "Privacy policy surface missing",
+    label: "Privacy policy missing",
     owner: "notice_scope_entity_identity",
     overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline"],
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.privacy_policy_surface_missing" }]
@@ -1708,7 +1708,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "terms_missing_surface",
-    label: "Terms surface missing",
+    label: "Terms missing",
     owner: "terms_coverage_enforceability_signals",
     mirrors: ["legal_commercial_disclosure_coverage"],
     overlays: ["disclosures_claim_substantiation"],
@@ -1724,7 +1724,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "cookie_policy_missing_surface",
-    label: "Cookie policy surface missing",
+    label: "Cookie policy missing",
     owner: "data_handling_disclosures",
     overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline"],
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.cookie_policy_surface_missing" }]
@@ -1738,7 +1738,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "accessibility_statement_missing_surface",
-    label: "Accessibility statement surface missing",
+    label: "Accessibility statement missing",
     owner: "public_accessibility_commitments",
     overlays: ["accessibility_commitments_support_paths"],
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.accessibility_statement_surface_missing" }]
@@ -1752,7 +1752,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "contact_page_missing_surface",
-    label: "Contact page surface missing",
+    label: "Contact page missing",
     owner: "privacy_contacts_accountability",
     mirrors: ["support_accommodation_contact_paths"],
     overlays: ["privacy_governance_contactability"],
