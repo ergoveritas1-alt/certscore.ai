@@ -13,7 +13,6 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
-import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
 import { ReportExecutiveSummary } from "../../../../components/scans/report-executive-summary";
 import {
@@ -75,24 +74,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatDurationMs(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "—";
-  }
-
-  if (value < 1_000) {
-    return `${Math.round(value)} ms`;
-  }
-
-  if (value < 60_000) {
-    return `${(value / 1_000).toFixed(1)} s`;
-  }
-
-  const minutes = Math.floor(value / 60_000);
-  const seconds = Math.round((value % 60_000) / 1_000);
-  return `${minutes}m ${seconds}s`;
-}
-
 function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -105,31 +86,6 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
   return `Next re-scan available ${formatDateTime(value)} for this ${
     planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
   } plan domain.`;
-}
-
-function formatEventMetadata(metadata: unknown) {
-  if (metadata == null) {
-    return "—";
-  }
-
-  if (Array.isArray(metadata)) {
-    return metadata.slice(0, 3).map((value) => String(value)).join(", ") || "—";
-  }
-
-  if (typeof metadata !== "object") {
-    return String(metadata);
-  }
-
-  const entries = Object.entries(metadata);
-
-  if (entries.length === 0) {
-    return "—";
-  }
-
-  return entries
-    .slice(0, 3)
-    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : String(value)}`)
-    .join(" · ");
 }
 
 function formatValue(value: unknown) {
@@ -251,58 +207,6 @@ function getRecordNumber(record: Record<string, unknown> | null | undefined, key
 function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
-}
-
-function getBuildPhaseSummaries(record: Record<string, unknown> | null | undefined) {
-  const value = record?.build_phase_summaries;
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
-    .map((entry) => ({
-      attempts: typeof entry.attempts === "number" ? entry.attempts : null,
-      completedAt: typeof entry.completedAt === "string" ? entry.completedAt : null,
-      durationMs: typeof entry.durationMs === "number" ? entry.durationMs : null,
-      error: typeof entry.error === "string" ? entry.error : null,
-      outcome: typeof entry.outcome === "string" ? entry.outcome : "unknown",
-      phase: typeof entry.phase === "string" ? entry.phase : "unknown",
-      startedAt: typeof entry.startedAt === "string" ? entry.startedAt : null
-    }));
-}
-
-function formatScannerPhaseLabel(value: string) {
-  return value
-    .split("_")
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(" ");
-}
-
-function getPhaseTone(outcome: string): "success" | "warning" | "neutral" {
-  if (outcome === "success") {
-    return "success";
-  }
-
-  if (outcome === "degraded") {
-    return "warning";
-  }
-
-  return "neutral";
-}
-
-function formatAttemptLabel(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "Not observed";
-  }
-
-  if (value <= 1) {
-    return "1";
-  }
-
-  return `${value} (retried)`;
 }
 
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
@@ -928,30 +832,6 @@ function hasTruthySignal(
     const matches = signal.key === key || signal.key.endsWith(`.${key}`);
     return matches && signal.value === true;
   });
-}
-
-function getExecutionPlan(scanConfigJson: Record<string, unknown> | null) {
-  const execution =
-    scanConfigJson && typeof scanConfigJson.execution === "object" && scanConfigJson.execution !== null
-      ? (scanConfigJson.execution as Record<string, unknown>)
-      : null;
-  const scanPlan =
-    execution && typeof execution.scanPlan === "object" && execution.scanPlan !== null
-      ? (execution.scanPlan as Record<string, unknown>)
-      : null;
-
-  return {
-    pagesRequested: typeof execution?.pagesRequested === "number" ? execution.pagesRequested : null,
-    profile: typeof scanPlan?.profile === "string" ? scanPlan.profile : null,
-    prefetchTargetCount: typeof scanPlan?.prefetchTargetCount === "number" ? scanPlan.prefetchTargetCount : null,
-    expansionTargetCount: typeof scanPlan?.expansionTargetCount === "number" ? scanPlan.expansionTargetCount : null,
-    staticFetchConcurrency: typeof scanPlan?.staticFetchConcurrency === "number" ? scanPlan.staticFetchConcurrency : null,
-    browserNavigationTimeoutMs:
-      typeof scanPlan?.browserNavigationTimeoutMs === "number" ? scanPlan.browserNavigationTimeoutMs : null,
-    browserPostLoadWaitMs: typeof scanPlan?.browserPostLoadWaitMs === "number" ? scanPlan.browserPostLoadWaitMs : null,
-    blockStylesheetsInBrowser:
-      typeof scanPlan?.blockStylesheetsInBrowser === "boolean" ? scanPlan.blockStylesheetsInBrowser : null
-  };
 }
 
 const OPERATIONAL_SNAPSHOT_SECTIONS = [
@@ -2403,7 +2283,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
 
   const snapshot = scanRecord.snapshot;
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
-  const isInProgress = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const canRescan = scanRecord.scan.status === "completed" && Boolean(scanRecord.scan.domainId);
   const rescanAvailability = canRescan
     ? getRescanAvailability({
@@ -2420,9 +2299,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           ? formatRescanCooldownMessage(rescanAvailability.nextAllowedAt, organization.plan)
           : null
       : null;
-  const executionPlan = getExecutionPlan(scanRecord.scan.scanConfigJson);
-  const executionSummary = scanRecord.scan.executionSummary;
-  const buildPhaseSummaries = getBuildPhaseSummaries(runtimeArtifacts);
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
   let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
@@ -2575,20 +2451,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
         />
       </div>
-
-      <FullScanProgressCard
-        buildPhaseSummaries={buildPhaseSummaries}
-        createdAt={scanRecord.scan.createdAt}
-        executionSummary={executionSummary}
-        events={scanRecord.events.map((event) => ({
-          createdAt: event.createdAt,
-          eventType: event.eventType,
-          message: event.message,
-          metadataJson: event.metadataJson
-        }))}
-        status={scanRecord.scan.status}
-      />
-
       {snapshot ? (
         <ReportExecutiveSummary
           titleTooltip="These ratings mirror the five primary evidence sections and use a 0.0 to 5.0 higher-is-better scale."
@@ -2828,113 +2690,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           )}
         </CollapsibleSectionCard>
 
-        <CollapsibleSectionCard
-          title={
-            <span className="flex items-center gap-1.5">
-              <span>Execution profile</span>
-              <InfoTip text="The scan plan and runtime budget selected for this run, including crawl depth, concurrency, and browser behavior settings." />
-            </span>
-          }
-          contentClassName="grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4"
-        >
-          <p>Profile: {formatValue(executionPlan.profile)}</p>
-          <p>Planned pages: {formatValue(executionPlan.pagesRequested)}</p>
-          <p>Prefetch targets: {formatValue(executionPlan.prefetchTargetCount)}</p>
-          <p>Expansion targets: {formatValue(executionPlan.expansionTargetCount)}</p>
-          <p>Static fetch concurrency: {formatValue(executionPlan.staticFetchConcurrency)}</p>
-          <p>Browser nav timeout: {formatValue(executionPlan.browserNavigationTimeoutMs)}</p>
-          <p>Browser post-load wait: {formatValue(executionPlan.browserPostLoadWaitMs)}</p>
-          <p>Block stylesheets: {formatValue(executionPlan.blockStylesheetsInBrowser)}</p>
-        </CollapsibleSectionCard>
-
-        {executionSummary && !isInProgress ? (
-          <CollapsibleSectionCard
-            title={
-              <span className="flex items-center gap-1.5">
-                <span>Execution stages</span>
-                <InfoTip text="Top-level scanner stages captured by the shared execution contract. This is the orchestration-level view of where the scan succeeded, degraded, or failed." />
-              </span>
-            }
-          >
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {executionSummary.stages.map((stage) => (
-                <div key={stage.stage} className="rounded-2xl border border-slate-200 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium text-slate-900">{formatScannerPhaseLabel(stage.stage)}</p>
-                    <Badge
-                      tone={getPhaseTone(stage.outcome)}
-                    >
-                      {stage.outcome}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 space-y-1 text-sm text-slate-600">
-                    <p>Started: {formatDateTime(stage.startedAt)}</p>
-                    <p>Completed: {formatDateTime(stage.completedAt)}</p>
-                    <p>Duration: {formatDurationMs(stage.durationMs)}</p>
-                    <p>Attempts: {formatAttemptLabel(stage.attempts)}</p>
-                    <p>Error category: {formatValue(stage.errorCategory)}</p>
-                  </div>
-                  {typeof stage.attempts === "number" && stage.attempts > 1 ? (
-                    <p className="mt-3 text-sm text-amber-700">Recovered after {stage.attempts - 1} retry attempt{stage.attempts - 1 === 1 ? "" : "s"}.</p>
-                  ) : null}
-                  {stage.message ? <p className="mt-3 text-sm text-slate-700">{stage.message}</p> : null}
-                </div>
-              ))}
-            </div>
-          </CollapsibleSectionCard>
-        ) : null}
-
-        {buildPhaseSummaries.length > 0 && !isInProgress ? (
-          <CollapsibleSectionCard
-            title={
-              <span className="flex items-center gap-1.5">
-                <span>Bundle build phases</span>
-                <InfoTip text="Lower-level timing inside snapshot bundle construction. This helps pinpoint where the crawler, browser pass, enrichment, or assembly work spent time or degraded." />
-              </span>
-            }
-          >
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500">
-                    <th className="pb-2 pr-4 font-medium">Phase</th>
-                    <th className="pb-2 pr-4 font-medium">Outcome</th>
-                    <th className="pb-2 pr-4 font-medium">Started</th>
-                    <th className="pb-2 pr-4 font-medium">Completed</th>
-                    <th className="pb-2 pr-4 font-medium">Duration</th>
-                    <th className="pb-2 pr-4 font-medium">Attempts</th>
-                    <th className="pb-2 font-medium">Error</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {buildPhaseSummaries.map((phase) => (
-                    <tr key={`${phase.phase}-${phase.startedAt ?? "na"}`} className="align-top">
-                      <td className="py-2 pr-4 font-medium text-slate-900">{formatScannerPhaseLabel(phase.phase)}</td>
-                      <td className="py-2 pr-4">
-                        <Badge
-                          tone={getPhaseTone(phase.outcome)}
-                        >
-                          {phase.outcome}
-                        </Badge>
-                      </td>
-                      <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.startedAt)}</td>
-                      <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(phase.completedAt)}</td>
-                      <td className="py-2 pr-4 text-slate-700">{formatDurationMs(phase.durationMs)}</td>
-                      <td className="py-2 pr-4 text-slate-700">
-                        <div>{formatAttemptLabel(phase.attempts)}</div>
-                        {typeof phase.attempts === "number" && phase.attempts > 1 ? (
-                          <div className="text-xs text-amber-700">Recovered after retry</div>
-                        ) : null}
-                      </td>
-                      <td className="py-2 text-slate-700">{phase.error ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CollapsibleSectionCard>
-        ) : null}
-
         {snapshot ? (
           <div className="grid gap-6 xl:grid-cols-2">
             {OPERATIONAL_SNAPSHOT_SECTIONS.map((section) => (
@@ -3025,41 +2780,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           </CollapsibleSectionCard>
         ) : null}
 
-        <CollapsibleSectionCard
-          title={
-            <span className="flex items-center gap-1.5">
-              <span>Scan events</span>
-              <InfoTip text="The event log recorded while this scan ran, including crawl milestones, persistence steps, and derived processing stages." />
-            </span>
-          }
-        >
-          {scanRecord.events.length === 0 ? (
-            <p className="text-sm text-slate-600">No scan events have been recorded for this scan yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500">
-                    <th className="pb-2 pr-4 font-medium">Time</th>
-                    <th className="pb-2 pr-4 font-medium">Event</th>
-                    <th className="pb-2 pr-4 font-medium">Message</th>
-                    <th className="pb-2 font-medium">Metadata</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {scanRecord.events.map((event) => (
-                    <tr key={event.id} className="align-top">
-                      <td className="py-2 pr-4 whitespace-nowrap text-slate-500">{formatDateTime(event.createdAt)}</td>
-                      <td className="py-2 pr-4 text-slate-700">{event.eventType}</td>
-                      <td className="py-2 pr-4 text-slate-900">{event.message}</td>
-                      <td className="py-2 font-mono text-xs text-slate-500">{formatEventMetadata(event.metadataJson)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CollapsibleSectionCard>
       </CollapsibleSectionCard>
     </div>
   );
