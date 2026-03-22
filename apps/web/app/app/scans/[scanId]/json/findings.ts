@@ -61,6 +61,52 @@ function getFindingPriority(finding: {
   return 0;
 }
 
+function deriveObservation(finding: JsonViewFindingInput) {
+  const normalizedTitle = normalizeFindingName(finding.title);
+  const evidence = finding.evidence ?? {};
+
+  const getStringArray = (key: string) =>
+    Array.isArray(evidence[key]) ? evidence[key].filter((entry): entry is string => typeof entry === "string") : [];
+
+  if (normalizedTitle === "Trackers observed before consent") {
+    const vendors = getStringArray("preconsent_tracker_vendors");
+    if (vendors.length > 0) {
+      return `The scan saw tracking vendors before a clear consent choice, including ${vendors.slice(0, 3).join(", ")}.`;
+    }
+
+    const runtimeEvidence = getStringArray("runtimeEvidence");
+    if (runtimeEvidence.length > 0) {
+      return runtimeEvidence[0] ?? "The scan saw tracking activity before a clear consent choice.";
+    }
+
+    return "The scan saw tracking activity before a clear consent choice.";
+  }
+
+  if (normalizedTitle === "WCAG errors") {
+    return "The automated accessibility check found WCAG issues that could affect how people use the site.";
+  }
+
+  if (/missing$/i.test(normalizedTitle)) {
+    return `The scan could not find a clear ${normalizedTitle.toLowerCase()} page during its bounded discovery pass.`;
+  }
+
+  if (/unavailable$/i.test(normalizedTitle)) {
+    return `The scan found what looked like a ${normalizedTitle.toLowerCase().replace(/ unavailable$/i, "")} page, but it could not retrieve it successfully.`;
+  }
+
+  const runtimeEvidence = getStringArray("runtimeEvidence");
+  if (runtimeEvidence.length > 0) {
+    return runtimeEvidence[0] ?? `The scan observed behavior related to ${normalizedTitle.toLowerCase()}.`;
+  }
+
+  const supportingSignals = getStringArray("supportingSignals");
+  if (supportingSignals.length > 0) {
+    return `The scan picked up supporting signals related to ${normalizedTitle.toLowerCase()}.`;
+  }
+
+  return `The scan observed evidence related to ${normalizedTitle.toLowerCase()}.`;
+}
+
 export function mapFindingsForJsonView(input: {
   domainHostname: string | null;
   findings: JsonViewFindingInput[];
@@ -77,6 +123,7 @@ export function mapFindingsForJsonView(input: {
       const summaryJson = {
         url: pageLabel,
         findingName: normalizeFindingName(finding.title),
+        observation: deriveObservation(finding),
         confidenceScore: presentation.confidenceScore ?? "NA",
         whyThisMatters: presentation.whyThisMatters,
         suggestedFix: presentation.suggestedFix,

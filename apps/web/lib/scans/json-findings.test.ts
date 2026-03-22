@@ -44,4 +44,16 @@ test("maps every finding row for the JSON view without collapsing duplicates", (
   );
   assert.equal(findings[0]?.pageLabel, "https://example.com");
   assert.equal(findings[2]?.pageLabel, "example.com");
+
+  const firstSummary = JSON.parse(findings[0]?.summaryJson ?? "{}");
+  assert.equal(
+    firstSummary.observation,
+    "The scan saw tracking vendors before a clear consent choice, including Meta Pixel."
+  );
+
+  const thirdSummary = JSON.parse(findings[2]?.summaryJson ?? "{}");
+  assert.equal(
+    thirdSummary.observation,
+    "The automated accessibility check found WCAG issues that could affect how people use the site."
+  );
 });
