@@ -78,9 +78,13 @@ test("collapses signal, issue, and validation sources into one unified finding p
   assert.equal(packets.length, 1);
   assert.equal(packets[0]?.unifiedFindingId, "preconsent_tracking");
   assert.equal(packets[0]?.severity, "high");
+  assert.equal(packets[0]?.confidenceBand, "high");
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "signal"));
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "issue"));
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "validation"));
+  assert.equal(packets[0]?.confidenceInputs.validationCount, 1);
+  assert.equal(packets[0]?.confidenceInputs.hasStructuredValidationEvidence, false);
+  assert.equal(packets[0]?.confidenceInputs.hasDirectRuntimeEvidence, false);
 });
 
 test("resolves validation-backed unified findings without a direct signal candidate", () => {
@@ -100,6 +104,8 @@ test("resolves validation-backed unified findings without a direct signal candid
   assert.equal(packets.length, 1);
   assert.equal(packets[0]?.unifiedFindingId, "missing_transfer_disclosure");
   assert.equal(packets[0]?.severity, "medium");
+  assert.equal(packets[0]?.confidenceBand, "moderate");
+  assert.equal(packets[0]?.confidenceInputs.validationCount, 1);
 });
 
 test("keeps key-page discovery context on coverage-gap packets", () => {
@@ -138,6 +144,9 @@ test("keeps key-page discovery context on coverage-gap packets", () => {
     "https://example.com/cookie-policy",
     "https://example.com/privacy/cookies"
   ]);
+  assert.equal(packets[0]?.confidenceInputs.hasKeyPageDiscoveryEvidence, true);
+  assert.equal(packets[0]?.confidenceInputs.isFallbackOnly, true);
+  assert.equal(packets[0]?.confidenceBand, "low");
 });
 
 test("exposes owner and mirror category relations on unified finding packets", () => {
@@ -157,6 +166,8 @@ test("exposes owner and mirror category relations on unified finding packets", (
   assert.equal(packet?.unifiedFindingId, "session_replay_undisclosed");
   assert.equal(getUnifiedFindingOwnerCategoryId(packet!), "policy_to_behavior_contradictions");
   assert.equal(getUnifiedFindingCategoryRelation(packet!, "adtech_analytics_replay_footprint"), "mirror");
+  assert.equal(packet?.confidenceInputs.validationCount, 1);
+  assert.equal(packet?.confidenceInputs.hasStructuredValidationEvidence, false);
 });
 
 test("rolls structured validation evidence into unified finding packets", () => {
@@ -183,4 +194,41 @@ test("rolls structured validation evidence into unified finding packets", () => 
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://example.com/privacy"]);
   assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Microsoft Clarity"]);
   assert.ok(packet?.evidence?.snippets?.includes("Replay script observed during homepage load"));
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.equal(packet?.confidenceInputs.hasPolicyTextEvidence, true);
+  assert.equal(packet?.confidenceBand, "high");
+});
+
+test("treats concrete payload evidence as a confidence booster for sensitive-data findings", () => {
+  const [packet] = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Scanner-derived risk indicator is elevated.",
+        fallbackEvidence: {
+          sensitivePayloadViolations: [
+            {
+              detectedType: "postal_code_detected",
+              evidenceStrength: "suspected",
+              requestMethod: "POST",
+              requestUrl: "https://tracker.example.net/collect"
+            }
+          ],
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(packet?.unifiedFindingId, "high_sensitivity_data_collection");
+  assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+  assert.equal(packet?.confidenceBand, "moderate");
 });

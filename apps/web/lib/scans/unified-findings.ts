@@ -73,6 +73,21 @@ export type UnifiedFindingPacket = {
   title: string;
   severity: ReviewFindingSeverity;
   summary: string;
+  confidenceBand: "high" | "moderate" | "low";
+  confidenceInputs: {
+    evidenceQualityFlags: string[];
+    hasConcretePayloadEvidence: boolean;
+    hasDirectRuntimeEvidence: boolean;
+    hasKeyPageDiscoveryEvidence: boolean;
+    hasPolicyTextEvidence: boolean;
+    hasStructuredValidationEvidence: boolean;
+    isFallbackOnly: boolean;
+    issueCount: number;
+    signalCount: number;
+    sourceCount: number;
+    sourceKinds: Array<"issue" | "signal" | "validation">;
+    validationCount: number;
+  };
   categoryAlignments: ReportUnifiedFindingCategoryAlignment[];
   sourceRefs: Array<
     | { kind: "signal"; key: string; label?: string; source: ReportSignalSource }
@@ -588,6 +603,129 @@ function getSourceUrl(packet: UnifiedFindingPacket) {
   return packet.evidence?.pageUrls?.[0];
 }
 
+function hasConcretePayloadEvidence(fallbackEvidence?: Record<string, unknown> | null) {
+  if (!Array.isArray(fallbackEvidence?.sensitivePayloadViolations)) {
+    return false;
+  }
+
+  return fallbackEvidence.sensitivePayloadViolations.some(
+    (row): boolean =>
+      Boolean(row) &&
+      typeof row === "object" &&
+      (row as { evidenceStrength?: unknown }).evidenceStrength !== "detector_only"
+  );
+}
+
+function deriveConfidenceInputs(input: {
+  packet: UnifiedFindingPacket;
+  validationFindings: ScanValidationFinding[];
+  fallbackEvidenceRows: Array<Record<string, unknown> | null | undefined>;
+}) {
+  const sourceKinds = [...new Set(input.packet.sourceRefs.map((sourceRef) => sourceRef.kind))];
+  const signalCount = input.packet.sourceRefs.filter((sourceRef) => sourceRef.kind === "signal").length;
+  const validationCount = input.packet.sourceRefs.filter((sourceRef) => sourceRef.kind === "validation").length;
+  const issueCount = input.packet.sourceRefs.filter((sourceRef) => sourceRef.kind === "issue").length;
+  const validationEvidenceRows = input.validationFindings
+    .map((finding) => finding.evidence)
+    .filter((evidence): evidence is Record<string, unknown> => Boolean(evidence) && typeof evidence === "object");
+  const allEvidenceRows = [...validationEvidenceRows, ...input.fallbackEvidenceRows.filter(Boolean) as Record<string, unknown>[]];
+  const evidenceQualityFlags = uniqueStrings([
+    ...(input.packet.evidence?.flags ?? []),
+    ...allEvidenceRows.flatMap((row) =>
+      Object.entries(row)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+    )
+  ]);
+
+  const hasDirectRuntimeEvidence =
+    validationEvidenceRows.some((row) =>
+      Object.keys(row).some((key) => /runtime|request|network|tracker|vendor/i.test(key))
+    );
+
+  const hasPolicyTextEvidence = allEvidenceRows.some((row) =>
+    Object.keys(row).some((key) => /claim|policy|disclosure|summary|snippet|description|pageurl|page_url/i.test(key))
+  );
+
+  const hasKeyPageDiscoveryEvidence = allEvidenceRows.some((row) =>
+    Object.keys(row).some((key) => /keyPage|attemptedUrls|attemptCount|stopReason|discovery/i.test(key))
+  );
+
+  const hasStructuredValidationEvidence = validationEvidenceRows.length > 0;
+  const concretePayloadEvidence = input.fallbackEvidenceRows.some((row) => hasConcretePayloadEvidence(row));
+  const isFallbackOnly = validationCount === 0 && !hasDirectRuntimeEvidence && signalCount > 0;
+
+  return {
+    evidenceQualityFlags,
+    hasConcretePayloadEvidence: concretePayloadEvidence,
+    hasDirectRuntimeEvidence,
+    hasKeyPageDiscoveryEvidence,
+    hasPolicyTextEvidence,
+    hasStructuredValidationEvidence,
+    isFallbackOnly,
+    issueCount,
+    signalCount,
+    sourceCount: input.packet.sourceRefs.length,
+    sourceKinds,
+    validationCount
+  };
+}
+
+function deriveConfidenceBand(
+  inputs: UnifiedFindingPacket["confidenceInputs"],
+  severity: ReviewFindingSeverity
+): UnifiedFindingPacket["confidenceBand"] {
+  let score = 0;
+
+  if (inputs.signalCount > 0) {
+    score += 1;
+  }
+  if (inputs.validationCount > 0) {
+    score += 2;
+  }
+  if (inputs.issueCount > 0) {
+    score += 1;
+  }
+  if (inputs.hasStructuredValidationEvidence) {
+    score += 1;
+  }
+  if (inputs.sourceKinds.length > 1) {
+    score += 1;
+  }
+  if (inputs.hasDirectRuntimeEvidence) {
+    score += 2;
+  }
+  if (inputs.hasPolicyTextEvidence) {
+    score += 1;
+  }
+  if (inputs.hasKeyPageDiscoveryEvidence) {
+    score += 1;
+  }
+  if (inputs.hasConcretePayloadEvidence) {
+    score += 2;
+  }
+  if (inputs.hasKeyPageDiscoveryEvidence || inputs.hasConcretePayloadEvidence) {
+    score += 1;
+  }
+  if (inputs.isFallbackOnly) {
+    score -= inputs.hasConcretePayloadEvidence ? 0 : 2;
+  }
+  if (inputs.hasKeyPageDiscoveryEvidence && inputs.validationCount === 0 && inputs.issueCount === 0) {
+    score -= 1;
+  }
+  if (severity === "high" && inputs.validationCount === 0 && !inputs.hasDirectRuntimeEvidence && !inputs.hasConcretePayloadEvidence) {
+    score -= 1;
+  }
+
+  if (score >= 5) {
+    return "high";
+  }
+  if (score >= 2) {
+    return "moderate";
+  }
+  return "low";
+}
+
 function getSourceLabel(packet: UnifiedFindingPacket) {
   const sourceUrl = getSourceUrl(packet);
   if (!sourceUrl) {
@@ -625,12 +763,49 @@ function selectPrimaryValidationFinding(findings: ScanValidationFinding[]) {
   );
 }
 
+function appendUniqueSourceRef(
+  sourceRefs: UnifiedFindingPacket["sourceRefs"],
+  nextSourceRef: UnifiedFindingPacket["sourceRefs"][number]
+) {
+  const alreadyPresent = sourceRefs.some((sourceRef) => {
+    if (sourceRef.kind !== nextSourceRef.kind) {
+      return false;
+    }
+
+    if (sourceRef.kind === "signal" && nextSourceRef.kind === "signal") {
+      return sourceRef.source === nextSourceRef.source && sourceRef.key === nextSourceRef.key;
+    }
+
+    if (sourceRef.kind === "validation" && nextSourceRef.kind === "validation") {
+      return sourceRef.ruleKey === nextSourceRef.ruleKey;
+    }
+
+    if (sourceRef.kind === "issue" && nextSourceRef.kind === "issue") {
+      return sourceRef.title === nextSourceRef.title;
+    }
+
+    return false;
+  });
+
+  return alreadyPresent ? sourceRefs : [...sourceRefs, nextSourceRef];
+}
+
+function appendUniqueValidationFinding(
+  findings: ScanValidationFinding[],
+  nextFinding: ScanValidationFinding
+) {
+  return findings.some((finding) => finding.id === nextFinding.id || finding.ruleKey === nextFinding.ruleKey)
+    ? findings
+    : [...findings, nextFinding];
+}
+
 export function buildUnifiedFindingPackets(input: {
   reviewFindingCandidates: UnifiedFindingCandidate[];
   validationFindings: ScanValidationFinding[];
 }) {
   const packets = new Map<string, UnifiedFindingPacket>();
   const validationByPacket = new Map<string, ScanValidationFinding[]>();
+  const fallbackEvidenceByPacket = new Map<string, Array<Record<string, unknown> | null | undefined>>();
 
   const addCandidate = (
     findingId: string,
@@ -649,6 +824,21 @@ export function buildUnifiedFindingPackets(input: {
       title: definition.label,
       severity: candidate.severity,
       summary: candidate.description,
+      confidenceBand: "low",
+      confidenceInputs: {
+        evidenceQualityFlags: [],
+        hasConcretePayloadEvidence: false,
+        hasDirectRuntimeEvidence: false,
+        hasKeyPageDiscoveryEvidence: false,
+        hasPolicyTextEvidence: false,
+        hasStructuredValidationEvidence: false,
+        isFallbackOnly: false,
+        issueCount: 0,
+        signalCount: 0,
+        sourceCount: 0,
+        sourceKinds: [],
+        validationCount: 0
+      },
       categoryAlignments: definition.categoryAlignments,
       sourceRefs: [],
       evidence: undefined,
@@ -661,33 +851,32 @@ export function buildUnifiedFindingPackets(input: {
     }
 
     if (candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey) {
-      nextPacket.sourceRefs = [
-        ...nextPacket.sourceRefs,
-        {
-          kind: "signal",
-          key: candidate.signalKey,
-          label: candidate.signalLabel,
-          source: candidate.signalSource
-        }
-      ];
+      nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, {
+        kind: "signal",
+        key: candidate.signalKey,
+        label: candidate.signalLabel,
+        source: candidate.signalSource
+      });
     } else {
-      nextPacket.sourceRefs = [...nextPacket.sourceRefs, { kind: "issue", title: candidate.title }];
+      nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, { kind: "issue", title: candidate.title });
     }
 
     if (linkedValidationFinding) {
-      nextPacket.sourceRefs = [
-        ...nextPacket.sourceRefs,
-        {
-          kind: "validation",
-          ruleKey: linkedValidationFinding.ruleKey,
-          title: linkedValidationFinding.title
-        }
-      ];
-      validationByPacket.set(findingId, [
-        ...(validationByPacket.get(findingId) ?? []),
-        linkedValidationFinding
-      ]);
+      nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, {
+        kind: "validation",
+        ruleKey: linkedValidationFinding.ruleKey,
+        title: linkedValidationFinding.title
+      });
+      validationByPacket.set(
+        findingId,
+        appendUniqueValidationFinding(validationByPacket.get(findingId) ?? [], linkedValidationFinding)
+      );
     }
+
+    fallbackEvidenceByPacket.set(findingId, [
+      ...(fallbackEvidenceByPacket.get(findingId) ?? []),
+      candidate.fallbackEvidence
+    ]);
 
     nextPacket.evidence = mergeEvidence(nextPacket.evidence, fallbackEvidence, candidate.evidence, linkedValidationFinding);
     nextPacket.details = buildUnifiedFindingDetails({
@@ -697,6 +886,12 @@ export function buildUnifiedFindingPackets(input: {
       observedValue: candidate.observedValue,
       summary: candidate.description
     });
+    nextPacket.confidenceInputs = deriveConfidenceInputs({
+      fallbackEvidenceRows: fallbackEvidenceByPacket.get(findingId) ?? [],
+      packet: nextPacket,
+      validationFindings: validationByPacket.get(findingId) ?? []
+    });
+    nextPacket.confidenceBand = deriveConfidenceBand(nextPacket.confidenceInputs, nextPacket.severity);
     packets.set(findingId, nextPacket);
   };
 
