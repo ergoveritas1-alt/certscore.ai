@@ -1833,7 +1833,7 @@ function AgencyAdvisorySummary(input: { findings: UnifiedFindingDisplayPacket[] 
   );
 }
 
-function PriorityFindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
+function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const sortedFindings = [...input.findings].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
     if (severityDelta !== 0) {
@@ -1855,9 +1855,9 @@ function PriorityFindingsOverview(input: { findings: UnifiedFindingDisplayPacket
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
       <div className="space-y-4">
         <div className="space-y-2">
-          <p className="text-base font-semibold text-slate-900">Priority findings</p>
+          <p className="text-base font-semibold text-slate-900">Findings worth review</p>
           <p className="text-sm text-slate-500">
-            Start here. These are the clearest surfaced issues for this site, ordered to help you decide what your team should review first.
+            Start here. These are the surfaced issues that look worth reviewing with the site owner, ordered to help your team decide what to tackle first.
           </p>
         </div>
 
@@ -1890,52 +1890,6 @@ function PriorityFindingsOverview(input: { findings: UnifiedFindingDisplayPacket
             <p className="text-sm text-slate-600">No surfaced unified findings were promoted for this scan.</p>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function AdditionalFindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
-  if (input.findings.length === 0) {
-    return null;
-  }
-
-  const sortedFindings = [...input.findings].sort((left, right) => {
-    const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
-    if (severityDelta !== 0) {
-      return severityDelta;
-    }
-
-    return left.presentation.findingName.localeCompare(right.presentation.findingName);
-  });
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-base font-semibold text-slate-900">Additional findings worth review</p>
-          <p className="text-sm text-slate-500">
-            These findings look valid and useful, but they are narrower, less urgent, or less corroborated than the primary findings above.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700">
-            {sortedFindings.length} additional finding{sortedFindings.length === 1 ? "" : "s"}
-          </span>
-        </div>
-
-        <div className="space-y-4">
-          {sortedFindings.map((finding) => (
-            <div key={`additional-${finding.unifiedFindingId}`} className="space-y-2">
-              <ReviewFindingCard finding={finding} />
-              <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                <span>{summarizeEvidence(finding)}</span>
-                <span>{finding.presentationDecision.confidenceRationale}</span>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -2003,26 +1957,14 @@ function summarizeSectionFindings(findings: UnifiedFindingDisplayPacket[]) {
   }.`;
 }
 
-function summarizeSectionFindingCoverage(input: {
-  additionalFindings: UnifiedFindingDisplayPacket[];
-  priorityFindings: UnifiedFindingDisplayPacket[];
-}) {
-  const priorityCount = input.priorityFindings.length;
-  const additionalCount = input.additionalFindings.length;
+function summarizeSectionFindingCoverage(findings: UnifiedFindingDisplayPacket[]) {
+  const findingCount = findings.length;
 
-  if (priorityCount === 0 && additionalCount === 0) {
+  if (findingCount === 0) {
     return "No surfaced findings in this section.";
   }
 
-  if (priorityCount > 0 && additionalCount === 0) {
-    return summarizeSectionFindings(input.priorityFindings);
-  }
-
-  if (priorityCount === 0 && additionalCount > 0) {
-    return `${additionalCount} additional finding${additionalCount === 1 ? "" : "s"} worth review.`;
-  }
-
-  return `${priorityCount} priority finding${priorityCount === 1 ? "" : "s"} and ${additionalCount} additional finding${additionalCount === 1 ? "" : "s"} worth review.`;
+  return summarizeSectionFindings(findings);
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
@@ -2106,14 +2048,9 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               validationFindings: sectionValidationFindings,
               validationFindingLookup
             }).filter((finding) => finding.presentationDecision.status !== "suppress");
-            const priorityFindings = unifiedFindings.filter((finding) => finding.presentationDecision.status === "surface");
-            const additionalFindings = unifiedFindings.filter((finding) => finding.presentationDecision.status === "audit_only");
+            const reviewFindings = unifiedFindings;
             const sectionItems = categories.flatMap((category) => category.items);
-            const ownerPriorityFindings = priorityFindings.filter((finding) => {
-              const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
-              return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
-            });
-            const ownerAdditionalFindings = additionalFindings.filter((finding) => {
+            const ownerReviewFindings = reviewFindings.filter((finding) => {
               const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
               return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
             });
@@ -2137,10 +2074,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             });
 
             return {
-              additionalFindings,
-              ownerAdditionalFindings,
-              ownerPriorityFindings,
-              priorityFindings,
+              ownerReviewFindings,
+              reviewFindings,
               section,
               sectionItems,
               unifiedFindings,
@@ -2149,26 +2084,18 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
           });
     return { pillar, sections };
   });
-  const priorityFindings = [
+  const reviewFindings = [
     ...new Map(
       pillarSections
-        .flatMap(({ sections }) => sections.flatMap((section) => section.ownerPriorityFindings))
-        .map((finding) => [finding.unifiedFindingId, finding])
-    ).values()
-  ];
-  const additionalFindings = [
-    ...new Map(
-      pillarSections
-        .flatMap(({ sections }) => sections.flatMap((section) => section.ownerAdditionalFindings))
+        .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
         .map((finding) => [finding.unifiedFindingId, finding])
     ).values()
   ];
 
   return (
     <div className="space-y-6">
-      <AgencyAdvisorySummary findings={priorityFindings} />
-      <PriorityFindingsOverview findings={priorityFindings} />
-      <AdditionalFindingsOverview findings={additionalFindings} />
+      <AgencyAdvisorySummary findings={reviewFindings} />
+      <FindingsOverview findings={reviewFindings} />
 
       <CollapsibleSectionCard
         title="Evidence by category"
@@ -2178,8 +2105,8 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       >
         {pillarSections.map(({ pillar, sections }) => (
           <PrimaryPillarGroup key={pillar.id} title={pillar.label}>
-            {sections.map(({ additionalFindings, ownerAdditionalFindings, ownerPriorityFindings, priorityFindings, section, sectionItems, unifiedFindings, visibleCategories }) => {
-              const status = getSectionStatus({ findingCount: ownerPriorityFindings.length + ownerAdditionalFindings.length, items: sectionItems });
+            {sections.map(({ ownerReviewFindings, reviewFindings, section, sectionItems, unifiedFindings, visibleCategories }) => {
+              const status = getSectionStatus({ findingCount: ownerReviewFindings.length, items: sectionItems });
 
               return (
                 <CollapsibleSectionCard
@@ -2191,14 +2118,9 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                     </span>
                   }
                   subtitle={
-                    <p className="text-sm text-slate-600">
-                      {summarizeSectionFindingCoverage({
-                        additionalFindings: ownerAdditionalFindings,
-                        priorityFindings: ownerPriorityFindings
-                      })}
-                    </p>
+                    <p className="text-sm text-slate-600">{summarizeSectionFindingCoverage(ownerReviewFindings)}</p>
                   }
-                  defaultOpen={ownerPriorityFindings.length > 0 || ownerAdditionalFindings.length > 0}
+                  defaultOpen={ownerReviewFindings.length > 0}
                   contentClassName="space-y-4"
                 >
                   {visibleCategories.length > 0 ? (
@@ -2221,13 +2143,10 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                             (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
                           );
                           const relatedFindingCount = mirrorFindings.length + overlayFindings.length;
-                          const ownerPriorityFindings = priorityFindings.filter(
+                          const ownerReviewFindings = reviewFindings.filter(
                             (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
                           );
-                          const ownerAdditionalFindings = additionalFindings.filter(
-                            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
-                          );
-                          const categoryFindingCount = ownerPriorityFindings.length + ownerAdditionalFindings.length;
+                          const categoryFindingCount = ownerReviewFindings.length;
 
                           return (
                             <div className="mt-4 space-y-3">
@@ -2247,20 +2166,9 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
                                 ) : null}
                               </div>
 
-                              {ownerPriorityFindings.map((finding) => (
+                              {ownerReviewFindings.map((finding) => (
                                 <ReviewFindingCard key={finding.unifiedFindingId} finding={finding} />
                               ))}
-
-                              {ownerAdditionalFindings.length > 0 ? (
-                                <div className="space-y-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                                    Additional findings worth review
-                                  </p>
-                                  {ownerAdditionalFindings.map((finding) => (
-                                    <ReviewFindingCard key={`${finding.unifiedFindingId}-additional`} finding={finding} />
-                                  ))}
-                                </div>
-                              ) : null}
 
                               {mirrorFindings.map((finding) => (
                                 <ReviewFindingMirrorRow key={`${finding.unifiedFindingId}-mirror`} finding={finding} />
