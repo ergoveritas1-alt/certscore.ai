@@ -320,12 +320,11 @@ test("suppresses resolved key page types from partial-scan 404 understatement wa
   assert.doesNotMatch(combined, /privacy policy \(https:\/\/www\.liveinternet\.ru\/privacybeleid\)/i);
   assert.doesNotMatch(combined, /terms of service \(https:\/\/www\.liveinternet\.ru\/gebruiksvoorwaarden\)/i);
   assert.doesNotMatch(combined, /These expected target pages returned 404 during bounded key-page fetch/i);
-  assert.match(
-    combined,
-    /could not retrieve standalone cookie-policy, accessibility pages within the bounded key-page fetch/i
-  );
+  assert.doesNotMatch(combined, /could not retrieve standalone .*bounded key-page fetch/i);
   assert.doesNotMatch(combined, /may understate .*privacy-policy/i);
   assert.doesNotMatch(combined, /may understate .*terms/i);
+  assert.doesNotMatch(combined, /may understate .*cookie-policy/i);
+  assert.doesNotMatch(combined, /may understate .*accessibility/i);
 });
 
 test("reports provenance-aware key page discovery gaps", () => {
@@ -375,7 +374,104 @@ test("reports provenance-aware key page discovery gaps", () => {
     status: "completed"
   });
 
-  assert.equal(summary.title, "Scan pass completed with warnings");
-  assert(summary.details.some((detail) => detail.includes("Privacy policy candidates were found via sitemap discovery")));
-  assert(summary.details.some((detail) => detail.includes("Only guessed-slug candidates were available for terms of service")));
+  assert.equal(summary.title, "Scan pass completed as planned");
+  assert(summary.details.every((detail) => !detail.includes("Privacy policy candidates were found via sitemap discovery")));
+  assert(summary.details.every((detail) => !detail.includes("Only guessed-slug candidates were available for terms of service")));
+  assert.match(summary.details[0] ?? "", /All recorded scan stages completed without persisted warnings or failures/i);
+});
+
+test("suppresses key-page gap warnings when the page type was fetched successfully elsewhere", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Fetched privacy policy from alternate route",
+        metadataJson: {
+          fetchStatus: "ok",
+          pageType: "privacy_policy",
+          phase: "key_page_coverage_fetch_target",
+          targetUrl: "https://example.com/privacy"
+        }
+      }
+    ],
+    keyPageDiscoverySummary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en"],
+      pageSummaries: [
+        {
+          attemptCount: 1,
+          attemptedUrls: ["https://example.com/privacy-policy"],
+          bestDiscoverySource: "guessed_slug",
+          guessedOnly: true,
+          pageType: "privacy_policy",
+          stopReason: "guessed_only",
+          successfulUrl: null,
+          successfulHostRelation: null,
+          surfaceDetected: false
+        }
+      ],
+      sameBrandSubdomainHostsInspected: [],
+      sitemapFilesFetched: [],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: []
+    },
+    status: "completed"
+  });
+
+  const combined = summary.details.join("\n");
+  assert.doesNotMatch(combined, /Only guessed-slug candidates were available for privacy policy/i);
+  assert.equal(summary.details.length, 1);
+  assert.match(summary.details[0] ?? "", /All recorded scan stages completed without persisted warnings or failures/i);
+});
+
+test("suppresses key-page gap warnings when the page type was discovered elsewhere", () => {
+  const summary = deriveScanExecutionSummary({
+    keyPageDiscoverySummary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en"],
+      pageSummaries: [
+        {
+          attemptCount: 1,
+          attemptedUrls: ["https://example.com/privacy-policy"],
+          bestDiscoverySource: "rendered_link",
+          guessedOnly: false,
+          pageType: "privacy_policy",
+          stopReason: "all_attempts_failed",
+          successfulUrl: null,
+          successfulHostRelation: null,
+          surfaceDetected: true
+        }
+      ],
+      sameBrandSubdomainHostsInspected: [],
+      sitemapFilesFetched: [],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: []
+    },
+    status: "completed"
+  });
+
+  const combined = summary.details.join("\n");
+  assert.doesNotMatch(combined, /Only guessed-slug candidates were available for privacy policy/i);
+  assert.equal(summary.details.length, 1);
+  assert.match(summary.details[0] ?? "", /All recorded scan stages completed without persisted warnings or failures/i);
 });

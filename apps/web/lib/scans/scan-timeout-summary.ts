@@ -146,6 +146,30 @@ function getRecoveredBrowserStages(
   return recoveredStages;
 }
 
+function getResolvedKeyPageTypesFromEvents(
+  events: NonNullable<ScanTimeoutSummaryInput["events"]>
+) {
+  const resolvedPageTypes = new Set<string>();
+
+  for (const event of events) {
+    if (event.eventType !== "runtime.build_phase_diagnostic") {
+      continue;
+    }
+
+    const pageType = getEventString(event.metadataJson, "pageType");
+    if (!pageType) {
+      continue;
+    }
+
+    const fetchStatus = getEventString(event.metadataJson, "fetchStatus");
+    if (fetchStatus === "ok") {
+      resolvedPageTypes.add(pageType);
+    }
+  }
+
+  return resolvedPageTypes;
+}
+
 function humanizeDiagnosticName(value: string | null) {
   if (!value) {
     return "A scan stage";
@@ -240,9 +264,13 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   const recoveredBrowserStages = getRecoveredBrowserStages(events);
   const missingTargetPages: Array<{ label: string; pageType: string | null }> = [];
   const keyPageSummaries = getKeyPageDiscoverySummaries(input.keyPageDiscoverySummary);
-  const resolvedPageTypes = new Set(
-    keyPageSummaries.filter((summary) => Boolean(summary.successfulUrl)).map((summary) => summary.pageType)
-  );
+  const discoveredPageTypes = new Set<string>([
+    ...keyPageSummaries.filter((summary) => summary.surfaceDetected).map((summary) => summary.pageType)
+  ]);
+  const resolvedPageTypes = new Set<string>([
+    ...keyPageSummaries.filter((summary) => Boolean(summary.successfulUrl)).map((summary) => summary.pageType),
+    ...getResolvedKeyPageTypesFromEvents(events)
+  ]);
   let partialScanDetected = false;
   let partialScanPageCounts: { requested: number | null; scanned: number | null } = {
     requested: getFiniteNumber(input.pagesRequested),
@@ -272,7 +300,7 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
       getEventString(event.metadataJson, "fetchStatus") === "not_found"
     ) {
       const pageType = getEventString(event.metadataJson, "pageType");
-      if (!pageType || !resolvedPageTypes.has(pageType)) {
+      if (!pageType || (!resolvedPageTypes.has(pageType) && !discoveredPageTypes.has(pageType))) {
         missingTargetPages.push({
           label: formatPageLabel(pageType, getEventString(event.metadataJson, "targetUrl") ?? getEventString(event.metadataJson, "finalUrl")),
           pageType
@@ -355,13 +383,16 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   }
 
   for (const pageSummary of keyPageSummaries) {
-    if (pageSummary.successfulUrl) {
+    if (
+      pageSummary.successfulUrl ||
+      resolvedPageTypes.has(pageSummary.pageType) ||
+      discoveredPageTypes.has(pageSummary.pageType)
+    ) {
       continue;
     }
 
     const pageLabel = humanizeDiagnosticName(pageSummary.pageType);
     if (pageSummary.guessedOnly) {
-      details.add(`Only guessed-slug candidates were available for ${pageLabel}, so confidence in page absence is lower.`);
       continue;
     }
 
