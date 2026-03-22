@@ -1746,6 +1746,93 @@ function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
   return parts.length > 0 ? parts.join(" · ") : "Evidence packet assembled for this finding.";
 }
 
+function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
+  const themes = new Set<string>();
+
+  for (const finding of findings) {
+    switch (finding.details?.family) {
+      case "consent_tracking":
+        themes.add("consent and tracking controls");
+        break;
+      case "contradiction":
+        themes.add("public claims versus observed behavior");
+        break;
+      case "rights_gap":
+      case "policy_extraction":
+      case "coverage_gap":
+        themes.add("policy and disclosure coverage");
+        break;
+      case "accessibility":
+        themes.add("accessibility and task completion");
+        break;
+      case "commercial":
+        themes.add("commercial transparency");
+        break;
+      case "sensitive_data":
+        themes.add("sensitive-data handling");
+        break;
+      default:
+        break;
+    }
+  }
+
+  return [...themes];
+}
+
+function AgencyAdvisorySummary(input: { findings: UnifiedFindingDisplayPacket[] }) {
+  const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
+  const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
+  const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
+  const clientBullets = [
+    highPriorityCount > 0
+      ? `${highPriorityCount} high-priority finding${highPriorityCount === 1 ? "" : "s"} should be reviewed with the site owner first.`
+      : "No high-priority findings were promoted in the main report.",
+    mediumPriorityCount > 0
+      ? `${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} should be scoped into the next remediation pass.`
+      : "No medium-priority findings were promoted in the main report.",
+    themes.length > 0
+      ? `The main exposure themes for this site are ${themes.join(", ")}.`
+      : "The surfaced findings do not yet point to one dominant exposure theme."
+  ];
+  const agencyBullets = [
+    "Use this report to brief the client on risk and remediation, but keep legal and compliance ownership explicitly with the site owner.",
+    "Document which surfaced findings your team will fix, which require client approval, and which need counsel or policy review.",
+    "Avoid making public trust, privacy, or accessibility claims on the client’s behalf until the underlying findings are resolved."
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-base font-semibold text-slate-900">Agency advisory</p>
+          <p className="text-sm text-slate-500">
+            Read this report as a manager of the client site. Focus on what the site owner needs to understand, what your team should remediate, and where you should keep clear scope boundaries.
+          </p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">What the client should know</p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-700">
+              {clientBullets.map((bullet) => (
+                <li key={bullet}>• {bullet}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">What your agency should do</p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-700">
+              {agencyBullets.map((bullet) => (
+                <li key={bullet}>• {bullet}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PriorityFindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const sortedFindings = [...input.findings].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
@@ -1995,6 +2082,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
 
   return (
     <div className="space-y-6">
+      <AgencyAdvisorySummary findings={priorityFindings} />
       <PriorityFindingsOverview findings={priorityFindings} />
 
       <CollapsibleSectionCard
