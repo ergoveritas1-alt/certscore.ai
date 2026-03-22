@@ -1930,7 +1930,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               reviewFindingCandidates: [...categories.flatMap((category) => category.reviewFindings), ...issueFindings],
               validationFindings: input.scanRecord.validationFindings,
               validationFindingLookup
-            });
+            }).filter((finding) => finding.presentationDecision.status === "surface");
             const sectionItems = categories.flatMap((category) => category.items);
 
             return {

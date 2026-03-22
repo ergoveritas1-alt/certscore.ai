@@ -106,6 +106,12 @@ export type UnifiedFindingPacket = {
   details?: UnifiedFindingDetails;
 };
 
+export type UnifiedFindingPresentationDecision = {
+  confidenceRationale: string;
+  rationale: string;
+  status: "surface" | "audit_only" | "suppress";
+};
+
 export type UnifiedFindingCandidate = {
   categoryId?: string;
   description: string;
@@ -124,6 +130,7 @@ export type UnifiedFindingCandidate = {
 export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
   linkedValidationFinding: ScanValidationFinding | null;
   observedValue: string | null;
+  presentationDecision: UnifiedFindingPresentationDecision;
   presentation: CanonicalReviewFindingPresentation;
   referenceLabel?: string;
   referenceUrl?: string;
@@ -205,6 +212,16 @@ const COMMERCIAL_FINDING_IDS = new Set([
   "limited_time_pressure",
   "store_credit_only_remedy",
   "restrictive_termination_or_suspension_terms"
+]);
+
+const SPECIFIC_CONTRADICTION_FINDING_IDS = new Set([
+  "consent_gated_tracking_claim_conflict",
+  "do_not_sell_sharing_disclosure_conflict",
+  "privacy_terms_conflict",
+  "privacy_cookie_policy_conflict",
+  "functional_misalignment",
+  "session_replay_undisclosed",
+  "missing_technical_disclosure"
 ]);
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -727,6 +744,184 @@ function deriveConfidenceBand(
   return "low";
 }
 
+function formatCoveragePageLabel(pageType: string | undefined) {
+  switch (pageType) {
+    case "privacy_policy":
+      return "privacy policy";
+    case "terms_of_service":
+      return "terms page";
+    case "cookie_policy":
+      return "cookie policy";
+    case "accessibility_statement":
+      return "accessibility statement";
+    case "contact_page":
+      return "contact page";
+    default:
+      return "disclosure page";
+  }
+}
+
+function buildConfidenceRationale(packet: UnifiedFindingPacket) {
+  const positives: string[] = [];
+
+  if (packet.confidenceInputs.hasDirectRuntimeEvidence) {
+    positives.push("direct runtime evidence was captured");
+  }
+  if (packet.confidenceInputs.hasPolicyTextEvidence) {
+    positives.push("policy or disclosure text contributed supporting context");
+  }
+  if (packet.confidenceInputs.hasStructuredValidationEvidence) {
+    positives.push("structured validation evidence corroborated the concern");
+  }
+  if (packet.confidenceInputs.hasKeyPageDiscoveryEvidence) {
+    positives.push("key-page discovery context narrowed the failure mode");
+  }
+  if (packet.confidenceInputs.hasConcretePayloadEvidence) {
+    positives.push("concrete payload evidence strengthened the signal");
+  }
+  if (packet.confidenceInputs.sourceKinds.length > 1) {
+    positives.push(`multiple source types (${packet.confidenceInputs.sourceKinds.join(", ")}) agreed`);
+  }
+
+  if (packet.confidenceBand === "high") {
+    return positives.length > 0
+      ? `High confidence because ${positives.slice(0, 3).join(", ")}.`
+      : "High confidence because multiple strong sources pointed to the same concern.";
+  }
+
+  if (packet.confidenceBand === "moderate") {
+    return positives.length > 0
+      ? `Moderate confidence because ${positives.slice(0, 2).join(", ")}, but corroboration is still partial.`
+      : "Moderate confidence because the concern is supported, but corroboration is still limited.";
+  }
+
+  if (packet.confidenceInputs.isFallbackOnly) {
+    return "Low confidence because this packet is relying on fallback scan context without stronger corroborating evidence yet.";
+  }
+
+  return "Low confidence because the current evidence is limited or only weakly corroborated.";
+}
+
+function buildPresentationCopy(
+  packet: UnifiedFindingPacket,
+  base: CanonicalReviewFindingPresentation
+): CanonicalReviewFindingPresentation {
+  if (packet.details?.family === "coverage_gap") {
+    const pageLabel = formatCoveragePageLabel(packet.details.pageType);
+    if (packet.details.gapKind === "fetch_failed") {
+      return {
+        ...base,
+        suggestedFix: `Repair the ${pageLabel} URL or response path so the page loads reliably and remains crawlable.`,
+        whyThisMatters: `If the ${pageLabel} appears to exist but cannot be retrieved, users and reviewers can hit a dead end when trying to verify disclosures.`
+      };
+    }
+
+    if (packet.details.gapKind === "surface_missing") {
+      return {
+        ...base,
+        suggestedFix: `Add a clear, stable entry point to the ${pageLabel} in footer or legal navigation and keep the destination crawlable.`,
+        whyThisMatters: `If the ${pageLabel} is not clearly surfaced, people may struggle to discover the disclosure at all.`
+      };
+    }
+
+    return {
+      ...base,
+      suggestedFix: `Expose the relevant ${pageLabel} through a stable crawlable path and verify bounded discovery can reliably reach it.`,
+      whyThisMatters: `If key-page discovery stays unresolved, the scan cannot confidently confirm whether the ${pageLabel} is actually reachable.`
+    };
+  }
+
+  switch (packet.unifiedFindingId) {
+    case "preconsent_tracking":
+      return {
+        ...base,
+        suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
+        whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
+      };
+    case "reject_did_not_reduce_tracking":
+      return {
+        ...base,
+        suggestedFix: "Review consent enforcement so a reject action actually suppresses the non-essential tracking vendors seen after rejection.",
+        whyThisMatters: "If reject does not materially reduce tracking, the consent experience may not be honoring the choice it presents."
+      };
+    case "reject_did_not_reduce_third_party_cookies":
+      return {
+        ...base,
+        suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
+        whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
+      };
+    case "session_replay_undisclosed":
+      return {
+        ...base,
+        suggestedFix: "Review replay tooling deployment and either disclose it clearly in privacy/cookie materials or disable it until disclosures are accurate.",
+        whyThisMatters: "Undisclosed session replay can materially change how users understand monitoring on the site."
+      };
+    case "cookie_disclosure_gap":
+      return {
+        ...base,
+        suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
+        whyThisMatters: "When runtime cookie activity outpaces the disclosure, users cannot easily understand what is actually being set and why."
+      };
+    case "low_confidence_policy_extraction":
+      return {
+        ...base,
+        suggestedFix: "Simplify the policy surface or markup so core disclosures can be extracted and reviewed more reliably.",
+        whyThisMatters: "Low-confidence extraction makes it harder to trust that important policy commitments were captured accurately."
+      };
+    default:
+      return base;
+  }
+}
+
+function buildPresentationDecision(input: {
+  packet: UnifiedFindingPacket;
+  siblingRows: UnifiedFindingPacket[];
+}): UnifiedFindingPresentationDecision {
+  if (
+    input.packet.unifiedFindingId === "policy_behavior_conflict" &&
+    input.siblingRows.some(
+      (row) => SPECIFIC_CONTRADICTION_FINDING_IDS.has(row.unifiedFindingId)
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because a more specific contradiction finding already explains this concern.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.confidenceBand === "low" &&
+    input.packet.confidenceInputs.isFallbackOnly
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because the packet is fallback-only and the benefit of surfacing it broadly is limited right now.",
+      status: "audit_only"
+    };
+  }
+
+  if (
+    input.packet.confidenceBand === "low" &&
+    input.packet.confidenceInputs.sourceCount <= 1 &&
+    !input.packet.confidenceInputs.hasDirectRuntimeEvidence &&
+    !input.packet.confidenceInputs.hasStructuredValidationEvidence &&
+    !input.packet.confidenceInputs.hasConcretePayloadEvidence
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because evidence is still too thin for confident report surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  return {
+    confidenceRationale: buildConfidenceRationale(input.packet),
+    rationale: "Surfaced because the evidence is specific enough to be useful in the main report.",
+    status: "surface"
+  };
+}
+
 function getSourceLabel(packet: UnifiedFindingPacket) {
   const sourceUrl = getSourceUrl(packet);
   if (!sourceUrl) {
@@ -955,7 +1150,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
     validationFindings: input.validationFindings
   });
 
-  return packets.map((packet, index, rows): UnifiedFindingDisplayPacket => {
+  return packets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
     const linkedValidationFinding = selectPrimaryValidationFinding(
       packet.sourceRefs
         .filter((sourceRef): sourceRef is Extract<typeof sourceRef, { kind: "validation" }> => sourceRef.kind === "validation")
@@ -988,17 +1183,23 @@ export function buildUnifiedFindingDisplayPackets(input: {
         title: row.title
       }))
     );
+    const presentationDecision = buildPresentationDecision({
+      packet,
+      siblingRows: siblingRows
+    });
+    const resolvedPresentation = buildPresentationCopy(packet, presentation);
 
     return {
       ...packet,
       linkedValidationFinding,
       observedValue: getBestObservedValue([packet.evidence?.snippets?.[0] ?? null, packet.summary]),
+      presentationDecision,
       presentation: {
-        ...presentation,
+        ...resolvedPresentation,
         findingName: normalizeFindingName(packet.title)
       },
-      referenceLabel: presentation.suggestedBestPractice?.label,
-      referenceUrl: presentation.suggestedBestPractice?.url,
+      referenceLabel: resolvedPresentation.suggestedBestPractice?.label,
+      referenceUrl: resolvedPresentation.suggestedBestPractice?.url,
       sourceLabel: getSourceLabel(packet),
       sourceUrl: getSourceUrl(packet)
     };

@@ -44,6 +44,17 @@ function getSeverityTone(severity: UnifiedFindingDisplayPacket["severity"]) {
   }
 }
 
+function getPresentationStatusTone(status: UnifiedFindingDisplayPacket["presentationDecision"]["status"]) {
+  switch (status) {
+    case "surface":
+      return "bg-emerald-100 text-emerald-900";
+    case "audit_only":
+      return "bg-slate-200 text-slate-800";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+}
+
 export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPageProps) {
   const detail = await getValidationRunDetail(runId);
   if (!detail) {
@@ -86,6 +97,8 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
     validationFindings,
     validationFindingLookup: buildValidationFindingLookup(validationFindings)
   });
+  const surfacedUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "surface");
+  const auditOnlyUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "audit_only");
 
   return (
     <div className="space-y-8">
@@ -156,7 +169,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {unifiedPackets.map((packet) => {
+            {surfacedUnifiedPackets.map((packet) => {
               const relatedRows = detail.rows.filter((row) =>
                 packet.sourceRefs.some(
                   (sourceRef) => sourceRef.kind === "validation" && sourceRef.ruleKey === row.automatedFinding.ruleKey
@@ -170,8 +183,10 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                     severity: packet.severity,
                     confidenceBand: packet.confidenceBand,
                     confidenceInputs: packet.confidenceInputs,
+                    confidenceRationale: packet.presentationDecision.confidenceRationale,
                     summary: packet.summary,
                     details: packet.details,
+                    presentationDecision: packet.presentationDecision,
                     sourceRefs: packet.sourceRefs,
                     evidence: compactEvidenceJsonForDisplay(packet.evidence ?? {})
                   },
@@ -194,6 +209,11 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold text-slate-950">{packet.presentation.findingName}</p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getPresentationStatusTone(packet.presentationDecision.status)}`}
+                        >
+                          {packet.presentationDecision.status === "surface" ? "surfaced" : "audit only"}
+                        </span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getSeverityTone(packet.severity)}`}>
                           {packet.severity}
                         </span>
@@ -202,6 +222,8 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                         </span>
                       </div>
                       <p className="text-sm text-slate-700">{packet.presentation.whyThisMatters}</p>
+                      <p className="text-xs text-slate-500">{packet.presentationDecision.confidenceRationale}</p>
+                      <p className="text-xs text-slate-500">{packet.presentationDecision.rationale}</p>
                       <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                         <span>{packet.confidenceInputs.sourceCount} source refs</span>
                         <span>{packet.confidenceInputs.signalCount} signals</span>
@@ -233,8 +255,35 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                 </div>
               );
             })}
-            {unifiedPackets.length === 0 ? (
+            {surfacedUnifiedPackets.length === 0 ? (
               <p className="text-sm text-slate-500">No unified findings were derived for this validation run.</p>
+            ) : null}
+            {auditOnlyUnifiedPackets.length > 0 ? (
+              <div className="space-y-3 border-t border-slate-200 pt-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Audit-only unified findings</p>
+                  <p className="text-sm text-slate-600">
+                    These packets were retained for review and calibration, but not promoted to the primary surfaced list.
+                  </p>
+                </div>
+                {auditOnlyUnifiedPackets.map((packet) => (
+                  <div key={`${packet.unifiedFindingId}-audit-only`} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900">{packet.presentation.findingName}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getPresentationStatusTone(packet.presentationDecision.status)}`}
+                      >
+                        audit only
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getConfidenceTone(packet.confidenceBand)}`}>
+                        {packet.confidenceBand} confidence
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-700">{packet.presentationDecision.rationale}</p>
+                    <p className="mt-1 text-xs text-slate-500">{packet.presentationDecision.confidenceRationale}</p>
+                  </div>
+                ))}
+              </div>
             ) : null}
           </div>
         </CardContent>

@@ -149,6 +149,35 @@ test("keeps key-page discovery context on coverage-gap packets", () => {
   assert.equal(packets[0]?.confidenceBand, "low");
 });
 
+test("marks fallback-only low-confidence packets as audit-only and refines coverage copy", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A key disclosure or support page was detected, but its target URL could not be fetched successfully.",
+        fallbackEvidence: {
+          keyPageAttemptCount: 2,
+          keyPageAttemptedUrls: ["https://example.com/cookie-policy"],
+          signalKey: "disclosure.cookie_policy_fetch_failed",
+          signalValue: true
+        },
+        observedValue: "Cookie Policy",
+        severity: "medium",
+        signalKey: "disclosure.cookie_policy_fetch_failed",
+        signalLabel: "Cookie policy unavailable",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Cookie policy unavailable"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.match(packet?.presentationDecision.rationale ?? "", /fallback-only/i);
+  assert.match(packet?.presentation.suggestedFix ?? "", /repair the cookie policy url/i);
+});
+
 test("exposes owner and mirror category relations on unified finding packets", () => {
   const validationFinding = makeValidationFinding({
     id: "val-3",
@@ -250,4 +279,88 @@ test("keeps the unified finding name canonical even when validation titles add j
   assert.equal(packet?.unifiedFindingId, "functional_misalignment");
   assert.equal(packet?.title, "Functional misalignment");
   assert.equal(packet?.presentation.findingName, "Functional misalignment");
+});
+
+test("suppresses generic policy-behavior conflicts when a more specific contradiction is present", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-7",
+    ruleKey: "privacy.session_replay_without_disclosure_detected",
+    severity: "high",
+    title: "Possible undisclosed session replay",
+    evidence: {
+      claim: "Policy does not clearly disclose replay tooling.",
+      relatedVendors: ["Microsoft Clarity"],
+      runtimeEvidence: ["Replay script observed during homepage load"]
+    }
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed runtime behavior appears to conflict with policy representations.",
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/behavior conflict detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Policy/behavior conflict detected"
+      },
+      {
+        description: "Runtime replay evidence was observed without a matching disclosure.",
+        linkedValidationFinding: validationFinding,
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "context.session_replay_without_disclosure_detected",
+        signalLabel: "Session replay without disclosure detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Possible undisclosed session replay"
+      }
+    ],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  const genericPacket = packets.find((packet) => packet.unifiedFindingId === "policy_behavior_conflict");
+  const specificPacket = packets.find((packet) => packet.unifiedFindingId === "session_replay_undisclosed");
+
+  assert.equal(genericPacket?.presentationDecision.status, "suppress");
+  assert.equal(specificPacket?.presentationDecision.status, "surface");
+});
+
+test("keeps strong corroborated findings surfaced with a confidence rationale", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-6",
+    ruleKey: "privacy.trackers_before_consent_detected",
+    severity: "high",
+    title: "Trackers observed before consent",
+    evidence: {
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      preconsent_tracker_evidence_urls: ["https://example.com/collect"],
+      policySummary: "Tracking is presented as consent-gated."
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed before a clear user choice was made.",
+        linkedValidationFinding: validationFinding,
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentationDecision.confidenceRationale ?? "", /high confidence/i);
+  assert.match(packet?.presentation.suggestedFix ?? "", /block non-essential trackers/i);
 });
