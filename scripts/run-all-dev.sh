@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 web_pid=""
 scan_worker_pid=""
 validation_worker_pid=""
@@ -30,4 +32,21 @@ scan_worker_pid=$!
 pnpm --filter @website-signal-risk-scanner/worker dev:validation:watch &
 validation_worker_pid=$!
 
-wait -n "${web_pid}" "${scan_worker_pid}" "${validation_worker_pid}"
+while true; do
+  if ! kill -0 "${web_pid}" >/dev/null 2>&1; then
+    wait "${web_pid}" || true
+    break
+  fi
+
+  if ! kill -0 "${scan_worker_pid}" >/dev/null 2>&1; then
+    wait "${scan_worker_pid}" || true
+    break
+  fi
+
+  if ! kill -0 "${validation_worker_pid}" >/dev/null 2>&1; then
+    wait "${validation_worker_pid}" || true
+    break
+  fi
+
+  sleep 1
+done
