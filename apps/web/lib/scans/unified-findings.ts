@@ -452,37 +452,132 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   return { counts, entities, flags, pageUrls, snippets, sourceUrls };
 }
 
+function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | null) {
+  if (!finding?.evidence) {
+    return {
+      counts: {} as Record<string, number>,
+      entities: {} as Record<string, string[]>,
+      flags: [] as string[],
+      pageUrls: [] as string[],
+      snippets: [] as string[],
+      sourceUrls: [] as string[]
+    };
+  }
+
+  const evidence = finding.evidence as Record<string, unknown>;
+  const pageUrls = new Set<string>();
+  const sourceUrls = new Set<string>();
+  const snippets = new Set<string>();
+  const flags = new Set<string>();
+  const counts: Record<string, number> = {};
+  const entities: Record<string, string[]> = {};
+
+  const addEntity = (key: string, values: string[]) => {
+    const cleaned = uniqueStrings(values);
+    if (cleaned.length === 0) {
+      return;
+    }
+    entities[key] = uniqueStrings([...(entities[key] ?? []), ...cleaned]);
+  };
+
+  for (const [key, value] of Object.entries(evidence)) {
+    if (typeof value === "string") {
+      if (/^https?:\/\//i.test(value.trim())) {
+        if (/pageurl|page_url/i.test(key)) {
+          pageUrls.add(value);
+        } else {
+          sourceUrls.add(value);
+        }
+      } else if (/claim|observed|summary|snippet|evidence|description|rationale/i.test(key)) {
+        snippets.add(value);
+      }
+      continue;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      if (/count|score|confidence|delta|attempt/i.test(key)) {
+        counts[key] = value;
+      }
+      continue;
+    }
+
+    if (value === true) {
+      flags.add(key);
+      continue;
+    }
+
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    const stringValues = value.filter((entry): entry is string => typeof entry === "string");
+    if (stringValues.length === 0) {
+      continue;
+    }
+
+    if (stringValues.some((entry) => /^https?:\/\//i.test(entry.trim()))) {
+      for (const entry of stringValues) {
+        if (/pageurl|page_url/i.test(key)) {
+          pageUrls.add(entry);
+        } else {
+          sourceUrls.add(entry);
+        }
+      }
+    } else if (/vendor|cookie|selector|url|page|rule/i.test(key)) {
+      addEntity(key, stringValues);
+    } else {
+      for (const entry of stringValues.slice(0, 5)) {
+        snippets.add(entry);
+      }
+    }
+  }
+
+  return {
+    counts,
+    entities,
+    flags: [...flags],
+    pageUrls: [...pageUrls],
+    snippets: [...snippets],
+    sourceUrls: [...sourceUrls]
+  };
+}
+
 function mergeEvidence(
   current: UnifiedFindingPacket["evidence"] | undefined,
   next: ReturnType<typeof extractEvidenceFromFallback>,
   candidateEvidence: string[] | undefined,
   linkedValidationFinding?: ScanValidationFinding | null
 ) {
+  const validationEvidence = extractEvidenceFromValidationFinding(linkedValidationFinding);
   const pageUrls = uniqueStrings([
     ...(current?.pageUrls ?? []),
     ...(next.pageUrls ?? []),
+    ...(validationEvidence.pageUrls ?? []),
     ...(candidateEvidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim())),
     linkedValidationFinding?.pageUrl ?? null
   ]);
 
   const sourceUrls = uniqueStrings([
     ...(current?.sourceUrls ?? []),
-    ...(next.sourceUrls ?? [])
+    ...(next.sourceUrls ?? []),
+    ...(validationEvidence.sourceUrls ?? [])
   ]);
 
   const snippets = uniqueStrings([
     ...(current?.snippets ?? []),
     ...(next.snippets ?? []),
+    ...(validationEvidence.snippets ?? []),
     ...(candidateEvidence ?? []).filter((entry) => !/^https?:\/\//i.test(entry.trim())).slice(0, 2)
   ]);
 
   return {
-    counts: { ...(current?.counts ?? {}), ...(next.counts ?? {}) },
+    counts: { ...(current?.counts ?? {}), ...(next.counts ?? {}), ...(validationEvidence.counts ?? {}) },
     entities: {
       ...(current?.entities ?? {}),
-      ...(next.entities ?? {})
+      ...(next.entities ?? {}),
+      ...(validationEvidence.entities ?? {})
     },
-    flags: uniqueStrings([...(current?.flags ?? []), ...(next.flags ?? [])]),
+    flags: uniqueStrings([...(current?.flags ?? []), ...(next.flags ?? []), ...(validationEvidence.flags ?? [])]),
     pageUrls,
     snippets,
     sourceUrls

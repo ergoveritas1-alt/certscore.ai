@@ -158,3 +158,29 @@ test("exposes owner and mirror category relations on unified finding packets", (
   assert.equal(getUnifiedFindingOwnerCategoryId(packet!), "policy_to_behavior_contradictions");
   assert.equal(getUnifiedFindingCategoryRelation(packet!, "adtech_analytics_replay_footprint"), "mirror");
 });
+
+test("rolls structured validation evidence into unified finding packets", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-4",
+    ruleKey: "privacy.session_replay_without_disclosure_detected",
+    severity: "high",
+    title: "Possible undisclosed session replay",
+    evidence: {
+      claim: "Policy does not clearly disclose session replay.",
+      pageUrl: "https://example.com/privacy",
+      relatedVendors: ["Microsoft Clarity"],
+      runtimeEvidence: ["Replay script observed during homepage load"],
+      supportingSignals: ["session replay tool detected"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding]
+  });
+
+  assert.equal(packet?.unifiedFindingId, "session_replay_undisclosed");
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://example.com/privacy"]);
+  assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Microsoft Clarity"]);
+  assert.ok(packet?.evidence?.snippets?.includes("Replay script observed during homepage load"));
+});
