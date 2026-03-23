@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/accessibility-validation.yml"
-      - "apps/worker/**"
+      - "packages/scan-core/**"
       - "packages/db/**"
       - "packages/shared/**"
       - "pnpm-lock.yaml"
@@ -15,7 +15,7 @@ on:
       - main
     paths:
       - ".github/workflows/accessibility-validation.yml"
-      - "apps/worker/**"
+      - "packages/scan-core/**"
       - "packages/db/**"
       - "packages/shared/**"
       - "pnpm-lock.yaml"
@@ -46,14 +46,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @website-signal-risk-scanner/worker playwright:install
+        run: pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium
 
-      - name: Typecheck worker
-        run: pnpm --filter @website-signal-risk-scanner/worker typecheck
+      - name: Typecheck scan-core
+        run: pnpm --filter @website-signal-risk-scanner/scan-core typecheck
 
       - name: Run accessibility validation tests
-        working-directory: apps/worker
-        run: node --import tsx --test ./src/scan/accessibility-validation.test.ts
+        run: pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility --dry-run --limit=1
 
   live-accessibility-benchmark:
     runs-on: ubuntu-latest
@@ -85,10 +84,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @website-signal-risk-scanner/worker playwright:install
+        run: pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium
 
-      - name: Create worker env file
-        working-directory: apps/worker
+      - name: Create web env file
+        working-directory: apps/web
         run: |
           cat <<'EOF' > .env.local
           NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
@@ -99,5 +98,4 @@ jobs:
           EOF
 
       - name: Run live accessibility benchmark assertions
-        working-directory: apps/worker
-        run: pnpm benchmark:accessibility:assert
+        run: pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility:assert

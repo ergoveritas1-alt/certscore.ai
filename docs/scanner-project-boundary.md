@@ -23,7 +23,7 @@
 - `WC01` should not be treated as the source of truth for scanner runtime behavior
 
 ## Transitional code still in `WC01`
-- `apps/scanner` and `packages/scan-core` remain here only as migration carryover and compatibility scaffolding
+- `packages/scan-core` remains here only as shared migration carryover while scanner ownership finishes moving to `WS01`
 - new scanner runtime, crawler identity, and operational changes should originate in `WS01`
 
 This document records the boundary now that the standalone scanner repo exists.

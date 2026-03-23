@@ -5,6 +5,8 @@
   "main": "dist/scan-core/src/index.js",
   "types": "dist/scan-core/src/index.d.ts",
   "scripts": {
+    "benchmark:accessibility": "node --env-file=../../apps/web/.env.local --enable-source-maps --import tsx ./scripts/accessibility-benchmark-matrix.ts",
+    "benchmark:accessibility:assert": "node --env-file=../../apps/web/.env.local --enable-source-maps --import tsx ./scripts/accessibility-benchmark-matrix.ts --run-now --assert",
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",

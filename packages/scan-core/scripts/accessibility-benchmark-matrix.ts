@@ -2,9 +2,9 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
   evaluateAccessibilityBenchmarkAssertions,
   type AccessibilityBenchmarkAssertion,
-  type AccessibilityBenchmarkSummary
+  type AccessibilityBenchmarkSummary,
+  runFullScanJob
 } from "@website-signal-risk-scanner/scan-core";
-import { runFullScanJob } from "@website-signal-risk-scanner/scan-core";
 
 type BenchmarkSuite = "act" | "apg" | "real-world";
 
@@ -417,7 +417,9 @@ async function loadScanSummary(scanId: string) {
   const [{ data: snapshot, error: snapshotError }, { data: ruleCounts, error: ruleCountsError }] = await Promise.all([
     supabase
       .from("scan_snapshots")
-      .select("scan_id, domain, homepage_fetch_status, pages_scanned, accessibility_score, wcag_error_count_total, wcag_aria_error_count, wcag_missing_alt_count, wcag_form_label_error_count, wcag_keyboard_navigation_issue_count, wcag_contrast_failures_count")
+      .select(
+        "scan_id, domain, homepage_fetch_status, pages_scanned, accessibility_score, wcag_error_count_total, wcag_aria_error_count, wcag_missing_alt_count, wcag_form_label_error_count, wcag_keyboard_navigation_issue_count, wcag_contrast_failures_count"
+      )
       .eq("scan_id", scanId)
       .maybeSingle(),
     supabase

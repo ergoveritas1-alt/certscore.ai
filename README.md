@@ -8,10 +8,8 @@ CertScore (`certscore.ai`) is a production-minded MVP for scanning public websit
 website-signal-risk-scanner/
 ├─ apps/
 │  ├─ web/
-│  ├─ scanner/
 │  ├─ validation-web/
-│  ├─ validation-worker/
-│  └─ worker/
+│  └─ validation-worker/
 ├─ packages/
 │  ├─ shared/
 │  ├─ db/
@@ -27,10 +25,8 @@ website-signal-risk-scanner/
 ## Workspace packages
 
 - `apps/web`: product-facing web app and control-plane workflows
-- `apps/scanner`: transitional scanner compatibility app left in `WC01` during the split to `WS01`
 - `apps/validation-web`: validation-only web surface
 - `apps/validation-worker`: active validation runtime owned by `WC01`
-- `apps/worker`: legacy worker compatibility and validation carryover paths
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/db`: Supabase clients and database env helpers
@@ -82,7 +78,7 @@ Required for the web app:
 - `REDIS_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
-Required for the validation runtime and compatibility worker paths in `WC01`:
+Required for the validation runtime in `WC01`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -123,8 +119,9 @@ Compatibility note:
    - production Supabase keys should exist only in Vercel / worker deployment settings
 8. Create the storage bucket referenced by `SUPABASE_STORAGE_BUCKET`.
 9. Provision a Redis instance and set `REDIS_URL`.
-10. Install Playwright Chromium for the worker:
-   - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
+10. Install Playwright Chromium for validation and shared scan-core tooling:
+   - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
+   - `pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium`
 11. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
 12. Start the main local app by itself when needed:
@@ -132,12 +129,10 @@ Compatibility note:
 13. Start the validation-only web app on a separate port when needed:
    - `pnpm dev:validation:web`
 14. Use `WS01` when you need the standalone scanner locally.
-15. Use the legacy all-in-one runner only when you intentionally need the old combined local topology:
+15. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
 16. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
-17. Run a legacy scheduler sweep manually when needed:
-   - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification
 
@@ -148,8 +143,8 @@ Use these commands before shipping changes:
 
 Accessibility-specific validation:
 
-- `pnpm --filter @website-signal-risk-scanner/worker typecheck`
-- `pnpm --filter @website-signal-risk-scanner/worker benchmark:accessibility:assert`
+- `pnpm --filter @website-signal-risk-scanner/scan-core typecheck`
+- `pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility:assert`
 
 The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
 
@@ -157,7 +152,7 @@ The live benchmark assertion command uses `apps/web/.env.local` and will execute
 
 GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
 
-- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks the legacy worker app, and runs the deterministic accessibility validation tests.
+- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks `scan-core`, and runs the deterministic accessibility validation tests.
 - `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `SUPABASE_STORAGE_BUCKET`.
 - If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
 
@@ -167,15 +162,12 @@ Use these lightweight checks before first deployment validation:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
 - `pnpm check-env:validation`
-- `pnpm --filter @website-signal-risk-scanner/scanner check-env`
-- `pnpm --filter @website-signal-risk-scanner/scanner check-runtime`
-- `pnpm --filter @website-signal-risk-scanner/worker check-env`
-- `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker check-env`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime`
 
-Use these runtime smoke helpers:
+Use this runtime smoke helper:
 
-- `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
-- `pnpm --filter @website-signal-risk-scanner/worker smoke:scheduler`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker scheduler`
 
 The full runtime QA sequence is documented in [docs/runtime-validation.md](/Users/benmasek/WC01/docs/runtime-validation.md).
 The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](/Users/benmasek/WC01/docs/validation-pipeline-plan.md).
@@ -198,7 +190,7 @@ The validation crawler deployment and VM runbook is documented in [docs/validati
 
 - do not use `WC01` for the primary scanner deploy path
 - use `WS01` for scanner runtime deployment
-- keep `WC01` worker deployment guidance scoped to validation or migration-only compatibility paths
+- keep `WC01` deployment guidance scoped to web and validation only
 
 ### Supabase
 
@@ -255,7 +247,7 @@ After deployment, validate in this order:
 
 ## Operational notes
 
-- The worker owns crawl, auditing, scoring, reporting, PDF generation, and scheduled sweep logic.
+- The standalone scanner in `WS01` owns crawl, auditing, scoring, reporting, PDF generation, and scheduled sweep logic.
 - PDF generation failures do not invalidate the scan or web report.
 - Regression calculation failures do not invalidate the scan or report.
 - The app validates critical env vars at runtime and now fails fast with clearer messages when required configuration is missing.

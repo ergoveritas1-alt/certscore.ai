@@ -8,8 +8,7 @@ const PROMPT_DIR_CANDIDATES = [
   PROMPT_DIR,
   path.resolve(__dirname, "../../../src/scan/policy-enrichment/prompts"),
   path.resolve(process.cwd(), "src/scan/policy-enrichment/prompts"),
-  path.resolve(process.cwd(), "packages/scan-core/src/scan/policy-enrichment/prompts"),
-  path.resolve(process.cwd(), "apps/worker/src/scan/policy-enrichment/prompts")
+  path.resolve(process.cwd(), "packages/scan-core/src/scan/policy-enrichment/prompts")
 ];
 
 export const POLICY_EXTRACTION_CONFIG = {

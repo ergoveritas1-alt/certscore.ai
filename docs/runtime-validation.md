@@ -14,17 +14,13 @@ Use `WS01` for scanner-runtime-specific deploy and operational validation.
 Run these first:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
-- `pnpm --filter @website-signal-risk-scanner/scanner check-env`
-- `pnpm --filter @website-signal-risk-scanner/scanner check-runtime`
-- `pnpm --filter @website-signal-risk-scanner/worker check-env`
-- `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
-- `pnpm --filter @website-signal-risk-scanner/worker exec node --enable-source-maps --import tsx ./scripts/check-consent-schema-cache.ts`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker check-env`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime`
 
 Expected result:
 
 - web env check passes
-- scanner compatibility env check passes in `WC01`
-- validation or legacy worker env check passes in `WC01`
+- validation env check passes in `WC01`
 - Redis connectivity passes
 - Supabase service-role DB access passes
 - Supabase storage bucket access passes
@@ -37,7 +33,7 @@ If a check fails:
 - Redis failure: verify `REDIS_URL` and network access
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
-- Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install` for `WC01` compatibility paths, or the equivalent `WS01` install flow for the standalone scanner
+- Chromium failure: run `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium` for `WC01` validation, or the equivalent `WS01` install flow for the standalone scanner
 - schema cache failure on dev (`ibjxttgmvdkbuqllbazj`): run `pnpm supabase:reload-schema:dev`
 - schema cache failure on prod (`wgfhzyrysztmtrjbcsgy`): run `pnpm supabase:reload-schema:prod`
 - if the REST layer is still stale after the reload notification, restart the affected Supabase project/API once

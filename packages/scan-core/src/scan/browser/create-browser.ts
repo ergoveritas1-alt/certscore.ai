@@ -74,7 +74,7 @@ export async function createBrowser(input?: {
     });
   } catch (error) {
     throw new Error(
-      `Failed to launch Chromium for CertScore scanning. Run pnpm --filter @website-signal-risk-scanner/worker playwright:install and verify the worker runtime can access browser binaries. ${
+      `Failed to launch Chromium for CertScore scanning. Run pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium and verify the runtime can access browser binaries. ${
         error instanceof Error ? error.message : "Unknown browser launch error"
       }`
     );

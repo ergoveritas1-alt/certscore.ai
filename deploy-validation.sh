@@ -57,7 +57,7 @@ steps:
     args:
       - build
       - -f
-      - apps/worker/Dockerfile
+      - apps/validation-worker/Dockerfile
       - -t
       - ${IMAGE_URI}
       - .
@@ -74,5 +74,5 @@ echo "Built validation worker image: ${IMAGE_URI}"
 echo
 echo "Suggested VM commands:"
 echo "  docker pull ${IMAGE_URI}"
-echo "  docker run -d --name validation-worker --restart unless-stopped --env-file /etc/validation-worker.env ${IMAGE_URI} pnpm --filter @website-signal-risk-scanner/worker start:validation"
-echo "  docker run -d --name validation-scheduler --restart unless-stopped --env-file /etc/validation-worker.env ${IMAGE_URI} pnpm --filter @website-signal-risk-scanner/worker start:validation:scheduler"
+echo "  docker run -d --name validation-worker --restart unless-stopped --env-file /etc/validation-worker.env ${IMAGE_URI} pnpm --filter @website-signal-risk-scanner/validation-worker start"
+echo "  docker run -d --name validation-scheduler --restart unless-stopped --env-file /etc/validation-worker.env ${IMAGE_URI} pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler"

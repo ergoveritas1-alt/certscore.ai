@@ -48,7 +48,7 @@ set +a
 PROJECT_ID=<project-id> REGION=us-central1 ./deploy-validation.sh
 ```
 
-This builds the existing worker Dockerfile and pushes an image intended for the validation VM.
+This builds the validation-worker Dockerfile and pushes an image intended for the validation VM.
 
 ## 4. Validation Worker VM
 
@@ -75,26 +75,26 @@ If using Docker:
 ```bash
 docker pull <image-uri>
 
-docker run -d \
+  docker run -d \
   --name validation-worker \
   --restart unless-stopped \
   --env-file /etc/validation-worker.env \
   <image-uri> \
-  pnpm --filter @website-signal-risk-scanner/worker start:validation
+  pnpm --filter @website-signal-risk-scanner/validation-worker start
 
 docker run -d \
   --name validation-scheduler \
   --restart unless-stopped \
   --env-file /etc/validation-worker.env \
   <image-uri> \
-  pnpm --filter @website-signal-risk-scanner/worker start:validation:scheduler
+  pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
 
 If running directly on the VM:
 
 ```bash
-pnpm --filter @website-signal-risk-scanner/worker start:validation
-pnpm --filter @website-signal-risk-scanner/worker start:validation:scheduler
+pnpm --filter @website-signal-risk-scanner/validation-worker start
+pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
 
 ## 5. Validation Runtime Checks
