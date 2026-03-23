@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@website-signal-risk-scanner/ui";
 import type { AnchorHTMLAttributes } from "react";
 
@@ -32,16 +32,11 @@ type PendingButtonLinkProps = PendingLinkSharedProps & {
 
 function usePendingNavigation(href: string, onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"]) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [hasStartedNavigation, setHasStartedNavigation] = useState(false);
-  const navigationStateKey = useMemo(() => {
-    const search = searchParams.toString();
-    return search.length > 0 ? `${pathname}?${search}` : pathname;
-  }, [pathname, searchParams]);
 
   useEffect(() => {
     setHasStartedNavigation(false);
-  }, [navigationStateKey]);
+  }, [pathname]);
 
   useEffect(() => {
     if (!hasStartedNavigation) {
