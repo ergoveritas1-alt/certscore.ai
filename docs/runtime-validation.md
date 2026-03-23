@@ -2,11 +2,20 @@
 
 This document is the practical first-deployment QA sequence for CertScore (`certscore.ai`). It is optimized for validating the real runtime path, not just static build success.
 
+`WC01` no longer owns the primary scanner runtime. Use this document for:
+
+- `WC01` web and validation runtime checks
+- shared-database contract validation between `WC01` and the standalone scanner
+
+Use `WS01` for scanner-runtime-specific deploy and operational validation.
+
 ## 1. Environment readiness
 
 Run these first:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
+- `pnpm --filter @website-signal-risk-scanner/scanner check-env`
+- `pnpm --filter @website-signal-risk-scanner/scanner check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`
 - `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/worker exec node --enable-source-maps --import tsx ./scripts/check-consent-schema-cache.ts`
@@ -14,7 +23,8 @@ Run these first:
 Expected result:
 
 - web env check passes
-- worker env check passes
+- scanner compatibility env check passes in `WC01`
+- validation or legacy worker env check passes in `WC01`
 - Redis connectivity passes
 - Supabase service-role DB access passes
 - Supabase storage bucket access passes
@@ -27,7 +37,7 @@ If a check fails:
 - Redis failure: verify `REDIS_URL` and network access
 - Supabase DB failure: verify service-role key and apply migrations
 - storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
-- Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
+- Chromium failure: run `pnpm --filter @website-signal-risk-scanner/worker playwright:install` for `WC01` compatibility paths, or the equivalent `WS01` install flow for the standalone scanner
 - schema cache failure on dev (`ibjxttgmvdkbuqllbazj`): run `pnpm supabase:reload-schema:dev`
 - schema cache failure on prod (`wgfhzyrysztmtrjbcsgy`): run `pnpm supabase:reload-schema:prod`
 - if the REST layer is still stale after the reload notification, restart the affected Supabase project/API once
@@ -63,8 +73,8 @@ If a check fails:
 4. Trigger a full scan.
 5. Confirm:
    - `scans` row is created
-   - BullMQ job is queued
-   - worker logs show scan start
+   - scan status remains `queued` until the standalone scanner service claims it
+   - scanner-service logs in `WS01` show scan start
    - scan transitions to `running`
    - scan transitions to `completed`
 6. Confirm DB persistence:
@@ -106,11 +116,11 @@ If a check fails:
 
 1. Set a domain to `daily`, `weekly`, or `monthly`.
 2. Run:
-   - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
-   - or `pnpm --filter @website-signal-risk-scanner/worker smoke:scheduler`
+   - the standalone scheduler flow in `WS01`
+   - or the legacy compatibility sweep in `WC01` only when you are intentionally validating that carryover path
 3. Confirm:
    - due domains create `scans` rows with `scan_type = scheduled`
-   - scheduled scans enqueue onto the full-scan queue
+   - scheduled scans are claimed by the standalone scanner service
    - active queued/running scans cause skip behavior instead of duplicates
 4. Confirm scheduler-related events appear in `scan_events`.
 
@@ -129,29 +139,29 @@ If a check fails:
 
 ## 9. What to watch in logs
 
-Worker logs should show:
+Relevant runtime logs should show:
 
-- worker startup summary
-- Redis host and report bucket
+- standalone scanner service startup and heartbeat behavior
 - scan start
 - crawl completion
 - scoring completion
 - report persistence
 - PDF generation success or failure
-- scheduler sweep counts
+- scheduler sweep counts when applicable
+- validation runtime startup if validation is enabled in `WC01`
 
 If a scan fails, check:
 
 - scan detail page error message
 - `scan_events` timeline
-- worker logs for the failing stage
+- standalone scanner logs for the failing stage
 
 ## 10. First production validation order
 
 Use this order after deploying:
 
-1. run `check-env` for web and worker
-2. run `check-runtime` for worker
+1. run `check-env` for web and the relevant runtime paths
+2. run `check-runtime` for the relevant runtime paths
 3. verify auth
 4. verify preview scan
 5. verify full scan
