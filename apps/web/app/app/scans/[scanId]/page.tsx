@@ -1045,6 +1045,27 @@ function getSnapshotSignalValue(snapshot: Record<string, unknown> | null, signal
   }
 
   switch (signalKey) {
+    case "privacy.children_privacy_context_without_supporting_disclosure":
+      return (
+        (snapshot.children_audience_likely === true || snapshot.kid_directed_content_detected === true) &&
+        snapshot.privacy_policy_present !== true &&
+        snapshot.privacy_contact_channel_type === "none"
+      );
+    case "privacy.consent_mechanism_absent":
+      return snapshot.consent_mechanism_type === "none";
+    case "privacy.consent_surface_missing":
+      return (
+        snapshot.consent_mechanism_type === "none" &&
+        snapshot.cookie_banner_present !== true &&
+        !snapshot.cmp_vendor_name &&
+        (!snapshot.consent_interaction_model || snapshot.consent_interaction_model === "none")
+      );
+    case "privacy.privacy_contact_channel_missing":
+      return snapshot.privacy_contact_channel_type === "none";
+    case "privacy.sale_sharing_controls_missing":
+      return snapshot.retargeting_pixel_detected === true && snapshot.do_not_sell_link_present === false;
+    case "accessibility.accessibility_support_path_missing":
+      return snapshot.accessibility_contact_method_present === false;
     case "privacy.cmp_vendor_detected":
       return snapshot.cmp_vendor_name ?? null;
     default:
