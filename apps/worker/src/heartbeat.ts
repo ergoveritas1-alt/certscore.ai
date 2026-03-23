@@ -9,7 +9,21 @@ export async function recordWorkerHeartbeat(input: {
 }) {
   const supabase = createAdminClient();
   const heartbeatAt = (input.heartbeatAt ?? new Date()).toISOString();
-  const { error } = await supabase.from("scan_events").insert({
+  const { error: heartbeatError } = await supabase.from("worker_heartbeats").upsert(
+    {
+      worker_type: input.workerType,
+      last_heartbeat_at: heartbeatAt,
+      started_at: input.startedAt?.toISOString() ?? null,
+      host: input.host ?? null
+    },
+    { onConflict: "worker_type" }
+  );
+
+  if (heartbeatError) {
+    throw new Error(`Failed to record ${input.workerType} worker heartbeat: ${heartbeatError.message}`);
+  }
+
+  const { error: eventError } = await supabase.from("scan_events").insert({
     scan_id: null,
     domain_id: null,
     organization_id: null,
@@ -23,7 +37,10 @@ export async function recordWorkerHeartbeat(input: {
     }
   });
 
-  if (error) {
-    throw new Error(`Failed to record ${input.workerType} worker heartbeat: ${error.message}`);
+  if (eventError) {
+    console.warn("[worker] failed to append legacy heartbeat event", {
+      error: eventError.message,
+      workerType: input.workerType
+    });
   }
 }

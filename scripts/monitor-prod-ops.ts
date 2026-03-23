@@ -10,6 +10,7 @@ const DEFAULT_SUPABASE_URL = "https://wgfhzyrysztmtrjbcsgy.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_5IJ4sZwcahADQtkyMq2rgA_g6NaYJxS";
 const DEFAULT_SUPABASE_SERVICE_ROLE_SECRET = "certscore-validation-worker-supabase-service-role-key";
 const VALIDATION_SETTINGS_KEY = "default";
+const FULL_SCAN_WORKER_TYPE = "full_scan";
 
 type WorkerPoolDescription = {
   spec?: {
@@ -34,6 +35,11 @@ type ValidationSettingsRow = {
   last_worker_heartbeat_at: string | null;
   last_worker_host: string | null;
   pipeline_enabled: boolean;
+};
+
+type WorkerHeartbeatRow = {
+  host: string | null;
+  last_heartbeat_at: string | null;
 };
 
 function getAlertRecipients() {
@@ -148,6 +154,25 @@ async function main() {
           `Validation worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
         );
       }
+    }
+  }
+
+  const { data: fullScanWorkerHeartbeat, error: fullScanWorkerHeartbeatError } = await db
+    .from("worker_heartbeats")
+    .select("last_heartbeat_at, host")
+    .eq("worker_type", FULL_SCAN_WORKER_TYPE)
+    .maybeSingle<WorkerHeartbeatRow>();
+
+  if (fullScanWorkerHeartbeatError) {
+    findings.push(`Full-scan worker heartbeat query failed: ${fullScanWorkerHeartbeatError.message}`);
+  } else if (!fullScanWorkerHeartbeat?.last_heartbeat_at) {
+    findings.push("Full-scan worker heartbeat is missing.");
+  } else {
+    const heartbeatAgeMs = Date.now() - new Date(fullScanWorkerHeartbeat.last_heartbeat_at).getTime();
+    if (heartbeatAgeMs > staleThresholdMs) {
+      findings.push(
+        `Full-scan worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${fullScanWorkerHeartbeat.host ?? "unknown"}).`
+      );
     }
   }
 

@@ -3,6 +3,9 @@ import { Queue, type ConnectionOptions } from "bullmq";
 import { FULL_SCAN_JOB, QUEUE_NAMES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { getConfiguredRedisUrl, getWebServerEnv } from "../../lib/env";
 
+const FULL_SCAN_WORKER_TYPE = "full_scan";
+const FULL_SCAN_WORKER_HEARTBEAT_WINDOW_MS = 90_000;
+
 let connection: ConnectionOptions | null = null;
 let fullScanQueue: Queue<{ scanId: string }> | null = null;
 
@@ -64,8 +67,6 @@ export async function enqueueFullScanJob(scanId: string) {
   );
 }
 
-const FULL_SCAN_WORKER_HEARTBEAT_WINDOW_MS = 90_000;
-
 export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: string | null, nowMs = Date.now()) {
   const heartbeatAgeMs = lastHeartbeatAt ? nowMs - new Date(lastHeartbeatAt).getTime() : null;
   const workerHealthy = typeof heartbeatAgeMs === "number" && Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= FULL_SCAN_WORKER_HEARTBEAT_WINDOW_MS;
@@ -74,7 +75,7 @@ export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: strin
     return {
       enabled: false as const,
       reason:
-        "Full scan queueing is unavailable because no healthy full-scan worker heartbeat was detected. Start `pnpm dev:certscore:worker`."
+        "Full scan queueing is unavailable because no healthy full-scan worker heartbeat was detected. Ensure the `certscore-worker` service is running in production, or run `pnpm dev:certscore:worker` locally."
     };
   }
 
@@ -82,6 +83,27 @@ export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: strin
     enabled: true as const,
     reason: null as string | null
   };
+}
+
+function getNewestHeartbeat(...heartbeatCandidates: Array<string | null>) {
+  let newestHeartbeat: string | null = null;
+  let newestHeartbeatMs = Number.NEGATIVE_INFINITY;
+
+  for (const candidate of heartbeatCandidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const candidateMs = new Date(candidate).getTime();
+    if (!Number.isFinite(candidateMs) || candidateMs <= newestHeartbeatMs) {
+      continue;
+    }
+
+    newestHeartbeat = candidate;
+    newestHeartbeatMs = candidateMs;
+  }
+
+  return newestHeartbeat;
 }
 
 export async function getFullScanQueueAvailability() {
@@ -95,6 +117,17 @@ export async function getFullScanQueueAvailability() {
   }
 
   const supabase = createAdminClient();
+  const { data: heartbeatRow, error: heartbeatError } = await supabase
+    .from("worker_heartbeats")
+    .select("last_heartbeat_at")
+    .eq("worker_type", FULL_SCAN_WORKER_TYPE)
+    .maybeSingle();
+
+  const tableHeartbeatAt =
+    heartbeatRow && typeof (heartbeatRow as { last_heartbeat_at?: unknown }).last_heartbeat_at === "string"
+      ? String((heartbeatRow as { last_heartbeat_at: string }).last_heartbeat_at)
+      : null;
+
   const { data, error } = await supabase
     .from("scan_events")
     .select("created_at")
@@ -107,13 +140,22 @@ export async function getFullScanQueueAvailability() {
   if (error) {
     return {
       enabled: false as const,
-      reason: `Full scan worker health check failed: ${error.message}`
+      reason: `Full scan worker health check failed: ${(heartbeatError ?? error).message}`
     };
   }
 
-  const lastHeartbeatAt =
+  const legacyHeartbeatAt =
     data && typeof (data as { created_at?: unknown }).created_at === "string"
       ? String((data as { created_at: string }).created_at)
       : null;
+  const lastHeartbeatAt = getNewestHeartbeat(tableHeartbeatAt, legacyHeartbeatAt);
+
+  if (!lastHeartbeatAt && heartbeatError) {
+    return {
+      enabled: false as const,
+      reason: `Full scan worker health check failed: ${heartbeatError.message}`
+    };
+  }
+
   return getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt);
 }
