@@ -5,7 +5,7 @@ const SCANNER_WORKER_TYPE = "scanner";
 const LEGACY_FULL_SCAN_WORKER_TYPE = "full_scan";
 const SCANNER_HEARTBEAT_WINDOW_MS = 90_000;
 
-type FullScanWorkerHeartbeatSnapshot = {
+type ScannerServiceHeartbeatSnapshot = {
   errorMessage: string | null;
   host: string | null;
   lastHeartbeatAt: string | null;
@@ -77,14 +77,14 @@ function getLegacyHeartbeatHost(metadata: unknown) {
   return typeof host === "string" && host.trim().length > 0 ? host : null;
 }
 
-export function resolveFullScanWorkerHeartbeatSnapshot(input: {
+export function resolveScannerServiceHeartbeatSnapshot(input: {
   heartbeatErrorMessage?: string | null;
   eventErrorMessage?: string | null;
   eventHeartbeatAt: string | null;
   eventHost: string | null;
   tableHeartbeatAt: string | null;
   tableHost: string | null;
-}): FullScanWorkerHeartbeatSnapshot {
+}): ScannerServiceHeartbeatSnapshot {
   const tableHeartbeatMs = getHeartbeatTimestamp(input.tableHeartbeatAt);
   const eventHeartbeatMs = getHeartbeatTimestamp(input.eventHeartbeatAt);
   const lastHeartbeatAt = getNewestHeartbeat(input.eventHeartbeatAt, input.tableHeartbeatAt);
@@ -118,9 +118,9 @@ export function resolveFullScanWorkerHeartbeatSnapshot(input: {
   };
 }
 
-export async function getLastFullScanWorkerHeartbeat(
+export async function getLastScannerServiceHeartbeat(
   supabase = createAdminClient()
-): Promise<FullScanWorkerHeartbeatSnapshot> {
+): Promise<ScannerServiceHeartbeatSnapshot> {
   const { data: eventRow, error: eventError } = await supabase
     .from("scan_events")
     .select("created_at, metadata_json")
@@ -158,7 +158,7 @@ export async function getLastFullScanWorkerHeartbeat(
   const tableHeartbeatAt = newestHeartbeatRow?.last_heartbeat_at ?? null;
   const tableHost = newestHeartbeatRow?.host ?? null;
 
-  return resolveFullScanWorkerHeartbeatSnapshot({
+  return resolveScannerServiceHeartbeatSnapshot({
     heartbeatErrorMessage: heartbeatError?.message ?? null,
     eventErrorMessage: eventError?.message ?? null,
     eventHeartbeatAt,
@@ -168,8 +168,27 @@ export async function getLastFullScanWorkerHeartbeat(
   });
 }
 
+/** @deprecated Use getLastScannerServiceHeartbeat instead. */
+export async function getLastFullScanWorkerHeartbeat(
+  supabase = createAdminClient()
+): Promise<ScannerServiceHeartbeatSnapshot> {
+  return getLastScannerServiceHeartbeat(supabase);
+}
+
+/** @deprecated Use resolveScannerServiceHeartbeatSnapshot instead. */
+export function resolveFullScanWorkerHeartbeatSnapshot(input: {
+  heartbeatErrorMessage?: string | null;
+  eventErrorMessage?: string | null;
+  eventHeartbeatAt: string | null;
+  eventHost: string | null;
+  tableHeartbeatAt: string | null;
+  tableHost: string | null;
+}): ScannerServiceHeartbeatSnapshot {
+  return resolveScannerServiceHeartbeatSnapshot(input);
+}
+
 export async function getFullScanQueueAvailability() {
-  const heartbeat = await getLastFullScanWorkerHeartbeat();
+  const heartbeat = await getLastScannerServiceHeartbeat();
 
   if (heartbeat.errorMessage) {
     return {

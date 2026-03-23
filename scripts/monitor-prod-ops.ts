@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
-import { getLastFullScanWorkerHeartbeat } from "../apps/web/server/queue/full-scan-queue";
+import { getLastScannerServiceHeartbeat } from "../apps/web/server/queue/full-scan-queue";
 
 const DEFAULT_PROJECT_ID = "certscore-ai";
 const DEFAULT_REGION = "us-central1";
@@ -152,7 +152,7 @@ async function main() {
     }
   }
 
-  const scannerHeartbeat = await getLastFullScanWorkerHeartbeat(db);
+  const scannerHeartbeat = await getLastScannerServiceHeartbeat(db);
 
   if (scannerHeartbeat.errorMessage) {
     findings.push(scannerHeartbeat.errorMessage);

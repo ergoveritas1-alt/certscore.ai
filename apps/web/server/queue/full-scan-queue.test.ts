@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getFullScanQueueAvailabilityFromHeartbeat, resolveFullScanWorkerHeartbeatSnapshot } from "./full-scan-queue";
+import { getFullScanQueueAvailabilityFromHeartbeat, resolveScannerServiceHeartbeatSnapshot } from "./full-scan-queue";
 
 test("disables scanning when no scanner heartbeat is present", () => {
   const availability = getFullScanQueueAvailabilityFromHeartbeat(null, Date.parse("2026-03-21T12:00:00.000Z"));
@@ -32,7 +32,7 @@ test("disables scanning when the scanner heartbeat is stale", () => {
 });
 
 test("uses the event heartbeat when the worker_heartbeats table query fails", () => {
-  const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
+  const heartbeat = resolveScannerServiceHeartbeatSnapshot({
     heartbeatErrorMessage: "Could not find the table 'public.worker_heartbeats' in the schema cache",
     eventErrorMessage: null,
     eventHeartbeatAt: "2026-03-21T11:59:40.000Z",
@@ -49,7 +49,7 @@ test("uses the event heartbeat when the worker_heartbeats table query fails", ()
 });
 
 test("uses the table heartbeat when the event query fails", () => {
-  const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
+  const heartbeat = resolveScannerServiceHeartbeatSnapshot({
     heartbeatErrorMessage: null,
     eventErrorMessage: "temporary scan_events failure",
     eventHeartbeatAt: null,
@@ -66,7 +66,7 @@ test("uses the table heartbeat when the event query fails", () => {
 });
 
 test("returns an error only when both heartbeat sources fail", () => {
-  const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
+  const heartbeat = resolveScannerServiceHeartbeatSnapshot({
     heartbeatErrorMessage: "worker_heartbeats unavailable",
     eventErrorMessage: "scan_events unavailable",
     eventHeartbeatAt: null,
@@ -82,7 +82,7 @@ test("returns an error only when both heartbeat sources fail", () => {
 });
 
 test("prefers the event heartbeat when both sources are present", () => {
-  const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
+  const heartbeat = resolveScannerServiceHeartbeatSnapshot({
     heartbeatErrorMessage: null,
     eventErrorMessage: null,
     eventHeartbeatAt: "2026-03-21T11:59:55.000Z",
