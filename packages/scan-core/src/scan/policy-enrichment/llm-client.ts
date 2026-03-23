@@ -21,7 +21,7 @@ export const POLICY_EXTRACTION_CONFIG = {
 } as const;
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
 
 export type PolicyPromptName =
   | "policy_extraction_v1.txt"

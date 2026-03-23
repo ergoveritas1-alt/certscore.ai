@@ -343,6 +343,32 @@ test("buildKeyPageDiscoveryState rejects unrelated external hosts", async () => 
   );
 });
 
+test("buildKeyPageDiscoveryState accepts strongly labeled related-party legal links from rendered navigation", async () => {
+  const state = await buildKeyPageDiscoveryState({
+    homepageLanguage: "en",
+    homepageUrl: "https://abc.com/",
+    renderedLinks: [
+      {
+        href: "https://disneytermsofuse.com/",
+        text: "Terms of Use"
+      },
+      {
+        href: "https://disneyprivacycenter.com/",
+        text: "Privacy Policy"
+      }
+    ],
+    renderedSource: "footer_link",
+    sitemapUrls: [],
+    sourceUrl: "https://abc.com/"
+  });
+
+  const termsCandidate = state.candidates.find((candidate) => candidate.candidateUrl === "https://disneytermsofuse.com/");
+  const privacyCandidate = state.candidates.find((candidate) => candidate.candidateUrl === "https://disneyprivacycenter.com/");
+
+  assert.equal(termsCandidate?.hostRelation, "related_party");
+  assert.equal(privacyCandidate?.hostRelation, "related_party");
+});
+
 test("buildKeyPageDiscoveryState promotes footer, header, and legal-container links to stronger discovery sources", async () => {
   const state = await buildKeyPageDiscoveryState({
     homepageLanguage: "en",
@@ -482,8 +508,11 @@ test("buildKeyPageDiscoverySummary marks guessed-only pages separately from disc
     fetchedPages: [
       {
         fetchStatus: "ok",
+        finalUrl: "https://example.com/contact",
         pageType: "contact",
-        pageUrl: "https://example.com/contact"
+        pageUrl: "https://example.com/contact",
+        textContent: "Contact us",
+        title: "Contact"
       }
     ],
     homepageUrl: "https://example.com/",
@@ -498,9 +527,65 @@ test("buildKeyPageDiscoverySummary marks guessed-only pages separately from disc
   const contactSummary = summary.pageSummaries.find((page) => page.pageType === "contact");
 
   assert.equal(privacySummary?.surfaceDetected, false);
+  assert.equal(privacySummary?.surfaceState, "guessed_only");
   assert.equal(privacySummary?.guessedOnly, true);
   assert.equal(privacySummary?.stopReason, "guessed_only");
   assert.equal(contactSummary?.successfulUrl, "https://example.com/contact");
   assert.equal(contactSummary?.successfulHostRelation, "same_host");
+  assert.equal(contactSummary?.surfaceState, "linked_and_verified");
   assert.equal(contactSummary?.stopReason, "covered");
+});
+
+test("buildKeyPageDiscoverySummary distinguishes blocked linked surfaces from missing ones", () => {
+  const summary = buildKeyPageDiscoverySummary({
+    attemptedUrls: new Set(["https://support.abc.com/"]),
+    candidates: [
+      {
+        anchorText: "Contact Us",
+        candidateScore: 95,
+        candidateUrl: "https://support.abc.com/",
+        discoveredFrom: "footer_link",
+        hostRelation: "same_brand_subdomain",
+        localeHints: ["en"],
+        pageType: "contact",
+        pageTypeConfidence: 0.95,
+        sourceUrl: "https://abc.com/"
+      },
+      {
+        anchorText: "Terms of Use",
+        candidateScore: 93,
+        candidateUrl: "https://disneytermsofuse.com/",
+        discoveredFrom: "footer_link",
+        hostRelation: "related_party",
+        localeHints: ["en"],
+        pageType: "terms_of_service",
+        pageTypeConfidence: 0.95,
+        sourceUrl: "https://abc.com/"
+      }
+    ],
+    fetchAttempts: new Map([
+      [
+        "https://support.abc.com/",
+        {
+          candidateUrl: "https://support.abc.com/",
+          fetchOutcome: "blocked"
+        }
+      ]
+    ]),
+    fetchedPages: [],
+    homepageUrl: "https://abc.com/",
+    localeHints: ["en"],
+    sameBrandSubdomainHostsInspected: [],
+    sitemapFilesFetched: [],
+    sitemapIndexUrlsFetched: [],
+    sitemapUrls: []
+  });
+
+  const contactSummary = summary.pageSummaries.find((page) => page.pageType === "contact");
+  const termsSummary = summary.pageSummaries.find((page) => page.pageType === "terms_of_service");
+
+  assert.equal(contactSummary?.surfaceState, "linked_but_fetch_blocked");
+  assert.equal(contactSummary?.bestFetchOutcome, "blocked");
+  assert.equal(termsSummary?.surfaceState, "linked_unverified");
+  assert.equal(termsSummary?.bestCandidateHostRelation, "related_party");
 });

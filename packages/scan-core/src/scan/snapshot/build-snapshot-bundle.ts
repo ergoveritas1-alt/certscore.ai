@@ -476,6 +476,28 @@ function hasSparsePolicyExtraction(input: {
   return typeof input.summaryShort !== "string" || input.summaryShort.trim().length === 0;
 }
 
+function hasPolicyEvidenceSnippet(input: {
+  enrichment: {
+    policyEvidenceSnippets?: Record<string, string | string[] | null>;
+  };
+  keys: string[];
+}) {
+  const snippetMap = input.enrichment.policyEvidenceSnippets ?? {};
+
+  return input.keys.some((key) => {
+    const value = snippetMap[key];
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+
+    if (Array.isArray(value)) {
+      return value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+    }
+
+    return false;
+  });
+}
+
 async function persistPolicyResolutionDiagnostic(input: {
   scanId: string;
   domainId: string;
@@ -770,6 +792,8 @@ async function runSnapshotBuildPhase<T>(input: {
 }
 
 export const testInternals = {
+  buildCompatibilitySignals,
+  buildKeyPageCoverageArtifacts,
   doesCandidateImproveConsentVisibility,
   getAdditionalDiscoveryFetchBudget,
   hasConsentVisibilitySignal,
@@ -4182,27 +4206,27 @@ function buildKeyPageCoverageArtifacts(input: {
   policyPages: StaticPageResult[];
 }) {
   const keyPageCoverage = summarizeKeyPageCoverage({
-    discoveredPageTypes: new Set(
-      input.keyPageDiscoverySummary.pageSummaries.filter((summary) => summary.surfaceDetected).map((summary) => summary.pageType)
-    ),
-    failedAttemptedUrlsByPageType: Object.fromEntries(
-      input.keyPageDiscoverySummary.pageSummaries.map((summary) => [summary.pageType, summary.successfulUrl ? [] : summary.attemptedUrls])
-    ) as Partial<Record<StaticPageResult["pageType"], string[]>>,
+    pageSummaries: input.keyPageDiscoverySummary.pageSummaries,
     fetchedPages: input.fetchedPages
   });
 
+  const hasDetectedSurface = (pageType: StaticPageResult["pageType"]) => {
+    const coverage = keyPageCoverage.find((row) => row.pageType === pageType);
+    return coverage?.surfaceDetected === true;
+  };
+
   return {
-    accessibilityStatementPresent: keyPageCoverage.find((row) => row.pageType === "accessibility_statement")?.fetched === true,
+    accessibilityStatementPresent: hasDetectedSurface("accessibility_statement"),
     advertisingDisclosurePresent:
       input.policyPages.some((page) => page.pageType === "advertising_disclosure") ||
       input.browserDiscoveredPageTypes.has("advertising_disclosure"),
     affiliateDisclosurePresent:
       input.policyPages.some((page) => page.pageType === "affiliate_disclosure") ||
       input.browserDiscoveredPageTypes.has("affiliate_disclosure"),
-    contactPagePresent: keyPageCoverage.find((row) => row.pageType === "contact")?.fetched === true,
-    cookiePolicyPresent: keyPageCoverage.find((row) => row.pageType === "cookie_policy")?.fetched === true,
+    contactPagePresent: hasDetectedSurface("contact"),
+    cookiePolicyPresent: hasDetectedSurface("cookie_policy"),
     keyPageCoverage,
-    privacyPolicyPresent: keyPageCoverage.find((row) => row.pageType === "privacy_policy")?.fetched === true,
+    privacyPolicyPresent: hasDetectedSurface("privacy_policy"),
     refundPolicyPresent:
       input.policyPages.some((page) => page.pageType === "refund_policy") || input.browserDiscoveredPageTypes.has("refund_policy"),
     shippingPolicyPresent:
@@ -4210,7 +4234,7 @@ function buildKeyPageCoverageArtifacts(input: {
     subscriptionTermsPresent:
       input.policyPages.some((page) => page.pageType === "subscription_terms") ||
       input.browserDiscoveredPageTypes.has("subscription_terms"),
-    termsOfServicePresent: keyPageCoverage.find((row) => row.pageType === "terms_of_service")?.fetched === true
+    termsOfServicePresent: hasDetectedSurface("terms_of_service")
   };
 }
 
@@ -4243,7 +4267,7 @@ function buildCompatibilitySignals(input: {
   }
 
   for (const coverage of input.keyPageCoverage) {
-    if (!coverage.surfaceDetected) {
+    if (coverage.surfaceState === "not_detected" || coverage.surfaceState === "guessed_only") {
       compatibilitySignals.push(
         toTaxonomySignal({
           category: "disclosure",
@@ -4252,7 +4276,7 @@ function buildCompatibilitySignals(input: {
           value: true
         })
       );
-    } else if (!coverage.fetched && coverage.failedPageUrls.length > 0) {
+    } else if (coverage.surfaceState === "linked_but_fetch_blocked" && coverage.failedPageUrls.length > 0) {
       compatibilitySignals.push(
         toTaxonomySignal({
           category: "disclosure",
@@ -4261,18 +4285,24 @@ function buildCompatibilitySignals(input: {
           value: coverage.failedPageUrls
         })
       );
+    } else if (coverage.surfaceState === "linked_but_extraction_limited" && coverage.extractionLimitedSignalKey && coverage.extractionLimitedSignalLabel) {
+      compatibilitySignals.push(
+        toTaxonomySignal({
+          category: "disclosure",
+          key: coverage.extractionLimitedSignalKey,
+          label: coverage.extractionLimitedSignalLabel,
+          value: coverage.bestCandidateUrl ?? true
+        })
+      );
     }
   }
 
   const unresolvedBoundedKeyPages = input.keyPageDiscoverySummary.pageSummaries
     .filter(
       (summary) =>
-        !summary.successfulUrl &&
-        (summary.surfaceDetected ||
-          summary.guessedOnly ||
-          summary.attemptCount > 0 ||
-          summary.stopReason === "no_surface" ||
-          summary.stopReason === "budget_exhausted")
+        summary.surfaceState === "guessed_only" ||
+        (summary.surfaceState === "not_detected" &&
+          (summary.attemptCount > 0 || summary.stopReason === "no_surface" || summary.stopReason === "budget_exhausted"))
     )
     .map((summary) => formatKeyPageTypeLabel(summary.pageType))
     .sort();
@@ -4529,7 +4559,6 @@ function buildCompatibilitySignals(input: {
     input.runtimeArtifacts.consentRedirectOrAuthRequired === true ||
     (typeof input.runtimeArtifacts.consentFrictionDelta === "number" && input.runtimeArtifacts.consentFrictionDelta > 0);
   let missingTechnicalDisclosureDetected = false;
-  let disclosureLikelyObstructedDetected = false;
 
   for (const enrichment of input.policyEnrichmentBundle.enrichments) {
     const reasons = reviewReasonsByEnrichmentId.get(String(enrichment.id ?? "")) ?? new Set<string>();
@@ -4547,14 +4576,7 @@ function buildCompatibilitySignals(input: {
     }
 
     if (
-      input.snapshotWithScores.retargetingPixelDetected === true ||
-      input.snapshotWithScores.sessionReplayWithoutDisclosureDetected === true
-    ) {
-      missingTechnicalDisclosureDetected = true;
-    }
-
-    if (
-      hasSparsePolicyExtraction({
+      !hasSparsePolicyExtraction({
         confidence: enrichment.policySemanticConfidence,
         coverageRatio: enrichment.policyCoverageRatio,
         flags,
@@ -4562,10 +4584,16 @@ function buildCompatibilitySignals(input: {
         snippetCount: enrichment.policySnippetCount,
         structurallyWeak: enrichment.policyStructurallyWeak,
         summaryShort: enrichment.policySummaryShort
-      })
+      }) &&
+      hasPolicyEvidenceSnippet({
+        enrichment,
+        keys: ["do_not_sell", "policy_claim_no_sale", "policy_claim_no_tracking", "cookie_disclosures"]
+      }) &&
+      (input.snapshotWithScores.retargetingPixelDetected === true || input.snapshotWithScores.sessionReplayWithoutDisclosureDetected === true)
     ) {
-      disclosureLikelyObstructedDetected = true;
+      missingTechnicalDisclosureDetected = true;
     }
+
   }
 
   if (functionalMisalignmentDetected) {
@@ -4588,17 +4616,6 @@ function buildCompatibilitySignals(input: {
       })
     );
   }
-  if (disclosureLikelyObstructedDetected) {
-    compatibilitySignals.push(
-      toTaxonomySignal({
-        category: "disclosure",
-        key: "disclosure.policy_runtime_disclosure_likely_obstructed",
-        label: "Policy disclosure likely obstructed",
-        value: true
-      })
-    );
-  }
-
   const cookiePolicyEnrichment =
     input.policyEnrichmentBundle.enrichments.find((enrichment) => enrichment.pageType === "cookie_policy") ?? null;
   const runtimeCookieNames = [

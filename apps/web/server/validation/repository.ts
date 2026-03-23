@@ -475,6 +475,7 @@ function isConcerningValidationSignal(row: ScanSignalRow) {
     /disclosure_gap/,
     /surface_missing/,
     /fetch_failed/,
+    /extraction_limited/,
     /bounded_search/,
     /structurally_obstructed/,
     /likely_obstructed/,
@@ -547,7 +548,11 @@ function getValidationConcernReason(row: ScanSignalRow) {
   }
 
   if (/fetch_failed/i.test(key)) {
-    return "A key disclosure or support page was detected, but its target URL could not be fetched successfully.";
+    return "A key disclosure or support page was linked from the scanned site, but automated retrieval of that target was limited during the scan.";
+  }
+
+  if (/extraction_limited/i.test(key)) {
+    return "A key disclosure page was linked and fetched, but the retrieved content was too limited for reliable automated extraction on its own.";
   }
 
   if (/key_page_discovery_unresolved_after_bounded_search/i.test(key)) {
@@ -566,7 +571,7 @@ function getValidationSignalSeverity(row: ScanSignalRow) {
     return "high";
   }
 
-  if (/key_page_discovery_unresolved_after_bounded_search|structurally_obstructed|likely_obstructed|surface_missing|fetch_failed/i.test(row.signal_key)) {
+  if (/key_page_discovery_unresolved_after_bounded_search|structurally_obstructed|likely_obstructed|surface_missing|fetch_failed|extraction_limited/i.test(row.signal_key)) {
     return "medium";
   }
 
@@ -603,7 +608,11 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   }
 
   if (row.signal_key === "disclosure.privacy_policy_fetch_failed") {
-    return "Privacy policy page unavailable";
+    return "Privacy policy linked but not retrievable";
+  }
+
+  if (row.signal_key === "disclosure.privacy_policy_extraction_limited") {
+    return "Privacy policy linked but automated extraction was limited";
   }
 
   if (row.signal_key === "disclosure.terms_of_service_surface_missing") {
@@ -611,7 +620,11 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   }
 
   if (row.signal_key === "disclosure.terms_of_service_fetch_failed") {
-    return "Terms page unavailable";
+    return "Terms page linked but not retrievable";
+  }
+
+  if (row.signal_key === "disclosure.terms_of_service_extraction_limited") {
+    return "Terms page linked but automated extraction was limited";
   }
 
   if (row.signal_key === "disclosure.cookie_policy_surface_missing") {
@@ -619,7 +632,11 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   }
 
   if (row.signal_key === "disclosure.cookie_policy_fetch_failed") {
-    return "Cookie policy unavailable";
+    return "Cookie policy linked but not retrievable";
+  }
+
+  if (row.signal_key === "disclosure.cookie_policy_extraction_limited") {
+    return "Cookie policy linked but automated extraction was limited";
   }
 
   if (row.signal_key === "disclosure.accessibility_statement_surface_missing") {
@@ -627,7 +644,11 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   }
 
   if (row.signal_key === "disclosure.accessibility_statement_fetch_failed") {
-    return "Accessibility statement unavailable";
+    return "Accessibility statement linked but not retrievable";
+  }
+
+  if (row.signal_key === "disclosure.accessibility_statement_extraction_limited") {
+    return "Accessibility statement linked but automated extraction was limited";
   }
 
   if (row.signal_key === "disclosure.contact_page_surface_missing") {
@@ -635,7 +656,7 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   }
 
   if (row.signal_key === "disclosure.contact_page_fetch_failed") {
-    return "Contact page unavailable";
+    return "Contact page linked but not retrievable";
   }
 
   if (row.signal_key === "disclosure.key_page_discovery_unresolved_after_bounded_search") {

@@ -51,10 +51,14 @@ Full policy text is never persisted.
   - overrides per-chunk retry count for provider errors and timeouts
 - `LLM_ENRICHMENT_MAX_CHUNKS`
   - caps selected LLM chunks per page type
+- `LLM_ENRICHMENT_TOTAL_BUDGET_MS`
+  - caps total LLM extraction time across all policy pages in a single scan so long policies fall back conservatively instead of timing out the whole enrichment phase
+- `LLM_ENRICHMENT_TIMEOUT_MS`
+  - caps individual LLM requests; the live default is intentionally short so enrichment fails open instead of holding the scan open
 - `LLM_ENRICHMENT_FORCE_LAST_CHUNK`
   - when set to `0`, disables mandatory tail-chunk selection for non-terms pages
 
-Long privacy policies now prefer high-signal interior chunks over the trailing boilerplate chunk once enough DSAR/retention/contact-style sections are present. That behavior is live by default and reduces timeout-driven partial coverage on sites like Atlassian without changing terms-page selection.
+Long privacy policies now prefer high-signal interior chunks over the trailing boilerplate chunk once enough DSAR/retention/contact-style sections are present. The default runtime posture is intentionally conservative for live scans: at most one selected page per supported policy type, a single attempt per chunk, a five-second per-request timeout, and a twelve-second total scan budget for policy LLM work. That reduces timeout-driven partial coverage on large policies without turning semantic enrichment into a full-scan bottleneck.
 Current thresholds in code:
 
 - high confidence: `0.80`

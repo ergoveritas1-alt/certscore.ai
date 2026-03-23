@@ -543,7 +543,7 @@ test("getPolicyLlmAvailability reports env-driven provider state", () => {
     enabled: false,
     hasApiKey: false,
     mock: false,
-    timeoutMs: 15000
+    timeoutMs: 5000
   });
 
   assert.deepEqual(
@@ -753,6 +753,154 @@ test("enrichPolicyPages flags no-sale policy with adtech conflict and queues rev
   assert.ok(bundle.reviewQueueItems.some((item) => item.reason === "policy_behavior_conflict_candidate"));
 });
 
+test("enrichPolicyPages does not surface conflict candidates without exact claim snippet support", async () => {
+  const bundle = await enrichPolicyPages({
+    scanId: "scan-no-claim-snippet",
+    organizationId: "org-1",
+    domainId: "domain-1",
+    pages: [
+      {
+        pageUrl: "https://example.com/privacy",
+        pageType: "privacy_policy",
+        fetchStatus: "ok",
+        finalUrl: "https://example.com/privacy",
+        headers: {},
+        html: "<html><body>Privacy policy</body></html>",
+        language: "en",
+        links: [],
+        redirected: false,
+        scripts: [],
+        statusCode: 200,
+        textContent: "We describe privacy rights and data practices in general terms without a no-sale statement.",
+        title: "Privacy Policy",
+        forms: []
+      }
+    ],
+    advertisingTrackerCount: 3,
+    sessionReplayTrackerCount: 0,
+    euExposureLikely: false,
+    californiaExposureLikely: true,
+    allowLlm: false
+  });
+
+  assert.equal(bundle.enrichments[0]!.policyBehaviorConflictCandidate, false);
+  assert.ok(!bundle.reviewQueueItems.some((item) => item.reason === "policy_behavior_conflict_candidate"));
+});
+
+test("enrichPolicyPages falls back when the total LLM budget is exhausted", async () => {
+  const originalEnv = {
+    LLM_ENRICHMENT_ENABLED: process.env.LLM_ENRICHMENT_ENABLED,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    LLM_ENRICHMENT_TOTAL_BUDGET_MS: process.env.LLM_ENRICHMENT_TOTAL_BUDGET_MS,
+    LLM_ENRICHMENT_TIMEOUT_MS: process.env.LLM_ENRICHMENT_TIMEOUT_MS,
+    LLM_ENRICHMENT_MAX_ATTEMPTS: process.env.LLM_ENRICHMENT_MAX_ATTEMPTS
+  };
+  const originalFetch = globalThis.fetch;
+
+  process.env.LLM_ENRICHMENT_ENABLED = "1";
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.LLM_ENRICHMENT_TOTAL_BUDGET_MS = "1";
+  process.env.LLM_ENRICHMENT_TIMEOUT_MS = "5000";
+  process.env.LLM_ENRICHMENT_MAX_ATTEMPTS = "1";
+
+  globalThis.fetch = (async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return new Response(
+      JSON.stringify({
+        model: POLICY_EXTRACTION_CONFIG.model,
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                mentions_gdpr: { value: true, confidence: 0.9, snippet: "GDPR applies to our processing" },
+                do_not_sell: { value: "unknown", confidence: 0, snippet: null },
+                dsar_mechanism: {
+                  value: "present",
+                  confidence: 0.9,
+                  snippet: "request access deletion and correction through our privacy request form"
+                },
+                data_access_request_present: {
+                  value: true,
+                  confidence: 0.9,
+                  snippet: "request access deletion and correction through our privacy request form"
+                },
+                data_deletion_request_present: {
+                  value: true,
+                  confidence: 0.9,
+                  snippet: "request access deletion and correction through our privacy request form"
+                },
+                privacy_contact_channel_type: { value: "form", confidence: 0.8, snippet: "privacy request form" },
+                retention_disclosure: { value: "specific", confidence: 0.8, snippet: "retain logs for 30 days" },
+                policy_claim_no_sale: { value: false, confidence: 0.6, snippet: null },
+                policy_claim_no_tracking: { value: false, confidence: 0.6, snippet: null },
+                policy_claim_privacy_protective: { value: false, confidence: 0.6, snippet: null },
+                data_categories: [],
+                retention_statements: [],
+                transfer_mechanisms: [],
+                children_reference: { value: "unknown", confidence: 0, snippet: null },
+                summary: { text: "Policy mentions GDPR and privacy request rights.", confidence: 0.8 }
+              })
+            }
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const bundle = await enrichPolicyPages({
+      scanId: "scan-budget",
+      organizationId: "org-1",
+      domainId: "domain-1",
+      pages: [
+        {
+          pageUrl: "https://example.com/privacy",
+          pageType: "privacy_policy",
+          fetchStatus: "ok",
+          finalUrl: "https://example.com/privacy",
+          headers: {},
+          html: "<html><body>Privacy policy</body></html>",
+          language: "en",
+          links: [],
+          redirected: false,
+          scripts: [],
+          statusCode: 200,
+          textContent: [
+            "Privacy Policy overview and general disclosures ".repeat(150),
+            "GDPR applies to our processing and you may request access deletion and correction through our privacy request form ".repeat(150),
+            "We retain logs for 30 days and maintain account records as long as necessary ".repeat(150),
+            "We use Standard Contractual Clauses for international transfers ".repeat(150)
+          ].join(" "),
+          title: "Privacy Policy",
+          forms: []
+        }
+      ],
+      advertisingTrackerCount: 0,
+      sessionReplayTrackerCount: 0,
+      euExposureLikely: true,
+      californiaExposureLikely: false,
+      forceLlm: true
+    });
+
+    assert.equal(bundle.enrichments.length, 1);
+    assert.ok(bundle.enrichments[0]!.policyActionableFlags.includes("llm_budget_exhausted"));
+    assert.ok(bundle.diagnostics[0]?.chunkDiagnostics.some((entry) => entry.failureCode === "timeout"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.LLM_ENRICHMENT_ENABLED = originalEnv.LLM_ENRICHMENT_ENABLED;
+    process.env.OPENAI_API_KEY = originalEnv.OPENAI_API_KEY;
+    process.env.LLM_ENRICHMENT_TOTAL_BUDGET_MS = originalEnv.LLM_ENRICHMENT_TOTAL_BUDGET_MS;
+    process.env.LLM_ENRICHMENT_TIMEOUT_MS = originalEnv.LLM_ENRICHMENT_TIMEOUT_MS;
+    process.env.LLM_ENRICHMENT_MAX_ATTEMPTS = originalEnv.LLM_ENRICHMENT_MAX_ATTEMPTS;
+  }
+});
+
 test("enrichPolicyPages queues ambiguous low-confidence policy for review", async () => {
   const bundle = await enrichPolicyPages({
     scanId: "scan-ambiguous",
@@ -863,10 +1011,12 @@ test("enrichPolicyPages retries transient provider failures before falling back"
   const originalFetch = globalThis.fetch;
   const originalEnabled = process.env.LLM_ENRICHMENT_ENABLED;
   const originalKey = process.env.OPENAI_API_KEY;
+  const originalAttempts = process.env.LLM_ENRICHMENT_MAX_ATTEMPTS;
   let attempts = 0;
 
   process.env.LLM_ENRICHMENT_ENABLED = "1";
   process.env.OPENAI_API_KEY = "test-key";
+  process.env.LLM_ENRICHMENT_MAX_ATTEMPTS = "2";
   globalThis.fetch = (async () => {
     attempts += 1;
 
@@ -960,6 +1110,7 @@ test("enrichPolicyPages retries transient provider failures before falling back"
     globalThis.fetch = originalFetch;
     process.env.LLM_ENRICHMENT_ENABLED = originalEnabled;
     process.env.OPENAI_API_KEY = originalKey;
+    process.env.LLM_ENRICHMENT_MAX_ATTEMPTS = originalAttempts;
   }
 });
 

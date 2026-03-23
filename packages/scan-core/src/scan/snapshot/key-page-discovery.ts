@@ -8,7 +8,7 @@ import type {
   PageType
 } from "@website-signal-risk-scanner/shared";
 import type { RobotsPolicy } from "../robots/policy";
-import { fetchTextPage, getRegisteredDomain } from "./extractors";
+import { assessPolicyPageContentQuality, fetchTextPage, getRegisteredDomain } from "./extractors";
 import {
   getLocalizedKeywords,
   getLocalizedPathGuesses,
@@ -145,6 +145,68 @@ function getHostRelation(candidateUrl: string, homepageUrl: string): KeyPageDisc
   } catch {
     return "external";
   }
+}
+
+function isEligibleRelatedPartySurface(input: {
+  anchorText: string | null;
+  candidateUrl: string;
+  discoveredFrom: Exclude<KeyPageDiscoverySource, "guessed_slug" | "sitemap" | "same_brand_subdomain">;
+  localeHints: string[];
+  pageType: KeyPageType;
+}) {
+  try {
+    const parsed = new URL(input.candidateUrl);
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+
+    if (!input.anchorText || input.anchorText.trim().length === 0) {
+      return false;
+    }
+
+    if (parsed.search.length > 96) {
+      return false;
+    }
+
+    const localizedKeywords = getLocalizedKeywords(input.pageType, input.localeHints);
+    const anchorScore = scoreKeywordMatches(normalizeLegalMatchText(input.anchorText), localizedKeywords);
+    const urlScore = scoreKeywordMatches(getUrlTokens(input.candidateUrl), localizedKeywords);
+    const sourcePriority = getRenderedLinkSourcePriority(input.discoveredFrom);
+
+    return sourcePriority >= getRenderedLinkSourcePriority("body_link") && (anchorScore >= 8 || anchorScore + urlScore >= 10);
+  } catch {
+    return false;
+  }
+}
+
+function resolveCandidateHostRelation(input: {
+  anchorText: string | null;
+  candidateUrl: string;
+  discoveredFrom: Exclude<KeyPageDiscoverySource, "guessed_slug" | "sitemap">;
+  homepageUrl: string;
+  localeHints: string[];
+  pageType: KeyPageType;
+}) {
+  const hostRelation = getHostRelation(input.candidateUrl, input.homepageUrl);
+  if (hostRelation !== "external") {
+    return hostRelation;
+  }
+
+  if (
+    input.discoveredFrom !== "same_brand_subdomain" &&
+    CROSS_DOMAIN_KEY_PAGE_TYPES.has(input.pageType) &&
+    isEligibleRelatedPartySurface({
+      anchorText: input.anchorText,
+      candidateUrl: input.candidateUrl,
+      discoveredFrom: input.discoveredFrom,
+      localeHints: input.localeHints,
+      pageType: input.pageType
+    })
+  ) {
+    return "related_party";
+  }
+
+  return null;
 }
 
 function isAllowedCrossDomainCandidate(pageType: KeyPageType, candidateUrl: string, homepageUrl: string) {
@@ -1088,7 +1150,18 @@ function buildRenderedLinkCandidates(input: {
       localeHints: input.localeHints
     });
 
-    if (pageType && isAllowedCrossDomainCandidate(pageType, link.href, input.homepageUrl)) {
+    const resolvedHostRelation = pageType
+      ? resolveCandidateHostRelation({
+          anchorText: link.text,
+          candidateUrl: link.href,
+          discoveredFrom: link.discoveredFrom,
+          homepageUrl: input.homepageUrl,
+          localeHints: input.localeHints,
+          pageType
+        })
+      : null;
+
+    if (pageType && resolvedHostRelation) {
       const scored = scoreCandidate({
         anchorText: link.text,
         candidateUrl: link.href,
@@ -1102,7 +1175,7 @@ function buildRenderedLinkCandidates(input: {
         candidateScore: scored.candidateScore,
         candidateUrl: link.href,
         discoveredFrom: link.discoveredFrom,
-        hostRelation: getHostRelation(link.href, input.homepageUrl) === "same_brand_subdomain" ? "same_brand_subdomain" : "same_host",
+        hostRelation: resolvedHostRelation,
         localeHints: input.localeHints,
         pageType,
         pageTypeConfidence: scored.pageTypeConfidence,
@@ -1408,7 +1481,15 @@ export function buildKeyPageDiscoverySummary(input: {
   attemptedUrls: Set<string>;
   candidates: DiscoveryCandidateDraft[];
   fetchAttempts: Map<string, KeyPageFetchAttempt>;
-  fetchedPages: Array<{ fetchStatus: FetchStatus; pageType: PageType; pageUrl: string }>;
+  fetchedPages: Array<{
+    fetchStatus: FetchStatus;
+    finalUrl?: string | null;
+    html?: string;
+    pageType: PageType;
+    pageUrl: string;
+    textContent?: string;
+    title?: string | null;
+  }>;
   homepageUrl: string;
   localeHints: string[];
   sameBrandSubdomainHostsInspected: string[];
@@ -1416,13 +1497,39 @@ export function buildKeyPageDiscoverySummary(input: {
   sitemapIndexUrlsFetched: string[];
   sitemapUrls: string[];
 }) : KeyPageDiscoverySummary {
-  const successfulPagesByType = new Map<KeyPageType, string>();
+  const successfulPagesByType = new Map<
+    KeyPageType,
+    {
+      extractionOutcome: KeyPageDiscoveryPageSummary["extractionOutcome"];
+      pageTitle: string | null;
+      successfulHostRelation: KeyPageDiscoveryHostRelation | null;
+      successfulUrl: string;
+    }
+  >();
   for (const page of input.fetchedPages) {
     if (!isKeyPageType(page.pageType)) {
       continue;
     }
     if ((page.fetchStatus === "ok" || page.fetchStatus === "redirected") && !successfulPagesByType.has(page.pageType)) {
-      successfulPagesByType.set(page.pageType, page.pageUrl);
+      const successfulUrl = page.finalUrl ?? page.pageUrl;
+      const contentQuality = assessPolicyPageContentQuality({
+        html: page.html ?? "",
+        pageType: page.pageType,
+        textContent: page.textContent ?? ""
+      });
+      const extractionLimited =
+        page.pageType === "privacy_policy" ||
+        page.pageType === "terms_of_service" ||
+        page.pageType === "cookie_policy" ||
+        page.pageType === "accessibility_statement"
+          ? contentQuality.insufficientContent || contentQuality.shellMarkerDetected
+          : false;
+      successfulPagesByType.set(page.pageType, {
+        extractionOutcome: extractionLimited ? "limited" : "sufficient",
+        pageTitle: page.title ?? null,
+        successfulHostRelation: null,
+        successfulUrl
+      });
     }
   }
 
@@ -1437,15 +1544,41 @@ export function buildKeyPageDiscoverySummary(input: {
 
   const pageSummaries: KeyPageDiscoveryPageSummary[] = getSupportedKeyPageTypes().map((pageType) => {
     const typedCandidates = candidates.filter((candidate) => candidate.pageType === pageType);
+    const linkedCandidates = typedCandidates.filter((candidate) => candidate.discoveredFrom !== "guessed_slug");
     const attemptedCandidates = typedCandidates.filter((candidate) => candidate.fetchAttempted);
-    const surfaceDetected = typedCandidates.some((candidate) => candidate.discoveredFrom !== "guessed_slug");
+    const surfaceDetected = linkedCandidates.length > 0;
     const guessedOnly = typedCandidates.length > 0 && !surfaceDetected;
-    const bestCandidate = typedCandidates[0] ?? null;
+    const bestCandidate = linkedCandidates[0] ?? typedCandidates[0] ?? null;
     const repeatedHardFailures =
       attemptedCandidates.filter((candidate) =>
         candidate.fetchOutcome && ["blocked", "error", "forbidden", "not_found", "timeout"].includes(candidate.fetchOutcome)
       ).length >= 2;
-    const successfulUrl = successfulPagesByType.get(pageType) ?? null;
+    const successfulPage = successfulPagesByType.get(pageType) ?? null;
+    const successfulUrl = successfulPage?.successfulUrl ?? null;
+    const attemptedLinkedCandidates = linkedCandidates.filter((candidate) => candidate.fetchAttempted);
+    const bestLinkedAttempt = attemptedLinkedCandidates[0] ?? null;
+    const extractionOutcome = successfulPage?.extractionOutcome ?? "not_attempted";
+    const successfulHostRelation =
+      successfulUrl
+        ? typedCandidates.find((candidate) => candidate.candidateUrl === successfulUrl)?.hostRelation ??
+          (() => {
+            const relation = getHostRelation(successfulUrl, input.homepageUrl);
+            return relation === "external" ? bestCandidate?.hostRelation ?? null : relation;
+          })()
+        : null;
+
+    let surfaceState: KeyPageDiscoveryPageSummary["surfaceState"];
+    if (successfulUrl) {
+      surfaceState = extractionOutcome === "limited" ? "linked_but_extraction_limited" : "linked_and_verified";
+    } else if (surfaceDetected && attemptedLinkedCandidates.length > 0) {
+      surfaceState = "linked_but_fetch_blocked";
+    } else if (surfaceDetected) {
+      surfaceState = "linked_unverified";
+    } else if (guessedOnly) {
+      surfaceState = "guessed_only";
+    } else {
+      surfaceState = "not_detected";
+    }
 
     let stopReason: KeyPageDiscoveryPageSummary["stopReason"];
     if (successfulUrl) {
@@ -1465,16 +1598,20 @@ export function buildKeyPageDiscoverySummary(input: {
     return {
       attemptCount: attemptedCandidates.length,
       attemptedUrls: attemptedCandidates.map((candidate) => candidate.candidateUrl),
+      bestCandidateAnchorText: bestCandidate?.anchorText ?? null,
+      bestCandidateHostRelation: bestCandidate?.hostRelation ?? null,
+      bestCandidateSourceUrl: bestCandidate?.sourceUrl ?? null,
+      bestCandidateUrl: bestCandidate?.candidateUrl ?? null,
       bestDiscoverySource: bestCandidate?.discoveredFrom ?? null,
+      bestFetchOutcome: bestLinkedAttempt?.fetchOutcome ?? null,
+      extractionOutcome,
       guessedOnly,
       pageType,
+      successfulPageTitle: successfulPage?.pageTitle ?? null,
+      successfulHostRelation,
       stopReason,
       successfulUrl,
-      successfulHostRelation: successfulUrl
-        ? getHostRelation(successfulUrl, input.homepageUrl) === "same_brand_subdomain"
-          ? "same_brand_subdomain"
-          : "same_host"
-        : null,
+      surfaceState,
       surfaceDetected
     };
   });

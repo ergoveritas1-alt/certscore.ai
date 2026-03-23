@@ -1154,6 +1154,7 @@ function isConcerningSignal(key: string, value: unknown) {
     /disclosure_gap/,
     /surface_missing/,
     /fetch_failed/,
+    /extraction_limited/,
     /bounded_search/,
     /structurally_obstructed/,
     /likely_obstructed/,
@@ -1209,7 +1210,11 @@ function getSignalConcernReason(key: string, value: unknown) {
   }
 
   if (/fetch_failed/i.test(key)) {
-    return "A key disclosure or support page was detected, but its target URL could not be fetched successfully.";
+    return "A key disclosure or support page was linked from the scanned site, but automated retrieval of that target was limited during the scan.";
+  }
+
+  if (/extraction_limited/i.test(key)) {
+    return "A key disclosure page was linked and fetched, but the retrieved content was too limited for reliable automated extraction on its own.";
   }
 
   if (/key_page_discovery_unresolved_after_bounded_search/i.test(key)) {
@@ -1369,16 +1374,16 @@ function severityRank(severity: CanonicalReviewFinding["severity"]) {
 }
 
 function getKeyPageTypeForSignal(key: string) {
-  if (/disclosure\.privacy_policy_fetch_failed/i.test(key)) {
+  if (/disclosure\.privacy_policy_(fetch_failed|extraction_limited)/i.test(key)) {
     return "privacy_policy";
   }
-  if (/disclosure\.terms_of_service_fetch_failed/i.test(key)) {
+  if (/disclosure\.terms_of_service_(fetch_failed|extraction_limited)/i.test(key)) {
     return "terms_of_service";
   }
-  if (/disclosure\.cookie_policy_fetch_failed/i.test(key)) {
+  if (/disclosure\.cookie_policy_(fetch_failed|extraction_limited)/i.test(key)) {
     return "cookie_policy";
   }
-  if (/disclosure\.accessibility_statement_fetch_failed/i.test(key)) {
+  if (/disclosure\.accessibility_statement_(fetch_failed|extraction_limited)/i.test(key)) {
     return "accessibility_statement";
   }
   if (/disclosure\.contact_page_fetch_failed/i.test(key)) {
@@ -1623,7 +1628,7 @@ function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewF
     return "high";
   }
 
-  if (/weak_cookie_security_attributes_detected|key_page_discovery_unresolved_after_bounded_search|surface_missing|fetch_failed|dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
+  if (/weak_cookie_security_attributes_detected|key_page_discovery_unresolved_after_bounded_search|surface_missing|fetch_failed|extraction_limited|dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present|store_credit_only|termination_for_cause|service_suspension_or_termination/i.test(key)) {
     return "medium";
   }
 

@@ -2052,3 +2052,243 @@ test("buildPageMetadata persists hashes without raw page content", () => {
   assert.equal("html" in (metadata as unknown as Record<string, unknown>), false);
   assert.equal("textContent" in (metadata as unknown as Record<string, unknown>), false);
 });
+
+test("buildKeyPageCoverageArtifacts keeps linked cross-domain and blocked disclosure surfaces out of missing buckets", () => {
+  const coverage = buildSnapshotBundleTestInternals.buildKeyPageCoverageArtifacts({
+    browserDiscoveredPageTypes: new Set<string>(),
+    fetchedPages: [],
+    keyPageDiscoverySummary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en"],
+      pageSummaries: [
+        {
+          pageType: "contact",
+          surfaceDetected: true,
+          surfaceState: "linked_but_fetch_blocked",
+          guessedOnly: false,
+          bestCandidateUrl: "https://support.abc.com/",
+          bestCandidateAnchorText: "Contact Us",
+          bestCandidateSourceUrl: "https://abc.com/",
+          bestCandidateHostRelation: "same_brand_subdomain",
+          bestFetchOutcome: "blocked",
+          successfulUrl: null,
+          successfulPageTitle: null,
+          successfulHostRelation: null,
+          extractionOutcome: "not_attempted",
+          attemptedUrls: ["https://support.abc.com/"],
+          attemptCount: 1,
+          bestDiscoverySource: "footer_link",
+          stopReason: "all_attempts_failed"
+        },
+        {
+          pageType: "terms_of_service",
+          surfaceDetected: true,
+          surfaceState: "linked_unverified",
+          guessedOnly: false,
+          bestCandidateUrl: "https://disneytermsofuse.com/",
+          bestCandidateAnchorText: "Terms of Use",
+          bestCandidateSourceUrl: "https://abc.com/",
+          bestCandidateHostRelation: "related_party",
+          bestFetchOutcome: null,
+          successfulUrl: null,
+          successfulPageTitle: null,
+          successfulHostRelation: null,
+          extractionOutcome: "not_attempted",
+          attemptedUrls: [],
+          attemptCount: 0,
+          bestDiscoverySource: "footer_link",
+          stopReason: "budget_exhausted"
+        }
+      ],
+      sameBrandSubdomainHostsInspected: [],
+      sitemapFilesFetched: [],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: []
+    },
+    policyPages: []
+  });
+
+  assert.equal(coverage.contactPagePresent, true);
+  assert.equal(coverage.termsOfServicePresent, true);
+  assert.equal(coverage.keyPageCoverage.find((row) => row.pageType === "contact")?.surfaceState, "linked_but_fetch_blocked");
+  assert.equal(coverage.keyPageCoverage.find((row) => row.pageType === "terms_of_service")?.surfaceState, "linked_unverified");
+});
+
+test("buildCompatibilitySignals suppresses weak obstruction and conflict signals when extraction is sparse", () => {
+  const compatibilitySignals = buildSnapshotBundleTestInternals.buildCompatibilitySignals({
+    allTrackers: [],
+    keyPageCoverage: [
+      {
+        pageType: "privacy_policy",
+        severity: "high",
+        surfaceMissingSignalKey: "disclosure.privacy_policy_surface_missing",
+        surfaceMissingSignalLabel: "Privacy policy surface not detected",
+        fetchFailedSignalKey: "disclosure.privacy_policy_fetch_failed",
+        fetchFailedSignalLabel: "Privacy policy linked but not retrievable",
+        extractionLimitedSignalKey: "disclosure.privacy_policy_extraction_limited",
+        extractionLimitedSignalLabel: "Privacy policy linked but automated extraction was limited",
+        failedPageUrls: [],
+        fetched: true,
+        surfaceDetected: true,
+        surfaceState: "linked_but_extraction_limited",
+        bestCandidateAnchorText: "Privacy Policy",
+        bestCandidateHostRelation: "related_party",
+        bestCandidateUrl: "https://disneyprivacycenter.com/",
+        extractionLimited: true
+      }
+    ],
+    keyPageDiscoverySummary: {
+      budgets: {
+        maxAdditionalFetchAttempts: 8,
+        maxCandidates: 20,
+        maxFetchAttemptsPerType: 3,
+        maxSameBrandCandidatesPerType: 2,
+        maxSameBrandSubdomainHosts: 3,
+        maxSecondHopLegalHubFetchesPerMissingType: 1,
+        maxSitemapFiles: 3,
+        maxSitemapIndexChildren: 2
+      },
+      candidates: [],
+      localeHints: ["en"],
+      pageSummaries: [],
+      sameBrandSubdomainHostsInspected: [],
+      sitemapFilesFetched: [],
+      sitemapIndexUrlsFetched: [],
+      sitemapUrls: []
+    },
+    policyEnrichmentBundle: {
+      diagnostics: [],
+      enrichments: [
+        {
+          id: "enrichment-1",
+          scanId: "scan-1",
+          pageType: "privacy_policy",
+          pageUrl: "https://disneyprivacycenter.com/",
+          normalizedPolicyHash: "hash-1",
+          policySummaryShort: "Insufficient policy content fetched for semantic review.",
+          policyEffectiveDate: null,
+          policyGoverningLaw: null,
+          policyArbitrationPresent: null,
+          policyNoticeContactPresent: null,
+          policyTerminationOrSuspensionPresent: null,
+          policyCancellationOrRefundPresent: null,
+          privacyContactChannelType: "none",
+          policyRetentionDisclosure: "none",
+          policyClaimNoSale: true,
+          policyClaimNoTracking: null,
+          policyClaimPrivacyProtective: null,
+          policyMentions: [],
+          policyDataCategories: [],
+          policyRetentionPeriods: [],
+          policyDsarMechanism: "unknown",
+          policyDsarConfidence: 0.2,
+          policyDoNotSell: "unknown",
+          policyDoNotSellConfidence: 0.2,
+          policySubprocessorsListed: null,
+          policyTransferMechanisms: [],
+          policyChildrenReference: "unknown",
+          policyAmbiguityScore: 90,
+          policyBehaviorConflictCandidate: false,
+          policyActionableFlags: ["low_confidence"],
+          policyEvidenceSnippets: {},
+          policyFieldCoverage: {},
+          policyCoverageRatio: 0.2,
+          policySnippetCount: 0,
+          policyStructurallyWeak: true,
+          policySemanticConfidence: 0.2,
+          policyAiModel: null,
+          policyAiModelVersion: null,
+          policyAiPromptVersion: null,
+          policyAiRunAt: null,
+          archiveSource: null
+        }
+      ],
+      evidences: [],
+      primaryPolicyEnrichmentId: null,
+      reviewQueueItems: [
+        {
+          id: "review-1",
+          policyEnrichmentId: "enrichment-1",
+          reason: "low_confidence_critical_fields",
+          reviewStatus: "pending",
+          scanId: "scan-1",
+          assignedTo: null,
+          reviewerNotes: null,
+          reviewedAt: null,
+          reviewVerdict: null
+        }
+      ],
+      snapshotOverrides: {}
+    },
+    runtimeArtifacts: {
+      consentAuditCompleted: null,
+      consentAcceptClickCount: null,
+      consentAcceptInteractionSucceeded: null,
+      consentAcceptNewTrackerVendorNames: [],
+      consentBaselineCookieCount: null,
+      consentBaselineThirdPartyCookieCount: null,
+      consentBaselineTrackerEvidenceUrls: [],
+      consentBaselineTrackerVendorNames: [],
+      consentBlockerPageTitle: null,
+      consentBlockerTextSnippet: null,
+      consentBlockerType: null,
+      consentBlockerUrl: null,
+      consentEvidencePassCount: null,
+      consentFrictionDelta: null,
+      consentOptInClicks: null,
+      consentOptOutClicks: null,
+      consentPostAcceptCookieCount: null,
+      consentPostAcceptThirdPartyCookieCount: null,
+      consentPostAcceptTrackerEvidenceUrls: [],
+      consentPostAcceptTrackerVendorNames: [],
+      consentPostRejectCookieCount: null,
+      consentPostRejectThirdPartyCookieCount: null,
+      consentPostRejectTrackerEvidenceUrls: [],
+      consentPostRejectTrackerVendorNames: [],
+      consentPreconsentViolationCount: null,
+      consentRedirectOrAuthRequired: null,
+      consentRejectClickCount: null,
+      consentRejectInteractionSucceeded: null,
+      consentRejectNewTrackerVendorNames: [],
+      consentRejectPersistedTrackerVendorNames: [],
+      consentRejectReducedThirdPartyCookies: null,
+      consentRejectReducedTracking: null,
+      cookieAttributeSummary: null,
+      domNodeCount: null,
+      domStructureHash: null,
+      gpcVerification: null,
+      initialCookieCount: 0,
+      initialCookieDomains: [],
+      initialCookieNames: [],
+      keyPageDiscoverySummary: null,
+      responseHeaders: {},
+      scanId: "scan-1",
+      scriptSrcDomains: [],
+      scriptTagCount: 0,
+      sensitivePayloadViolations: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyRequestDomains: []
+    } as any,
+    signalHits: [],
+    snapshotWithScores: makeSnapshot({
+      advertisingTrackerCount: 1,
+      privacyPolicyPresent: true,
+      retargetingPixelDetected: true,
+      sessionReplayWithoutDisclosureDetected: true
+    })
+  });
+
+  assert.ok(compatibilitySignals.some((signal) => signal.key === "disclosure.privacy_policy_extraction_limited"));
+  assert.ok(!compatibilitySignals.some((signal) => signal.key === "disclosure.policy_runtime_disclosure_likely_obstructed"));
+  assert.ok(!compatibilitySignals.some((signal) => signal.key === "disclosure.policy_runtime_missing_technical_disclosure_detected"));
+});
