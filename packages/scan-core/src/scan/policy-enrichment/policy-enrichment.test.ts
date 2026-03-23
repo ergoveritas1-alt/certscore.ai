@@ -228,6 +228,18 @@ test("validatePolicyChunkJson normalizes broader minors thresholds into supporte
   assert.equal(normalized.childrenReference.confidence, 0.8);
 });
 
+test("ruleBasedPolicyPreprocess ignores exclusionary under-13 boilerplate", () => {
+  const result = ruleBasedPolicyPreprocess({
+    pageType: "privacy_policy",
+    text:
+      "Parents and guardians should observe children's activity. We do not knowingly collect Personal Information from children under the age of 13."
+  });
+
+  assert.equal(result.childrenReference, "none");
+  assert.ok(!result.mentions.some((mention) => mention.topic === "children"));
+  assert.equal(result.evidenceSnippets.children, undefined);
+});
+
 test("validatePolicyChunkJson normalizes unsupported retention categories into other", () => {
   const normalized = validatePolicyChunkJson({
     chunkText: "We retain customer data for as long as needed to provide the service.",

@@ -22,8 +22,34 @@ const TOPIC_PATTERNS: Array<{ topic: PolicyTopicKey; pattern: RegExp }> = [
   { topic: "cross_border_transfer", pattern: /\bcross-border\b|international transfer|transfer.*outside/i },
   { topic: "data_retention", pattern: /\bretain|retention|keep your data|store.*for\b/i },
   { topic: "sensitive_data", pattern: /\bsensitive data\b|health data|biometric|financial information/i },
-  { topic: "children", pattern: /\bunder 13\b|\bunder 16\b|children under/i },
   { topic: "session_replay_disclosure", pattern: /\bsession replay\b|record your interactions|replay your session/i }
+];
+
+const GENERIC_UNDER_13_PATTERNS = [/\bunder 13\b/i, /\bchildren under the age of 13\b/i];
+const GENERIC_UNDER_16_PATTERNS = [/\bunder 16\b/i, /\bchildren under the age of 16\b/i];
+const EXCLUSIONARY_UNDER_13_PATTERNS = [
+  /do(?:es)? not knowingly collect[^.]{0,160}\bchildren under (?:the age of )?13\b/i,
+  /do(?:es)? not knowingly collect[^.]{0,160}\bfrom children under (?:the age of )?13\b/i,
+  /\bnot intended for children under (?:the age of )?13\b/i,
+  /\bnot directed to children under (?:the age of )?13\b/i,
+  /\bif you are under (?:the age of )?13\b[^.]{0,120}\bdo not\b/i,
+  /\bchildren under (?:the age of )?13\b[^.]{0,120}\b(?:may not|must not|should not|are not permitted to)\b/i
+];
+const EXCLUSIONARY_UNDER_16_PATTERNS = [
+  /do(?:es)? not knowingly collect[^.]{0,160}\bchildren under (?:the age of )?16\b/i,
+  /do(?:es)? not knowingly collect[^.]{0,160}\bfrom children under (?:the age of )?16\b/i,
+  /\bnot intended for children under (?:the age of )?16\b/i,
+  /\bnot directed to children under (?:the age of )?16\b/i,
+  /\bif you are under (?:the age of )?16\b[^.]{0,120}\bdo not\b/i,
+  /\bchildren under (?:the age of )?16\b[^.]{0,120}\b(?:may not|must not|should not|are not permitted to)\b/i
+];
+const AFFIRMATIVE_UNDER_13_PATTERNS = [
+  /\bchildren under (?:the age of )?13\b[^.]{0,160}\b(?:with|after|upon)\b[^.]{0,80}\bparental consent\b/i,
+  /\bservices?\s+(?:for|to)\s+children under (?:the age of )?13\b/i
+];
+const AFFIRMATIVE_UNDER_16_PATTERNS = [
+  /\bchildren under (?:the age of )?16\b[^.]{0,160}\b(?:with|after|upon)\b[^.]{0,80}\bparental consent\b/i,
+  /\bservices?\s+(?:for|to)\s+children under (?:the age of )?16\b/i
 ];
 
 function getSnippetForPattern(source: string, pattern: RegExp) {
@@ -36,6 +62,23 @@ function getSnippetForPattern(source: string, pattern: RegExp) {
     matchIndex: match.index,
     source
   });
+}
+
+function hasMeaningfulChildrenReference(input: {
+  content: string;
+  genericPatterns: RegExp[];
+  affirmativePatterns: RegExp[];
+  exclusionaryPatterns: RegExp[];
+}) {
+  if (!input.genericPatterns.some((pattern) => pattern.test(input.content))) {
+    return false;
+  }
+
+  if (input.affirmativePatterns.some((pattern) => pattern.test(input.content))) {
+    return true;
+  }
+
+  return !input.exclusionaryPatterns.some((pattern) => pattern.test(input.content));
 }
 
 function firstSentence(text: string) {
@@ -254,6 +297,18 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
   const isTermsPage = pageType === "terms_of_service";
   const evidenceSnippets: Record<string, string> = {};
   const actionableFlags: string[] = [];
+  const meaningfulUnder13Reference = hasMeaningfulChildrenReference({
+    content: normalizedText,
+    genericPatterns: GENERIC_UNDER_13_PATTERNS,
+    affirmativePatterns: AFFIRMATIVE_UNDER_13_PATTERNS,
+    exclusionaryPatterns: EXCLUSIONARY_UNDER_13_PATTERNS
+  });
+  const meaningfulUnder16Reference = hasMeaningfulChildrenReference({
+    content: normalizedText,
+    genericPatterns: GENERIC_UNDER_16_PATTERNS,
+    affirmativePatterns: AFFIRMATIVE_UNDER_16_PATTERNS,
+    exclusionaryPatterns: EXCLUSIONARY_UNDER_16_PATTERNS
+  });
 
   const addEvidence = (key: string, snippet: string | null) => {
     if (snippet) {
@@ -270,6 +325,17 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     addEvidence(`topic:${entry.topic}`, snippet);
     return [{ topic: entry.topic, confidence: 0.82 }];
   });
+
+  if (meaningfulUnder13Reference || meaningfulUnder16Reference) {
+    const childrenSnippet = meaningfulUnder13Reference
+      ? getSnippetForPattern(normalizedText, /under 13|children under the age of 13/i)
+      : getSnippetForPattern(normalizedText, /under 16|children under the age of 16/i);
+
+    addEvidence("topic:children", childrenSnippet);
+    if (childrenSnippet) {
+      policyMentions.push({ topic: "children", confidence: 0.82 });
+    }
+  }
 
   const dsarPresent = /request access|request deletion|delete your data|access your data|data subject request|submit a privacy request/i.test(
     normalizedText
@@ -321,9 +387,9 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
       return [{ mechanism: entry.mechanism, confidence: 0.8, snippet }];
     });
 
-  const childrenReference = /under 13|children under the age of 13/i.test(normalizedText)
+  const childrenReference = meaningfulUnder13Reference
     ? "under_13"
-    : /under 16|children under the age of 16/i.test(normalizedText)
+    : meaningfulUnder16Reference
       ? "under_16"
       : normalizedText.length > 0
         ? "none"

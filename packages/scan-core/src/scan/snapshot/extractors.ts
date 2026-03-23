@@ -1096,6 +1096,71 @@ function matchesKeywordSet(haystack: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(haystack));
 }
 
+const LEGAL_PAGE_TYPES = new Set<StaticPageResult["pageType"]>(["privacy_policy", "terms_of_service", "cookie_policy"]);
+
+const MEANINGFUL_CHILD_AUDIENCE_PATTERNS = [
+  /\bfor kids\b/,
+  /\bfor children\b/,
+  /\bkids(?:'s)?\s+(?:products?|programs?|courses?|lessons?|games?|toys?|content|activities|club)\b/,
+  /\bchildren(?:'s)?\s+(?:products?|programs?|courses?|lessons?|games?|toys?|content|activities|club)\b/,
+  /\byoung learners\b/,
+  /\bparents and teachers\b/,
+  /\bfor ages?\s*\d{1,2}(?:\s*(?:\+|and up))?\b/,
+  /\bages?\s*\d{1,2}\s*(?:to|-)\s*\d{1,2}\b/
+];
+
+const KID_DIRECTED_CONTENT_PATTERNS = [
+  /\bcartoon\b/,
+  /\bkids club\b/,
+  /\bfor ages?\s*\d{1,2}(?:\s*(?:\+|and up))?\b/,
+  /\bchildren(?:'s)?\s+(?:games?|activities|club|content|lessons?)\b/,
+  /\byoung learners\b/
+];
+
+const GENERIC_UNDER_13_PATTERNS = [/\bunder 13\b/i, /\bchildren under the age of 13\b/i];
+const GENERIC_UNDER_16_PATTERNS = [/\bunder 16\b/i, /\bchildren under the age of 16\b/i];
+const EXCLUSIONARY_UNDER_13_PATTERNS = [
+  /do(?:es)? not knowingly collect[^.]{0,160}\bchildren under (?:the age of )?13\b/i,
+  /do(?:es)? not knowingly collect[^.]{0,160}\bfrom children under (?:the age of )?13\b/i,
+  /\bnot intended for children under (?:the age of )?13\b/i,
+  /\bnot directed to children under (?:the age of )?13\b/i,
+  /\bif you are under (?:the age of )?13\b[^.]{0,120}\bdo not\b/i,
+  /\bchildren under (?:the age of )?13\b[^.]{0,120}\b(?:may not|must not|should not|are not permitted to)\b/i
+];
+const EXCLUSIONARY_UNDER_16_PATTERNS = [
+  /do(?:es)? not knowingly collect[^.]{0,160}\bchildren under (?:the age of )?16\b/i,
+  /do(?:es)? not knowingly collect[^.]{0,160}\bfrom children under (?:the age of )?16\b/i,
+  /\bnot intended for children under (?:the age of )?16\b/i,
+  /\bnot directed to children under (?:the age of )?16\b/i,
+  /\bif you are under (?:the age of )?16\b[^.]{0,120}\bdo not\b/i,
+  /\bchildren under (?:the age of )?16\b[^.]{0,120}\b(?:may not|must not|should not|are not permitted to)\b/i
+];
+const AFFIRMATIVE_UNDER_13_PATTERNS = [
+  /\bchildren under (?:the age of )?13\b[^.]{0,160}\b(?:with|after|upon)\b[^.]{0,80}\bparental consent\b/i,
+  /\bservices?\s+(?:for|to)\s+children under (?:the age of )?13\b/i
+];
+const AFFIRMATIVE_UNDER_16_PATTERNS = [
+  /\bchildren under (?:the age of )?16\b[^.]{0,160}\b(?:with|after|upon)\b[^.]{0,80}\bparental consent\b/i,
+  /\bservices?\s+(?:for|to)\s+children under (?:the age of )?16\b/i
+];
+
+function hasMeaningfulChildrenPolicyReference(input: {
+  content: string;
+  genericPatterns: RegExp[];
+  affirmativePatterns: RegExp[];
+  exclusionaryPatterns: RegExp[];
+}) {
+  if (!hasText(input.content, input.genericPatterns)) {
+    return false;
+  }
+
+  if (hasText(input.content, input.affirmativePatterns)) {
+    return true;
+  }
+
+  return !hasText(input.content, input.exclusionaryPatterns);
+}
+
 function deriveGovernanceLinkSignals(pages: StaticPageResult[]) {
   const normalizedLinks = pages.flatMap((page) =>
     page.links.map((link) => {
@@ -1386,6 +1451,18 @@ export function derivePolicySignals(policyPages: StaticPageResult[]) {
   const privacyPolicyWordCount = privacyPolicy?.textContent.match(/\b[\w'-]+\b/g)?.length ?? null;
   const readability = privacyPolicy ? estimateReadingScore(privacyPolicy.textContent) : null;
   const namedVendorCount = (privacyPolicy?.textContent.match(/\b(google|meta|facebook|stripe|shopify|hubspot|salesforce|zendesk|mailchimp)\b/gi) ?? []).length;
+  const meaningfulUnder13Reference = hasMeaningfulChildrenPolicyReference({
+    content: combinedPolicyText,
+    genericPatterns: GENERIC_UNDER_13_PATTERNS,
+    affirmativePatterns: AFFIRMATIVE_UNDER_13_PATTERNS,
+    exclusionaryPatterns: EXCLUSIONARY_UNDER_13_PATTERNS
+  });
+  const meaningfulUnder16Reference = hasMeaningfulChildrenPolicyReference({
+    content: combinedPolicyText,
+    genericPatterns: GENERIC_UNDER_16_PATTERNS,
+    affirmativePatterns: AFFIRMATIVE_UNDER_16_PATTERNS,
+    exclusionaryPatterns: EXCLUSIONARY_UNDER_16_PATTERNS
+  });
 
   return {
     privacyPolicyHash: privacyPolicy ? stableHash(normalizeTextForHash(privacyPolicy.textContent)) : null,
@@ -1399,8 +1476,8 @@ export function derivePolicySignals(policyPages: StaticPageResult[]) {
     mentionsGdpr: hasText(combinedPolicyText, [/\bgdpr\b/i, /general data protection regulation/i]),
     mentionsCcpaOrCpra: hasText(combinedPolicyText, [/\bccpa\b/i, /\bcpra\b/i, /california consumer privacy/i]),
     mentionsCoppa: hasText(combinedPolicyText, [/\bcoppa\b/i, /children'?s online privacy/i]),
-    mentionsUnder13: hasText(combinedPolicyText, [/under 13/i, /children under the age of 13/i]),
-    mentionsUnder16: hasText(combinedPolicyText, [/under 16/i, /children under the age of 16/i]),
+    mentionsUnder13: meaningfulUnder13Reference,
+    mentionsUnder16: meaningfulUnder16Reference,
     mentionsSensitiveData: hasText(combinedPolicyText, [/sensitive personal/i, /sensitive data/i]),
     mentionsBiometricData: hasText(combinedPolicyText, [/biometric/i]),
     mentionsHealthData: hasText(combinedPolicyText, [/health data/i, /health information/i, /\bphi\b/i]),
@@ -1536,6 +1613,11 @@ export function deriveContactSignals(pages: StaticPageResult[]) {
 export function deriveJurisdictionAndIndustry(pages: StaticPageResult[], domain: string) {
   const combinedText = pages.map((page) => page.textContent).join("\n");
   const lowerText = combinedText.toLowerCase();
+  const audienceText = normalizeMatchingText(
+    ...pages
+      .filter((page) => !LEGAL_PAGE_TYPES.has(page.pageType))
+      .map((page) => `${page.title ?? ""} ${page.textContent}`)
+  );
 
   return {
     countryInferred: /\.ca$/.test(domain) ? "CA" : /\.uk$/.test(domain) ? "GB" : "US",
@@ -1547,8 +1629,8 @@ export function deriveJurisdictionAndIndustry(pages: StaticPageResult[], domain:
         : "us",
     euExposureLikely: /\bgdpr\b|european union|eea/i.test(combinedText),
     californiaExposureLikely: /\bccpa\b|\bcpra\b|california resident/i.test(combinedText),
-    childrenAudienceLikely: /kids|children|students|young learners|parents/i.test(lowerText),
-    kidDirectedContentDetected: /cartoon|kids club|for ages \d+|children's|young learners/i.test(lowerText),
+    childrenAudienceLikely: matchesKeywordSet(audienceText, MEANINGFUL_CHILD_AUDIENCE_PATTERNS),
+    kidDirectedContentDetected: matchesKeywordSet(audienceText, KID_DIRECTED_CONTENT_PATTERNS),
     healthcareSiteLikely: /patient|hipaa|health care|medical/i.test(lowerText),
     financialServicesSiteLikely: /loan|insurance|investment|bank|fintech/i.test(lowerText),
     ecommerceSiteLikely: /add to cart|checkout|shipping|returns/i.test(lowerText),

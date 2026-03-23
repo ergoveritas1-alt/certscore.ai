@@ -636,3 +636,33 @@ test("surfaces minors-related context without requiring page-level attribution",
   assert.ok(packet?.details?.dataTypes?.includes("birthdate"));
   assert.ok(packet?.details?.dataTypes?.includes("youth_directed_context"));
 });
+
+test("suppresses minors-related context when only weak policy and audience cues are present", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The site shows youth-directed or age-related privacy cues that merit closer review.",
+        fallbackEvidence: {
+          childrenAudienceLikely: true,
+          childrenPrivacyRiskScore: 63,
+          mentionsUnder13: true,
+          signalKey: "context.children_audience_likely",
+          signalLabel: "Children audience likely",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "context.children_audience_likely",
+        signalLabel: "Children audience likely",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Children audience likely"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "minors_or_age_gated_collection_context");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});

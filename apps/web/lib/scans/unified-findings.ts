@@ -1036,6 +1036,23 @@ function buildPresentationDecision(input: {
     "form_collects_birthdate",
     "date_of_birth_input_present"
   ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
+  const strongMinorsContextEvidenceCount = [
+    "age_gate_present",
+    "kid_directed_content_detected",
+    "parental_consent_reference_present",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
+  const explicitMinorsCollectionFlagPresent = [
+    "age_gate_present",
+    "parental_consent_reference_present",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].some((flag) => input.packet.evidence?.flags?.includes(flag));
+  const childrenPrivacyRiskScore =
+    typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
+      ? input.packet.evidence.counts.childrenPrivacyRiskScore
+      : null;
   const needsPageAttribution =
     (input.packet.details?.family === "accessibility" &&
       !["accessibility_support_path_missing"].includes(input.packet.unifiedFindingId)) ||
@@ -1061,7 +1078,11 @@ function buildPresentationDecision(input: {
 
   if (
     isDomainLevelSensitiveContext &&
-    (minorsContextEvidenceCount >= 2 || typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number")
+    (
+      explicitMinorsCollectionFlagPresent ||
+      (strongMinorsContextEvidenceCount >= 1 &&
+        (minorsContextEvidenceCount >= 2 || (childrenPrivacyRiskScore !== null && childrenPrivacyRiskScore >= 60)))
+    )
   ) {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),

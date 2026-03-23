@@ -12,6 +12,7 @@ import {
   deriveFormSignals,
   deriveExpandedCommercialSignals,
   deriveGovernanceSignals,
+  deriveJurisdictionAndIndustry,
   derivePolicySignals,
   detectCmpVendorFromPage,
   detectTrackerVendorsFromStaticPage,
@@ -728,6 +729,38 @@ test("derivePolicySignals sanitizes noisy policy update dates", () => {
 
   assert.equal(signals.privacyPolicyLastUpdatedFound, "2026-01-01");
   assert.equal(signals.privacyPolicyLastUpdatedDate, "2026-01-01");
+});
+
+test("derivePolicySignals ignores exclusionary under-13 boilerplate", () => {
+  const signals = derivePolicySignals([
+    makePage({
+      pageType: "privacy_policy",
+      textContent:
+        "Parents and guardians should observe children's activity. We do not knowingly collect Personal Information from children under the age of 13."
+    })
+  ]);
+
+  assert.equal(signals.mentionsUnder13, false);
+});
+
+test("deriveJurisdictionAndIndustry ignores legal-page children boilerplate and vague audience terms", () => {
+  const signals = deriveJurisdictionAndIndustry(
+    [
+      makePage({
+        pageType: "homepage",
+        textContent: "We build custom keyboards for students and professionals."
+      }),
+      makePage({
+        pageType: "privacy_policy",
+        textContent:
+          "Parents and guardians should observe children's activity. We do not knowingly collect Personal Information from children under the age of 13."
+      })
+    ],
+    "example.com"
+  );
+
+  assert.equal(signals.childrenAudienceLikely, false);
+  assert.equal(signals.kidDirectedContentDetected, false);
 });
 
 test("assessPolicyPageContentQuality flags thin shell-like legal pages for rendered fallback", () => {
