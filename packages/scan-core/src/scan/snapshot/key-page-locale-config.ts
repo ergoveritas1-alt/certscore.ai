@@ -1,7 +1,10 @@
 import type { PageType } from "@website-signal-risk-scanner/shared";
 
 export type SupportedKeyPageLocale = "de" | "en" | "es" | "fr" | "it" | "nl" | "pt" | "ru";
-export type KeyPageType = Extract<PageType, "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">;
+export type KeyPageType = Extract<
+  PageType,
+  "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact" | "about" | "pricing" | "product"
+>;
 
 type LocaleDictionary = Record<KeyPageType | "legal_hub", string[]>;
 
@@ -26,6 +29,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookie", "cookie policy", "cookies"],
     accessibility_statement: ["accessibility", "accessibility statement", "accessibility declaration"],
     contact: ["contact", "contact us", "contact information"],
+    about: ["about", "about us", "company", "our story", "leadership", "team"],
+    pricing: ["pricing", "plans", "fees", "cost", "rates"],
+    product: ["product", "products", "platform", "solutions", "services", "trade"],
     legal_hub: ["legal", "legal notices", "legal information", "policies", "policy center", "privacy center"]
   },
   fr: {
@@ -34,6 +40,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookies", "politique de cookies", "gestion des cookies"],
     accessibility_statement: ["accessibilite", "declaration d accessibilite"],
     contact: ["contact", "nous contacter"],
+    about: ["a propos", "societe", "equipe", "direction"],
+    pricing: ["tarifs", "prix", "forfaits", "frais"],
+    product: ["produit", "produits", "plateforme", "services"],
     legal_hub: ["mentions legales", "informations legales", "juridique", "politiques", "centre de confidentialite"]
   },
   de: {
@@ -42,6 +51,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookies", "cookie richtlinie", "cookie hinweise"],
     accessibility_statement: ["barrierefreiheit", "erklarung zur barrierefreiheit", "erklaerung zur barrierefreiheit"],
     contact: ["kontakt", "kontaktieren sie uns"],
+    about: ["uber uns", "ueber uns", "team", "leitung", "unternehmen"],
+    pricing: ["preise", "tarife", "gebuhren", "gebuehren"],
+    product: ["produkt", "produkte", "plattform", "dienstleistungen"],
     legal_hub: ["impressum", "rechtliches", "rechtliche hinweise", "richtlinien"]
   },
   es: {
@@ -50,6 +62,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookies", "politica de cookies"],
     accessibility_statement: ["accesibilidad", "declaracion de accesibilidad"],
     contact: ["contacto", "contactanos", "contacte con nosotros"],
+    about: ["sobre nosotros", "empresa", "equipo", "liderazgo"],
+    pricing: ["precios", "tarifas", "planes", "costes"],
+    product: ["producto", "productos", "plataforma", "servicios"],
     legal_hub: ["legal", "aviso legal", "politicas", "centro de privacidad"]
   },
   it: {
@@ -58,6 +73,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookie", "cookie policy", "informativa sui cookie"],
     accessibility_statement: ["accessibilita", "dichiarazione di accessibilita"],
     contact: ["contatti", "contattaci", "contatto"],
+    about: ["chi siamo", "azienda", "team", "leadership"],
+    pricing: ["prezzi", "tariffe", "piani", "costi"],
+    product: ["prodotto", "prodotti", "piattaforma", "servizi"],
     legal_hub: ["legale", "note legali", "politiche", "centro privacy"]
   },
   nl: {
@@ -66,6 +84,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookie", "cookiebeleid", "cookies"],
     accessibility_statement: ["toegankelijkheid", "toegankelijkheidsverklaring"],
     contact: ["contact", "neem contact op"],
+    about: ["over ons", "bedrijf", "team", "leiding"],
+    pricing: ["prijzen", "tarieven", "plannen", "kosten"],
+    product: ["product", "producten", "platform", "diensten"],
     legal_hub: ["juridisch", "juridische informatie", "beleid", "privacycentrum"]
   },
   pt: {
@@ -74,6 +95,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookies", "politica de cookies"],
     accessibility_statement: ["acessibilidade", "declaracao de acessibilidade"],
     contact: ["contato", "contacto", "fale conosco", "fale connosco"],
+    about: ["sobre nos", "empresa", "equipa", "time", "lideranca"],
+    pricing: ["precos", "tarifas", "planos", "custos"],
+    product: ["produto", "produtos", "plataforma", "servicos"],
     legal_hub: ["legal", "aviso legal", "politicas", "centro de privacidade"]
   },
   ru: {
@@ -94,6 +118,9 @@ const KEY_PAGE_KEYWORDS_BY_LOCALE: Record<SupportedKeyPageLocale, LocaleDictiona
     cookie_policy: ["cookies", "cookie policy", "куки", "политика cookies"],
     accessibility_statement: ["доступность", "заявление о доступности", "accessibility"],
     contact: ["контакты", "обратная связь", "связаться с нами", "kontakty", "contact"],
+    about: ["о нас", "компания", "команда", "руководство", "about"],
+    pricing: ["цены", "тарифы", "стоимость", "pricing"],
+    product: ["продукт", "продукты", "платформа", "сервисы", "product"],
     legal_hub: ["правовая информация", "документы", "юридическая информация", "правила", "legal"]
   }
 };
@@ -104,56 +131,80 @@ const KEY_PAGE_PATH_GUESSES_BY_LOCALE: Record<SupportedKeyPageLocale, Record<Key
     terms_of_service: ["/terms", "/terms-of-service", "/terms-of-use", "/terms-and-conditions", "/legal/terms"],
     cookie_policy: ["/cookies", "/cookie-policy", "/legal/cookies"],
     accessibility_statement: ["/accessibility", "/accessibility-statement"],
-    contact: ["/contact", "/contact-us"]
+    contact: ["/contact", "/contact-us"],
+    about: ["/about", "/about-us", "/company", "/team", "/leadership"],
+    pricing: ["/pricing", "/plans", "/fees"],
+    product: ["/product", "/products", "/platform", "/services"]
   },
   fr: {
     privacy_policy: ["/politique-de-confidentialite", "/confidentialite", "/vie-privee"],
     terms_of_service: ["/mentions-legales", "/conditions-generales", "/conditions-generales-d-utilisation", "/cgu", "/cgv"],
     cookie_policy: ["/politique-de-cookies", "/cookies", "/gestion-des-cookies"],
     accessibility_statement: ["/accessibilite", "/declaration-accessibilite"],
-    contact: ["/contact", "/nous-contacter"]
+    contact: ["/contact", "/nous-contacter"],
+    about: ["/a-propos", "/societe", "/equipe"],
+    pricing: ["/tarifs", "/prix", "/forfaits"],
+    product: ["/produits", "/produit", "/plateforme", "/services"]
   },
   de: {
     privacy_policy: ["/datenschutz", "/datenschutzerklaerung", "/datenschutzerklaerung"],
     terms_of_service: ["/agb", "/nutzungsbedingungen", "/rechtliche-hinweise"],
     cookie_policy: ["/cookies", "/cookie-richtlinie"],
     accessibility_statement: ["/barrierefreiheit", "/erklaerung-zur-barrierefreiheit"],
-    contact: ["/kontakt"]
+    contact: ["/kontakt"],
+    about: ["/uber-uns", "/ueber-uns", "/team"],
+    pricing: ["/preise", "/tarife", "/gebuehren"],
+    product: ["/produkte", "/produkt", "/plattform", "/dienstleistungen"]
   },
   es: {
     privacy_policy: ["/politica-de-privacidad", "/privacidad", "/proteccion-de-datos"],
     terms_of_service: ["/terminos-y-condiciones", "/terminos-de-uso", "/aviso-legal"],
     cookie_policy: ["/politica-de-cookies", "/cookies"],
     accessibility_statement: ["/accesibilidad", "/declaracion-de-accesibilidad"],
-    contact: ["/contacto"]
+    contact: ["/contacto"],
+    about: ["/sobre-nosotros", "/empresa", "/equipo"],
+    pricing: ["/precios", "/tarifas", "/planes"],
+    product: ["/productos", "/producto", "/plataforma", "/servicios"]
   },
   it: {
     privacy_policy: ["/informativa-privacy", "/privacy", "/privacy-policy"],
     terms_of_service: ["/termini-e-condizioni", "/termini-di-servizio", "/note-legali"],
     cookie_policy: ["/cookie-policy", "/cookies", "/informativa-cookie"],
     accessibility_statement: ["/accessibilita", "/dichiarazione-di-accessibilita"],
-    contact: ["/contatti", "/contatto"]
+    contact: ["/contatti", "/contatto"],
+    about: ["/chi-siamo", "/azienda", "/team"],
+    pricing: ["/prezzi", "/tariffe", "/piani"],
+    product: ["/prodotti", "/prodotto", "/piattaforma", "/servizi"]
   },
   nl: {
     privacy_policy: ["/privacybeleid", "/privacy"],
     terms_of_service: ["/algemene-voorwaarden", "/gebruiksvoorwaarden", "/juridische-kennisgeving"],
     cookie_policy: ["/cookiebeleid", "/cookies"],
     accessibility_statement: ["/toegankelijkheid", "/toegankelijkheidsverklaring"],
-    contact: ["/contact"]
+    contact: ["/contact"],
+    about: ["/over-ons", "/bedrijf", "/team"],
+    pricing: ["/prijzen", "/tarieven", "/plannen"],
+    product: ["/producten", "/product", "/platform", "/diensten"]
   },
   pt: {
     privacy_policy: ["/politica-de-privacidade", "/privacidade", "/protecao-de-dados"],
     terms_of_service: ["/termos-e-condicoes", "/termos-de-uso", "/aviso-legal"],
     cookie_policy: ["/politica-de-cookies", "/cookies"],
     accessibility_statement: ["/acessibilidade", "/declaracao-de-acessibilidade"],
-    contact: ["/contato", "/contacto"]
+    contact: ["/contato", "/contacto"],
+    about: ["/sobre-nos", "/empresa", "/equipa", "/time"],
+    pricing: ["/precos", "/tarifas", "/planos"],
+    product: ["/produtos", "/produto", "/plataforma", "/servicos"]
   },
   ru: {
     privacy_policy: ["/privacy-policy", "/privacypolicy", "/politika-konfidentsialnosti", "/конфиденциальность"],
     terms_of_service: ["/pravila", "/terms", "/usloviya-ispolzovaniya", "/правила"],
     cookie_policy: ["/cookies", "/cookie-policy", "/куки"],
     accessibility_statement: ["/accessibility", "/zayavlenie-o-dostupnosti", "/доступность"],
-    contact: ["/contact", "/kontakty", "/контакты"]
+    contact: ["/contact", "/kontakty", "/контакты"],
+    about: ["/about", "/o-nas", "/компания", "/команда"],
+    pricing: ["/pricing", "/tseny", "/цены"],
+    product: ["/product", "/products", "/produkty", "/продукты"]
   }
 };
 
@@ -270,5 +321,5 @@ export function scoreKeywordMatches(text: string, keywords: string[]) {
 }
 
 export function getSupportedKeyPageTypes() {
-  return ["privacy_policy", "terms_of_service", "cookie_policy", "accessibility_statement", "contact"] as const;
+  return ["privacy_policy", "terms_of_service", "cookie_policy", "accessibility_statement", "contact", "about", "pricing", "product"] as const;
 }

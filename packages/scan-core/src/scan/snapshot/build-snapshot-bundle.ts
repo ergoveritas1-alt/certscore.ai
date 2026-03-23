@@ -305,9 +305,15 @@ const KEY_PAGE_TYPES = [
   "terms_of_service",
   "cookie_policy",
   "accessibility_statement",
-  "contact"
+  "contact",
+  "about",
+  "pricing",
+  "product"
 ] as const satisfies Array<
-  Extract<StaticPageResult["pageType"], "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">
+  Extract<
+    StaticPageResult["pageType"],
+    "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact" | "about" | "pricing" | "product"
+  >
 >;
 
 const BROWSER_PASS_HARD_TIMEOUT_MS = 45_000;
@@ -1348,6 +1354,12 @@ function formatKeyPageTypeLabel(pageType: (typeof KEY_PAGE_TYPES)[number]) {
       return "Accessibility statement";
     case "contact":
       return "Contact page";
+    case "about":
+      return "About page";
+    case "pricing":
+      return "Pricing page";
+    case "product":
+      return "Product page";
   }
 }
 

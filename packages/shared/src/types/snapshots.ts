@@ -604,7 +604,10 @@ export type KeyPageDiscoverySource =
 export type KeyPageDiscoveryHostRelation = "same_host" | "same_brand_subdomain";
 
 export type KeyPageDiscoveryCandidate = {
-  pageType: Extract<PageType, "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">;
+  pageType: Extract<
+    PageType,
+    "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact" | "about" | "pricing" | "product"
+  >;
   candidateUrl: string;
   discoveredFrom: KeyPageDiscoverySource;
   hostRelation: KeyPageDiscoveryHostRelation;
@@ -618,7 +621,10 @@ export type KeyPageDiscoveryCandidate = {
 };
 
 export type KeyPageDiscoveryPageSummary = {
-  pageType: Extract<PageType, "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact">;
+  pageType: Extract<
+    PageType,
+    "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact" | "about" | "pricing" | "product"
+  >;
   surfaceDetected: boolean;
   guessedOnly: boolean;
   successfulUrl: string | null;
