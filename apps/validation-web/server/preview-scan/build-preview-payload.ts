@@ -59,6 +59,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
     input.snapshot.homepageFetchStatus === "forbidden" ||
     input.snapshot.homepageFetchStatus === "blocked" ||
     input.snapshot.homepageFetchStatus === "timeout";
+  const secondarySurfaceCoverageLimited = input.snapshot.partialScan || input.snapshot.pagesScanned < 3;
 
   pushFinding(
     findings,
@@ -135,7 +136,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    !siteSurfaceUnverified && !input.snapshot.termsOfServicePresent
+    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.termsOfServicePresent
       ? {
           affectedPage: "Footer",
           category: "legal",
@@ -149,7 +150,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    !siteSurfaceUnverified && !input.snapshot.contactPagePresent
+    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.contactPagePresent
       ? {
           affectedPage: "Footer",
           category: "legal",
@@ -170,7 +171,9 @@ export function buildPreviewPayloadFromSnapshot(input: {
         : `This preview scanned ${input.snapshot.pagesScanned} pages in a lightweight pass.`;
   const confidenceDescriptor = siteSurfaceUnverified
     ? "Some legal and disclosure checks could not be verified because the scanned site surface was only partially reachable during the live preview."
-    : null;
+    : secondarySurfaceCoverageLimited
+      ? "This lightweight preview may not verify every secondary legal or contact route unless those pages are directly fetched during the live pass."
+      : null;
 
   return {
     version: "preview-v1",
