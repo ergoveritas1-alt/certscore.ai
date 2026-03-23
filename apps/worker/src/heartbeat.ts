@@ -19,10 +19,6 @@ export async function recordWorkerHeartbeat(input: {
     { onConflict: "worker_type" }
   );
 
-  if (heartbeatError) {
-    throw new Error(`Failed to record ${input.workerType} worker heartbeat: ${heartbeatError.message}`);
-  }
-
   const { error: eventError } = await supabase.from("scan_events").insert({
     scan_id: null,
     domain_id: null,
@@ -36,6 +32,20 @@ export async function recordWorkerHeartbeat(input: {
       workerType: input.workerType
     }
   });
+
+  if (heartbeatError && eventError) {
+    throw new Error(
+      `Failed to record ${input.workerType} worker heartbeat: ${heartbeatError.message}; legacy event fallback also failed: ${eventError.message}`
+    );
+  }
+
+  if (heartbeatError) {
+    console.warn("[worker] worker_heartbeats write failed; retained legacy heartbeat event", {
+      error: heartbeatError.message,
+      workerType: input.workerType
+    });
+    return;
+  }
 
   if (eventError) {
     console.warn("[worker] failed to append legacy heartbeat event", {
