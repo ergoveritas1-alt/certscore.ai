@@ -31,29 +31,29 @@ test("disables scanning when the scanner heartbeat is stale", () => {
   assert.match(availability.reason ?? "", /no healthy scanner service heartbeat/i);
 });
 
-test("uses the legacy heartbeat when the worker_heartbeats table query fails", () => {
+test("uses the event heartbeat when the worker_heartbeats table query fails", () => {
   const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
     heartbeatErrorMessage: "Could not find the table 'public.worker_heartbeats' in the schema cache",
-    legacyErrorMessage: null,
-    legacyHeartbeatAt: "2026-03-21T11:59:40.000Z",
-    legacyHost: "legacy-worker",
+    eventErrorMessage: null,
+    eventHeartbeatAt: "2026-03-21T11:59:40.000Z",
+    eventHost: "event-worker",
     tableHeartbeatAt: null,
     tableHost: null
   });
 
   assert.deepEqual(heartbeat, {
     errorMessage: null,
-    host: "legacy-worker",
+    host: "event-worker",
     lastHeartbeatAt: "2026-03-21T11:59:40.000Z"
   });
 });
 
-test("uses the table heartbeat when the legacy event query fails", () => {
+test("uses the table heartbeat when the event query fails", () => {
   const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
     heartbeatErrorMessage: null,
-    legacyErrorMessage: "temporary scan_events failure",
-    legacyHeartbeatAt: null,
-    legacyHost: null,
+    eventErrorMessage: "temporary scan_events failure",
+    eventHeartbeatAt: null,
+    eventHost: null,
     tableHeartbeatAt: "2026-03-21T11:59:50.000Z",
     tableHost: "table-worker"
   });
@@ -68,9 +68,9 @@ test("uses the table heartbeat when the legacy event query fails", () => {
 test("returns an error only when both heartbeat sources fail", () => {
   const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
     heartbeatErrorMessage: "worker_heartbeats unavailable",
-    legacyErrorMessage: "scan_events unavailable",
-    legacyHeartbeatAt: null,
-    legacyHost: null,
+    eventErrorMessage: "scan_events unavailable",
+    eventHeartbeatAt: null,
+    eventHost: null,
     tableHeartbeatAt: null,
     tableHost: null
   });
@@ -79,4 +79,21 @@ test("returns an error only when both heartbeat sources fail", () => {
   assert.equal(heartbeat.host, null);
   assert.match(heartbeat.errorMessage ?? "", /worker_heartbeats unavailable/);
   assert.match(heartbeat.errorMessage ?? "", /scan_events unavailable/);
+});
+
+test("prefers the event heartbeat when both sources are present", () => {
+  const heartbeat = resolveFullScanWorkerHeartbeatSnapshot({
+    heartbeatErrorMessage: null,
+    eventErrorMessage: null,
+    eventHeartbeatAt: "2026-03-21T11:59:55.000Z",
+    eventHost: "event-worker",
+    tableHeartbeatAt: "2026-03-21T11:59:50.000Z",
+    tableHost: "table-worker"
+  });
+
+  assert.deepEqual(heartbeat, {
+    errorMessage: null,
+    host: "event-worker",
+    lastHeartbeatAt: "2026-03-21T11:59:55.000Z"
+  });
 });

@@ -79,21 +79,21 @@ function getLegacyHeartbeatHost(metadata: unknown) {
 
 export function resolveFullScanWorkerHeartbeatSnapshot(input: {
   heartbeatErrorMessage?: string | null;
-  legacyErrorMessage?: string | null;
-  legacyHeartbeatAt: string | null;
-  legacyHost: string | null;
+  eventErrorMessage?: string | null;
+  eventHeartbeatAt: string | null;
+  eventHost: string | null;
   tableHeartbeatAt: string | null;
   tableHost: string | null;
 }): FullScanWorkerHeartbeatSnapshot {
   const tableHeartbeatMs = getHeartbeatTimestamp(input.tableHeartbeatAt);
-  const legacyHeartbeatMs = getHeartbeatTimestamp(input.legacyHeartbeatAt);
-  const lastHeartbeatAt = getNewestHeartbeat(input.tableHeartbeatAt, input.legacyHeartbeatAt);
+  const eventHeartbeatMs = getHeartbeatTimestamp(input.eventHeartbeatAt);
+  const lastHeartbeatAt = getNewestHeartbeat(input.eventHeartbeatAt, input.tableHeartbeatAt);
   const host =
-    legacyHeartbeatMs > tableHeartbeatMs
-      ? input.legacyHost
+    eventHeartbeatMs >= tableHeartbeatMs
+      ? input.eventHost
       : tableHeartbeatMs > Number.NEGATIVE_INFINITY
         ? input.tableHost
-        : input.legacyHost;
+        : input.eventHost;
 
   if (lastHeartbeatAt) {
     return {
@@ -103,9 +103,9 @@ export function resolveFullScanWorkerHeartbeatSnapshot(input: {
     };
   }
 
-  if (input.heartbeatErrorMessage && input.legacyErrorMessage) {
+  if (input.heartbeatErrorMessage && input.eventErrorMessage) {
     return {
-      errorMessage: `Scanner health check failed: ${input.heartbeatErrorMessage}; fallback query also failed: ${input.legacyErrorMessage}`,
+      errorMessage: `Scanner health check failed: ${input.eventErrorMessage}; table fallback also failed: ${input.heartbeatErrorMessage}`,
       host: null,
       lastHeartbeatAt: null
     };
@@ -121,37 +121,48 @@ export function resolveFullScanWorkerHeartbeatSnapshot(input: {
 export async function getLastFullScanWorkerHeartbeat(
   supabase = createAdminClient()
 ): Promise<FullScanWorkerHeartbeatSnapshot> {
-  const [{ data: heartbeatRows, error: heartbeatError }, { data: legacyRow, error: legacyError }] = await Promise.all([
-    supabase
-      .from("worker_heartbeats")
-      .select("worker_type, last_heartbeat_at, host")
-      .in("worker_type", [SCANNER_WORKER_TYPE, LEGACY_FULL_SCAN_WORKER_TYPE]),
-    supabase
-      .from("scan_events")
-      .select("created_at, metadata_json")
-      .is("scan_id", null)
-      .in("event_type", [SCAN_EVENT_TYPES.scannerHeartbeat, SCAN_EVENT_TYPES.fullWorkerHeartbeat])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-  ]);
+  const { data: eventRow, error: eventError } = await supabase
+    .from("scan_events")
+    .select("created_at, metadata_json")
+    .is("scan_id", null)
+    .in("event_type", [SCAN_EVENT_TYPES.scannerHeartbeat, SCAN_EVENT_TYPES.fullWorkerHeartbeat])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const eventHeartbeatAt =
+    eventRow && typeof (eventRow as { created_at?: unknown }).created_at === "string"
+      ? String((eventRow as { created_at: string }).created_at)
+      : null;
+  const eventHost = getLegacyHeartbeatHost((eventRow as { metadata_json?: unknown } | null)?.metadata_json);
+
+  if (eventHeartbeatAt) {
+    return resolveFullScanWorkerHeartbeatSnapshot({
+      heartbeatErrorMessage: null,
+      eventErrorMessage: eventError?.message ?? null,
+      eventHeartbeatAt,
+      eventHost,
+      tableHeartbeatAt: null,
+      tableHost: null
+    });
+  }
+
+  const { data: heartbeatRows, error: heartbeatError } = await supabase
+    .from("worker_heartbeats")
+    .select("worker_type, last_heartbeat_at, host")
+    .in("worker_type", [SCANNER_WORKER_TYPE, LEGACY_FULL_SCAN_WORKER_TYPE]);
 
   const newestHeartbeatRow = [...(((heartbeatRows as WorkerHeartbeatRow[] | null) ?? []))]
     .filter((row) => typeof row.last_heartbeat_at === "string")
     .sort((left, right) => getHeartbeatTimestamp(right.last_heartbeat_at) - getHeartbeatTimestamp(left.last_heartbeat_at))[0];
   const tableHeartbeatAt = newestHeartbeatRow?.last_heartbeat_at ?? null;
   const tableHost = newestHeartbeatRow?.host ?? null;
-  const legacyHeartbeatAt =
-    legacyRow && typeof (legacyRow as { created_at?: unknown }).created_at === "string"
-      ? String((legacyRow as { created_at: string }).created_at)
-      : null;
-  const legacyHost = getLegacyHeartbeatHost((legacyRow as { metadata_json?: unknown } | null)?.metadata_json);
 
   return resolveFullScanWorkerHeartbeatSnapshot({
     heartbeatErrorMessage: heartbeatError?.message ?? null,
-    legacyErrorMessage: legacyError?.message ?? null,
-    legacyHeartbeatAt,
-    legacyHost,
+    eventErrorMessage: eventError?.message ?? null,
+    eventHeartbeatAt,
+    eventHost,
     tableHeartbeatAt,
     tableHost
   });
