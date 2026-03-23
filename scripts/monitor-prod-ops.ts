@@ -152,17 +152,17 @@ async function main() {
     }
   }
 
-  const fullScanWorkerHeartbeat = await getLastFullScanWorkerHeartbeat(db);
+  const scannerHeartbeat = await getLastFullScanWorkerHeartbeat(db);
 
-  if (fullScanWorkerHeartbeat.errorMessage) {
-    findings.push(fullScanWorkerHeartbeat.errorMessage);
-  } else if (!fullScanWorkerHeartbeat.lastHeartbeatAt) {
-    findings.push("Full-scan worker heartbeat is missing.");
+  if (scannerHeartbeat.errorMessage) {
+    findings.push(scannerHeartbeat.errorMessage);
+  } else if (!scannerHeartbeat.lastHeartbeatAt) {
+    findings.push("Scanner service heartbeat is missing.");
   } else {
-    const heartbeatAgeMs = Date.now() - new Date(fullScanWorkerHeartbeat.lastHeartbeatAt).getTime();
+    const heartbeatAgeMs = Date.now() - new Date(scannerHeartbeat.lastHeartbeatAt).getTime();
     if (heartbeatAgeMs > staleThresholdMs) {
       findings.push(
-        `Full-scan worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${fullScanWorkerHeartbeat.host ?? "unknown"}).`
+        `Scanner service heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
       );
     }
   }
