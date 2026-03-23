@@ -43,7 +43,7 @@ async function bootstrapWorker() {
     });
   });
 
-  console.info("[worker] worker service started", {
+  console.info("[worker] legacy scanner queue bridge started", {
     jobs: QUEUE_JOB_NAMES,
     concurrency: env.WORKER_CONCURRENCY,
     redisHost,
@@ -55,9 +55,9 @@ async function bootstrapWorker() {
     startedAt,
     workerType: "full_scan"
   }).catch((error) => {
-    console.error("[worker] failed to record startup heartbeat", {
-      error: error instanceof Error ? error.message : String(error)
-    });
+      console.error("[worker] failed to record legacy startup heartbeat", {
+        error: error instanceof Error ? error.message : String(error)
+      });
   });
 
   const interval = setInterval(() => {
@@ -65,7 +65,7 @@ async function bootstrapWorker() {
       host,
       workerType: "full_scan"
     }).catch((error) => {
-      console.error("[worker] failed to record heartbeat", {
+      console.error("[worker] failed to record legacy heartbeat", {
         error: error instanceof Error ? error.message : String(error)
       });
     });
@@ -80,7 +80,7 @@ async function bootstrapWorker() {
     }
     shuttingDown = true;
     clearInterval(interval);
-    console.info("[worker] shutting down", { signal });
+    console.info("[worker] shutting down legacy scanner queue bridge", { signal });
     await Promise.allSettled(workers.map((worker) => worker.close()));
     process.exit(0);
   };

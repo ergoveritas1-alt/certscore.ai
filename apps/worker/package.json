@@ -1,5 +1,6 @@
 {
   "name": "@website-signal-risk-scanner/worker",
+  "description": "Legacy queue and validation worker compatibility app for WC01 during the scanner transition to WS01.",
   "version": "0.1.0",
   "private": true,
   "scripts": {
