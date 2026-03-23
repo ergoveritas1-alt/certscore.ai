@@ -8,10 +8,14 @@ CertScore (`certscore.ai`) is a production-minded MVP for scanning public websit
 website-signal-risk-scanner/
 ├─ apps/
 │  ├─ web/
+│  ├─ scanner/
+│  ├─ validation-web/
+│  ├─ validation-worker/
 │  └─ worker/
 ├─ packages/
 │  ├─ shared/
 │  ├─ db/
+│  ├─ scan-core/
 │  └─ ui/
 ├─ docs/
 ├─ .env.example
@@ -22,11 +26,23 @@ website-signal-risk-scanner/
 
 ## Workspace packages
 
-- `apps/web`: Next.js App Router marketing site, auth flows, dashboard, reports, and server actions
-- `apps/worker`: BullMQ worker, crawl/audit/scoring/report pipeline, PDF generation, and scheduler sweep
+- `apps/web`: product-facing web app and control-plane workflows
+- `apps/scanner`: transitional scanner compatibility app left in `WC01` during the split to `WS01`
+- `apps/validation-web`: validation-only web surface
+- `apps/validation-worker`: active validation runtime owned by `WC01`
+- `apps/worker`: legacy worker compatibility and validation carryover paths
+- `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/db`: Supabase clients and database env helpers
 - `packages/ui`: reusable UI primitives
+
+## Repo boundary
+
+`WC01` is now the product/control-plane repo.
+
+- product web flows, scan creation, reporting, and validation stay here
+- the standalone scanner runtime now lives in `WS01`
+- scanner operational changes, crawler identity work, and scanner deploy flow should originate in `WS01`
 
 ## What the MVP includes
 
@@ -34,10 +50,10 @@ website-signal-risk-scanner/
 - Supabase auth with Google OAuth and magic link login
 - organization bootstrap and protected workspace routes
 - domain management, plan limits, and client grouping
-- BullMQ queue processing with a single worker service
+- DB-backed scan creation with scanner-service claiming
 - crawl/discovery, accessibility, privacy, and legal heuristics
 - deterministic scoring, canonical report payloads, and authenticated report UI
-- worker-side PDF generation and upload
+- scanner-generated PDF generation and upload
 - regression summaries and scheduled rescans
 - lightweight branding for reports and PDFs
 
@@ -50,10 +66,10 @@ This monorepo should use [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.en
 
 Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a root `.env.local` for app runtime configuration.
 
-Recommended environment split:
+Recommended environment split inside `WC01`:
 
-- local web + local worker: dedicated dev Supabase project
-- production web + production worker: dedicated prod Supabase project
+- local web + local validation runtime: dedicated dev Supabase project
+- production web + production validation runtime: dedicated prod Supabase project
 
 Do not point localhost at the production Supabase auth project unless you are intentionally testing production auth behavior.
 
@@ -66,7 +82,7 @@ Required for the web app:
 - `REDIS_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
-Required for the worker:
+Required for the validation runtime and compatibility worker paths in `WC01`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -109,17 +125,18 @@ Compatibility note:
 9. Provision a Redis instance and set `REDIS_URL`.
 10. Install Playwright Chromium for the worker:
    - `pnpm --filter @website-signal-risk-scanner/worker playwright:install`
-11. Start the full local stack when you want web plus both workers ready:
-   - `pnpm dev:all`
-12. Start validation local development with a watched validation worker:
+11. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
-13. Start the main local app by itself when needed:
+12. Start the main local app by itself when needed:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-14. Start the validation-only web app on a separate port when needed:
+13. Start the validation-only web app on a separate port when needed:
    - `pnpm dev:validation:web`
-15. Start the main scan worker when needed:
-   - `pnpm --filter @website-signal-risk-scanner/worker dev`
-16. Run a scheduler sweep manually when needed:
+14. Use `WS01` when you need the standalone scanner locally.
+15. Use the legacy all-in-one runner only when you intentionally need the old combined local topology:
+   - `pnpm dev:all`
+16. Run a validation scheduler sweep manually when needed:
+   - `pnpm dev:validation:scheduler`
+17. Run a legacy scheduler sweep manually when needed:
    - `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
 
 ## Development verification
@@ -132,7 +149,6 @@ Use these commands before shipping changes:
 Accessibility-specific validation:
 
 - `pnpm --filter @website-signal-risk-scanner/worker typecheck`
-- `node --import tsx --test /Users/benmasek/WC01/apps/worker/src/scan/accessibility-validation.test.ts`
 - `pnpm --filter @website-signal-risk-scanner/worker benchmark:accessibility:assert`
 
 The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
@@ -141,7 +157,7 @@ The live benchmark assertion command uses `apps/web/.env.local` and will execute
 
 GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
 
-- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks the worker, and runs the deterministic accessibility validation tests.
+- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks the legacy worker app, and runs the deterministic accessibility validation tests.
 - `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `SUPABASE_STORAGE_BUCKET`.
 - If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
 
@@ -151,10 +167,10 @@ Use these lightweight checks before first deployment validation:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
 - `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
+- `pnpm --filter @website-signal-risk-scanner/scanner check-env`
+- `pnpm --filter @website-signal-risk-scanner/scanner check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`
-- `pnpm --filter @website-signal-risk-scanner/worker check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/worker check-runtime`
-- `pnpm --filter @website-signal-risk-scanner/worker check-runtime:validation`
 
 Use these runtime smoke helpers:
 
@@ -180,12 +196,9 @@ The validation crawler deployment and VM runbook is documented in [docs/validati
 
 ### GCP worker pool
 
-- deploy `apps/worker`
-- configure the worker environment variables from the list above
-- use only production Supabase URL and keys in the worker host
-- install Playwright Chromium in the deploy image or build step
-- deploy the worker as a Cloud Run Worker Pool or use [`deploy.sh`](/Users/benmasek/WC01/deploy.sh)
-- run exactly one production worker instance unless you intentionally scale concurrency
+- do not use `WC01` for the primary scanner deploy path
+- use `WS01` for scanner runtime deployment
+- keep `WC01` worker deployment guidance scoped to validation or migration-only compatibility paths
 
 ### Supabase
 
@@ -198,19 +211,19 @@ The validation crawler deployment and VM runbook is documented in [docs/validati
 ### Redis
 
 - create a Redis database
-- set `REDIS_URL` in both web and worker environments
+- set `REDIS_URL` in any `WC01` runtime that still requires Redis
 
 ### Scheduler
 
 Recommended production trigger:
 
-- run the scheduler sweep every hour
+- run the validation scheduler sweep every hour if the validation runtime is enabled
 
 Command:
 
-- `pnpm --filter @website-signal-risk-scanner/worker scheduler:sweep`
+- `pnpm dev:validation:scheduler`
 
-This can be invoked by a Cloud Run Job or any equivalent scheduler.
+The primary scanner scheduler now lives in `WS01`.
 
 ## Deployment readiness checklist
 

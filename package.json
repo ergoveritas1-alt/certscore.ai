@@ -13,6 +13,7 @@
     "check-runtime": "pnpm --filter @website-signal-risk-scanner/web check-runtime && pnpm --filter @website-signal-risk-scanner/scanner check-runtime",
     "check-runtime:validation": "pnpm --filter @website-signal-risk-scanner/validation-web check-runtime && pnpm --filter @website-signal-risk-scanner/scanner check-runtime",
     "dev": "turbo run dev --parallel",
+    "dev:control-plane": "bash ./scripts/run-validation-dev.sh",
     "dev:all": "bash ./scripts/run-all-dev.sh",
     "dev:certscore:web": "pnpm --filter @website-signal-risk-scanner/web dev",
     "dev:certscore:worker": "pnpm --filter @website-signal-risk-scanner/scanner dev",

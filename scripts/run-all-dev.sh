@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+echo "[run-all-dev] starting legacy combined WC01 local stack"
+echo "[run-all-dev] for the standalone scanner runtime, prefer WS01"
+
 web_pid=""
 scan_worker_pid=""
 validation_worker_pid=""
