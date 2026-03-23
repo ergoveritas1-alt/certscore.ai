@@ -129,9 +129,11 @@ Compatibility note:
 13. Start the validation-only web app on a separate port when needed:
    - `pnpm dev:validation:web`
 14. Use `WS01` when you need the standalone scanner locally.
-15. Use the combined local runner only when you want web + validation together in `WC01`:
+15. Start the standalone scanner locally against the same dev Supabase project as `localhost:3000`:
+   - `pnpm dev:scanner:local`
+16. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
-16. Run a validation scheduler sweep manually when needed:
+17. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 
 ## Development verification
