@@ -11,7 +11,7 @@ export type ValidationFindingFamilyId =
   | "cookie_runtime_review"
   | "policy_runtime_review"
   | "policy_review_queue"
-  | "policy_section_review"
+  | "section_review"
   | "uncategorized";
 
 export type ValidationFindingSource =
@@ -19,6 +19,7 @@ export type ValidationFindingSource =
   | "policy_runtime"
   | "policy_enrichment"
   | "policy_review_queue"
+  | "supplemental_validation"
   | "snapshot_accessibility"
   | "unknown";
 
@@ -53,11 +54,11 @@ export function deriveValidationFindingTaxonomy(input: {
 
   if (rulePrefix === "section_review") {
     return {
-      familyId: "policy_section_review",
-      familyLabel: "Policy Section Review",
+      familyId: "section_review",
+      familyLabel: "Section Review",
       scope: "page",
-      source: "policy_enrichment",
-      subject: "privacy"
+      source: "supplemental_validation",
+      subject: "disclosure"
     };
   }
 

@@ -9,11 +9,15 @@ export type ReportSectionId =
   | "privacy_notices_rights_data_handling"
   | "terms_legal_disclosures"
   | "policy_clarity_consistency_review"
+  | "financial_promotions_claims_disclosures"
+  | "entity_identity_registration_transparency"
   | "consent_controls_enforcement"
   | "tracking_third_party_ecosystem"
   | "sensitive_data_collection"
   | "offers_pricing_claims"
   | "billing_cancellation_post_purchase_rights"
+  | "fees_terms_pricing_transparency"
+  | "high_risk_product_marketing_disclosures"
   | "access_barriers_task_completion"
   | "accessibility_commitments_conformance_support"
   | "us_consumer_protection_ftc_coppa"
@@ -35,6 +39,14 @@ export type ReportEvidenceCategoryId =
   | "cross_document_consistency"
   | "policy_to_behavior_contradictions"
   | "manual_review_triggers"
+  | "consumer_financial_marketing_claims"
+  | "performance_claim_context_and_risk_disclosure"
+  | "entity_identity_governance_transparency"
+  | "contact_and_operator_disclosure_quality"
+  | "registration_status_credibility"
+  | "fee_disclosure_clarity"
+  | "consumer_choice_and_cost_transparency"
+  | "high_risk_product_promotion"
   | "consent_interface_control_availability"
   | "choice_symmetry_dark_pattern_indicators"
   | "consent_framework_cmp_signals"
@@ -196,6 +208,264 @@ const defineReportUnifiedFinding = (input: {
   presentationKey: input.presentationKey
 });
 
+const FINANCIAL_REPORT_SECTIONS: ReportSectionDefinition[] = [
+  {
+    id: "financial_promotions_claims_disclosures",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "Financial promotions, claims & disclosures",
+    evidenceCategoryIds: [
+      "consumer_financial_marketing_claims",
+      "performance_claim_context_and_risk_disclosure",
+      "disclosures_claim_substantiation"
+    ]
+  },
+  {
+    id: "entity_identity_registration_transparency",
+    pillarId: "policies_rights_disclosures",
+    label: "Entity identity & registration transparency",
+    evidenceCategoryIds: [
+      "entity_identity_governance_transparency",
+      "contact_and_operator_disclosure_quality",
+      "registration_status_credibility"
+    ]
+  },
+  {
+    id: "fees_terms_pricing_transparency",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "Fees, terms & pricing transparency",
+    evidenceCategoryIds: [
+      "fee_disclosure_clarity",
+      "consumer_choice_and_cost_transparency",
+      "policy_to_behavior_contradictions",
+      "disclosures_claim_substantiation"
+    ]
+  },
+  {
+    id: "high_risk_product_marketing_disclosures",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "High-risk product marketing & disclosures",
+    evidenceCategoryIds: [
+      "high_risk_product_promotion",
+      "performance_claim_context_and_risk_disclosure",
+      "consumer_financial_marketing_claims",
+      "disclosures_claim_substantiation"
+    ]
+  }
+];
+
+const FINANCIAL_REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
+  {
+    id: "consumer_financial_marketing_claims",
+    sectionId: "financial_promotions_claims_disclosures",
+    label: "consumer financial marketing claims"
+  },
+  {
+    id: "performance_claim_context_and_risk_disclosure",
+    sectionId: "financial_promotions_claims_disclosures",
+    label: "performance claim context and risk disclosure"
+  },
+  {
+    id: "entity_identity_governance_transparency",
+    sectionId: "entity_identity_registration_transparency",
+    label: "entity identity and governance transparency"
+  },
+  {
+    id: "contact_and_operator_disclosure_quality",
+    sectionId: "entity_identity_registration_transparency",
+    label: "contact and operator disclosure quality"
+  },
+  {
+    id: "registration_status_credibility",
+    sectionId: "entity_identity_registration_transparency",
+    label: "registration-status credibility signals"
+  },
+  {
+    id: "fee_disclosure_clarity",
+    sectionId: "fees_terms_pricing_transparency",
+    label: "fee disclosure clarity"
+  },
+  {
+    id: "consumer_choice_and_cost_transparency",
+    sectionId: "fees_terms_pricing_transparency",
+    label: "consumer choice and cost transparency"
+  },
+  {
+    id: "high_risk_product_promotion",
+    sectionId: "high_risk_product_marketing_disclosures",
+    label: "high-risk product promotion"
+  }
+];
+
+const FINANCIAL_REPORT_SIGNALS: ReportSignalDefinition[] = [
+  defineReportSignal("snapshot_signal", "financial.performance_claim_text_present", "Financial performance claim text present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.return_or_yield_percentage_present", "Return or yield percentage present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.investment_outperformance_language_present", "Investment outperformance language present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.guaranteed_return_language_present", "Guaranteed return language present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.low_risk_high_return_language_present", "Low-risk high-return language present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.hypothetical_or_backtest_language_present", "Hypothetical or backtest language present", "performance_claim_context_and_risk_disclosure", ["consumer_financial_marketing_claims"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.testimonial_or_review_block_near_financial_claim_present", "Testimonial or review block near financial claim present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.risk_disclosure_text_present", "Financial risk disclosure text present", "performance_claim_context_and_risk_disclosure", ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.claim_cta_block_present", "Financial claim CTA block present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"]),
+  defineReportSignal("snapshot_signal", "entity.legal_entity_name_text_present", "Legal entity name text present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.company_address_text_present", "Company address text present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.contact_email_present", "Contact email present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.contact_phone_present", "Contact phone present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.contact_form_present", "Contact form present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.about_page_present", "About page present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.team_or_leadership_page_present", "Team or leadership page present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.jurisdiction_or_operating_entity_text_present", "Jurisdiction or operating entity text present", "entity_identity_governance_transparency", ["registration_status_credibility"]),
+  defineReportSignal("snapshot_signal", "entity.regulatory_or_license_claim_text_present", "Regulatory or license claim text present", "registration_status_credibility", ["entity_identity_governance_transparency", "contact_and_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.registration_identifier_text_present", "Registration identifier text present", "registration_status_credibility", ["entity_identity_governance_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.multiple_entity_names_detected_on_site", "Multiple entity names detected on site", "entity_identity_governance_transparency"),
+  defineReportSignal("snapshot_signal", "commercial.pricing_page_present", "Pricing page present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
+  defineReportSignal("snapshot_signal", "commercial.fee_related_text_present", "Fee-related text present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
+  defineReportSignal("snapshot_signal", "commercial.fee_schedule_table_present", "Fee schedule table present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
+  defineReportSignal("snapshot_signal", "commercial.withdrawal_redemption_terms_text_present", "Withdrawal or redemption terms present", "consumer_choice_and_cost_transparency", ["fee_disclosure_clarity"]),
+  defineReportSignal("snapshot_signal", "commercial.cancellation_terms_text_present", "Cancellation terms present", "consumer_choice_and_cost_transparency", ["fee_disclosure_clarity"]),
+  defineReportSignal("snapshot_signal", "commercial.account_closure_terms_text_present", "Account closure terms present", "consumer_choice_and_cost_transparency", ["fee_disclosure_clarity"]),
+  defineReportSignal("snapshot_signal", "commercial.promo_price_or_free_claim_present", "Promo price or free claim present", "disclosures_claim_substantiation", ["fee_disclosure_clarity", "consumer_choice_and_cost_transparency"]),
+  defineReportSignal("snapshot_signal", "commercial.variable_fee_language_present_without_explanation", "Variable fee language without explanation", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
+  defineReportSignal("snapshot_signal", "financial.leverage_language_present", "Leverage language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.margin_trading_language_present", "Margin trading language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.options_or_futures_language_present", "Options or futures language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.perpetuals_or_derivatives_language_present", "Perpetuals or derivatives language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.staking_apy_language_present", "Staking APY language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.copy_trading_language_present", "Copy trading language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
+  defineReportSignal("snapshot_signal", "financial.ai_trading_or_automated_trading_language_present", "AI trading or automated trading language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
+  defineReportSignal("snapshot_signal", "financial.loss_risk_disclosure_text_present", "Loss-risk disclosure text present", "performance_claim_context_and_risk_disclosure", ["high_risk_product_promotion"]),
+  defineReportSignal("snapshot_signal", "financial.high_risk_product_explainer_page_present", "High-risk product explainer page present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"])
+];
+
+const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
+  defineReportUnifiedFinding({
+    id: "performance_claims_without_context",
+    label: "Performance claims without context",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["disclosures_claim_substantiation", "performance_claim_context_and_risk_disclosure"],
+    validationRuleKeys: ["section_review.claim_disclosure_distance_exceeds_threshold"]
+  }),
+  defineReportUnifiedFinding({
+    id: "investment_risk_disclosure_missing",
+    label: "Investment risk disclosure missing",
+    owner: "performance_claim_context_and_risk_disclosure",
+    mirrors: ["disclosures_claim_substantiation"],
+    validationRuleKeys: ["section_review.claim_block_without_local_risk_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "hypothetical_performance_disclosure_missing",
+    label: "Hypothetical performance disclosure missing",
+    owner: "performance_claim_context_and_risk_disclosure",
+    validationRuleKeys: ["section_review.hypothetical_results_without_local_qualification"]
+  }),
+  defineReportUnifiedFinding({
+    id: "testimonial_endorsement_financial_promotion_risk",
+    label: "Testimonial or endorsement financial-promotion risk",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["disclosures_claim_substantiation"],
+    signalMappings: [{ source: "snapshot_signal", key: "financial.testimonial_or_review_block_near_financial_claim_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "registration_identifier_missing",
+    label: "Registration identifier missing",
+    owner: "registration_status_credibility",
+    mirrors: ["entity_identity_governance_transparency"],
+    validationRuleKeys: ["section_review.registration_claim_without_identifier"]
+  }),
+  defineReportUnifiedFinding({
+    id: "registration_claim_support_missing",
+    label: "Registration claim support missing",
+    owner: "registration_status_credibility",
+    mirrors: ["contact_and_operator_disclosure_quality"]
+  }),
+  defineReportUnifiedFinding({
+    id: "entity_contact_governance_transparency_missing",
+    label: "Entity contact and governance transparency missing",
+    owner: "entity_identity_governance_transparency",
+    mirrors: ["contact_and_operator_disclosure_quality"],
+    validationRuleKeys: ["section_review.contact_surface_minimal_for_regulated_claim_context"]
+  }),
+  defineReportUnifiedFinding({
+    id: "operator_identity_surface_sparse",
+    label: "Operator identity surface sparse",
+    owner: "contact_and_operator_disclosure_quality",
+    mirrors: ["entity_identity_governance_transparency"],
+    validationRuleKeys: ["section_review.entity_transparency_surface_sparse"]
+  }),
+  defineReportUnifiedFinding({
+    id: "entity_naming_consistency_conflict",
+    label: "Entity naming consistency conflict",
+    owner: "entity_identity_governance_transparency",
+    validationRuleKeys: ["section_review.inconsistent_entity_naming_pattern_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "fee_disclosure_missing_or_opaque",
+    label: "Fee disclosure missing or opaque",
+    owner: "fee_disclosure_clarity",
+    mirrors: ["consumer_choice_and_cost_transparency"],
+    validationRuleKeys: ["section_review.service_promoted_without_fee_schedule_surface"]
+  }),
+  defineReportUnifiedFinding({
+    id: "material_terms_hard_to_locate",
+    label: "Material terms hard to locate",
+    owner: "consumer_choice_and_cost_transparency",
+    mirrors: ["fee_disclosure_clarity"],
+    validationRuleKeys: ["section_review.material_fee_terms_link_depth_exceeds_threshold"]
+  }),
+  defineReportUnifiedFinding({
+    id: "promo_to_terms_conflict",
+    label: "Promotional claim to terms conflict",
+    owner: "disclosures_claim_substantiation",
+    mirrors: ["fee_disclosure_clarity", "policy_to_behavior_contradictions"],
+    validationRuleKeys: ["section_review.price_claim_without_material_conditions_nearby"]
+  }),
+  defineReportUnifiedFinding({
+    id: "account_exit_terms_missing",
+    label: "Account-exit terms missing",
+    owner: "consumer_choice_and_cost_transparency",
+    mirrors: ["fee_disclosure_clarity"],
+    validationRuleKeys: [
+      "section_review.withdrawal_redemption_terms_missing",
+      "section_review.account_exit_terms_missing"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "leveraged_or_high_risk_product_promotion",
+    label: "Leveraged or high-risk product promotion",
+    owner: "high_risk_product_promotion",
+    mirrors: ["consumer_financial_marketing_claims"],
+    signalMappings: [
+      { source: "snapshot_signal", key: "financial.leverage_language_present" },
+      { source: "snapshot_signal", key: "financial.margin_trading_language_present" },
+      { source: "snapshot_signal", key: "financial.options_or_futures_language_present" },
+      { source: "snapshot_signal", key: "financial.perpetuals_or_derivatives_language_present" },
+      { source: "snapshot_signal", key: "financial.staking_apy_language_present" },
+      { source: "snapshot_signal", key: "financial.copy_trading_language_present" }
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "yield_or_return_claims_high_risk",
+    label: "Yield or return claims in high-risk context",
+    owner: "high_risk_product_promotion",
+    mirrors: ["performance_claim_context_and_risk_disclosure"],
+    validationRuleKeys: ["section_review.yield_claim_in_high_risk_product_context"]
+  }),
+  defineReportUnifiedFinding({
+    id: "high_risk_product_risk_disclosure_missing",
+    label: "High-risk product risk disclosure missing",
+    owner: "performance_claim_context_and_risk_disclosure",
+    mirrors: ["high_risk_product_promotion"],
+    validationRuleKeys: ["section_review.high_risk_product_without_local_loss_risk_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_financial_advice_or_trading_claims_without_disclosure",
+    label: "AI financial advice or trading claims without disclosure",
+    owner: "high_risk_product_promotion",
+    mirrors: ["disclosures_claim_substantiation"],
+    signalMappings: [{ source: "snapshot_signal", key: "financial.ai_trading_or_automated_trading_language_present" }],
+    validationRuleKeys: ["section_review.high_risk_product_without_explainer_surface"]
+  })
+];
+
 export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
   {
     id: "policies_rights_disclosures",
@@ -203,7 +473,8 @@ export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
     sectionIds: [
       "privacy_notices_rights_data_handling",
       "terms_legal_disclosures",
-      "policy_clarity_consistency_review"
+      "policy_clarity_consistency_review",
+      "entity_identity_registration_transparency"
     ]
   },
   {
@@ -220,7 +491,10 @@ export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
     label: "Consumer Protection & Commercial Practices",
     sectionIds: [
       "offers_pricing_claims",
-      "billing_cancellation_post_purchase_rights"
+      "billing_cancellation_post_purchase_rights",
+      "financial_promotions_claims_disclosures",
+      "fees_terms_pricing_transparency",
+      "high_risk_product_marketing_disclosures"
     ]
   },
   {
@@ -278,6 +552,7 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
       "manual_review_triggers"
     ]
   },
+  ...FINANCIAL_REPORT_SECTIONS,
   {
     id: "consent_controls_enforcement",
     pillarId: "consent_tracking_data_collection",
@@ -473,6 +748,7 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
     sectionId: "policy_clarity_consistency_review",
     label: "manual review triggers"
   },
+  ...FINANCIAL_REPORT_EVIDENCE_CATEGORIES,
   {
     id: "consent_interface_control_availability",
     sectionId: "consent_controls_enforcement",
@@ -1752,7 +2028,8 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "data_handling_disclosures",
     ["commercial_claims_disclosure_adequacy"],
     ["disclosures_claim_substantiation"]
-  )
+  ),
+  ...FINANCIAL_REPORT_SIGNALS
 ];
 
 export const REPORT_UNIFIED_FINDINGS = [
@@ -2385,7 +2662,8 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["accessibility_commitments_support_paths"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.accessibility_support_path_missing" }],
     aliases: ["Accessibility support path missing", "No accessibility support path detected", "Accessibility contact path missing"]
-  })
+  }),
+  ...FINANCIAL_REPORT_UNIFIED_FINDINGS
 ] satisfies ReportUnifiedFindingDefinition[];
 
 export type ReportUnifiedFindingId = (typeof REPORT_UNIFIED_FINDINGS)[number]["id"];

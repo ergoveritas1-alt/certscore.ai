@@ -1,5 +1,6 @@
 import type {
   ComplianceChangeEvent,
+  ObservedPageEvidence,
   PolicyEnrichment,
   PolicyEvidence,
   PolicyReviewQueueItem,
@@ -7,6 +8,7 @@ import type {
   ScanAccessibilityRuleCount,
   ScanPage,
   ScanRuntimeArtifact,
+  ScanSignalHit,
   ScanSnapshot,
   ScanTrackerVendor,
   SnapshotSignalItem
@@ -105,11 +107,13 @@ export type SnapshotBundle = {
   compatibilitySignals: SnapshotSignalItem[];
   changeEvents?: ComplianceChangeEvent[];
   pages: ScanPage[];
+  pageEvidence: ObservedPageEvidence[];
   policyEnrichments: PolicyEnrichment[];
   policyEvidence: PolicyEvidence[];
   policyReviewQueueItems: PolicyReviewQueueItem[];
   runtimeArtifacts: ScanRuntimeArtifact;
   scanPlan: ScanPlan;
+  signalHits: ScanSignalHit[];
   snapshot: ScanSnapshot;
   trackerVendors: ScanTrackerVendor[];
 };

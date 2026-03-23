@@ -12,7 +12,9 @@ import {
   type ValidationVerdict
 } from "@website-signal-risk-scanner/shared";
 import { extractHostname, normalizeUrl } from "@website-signal-risk-scanner/shared";
+import type { ObservedPageEvidence, ScanSignalHit } from "@website-signal-risk-scanner/shared";
 import { getWorkerEnv } from "../env";
+import { buildFinancialSectionReviewFindings } from "./financial-review";
 import { getCooldownDaysForRank, getNextDueAt, getRankBand, isValidValidationInterval, VALIDATION_FINDING_LIMIT, VALIDATION_SETTINGS_KEY } from "./constants";
 
 type ValidationSettingsRow = {
@@ -186,6 +188,40 @@ type ScanAccessibilityRuleExampleRow = {
   rule_code: string;
   rule_group: string;
   severity: string;
+};
+
+type ScanPageEvidenceRow = {
+  container_dom_path: string | null;
+  container_selector: string | null;
+  crawl_depth: number | null;
+  dom_path: string | null;
+  evidence_id: string;
+  matched_text: string | null;
+  metadata: Record<string, unknown> | null;
+  page_role: ObservedPageEvidence["pageRole"];
+  page_type: ObservedPageEvidence["pageType"];
+  page_url: string;
+  scan_id: string;
+  screenshot_ref: string | null;
+  selector: string | null;
+  sibling_index: number | null;
+  source_kind: ObservedPageEvidence["sourceKind"];
+  token_end: number | null;
+  token_start: number | null;
+};
+
+type ScanSignalHitRow = {
+  detector_name: string;
+  detector_type: ScanSignalHit["detectorType"];
+  detector_version: string;
+  evidence_refs: string[] | null;
+  id: string;
+  page_role: ScanSignalHit["pageRole"];
+  page_type: ScanSignalHit["pageType"];
+  page_url: string;
+  payload: Record<string, unknown> | null;
+  scan_id: string;
+  signal_key: string;
 };
 
 type ValidationSnapshotFallbackRow = {
@@ -3531,7 +3567,9 @@ export async function loadRankableFindings(scanId: string) {
     { data: runtimeArtifacts, error: runtimeArtifactsError },
     { data: snapshotSupplements, error: snapshotSupplementError },
     { data: policyQueue, error: policyQueueError },
-    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
+    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError },
+    { data: pageEvidenceRows, error: pageEvidenceError },
+    { data: signalHitRows, error: signalHitsError }
   ] = await Promise.all([
     supabase
       .from("scan_signals")
@@ -3565,7 +3603,15 @@ export async function loadRankableFindings(scanId: string) {
       .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
       .eq("scan_id", scanId)
       .order("node_count", { ascending: false })
-      .limit(10)
+      .limit(10),
+    supabase
+      .from("scan_page_evidence")
+      .select("scan_id, evidence_id, page_url, page_type, page_role, crawl_depth, source_kind, matched_text, selector, dom_path, container_selector, container_dom_path, sibling_index, token_start, token_end, screenshot_ref, metadata")
+      .eq("scan_id", scanId),
+    supabase
+      .from("scan_signal_hits")
+      .select("scan_id, id, signal_key, detector_name, detector_type, detector_version, page_url, page_type, page_role, evidence_refs, payload")
+      .eq("scan_id", scanId)
   ]);
 
   if (error) {
@@ -3590,6 +3636,14 @@ export async function loadRankableFindings(scanId: string) {
 
   if (accessibilityRuleExamplesError) {
     throw new Error(`Failed to load validation accessibility examples for scan ${scanId}: ${accessibilityRuleExamplesError.message}`);
+  }
+
+  if (pageEvidenceError) {
+    throw new Error(`Failed to load financial page evidence for scan ${scanId}: ${pageEvidenceError.message}`);
+  }
+
+  if (signalHitsError) {
+    throw new Error(`Failed to load financial signal hits for scan ${scanId}: ${signalHitsError.message}`);
   }
 
   const rows = (signalRows ?? []) as ScanSignalRow[];
@@ -3778,6 +3832,46 @@ export async function loadRankableFindings(scanId: string) {
       });
     }
   }
+
+  const normalizedPageEvidence: ObservedPageEvidence[] = ((pageEvidenceRows ?? []) as ScanPageEvidenceRow[]).map((row) => ({
+    evidenceId: row.evidence_id,
+    scanId: row.scan_id,
+    pageUrl: row.page_url,
+    pageType: row.page_type,
+    pageRole: row.page_role,
+    crawlDepth: row.crawl_depth,
+    sourceKind: row.source_kind,
+    matchedText: row.matched_text,
+    selector: row.selector,
+    domPath: row.dom_path,
+    containerSelector: row.container_selector,
+    containerDomPath: row.container_dom_path,
+    siblingIndex: row.sibling_index,
+    tokenStart: row.token_start,
+    tokenEnd: row.token_end,
+    screenshotRef: row.screenshot_ref,
+    metadata: row.metadata
+  }));
+  const normalizedSignalHits: ScanSignalHit[] = ((signalHitRows ?? []) as ScanSignalHitRow[]).map((row) => ({
+    id: row.id,
+    scanId: row.scan_id,
+    signalKey: row.signal_key,
+    detectorName: row.detector_name,
+    detectorType: row.detector_type,
+    detectorVersion: row.detector_version,
+    pageUrl: row.page_url,
+    pageType: row.page_type,
+    pageRole: row.page_role,
+    evidenceRefs: Array.isArray(row.evidence_refs) ? row.evidence_refs : [],
+    payload: row.payload ?? {}
+  }));
+
+  findings.push(
+    ...buildFinancialSectionReviewFindings({
+      pageEvidence: normalizedPageEvidence,
+      signalHits: normalizedSignalHits
+    })
+  );
 
   return findings.filter((finding, index, allFindings) => {
     return allFindings.findIndex((candidate) => candidate.rule_key === finding.rule_key) === index;

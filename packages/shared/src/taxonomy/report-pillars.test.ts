@@ -38,7 +38,7 @@ test("defines the v1 pillar order", () => {
 });
 
 test("keeps each section attached to exactly one pillar", () => {
-  assert.equal(REPORT_SECTIONS.length, 15);
+  assert.equal(REPORT_SECTIONS.length, 19);
   assert.ok(
     REPORT_SECTIONS.every((section) =>
       REPORT_PRIMARY_PILLARS.some((pillar) => pillar.id === section.pillarId && pillar.sectionIds.includes(section.id))
@@ -47,7 +47,7 @@ test("keeps each section attached to exactly one pillar", () => {
 });
 
 test("keeps each evidence category attached to exactly one section", () => {
-  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 60);
+  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 68);
   assert.ok(
     REPORT_EVIDENCE_CATEGORIES.every((category) =>
       REPORT_SECTIONS.some(
@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 72);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 89);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -101,7 +101,8 @@ test("returns ordered section metadata for a pillar", () => {
     [
       "privacy_notices_rights_data_handling",
       "terms_legal_disclosures",
-      "policy_clarity_consistency_review"
+      "policy_clarity_consistency_review",
+      "entity_identity_registration_transparency"
     ]
   );
 });
@@ -286,6 +287,46 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.children_privacy_context_without_supporting_disclosure")?.id,
     "children_privacy_context_without_supporting_disclosure"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("section_review.high_risk_product_without_local_loss_risk_disclosure")?.id,
+    "high_risk_product_risk_disclosure_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.testimonial_or_review_block_near_financial_claim_present")?.id,
+    "testimonial_endorsement_financial_promotion_risk"
+  );
+});
+
+test("registers financial sections, categories, and signals additively", () => {
+  assert.deepEqual(getReportSection("financial_promotions_claims_disclosures"), {
+    id: "financial_promotions_claims_disclosures",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "Financial promotions, claims & disclosures",
+    evidenceCategoryIds: [
+      "consumer_financial_marketing_claims",
+      "performance_claim_context_and_risk_disclosure",
+      "disclosures_claim_substantiation"
+    ]
+  });
+
+  assert.deepEqual(getReportEvidenceCategory("fee_disclosure_clarity"), {
+    id: "fee_disclosure_clarity",
+    sectionId: "fees_terms_pricing_transparency",
+    label: "fee disclosure clarity"
+  });
+
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "financial.guaranteed_return_language_present"),
+    {
+      id: "snapshot_signal:financial.guaranteed_return_language_present",
+      source: "snapshot_signal",
+      key: "financial.guaranteed_return_language_present",
+      label: "Guaranteed return language present",
+      primaryEvidenceCategoryId: "consumer_financial_marketing_claims",
+      secondaryEvidenceCategoryIds: ["performance_claim_context_and_risk_disclosure"],
+      overlayEvidenceCategoryIds: ["disclosures_claim_substantiation"]
+    }
   );
 });
 

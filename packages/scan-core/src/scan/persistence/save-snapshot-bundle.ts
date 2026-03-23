@@ -221,6 +221,22 @@ export function buildAccessibilityRuleExampleRows(bundle: SnapshotBundle) {
   }));
 }
 
+export function buildObservedPageEvidenceRows(bundle: SnapshotBundle) {
+  return bundle.pageEvidence.map((evidence) => ({
+    ...camelToSnakeRecord(evidence),
+    organization_id: bundle.snapshot.organizationId,
+    domain_id: bundle.snapshot.domainId
+  }));
+}
+
+export function buildScanSignalHitRows(bundle: SnapshotBundle) {
+  return bundle.signalHits.map((hit) => ({
+    ...camelToSnakeRecord(hit),
+    organization_id: bundle.snapshot.organizationId,
+    domain_id: bundle.snapshot.domainId
+  }));
+}
+
 export async function persistAccessibilityEvidence(input: AccessibilityEvidencePersistenceInput) {
   const supabase = createAdminClient();
 
@@ -409,6 +425,34 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
     organizationId: bundle.snapshot.organizationId,
     scanId: bundle.snapshot.scanId
   });
+
+  const { error: deletePageEvidenceError } = await supabase.from("scan_page_evidence").delete().eq("scan_id", bundle.snapshot.scanId);
+  if (deletePageEvidenceError) {
+    throw new Error(`Failed to clear scan page evidence: ${deletePageEvidenceError.message}`);
+  }
+
+  const pageEvidenceRows = buildObservedPageEvidenceRows(bundle);
+  if (pageEvidenceRows.length > 0) {
+    const { error: pageEvidenceError } = await supabase.from("scan_page_evidence").insert(pageEvidenceRows);
+
+    if (pageEvidenceError) {
+      throw new Error(`Failed to persist scan page evidence: ${pageEvidenceError.message}`);
+    }
+  }
+
+  const { error: deleteSignalHitsError } = await supabase.from("scan_signal_hits").delete().eq("scan_id", bundle.snapshot.scanId);
+  if (deleteSignalHitsError) {
+    throw new Error(`Failed to clear scan signal hits: ${deleteSignalHitsError.message}`);
+  }
+
+  const signalHitRows = buildScanSignalHitRows(bundle);
+  if (signalHitRows.length > 0) {
+    const { error: signalHitsError } = await supabase.from("scan_signal_hits").insert(signalHitRows);
+
+    if (signalHitsError) {
+      throw new Error(`Failed to persist scan signal hits: ${signalHitsError.message}`);
+    }
+  }
 
   const { error: deletePagesError } = await supabase.from("scan_pages").delete().eq("scan_id", bundle.snapshot.scanId);
   if (deletePagesError) {

@@ -60,6 +60,7 @@ import {
   policyPresenceHash,
   summarizeTrackers
 } from "./extractors";
+import { analyzeFinancialSignals } from "../financial/signals";
 import { fetchDnsSignals, fetchDomainRegistration, fetchTlsMetadata } from "./network-enrichment";
 import {
   buildKeyPageDiscoveryState,
@@ -345,6 +346,23 @@ function toTaxonomySignal(input: Omit<SnapshotSignalItem, "primaryCategory" | "p
     subcategory: taxonomy.subcategory ?? null,
     regulatoryTags: taxonomy.regulatoryTags ?? []
   };
+}
+
+function humanizeSignalKeyLabel(key: string) {
+  const [, tail = key] = key.split(".", 2);
+  return tail
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function mapFinancialSignalCategory(key: string): SnapshotSignalItem["category"] {
+  if (key.startsWith("entity.") || key.startsWith("commercial.") || key.startsWith("financial.")) {
+    return "disclosure";
+  }
+
+  return "context";
 }
 
 function normalizeCookieName(value: string | null | undefined) {
@@ -4188,9 +4206,27 @@ function buildCompatibilitySignals(input: {
   keyPageDiscoverySummary: ReturnType<typeof buildKeyPageDiscoverySummary>;
   policyEnrichmentBundle: Awaited<ReturnType<typeof enrichPolicyPages>>;
   runtimeArtifacts: ScanRuntimeArtifact;
+  signalHits: SnapshotBundle["signalHits"];
   snapshotWithScores: ScanSnapshot;
 }) {
   const compatibilitySignals = projectSnapshotSignals(input.snapshotWithScores, input.allTrackers);
+  const existingSignalKeys = new Set(compatibilitySignals.map((signal) => signal.key));
+
+  for (const hit of input.signalHits) {
+    if (existingSignalKeys.has(hit.signalKey)) {
+      continue;
+    }
+
+    compatibilitySignals.push(
+      toTaxonomySignal({
+        category: mapFinancialSignalCategory(hit.signalKey),
+        key: hit.signalKey,
+        label: humanizeSignalKeyLabel(hit.signalKey),
+        value: true
+      })
+    );
+    existingSignalKeys.add(hit.signalKey);
+  }
 
   for (const coverage of input.keyPageCoverage) {
     if (!coverage.surfaceDetected) {
@@ -5169,6 +5205,10 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
           ])
   });
   const allText = successfulPages.map((page) => page.textContent).join("\n");
+  const financialSignals = analyzeFinancialSignals({
+    pages: successfulPages,
+    scanId: input.scanId
+  });
   const {
     accessibilityStatementPresent,
     advertisingDisclosurePresent,
@@ -5517,6 +5557,43 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     sessionReplayWithoutDisclosureDetected: null,
     accessibilityClaimVsRealityGapDetected: null,
     complianceTrendScore: null,
+    performanceClaimPresent: financialSignals.summary.performanceClaimPresent,
+    performanceClaimCount: financialSignals.summary.performanceClaimCount,
+    returnOrYieldPercentagePresent: financialSignals.summary.returnOrYieldPercentagePresent,
+    investmentOutperformanceLanguagePresent: financialSignals.summary.investmentOutperformanceLanguagePresent,
+    guaranteedReturnLanguagePresent: financialSignals.summary.guaranteedReturnLanguagePresent,
+    lowRiskHighReturnLanguagePresent: financialSignals.summary.lowRiskHighReturnLanguagePresent,
+    hypotheticalOrBacktestLanguagePresent: financialSignals.summary.hypotheticalOrBacktestLanguagePresent,
+    testimonialOrReviewBlockNearFinancialClaimPresent: financialSignals.summary.testimonialOrReviewBlockNearFinancialClaimPresent,
+    riskDisclosureTextPresent: financialSignals.summary.riskDisclosureTextPresent,
+    claimCtaBlockPresent: financialSignals.summary.claimCtaBlockPresent,
+    financialClaimWithCtaCount: financialSignals.summary.financialClaimWithCtaCount,
+    aboutPagePresent: financialSignals.summary.aboutPagePresent,
+    teamOrLeadershipPagePresent: financialSignals.summary.teamOrLeadershipPagePresent,
+    jurisdictionOrOperatingEntityTextPresent: financialSignals.summary.jurisdictionOrOperatingEntityTextPresent,
+    registrationClaimPresent: financialSignals.summary.registrationClaimPresent,
+    registrationIdentifierPresent: financialSignals.summary.registrationIdentifierPresent,
+    multipleEntityNamesDetected: financialSignals.summary.multipleEntityNamesDetected,
+    entityTransparencySurfaceScore: financialSignals.summary.entityTransparencySurfaceScore,
+    pricingPagePresent: financialSignals.summary.pricingPagePresent,
+    feeRelatedTextPresent: financialSignals.summary.feeRelatedTextPresent,
+    feeSchedulePresent: financialSignals.summary.feeSchedulePresent,
+    withdrawalTermsPresent: financialSignals.summary.withdrawalTermsPresent,
+    cancellationTermsPresent: financialSignals.summary.cancellationTermsPresent,
+    accountClosureTermsPresent: financialSignals.summary.accountClosureTermsPresent,
+    promoPriceOrFreeClaimPresent: financialSignals.summary.promoPriceOrFreeClaimPresent,
+    variableFeeLanguageWithoutExplanation: financialSignals.summary.variableFeeLanguageWithoutExplanation,
+    materialFeeTermsMinLinkDepth: financialSignals.summary.materialFeeTermsMinLinkDepth,
+    leverageLanguagePresent: financialSignals.summary.leverageLanguagePresent,
+    marginTradingLanguagePresent: financialSignals.summary.marginTradingLanguagePresent,
+    optionsOrFuturesLanguagePresent: financialSignals.summary.optionsOrFuturesLanguagePresent,
+    perpetualsOrDerivativesLanguagePresent: financialSignals.summary.perpetualsOrDerivativesLanguagePresent,
+    stakingApyLanguagePresent: financialSignals.summary.stakingApyLanguagePresent,
+    copyTradingLanguagePresent: financialSignals.summary.copyTradingLanguagePresent,
+    aiTradingLanguagePresent: financialSignals.summary.aiTradingLanguagePresent,
+    lossRiskDisclosureTextPresent: financialSignals.summary.lossRiskDisclosureTextPresent,
+    highRiskProductExplainerPagePresent: financialSignals.summary.highRiskProductExplainerPagePresent,
+    highRiskProductSignalCount: financialSignals.summary.highRiskProductSignalCount,
     wcagLevelClaimed: null,
     accessibilityRemediationLikely: null,
     accessibilityClaimAccuracyScore: null,
@@ -5741,6 +5818,7 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     keyPageDiscoverySummary,
     policyEnrichmentBundle,
     runtimeArtifacts,
+    signalHits: financialSignals.signalHits,
     snapshotWithScores
   });
   const finalSnapshot = buildFinalSnapshot({
@@ -5760,6 +5838,8 @@ export async function buildSnapshotBundle(input: BuildSnapshotBundleInput): Prom
     accessibilityRuleExamples: browserPass.ruleExamples,
     accessibilityRuleCounts: browserPass.ruleCounts,
     pages: fetchedPages.map((page) => buildPageMetadata(input.scanId, page)),
+    pageEvidence: financialSignals.pageEvidence,
+    signalHits: financialSignals.signalHits,
     compatibilitySignals
   };
 }

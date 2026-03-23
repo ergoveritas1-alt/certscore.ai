@@ -190,6 +190,229 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     snapshot.privacyPolicyWordCount ?? 0
   );
 
+  pushBoolean(
+    "disclosure",
+    "financial.performance_claim_text_present",
+    "Financial performance claim text present",
+    snapshot.performanceClaimPresent
+  );
+  pushNumber(
+    "disclosure",
+    "financial.performance_claim_count",
+    "Financial performance claim count",
+    snapshot.performanceClaimCount ?? 0
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.return_or_yield_percentage_present",
+    "Return or yield percentage present",
+    snapshot.returnOrYieldPercentagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.investment_outperformance_language_present",
+    "Investment outperformance language present",
+    snapshot.investmentOutperformanceLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.guaranteed_return_language_present",
+    "Guaranteed return language present",
+    snapshot.guaranteedReturnLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.low_risk_high_return_language_present",
+    "Low-risk high-return language present",
+    snapshot.lowRiskHighReturnLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.hypothetical_or_backtest_language_present",
+    "Hypothetical or backtest language present",
+    snapshot.hypotheticalOrBacktestLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.testimonial_or_review_block_near_financial_claim_present",
+    "Testimonial or review block near financial claim present",
+    snapshot.testimonialOrReviewBlockNearFinancialClaimPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.risk_disclosure_text_present",
+    "Financial risk disclosure text present",
+    snapshot.riskDisclosureTextPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.claim_cta_block_present",
+    "Financial claim CTA block present",
+    snapshot.claimCtaBlockPresent
+  );
+  pushNumber(
+    "disclosure",
+    "financial.financial_claim_with_cta_count",
+    "Financial claim CTA count",
+    snapshot.financialClaimWithCtaCount ?? 0
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.about_page_present",
+    "About page present",
+    snapshot.aboutPagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.team_or_leadership_page_present",
+    "Team or leadership page present",
+    snapshot.teamOrLeadershipPagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.jurisdiction_or_operating_entity_text_present",
+    "Jurisdiction or operating entity text present",
+    snapshot.jurisdictionOrOperatingEntityTextPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.regulatory_or_license_claim_text_present",
+    "Regulatory or license claim text present",
+    snapshot.registrationClaimPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.registration_identifier_text_present",
+    "Registration identifier text present",
+    snapshot.registrationIdentifierPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "entity.multiple_entity_names_detected_on_site",
+    "Multiple entity names detected on site",
+    snapshot.multipleEntityNamesDetected
+  );
+  pushNumber(
+    "disclosure",
+    "entity.entity_transparency_surface_score",
+    "Entity transparency surface score",
+    snapshot.entityTransparencySurfaceScore ?? 0
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.pricing_page_present",
+    "Pricing page present",
+    snapshot.pricingPagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.fee_related_text_present",
+    "Fee-related text present",
+    snapshot.feeRelatedTextPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.fee_schedule_table_present",
+    "Fee schedule table present",
+    snapshot.feeSchedulePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.withdrawal_redemption_terms_text_present",
+    "Withdrawal or redemption terms present",
+    snapshot.withdrawalTermsPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.cancellation_terms_text_present",
+    "Cancellation terms present",
+    snapshot.cancellationTermsPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.account_closure_terms_text_present",
+    "Account closure terms present",
+    snapshot.accountClosureTermsPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.promo_price_or_free_claim_present",
+    "Promo price or free claim present",
+    snapshot.promoPriceOrFreeClaimPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "commercial.variable_fee_language_present_without_explanation",
+    "Variable fee language without explanation",
+    snapshot.variableFeeLanguageWithoutExplanation
+  );
+  pushNumber(
+    "disclosure",
+    "commercial.material_fee_terms_min_link_depth",
+    "Material fee terms minimum link depth",
+    snapshot.materialFeeTermsMinLinkDepth ?? 0
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.leverage_language_present",
+    "Leverage language present",
+    snapshot.leverageLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.margin_trading_language_present",
+    "Margin trading language present",
+    snapshot.marginTradingLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.options_or_futures_language_present",
+    "Options or futures language present",
+    snapshot.optionsOrFuturesLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.perpetuals_or_derivatives_language_present",
+    "Perpetuals or derivatives language present",
+    snapshot.perpetualsOrDerivativesLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.staking_apy_language_present",
+    "Staking APY language present",
+    snapshot.stakingApyLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.copy_trading_language_present",
+    "Copy trading language present",
+    snapshot.copyTradingLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.ai_trading_or_automated_trading_language_present",
+    "AI trading or automated trading language present",
+    snapshot.aiTradingLanguagePresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.loss_risk_disclosure_text_present",
+    "Loss-risk disclosure text present",
+    snapshot.lossRiskDisclosureTextPresent
+  );
+  pushBoolean(
+    "disclosure",
+    "financial.high_risk_product_explainer_page_present",
+    "High-risk product explainer page present",
+    snapshot.highRiskProductExplainerPagePresent
+  );
+  pushNumber(
+    "disclosure",
+    "financial.high_risk_product_signal_count",
+    "High-risk product signal count",
+    snapshot.highRiskProductSignalCount ?? 0
+  );
+
   pushNumber("accessibility", "accessibility.wcag_error_count_total", "WCAG errors", snapshot.wcagErrorCountTotal);
   pushNumber(
     "accessibility",

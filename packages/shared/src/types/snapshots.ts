@@ -432,6 +432,43 @@ export type ScanSnapshot = {
   sessionReplayWithoutDisclosureDetected: boolean | null;
   accessibilityClaimVsRealityGapDetected: boolean | null;
   complianceTrendScore: number | null;
+  performanceClaimPresent: boolean;
+  performanceClaimCount: number;
+  returnOrYieldPercentagePresent: boolean;
+  investmentOutperformanceLanguagePresent: boolean;
+  guaranteedReturnLanguagePresent: boolean;
+  lowRiskHighReturnLanguagePresent: boolean;
+  hypotheticalOrBacktestLanguagePresent: boolean;
+  testimonialOrReviewBlockNearFinancialClaimPresent: boolean;
+  riskDisclosureTextPresent: boolean;
+  claimCtaBlockPresent: boolean;
+  financialClaimWithCtaCount: number;
+  aboutPagePresent: boolean;
+  teamOrLeadershipPagePresent: boolean;
+  jurisdictionOrOperatingEntityTextPresent: boolean;
+  registrationClaimPresent: boolean;
+  registrationIdentifierPresent: boolean;
+  multipleEntityNamesDetected: boolean;
+  entityTransparencySurfaceScore: number | null;
+  pricingPagePresent: boolean;
+  feeRelatedTextPresent: boolean;
+  feeSchedulePresent: boolean;
+  withdrawalTermsPresent: boolean;
+  cancellationTermsPresent: boolean;
+  accountClosureTermsPresent: boolean;
+  promoPriceOrFreeClaimPresent: boolean;
+  variableFeeLanguageWithoutExplanation: boolean;
+  materialFeeTermsMinLinkDepth: number | null;
+  leverageLanguagePresent: boolean;
+  marginTradingLanguagePresent: boolean;
+  optionsOrFuturesLanguagePresent: boolean;
+  perpetualsOrDerivativesLanguagePresent: boolean;
+  stakingApyLanguagePresent: boolean;
+  copyTradingLanguagePresent: boolean;
+  aiTradingLanguagePresent: boolean;
+  lossRiskDisclosureTextPresent: boolean;
+  highRiskProductExplainerPagePresent: boolean;
+  highRiskProductSignalCount: number;
   policyEnrichmentId: string | null;
   certscoreOverall: number;
   privacyScore: number;
@@ -490,6 +527,67 @@ export type ScanPage = {
   normalizedContentHash: string | null;
   titleHash: string | null;
   pageLanguage: string | null;
+};
+
+export type ObservedPageRole =
+  | "core"
+  | "promotional"
+  | "pricing"
+  | "product"
+  | "legal"
+  | "contact"
+  | "about"
+  | "support"
+  | "other";
+
+export type ObservedPageEvidence = {
+  evidenceId: string;
+  scanId: string;
+  pageUrl: string;
+  pageType: PageType;
+  pageRole: ObservedPageRole;
+  crawlDepth: number | null;
+  sourceKind: "dom_text" | "page_metadata" | "link_target" | "absence_scope";
+  matchedText: string | null;
+  selector: string | null;
+  domPath: string | null;
+  containerSelector: string | null;
+  containerDomPath: string | null;
+  siblingIndex: number | null;
+  tokenStart: number | null;
+  tokenEnd: number | null;
+  screenshotRef?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type ScanSignalHit = {
+  id: string;
+  scanId: string;
+  signalKey: string;
+  detectorName: string;
+  detectorType: "text_pattern" | "dom_classifier" | "page_classifier" | "absence_scope";
+  detectorVersion: string;
+  pageUrl: string;
+  pageType: PageType;
+  pageRole: ObservedPageRole;
+  evidenceRefs: string[];
+  payload: Record<string, unknown>;
+};
+
+export type ReviewRuleEvidence = {
+  ruleKey: string;
+  ruleVersion: string;
+  inputSignalKeys: string[];
+  evidenceRefs: string[];
+  localSearch: {
+    tokenRadius: number;
+    domSiblingRadius: number;
+    evaluatedPageUrls: string[];
+    evaluatedContainers: string[];
+    matchedDisclosureEvidenceRefs: string[];
+    maxAcceptableLinkDepth?: number;
+    explainerSurfaceMaxCrawlDepth?: number;
+  };
 };
 
 export type KeyPageDiscoverySource =

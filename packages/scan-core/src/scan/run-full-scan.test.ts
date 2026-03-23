@@ -220,6 +220,7 @@ function createBundle() {
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
     compatibilitySignals: [],
+    pageEvidence: [],
     pages: [],
     policyEnrichments: [],
     policyEvidence: [],
@@ -238,6 +239,7 @@ function createBundle() {
       profile: "balanced",
       staticFetchConcurrency: 4
     },
+    signalHits: [],
     snapshot: {
       accessibilityScore: 80,
       certscoreOverall: 72,

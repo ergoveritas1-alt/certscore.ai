@@ -13,6 +13,21 @@ export { shouldContinueRuntimeWait } from "./scan/snapshot/browser-stability";
 export { upgradeThinPolicyPages } from "./scan/snapshot/policy-resolution";
 export { buildScanPlan } from "./scan/snapshot/scan-planner";
 export type { StaticPageResult } from "./scan/snapshot/types";
+export {
+  analyzeFinancialSignals,
+  collectBlocksForSignalHits,
+  CORE_PAGES_DEFINITION,
+  ENTITY_TRANSPARENCY_MINIMUM_SURFACE_SCORE,
+  EXPLAINER_SURFACE_MAX_CRAWL_DEPTH,
+  FINANCIAL_RULE_VERSION,
+  FINANCIAL_SIGNAL_DETECTOR_VERSION,
+  getFinancialSignalHitsForPage,
+  getNearestDisclosureDistance,
+  getObservedEvidenceByIds,
+  LOCAL_DISCLOSURE_DOM_SIBLING_RADIUS,
+  LOCAL_DISCLOSURE_TOKEN_RADIUS,
+  MAX_ACCEPTABLE_LINK_DEPTH_FOR_MATERIAL_TERMS
+} from "./scan/financial/signals";
 export { createBrowser } from "./scan/browser/create-browser";
 export { runAxe } from "./scan/page-audit/run-axe";
 export {

@@ -3,8 +3,10 @@ import test from "node:test";
 import type { SnapshotBundle } from "../snapshot/types";
 import {
   buildAccessibilityRuleExampleRows,
+  buildObservedPageEvidenceRows,
   buildPreconsentViolationRows,
   buildRuntimeArtifactRow,
+  buildScanSignalHitRows,
   buildSnapshotInsert,
   omitOptionalRuntimeArtifactsColumn
 } from "./save-snapshot-bundle";
@@ -18,6 +20,7 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
     },
     accessibilityRuleCounts: [],
     compatibilitySignals: [],
+    pageEvidence: [],
     pages: [],
     scanPlan: {
       profile: "balanced",
@@ -29,6 +32,7 @@ test("buildRuntimeArtifactRow maps compact runtime evidence for persistence", ()
       blockStylesheetsInBrowser: true
     },
     trackerVendors: [],
+    signalHits: [],
     runtimeArtifacts: {
       scanId: "scan-1",
       thirdPartyRequestDomains: ["cdn.example.com", "tracker.example.net"],
@@ -551,6 +555,104 @@ test("buildAccessibilityRuleExampleRows persists representative selectors and he
       description: "Ensures the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
       node_count: 3,
       representative_selectors: ["button.primary", "a.hero-link"]
+    }
+  ]);
+});
+
+test("buildObservedPageEvidenceRows and buildScanSignalHitRows map financial evidence tables", () => {
+  const bundle = {
+    snapshot: {
+      scanId: "scan-1",
+      organizationId: "org-1",
+      domainId: "domain-1"
+    },
+    pageEvidence: [
+      {
+        evidenceId: "evidence-1",
+        scanId: "scan-1",
+        pageUrl: "https://example.com/",
+        pageType: "homepage",
+        pageRole: "core",
+        crawlDepth: 0,
+        sourceKind: "dom_text",
+        matchedText: "Earn up to 12% APY",
+        selector: null,
+        domPath: null,
+        containerSelector: null,
+        containerDomPath: null,
+        siblingIndex: 2,
+        tokenStart: 10,
+        tokenEnd: 14,
+        screenshotRef: null,
+        metadata: {
+          matchedPattern: "apy"
+        }
+      }
+    ],
+    signalHits: [
+      {
+        id: "hit-1",
+        scanId: "scan-1",
+        signalKey: "financial.return_or_yield_percentage_present",
+        detectorName: "financial_return_or_yield_percentage",
+        detectorType: "text_pattern",
+        detectorVersion: "financial-v1",
+        pageUrl: "https://example.com/",
+        pageType: "homepage",
+        pageRole: "core",
+        evidenceRefs: ["evidence-1"],
+        payload: {
+          count: 1,
+          matchedTexts: ["12% APY"]
+        }
+      }
+    ]
+  } as unknown as SnapshotBundle;
+
+  assert.deepEqual(buildObservedPageEvidenceRows(bundle), [
+    {
+      evidence_id: "evidence-1",
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      page_url: "https://example.com/",
+      page_type: "homepage",
+      page_role: "core",
+      crawl_depth: 0,
+      source_kind: "dom_text",
+      matched_text: "Earn up to 12% APY",
+      selector: null,
+      dom_path: null,
+      container_selector: null,
+      container_dom_path: null,
+      sibling_index: 2,
+      token_start: 10,
+      token_end: 14,
+      screenshot_ref: null,
+      metadata: {
+        matchedPattern: "apy"
+      }
+    }
+  ]);
+
+  assert.deepEqual(buildScanSignalHitRows(bundle), [
+    {
+      id: "hit-1",
+      scan_id: "scan-1",
+      organization_id: "org-1",
+      domain_id: "domain-1",
+      signal_key: "financial.return_or_yield_percentage_present",
+      detector_name: "financial_return_or_yield_percentage",
+      detector_type: "text_pattern",
+      detector_version: "financial-v1",
+      page_url: "https://example.com/",
+      page_type: "homepage",
+      page_role: "core",
+      evidence_refs: ["evidence-1"],
+      payload: {
+        count: 1,
+        matchedTexts: ["12% APY"]
+      }
     }
   ]);
 });
