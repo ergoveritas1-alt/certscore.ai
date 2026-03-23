@@ -29,10 +29,10 @@ pnpm --filter @website-signal-risk-scanner/scan-core build
 pnpm --filter @website-signal-risk-scanner/web dev &
 web_pid=$!
 
-pnpm --filter @website-signal-risk-scanner/worker dev &
+pnpm --filter @website-signal-risk-scanner/scanner dev &
 scan_worker_pid=$!
 
-pnpm --filter @website-signal-risk-scanner/worker dev:validation:watch &
+pnpm --filter @website-signal-risk-scanner/validation-worker dev &
 validation_worker_pid=$!
 
 while true; do

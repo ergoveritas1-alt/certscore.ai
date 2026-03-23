@@ -19,7 +19,7 @@ trap cleanup EXIT INT TERM
 pnpm --filter @website-signal-risk-scanner/web dev &
 web_pid=$!
 
-pnpm --filter @website-signal-risk-scanner/worker dev:validation:watch &
+pnpm --filter @website-signal-risk-scanner/validation-worker dev &
 worker_pid=$!
 
 wait -n "${web_pid}" "${worker_pid}"

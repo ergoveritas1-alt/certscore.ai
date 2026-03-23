@@ -64,7 +64,7 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
         {
           createdAt: "2026-03-22T22:14:00.000Z",
           eventType: SCAN_EVENT_TYPES.fullQueued,
-          message: "Scan queued and awaiting worker processing.",
+          message: "Scan queued and awaiting scanner pickup.",
           metadataJson: { profile: "team", pagesRequested: 5 }
         },
         {

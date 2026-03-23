@@ -21,6 +21,24 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
+  apps/scanner:
+    dependencies:
+      '@website-signal-risk-scanner/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@website-signal-risk-scanner/scan-core':
+        specifier: workspace:*
+        version: link:../../packages/scan-core
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      playwright:
+        specifier: ^1.51.1
+        version: 1.58.2
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
   apps/validation-web:
     dependencies:
       '@website-signal-risk-scanner/db':

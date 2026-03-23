@@ -138,7 +138,7 @@ function buildActivityFeed(input: {
 }) {
   if (input.events.length === 0) {
     return input.status === "queued"
-      ? ["step[1/3] event> Scan queued and awaiting worker processing.", "data> evt=full_scan.queued"]
+      ? ["step[1/3] event> Scan queued and awaiting scanner pickup.", "data> evt=full_scan.queued"]
       : ["step[2/3] event> Full scan activity feed is initializing.", "data> evt=full_scan.pending"];
   }
 
@@ -148,7 +148,7 @@ function buildActivityFeed(input: {
     events: input.events,
     fallbackLines:
       input.status === "queued"
-        ? ["step[1/3] event> Scan queued and awaiting worker processing.", "data> evt=full_scan.queued"]
+        ? ["step[1/3] event> Scan queued and awaiting scanner pickup.", "data> evt=full_scan.queued"]
         : ["step[2/3] event> Full scan activity feed is initializing.", "data> evt=full_scan.pending"],
     latestLabel: stepLabel
   });
@@ -182,7 +182,7 @@ export function FullScanProgressCard({ createdAt, events, status }: FullScanProg
   const stepState = getStepState(eventTypes, status);
   const fallbackLine =
     status === "queued"
-      ? "step[1/3] event> Scan queued and awaiting worker processing."
+      ? "step[1/3] event> Scan queued and awaiting scanner pickup."
       : "step[2/3] event> Full scan activity feed is initializing.";
   const fallbackDataLine = status === "queued" ? "data> evt=full_scan.queued" : "data> evt=full_scan.pending";
   const fallbackWaitingLine = `log evt=${events.at(-1)?.eventType ?? "full_scan.pending"} · waiting for next scan event...`;

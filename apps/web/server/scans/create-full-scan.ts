@@ -6,8 +6,7 @@ import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
 import { getPlanLimits } from "../plans/get-plan-limits";
-import { enqueueFullScanJob, getFullScanQueueAvailability } from "../queue/full-scan-queue";
-import { getQueueAvailability } from "../../lib/env";
+import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 
@@ -39,17 +38,6 @@ type QueueFullScanInput = {
   enforceMonthlyUsageLimit?: boolean;
   source?: string;
 };
-
-const QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
-
-function withQueueHandoffTimeout<T>(promise: Promise<T>) {
-  return Promise.race<T>([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error("Full scan queue handoff timed out.")), QUEUE_HANDOFF_TIMEOUT_MS);
-    })
-  ]);
-}
 
 function getCurrentMonthWindow(now = new Date()) {
   const year = now.getUTCFullYear();
@@ -229,7 +217,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     domain_id: domainRecord.domain.id,
     organization_id: input.organizationId,
     event_type: FULL_SCAN_EVENT_TYPES.queued,
-    message: "Scan queued and awaiting worker processing.",
+    message: "Scan queued and awaiting scanner pickup.",
     metadata_json: {
       pagesRequested,
       profile: planLimits.scanProfile
@@ -252,37 +240,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   if (latestScanError) {
     return {
       error: `Scan created but latest scan update failed: ${latestScanError.message}`,
-      scanId: null
-    };
-  }
-
-  try {
-    await withQueueHandoffTimeout(enqueueFullScanJob(scan.id));
-  } catch (queueError) {
-    const message = queueError instanceof Error ? queueError.message : "Unknown queue error";
-
-    await supabase
-      .from("scans")
-      .update({
-        status: "failed",
-        error_message: message
-      })
-      .eq("id", scan.id)
-      .eq("organization_id", input.organizationId);
-
-    await supabase.from("scan_events").insert({
-      scan_id: scan.id,
-      domain_id: domainRecord.domain.id,
-      organization_id: input.organizationId,
-      event_type: FULL_SCAN_EVENT_TYPES.failed,
-      message: "Full scan queue handoff failed.",
-      metadata_json: {
-        error: message
-      }
-    });
-
-    return {
-      error: `Scan queue handoff failed: ${message}`,
       scanId: null
     };
   }
@@ -313,14 +270,6 @@ export async function createFullScanAction(
   _previousState: CreateFullScanActionState = initialState,
   formData: FormData
 ): Promise<CreateFullScanActionState> {
-  const queueAvailability = getQueueAvailability();
-
-  if (!queueAvailability.enabled) {
-    return {
-      error: queueAvailability.reason
-    };
-  }
-
   const fullScanQueueAvailability = await getFullScanQueueAvailability();
 
   if (!fullScanQueueAvailability.enabled) {

@@ -1,6 +1,7 @@
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { createAdminSupabaseClient } from "../../lib/supabase/admin";
-import { getQueueAvailability, isGoogleAuthEnabled } from "../../lib/env";
+import { isGoogleAuthEnabled } from "../../lib/env";
+import { getFullScanQueueAvailability } from "../../../web/server/queue/full-scan-queue";
 import { getSupabaseHealth } from "./get-supabase-health";
 
 type BucketStatus = {
@@ -39,7 +40,7 @@ function isRecent(value: string | null, windowMs = 30 * 60 * 1000) {
 
 export async function getSystemHealth(): Promise<SystemHealthStatus> {
   const supabase = await getSupabaseHealth();
-  const queue = getQueueAvailability();
+  const queue = await getFullScanQueueAvailability();
   const googleEnabled = isGoogleAuthEnabled();
   const bucketNames = {
     artifacts: process.env.SUPABASE_STORAGE_BUCKET_ARTIFACTS ?? "scan-artifacts"

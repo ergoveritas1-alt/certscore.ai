@@ -1,5 +1,5 @@
-const DEFAULT_CRAWLER_NAME = "CertScoreBot";
-const DEFAULT_CRAWLER_PUBLIC_URL = "https://certscore.ai";
+const DEFAULT_CRAWLER_NAME = "SignalScannerBot";
+const DEFAULT_CRAWLER_PUBLIC_URL = "https://scanner.example";
 
 function getConfiguredCrawler() {
   const publicUrl = process.env.SCANNER_CRAWLER_PUBLIC_URL?.trim() || null;

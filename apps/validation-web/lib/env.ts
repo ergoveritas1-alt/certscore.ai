@@ -49,24 +49,6 @@ export function getWebServerEnv(env: NodeJS.ProcessEnv = process.env): WebServer
 }
 
 export function getQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
-  const redisUrl = getConfiguredRedisUrl(env);
-
-  if (!redisUrl) {
-    return {
-      enabled: false,
-      reason: "Queueing is unavailable until REDIS_URL is configured."
-    } as const;
-  }
-
-  try {
-    new URL(redisUrl);
-  } catch {
-    return {
-      enabled: false,
-      reason: "Queueing is unavailable because REDIS_URL is invalid."
-    } as const;
-  }
-
   return {
     enabled: true,
     reason: null

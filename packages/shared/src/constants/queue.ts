@@ -29,6 +29,7 @@ export const QUEUE_JOB_NAMES = Object.values(SCAN_JOB_TYPES);
 export const SCAN_STATUS = ["queued", "running", "completed", "failed"] as const satisfies readonly ScanStatus[];
 
 export const SCAN_EVENT_TYPES = {
+  scannerHeartbeat: "scanner.runtime_heartbeat",
   previewQueued: "preview_scan.queued",
   previewStarted: "preview_scan.started",
   previewCompleted: "preview_scan.completed",
