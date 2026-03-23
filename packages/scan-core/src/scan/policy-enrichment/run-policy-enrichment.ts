@@ -14,7 +14,9 @@ import type { EnrichPolicyPagesInput, PolicyEnrichmentBundle, PolicyLlmChunkDiag
 const CONFIDENCE_THRESHOLD_HIGH = 0.8;
 const CONFIDENCE_THRESHOLD_MODERATE = 0.6;
 const FAILURE_PREVIEW_MAX_CHARS = 600;
-const DEFAULT_LLM_ATTEMPTS = 3;
+const DEFAULT_LLM_ATTEMPTS = 1;
+const DEFAULT_TOTAL_LLM_BUDGET_MS = 12_000;
+const DEFAULT_CHUNK_TIMEOUT_MS = 5_000;
 
 function getMaxLlmAttempts(env: NodeJS.ProcessEnv = process.env) {
   const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_ATTEMPTS ?? String(DEFAULT_LLM_ATTEMPTS), 10);
@@ -22,13 +24,23 @@ function getMaxLlmAttempts(env: NodeJS.ProcessEnv = process.env) {
 }
 
 function getMaxLlmChunks(env: NodeJS.ProcessEnv = process.env) {
-  const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_CHUNKS ?? "5", 10);
-  return Number.isFinite(parsed) ? Math.max(1, parsed) : 5;
+  const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_CHUNKS ?? "3", 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : 3;
 }
 
 function getMaxLlmChunksForPageType(pageType: StaticPageResult["pageType"], env: NodeJS.ProcessEnv = process.env) {
   const base = getMaxLlmChunks(env);
-  return pageType === "terms_of_service" ? Math.max(base, 5) : base;
+  return pageType === "terms_of_service" ? Math.max(base, 3) : base;
+}
+
+function getTotalLlmBudgetMs(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = Number.parseInt(env.LLM_ENRICHMENT_TOTAL_BUDGET_MS ?? String(DEFAULT_TOTAL_LLM_BUDGET_MS), 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : DEFAULT_TOTAL_LLM_BUDGET_MS;
+}
+
+function getChunkTimeoutMs(env: NodeJS.ProcessEnv = process.env) {
+  const parsed = Number.parseInt(env.LLM_ENRICHMENT_TIMEOUT_MS ?? String(DEFAULT_CHUNK_TIMEOUT_MS), 10);
+  return Number.isFinite(parsed) ? Math.max(1_000, parsed) : DEFAULT_CHUNK_TIMEOUT_MS;
 }
 
 function shouldPreferLastChunk(env: NodeJS.ProcessEnv = process.env) {
@@ -143,6 +155,49 @@ function allowTermsOnlyLegalClauses(pageType: StaticPageResult["pageType"]) {
   return pageType === "terms_of_service";
 }
 
+function hasPolicyClaimSnippet(
+  snippets: Record<string, string | string[] | null> | null | undefined,
+  keys: string[]
+) {
+  if (!snippets) {
+    return false;
+  }
+
+  return keys.some((key) => {
+    const value = snippets[key];
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+
+    if (Array.isArray(value)) {
+      return value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+    }
+
+    return false;
+  });
+}
+
+function scorePolicyPageForEnrichment(page: StaticPageResult) {
+  const quality = assessPolicyPageContentQuality(page);
+  return (quality.insufficientContent ? 0 : 1_000) + quality.textLength + quality.wordCount * 2;
+}
+
+function selectPolicyPagesForEnrichment(pages: StaticPageResult[]) {
+  const eligible = pages.filter((candidate) => ["privacy_policy", "terms_of_service", "cookie_policy"].includes(candidate.pageType));
+  const bestByType = new Map<StaticPageResult["pageType"], StaticPageResult>();
+
+  for (const page of eligible) {
+    const existing = bestByType.get(page.pageType);
+    if (!existing || scorePolicyPageForEnrichment(page) > scorePolicyPageForEnrichment(existing)) {
+      bestByType.set(page.pageType, page);
+    }
+  }
+
+  return [...bestByType.values()]
+    .sort((left, right) => scorePolicyPageForEnrichment(right) - scorePolicyPageForEnrichment(left))
+    .slice(0, 3);
+}
+
 function maybeQueueReview(input: {
   enrichment: PolicyEnrichment;
   euExposureLikely: boolean;
@@ -231,10 +286,26 @@ async function extractChunkWithRetry(input: {
 }) {
   let lastError: unknown = null;
   const maxAttempts = getMaxLlmAttempts();
+  const chunkTimeoutMs = getChunkTimeoutMs();
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const result = await extractChunkWithLlm(input);
+      let timeoutId: NodeJS.Timeout | null = null;
+      let result: Awaited<ReturnType<typeof extractChunkWithLlm>>;
+      try {
+        result = await Promise.race([
+          extractChunkWithLlm(input),
+          new Promise<Awaited<ReturnType<typeof extractChunkWithLlm>>>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new PolicyLlmError("timeout", `Policy chunk extraction timed out after ${chunkTimeoutMs}ms.`));
+            }, chunkTimeoutMs);
+          })
+        ]);
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
       return {
         ...result,
         attemptCount: attempt + 1
@@ -326,6 +397,8 @@ function toCachedEnrichment(input: {
 
 export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<PolicyEnrichmentBundle> {
   const llmClient = createPolicyLlmClient();
+  const llmBudgetStartedAt = Date.now();
+  const totalLlmBudgetMs = getTotalLlmBudgetMs();
   const diagnostics: PolicyEnrichmentBundle["diagnostics"] = [];
   const evidences = new Map<string, ReturnType<typeof buildPolicyEvidenceRecords>["evidences"][number]>();
   const enrichments: PolicyEnrichment[] = [];
@@ -333,9 +406,7 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
   let primaryPolicyEnrichmentId: string | null = null;
   const snapshotOverrides: PolicyEnrichmentBundle["snapshotOverrides"] = {};
 
-  for (const page of input.pages.filter((candidate) =>
-    ["privacy_policy", "terms_of_service", "cookie_policy"].includes(candidate.pageType)
-  )) {
+  for (const page of selectPolicyPagesForEnrichment(input.pages)) {
     const allowTermsClauses = allowTermsOnlyLegalClauses(page.pageType);
     const promptName = resolvePolicyPromptName(page.pageType);
     const promptVersion = promptName.replace(".txt", "");
@@ -365,7 +436,9 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         scanId: input.scanId
       });
       const cachedConflict =
-        Boolean(cached.policyClaimNoSale) && input.advertisingTrackerCount > 0;
+        Boolean(cached.policyClaimNoSale) &&
+        input.advertisingTrackerCount > 0 &&
+        hasPolicyClaimSnippet(cached.policyEvidenceSnippets, ["do_not_sell", "policy_claim_no_sale", "policy_claim_no_tracking"]);
       const cachedSessionReplayWithoutDisclosure = input.sessionReplayTrackerCount > 0 && !explicitSessionReplayDisclosure;
       cached.policyBehaviorConflictCandidate = cachedConflict;
       if (!allowTermsClauses) {
@@ -415,7 +488,9 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       continue;
     }
 
-    const runLlm = shouldRunLlm({
+    const llmBudgetRemainingMs = totalLlmBudgetMs - (Date.now() - llmBudgetStartedAt);
+    const llmBudgetExhaustedBeforePage = llmBudgetRemainingMs <= 0;
+    const runLlm = !llmBudgetExhaustedBeforePage && shouldRunLlm({
       allowLlm: input.allowLlm,
       forceLlm: input.forceLlm,
       hasClient: Boolean(llmClient),
@@ -447,6 +522,23 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       const chunkDiagnostics: PolicyLlmChunkDiagnostic[] = [];
 
       for (const chunk of selectedChunks) {
+        if (Date.now() - llmBudgetStartedAt >= totalLlmBudgetMs) {
+          llmFailureFlags = Array.from(new Set([...llmFailureFlags, "llm_budget_exhausted", "low_confidence"]));
+          llmPartialCoverage = chunkExtractions.length > 0;
+          chunkDiagnostics.push({
+            chunkId: chunk.chunkId,
+            selectedReason: chunk.reason,
+            score: chunk.score,
+            attemptCount: 0,
+            success: false,
+            failureCode: "timeout",
+            failureDetail: `Policy LLM budget exhausted after ${totalLlmBudgetMs}ms for this scan.`,
+            rawPreview: null,
+            rawLength: null
+          });
+          break;
+        }
+
         try {
           const result = await extractChunkWithRetry({
             chunkId: chunk.chunkId,
@@ -532,8 +624,25 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         pageUrl: page.pageUrl,
         selectedChunkCount: 0,
         totalChunkCount: totalChunks,
-        chunkDiagnostics: []
+        chunkDiagnostics: llmBudgetExhaustedBeforePage
+          ? [
+              {
+                chunkId: "budget-skip",
+                selectedReason: "llm_budget_exhausted",
+                score: 0,
+                attemptCount: 0,
+                success: false,
+                failureCode: "timeout",
+                failureDetail: `Policy LLM budget exhausted after ${totalLlmBudgetMs}ms for this scan.`,
+                rawPreview: null,
+                rawLength: null
+              }
+            ]
+          : []
       });
+      if (llmBudgetExhaustedBeforePage) {
+        llmFailureFlags = Array.from(new Set([...llmFailureFlags, "llm_budget_exhausted", "low_confidence"]));
+      }
     }
 
     const merged =
@@ -603,11 +712,6 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
       ])
     ).filter((flag) => allowTermsClauses || flag !== "arbitration_clause_present");
 
-    const policyBehaviorConflictCandidate = Boolean(merged.policyClaimNoSale) && input.advertisingTrackerCount > 0;
-    const explicitSessionReplayDisclosure = merged.policyMentions.some(
-      (mention) => mention.topic === "session_replay_disclosure" && mention.confidence >= CONFIDENCE_THRESHOLD_MODERATE
-    );
-    const sessionReplayWithoutDisclosureDetected = input.sessionReplayTrackerCount > 0 && !explicitSessionReplayDisclosure;
     const policyEvidence = buildPolicyEvidenceRecords({
       pageUrl: page.pageUrl,
       snippets: buildPolicyEvidenceSnippetMap({
@@ -615,6 +719,14 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
         ruleSnippets: ruleResult.evidenceSnippets
       })
     });
+    const policyBehaviorConflictCandidate =
+      Boolean(merged.policyClaimNoSale) &&
+      input.advertisingTrackerCount > 0 &&
+      hasPolicyClaimSnippet(policyEvidence.references, ["do_not_sell", "policy_claim_no_sale", "policy_claim_no_tracking"]);
+    const explicitSessionReplayDisclosure = merged.policyMentions.some(
+      (mention) => mention.topic === "session_replay_disclosure" && mention.confidence >= CONFIDENCE_THRESHOLD_MODERATE
+    );
+    const sessionReplayWithoutDisclosureDetected = input.sessionReplayTrackerCount > 0 && !explicitSessionReplayDisclosure;
 
     for (const evidence of policyEvidence.evidences) {
       evidences.set(evidence.evidenceHash, evidence);

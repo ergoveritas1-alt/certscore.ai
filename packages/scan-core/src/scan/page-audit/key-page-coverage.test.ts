@@ -4,7 +4,65 @@ import { summarizeKeyPageCoverage } from "./key-page-coverage";
 
 test("distinguishes detected key-page surfaces from successful fetches", () => {
   const coverage = summarizeKeyPageCoverage({
-    discoveredPageTypes: new Set(["privacy_policy", "terms_of_service", "accessibility_statement"]),
+    pageSummaries: [
+      {
+        pageType: "privacy_policy",
+        surfaceDetected: true,
+        surfaceState: "linked_but_fetch_blocked",
+        guessedOnly: false,
+        bestCandidateUrl: "https://example.com/privacy",
+        bestCandidateAnchorText: "Privacy policy",
+        bestCandidateSourceUrl: "https://example.com/",
+        bestCandidateHostRelation: "same_host",
+        bestFetchOutcome: "not_found",
+        successfulUrl: null,
+        successfulPageTitle: null,
+        successfulHostRelation: null,
+        extractionOutcome: "not_attempted",
+        attemptedUrls: ["https://example.com/privacy"],
+        attemptCount: 1,
+        bestDiscoverySource: "footer_link",
+        stopReason: "all_attempts_failed"
+      },
+      {
+        pageType: "terms_of_service",
+        surfaceDetected: true,
+        surfaceState: "linked_unverified",
+        guessedOnly: false,
+        bestCandidateUrl: "https://example.com/terms",
+        bestCandidateAnchorText: "Terms",
+        bestCandidateSourceUrl: "https://example.com/",
+        bestCandidateHostRelation: "same_host",
+        bestFetchOutcome: null,
+        successfulUrl: null,
+        successfulPageTitle: null,
+        successfulHostRelation: null,
+        extractionOutcome: "not_attempted",
+        attemptedUrls: [],
+        attemptCount: 0,
+        bestDiscoverySource: "footer_link",
+        stopReason: "budget_exhausted"
+      },
+      {
+        pageType: "contact",
+        surfaceDetected: true,
+        surfaceState: "linked_and_verified",
+        guessedOnly: false,
+        bestCandidateUrl: "https://example.com/contact",
+        bestCandidateAnchorText: "Contact",
+        bestCandidateSourceUrl: "https://example.com/",
+        bestCandidateHostRelation: "same_host",
+        bestFetchOutcome: "ok",
+        successfulUrl: "https://example.com/contact",
+        successfulPageTitle: "Contact",
+        successfulHostRelation: "same_host",
+        extractionOutcome: "sufficient",
+        attemptedUrls: ["https://example.com/contact"],
+        attemptCount: 1,
+        bestDiscoverySource: "footer_link",
+        stopReason: "covered"
+      }
+    ],
     fetchedPages: [
       {
         fetchStatus: "not_found",
@@ -47,10 +105,12 @@ test("distinguishes detected key-page surfaces from successful fetches", () => {
 
   assert.equal(privacy?.surfaceDetected, true);
   assert.equal(privacy?.fetched, false);
+  assert.equal(privacy?.surfaceState, "linked_but_fetch_blocked");
   assert.deepEqual(privacy?.failedPageUrls, ["https://example.com/privacy"]);
 
   assert.equal(terms?.surfaceDetected, true);
   assert.equal(terms?.fetched, false);
+  assert.equal(terms?.surfaceState, "linked_unverified");
 
   assert.equal(contact?.surfaceDetected, true);
   assert.equal(contact?.fetched, true);
@@ -58,10 +118,27 @@ test("distinguishes detected key-page surfaces from successful fetches", () => {
 
 test("does not treat guessed-slug fetch failures as discovered surfaces", () => {
   const coverage = summarizeKeyPageCoverage({
-    discoveredPageTypes: new Set(),
-    failedAttemptedUrlsByPageType: {
-      privacy_policy: ["https://example.com/privacy"]
-    },
+    pageSummaries: [
+      {
+        pageType: "privacy_policy",
+        surfaceDetected: false,
+        surfaceState: "guessed_only",
+        guessedOnly: true,
+        bestCandidateUrl: "https://example.com/privacy",
+        bestCandidateAnchorText: null,
+        bestCandidateSourceUrl: "https://example.com/",
+        bestCandidateHostRelation: "same_host",
+        bestFetchOutcome: "not_found",
+        successfulUrl: null,
+        successfulPageTitle: null,
+        successfulHostRelation: null,
+        extractionOutcome: "not_attempted",
+        attemptedUrls: ["https://example.com/privacy"],
+        attemptCount: 1,
+        bestDiscoverySource: "guessed_slug",
+        stopReason: "guessed_only"
+      }
+    ],
     fetchedPages: [
       {
         fetchStatus: "not_found",
@@ -86,21 +163,40 @@ test("does not treat guessed-slug fetch failures as discovered surfaces", () => 
 
   assert.equal(privacy?.surfaceDetected, false);
   assert.equal(privacy?.fetched, false);
-  assert.deepEqual(privacy?.failedPageUrls, ["https://example.com/privacy"]);
+  assert.equal(privacy?.surfaceState, "guessed_only");
+  assert.deepEqual(privacy?.failedPageUrls, []);
 });
 
-test("surfaces fetch failures from attempted urls even when no page artifact was retained", () => {
+test("reports extraction-limited pages as detected without surfacing them as missing", () => {
   const coverage = summarizeKeyPageCoverage({
-    discoveredPageTypes: new Set(["privacy_policy"]),
-    failedAttemptedUrlsByPageType: {
-      privacy_policy: ["https://example.com/privacy"]
-    },
+    pageSummaries: [
+      {
+        pageType: "privacy_policy",
+        surfaceDetected: true,
+        surfaceState: "linked_but_extraction_limited",
+        guessedOnly: false,
+        bestCandidateUrl: "https://example.com/privacy",
+        bestCandidateAnchorText: "Privacy policy",
+        bestCandidateSourceUrl: "https://example.com/",
+        bestCandidateHostRelation: "related_party",
+        bestFetchOutcome: "ok",
+        successfulUrl: "https://example.com/privacy",
+        successfulPageTitle: "Privacy Policy",
+        successfulHostRelation: "related_party",
+        extractionOutcome: "limited",
+        attemptedUrls: ["https://example.com/privacy"],
+        attemptCount: 1,
+        bestDiscoverySource: "footer_link",
+        stopReason: "covered"
+      }
+    ],
     fetchedPages: []
   });
 
   const privacy = coverage.find((row) => row.pageType === "privacy_policy");
 
   assert.equal(privacy?.surfaceDetected, true);
-  assert.equal(privacy?.fetched, false);
-  assert.deepEqual(privacy?.failedPageUrls, ["https://example.com/privacy"]);
+  assert.equal(privacy?.fetched, true);
+  assert.equal(privacy?.extractionLimited, true);
+  assert.deepEqual(privacy?.failedPageUrls, []);
 });

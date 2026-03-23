@@ -601,7 +601,17 @@ export type KeyPageDiscoverySource =
   | "second_hop_legal_hub"
   | "same_brand_subdomain";
 
-export type KeyPageDiscoveryHostRelation = "same_host" | "same_brand_subdomain";
+export type KeyPageDiscoveryHostRelation = "same_host" | "same_brand_subdomain" | "related_party";
+
+export type KeyPageSurfaceState =
+  | "linked_and_verified"
+  | "linked_but_fetch_blocked"
+  | "linked_but_extraction_limited"
+  | "linked_unverified"
+  | "guessed_only"
+  | "not_detected";
+
+export type KeyPageExtractionOutcome = "not_attempted" | "sufficient" | "limited";
 
 export type KeyPageDiscoveryCandidate = {
   pageType: Extract<
@@ -626,9 +636,17 @@ export type KeyPageDiscoveryPageSummary = {
     "privacy_policy" | "terms_of_service" | "cookie_policy" | "accessibility_statement" | "contact" | "about" | "pricing" | "product"
   >;
   surfaceDetected: boolean;
+  surfaceState: KeyPageSurfaceState;
   guessedOnly: boolean;
+  bestCandidateUrl: string | null;
+  bestCandidateAnchorText: string | null;
+  bestCandidateSourceUrl: string | null;
+  bestCandidateHostRelation: KeyPageDiscoveryHostRelation | null;
+  bestFetchOutcome: FetchStatus | null;
   successfulUrl: string | null;
+  successfulPageTitle: string | null;
   successfulHostRelation: KeyPageDiscoveryHostRelation | null;
+  extractionOutcome: KeyPageExtractionOutcome;
   attemptedUrls: string[];
   attemptCount: number;
   bestDiscoverySource: KeyPageDiscoverySource | null;

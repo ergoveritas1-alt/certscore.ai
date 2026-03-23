@@ -1,8 +1,9 @@
-import type { ScanPage } from "@website-signal-risk-scanner/shared";
+import type { KeyPageDiscoveryPageSummary, ScanPage } from "@website-signal-risk-scanner/shared";
 import type { StaticPageResult } from "../snapshot/types";
 
 export type KeyPageCoverageDefinition = {
-  fetchedSignalLabel: string;
+  extractionLimitedSignalKey?: string;
+  extractionLimitedSignalLabel?: string;
   fetchFailedSignalKey: string;
   fetchFailedSignalLabel: string;
   pageType: ScanPage["pageType"];
@@ -13,45 +14,48 @@ export type KeyPageCoverageDefinition = {
 
 export const KEY_PAGE_COVERAGE_DEFINITIONS: KeyPageCoverageDefinition[] = [
   {
-    fetchedSignalLabel: "Privacy policy fetched",
+    extractionLimitedSignalKey: "disclosure.privacy_policy_extraction_limited",
+    extractionLimitedSignalLabel: "Privacy policy linked but automated extraction was limited",
     fetchFailedSignalKey: "disclosure.privacy_policy_fetch_failed",
-    fetchFailedSignalLabel: "Privacy policy page unavailable",
+    fetchFailedSignalLabel: "Privacy policy linked but not retrievable",
     pageType: "privacy_policy",
     severity: "high",
     surfaceMissingSignalKey: "disclosure.privacy_policy_surface_missing",
     surfaceMissingSignalLabel: "Privacy policy surface not detected"
   },
   {
-    fetchedSignalLabel: "Terms page fetched",
+    extractionLimitedSignalKey: "disclosure.terms_of_service_extraction_limited",
+    extractionLimitedSignalLabel: "Terms page linked but automated extraction was limited",
     fetchFailedSignalKey: "disclosure.terms_of_service_fetch_failed",
-    fetchFailedSignalLabel: "Terms page unavailable",
+    fetchFailedSignalLabel: "Terms page linked but not retrievable",
     pageType: "terms_of_service",
     severity: "medium",
     surfaceMissingSignalKey: "disclosure.terms_of_service_surface_missing",
     surfaceMissingSignalLabel: "Terms page surface not detected"
   },
   {
-    fetchedSignalLabel: "Cookie policy fetched",
+    extractionLimitedSignalKey: "disclosure.cookie_policy_extraction_limited",
+    extractionLimitedSignalLabel: "Cookie policy linked but automated extraction was limited",
     fetchFailedSignalKey: "disclosure.cookie_policy_fetch_failed",
-    fetchFailedSignalLabel: "Cookie policy unavailable",
+    fetchFailedSignalLabel: "Cookie policy linked but not retrievable",
     pageType: "cookie_policy",
     severity: "medium",
     surfaceMissingSignalKey: "disclosure.cookie_policy_surface_missing",
     surfaceMissingSignalLabel: "Cookie policy surface not detected"
   },
   {
-    fetchedSignalLabel: "Accessibility statement fetched",
+    extractionLimitedSignalKey: "disclosure.accessibility_statement_extraction_limited",
+    extractionLimitedSignalLabel: "Accessibility statement linked but automated extraction was limited",
     fetchFailedSignalKey: "disclosure.accessibility_statement_fetch_failed",
-    fetchFailedSignalLabel: "Accessibility statement unavailable",
+    fetchFailedSignalLabel: "Accessibility statement linked but not retrievable",
     pageType: "accessibility_statement",
     severity: "medium",
     surfaceMissingSignalKey: "disclosure.accessibility_statement_surface_missing",
     surfaceMissingSignalLabel: "Accessibility statement surface not detected"
   },
   {
-    fetchedSignalLabel: "Contact page fetched",
     fetchFailedSignalKey: "disclosure.contact_page_fetch_failed",
-    fetchFailedSignalLabel: "Contact page unavailable",
+    fetchFailedSignalLabel: "Contact page linked but not retrievable",
     pageType: "contact",
     severity: "medium",
     surfaceMissingSignalKey: "disclosure.contact_page_surface_missing",
@@ -60,34 +64,44 @@ export const KEY_PAGE_COVERAGE_DEFINITIONS: KeyPageCoverageDefinition[] = [
 ] as const;
 
 export type KeyPageCoverageStatus = KeyPageCoverageDefinition & {
+  bestCandidateAnchorText: string | null;
+  bestCandidateHostRelation: KeyPageDiscoveryPageSummary["bestCandidateHostRelation"];
+  bestCandidateUrl: string | null;
+  extractionLimited: boolean;
   failedPageUrls: string[];
   fetched: boolean;
   surfaceDetected: boolean;
+  surfaceState: KeyPageDiscoveryPageSummary["surfaceState"];
 };
 
-function isSuccessfulFetch(fetchStatus: ScanPage["fetchStatus"]) {
-  return fetchStatus === "ok" || fetchStatus === "redirected";
-}
-
 export function summarizeKeyPageCoverage(input: {
-  discoveredPageTypes: Set<ScanPage["pageType"]>;
-  failedAttemptedUrlsByPageType?: Partial<Record<ScanPage["pageType"], string[]>>;
+  pageSummaries: KeyPageDiscoveryPageSummary[];
   fetchedPages: StaticPageResult[];
 }) {
   return KEY_PAGE_COVERAGE_DEFINITIONS.map((definition) => {
+    const summary = input.pageSummaries.find((candidate) => candidate.pageType === definition.pageType) ?? null;
     const matchingPages = input.fetchedPages.filter((page) => page.pageType === definition.pageType);
-    const fetched = matchingPages.some((page) => isSuccessfulFetch(page.fetchStatus));
-    const surfaceDetected = fetched || input.discoveredPageTypes.has(definition.pageType);
-    const failedPageUrls = [
-      ...matchingPages.filter((page) => !isSuccessfulFetch(page.fetchStatus)).map((page) => page.pageUrl),
-      ...(input.failedAttemptedUrlsByPageType?.[definition.pageType] ?? [])
-    ];
+    const fetched = summary?.surfaceState === "linked_and_verified" || summary?.surfaceState === "linked_but_extraction_limited";
+    const surfaceDetected =
+      summary?.surfaceState === "linked_and_verified" ||
+      summary?.surfaceState === "linked_but_fetch_blocked" ||
+      summary?.surfaceState === "linked_but_extraction_limited" ||
+      summary?.surfaceState === "linked_unverified";
+    const failedPageUrls =
+      summary?.surfaceState === "linked_but_fetch_blocked"
+        ? [...new Set(summary.attemptedUrls)]
+        : [];
 
     return {
       ...definition,
+      bestCandidateAnchorText: summary?.bestCandidateAnchorText ?? null,
+      bestCandidateHostRelation: summary?.bestCandidateHostRelation ?? null,
+      bestCandidateUrl: summary?.bestCandidateUrl ?? null,
+      extractionLimited: summary?.surfaceState === "linked_but_extraction_limited",
       failedPageUrls: [...new Set(failedPageUrls)],
       fetched,
-      surfaceDetected
+      surfaceDetected,
+      surfaceState: summary?.surfaceState ?? "not_detected"
     } satisfies KeyPageCoverageStatus;
   });
 }
