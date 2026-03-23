@@ -52,7 +52,7 @@ const POLICY_PATH_GUESSES: Record<PageType, string[]> = {
   login: ["/login", "/sign-in"],
   checkout: ["/checkout", "/cart"],
   blog: ["/blog", "/articles"],
-  about: ["/about"],
+  about: ["/about", "/team", "/leadership", "/founders", "/management"],
   support: ["/support", "/help"],
   other: []
 };
@@ -223,7 +223,13 @@ function classifyPageType(url: string): PageType {
     return "blog";
   }
 
-  if (pathname.includes("about")) {
+  if (
+    pathname.includes("about") ||
+    pathname.includes("team") ||
+    pathname.includes("leadership") ||
+    pathname.includes("founder") ||
+    pathname.includes("management")
+  ) {
     return "about";
   }
 

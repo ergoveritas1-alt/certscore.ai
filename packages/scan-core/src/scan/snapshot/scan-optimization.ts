@@ -10,7 +10,7 @@ export const ENRICHMENT_CACHE_TTLS_MS = {
   tls: DAY_MS
 } as const;
 
-const NON_COVERAGE_PAGE_TYPES = new Set<ScanPage["pageType"]>(["homepage", "other", "about", "blog", "support"]);
+const NON_COVERAGE_PAGE_TYPES = new Set<ScanPage["pageType"]>(["homepage", "other", "blog", "support"]);
 const SUCCESS_FETCH_STATUSES = new Set<ScanPage["fetchStatus"]>(["ok", "redirected"]);
 
 type CandidateTarget = {

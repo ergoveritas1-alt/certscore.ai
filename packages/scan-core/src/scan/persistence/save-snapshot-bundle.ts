@@ -19,9 +19,54 @@ type RuntimeArtifactsPatchInput = {
 };
 
 const OPTIONAL_RUNTIME_ARTIFACT_COLUMNS = ["build_phase_summaries", "cookie_attribute_summary", "gpc_verification"] as const;
+const OPTIONAL_PERSISTENCE_TABLES = ["scan_page_evidence", "scan_signal_hits"] as const;
+const OPTIONAL_SNAPSHOT_COLUMNS = [
+  "performance_claim_present",
+  "performance_claim_count",
+  "return_or_yield_percentage_present",
+  "investment_outperformance_language_present",
+  "guaranteed_return_language_present",
+  "low_risk_high_return_language_present",
+  "hypothetical_or_backtest_language_present",
+  "testimonial_or_review_block_near_financial_claim_present",
+  "risk_disclosure_text_present",
+  "claim_cta_block_present",
+  "financial_claim_with_cta_count",
+  "about_page_present",
+  "team_or_leadership_page_present",
+  "jurisdiction_or_operating_entity_text_present",
+  "registration_claim_present",
+  "registration_identifier_present",
+  "multiple_entity_names_detected",
+  "entity_transparency_surface_score",
+  "pricing_page_present",
+  "fee_related_text_present",
+  "fee_schedule_present",
+  "withdrawal_terms_present",
+  "cancellation_terms_present",
+  "account_closure_terms_present",
+  "promo_price_or_free_claim_present",
+  "variable_fee_language_without_explanation",
+  "material_fee_terms_min_link_depth",
+  "leverage_language_present",
+  "margin_trading_language_present",
+  "options_or_futures_language_present",
+  "perpetuals_or_derivatives_language_present",
+  "staking_apy_language_present",
+  "copy_trading_language_present",
+  "ai_trading_language_present",
+  "loss_risk_disclosure_text_present",
+  "high_risk_product_explainer_page_present",
+  "high_risk_product_signal_count"
+] as const;
 
 function getMissingColumnName(errorMessage: string) {
   const match = errorMessage.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
+function getMissingTableName(errorMessage: string) {
+  const match = errorMessage.match(/Could not find the table 'public\.([^']+)'/i);
   return match?.[1] ?? null;
 }
 
@@ -37,6 +82,47 @@ export function omitOptionalRuntimeArtifactsColumn(
   const nextRow = { ...row };
   delete nextRow[missingColumn];
   return nextRow;
+}
+
+export function omitOptionalSnapshotColumn(row: Record<string, unknown>, errorMessage: string): Record<string, unknown> | null {
+  const missingColumn = getMissingColumnName(errorMessage);
+  if (!missingColumn || !OPTIONAL_SNAPSHOT_COLUMNS.includes(missingColumn as (typeof OPTIONAL_SNAPSHOT_COLUMNS)[number])) {
+    return null;
+  }
+
+  const nextRow = { ...row };
+  delete nextRow[missingColumn];
+  return nextRow;
+}
+
+function shouldSkipOptionalPersistenceTable(errorMessage: string, tableName: (typeof OPTIONAL_PERSISTENCE_TABLES)[number]) {
+  return getMissingTableName(errorMessage) === tableName;
+}
+
+async function upsertSnapshotWithOptionalColumnFallback(input: {
+  row: Record<string, unknown>;
+  contextLabel: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  let currentRow = { ...input.row };
+
+  while (true) {
+    const { error } = await input.supabase.from("scan_snapshots").upsert(currentRow, {
+      onConflict: "scan_id"
+    });
+
+    if (!error) {
+      return;
+    }
+
+    const fallbackRow = omitOptionalSnapshotColumn(currentRow, error.message);
+
+    if (!fallbackRow) {
+      throw new Error(`Failed to persist ${input.contextLabel}: ${error.message}`);
+    }
+
+    currentRow = fallbackRow;
+  }
 }
 
 export function buildRuntimeArtifactRow(bundle: SnapshotBundle) {
@@ -279,34 +365,28 @@ export async function persistAccessibilityEvidence(input: AccessibilityEvidenceP
 
 export async function persistRuntimeArtifactsPatch(input: RuntimeArtifactsPatchInput) {
   const supabase = createAdminClient();
-  const runtimeArtifactsRow = {
+  let runtimeArtifactsRow: Record<string, unknown> = {
     ...camelToSnakeRecord(input.runtimeArtifacts),
     domain_id: input.domainId,
     organization_id: input.organizationId,
     scan_id: input.scanId
   };
-  const { error } = await supabase.from("scan_runtime_artifacts").upsert(runtimeArtifactsRow, {
-    onConflict: "scan_id"
-  });
 
-  if (error) {
-    const fallbackRow = omitOptionalRuntimeArtifactsColumn(runtimeArtifactsRow, error.message);
+  while (true) {
+    const { error } = await supabase.from("scan_runtime_artifacts").upsert(runtimeArtifactsRow, {
+      onConflict: "scan_id"
+    });
 
-    if (fallbackRow) {
-      const { error: fallbackError } = await supabase.from("scan_runtime_artifacts").upsert(fallbackRow, {
-        onConflict: "scan_id"
-      });
-
-      if (!fallbackError) {
-        return;
-      }
-
-      throw new Error(`Failed to persist scan runtime artifacts patch: ${fallbackError.message}`);
+    if (!error) {
+      return;
     }
-  }
 
-  if (error) {
-    throw new Error(`Failed to persist scan runtime artifacts patch: ${error.message}`);
+    const fallbackRow = omitOptionalRuntimeArtifactsColumn(runtimeArtifactsRow, error.message);
+    if (!fallbackRow) {
+      throw new Error(`Failed to persist scan runtime artifacts patch: ${error.message}`);
+    }
+
+    runtimeArtifactsRow = fallbackRow;
   }
 }
 
@@ -316,13 +396,11 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
     omitPolicyEnrichmentId: true
   });
 
-  const { error: snapshotError } = await supabase.from("scan_snapshots").upsert(snapshotInsert, {
-    onConflict: "scan_id"
+  await upsertSnapshotWithOptionalColumnFallback({
+    row: snapshotInsert,
+    contextLabel: "scan snapshot",
+    supabase
   });
-
-  if (snapshotError) {
-    throw new Error(`Failed to persist scan snapshot: ${snapshotError.message}`);
-  }
 
   const { error: deleteReviewQueueError } = await supabase.from("policy_review_queue").delete().eq("scan_id", bundle.snapshot.scanId);
   if (deleteReviewQueueError) {
@@ -356,13 +434,11 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
 
   if (bundle.snapshot.policyEnrichmentId) {
     const traceableSnapshotInsert = buildSnapshotInsert(bundle);
-    const { error: snapshotTraceError } = await supabase.from("scan_snapshots").upsert(traceableSnapshotInsert, {
-      onConflict: "scan_id"
+    await upsertSnapshotWithOptionalColumnFallback({
+      row: traceableSnapshotInsert,
+      contextLabel: "policy enrichment traceability on scan snapshot",
+      supabase
     });
-
-    if (snapshotTraceError) {
-      throw new Error(`Failed to persist policy enrichment traceability on scan snapshot: ${snapshotTraceError.message}`);
-    }
   }
 
   if (bundle.policyReviewQueueItems.length > 0) {
@@ -427,30 +503,34 @@ export async function saveSnapshotBundle(bundle: SnapshotBundle) {
   });
 
   const { error: deletePageEvidenceError } = await supabase.from("scan_page_evidence").delete().eq("scan_id", bundle.snapshot.scanId);
-  if (deletePageEvidenceError) {
+  if (deletePageEvidenceError && !shouldSkipOptionalPersistenceTable(deletePageEvidenceError.message, "scan_page_evidence")) {
     throw new Error(`Failed to clear scan page evidence: ${deletePageEvidenceError.message}`);
   }
 
-  const pageEvidenceRows = buildObservedPageEvidenceRows(bundle);
-  if (pageEvidenceRows.length > 0) {
-    const { error: pageEvidenceError } = await supabase.from("scan_page_evidence").insert(pageEvidenceRows);
+  if (!deletePageEvidenceError) {
+    const pageEvidenceRows = buildObservedPageEvidenceRows(bundle);
+    if (pageEvidenceRows.length > 0) {
+      const { error: pageEvidenceError } = await supabase.from("scan_page_evidence").insert(pageEvidenceRows);
 
-    if (pageEvidenceError) {
-      throw new Error(`Failed to persist scan page evidence: ${pageEvidenceError.message}`);
+      if (pageEvidenceError && !shouldSkipOptionalPersistenceTable(pageEvidenceError.message, "scan_page_evidence")) {
+        throw new Error(`Failed to persist scan page evidence: ${pageEvidenceError.message}`);
+      }
     }
   }
 
   const { error: deleteSignalHitsError } = await supabase.from("scan_signal_hits").delete().eq("scan_id", bundle.snapshot.scanId);
-  if (deleteSignalHitsError) {
+  if (deleteSignalHitsError && !shouldSkipOptionalPersistenceTable(deleteSignalHitsError.message, "scan_signal_hits")) {
     throw new Error(`Failed to clear scan signal hits: ${deleteSignalHitsError.message}`);
   }
 
-  const signalHitRows = buildScanSignalHitRows(bundle);
-  if (signalHitRows.length > 0) {
-    const { error: signalHitsError } = await supabase.from("scan_signal_hits").insert(signalHitRows);
+  if (!deleteSignalHitsError) {
+    const signalHitRows = buildScanSignalHitRows(bundle);
+    if (signalHitRows.length > 0) {
+      const { error: signalHitsError } = await supabase.from("scan_signal_hits").insert(signalHitRows);
 
-    if (signalHitsError) {
-      throw new Error(`Failed to persist scan signal hits: ${signalHitsError.message}`);
+      if (signalHitsError && !shouldSkipOptionalPersistenceTable(signalHitsError.message, "scan_signal_hits")) {
+        throw new Error(`Failed to persist scan signal hits: ${signalHitsError.message}`);
+      }
     }
   }
 

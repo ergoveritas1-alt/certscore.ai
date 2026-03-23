@@ -3638,11 +3638,15 @@ export async function loadRankableFindings(scanId: string) {
     throw new Error(`Failed to load validation accessibility examples for scan ${scanId}: ${accessibilityRuleExamplesError.message}`);
   }
 
-  if (pageEvidenceError) {
+  const pageEvidenceTableMissing =
+    pageEvidenceError?.message.includes("Could not find the table 'public.scan_page_evidence' in the schema cache") ?? false;
+  if (pageEvidenceError && !pageEvidenceTableMissing) {
     throw new Error(`Failed to load financial page evidence for scan ${scanId}: ${pageEvidenceError.message}`);
   }
 
-  if (signalHitsError) {
+  const signalHitsTableMissing =
+    signalHitsError?.message.includes("Could not find the table 'public.scan_signal_hits' in the schema cache") ?? false;
+  if (signalHitsError && !signalHitsTableMissing) {
     throw new Error(`Failed to load financial signal hits for scan ${scanId}: ${signalHitsError.message}`);
   }
 
@@ -3833,7 +3837,7 @@ export async function loadRankableFindings(scanId: string) {
     }
   }
 
-  const normalizedPageEvidence: ObservedPageEvidence[] = ((pageEvidenceRows ?? []) as ScanPageEvidenceRow[]).map((row) => ({
+  const normalizedPageEvidence: ObservedPageEvidence[] = (((pageEvidenceTableMissing ? [] : pageEvidenceRows) ?? []) as ScanPageEvidenceRow[]).map((row) => ({
     evidenceId: row.evidence_id,
     scanId: row.scan_id,
     pageUrl: row.page_url,
@@ -3852,7 +3856,7 @@ export async function loadRankableFindings(scanId: string) {
     screenshotRef: row.screenshot_ref,
     metadata: row.metadata
   }));
-  const normalizedSignalHits: ScanSignalHit[] = ((signalHitRows ?? []) as ScanSignalHitRow[]).map((row) => ({
+  const normalizedSignalHits: ScanSignalHit[] = (((signalHitsTableMissing ? [] : signalHitRows) ?? []) as ScanSignalHitRow[]).map((row) => ({
     id: row.id,
     scanId: row.scan_id,
     signalKey: row.signal_key,

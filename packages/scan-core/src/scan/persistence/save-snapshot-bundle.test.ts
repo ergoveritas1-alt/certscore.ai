@@ -8,6 +8,7 @@ import {
   buildRuntimeArtifactRow,
   buildScanSignalHitRows,
   buildSnapshotInsert,
+  omitOptionalSnapshotColumn,
   omitOptionalRuntimeArtifactsColumn
 } from "./save-snapshot-bundle";
 
@@ -378,6 +379,24 @@ test("omitOptionalRuntimeArtifactsColumn removes unsupported optional runtime fi
     cookie_attribute_summary: { totalCookiesAnalyzed: 1 },
     scan_id: "scan-1",
     third_party_request_count: 1
+  });
+});
+
+test("omitOptionalSnapshotColumn removes unsupported optional financial snapshot fields", () => {
+  const strippedRow = omitOptionalSnapshotColumn(
+    {
+      about_page_present: true,
+      performance_claim_present: true,
+      pricing_page_present: true,
+      scan_id: "scan-1"
+    },
+    "Could not find the 'about_page_present' column of 'scan_snapshots' in the schema cache"
+  );
+
+  assert.deepEqual(strippedRow, {
+    performance_claim_present: true,
+    pricing_page_present: true,
+    scan_id: "scan-1"
   });
 });
 

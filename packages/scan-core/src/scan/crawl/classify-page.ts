@@ -7,7 +7,13 @@ export function classifyPage(url: string): PageType {
     return "homepage";
   }
 
-  if (pathname.includes("about")) {
+  if (
+    pathname.includes("about") ||
+    pathname.includes("team") ||
+    pathname.includes("leadership") ||
+    pathname.includes("founder") ||
+    pathname.includes("management")
+  ) {
     return "about";
   }
 

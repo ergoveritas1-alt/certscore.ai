@@ -1235,6 +1235,8 @@ function priorityForPage(pageType: StaticPageResult["pageType"]) {
       return 950;
     case "checkout":
       return 940;
+    case "about":
+      return 930;
     case "product":
     case "pricing":
       return 920;
