@@ -29,7 +29,7 @@ Deploy the same `apps/web` app to Vercel, but with:
 
 Recommended checks before deploy:
 
-- `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
+- `pnpm check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/web typecheck`
 
 After deploy:
@@ -101,9 +101,8 @@ pnpm --filter @website-signal-risk-scanner/worker start:validation:scheduler
 
 Run these before trusting the deployment:
 
-- `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
-- `pnpm --filter @website-signal-risk-scanner/worker check-env:validation`
-- `pnpm --filter @website-signal-risk-scanner/worker check-runtime:validation`
+- `pnpm check-env:validation`
+- `pnpm check-runtime:validation`
 
 Expected results:
 

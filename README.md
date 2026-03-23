@@ -166,7 +166,7 @@ GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users
 Use these lightweight checks before first deployment validation:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
-- `pnpm --filter @website-signal-risk-scanner/web check-env:validation`
+- `pnpm check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/scanner check-env`
 - `pnpm --filter @website-signal-risk-scanner/scanner check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/worker check-env`

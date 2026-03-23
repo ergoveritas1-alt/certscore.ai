@@ -9,9 +9,9 @@
   "scripts": {
     "build": "turbo run build",
     "check-env": "pnpm --filter @website-signal-risk-scanner/web check-env && pnpm --filter @website-signal-risk-scanner/scanner check-env",
-    "check-env:validation": "pnpm --filter @website-signal-risk-scanner/validation-web check-env && pnpm --filter @website-signal-risk-scanner/scanner check-env",
+    "check-env:validation": "pnpm --filter @website-signal-risk-scanner/validation-web check-env && pnpm --filter @website-signal-risk-scanner/validation-worker check-env",
     "check-runtime": "pnpm --filter @website-signal-risk-scanner/web check-runtime && pnpm --filter @website-signal-risk-scanner/scanner check-runtime",
-    "check-runtime:validation": "pnpm --filter @website-signal-risk-scanner/validation-web check-runtime && pnpm --filter @website-signal-risk-scanner/scanner check-runtime",
+    "check-runtime:validation": "pnpm --filter @website-signal-risk-scanner/validation-web check-runtime && pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime",
     "dev": "turbo run dev --parallel",
     "dev:control-plane": "bash ./scripts/run-validation-dev.sh",
     "dev:all": "bash ./scripts/run-all-dev.sh",
