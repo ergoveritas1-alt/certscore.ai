@@ -12,6 +12,98 @@ function weightedIssueCost(count: number, weight: number, cap: number) {
   return Math.min(cap, Math.sqrt(count) * weight);
 }
 
+function deriveTrackerRiskScore(snapshot: ScanSnapshot) {
+  const rightsFrictionPenalty =
+    snapshot.userRightsFrictionScore === null ? 0 : Math.min(10, Math.max(0, (snapshot.userRightsFrictionScore - 30) * 0.15));
+  const thirdPartyCookiePenalty = weightedIssueCost(snapshot.thirdPartyCookieCount ?? 0, 5, 16);
+  const vendorBreadthPenalty = Math.min(12, Math.max(0, snapshot.trackerVendorCount - 2) * 3);
+
+  return clamp(
+    snapshot.analyticsTrackerCount * 6 +
+      snapshot.advertisingTrackerCount * 12 +
+      snapshot.socialTrackerCount * 5 +
+      snapshot.sessionReplayTrackerCount * 18 +
+      thirdPartyCookiePenalty +
+      vendorBreadthPenalty +
+      (snapshot.preconsentTrackingDetected ? 24 : 0) +
+      (snapshot.preconsentTrackingDetected && !snapshot.rejectAllPresent ? 10 : 0) +
+      (snapshot.preconsentTrackingDetected && snapshot.consentWithdrawalMechanismPresent === false ? 8 : 0) +
+      rightsFrictionPenalty +
+      (snapshot.fingerprintingOrIdentityVendorDetected ? 24 : 0)
+  );
+}
+
+function deriveAccessibilityAutomatedScore(snapshot: ScanSnapshot) {
+  return clamp(
+    100 -
+      weightedIssueCost(snapshot.wcagMissingAltCount, 6, 18) -
+      weightedIssueCost(snapshot.wcagContrastFailuresCount, 6, 20) -
+      weightedIssueCost(snapshot.wcagFormLabelErrorCount, 8, 20) -
+      weightedIssueCost(snapshot.wcagAriaErrorCount, 4, 12) -
+      weightedIssueCost(snapshot.wcagHeadingStructureErrorCount, 4, 12) -
+      weightedIssueCost(snapshot.wcagLinkNameErrorCount, 6, 20) -
+      weightedIssueCost(snapshot.wcagKeyboardNavigationIssueCount, 8, 18) -
+      weightedIssueCost(snapshot.wcagFocusIndicatorIssueCount, 8, 18) -
+      weightedIssueCost(snapshot.wcagLandmarkIssueCount, 4, 12)
+  );
+}
+
+function deriveAccessibilityConfidencePenalty(snapshot: ScanSnapshot, automatedScore: number) {
+  let penalty = 0;
+
+  if (snapshot.scanConfidence === "medium") {
+    penalty += 6;
+  } else if (snapshot.scanConfidence === "low") {
+    penalty += 14;
+  }
+
+  if (snapshot.partialScan) {
+    penalty += 10;
+  }
+
+  if (snapshot.timeoutFlag) {
+    penalty += 5;
+  }
+
+  if (snapshot.blockedFlag || snapshot.captchaFlag || snapshot.authWallDetected) {
+    penalty += 8;
+  }
+
+  if (snapshot.pagesScanned <= 3) {
+    penalty += 6;
+  } else if (snapshot.pagesScanned <= 5) {
+    penalty += 3;
+  }
+
+  if (automatedScore >= 95) {
+    if ((snapshot.thirdPartyScriptDomainCount ?? 0) >= 5) {
+      penalty += 8;
+    } else if ((snapshot.thirdPartyScriptDomainCount ?? 0) >= 3) {
+      penalty += 4;
+    }
+
+    if (snapshot.adtechStackComplexityScore >= 40) {
+      penalty += 6;
+    } else if (snapshot.adtechStackComplexityScore >= 20) {
+      penalty += 3;
+    }
+  }
+
+  if (snapshot.accessibilityWidgetPresent) {
+    penalty += 6;
+  }
+
+  if (snapshot.accessibilityClaimMismatchDetected) {
+    penalty += 8;
+  }
+
+  if (automatedScore >= 90 && !snapshot.accessibilityStatementPresent && !snapshot.vpatOrAccessibilityConformanceDocPresent) {
+    penalty += 4;
+  }
+
+  return Math.min(30, penalty);
+}
+
 export function deriveSecurityHeadersScore(input: Pick<
   ScanSnapshot,
   "cspHeaderPresent" | "xFrameOptionsPresent" | "referrerPolicyPresent" | "permissionsPolicyPresent" | "hstsEnabled"
@@ -138,26 +230,9 @@ export function scoreSnapshot(snapshot: ScanSnapshot) {
       (snapshot.darkPatternRejectHidden ? 6 : 0)
   );
 
-  const trackerRiskScore = clamp(
-    snapshot.analyticsTrackerCount * 6 +
-      snapshot.advertisingTrackerCount * 10 +
-      snapshot.sessionReplayTrackerCount * 15 +
-      (snapshot.preconsentTrackingDetected ? 18 : 0) +
-      (snapshot.fingerprintingOrIdentityVendorDetected ? 20 : 0)
-  );
-
-  const accessibilityScore = clamp(
-    100 -
-      weightedIssueCost(snapshot.wcagMissingAltCount, 6, 18) -
-      weightedIssueCost(snapshot.wcagContrastFailuresCount, 6, 20) -
-      weightedIssueCost(snapshot.wcagFormLabelErrorCount, 8, 20) -
-      weightedIssueCost(snapshot.wcagAriaErrorCount, 4, 12) -
-      weightedIssueCost(snapshot.wcagHeadingStructureErrorCount, 4, 12) -
-      weightedIssueCost(snapshot.wcagLinkNameErrorCount, 6, 20) -
-      weightedIssueCost(snapshot.wcagKeyboardNavigationIssueCount, 8, 18) -
-      weightedIssueCost(snapshot.wcagFocusIndicatorIssueCount, 8, 18) -
-      weightedIssueCost(snapshot.wcagLandmarkIssueCount, 4, 12)
-  );
+  const trackerRiskScore = deriveTrackerRiskScore(snapshot);
+  const accessibilityScoreAutomated = deriveAccessibilityAutomatedScore(snapshot);
+  const accessibilityScore = clamp(accessibilityScoreAutomated - deriveAccessibilityConfidencePenalty(snapshot, accessibilityScoreAutomated));
 
   const dataCollectionRiskScore = clamp(
     snapshot.formCountTotal * 4 +
@@ -213,7 +288,7 @@ export function scoreSnapshot(snapshot: ScanSnapshot) {
     consumerProtectionScore,
     childrenPrivacyRiskScore,
     regulatoryExposureScore,
-    accessibilityScoreAutomated: accessibilityScore,
+    accessibilityScoreAutomated,
     piiCollectionRiskScore: dataCollectionRiskScore,
     transparencyScore: clamp(
       (snapshot.securityTxtPresent ? 25 : 0) +

@@ -482,6 +482,72 @@ test("scoreSnapshot raises children privacy risk for kid-directed content even w
   assert.equal(scored.childrenPrivacyRiskScore, 48);
 });
 
+test("scoreSnapshot increases tracker risk severity for pre-consent adtech plus high-friction consent flows", () => {
+  const scored = scoreSnapshot(
+    makeSnapshot({
+      advertisingTrackerCount: 1,
+      trackerVendorCount: 4,
+      thirdPartyCookieCount: 3,
+      preconsentTrackingDetected: true,
+      rejectAllPresent: false,
+      consentWithdrawalMechanismPresent: false,
+      userRightsFrictionScore: 50
+    })
+  );
+
+  assert.equal(scored.trackerRiskScore, 78);
+});
+
+test("scoreSnapshot preserves automated accessibility score when confidence is strong", () => {
+  const scored = scoreSnapshot(
+    makeSnapshot({
+      pagesRequested: 6,
+      pagesScanned: 6,
+      accessibilityStatementPresent: true,
+      wcagErrorCountTotal: 0,
+      wcagContrastFailuresCount: 0,
+      wcagMissingAltCount: 0,
+      wcagFormLabelErrorCount: 0,
+      wcagAriaErrorCount: 0,
+      wcagHeadingStructureErrorCount: 0,
+      wcagLinkNameErrorCount: 0,
+      wcagKeyboardNavigationIssueCount: 0,
+      wcagFocusIndicatorIssueCount: 0,
+      wcagLandmarkIssueCount: 0
+    })
+  );
+
+  assert.equal(scored.accessibilityScoreAutomated, 100);
+  assert.equal(scored.accessibilityScore, 100);
+});
+
+test("scoreSnapshot lowers confidence-adjusted accessibility score for complex medium-confidence scans", () => {
+  const scored = scoreSnapshot(
+    makeSnapshot({
+      scanConfidence: "medium",
+      pagesScanned: 3,
+      thirdPartyScriptDomainCount: 6,
+      adtechStackComplexityScore: 45,
+      accessibilityWidgetPresent: true,
+      accessibilityStatementPresent: false,
+      vpatOrAccessibilityConformanceDocPresent: false,
+      wcagErrorCountTotal: 0,
+      wcagContrastFailuresCount: 0,
+      wcagMissingAltCount: 0,
+      wcagFormLabelErrorCount: 0,
+      wcagAriaErrorCount: 0,
+      wcagHeadingStructureErrorCount: 0,
+      wcagLinkNameErrorCount: 0,
+      wcagKeyboardNavigationIssueCount: 0,
+      wcagFocusIndicatorIssueCount: 0,
+      wcagLandmarkIssueCount: 0
+    })
+  );
+
+  assert.equal(scored.accessibilityScoreAutomated, 100);
+  assert.equal(scored.accessibilityScore, 70);
+});
+
 test("runSnapshotBuildPhase records failed attempts when retries are exhausted", async () => {
   const summaries: SnapshotBuildPhaseSummary[] = [];
   let attempts = 0;
