@@ -3044,7 +3044,7 @@ export async function getActiveValidationRunCount() {
   const { count, error } = await supabase
     .from("validation_runs")
     .select("id", { count: "exact", head: true })
-    .in("status", ["queued", "collecting", "ranking", "validating"]);
+    .in("status", ["waiting_for_scan", "queued", "collecting", "ranking", "validating"]);
 
   if (error) {
     throw new Error(`Failed to count active validation runs: ${error.message}`);
@@ -3192,13 +3192,127 @@ export async function createValidationRun(input: {
   return (data as { id: string }).id;
 }
 
+export async function ensureValidationRunForCompletedManualScan(input: { scanId: string }) {
+  const supabase = createAdminClient();
+  const { data: scan, error: scanError } = await supabase
+    .from("scans")
+    .select("id, organization_id, domain_id, submitted_by_user_id, status, scan_type, scan_config_json")
+    .eq("id", input.scanId)
+    .maybeSingle();
+
+  if (scanError) {
+    throw new Error(`Failed to load completed scan ${input.scanId}: ${scanError.message}`);
+  }
+
+  const scanRow =
+    (scan as {
+      domain_id: string | null;
+      id: string;
+      organization_id: string | null;
+      scan_config_json: Record<string, unknown> | null;
+      scan_type: string;
+      status: string;
+      submitted_by_user_id: string | null;
+    } | null) ?? null;
+
+  if (!scanRow || scanRow.status !== "completed" || scanRow.scan_type !== "full" || !scanRow.organization_id || !scanRow.domain_id) {
+    return null;
+  }
+
+  const source =
+    scanRow.scan_config_json && typeof scanRow.scan_config_json.source === "string"
+      ? scanRow.scan_config_json.source
+      : null;
+
+  if (source !== "manual-dashboard" && source !== "manual-rescan") {
+    return null;
+  }
+
+  const { data: existingRun, error: existingRunError } = await supabase
+    .from("validation_runs")
+    .select("id")
+    .eq("scan_id", input.scanId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingRunError) {
+    throw new Error(`Failed to check validation runs for scan ${input.scanId}: ${existingRunError.message}`);
+  }
+
+  if (existingRun) {
+    return (existingRun as { id: string }).id;
+  }
+
+  const { data: domain, error: domainError } = await supabase
+    .from("domains")
+    .select("id, hostname, normalized_url")
+    .eq("id", scanRow.domain_id)
+    .eq("organization_id", scanRow.organization_id)
+    .maybeSingle();
+
+  if (domainError) {
+    throw new Error(`Failed to load domain for completed scan ${input.scanId}: ${domainError.message}`);
+  }
+
+  if (!domain) {
+    return null;
+  }
+
+  const { data: previousRun, error: previousRunError } = await supabase
+    .from("validation_runs")
+    .select("tranco_rank, rank_band")
+    .eq("domain_id", scanRow.domain_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (previousRunError) {
+    throw new Error(`Failed to load previous validation run for completed scan ${input.scanId}: ${previousRunError.message}`);
+  }
+
+  const { data: run, error: runError } = await supabase
+    .from("validation_runs")
+    .insert({
+      domain_id: (domain as { id: string }).id,
+      hostname: (domain as { hostname: string }).hostname,
+      normalized_url: (domain as { normalized_url: string }).normalized_url,
+      rank_band: (previousRun as { rank_band: string | null } | null)?.rank_band ?? null,
+      scan_id: input.scanId,
+      status: "queued",
+      tranco_rank: (previousRun as { tranco_rank: number | null } | null)?.tranco_rank ?? null,
+      trigger_mode: "manual",
+      triggered_by_user_id: scanRow.submitted_by_user_id
+    })
+    .select("id")
+    .single();
+
+  if (runError || !run) {
+    throw new Error(`Failed to create validation run for completed scan ${input.scanId}: ${runError?.message ?? "Unknown error"}`);
+  }
+
+  await insertValidationAuditEvent({
+    eventType: "validation.manual_run_queued",
+    metadata: {
+      domainId: (domain as { id: string }).id,
+      hostname: (domain as { hostname: string }).hostname,
+      reason: "manual_scan_completed",
+      scanId: input.scanId,
+      validationRunId: (run as { id: string }).id
+    },
+    actorUserId: scanRow.submitted_by_user_id
+  });
+
+  return (run as { id: string }).id;
+}
+
 export async function getEligibleTargetForAutomaticRun(now = new Date()) {
   const supabase = createAdminClient();
   const activeTargetIds = new Set<string>();
   const { data: activeRuns, error: activeRunsError } = await supabase
     .from("validation_runs")
     .select("validation_target_id")
-    .in("status", ["queued", "collecting", "ranking", "validating"]);
+    .in("status", ["waiting_for_scan", "queued", "collecting", "ranking", "validating"]);
 
   if (activeRunsError) {
     throw new Error(`Failed to load active validation runs: ${activeRunsError.message}`);

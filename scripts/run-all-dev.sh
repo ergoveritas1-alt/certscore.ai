@@ -23,6 +23,9 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+pnpm --filter @website-signal-risk-scanner/shared build
+pnpm --filter @website-signal-risk-scanner/scan-core build
+
 pnpm --filter @website-signal-risk-scanner/web dev &
 web_pid=$!
 

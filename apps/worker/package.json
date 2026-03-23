@@ -19,6 +19,7 @@
     "playwright:install": "playwright install chromium",
     "smoke:scheduler": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./src/scheduling/run-scheduler.ts",
     "scheduler:sweep": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./src/scheduling/run-scheduler.ts",
+    "reconcile:queues": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/reconcile-stale-queue-state.ts",
     "validation:scheduler": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./src/validation/run-scheduler.ts --once",
     "test": "node --import tsx --test ./src/**/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",

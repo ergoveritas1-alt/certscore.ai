@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const MAX_ACTIVITY_LINE_LENGTH = 200;
 const ACTIVITY_ROTATION_MS = 1800;

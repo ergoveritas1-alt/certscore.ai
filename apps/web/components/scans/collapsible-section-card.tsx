@@ -1,5 +1,5 @@
 import { Card, cn } from "@website-signal-risk-scanner/ui";
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
 
 type CollapsibleSectionCardProps = {
   title: ReactNode;
@@ -12,10 +12,10 @@ type CollapsibleSectionCardProps = {
   summaryClassName?: string;
 };
 
-function ChevronIcon() {
+function DisclosureChevron() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 20 20" fill="none">
+      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
     </svg>
   );
 }
@@ -32,7 +32,7 @@ export function CollapsibleSectionCard({
 }: CollapsibleSectionCardProps) {
   return (
     <Card className={cn("border border-slate-200 bg-white", className)}>
-      <details className="group/section" open={defaultOpen}>
+      <details suppressHydrationWarning className="group/section" {...(defaultOpen ? { open: true } : {})}>
         <summary
           className={cn(
             "flex cursor-pointer list-none items-start gap-3 px-6 py-5 marker:hidden [&::-webkit-details-marker]:hidden",
@@ -40,8 +40,8 @@ export function CollapsibleSectionCard({
           )}
         >
           {showChevron ? (
-            <span className="mt-0.5 inline-flex text-slate-400 transition-transform duration-150 group-open/section:rotate-90">
-              <ChevronIcon />
+            <span aria-hidden="true" className="mt-0.5 inline-flex shrink-0 text-slate-400 transition-transform duration-150 group-open/section:rotate-90">
+              <DisclosureChevron />
             </span>
           ) : null}
           <div className="min-w-0 flex-1">

@@ -115,6 +115,8 @@ export function deriveInfrastructureChangeSignals(input: {
 }
 
 export function scoreSnapshot(snapshot: ScanSnapshot) {
+  const youthDirectedContextDetected = snapshot.childrenAudienceLikely || snapshot.kidDirectedContentDetected;
+
   const privacyScore = clamp(
     85 -
       (snapshot.privacyPolicyPresent ? 0 : 20) -
@@ -177,10 +179,11 @@ export function scoreSnapshot(snapshot: ScanSnapshot) {
 
   const childrenPrivacyRiskScore = clamp(
     (snapshot.childrenAudienceLikely ? 20 : 0) +
+      (snapshot.kidDirectedContentDetected ? 20 : 0) +
       (snapshot.mentionsCoppa ? 10 : 0) +
       (snapshot.mentionsUnder13 ? 15 : 0) +
-      (snapshot.ageGatePresent ? 0 : snapshot.childrenAudienceLikely ? 18 : 0) +
-      (snapshot.parentalConsentReferencePresent ? 0 : snapshot.childrenAudienceLikely ? 10 : 0)
+      (snapshot.ageGatePresent ? 0 : youthDirectedContextDetected ? 18 : 0) +
+      (snapshot.parentalConsentReferencePresent ? 0 : youthDirectedContextDetected ? 10 : 0)
   );
 
   const regulatoryExposureScore = clamp(

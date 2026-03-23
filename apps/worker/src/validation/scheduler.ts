@@ -15,6 +15,36 @@ import {
 } from "./repository";
 import { syncTrancoTargetsIfDue } from "./tranco";
 
+async function failValidationQueueHandoff(input: {
+  hostname: string;
+  message: string;
+  trancoRank: number | null;
+  validationRunId: string;
+}) {
+  const { updateValidationRun, updateValidationTargetAfterRun, insertValidationAuditEvent } = await import("./repository");
+
+  await updateValidationRun(input.validationRunId, {
+    completed_at: new Date().toISOString(),
+    error_message: input.message,
+    status: "failed"
+  });
+  await updateValidationTargetAfterRun({
+    errorMessage: input.message,
+    hostname: input.hostname,
+    lastStatus: "failed",
+    trancoRank: input.trancoRank
+  });
+  await insertValidationAuditEvent({
+    eventType: "validation.run_scheduled",
+    metadata: {
+      error: input.message,
+      hostname: input.hostname,
+      triggerMode: "automatic",
+      validationRunId: input.validationRunId
+    }
+  });
+}
+
 export async function runValidationSchedulerTick(now = new Date()) {
   const pipelineState = await getValidationPipelineState();
   const settings = await ensureValidationSettings();
@@ -60,14 +90,25 @@ export async function runValidationSchedulerTick(now = new Date()) {
   });
   await markValidationTargetRunQueued(target.hostname);
 
-  await createValidationCollectQueue().add(
-    VALIDATION_COLLECT_JOB,
-    { validationRunId },
-    {
-      attempts: 2,
-      jobId: `${validationRunId}--collect`
-    }
-  );
+  try {
+    await createValidationCollectQueue().add(
+      VALIDATION_COLLECT_JOB,
+      { validationRunId },
+      {
+        attempts: 2,
+        jobId: `${validationRunId}--collect`
+      }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown validation queue handoff error";
+    await failValidationQueueHandoff({
+      hostname: target.hostname,
+      message: `Validation collect queue handoff failed: ${message}`,
+      trancoRank: target.trancoRank,
+      validationRunId
+    });
+    throw error;
+  }
 
   await insertValidationAuditEvent({
     eventType: "validation.run_scheduled",

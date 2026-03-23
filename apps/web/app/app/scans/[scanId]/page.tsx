@@ -13,8 +13,8 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
+import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
-import { ReportExecutiveSummary } from "../../../../components/scans/report-executive-summary";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
   EMPHASIS_METRIC_CARD_VALUE_CLASS,
@@ -31,6 +31,10 @@ import {
   isRightsFrictionSignal,
   shouldSurfacePrimarySignalFinding
 } from "../../../../lib/scans/finding-evidence-gates";
+import {
+  buildChildContextFallbackEvidence,
+  isChildContextSignalKey
+} from "../../../../lib/scans/signal-fallback-evidence";
 import {
   buildUnifiedFindingDisplayPackets,
   getUnifiedFindingCategoryRelation,
@@ -206,6 +210,13 @@ function getRecordNumber(record: Record<string, unknown> | null | undefined, key
 function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function getRecordObjectArray(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    : [];
 }
 
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
@@ -929,6 +940,24 @@ type ScanRecordData = NonNullable<Awaited<ReturnType<typeof getScanById>>>;
 type CanonicalTaxonomyReviewProps = {
   accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
   consentAuditFindings: PreviewSampleFinding[];
+  executiveSummary: {
+    badges: Array<{
+      label: string;
+      tone?: "neutral" | "warning";
+      tooltip?: string;
+    }>;
+    metrics: Array<{
+      href?: string;
+      label: string;
+      tooltip?: string;
+      value: string;
+    }>;
+    statusCallout: {
+      details: string[];
+      title: string;
+      tone: "danger" | "success" | "warning";
+    } | null;
+  };
   policyBehaviorContradictions: PolicyBehaviorContradiction[];
   preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
   prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows>;
@@ -1147,7 +1176,7 @@ function getSignalConcernReason(key: string, value: unknown) {
   }
 
   if (/children_audience_likely|kid_directed_content_detected|form_collects_birthdate|policyChildrenReference/i.test(key)) {
-    return "The scan retained age-related or youth-directed context that may raise children’s privacy review expectations.";
+    return "The scan flagged age-related or youth-directed context that may raise children’s privacy review expectations.";
   }
 
   if (/weak_cookie_security_attributes_detected/i.test(key)) {
@@ -1478,26 +1507,13 @@ function buildReviewFindings(input: {
                   signalLabel: item.label,
                   signalValue: item.value
                 }
-            : /children_audience_likely|kid_directed_content_detected|form_collects_birthdate|policyChildrenReference/i.test(item.key)
-              ? {
-                  ageGatePresent: input.snapshot?.age_gate_present === true,
-                  childrenAudienceLikely: input.snapshot?.children_audience_likely === true,
-                  childrenPrivacyRiskScore:
-                    typeof input.snapshot?.children_privacy_risk_score === "number"
-                      ? input.snapshot.children_privacy_risk_score
-                      : null,
-                  dateOfBirthInputPresent: input.snapshot?.date_of_birth_input_present === true,
-                  formCollectsBirthdate: input.snapshot?.form_collects_birthdate === true,
-                  kidDirectedContentDetected: input.snapshot?.kid_directed_content_detected === true,
-                  mentionsCoppa: input.snapshot?.mentions_coppa === true,
-                  mentionsUnder13: input.snapshot?.mentions_under_13 === true,
-                  mentionsUnder16: input.snapshot?.mentions_under_16 === true,
-                  parentalConsentReferencePresent: input.snapshot?.parental_consent_reference_present === true,
-                  policyChildrenReference: typeof item.value === "string" ? item.value : null,
+            : isChildContextSignalKey(item.key)
+              ? buildChildContextFallbackEvidence({
                   signalKey: item.key,
                   signalLabel: item.label,
-                  signalValue: item.value
-                }
+                  signalValue: item.value,
+                  snapshot: input.snapshot
+                })
             : keyPageType
               ? {
                   keyPageAttemptCount: keyPageSummary?.attemptCount ?? null,
@@ -1653,23 +1669,38 @@ function formatValidationSupport(finding: UnifiedFindingDisplayPacket) {
 function formatFindingPageLabel(pageUrl: string) {
   try {
     const parsed = new URL(pageUrl);
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.trim();
+    const looksLikeTrackingRequest =
+      parsed.search.length > 80 ||
+      pathname.includes("/collect") ||
+      pathname.includes("/g/collect") ||
+      host.includes("google-analytics.com") ||
+      host.includes("googletagmanager.com");
+
+    if (looksLikeTrackingRequest) {
+      return null;
+    }
+
     const path = `${parsed.pathname}${parsed.search}`.trim();
     if (!path || path === "/") {
       return parsed.hostname;
     }
     return path;
   } catch {
-    return pageUrl;
+    return null;
   }
 }
 
 function getFindingPageAttributionSummary(finding: UnifiedFindingDisplayPacket) {
   if (finding.primaryPageUrl) {
     const pageLabel = formatFindingPageLabel(finding.primaryPageUrl);
-    if (finding.affectedPageCount > 1) {
+    if (pageLabel && finding.affectedPageCount > 1) {
       return `Seen on ${finding.affectedPageCount} pages including ${pageLabel}.`;
     }
-    return `Seen on ${pageLabel}.`;
+    if (pageLabel) {
+      return `Seen on ${pageLabel}.`;
+    }
   }
 
   if (finding.affectedPageCount > 0) {
@@ -1736,28 +1767,63 @@ function getConfidenceBadgeClasses(band: UnifiedFindingDisplayPacket["confidence
   }
 }
 
+function getCollapsedFindingSummary(finding: UnifiedFindingDisplayPacket) {
+  const source = (finding.observedValue ?? "").trim();
+  if (!source) {
+    return null;
+  }
+
+  const normalized = source.endsWith(".") ? source.slice(0, -1) : source;
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 117).trimEnd()}...`;
+}
+
+function DisclosureChevron(input?: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={input?.className ?? "h-4 w-4"}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
+    </svg>
+  );
+}
+
 function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const validationSupport = formatValidationSupport(input.finding);
   const pageAttribution = getFindingPageAttributionSummary(input.finding);
+  const evidenceSummary = summarizeEvidence(input.finding);
+  const confidenceRationale = input.finding.presentationDecision.confidenceRationale;
+  const collapsedSummary = getCollapsedFindingSummary(input.finding);
+  const findingJsonPayload = JSON.stringify(input.finding, null, 2);
 
   return (
-    <div className={`rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding.severity)}`}>
-      <div className="grid gap-4 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
+    <details className={`group/finding rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding.severity)}`}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/finding:rotate-90">
+          <DisclosureChevron />
+        </span>
+        <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
+          {input.finding.presentation.findingName}
+        </p>
+        {collapsedSummary ? (
+          <p className="min-w-0 truncate text-xs font-mono text-slate-500">
+            <span aria-hidden="true" className="mr-2 text-slate-300">
+              •
+            </span>
+            {collapsedSummary}
+          </p>
+        ) : null}
+      </summary>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
         <div className="min-w-0 space-y-2">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-slate-950">{input.finding.presentation.findingName}</p>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding.severity)}`}
-              >
-                {input.finding.severity}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getConfidenceBadgeClasses(input.finding.confidenceBand)}`}
-              >
-                {input.finding.confidenceBand} confidence
-              </span>
-            </div>
             <p className="mt-1 text-sm text-slate-700">{input.finding.observedValue ?? `${input.finding.severity} severity`}</p>
             {pageAttribution ? <p className="mt-1 text-xs text-slate-500">{pageAttribution}</p> : null}
           </div>
@@ -1789,16 +1855,55 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
           <ReviewFindingLinks finding={input.finding} />
         </div>
       </div>
-    </div>
+      <details className="group/evidence mt-3 rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/evidence:rotate-90">
+            <DisclosureChevron />
+          </span>
+          <span>Evidence</span>
+        </summary>
+        <div className="mt-2 space-y-2 text-xs text-slate-500">
+          <p>{evidenceSummary}</p>
+          <p>{confidenceRationale}</p>
+          <details className="group/json">
+            <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span
+                aria-hidden="true"
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-slate-500"
+                title="Show technical JSON"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M8 4 4 12l4 8" />
+                  <path d="M16 4l4 8-4 8" />
+                  <path d="M14 3 10 21" />
+                </svg>
+              </span>
+            </summary>
+            <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 text-[11px] leading-5 text-slate-600">
+              {findingJsonPayload}
+            </pre>
+          </details>
+        </div>
+      </details>
+    </details>
   );
 }
 
 function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
+  const primaryPageLabel = packet.primaryPageUrl ? formatFindingPageLabel(packet.primaryPageUrl) : null;
   const parts = [
-    packet.primaryPageUrl
+    primaryPageLabel
       ? packet.affectedPageCount > 1
-        ? `${packet.affectedPageCount} pages including ${formatFindingPageLabel(packet.primaryPageUrl)}`
-        : `page ${formatFindingPageLabel(packet.primaryPageUrl)}`
+        ? `${packet.affectedPageCount} pages including ${primaryPageLabel}`
+        : `page ${primaryPageLabel}`
       : packet.affectedPageCount > 0
         ? `${packet.affectedPageCount} page${packet.affectedPageCount === 1 ? "" : "s"}`
         : null,
@@ -1845,57 +1950,394 @@ function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
   return [...themes];
 }
 
-function AgencyAdvisorySummary(input: { findings: UnifiedFindingDisplayPacket[] }) {
+function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
+  const counts = new Map<string, { count: number; highCount: number; mediumCount: number }>();
+
+  for (const finding of findings) {
+    let theme: string | null = null;
+
+    switch (finding.details?.family) {
+      case "consent_tracking":
+        theme = "Consent & tracking";
+        break;
+      case "contradiction":
+        theme = "Claims vs behavior";
+        break;
+      case "rights_gap":
+      case "policy_extraction":
+      case "coverage_gap":
+        theme = "Policy & disclosure";
+        break;
+      case "accessibility":
+        theme = "Accessibility";
+        break;
+      case "commercial":
+        theme = "Commercial practices";
+        break;
+      case "sensitive_data":
+        theme = "Sensitive-data handling";
+        break;
+      default:
+        theme = null;
+        break;
+    }
+
+    if (theme) {
+      const current = counts.get(theme) ?? { count: 0, highCount: 0, mediumCount: 0 };
+      counts.set(theme, {
+        count: current.count + 1,
+        highCount: current.highCount + (finding.severity === "high" ? 1 : 0),
+        mediumCount: current.mediumCount + (finding.severity === "medium" ? 1 : 0)
+      });
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]))
+    .slice(0, 3)
+    .map(([label, value]) => ({ ...value, label }));
+}
+
+function formatVendorGroupLabel(key: string) {
+  switch (key) {
+    case "analytics":
+      return "Analytics";
+    case "advertising":
+      return "Advertising";
+    case "social":
+      return "Social";
+    case "session_replay":
+      return "Session replay";
+    case "tag_manager":
+      return "Tag manager";
+    case "cmp":
+      return "Consent management";
+    case "accessibility_widget":
+      return "Accessibility widget";
+    case "payment":
+      return "Payment";
+    case "chat_support":
+      return "Chat support";
+    case "marketing":
+      return "Marketing";
+    case "fingerprinting":
+      return "Fingerprinting";
+    case "hosting":
+      return "Hosting";
+    case "ai_assistant":
+      return "AI assistant";
+    default:
+      return key.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+}
+
+function deriveVendorContext(input: {
+  scanRecord: ScanRecordData;
+  snapshot: Record<string, unknown>;
+}) {
+  const vendorGroups = new Map<string, Set<string>>();
+
+  const pushVendor = (groupKey: string, vendorName: string | null | undefined) => {
+    if (!vendorName || vendorName.trim().length === 0) {
+      return;
+    }
+
+    const normalizedName = vendorName.trim();
+    const current = vendorGroups.get(groupKey) ?? new Set<string>();
+    current.add(normalizedName);
+    vendorGroups.set(groupKey, current);
+  };
+
+  for (const tracker of input.scanRecord.trackerVendors) {
+    pushVendor(tracker.vendorCategory || "other", tracker.vendorName);
+  }
+
+  pushVendor("cmp", typeof input.snapshot.cmp_vendor_name === "string" ? input.snapshot.cmp_vendor_name : null);
+  pushVendor("ai_assistant", typeof input.snapshot.ai_chatbot_vendor === "string" ? input.snapshot.ai_chatbot_vendor : null);
+
+  return [...vendorGroups.entries()]
+    .map(([key, items]) => ({
+      key,
+      label: formatVendorGroupLabel(key),
+      vendors: [...items].sort((left, right) => left.localeCompare(right))
+    }))
+    .filter((group) => group.vendors.length > 0)
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function deriveSectionScore(findings: UnifiedFindingDisplayPacket[]) {
+  if (findings.length === 0) {
+    return 5;
+  }
+
+  const highCount = findings.filter((finding) => finding.severity === "high").length;
+  const mediumCount = findings.filter((finding) => finding.severity === "medium").length;
+  const lowCount = findings.filter((finding) => finding.severity === "low").length;
+  const penalty = Math.min(5, highCount * 1.15 + mediumCount * 0.55 + lowCount * 0.2);
+  const score = Math.max(0, 5 - penalty);
+
+  return Math.round(score * 10) / 10;
+}
+
+function formatSectionScore(value: number) {
+  return `${value.toFixed(1)}/5`;
+}
+
+function AgencyAdvisorySummary(input: {
+  sectionTiles: Array<{
+    className?: string;
+    href: string;
+    label: string;
+    showValueText?: boolean;
+    tooltip?: string;
+    value: string;
+    valueClassName?: string;
+  }>;
+  findings: UnifiedFindingDisplayPacket[];
+  badges: CanonicalTaxonomyReviewProps["executiveSummary"]["badges"];
+  metrics: CanonicalTaxonomyReviewProps["executiveSummary"]["metrics"];
+  vendorGroups: Array<{
+    key: string;
+    label: string;
+    vendors: string[];
+  }>;
+  snapshot: Record<string, unknown>;
+  statusCallout: CanonicalTaxonomyReviewProps["executiveSummary"]["statusCallout"];
+}) {
   const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
   const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
-  const clientBullets = [
+  const topThemes = deriveThemeCounts(input.findings);
+  const infrastructureItems = deriveInfrastructureContext(input.snapshot);
+  const audienceItems = deriveAudienceSensitivityContext(input.snapshot);
+  const summaryBullets = [
     highPriorityCount > 0
-      ? `${highPriorityCount} high-priority finding${highPriorityCount === 1 ? "" : "s"} should be reviewed with the site owner first.`
-      : "No high-priority findings were promoted in the main report.",
-    mediumPriorityCount > 0
-      ? `${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} should be scoped into the next remediation pass.`
-      : "No medium-priority findings were promoted in the main report.",
+      ? mediumPriorityCount > 0
+        ? `This scan surfaced ${highPriorityCount} high and ${mediumPriorityCount} medium-priority finding${highPriorityCount + mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
+        : `This scan surfaced ${highPriorityCount} high-priority finding${highPriorityCount === 1 ? "" : "s"} that should be reviewed.`
+      : mediumPriorityCount > 0
+        ? `This scan surfaced ${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
+        : "This scan did not surface any high- or medium-priority findings in the main report.",
     themes.length > 0
-      ? `The main exposure themes for this site are ${themes.join(", ")}.`
-      : "The surfaced findings do not yet point to one dominant exposure theme."
+      ? "The strongest patterns in this scan involve incomplete policy and disclosure coverage, gaps between stated site practices and observed behavior, and consent or tracking flows that may not give users a clear or balanced choice."
+      : "The surfaced findings do not yet point to one dominant risk pattern.",
+    "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
   ];
-  const agencyBullets = [
-    "Use this report to brief the client on risk and remediation, but keep legal and compliance ownership explicitly with the site owner.",
-    "Document which surfaced findings your team will fix, which require client approval, and which need counsel or policy review.",
-    "Avoid making public trust, privacy, or accessibility claims on the client’s behalf until the underlying findings are resolved."
-  ];
+  const totalPriorityFindings = highPriorityCount + mediumPriorityCount;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
       <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-base font-semibold text-slate-900">Agency advisory</p>
-          <p className="text-sm text-slate-500">
-            Read this report as a manager of the client site. Focus on what the site owner needs to understand, what your team should remediate, and where you should keep clear scope boundaries.
-          </p>
+        <p className="text-base font-semibold text-slate-900">Executive summary</p>
+
+        {topThemes.length > 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Areas of concern</p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                <span className="inline-flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                <span>High</span>
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                  <span>Medium</span>
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 space-y-3">
+              {topThemes.map((theme) => {
+                const width = totalPriorityFindings > 0 ? (theme.count / totalPriorityFindings) * 100 : 0;
+                const highWidth = theme.count > 0 ? (theme.highCount / theme.count) * 100 : 0;
+                const mediumWidth = theme.count > 0 ? (theme.mediumCount / theme.count) * 100 : 0;
+                return (
+                  <div key={theme.label} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                      <span>{theme.label}</span>
+                      <span className="text-xs text-slate-500">{theme.count}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="flex h-full" style={{ width: `${width}%` }}>
+                        {theme.highCount > 0 ? (
+                          <div className="h-full bg-rose-400" style={{ width: `${highWidth}%` }} />
+                        ) : null}
+                        {theme.mediumCount > 0 ? (
+                          <div className="h-full bg-amber-400" style={{ width: `${mediumWidth}%` }} />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {input.sectionTiles.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Coverage navigation</p>
+              <p className="text-xs text-slate-500">Jump to a report section in the matrix below.</p>
+            </div>
+            <div className="grid gap-2 md:grid-cols-5">
+              {input.sectionTiles.map((metric) => (
+                <SummaryMetricTile
+                  key={metric.label}
+                  className={metric.className}
+                  href={metric.href}
+                  label={metric.label}
+                  showValueText={metric.showValueText}
+                  tooltip={metric.tooltip}
+                  value={metric.value}
+                  valueClassName={metric.valueClassName}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <ul className="space-y-2 text-sm text-slate-700">
+            {summaryBullets.map((bullet) => (
+              <li key={bullet}>• {bullet}</li>
+            ))}
+          </ul>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">What the client should know</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
-              {clientBullets.map((bullet) => (
-                <li key={bullet}>• {bullet}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">What your agency should do</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
-              {agencyBullets.map((bullet) => (
-                <li key={bullet}>• {bullet}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        {(infrastructureItems.length > 0 || audienceItems.length > 0 || input.vendorGroups.length > 0 || input.statusCallout) ? (
+          <details className="group/context rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+                <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context:rotate-90">
+                  <DisclosureChevron />
+                </span>
+                <span>Operational context</span>
+              </summary>
+
+              <div className="mt-2 space-y-4">
+                <p className="text-xs text-slate-500">
+                  Supporting context from the scan: infrastructure, audience sensitivity, observed vendors, and scan-pass conditions that can affect how findings are interpreted.
+                </p>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {input.vendorGroups.length > 0 ? (
+                    <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+                        <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
+                          <DisclosureChevron />
+                        </span>
+                        <span>Vendors</span>
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        {input.vendorGroups.map((group) => (
+                          <div key={group.key} className="space-y-1">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                              {group.label}
+                            </p>
+                            <ul className="space-y-1 text-sm text-slate-700">
+                              {group.vendors.map((vendor) => (
+                                <li key={`${group.key}-${vendor}`}>• {vendor}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                  <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
+                        <DisclosureChevron />
+                      </span>
+                      <span>Infrastructure profile</span>
+                    </summary>
+                    {infrastructureItems.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                        {infrastructureItems.map((item) => (
+                          <li key={item}>• {item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-600">No compact infrastructure context was retained for this scan.</p>
+                    )}
+                  </details>
+                  <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
+                        <DisclosureChevron />
+                      </span>
+                      <span>Audience & sensitive context</span>
+                    </summary>
+                    {audienceItems.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                        {audienceItems.map((item) => (
+                          <li key={item}>• {item}</li>
+                        ))}
+                      </ul>
+                  ) : (
+                      <p className="mt-3 text-sm text-slate-600">No children’s-privacy or age-gate context was retained for this scan.</p>
+                    )}
+                  </details>
+                </div>
+
+                <ScanPassWarningCallout badges={input.badges} statusCallout={input.statusCallout} />
+              </div>
+          </details>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function ScanPassWarningCallout(input: {
+  badges: CanonicalTaxonomyReviewProps["executiveSummary"]["badges"];
+  statusCallout: CanonicalTaxonomyReviewProps["executiveSummary"]["statusCallout"];
+}) {
+  if (!input.statusCallout) {
+    return null;
+  }
+
+  const toneClasses =
+    input.statusCallout.tone === "danger"
+      ? "rounded-lg border border-rose-200/80 bg-rose-50/60 px-3 py-2 text-sm text-rose-950"
+      : input.statusCallout.tone === "success"
+        ? "rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-950"
+        : "rounded-lg border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm text-amber-950";
+  const detailClasses =
+    input.statusCallout.tone === "danger"
+      ? "mt-2 space-y-1 text-rose-900"
+      : input.statusCallout.tone === "success"
+        ? "mt-2 space-y-1 text-emerald-900"
+        : "mt-2 space-y-1 text-amber-900";
+
+  return (
+    <details className={`${toneClasses} group/warning`}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] marker:hidden [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true" className="inline-flex shrink-0 opacity-70 transition-transform group-open/warning:rotate-90">
+          <DisclosureChevron />
+        </span>
+        <span>{input.statusCallout.title}</span>
+      </summary>
+      <ul className={detailClasses}>
+        {input.statusCallout.details.map((detail) => (
+          <li key={detail}>• {detail}</li>
+        ))}
+      </ul>
+      {input.badges.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {input.badges.map((badge) => (
+            <div
+              key={badge.label}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] ${
+                badge.tone === "warning" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              <span>{badge.label}</span>
+              {badge.tooltip ? <InfoTip align="start" text={badge.tooltip} /> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </details>
   );
 }
 
@@ -1966,55 +2408,6 @@ function deriveAudienceSensitivityContext(snapshot: Record<string, unknown>) {
   return items.slice(0, 6);
 }
 
-function OperationalContextSummary(input: { snapshot: Record<string, unknown> }) {
-  const infrastructureItems = deriveInfrastructureContext(input.snapshot);
-  const audienceItems = deriveAudienceSensitivityContext(input.snapshot);
-
-  if (infrastructureItems.length === 0 && audienceItems.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-base font-semibold text-slate-900">Operational context</p>
-          <p className="text-sm text-slate-500">
-            A compact view of infrastructure and audience-sensitive context that can affect how the site owner prioritizes remediation and risk discussions.
-          </p>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Infrastructure profile</p>
-            {infrastructureItems.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                {infrastructureItems.map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-slate-600">No compact infrastructure context was retained for this scan.</p>
-            )}
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Audience & sensitive context</p>
-            {audienceItems.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                {audienceItems.map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-slate-600">No children’s-privacy or age-gate context was retained for this scan.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const sortedFindings = [...input.findings].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
@@ -2035,44 +2428,43 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-base font-semibold text-slate-900">Findings worth review</p>
-          <p className="text-sm text-slate-500">
-            Start here. These are the surfaced issues that look worth reviewing with the site owner, ordered to help your team decide what to tackle first.
-          </p>
-        </div>
+      <details className="group/noteworthy" open={true}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-3">
+            <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/noteworthy:rotate-90">
+              <DisclosureChevron />
+            </span>
+            <span className="min-w-0">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-base font-semibold text-slate-900">Noteworthy Findings</span>
+                <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
+                  {highPriorityCount} high priority
+                </span>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
+                  {mediumPriorityCount} medium priority
+                </span>
+              </span>
+              <p className="mt-1 text-sm text-slate-500">
+                The main surfaced issues from this scan, prioritized for review and remediation.
+              </p>
+            </span>
+          </span>
+        </summary>
 
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
-            {highPriorityCount} high priority
-          </span>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
-            {mediumPriorityCount} medium priority
-          </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700">
-            {sortedFindings.length} surfaced finding{sortedFindings.length === 1 ? "" : "s"}
-          </span>
+        <div className="mt-4">
+          {sortedFindings.length > 0 ? (
+            <div className="space-y-4">
+              {sortedFindings.map((finding) => (
+                <ReviewFindingCard key={`priority-${finding.unifiedFindingId}`} finding={finding} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="text-sm text-slate-600">No surfaced unified findings were promoted for this scan.</p>
+            </div>
+          )}
         </div>
-
-        {sortedFindings.length > 0 ? (
-          <div className="space-y-4">
-            {sortedFindings.map((finding) => (
-              <div key={`priority-${finding.unifiedFindingId}`} className="space-y-2">
-                <ReviewFindingCard finding={finding} />
-                <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                  <span>{summarizeEvidence(finding)}</span>
-                  <span>{finding.presentationDecision.confidenceRationale}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-sm text-slate-600">No surfaced unified findings were promoted for this scan.</p>
-          </div>
-        )}
-      </div>
+      </details>
     </div>
   );
 }
@@ -2123,11 +2515,25 @@ function summarizeSectionFindings(findings: UnifiedFindingDisplayPacket[]) {
   }.`;
 }
 
-function summarizeSectionFindingCoverage(findings: UnifiedFindingDisplayPacket[]) {
+function summarizeSectionFindingCoverage(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  visibleCategories: Array<{
+    category: ReturnType<typeof getReportEvidenceCategoriesForSection>[number];
+    items: CanonicalSignalItem[];
+  }>;
+}) {
+  const { findings, visibleCategories } = input;
   const findingCount = findings.length;
 
   if (findingCount === 0) {
-    return "No surfaced findings in this section.";
+    const populatedCategories = visibleCategories.filter(({ items }) => items.length > 0);
+    if (populatedCategories.length === 0) {
+      return "No surfaced findings or retained signal context in this section.";
+    }
+
+    const labels = populatedCategories.slice(0, 2).map(({ category }) => category.label);
+    const remainder = populatedCategories.length - labels.length;
+    return `No surfaced findings, but signal context was retained in ${populatedCategories.length} categor${populatedCategories.length === 1 ? "y" : "ies"}${labels.length > 0 ? `: ${labels.join(", ")}${remainder > 0 ? `, +${remainder} more` : ""}` : ""}.`;
   }
 
   return summarizeSectionFindings(findings);
@@ -2141,6 +2547,104 @@ function getMatrixCountTone(count: number) {
     return "bg-amber-100 text-amber-900";
   }
   return "bg-slate-100 text-slate-600";
+}
+
+function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[] }) {
+  const highCount = input.findings.filter((finding) => finding.severity === "high").length;
+  const mediumCount = input.findings.filter((finding) => finding.severity === "medium").length;
+  const lowCount = input.findings.filter((finding) => finding.severity === "low").length;
+
+  if (highCount === 0 && mediumCount === 0 && lowCount === 0) {
+    return (
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-600">
+        —
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {highCount > 0 ? (
+        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-rose-900">
+          {highCount}
+        </span>
+      ) : null}
+      {mediumCount > 0 ? (
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-amber-900">
+          {mediumCount}
+        </span>
+      ) : null}
+      {lowCount > 0 ? (
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700">
+          {lowCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacket }) {
+  const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
+  const whyItMatters = input.finding.presentation.whyThisMatters;
+  const suggestedFix = input.finding.presentation.suggestedFix;
+  const findingJsonPayload = JSON.stringify(input.finding, null, 2);
+
+  return (
+    <div className="relative rounded-lg border border-slate-200 bg-white px-3 pt-3 pb-12">
+      <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-slate-900">{input.finding.presentation.findingName}</p>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding.severity)}`}>
+            {input.finding.severity}
+          </span>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-slate-600">{summary}</p>
+      <div className="mt-3 space-y-2">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why it matters</p>
+          <p className="text-xs text-slate-700">{whyItMatters}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Fix it</p>
+          <p className="text-xs text-slate-700">{suggestedFix}</p>
+        </div>
+        {input.finding.presentation.suggestedBestPractice ? (
+          <Link
+            href={input.finding.presentation.suggestedBestPractice.url}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
+          >
+            <span>↗</span>
+            <span>{input.finding.presentation.suggestedBestPractice.label}</span>
+          </Link>
+        ) : null}
+        <details className="group/json mt-3 group-open/json:rounded-lg group-open/json:bg-slate-50 group-open/json:p-3">
+          <summary className="absolute bottom-3 left-3 inline-flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm marker:hidden transition-colors hover:border-slate-400 hover:text-slate-700 group-open/json:static group-open/json:mb-2 group-open/json:border-slate-200 group-open/json:bg-white/80 [&::-webkit-details-marker]:hidden">
+            <span className="sr-only">Show technical JSON</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 4 4 12l4 8" />
+              <path d="M16 4l4 8-4 8" />
+              <path d="M14 3 10 21" />
+            </svg>
+          </summary>
+          <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-600">
+            {findingJsonPayload}
+          </pre>
+        </details>
+      </div>
+    </div>
+  );
 }
 
 function CoverageMatrix(input: {
@@ -2165,44 +2669,75 @@ function CoverageMatrix(input: {
       contentClassName="space-y-6"
     >
       {input.pillarSections.map(({ pillar, sections }) => {
-        const pillarFindingCount = sections.reduce((sum, section) => sum + section.alignedReviewFindings.length, 0);
-
         return (
           <div key={pillar.id} className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-900">{pillar.label}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(pillarFindingCount)}`}>
-                {pillarFindingCount} finding{pillarFindingCount === 1 ? "" : "s"}
-              </span>
-            </div>
+            <p className="text-sm font-semibold text-slate-900">{pillar.label}</p>
 
             <div className="space-y-3">
               {sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => (
-                <div key={section.id} className="rounded-xl border border-slate-200 bg-white px-4 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-900">{section.label}</p>
-                      <p className="mt-1 text-xs text-slate-500">{summarizeSectionFindingCoverage(alignedReviewFindings)}</p>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(alignedReviewFindings.length)}`}>
-                      {alignedReviewFindings.length}
-                    </span>
+                <div
+                  key={section.id}
+                  id={`coverage-section-${section.id}`}
+                  className="scroll-mt-24 rounded-xl border border-slate-200 bg-white px-4 py-4"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{section.label}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {summarizeSectionFindingCoverage({
+                        findings: alignedReviewFindings,
+                        visibleCategories
+                      })}
+                    </p>
                   </div>
 
                   {visibleCategories.length > 0 ? (
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {visibleCategories.map(({ category }) => {
-                        const categoryCount = alignedReviewFindings.filter(
+                        const categoryFindings = alignedReviewFindings.filter(
                           (finding) => getUnifiedFindingCategoryRelation(finding, category.id) !== null
-                        ).length;
+                        );
+
+                        if (categoryFindings.length === 0) {
+                          return (
+                            <div
+                              key={category.id}
+                              id={`coverage-category-${category.id}`}
+                              className="scroll-mt-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm text-slate-700">{category.label}</p>
+                                <CategorySeverityCounts findings={categoryFindings} />
+                              </div>
+                            </div>
+                          );
+                        }
 
                         return (
-                          <div key={category.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                            <p className="text-sm text-slate-700">{category.label}</p>
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getMatrixCountTone(categoryCount)}`}>
-                              {categoryCount > 0 ? `${categoryCount}` : "—"}
-                            </span>
-                          </div>
+                          <details
+                            key={category.id}
+                            id={`coverage-category-${category.id}`}
+                            className="group/category scroll-mt-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                          >
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/category:rotate-90">
+                                  <DisclosureChevron />
+                                </span>
+                                <p className="text-sm text-slate-700">{category.label}</p>
+                              </div>
+                              <CategorySeverityCounts findings={categoryFindings} />
+                            </summary>
+                            {categoryFindings.length > 0 ? (
+                              <div className="mt-3 space-y-2">
+                                {categoryFindings.map((finding) => (
+                                  <CategoryFindingSummaryCard
+                                    key={`${category.id}-${finding.unifiedFindingId}`}
+                                    finding={finding}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </details>
                         );
                       })}
                     </div>
@@ -2219,124 +2754,135 @@ function CoverageMatrix(input: {
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
-  const pillarSections = REPORT_PRIMARY_PILLARS.map((pillar) => {
-    const sections = getReportSectionsForPillar(pillar.id)
-          .map((section) => {
-            const sectionCategoryIds = new Set(
-              getReportEvidenceCategoriesForSection(section.id).map((category) => category.id)
-            );
-            const categories = getReportEvidenceCategoriesForSection(section.id)
-              .map((category) => {
-                const items = getReportSignalsForEvidenceCategory(category.id)
-                  .map(({ relation, signal }) => ({
-                    key: signal.key,
-                    label: signal.label,
-                    relation,
-                    source: signal.source,
-                    value: getReportSignalValue({
-                      policyEnrichment: input.scanRecord.policyEnrichment,
-                      runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-                      signals: input.scanRecord.signals,
-                      snapshot: input.scanRecord.snapshot,
-                      signal
-                    })
-                  }))
-                  .filter((item) => isSignalValuePopulated(item.key, item.value))
-                  .sort((left, right) => {
-                    const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
-                    return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
-                  });
-
-                const reviewFindings = buildReviewFindings({
-                  categoryId: category.id,
-                  issues: [],
-                  prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
-                  runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-                  sectionId: section.id,
-                  sectionItems: items,
-                  validationFindingLookup
-                });
-
-                return {
-                  category,
-                  emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
-                  items,
-                  reviewFindings
-                };
-              });
-
-            const issues = buildSectionReviewIssues({
-              accessibilityIssueRows: input.accessibilityIssueRows,
-              consentAuditFindings: input.consentAuditFindings,
-              policyBehaviorContradictions: input.policyBehaviorContradictions,
-              preconsentViolationRows: input.preconsentViolationRows,
-              scanReportReviewIssues: input.scanReportReviewIssues,
-              sectionId: section.id,
-              snapshot: input.snapshot
-            });
-            const issueFindings = buildReviewFindings({
-              issues,
-              prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
+  const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
+    const sections = getReportSectionsForPillar(pillar.id).map((section) => {
+      const sectionCategoryIds = new Set(
+        getReportEvidenceCategoriesForSection(section.id).map((category) => category.id)
+      );
+      const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
+        const items = getReportSignalsForEvidenceCategory(category.id)
+          .map(({ relation, signal }) => ({
+            key: signal.key,
+            label: signal.label,
+            relation,
+            source: signal.source,
+            value: getReportSignalValue({
+              policyEnrichment: input.scanRecord.policyEnrichment,
               runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-              sectionId: section.id,
-              sectionItems: [],
-              validationFindingLookup
-            });
-            const sectionValidationFindings = input.scanRecord.validationFindings.filter((finding) => {
-              const mappedFinding =
-                getReportUnifiedFindingForValidationRule(finding.ruleKey) ??
-                getReportUnifiedFindingByAlias(finding.title);
-
-              return (
-                mappedFinding?.categoryAlignments.some((alignment) =>
-                  sectionCategoryIds.has(alignment.evidenceCategoryId)
-                ) ?? false
-              );
-            });
-            const unifiedFindings = buildUnifiedFindingDisplayPackets({
-              reviewFindingCandidates: [...categories.flatMap((category) => category.reviewFindings), ...issueFindings],
-              validationFindings: sectionValidationFindings,
-              validationFindingLookup
-            }).filter((finding) => finding.presentationDecision.status !== "suppress");
-            const reviewFindings = unifiedFindings;
-            const sectionItems = categories.flatMap((category) => category.items);
-            const alignedReviewFindings = reviewFindings.filter((finding) =>
-              finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
-            );
-            const ownerReviewFindings = reviewFindings.filter((finding) => {
-              const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
-              return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
-            });
-            const visibleCategories = categories.filter(({ category, items }) => {
-              const ownerFindingsForCategory = unifiedFindings.filter(
-                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
-              );
-              const mirrorFindingsForCategory = unifiedFindings.filter(
-                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "mirror"
-              );
-              const overlayFindingsForCategory = unifiedFindings.filter(
-                (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
-              );
-
-              return (
-                ownerFindingsForCategory.length > 0 ||
-                mirrorFindingsForCategory.length > 0 ||
-                overlayFindingsForCategory.length > 0 ||
-                items.length > 0
-              );
-            });
-
-            return {
-              alignedReviewFindings,
-              ownerReviewFindings,
-              reviewFindings,
-              section,
-              sectionItems,
-              unifiedFindings,
-              visibleCategories
-            };
+              signals: input.scanRecord.signals,
+              snapshot: input.scanRecord.snapshot,
+              signal
+            })
+          }))
+          .filter((item) => isSignalValuePopulated(item.key, item.value))
+          .sort((left, right) => {
+            const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
+            return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
           });
+
+        const reviewFindings = buildReviewFindings({
+          categoryId: category.id,
+          issues: [],
+          prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
+          runtimeArtifacts: input.scanRecord.runtimeArtifacts,
+          snapshot: input.snapshot,
+          sectionId: section.id,
+          sectionItems: items,
+          validationFindingLookup
+        });
+
+        return {
+          category,
+          emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
+          items,
+          reviewFindings
+        };
+      });
+
+      const issues = buildSectionReviewIssues({
+        accessibilityIssueRows: input.accessibilityIssueRows,
+        consentAuditFindings: input.consentAuditFindings,
+        policyBehaviorContradictions: input.policyBehaviorContradictions,
+        preconsentViolationRows: input.preconsentViolationRows,
+        scanReportReviewIssues: input.scanReportReviewIssues,
+        sectionId: section.id,
+        snapshot: input.snapshot
+      });
+      const issueFindings = buildReviewFindings({
+        issues,
+        prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
+        runtimeArtifacts: input.scanRecord.runtimeArtifacts,
+        snapshot: input.snapshot,
+        sectionId: section.id,
+        sectionItems: [],
+        validationFindingLookup
+      });
+
+      return {
+        categories,
+        issueFindings,
+        pillar,
+        section,
+        sectionCategoryIds
+      };
+    });
+
     return { pillar, sections };
+  });
+  const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
+    sections.flatMap((section) => [
+      ...section.categories.flatMap((category) => category.reviewFindings),
+      ...section.issueFindings
+    ])
+  );
+  const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: allReviewFindingCandidates,
+    validationFindings: input.scanRecord.validationFindings,
+    validationFindingLookup
+  }).filter((finding) => finding.presentationDecision.status !== "suppress");
+  const pillarSections = sectionDrafts.map(({ pillar, sections }) => {
+    return {
+      pillar,
+      sections: sections.map(({ categories, section, sectionCategoryIds }) => {
+        const reviewFindings = globalUnifiedFindings.filter((finding) =>
+          finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
+        );
+        const sectionItems = categories.flatMap((category) => category.items);
+        const alignedReviewFindings = reviewFindings;
+        const ownerReviewFindings = reviewFindings.filter((finding) => {
+          const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
+          return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
+        });
+        const visibleCategories = categories.filter(({ category, items }) => {
+          const ownerFindingsForCategory = reviewFindings.filter(
+            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
+          );
+          const mirrorFindingsForCategory = reviewFindings.filter(
+            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "mirror"
+          );
+          const overlayFindingsForCategory = reviewFindings.filter(
+            (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "overlay"
+          );
+
+          return (
+            ownerFindingsForCategory.length > 0 ||
+            mirrorFindingsForCategory.length > 0 ||
+            overlayFindingsForCategory.length > 0 ||
+            items.length > 0
+          );
+        });
+
+        return {
+          alignedReviewFindings,
+          ownerReviewFindings,
+          reviewFindings,
+          section,
+          sectionItems,
+          unifiedFindings: reviewFindings,
+          visibleCategories
+        };
+      })
+    };
   });
   const reviewFindings = [
     ...new Map(
@@ -2345,10 +2891,40 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         .map((finding) => [finding.unifiedFindingId, finding])
     ).values()
   ];
+  const vendorGroups = deriveVendorContext({
+    scanRecord: input.scanRecord,
+    snapshot: input.snapshot
+  });
+  const sectionTiles = [
+    ...new Map(
+      pillarSections.flatMap(({ sections }) =>
+        sections.map(({ alignedReviewFindings, section }) => {
+          const sectionScore = deriveSectionScore(alignedReviewFindings);
+          return [
+            section.id,
+            {
+              href: `#coverage-section-${section.id}`,
+              label: section.label,
+              showValueText: false,
+              value: formatSectionScore(sectionScore)
+            }
+          ] as const;
+        })
+      )
+    ).values()
+  ];
 
   return (
     <div className="space-y-6">
-      <AgencyAdvisorySummary findings={reviewFindings} />
+      <AgencyAdvisorySummary
+        badges={input.executiveSummary.badges}
+        findings={reviewFindings}
+        metrics={input.executiveSummary.metrics}
+        sectionTiles={sectionTiles}
+        snapshot={input.snapshot}
+        statusCallout={input.executiveSummary.statusCallout}
+        vendorGroups={vendorGroups}
+      />
       <FindingsOverview findings={reviewFindings} />
 
       <CoverageMatrix
@@ -2644,6 +3220,15 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const consentRejectNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_reject_new_tracker_vendor_names");
   const consentAcceptNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_accept_new_tracker_vendor_names");
   const consentPostAcceptTrackerEvidenceUrls = getRecordStringArray(runtimeArtifacts, "consent_post_accept_tracker_evidence_urls");
+  const buildPhaseSummaries = getRecordObjectArray(runtimeArtifacts, "build_phase_summaries").map((row) => ({
+    attempts: typeof row.attempts === "number" ? row.attempts : null,
+    completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
+    durationMs: typeof row.durationMs === "number" ? row.durationMs : null,
+    error: typeof row.error === "string" ? row.error : null,
+    outcome: typeof row.outcome === "string" ? row.outcome : "unknown",
+    phase: typeof row.phase === "string" ? row.phase : "unknown",
+    startedAt: typeof row.startedAt === "string" ? row.startedAt : null
+  }));
   const privacyLegalSectionScore = averageNumbers([
     getFiniteNumber(snapshot?.privacy_score),
     getFiniteNumber(snapshot?.legal_coverage_score)
@@ -2707,94 +3292,15 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
         />
       </div>
-      {snapshot ? (
-        <ReportExecutiveSummary
-          titleTooltip="These ratings mirror the five primary evidence sections and use a 0.0 to 5.0 higher-is-better scale."
-          statusCallout={
-            scanExecutionSummary
-              ? {
-                  title: scanExecutionSummary.title,
-                  details: scanExecutionSummary.details,
-                  tone: scanExecutionSummary.tone
-                }
-              : null
-          }
-          metrics={[
-            {
-              label: "Privacy & disclosure",
-              tooltip:
-                "Combined 1 to 5 section rating for privacy-policy quality, policy-page coverage, and consumer-facing disclosure posture.",
-              value: formatRating(privacyLegalSectionScore)
-            },
-            {
-              label: "Consent",
-              tooltip:
-                "Combined 1 to 5 section rating for banner visibility, choice quality, CMP posture, and consent-flow behavior.",
-              value: formatRating(cookieConsentSectionScore)
-            },
-            {
-              label: "Trackers",
-              tooltip:
-                "Combined 1 to 5 section rating for tracker risk, third-party collection surface, and the observed vendor ecosystem.",
-              value: formatRating(trackerSectionScore)
-            },
-            {
-              label: "Pre-consent",
-              tooltip:
-                "Combined 1 to 5 section rating for whether trackers fired before consent and whether the consent audit showed enforcement failures.",
-              value: formatRating(preconsentSectionScore)
-            },
-            {
-              label: "Accessibility & consumer",
-              tooltip:
-                "Combined 1 to 5 section rating for accessibility posture, WCAG-oriented findings, and broader consumer-facing signals.",
-              value: formatRating(accessibilityConsumerSectionScore)
-            }
-          ]}
-          badges={[
-            ...(policyBehaviorContradictions.length > 0
-              ? [
-                  {
-                    label: `${policyBehaviorContradictions.length} contradiction${policyBehaviorContradictions.length === 1 ? "" : "s"}`,
-                    tone: "warning" as const,
-                    tooltip:
-                      "Number of policy-versus-behavior contradictions surfaced from comparing public claims with observed runtime behavior."
-                  }
-                ]
-              : []),
-            ...((consentPreconsentViolationCount ?? 0) > 0
-              ? [
-                  {
-                    label: `${consentPreconsentViolationCount} pre-consent conflict${consentPreconsentViolationCount === 1 ? "" : "s"}`,
-                    tone: "warning" as const,
-                    tooltip:
-                      "Number of tracker vendors with persisted evidence showing they fired before a consent interaction was completed."
-                  }
-                ]
-              : []),
-            ...(consentAuditCompleted
-              ? [
-                  {
-                    label: `reject ${
-                      consentRejectReducedTracking === false
-                        ? "failed"
-                        : consentRejectReducedTracking === true
-                          ? "reduced tracking"
-                          : "audit completed"
-                    }`,
-                    tooltip:
-                      "Outcome of the consent interaction audit after attempting a reject path. This shows whether tracking activity actually changed after the choice."
-                  }
-                ]
-              : [])
-          ]}
+      {(scanRecord.scan.status === "queued" || scanRecord.scan.status === "running") ? (
+        <FullScanProgressCard
+          buildPhaseSummaries={buildPhaseSummaries}
+          createdAt={scanRecord.scan.createdAt}
+          events={scanRecord.events}
+          executionSummary={scanRecord.scan.executionSummary}
+          status={scanRecord.scan.status}
         />
       ) : null}
-
-      {snapshot ? (
-        <OperationalContextSummary snapshot={snapshot} />
-      ) : null}
-
       {snapshot ? (
         <>
           {reviewSectionError ? (
@@ -2806,6 +3312,89 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
             renderCanonicalTaxonomyReviewSafely({
               accessibilityIssueRows,
               consentAuditFindings,
+              executiveSummary: {
+                badges: [
+                  ...(policyBehaviorContradictions.length > 0
+                    ? [
+                        {
+                          label: `${policyBehaviorContradictions.length} contradiction${policyBehaviorContradictions.length === 1 ? "" : "s"}`,
+                          tone: "warning" as const,
+                          tooltip:
+                            "Number of policy-versus-behavior contradictions surfaced from comparing public claims with observed runtime behavior."
+                        }
+                      ]
+                    : []),
+                  ...((consentPreconsentViolationCount ?? 0) > 0
+                    ? [
+                        {
+                          label: `${consentPreconsentViolationCount} pre-consent conflict${consentPreconsentViolationCount === 1 ? "" : "s"}`,
+                          tone: "warning" as const,
+                          tooltip:
+                            "Number of tracker vendors with persisted evidence showing they fired before a consent interaction was completed."
+                        }
+                      ]
+                    : []),
+                  ...(consentAuditCompleted
+                    ? [
+                        {
+                          label: `reject ${
+                            consentRejectReducedTracking === false
+                              ? "failed"
+                              : consentRejectReducedTracking === true
+                                ? "reduced tracking"
+                                : "audit completed"
+                          }`,
+                          tooltip:
+                            "Outcome of the consent interaction audit after attempting a reject path. This shows whether tracking activity actually changed after the choice."
+                        }
+                      ]
+                    : [])
+                ],
+                metrics: [
+                  {
+                    href: "#coverage-section-privacy_notices_rights_data_handling",
+                    label: "Privacy & disclosure",
+                    tooltip:
+                      "Combined 1 to 5 section rating for privacy-policy quality, policy-page coverage, and consumer-facing disclosure posture.",
+                    value: formatRating(privacyLegalSectionScore)
+                  },
+                  {
+                    href: "#coverage-section-consent_controls_enforcement",
+                    label: "Consent",
+                    tooltip:
+                      "Combined 1 to 5 section rating for banner visibility, choice quality, CMP posture, and consent-flow behavior.",
+                    value: formatRating(cookieConsentSectionScore)
+                  },
+                  {
+                    href: "#coverage-section-tracking_third_party_ecosystem",
+                    label: "Trackers",
+                    tooltip:
+                      "Combined 1 to 5 section rating for tracker risk, third-party collection surface, and the observed vendor ecosystem.",
+                    value: formatRating(trackerSectionScore)
+                  },
+                  {
+                    href: "#coverage-section-tracking_third_party_ecosystem",
+                    label: "Pre-consent",
+                    tooltip:
+                      "Combined 1 to 5 section rating for whether trackers fired before consent and whether the consent audit showed enforcement failures.",
+                    value: formatRating(preconsentSectionScore)
+                  },
+                  {
+                    href: "#coverage-section-access_barriers_task_completion",
+                    label: "Accessibility & consumer",
+                    tooltip:
+                      "Combined 1 to 5 section rating for accessibility posture, WCAG-oriented findings, and broader consumer-facing signals.",
+                    value: formatRating(accessibilityConsumerSectionScore)
+                  }
+                ],
+                statusCallout: scanExecutionSummary
+                  ? {
+                      title: scanExecutionSummary.title,
+                      details: scanExecutionSummary.details,
+                      tone: scanExecutionSummary.tone
+                    }
+                  : null
+              },
               policyBehaviorContradictions,
               preconsentViolationRows,
               prioritizedAccessibilityRuleRows,

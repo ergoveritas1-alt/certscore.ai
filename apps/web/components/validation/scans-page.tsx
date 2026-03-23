@@ -19,7 +19,9 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
     rankBand,
     status
   });
-  const hasActiveRuns = result.items.some((run) => ["queued", "collecting", "ranking", "validating"].includes(run.status ?? ""));
+  const hasActiveRuns = result.items.some((run) =>
+    ["waiting_for_scan", "queued", "collecting", "ranking", "validating"].includes(run.status ?? "")
+  );
 
   return (
     <div className="space-y-8">
@@ -39,6 +41,7 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
               Status
               <select className="mt-1 w-full rounded-2xl border border-slate-300 bg-white px-3 py-2" defaultValue={status ?? ""} name="status">
                 <option value="">All</option>
+                <option value="waiting_for_scan">Waiting for scan</option>
                 <option value="queued">Queued</option>
                 <option value="collecting">Collecting</option>
                 <option value="ranking">Ranking</option>

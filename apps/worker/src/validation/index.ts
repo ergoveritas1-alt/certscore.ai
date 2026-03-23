@@ -2,10 +2,11 @@ import { getWorkerEnv } from "../env";
 import { hostname as getHostname } from "node:os";
 import { createValidationWorkers } from "./workers";
 import { recordValidationWorkerHeartbeat } from "./repository";
+import { reconcileStaleQueueState } from "../reconcile-queue-state";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-function bootstrapValidationWorker() {
+async function bootstrapValidationWorker() {
   const env = getWorkerEnv();
   if (!env.VALIDATION_REDIS_URL) {
     throw new Error("VALIDATION_REDIS_URL is not configured.");
@@ -13,6 +14,11 @@ function bootstrapValidationWorker() {
 
   const startedAt = new Date();
   const host = getHostname();
+
+  const reconciliation = await reconcileStaleQueueState();
+  if (reconciliation.repairedScans.length > 0 || reconciliation.repairedValidationRuns.length > 0) {
+    console.info("[validation-worker] queue reconciliation repaired stale rows", reconciliation);
+  }
 
   const workers = createValidationWorkers();
   workers.forEach((worker) => {
@@ -59,6 +65,25 @@ function bootstrapValidationWorker() {
   }, HEARTBEAT_INTERVAL_MS);
 
   interval.unref();
+
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    clearInterval(interval);
+    console.info("[validation-worker] shutting down", { signal });
+    await Promise.allSettled(workers.map((worker) => worker.close()));
+    process.exit(0);
+  };
+
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
 }
 
-bootstrapValidationWorker();
+void bootstrapValidationWorker();

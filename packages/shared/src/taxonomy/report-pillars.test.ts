@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 66);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 72);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -217,9 +217,11 @@ test("returns signals attached to an evidence category by relation", () => {
       "snapshot_signal:privacy.data_access_request_present",
       "snapshot_signal:privacy.data_deletion_request_present",
       "snapshot_signal:privacy.do_not_sell_link_present",
+      "snapshot_signal:privacy.sale_sharing_controls_missing",
       "snapshot_signal:privacy.consent_withdrawal_mechanism_present",
       "snapshot_signal:privacy.user_rights_friction_score",
       "policy_enrichment_signal:policyDsarMechanism",
+      "snapshot_signal:privacy.privacy_contact_channel_missing",
       "policy_enrichment_signal:policyDoNotSell",
       "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected"
     ]
@@ -260,6 +262,30 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.weak_cookie_security_attributes_detected")?.id,
     "weak_cookie_security_attributes"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.consent_mechanism_absent")?.id,
+    "consent_mechanism_absent"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.consent_surface_missing")?.id,
+    "consent_surface_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.privacy_contact_channel_missing")?.id,
+    "privacy_contact_channel_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "accessibility.accessibility_support_path_missing")?.id,
+    "accessibility_support_path_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.sale_sharing_controls_missing")?.id,
+    "sale_sharing_controls_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.children_privacy_context_without_supporting_disclosure")?.id,
+    "children_privacy_context_without_supporting_disclosure"
   );
 });
 

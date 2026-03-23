@@ -9,6 +9,7 @@ import { getPlanLimits } from "../plans/get-plan-limits";
 import { enqueueFullScanJob, getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getQueueAvailability } from "../../lib/env";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
+import { ensureValidationRunForManualScan } from "../validation/repository";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -283,6 +284,22 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return {
       error: `Scan queue handoff failed: ${message}`,
       scanId: null
+    };
+  }
+
+  try {
+    await ensureValidationRunForManualScan({
+      domainId: domainRecord.domain.id,
+      hostname: domainRecord.domain.hostname,
+      normalizedUrl: domainRecord.domain.normalizedUrl,
+      organizationId: input.organizationId,
+      scanId: scan.id,
+      submittedByUserId: input.submittedByUserId
+    });
+  } catch (validationRunError) {
+    return {
+      error: `Scan queued but validation handoff failed: ${validationRunError instanceof Error ? validationRunError.message : "Unknown error"}`,
+      scanId: scan.id
     };
   }
 

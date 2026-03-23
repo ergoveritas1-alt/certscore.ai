@@ -26,6 +26,13 @@ export type ValidationPipelineState = "running" | "paused_by_admin" | "paused_by
 
 export type ValidationRunMode = "manual" | "automatic";
 
-export type ValidationRunStatus = "queued" | "collecting" | "ranking" | "validating" | "completed" | "failed";
+export type ValidationRunStatus =
+  | "waiting_for_scan"
+  | "queued"
+  | "collecting"
+  | "ranking"
+  | "validating"
+  | "completed"
+  | "failed";
 
 export type ValidationVerdict = "supported" | "inconclusive" | "not_supported";

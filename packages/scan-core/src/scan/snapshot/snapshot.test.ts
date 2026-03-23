@@ -34,7 +34,8 @@ import {
   deriveInfrastructureChangeSignals,
   derivePolicyBehaviorConflictDetected,
   deriveSecurityHeadersScore,
-  deriveTrackingBeforeConsentDetected
+  deriveTrackingBeforeConsentDetected,
+  scoreSnapshot
 } from "./score-snapshot";
 import {
   getCachedDnsSignals,
@@ -426,6 +427,21 @@ test("runSnapshotBuildPhase retries once and records attempts on success", async
   assert.equal(summaries[0]?.attempts, 2);
   assert.equal(summaries[0]?.outcome, "success");
   assert.equal(summaries[0]?.error, null);
+});
+
+test("scoreSnapshot raises children privacy risk for kid-directed content even without childrenAudienceLikely", () => {
+  const scored = scoreSnapshot(
+    makeSnapshot({
+      childrenAudienceLikely: false,
+      kidDirectedContentDetected: true,
+      ageGatePresent: false,
+      parentalConsentReferencePresent: false,
+      mentionsCoppa: false,
+      mentionsUnder13: false
+    })
+  );
+
+  assert.equal(scored.childrenPrivacyRiskScore, 48);
 });
 
 test("runSnapshotBuildPhase records failed attempts when retries are exhausted", async () => {

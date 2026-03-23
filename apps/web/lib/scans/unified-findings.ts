@@ -165,6 +165,8 @@ const POLICY_EXTRACTION_FINDING_IDS = new Set([
 ]);
 
 const RIGHTS_GAP_FINDING_IDS = new Set([
+  "privacy_contact_channel_missing",
+  "sale_sharing_controls_missing",
   "missing_dsar_mechanism",
   "missing_dsar_high_exposure",
   "rights_fulfillment_friction",
@@ -186,6 +188,8 @@ const CONTRADICTION_FINDING_IDS = new Set([
 
 const CONSENT_TRACKING_FINDING_IDS = new Set([
   "preconsent_tracking",
+  "consent_mechanism_absent",
+  "consent_surface_missing",
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored",
@@ -208,7 +212,8 @@ const SENSITIVE_DATA_FINDING_IDS = new Set([
   "ssn_collection",
   "government_id_collection",
   "financial_information_collection",
-  "minors_or_age_gated_collection_context"
+  "minors_or_age_gated_collection_context",
+  "children_privacy_context_without_supporting_disclosure"
 ]);
 
 const COMMERCIAL_FINDING_IDS = new Set([
@@ -924,6 +929,18 @@ function buildPresentationCopy(
         suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
         whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
       };
+    case "consent_mechanism_absent":
+      return {
+        ...base,
+        suggestedFix: "Add a clear consent control surface before non-essential tracking starts, and make sure users can reject or manage that tracking without extra friction.",
+        whyThisMatters: "If no consent controls are presented, users may not get a meaningful chance to manage non-essential tracking before it begins."
+      };
+    case "consent_surface_missing":
+      return {
+        ...base,
+        suggestedFix: "Add a visible consent banner, modal, or equivalent control surface before non-essential tracking starts, and make sure it lets users reject or manage tracking without extra friction.",
+        whyThisMatters: "If there is no visible consent surface at all, users may never get a clear chance to understand or control non-essential tracking."
+      };
     case "reject_did_not_reduce_tracking":
       return {
         ...base,
@@ -960,6 +977,30 @@ function buildPresentationCopy(
         suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
         whyThisMatters: "When runtime cookie activity outpaces the disclosure, users cannot easily understand what is actually being set and why."
       };
+    case "privacy_contact_channel_missing":
+      return {
+        ...base,
+        suggestedFix: "Add a clearly labeled privacy contact path or request channel so people can reliably reach the site owner about privacy and rights-related questions.",
+        whyThisMatters: "If there is no clear privacy contact path, people may struggle to ask questions or exercise privacy-related rights."
+      };
+    case "sale_sharing_controls_missing":
+      return {
+        ...base,
+        suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
+        whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
+      };
+    case "accessibility_support_path_missing":
+      return {
+        ...base,
+        suggestedFix: "Add a clearly labeled accessibility support or accommodation contact path so people know how to request help or report access barriers.",
+        whyThisMatters: "If there is no visible accessibility support path, people may not know how to ask for help when they hit an access barrier."
+      };
+    case "children_privacy_context_without_supporting_disclosure":
+      return {
+        ...base,
+        suggestedFix: "Add clear child- or youth-related privacy disclosure and a supporting privacy contact path wherever the site presents youth-directed cues or age-related collection context.",
+        whyThisMatters: "If the site looks child-directed or collects age-related information without supporting privacy disclosure, users and reviewers may not be able to understand how those expectations are handled."
+      };
     case "minors_or_age_gated_collection_context":
       return {
         ...base,
@@ -982,6 +1023,8 @@ function buildPresentationDecision(input: {
   siblingRows: UnifiedFindingPacket[];
 }): UnifiedFindingPresentationDecision {
   const isDomainLevelSensitiveContext = input.packet.unifiedFindingId === "minors_or_age_gated_collection_context";
+  const isDomainLevelChildrenDisclosureContext =
+    input.packet.unifiedFindingId === "children_privacy_context_without_supporting_disclosure";
   const minorsContextEvidenceCount = [
     "age_gate_present",
     "children_audience_likely",
@@ -994,11 +1037,14 @@ function buildPresentationDecision(input: {
     "date_of_birth_input_present"
   ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
   const needsPageAttribution =
-    input.packet.details?.family === "accessibility" ||
+    (input.packet.details?.family === "accessibility" &&
+      !["accessibility_support_path_missing"].includes(input.packet.unifiedFindingId)) ||
     (input.packet.details?.family === "consent_tracking" &&
-      !["gpc_signal_not_honored", "weak_cookie_security_attributes"].includes(input.packet.unifiedFindingId)) ||
+      !["gpc_signal_not_honored", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.packet.unifiedFindingId)) ||
     input.packet.details?.family === "contradiction" ||
-    (input.packet.details?.family === "sensitive_data" && !isDomainLevelSensitiveContext);
+    (input.packet.details?.family === "sensitive_data" &&
+      !isDomainLevelSensitiveContext &&
+      !isDomainLevelChildrenDisclosureContext);
 
   if (
     input.packet.unifiedFindingId === "policy_behavior_conflict" &&
@@ -1020,6 +1066,50 @@ function buildPresentationDecision(input: {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because multiple youth-directed or age-related context cues make this domain-level privacy context worth reviewer attention.",
+      status: "surface"
+    };
+  }
+
+  if (
+    isDomainLevelChildrenDisclosureContext &&
+    input.packet.evidence?.flags?.includes("privacy.children_privacy_context_without_supporting_disclosure")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because youth-directed or age-related context was retained alongside missing privacy-supporting disclosure signals.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "consent_surface_missing" &&
+    input.packet.evidence?.flags?.includes("privacy.consent_surface_missing")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a clear domain-level signal that no user-facing consent surface was detected.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "accessibility_support_path_missing" &&
+    input.packet.evidence?.flags?.includes("accessibility.accessibility_support_path_missing")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a clear domain-level signal that no accessibility support path was detected.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "sale_sharing_controls_missing" &&
+    input.packet.evidence?.flags?.includes("privacy.sale_sharing_controls_missing")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior.",
       status: "surface"
     };
   }

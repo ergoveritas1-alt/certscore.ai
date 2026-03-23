@@ -59,6 +59,14 @@ function getBadgeClassName(tone: "neutral" | "warning" = "neutral") {
   return "flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700";
 }
 
+function DisclosureChevron() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 20 20" fill="none">
+      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
+    </svg>
+  );
+}
+
 export function ReportExecutiveSummary({
   title = "Executive summary",
   titleTooltip,
@@ -69,6 +77,32 @@ export function ReportExecutiveSummary({
 }: ReportExecutiveSummaryProps) {
   return (
     <div className="grid gap-4">
+      {statusCallout ? (
+        <details className={`${getCalloutClassName(statusCallout.tone)} group/callout`}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="inline-flex shrink-0 opacity-70 transition-transform group-open/callout:rotate-90">
+              <DisclosureChevron />
+            </span>
+            <span>{statusCallout.title}</span>
+          </summary>
+          <ul className={getCalloutListClassName(statusCallout.tone)}>
+            {statusCallout.details.map((detail) => (
+              <li key={detail}>• {detail}</li>
+            ))}
+          </ul>
+          {badges.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {badges.map((badge) => (
+                <div key={String(badge.label)} className={getBadgeClassName(badge.tone)}>
+                  <span>{badge.label}</span>
+                  {badge.tooltip ? <InfoTip align="start" text={badge.tooltip} /> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </details>
+      ) : null}
+
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
         <div className="space-y-4">
           <div className="space-y-2">
@@ -78,17 +112,6 @@ export function ReportExecutiveSummary({
             </div>
             {intro ? <p className="text-sm text-slate-500">{intro}</p> : null}
           </div>
-
-          {statusCallout ? (
-            <div className={getCalloutClassName(statusCallout.tone)}>
-              <p className="font-semibold">{statusCallout.title}</p>
-              <ul className={getCalloutListClassName(statusCallout.tone)}>
-                {statusCallout.details.map((detail) => (
-                  <li key={detail}>• {detail}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
 
           <div className={METRIC_GRID_CLASS}>
             {metrics.map((metric) => (
@@ -101,7 +124,7 @@ export function ReportExecutiveSummary({
             ))}
           </div>
 
-          {badges.length > 0 ? (
+          {badges.length > 0 && !statusCallout ? (
             <div className="flex flex-wrap gap-2">
               {badges.map((badge) => (
                 <div key={String(badge.label)} className={getBadgeClassName(badge.tone)}>

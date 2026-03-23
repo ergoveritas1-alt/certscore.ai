@@ -6,7 +6,7 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { Badge } from "@website-signal-risk-scanner/ui";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { formatMetadataPreview } from "../../lib/scans/activity-feed";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
@@ -198,6 +198,23 @@ function buildLatestActivityLine(input: { createdAt: string; events: ScanEventRo
     : `live · evt=${latestEvent.eventType} · ${latestEvent.message}`;
 }
 
+function getProgressValue(input: {
+  executionSummary: ScannerExecutionSummary | null;
+  status: string;
+}) {
+  if (input.status === "completed") {
+    return 100;
+  }
+
+  if (input.status === "queued") {
+    return 8;
+  }
+
+  const completedCount = input.executionSummary?.stages.length ?? 0;
+  const totalCount = SCAN_EXECUTION_STAGES.length + 1;
+  return Math.min(96, Math.max(12, (completedCount / totalCount) * 100));
+}
+
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {
   const completedStages = new Set(executionSummary?.stages.map((stage) => stage.stage) ?? []);
   return SCAN_EXECUTION_STAGES.findIndex((stage) => !completedStages.has(stage));
@@ -343,6 +360,7 @@ export function FullScanProgressCard({
 }: FullScanProgressCardProps) {
   const initialNowMs = Date.parse(events.at(-1)?.createdAt ?? createdAt);
   const [nowMs, setNowMs] = useState(initialNowMs);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (status !== "queued" && status !== "running") {
@@ -359,6 +377,14 @@ export function FullScanProgressCard({
   }, [status]);
 
   const latestActivityLine = useMemo(() => buildLatestActivityLine({ createdAt, events, status }), [createdAt, events, status]);
+  const progressValue = useMemo(
+    () =>
+      getProgressValue({
+        executionSummary,
+        status
+      }),
+    [executionSummary, status]
+  );
   const dashboardRows = useMemo(
     () => [
       getQueueRow({
@@ -377,11 +403,33 @@ export function FullScanProgressCard({
     [buildPhaseSummaries, createdAt, events, executionSummary, status]
   );
 
+  useEffect(() => {
+    if (status !== "queued" && status !== "running") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const container = tableScrollRef.current;
+      if (!container) {
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth"
+      });
+    }, 2_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [dashboardRows.length, status]);
+
   return (
     <CollapsibleSectionCard
       title={
         <span className="flex items-center gap-1.5">
-          <span>Live scan dashboard</span>
+          <span>Full scan in progress</span>
           <InfoTip text="Stage-driven live dashboard backed by the execution summary, with raw worker events preserved below for debugging." />
         </span>
       }
@@ -389,13 +437,20 @@ export function FullScanProgressCard({
       className="min-w-0"
       contentClassName="min-w-0 space-y-4"
     >
+      <div className="h-5 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-amber-500 transition-[width] duration-500"
+          style={{ width: `${progressValue}%` }}
+        />
+      </div>
+
       <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
         <div className="min-w-0 max-w-full overflow-hidden rounded-xl bg-white/60 px-3 py-2 font-mono text-[13px] text-slate-600">
           <LiveActivityLine line={latestActivityLine} />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div ref={tableScrollRef} className="max-h-[25vh] overflow-auto rounded-2xl border border-slate-200 bg-white">
         <div className="grid grid-cols-[140px_170px_170px_130px_minmax(320px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
           <p>Status</p>
           <p>Stage</p>
@@ -442,41 +497,7 @@ export function FullScanProgressCard({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="grid grid-cols-[180px_180px_minmax(320px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-          <p>Time</p>
-          <p>Event</p>
-          <p>Message and metadata</p>
-        </div>
-        <div className="max-h-[240px] overflow-y-auto">
-          {events.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-slate-500">Waiting for the first scan event.</div>
-          ) : (
-            events.slice(-24).reverse().map((event, eventIndex) => (
-              <div
-                key={`${event.createdAt}-${event.eventType}-${event.message}-${eventIndex}`}
-                className="grid grid-cols-[180px_180px_minmax(320px,1fr)] gap-3 border-b border-slate-100 px-4 py-2 text-[13px] text-slate-700 last:border-b-0"
-              >
-                <p className="whitespace-nowrap text-slate-500">{formatDateTime(event.createdAt)}</p>
-                <p className="font-mono text-[12px] text-slate-600">{event.eventType}</p>
-                <div className="space-y-1">
-                  <p>{event.message}</p>
-                  {formatMetadataPreview(event.metadataJson).map((line, lineIndex) => (
-                    <p
-                      key={`${event.createdAt}-${event.eventType}-${line}-${lineIndex}`}
-                      className="text-xs text-slate-500"
-                    >
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <p className="text-xs text-slate-500">Stage rows come from the execution summary; raw events stay below as diagnostics only.</p>
+      <p className="text-xs text-slate-500">Progress updates automatically while the scan is queued or running.</p>
     </CollapsibleSectionCard>
   );
 }

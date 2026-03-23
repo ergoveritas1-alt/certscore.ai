@@ -44,6 +44,15 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   };
 
   pushBoolean("disclosure", "disclosure.privacy_policy_present", "Privacy policy fetched", snapshot.privacyPolicyPresent);
+  pushBoolean(
+    "privacy",
+    "privacy.children_privacy_context_without_supporting_disclosure",
+    "Child-directed context without supporting privacy disclosure",
+    (snapshot.childrenAudienceLikely === true ||
+      snapshot.kidDirectedContentDetected === true) &&
+      snapshot.privacyPolicyPresent === false &&
+      snapshot.privacyContactChannelType === "none"
+  );
   pushBoolean("privacy", "privacy.cookie_banner_present", "Cookie banner present", snapshot.cookieBannerPresent);
   if (snapshot.cmpVendorName) {
     activeSignals.push(
@@ -65,12 +74,33 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
       })
     );
   }
+  pushBoolean(
+    "privacy",
+    "privacy.consent_mechanism_absent",
+    "Consent mechanism absent",
+    snapshot.consentMechanismType === "none"
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.consent_surface_missing",
+    "Consent surface missing",
+    snapshot.consentMechanismType === "none" &&
+      snapshot.cookieBannerPresent !== true &&
+      !snapshot.cmpVendorName &&
+      (!snapshot.consentInteractionModel || snapshot.consentInteractionModel === "none")
+  );
   pushBoolean("privacy", "privacy.reject_all_present", "Reject-all control present", snapshot.rejectAllPresent);
   pushBoolean("privacy", "privacy.dsar_request_mechanism_present", "DSAR request mechanism present", snapshot.dsarRequestMechanismPresent);
   pushBoolean("privacy", "privacy.privacy_request_form_present", "Privacy request form present", snapshot.privacyRequestFormPresent === true);
   pushBoolean("privacy", "privacy.data_access_request_present", "Access request flow present", snapshot.dataAccessRequestPresent === true);
   pushBoolean("privacy", "privacy.data_deletion_request_present", "Deletion request flow present", snapshot.dataDeletionRequestPresent === true);
   pushBoolean("privacy", "privacy.do_not_sell_link_present", "Do-not-sell link present", snapshot.doNotSellLinkPresent);
+  pushBoolean(
+    "privacy",
+    "privacy.sale_sharing_controls_missing",
+    "Sale/sharing controls missing",
+    snapshot.doNotSellLinkPresent === false && snapshot.retargetingPixelDetected === true
+  );
   pushBoolean("privacy", "privacy.preconsent_tracking_detected", "Pre-consent tracking detected", snapshot.preconsentTrackingDetected);
   pushBoolean(
     "privacy",
@@ -107,6 +137,12 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "privacy.user_rights_friction_score",
     "User-rights friction score",
     snapshot.userRightsFrictionScore ?? 0
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.privacy_contact_channel_missing",
+    "Privacy contact path missing",
+    snapshot.privacyContactChannelType === "none"
   );
   pushNumber("privacy", "privacy.cookie_count_total", "Cookies observed", snapshot.cookieCountTotal ?? 0);
   pushNumber("privacy", "privacy.third_party_cookie_count", "Third-party cookies", snapshot.thirdPartyCookieCount ?? 0);
@@ -210,6 +246,12 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "accessibility.accessibility_contact_method_present",
     "Accessibility contact method detected",
     snapshot.accessibilityContactMethodPresent
+  );
+  pushBoolean(
+    "accessibility",
+    "accessibility.accessibility_support_path_missing",
+    "Accessibility support path missing",
+    snapshot.accessibilityContactMethodPresent === false
   );
   if (snapshot.wcagLevelClaimed && snapshot.wcagLevelClaimed !== "unknown") {
     activeSignals.push(

@@ -3,10 +3,11 @@ import { hostname as getHostname } from "node:os";
 import { getWorkerEnv } from "./env";
 import { recordWorkerHeartbeat } from "./heartbeat";
 import { createQueueWorkers } from "./queue/workers";
+import { reconcileStaleQueueState } from "./reconcile-queue-state";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-function bootstrapWorker() {
+async function bootstrapWorker() {
   const env = getWorkerEnv();
   const redisUrl = env.REDIS_URL;
 
@@ -17,6 +18,11 @@ function bootstrapWorker() {
   const redisHost = new URL(redisUrl).host;
   const host = getHostname();
   const startedAt = new Date();
+
+  const reconciliation = await reconcileStaleQueueState();
+  if (reconciliation.repairedScans.length > 0 || reconciliation.repairedValidationRuns.length > 0) {
+    console.info("[worker] queue reconciliation repaired stale rows", reconciliation);
+  }
 
   const workers = createQueueWorkers();
 
@@ -66,6 +72,25 @@ function bootstrapWorker() {
   }, HEARTBEAT_INTERVAL_MS);
 
   interval.unref();
+
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    clearInterval(interval);
+    console.info("[worker] shutting down", { signal });
+    await Promise.allSettled(workers.map((worker) => worker.close()));
+    process.exit(0);
+  };
+
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
 }
 
-bootstrapWorker();
+void bootstrapWorker();

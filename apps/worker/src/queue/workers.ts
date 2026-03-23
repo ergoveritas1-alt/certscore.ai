@@ -1,10 +1,12 @@
 import { Worker } from "bullmq";
 import { runFullScanJob } from "@website-signal-risk-scanner/scan-core";
-import { FULL_SCAN_JOB, PREVIEW_SCAN_JOB, QUEUE_NAMES, SCHEDULED_SCAN_JOB, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_JOB, PREVIEW_SCAN_JOB, QUEUE_NAMES, SCHEDULED_SCAN_JOB, SCAN_EVENT_TYPES, VALIDATION_RANK_JOB } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { getWorkerEnv } from "../env";
 import { enqueueScheduledScans } from "../scheduling/enqueue-scheduled-scans";
+import { createValidationRankQueue } from "./queues";
 import { getSharedRedisConnection } from "./connection";
+import { ensureValidationRunForCompletedManualScan, getValidationPipelineState, insertValidationScanEvent, updateValidationRun } from "../validation/repository";
 
 async function insertSchedulerEvent(eventType: string, message: string, metadata?: Record<string, unknown>) {
   const supabase = createAdminClient();
@@ -28,6 +30,51 @@ export function createQueueWorkers() {
       }
 
       await runFullScanJob(job.data.scanId);
+
+      if ((await getValidationPipelineState()) !== "running") {
+        return;
+      }
+
+      const validationRunId = await ensureValidationRunForCompletedManualScan({
+        scanId: job.data.scanId
+      });
+
+      if (!validationRunId) {
+        return;
+      }
+
+      await updateValidationRun(validationRunId, {
+        error_message: null,
+        status: "queued"
+      });
+
+      try {
+        await createValidationRankQueue().add(
+          VALIDATION_RANK_JOB,
+          { validationRunId },
+          {
+            attempts: 2,
+            jobId: `${validationRunId}--rank`
+          }
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown validation rank queue handoff error";
+        await updateValidationRun(validationRunId, {
+          completed_at: new Date().toISOString(),
+          error_message: message,
+          status: "failed"
+        });
+        await insertValidationScanEvent({
+          eventType: SCAN_EVENT_TYPES.validationRunFailed,
+          message: "Validation rank queue handoff failed for completed manual scan.",
+          metadata: {
+            error: message,
+            validationRunId
+          },
+          scanId: job.data.scanId
+        });
+        throw error;
+      }
     },
     {
       connection: getSharedRedisConnection(),

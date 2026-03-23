@@ -471,6 +471,130 @@ test("surfaces weak cookie security attributes from runtime artifact evidence", 
   assert.equal(packet?.evidence?.counts?.missingSecureCount, 2);
 });
 
+test("surfaces missing consent surface as a domain-level consent finding", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "No user-facing consent surface was detected before the site initialized consent-relevant behavior.",
+        fallbackEvidence: {
+          signalKey: "privacy.consent_surface_missing",
+          signalLabel: "Consent surface missing",
+          signalValue: true,
+          consentMechanismType: "none",
+          cookieBannerPresent: false,
+          cmpVendorName: null,
+          consentInteractionModel: "none"
+        },
+        observedValue: "No consent surface detected",
+        severity: "high",
+        signalKey: "privacy.consent_surface_missing",
+        signalLabel: "Consent surface missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Consent surface missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /visible consent surface/i);
+});
+
+test("surfaces missing accessibility support path as a domain-level accessibility finding", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "No accessibility-specific support or accommodation contact path was detected during the scan.",
+        fallbackEvidence: {
+          signalKey: "accessibility.accessibility_support_path_missing",
+          signalLabel: "Accessibility support path missing",
+          signalValue: true,
+          accessibilityContactMethodPresent: false
+        },
+        observedValue: "No accessibility support path detected",
+        severity: "medium",
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalLabel: "Accessibility support path missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Accessibility support path missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accessibility_support_path_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
+});
+
+test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Retargeting behavior was observed, but no do-not-sell/share control path was detected.",
+        fallbackEvidence: {
+          signalKey: "privacy.sale_sharing_controls_missing",
+          signalLabel: "Sale/sharing controls missing",
+          signalValue: true,
+          doNotSellLinkPresent: false,
+          retargetingPixelDetected: true
+        },
+        observedValue: "No sale/sharing control path detected",
+        severity: "medium",
+        signalKey: "privacy.sale_sharing_controls_missing",
+        signalLabel: "Sale/sharing controls missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Sale/sharing controls missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "sale_sharing_controls_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /privacy choice/i);
+});
+
+test("surfaces child-directed context without supporting privacy disclosure", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Youth-directed cues were retained, but supporting privacy disclosure and contact signals were missing.",
+        fallbackEvidence: {
+          signalKey: "privacy.children_privacy_context_without_supporting_disclosure",
+          signalLabel: "Child-directed context without supporting privacy disclosure",
+          signalValue: true,
+          childrenAudienceLikely: true,
+          kidDirectedContentDetected: true,
+          formCollectsBirthdate: true,
+          privacyPolicyPresent: false,
+          privacyContactChannelType: "none"
+        },
+        observedValue: "Youth-directed context with missing disclosure support",
+        severity: "medium",
+        signalKey: "privacy.children_privacy_context_without_supporting_disclosure",
+        signalLabel: "Child-directed context without supporting privacy disclosure",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Child-directed context without supporting privacy disclosure"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "children_privacy_context_without_supporting_disclosure");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /supporting privacy disclosure/i);
+});
+
 test("surfaces minors-related context without requiring page-level attribution", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
+  SCAN_EVENT_TYPES,
   VALIDATION_DEFAULT_INTERVAL_MINUTES,
   VALIDATION_DEFAULT_RUN_MODE,
   VALIDATION_INTERVAL_OPTIONS,
@@ -156,6 +157,70 @@ type ScanAccessibilityRuleExampleRow = {
 };
 
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+const VALIDATION_QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
+
+function withValidationQueueHandoffTimeout<T>(promise: Promise<T>) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Validation queue handoff timed out.")), VALIDATION_QUEUE_HANDOFF_TIMEOUT_MS);
+    })
+  ]);
+}
+
+async function failValidationQueueHandoff(input: {
+  actorUserId: string;
+  hostname: string;
+  message: string;
+  scanId: string;
+  targetId: string | null;
+  validationRunId: string;
+}) {
+  const supabase = createAdminClient();
+  await supabase
+    .from("validation_runs")
+    .update({
+      completed_at: new Date().toISOString(),
+      error_message: input.message,
+      status: "failed"
+    })
+    .eq("id", input.validationRunId);
+
+  if (input.targetId) {
+    await supabase
+      .from("validation_targets")
+      .update({
+        last_completed_at: new Date().toISOString(),
+        last_error: input.message,
+        last_status: "failed"
+      })
+      .eq("id", input.targetId);
+  }
+
+  await supabase.from("scan_events").insert({
+    scan_id: input.scanId,
+    domain_id: null,
+    organization_id: null,
+    event_type: SCAN_EVENT_TYPES.validationRunFailed,
+    message: "Validation queue handoff failed.",
+    metadata_json: {
+      error: input.message,
+      validationRunId: input.validationRunId
+    }
+  });
+
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: input.actorUserId,
+    event_type: "validation.manual_run_queue_failed",
+    metadata_json: {
+      hostname: input.hostname,
+      scanId: input.scanId,
+      targetId: input.targetId,
+      validationRunId: input.validationRunId,
+      error: input.message
+    }
+  });
+}
 
 function rankBandForRank(rank: number | null) {
   if (!rank) {
@@ -1060,11 +1125,137 @@ function getEffectiveValidationRunStatus(input: {
     return "failed";
   }
 
+  if (input.status === "waiting_for_scan") {
+    return "waiting_for_scan";
+  }
+
   if (input.scanStatus === "running" || input.scanStatus === "processing") {
     return "collecting";
   }
 
   return input.status ?? null;
+}
+
+export async function ensureValidationRunForManualScan(input: {
+  domainId: string;
+  hostname: string;
+  normalizedUrl: string;
+  organizationId: string;
+  scanId: string;
+  submittedByUserId: string | null;
+}) {
+  const availability = getValidationQueueAvailability();
+  if (!availability.enabled) {
+    return null;
+  }
+
+  const supabase = createAdminClient();
+  const { data: settings, error: settingsError } = await supabase
+    .from("validation_settings")
+    .select("pipeline_enabled")
+    .eq("singleton_key", "default")
+    .single();
+
+  if (settingsError) {
+    throw new Error(`Failed to load validation pipeline state: ${settingsError.message}`);
+  }
+
+  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !(settings as { pipeline_enabled: boolean }).pipeline_enabled) {
+    return null;
+  }
+
+  const { data: existingRun, error: existingRunError } = await supabase
+    .from("validation_runs")
+    .select("id")
+    .eq("scan_id", input.scanId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingRunError) {
+    throw new Error(`Failed to check validation run for manual scan ${input.scanId}: ${existingRunError.message}`);
+  }
+
+  if (existingRun) {
+    return (existingRun as { id: string }).id;
+  }
+
+  const { data: previousRun, error: previousRunError } = await supabase
+    .from("validation_runs")
+    .select("tranco_rank, rank_band")
+    .eq("domain_id", input.domainId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (previousRunError) {
+    throw new Error(`Failed to load previous validation run for manual scan ${input.scanId}: ${previousRunError.message}`);
+  }
+
+  const insertBase = {
+    domain_id: input.domainId,
+    hostname: input.hostname,
+    normalized_url: input.normalizedUrl,
+    rank_band: (previousRun as { rank_band: string | null } | null)?.rank_band ?? null,
+    scan_id: input.scanId,
+    tranco_rank: (previousRun as { tranco_rank: number | null } | null)?.tranco_rank ?? null,
+    trigger_mode: "manual" as const,
+    triggered_by_user_id: input.submittedByUserId
+  };
+
+  let run: { id: string } | null = null;
+  let runError: { message?: string } | null = null;
+
+  {
+    const firstAttempt = await supabase
+      .from("validation_runs")
+      .insert({
+        ...insertBase,
+        status: "waiting_for_scan"
+      })
+      .select("id")
+      .single();
+
+    run = (firstAttempt.data as { id: string } | null) ?? null;
+    runError = firstAttempt.error;
+  }
+
+  const statusConstraintRejectedWaitingForScan =
+    !run &&
+    typeof runError?.message === "string" &&
+    runError.message.includes("validation_runs_status_check");
+
+  if (statusConstraintRejectedWaitingForScan) {
+    const fallbackAttempt = await supabase
+      .from("validation_runs")
+      .insert({
+        ...insertBase,
+        status: "queued"
+      })
+      .select("id")
+      .single();
+
+    run = (fallbackAttempt.data as { id: string } | null) ?? null;
+    runError = fallbackAttempt.error;
+  }
+
+  if (runError || !run) {
+    throw new Error(`Failed to create validation run for manual scan ${input.scanId}: ${runError?.message ?? "Unknown error"}`);
+  }
+
+  await supabase.from("validation_audit_events").insert({
+    actor_user_id: input.submittedByUserId,
+    event_type: "validation.manual_run_queued",
+    metadata_json: {
+      domainId: input.domainId,
+      hostname: input.hostname,
+      reason: "manual_scan_created",
+      scanId: input.scanId,
+      validationRunId: (run as { id: string }).id
+    }
+  });
+
+  return (run as { id: string }).id;
 }
 
 async function ensureValidationDomainForOrganization(input: {
@@ -1898,8 +2089,22 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(`Failed to mark validation target queued: ${targetError.message}`);
   }
 
-  await enqueueFullScanJob(scanId);
-  await enqueueValidationCollectJob((run as { id: string }).id);
+  try {
+    await withValidationQueueHandoffTimeout(enqueueFullScanJob(scanId));
+    await withValidationQueueHandoffTimeout(enqueueValidationCollectJob((run as { id: string }).id));
+  } catch (queueError) {
+    const message = queueError instanceof Error ? queueError.message : "Unknown validation queue handoff error";
+    await failValidationQueueHandoff({
+      actorUserId: context.user.id,
+      hostname: resolvedTarget.hostname,
+      message,
+      scanId,
+      targetId: resolvedTarget.id,
+      validationRunId: (run as { id: string }).id
+    });
+    throw new Error(`Validation queue handoff failed: ${message}`);
+  }
+
   await supabase.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
@@ -2021,8 +2226,22 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(`Failed to create validation re-scan run: ${runError?.message ?? "Unknown error"}`);
   }
 
-  await enqueueFullScanJob(scanId);
-  await enqueueValidationCollectJob((run as { id: string }).id);
+  try {
+    await withValidationQueueHandoffTimeout(enqueueFullScanJob(scanId));
+    await withValidationQueueHandoffTimeout(enqueueValidationCollectJob((run as { id: string }).id));
+  } catch (queueError) {
+    const message = queueError instanceof Error ? queueError.message : "Unknown validation queue handoff error";
+    await failValidationQueueHandoff({
+      actorUserId: context.user.id,
+      hostname: (domain as { hostname: string }).hostname,
+      message,
+      scanId,
+      targetId: null,
+      validationRunId: (run as { id: string }).id
+    });
+    throw new Error(`Validation queue handoff failed: ${message}`);
+  }
+
   await supabase.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
