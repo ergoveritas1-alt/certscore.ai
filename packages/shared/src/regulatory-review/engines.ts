@@ -34,6 +34,10 @@ function getEvidenceTypeCount(evidence: EvidencePacket) {
   ].filter(Boolean).length;
 }
 
+function hasConcreteBehaviorEvidence(evidence: EvidencePacket) {
+  return evidence.networkEvents.length > 0 || evidence.cookies.length > 0 || evidence.storageWrites.length > 0;
+}
+
 function getBehaviorContradictionFlag(finding: Pick<ScanFinding, "observations">) {
   return finding.observations.some((entry) => /contradict|unclear|ambiguous|inconsistent/i.test(entry));
 }
@@ -43,10 +47,26 @@ export function computeFindingConfidence(
   evidence: EvidencePacket
 ): ConfidenceResult {
   const evidenceTypes = getEvidenceTypeCount(evidence);
+  const concreteBehaviorEvidence = hasConcreteBehaviorEvidence(evidence);
   const pageCount = new Set(evidence.pageUrls).size;
   const contradiction = getBehaviorContradictionFlag(finding);
   const sessionCount = finding.reproduction.sessionCount;
   const repeatability = finding.reproduction.repeatability;
+
+  if (
+    (finding.claimType === "observable_behavior" ||
+      finding.claimType === "readiness_not_evident" ||
+      finding.claimType === "manual_review_recommended" ||
+      finding.claimType === "claim_vs_behavior_gap") &&
+    !concreteBehaviorEvidence
+  ) {
+    return {
+      confidence: "low",
+      confidenceReason:
+        "Low confidence because the retained evidence does not include concrete network, cookie, or storage artifacts supporting the observed behavior claim.",
+      evidenceQuality: "weak"
+    };
+  }
 
   if (evidenceTypes >= 2 && (pageCount >= 2 || sessionCount >= 2) && repeatability === "consistent" && !contradiction) {
     return {
@@ -135,6 +155,10 @@ export function computeFindingSeverity(
     weight += 1;
   }
 
+  if (finding.claimType === "observable_behavior" && context.flowCriticality !== "core") {
+    weight = Math.min(weight, 4);
+  }
+
   const severity = weightedSeverity(Math.max(1, Math.min(weight, 5)));
   return {
     rationale:
@@ -200,25 +224,81 @@ function includesKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => normalized.includes(keyword));
 }
 
+function classifyClaimTopic(claim: PublicClaim) {
+  const text = claim.text.toLowerCase();
+
+  if (/global privacy control|gpc|browser|signal/.test(text)) {
+    return "browser_signal";
+  }
+
+  if (/do not sell|do not share|targeted advertising|opt out|privacy choices/.test(text)) {
+    return "opt_out";
+  }
+
+  if (/tracking|cookies|analytics|advertising/.test(text)) {
+    return "tracking";
+  }
+
+  if (claim.kind === "accessibility") {
+    if (/screen reader|keyboard|assistive/.test(text)) {
+      return "assistive_support";
+    }
+
+    return "accessibility_general";
+  }
+
+  return "other";
+}
+
+function classifyBehaviorTopic(behavior: ObservableBehavior) {
+  const summary = `${behavior.signal} ${behavior.summary}`.toLowerCase();
+
+  if (/gpc|browser_signal|universal_opt_out|signal/.test(summary)) {
+    return "browser_signal";
+  }
+
+  if (/opt_out|do_not_sell|do_not_share|targeted/.test(summary)) {
+    return "opt_out";
+  }
+
+  if (/tracking|cookie|analytics|advertising|pre[_ -]?choice/.test(summary)) {
+    return "tracking";
+  }
+
+  if (behavior.kind === "accessibility") {
+    if (/screen reader|keyboard|assistive/.test(summary)) {
+      return "assistive_support";
+    }
+
+    return "accessibility_general";
+  }
+
+  return "other";
+}
+
 export function detectClaimBehaviorGaps(claims: PublicClaim[], behaviors: ObservableBehavior[]): GapFinding[] {
   return claims.flatMap((claim) => {
     if (!claim.text.trim()) {
       return [];
     }
 
+    const claimTopic = classifyClaimTopic(claim);
+
     const relatedBehaviors = behaviors.filter((behavior) => {
       if (behavior.kind !== claim.kind) {
         return false;
       }
 
-      if (behavior.contradictsClaim) {
-        return true;
+      const behaviorTopic = classifyBehaviorTopic(behavior);
+      if (claimTopic === "other" || behaviorTopic === "other") {
+        return false;
       }
 
-      const privacyKeywords = ["opt out", "reject", "privacy choice", "sell", "share", "tracking"];
-      const accessibilityKeywords = ["accessible", "screen reader", "keyboard", "wcag", "assistive"];
-      const keywords = claim.kind === "privacy" ? privacyKeywords : accessibilityKeywords;
-      return includesKeyword(claim.text, keywords) && includesKeyword(behavior.summary, keywords);
+      if (claimTopic !== behaviorTopic) {
+        return false;
+      }
+
+      return behavior.contradictsClaim || includesKeyword(behavior.summary, claim.text.toLowerCase().split(/\W+/).filter(Boolean).slice(0, 5));
     });
 
     if (relatedBehaviors.length === 0) {
