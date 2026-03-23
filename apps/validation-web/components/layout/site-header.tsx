@@ -5,6 +5,7 @@ import CertScoreLogo from "../brand/CertScoreLogo";
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/how-it-works", label: "How It Works" },
+  { href: "/methodology", label: "Methodology" },
   { href: "/pricing", label: "Pricing" },
   { href: "/guides", label: "Guides" }
 ];

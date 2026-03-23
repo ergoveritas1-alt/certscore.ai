@@ -19,3 +19,4 @@ export * from "./scoring/agency-mapping";
 export * from "./scoring/regulatory-risk";
 export * from "./taxonomy/report-pillars";
 export * from "./taxonomy/signal-taxonomy";
+export * from "./regulatory-review";
