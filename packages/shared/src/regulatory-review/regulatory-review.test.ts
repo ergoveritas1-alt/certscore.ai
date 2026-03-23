@@ -373,3 +373,227 @@ test("generator emits only validated findings for the scoped modules", () => {
   });
   assert.ok(customerFacing.findings.length > 0);
 });
+
+test("browser readiness finding remains suppressed without retained signal comparison evidence", () => {
+  const artifacts: RegulatoryReviewArtifacts = {
+    accessibilityIssues: [],
+    behaviors: [],
+    claims: [],
+    comparedAgainstControl: true,
+    evidence: buildEvidenceRefs({
+      domSnapshots: [
+        {
+          excerpt: "Homepage content.",
+          id: "dom-1",
+          pageUrl: "https://example.com",
+          selector: "body",
+          timestamp: "2026-03-22T12:00:00.000Z"
+        }
+      ],
+      pageUrls: ["https://example.com"],
+      sessionLogs: [
+        {
+          eventType: "browser_signal_comparison",
+          id: "log-1",
+          message: "No visible change observed.",
+          pageUrl: "https://example.com",
+          timestamp: "2026-03-22T12:00:00.000Z"
+        }
+      ]
+    }),
+    methodology: makeMethodology("scan-no-signal-diff"),
+    pageUrls: ["https://example.com"],
+    repeatability: "partially_consistent",
+    sessionCount: 2,
+    surfaces: [
+      {
+        detected: false,
+        evidence: buildEvidenceRefs({
+          domSnapshots: [
+            {
+              excerpt: "Homepage content.",
+              id: "dom-2",
+              pageUrl: "https://example.com",
+              selector: "body",
+              timestamp: "2026-03-22T12:00:00.000Z"
+            }
+          ],
+          pageUrls: ["https://example.com"]
+        }),
+        surfaceKey: "browser_signal_readiness",
+        timestamp: "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    testConditions: ["Paired sessions claimed but no retained network, cookie, or storage diff."]
+  };
+
+  const findings = generateAllRegulatoryFindings(artifacts);
+  assert.equal(findings.some((finding) => finding.findingId === "privacy.ca.browser_readiness_not_evident"), false);
+});
+
+test("pre-choice tracking finding remains suppressed when no concrete tracking artifacts are retained", () => {
+  const artifacts: RegulatoryReviewArtifacts = {
+    accessibilityIssues: [],
+    behaviors: [
+      {
+        contradictsClaim: true,
+        evidenceRefs: ["log-1"],
+        id: "behavior-1",
+        kind: "privacy",
+        pageUrl: "https://example.com",
+        signal: "tracking_before_choice",
+        summary: "Tracking may have occurred before choice.",
+        timestamp: "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    claims: [],
+    comparedAgainstControl: false,
+    evidence: buildEvidenceRefs({
+      pageUrls: ["https://example.com"],
+      sessionLogs: [
+        {
+          eventType: "heuristic",
+          id: "log-1",
+          message: "Heuristic detector fired without retained technical artifact.",
+          pageUrl: "https://example.com",
+          timestamp: "2026-03-22T12:00:00.000Z"
+        }
+      ],
+      screenshots: [
+        {
+          id: "shot-1",
+          pageUrl: "https://example.com",
+          timestamp: "2026-03-22T12:00:00.000Z",
+          url: "https://evidence.certscore.test/shot-1.png"
+        }
+      ]
+    }),
+    methodology: makeMethodology("scan-no-tracking-artifacts"),
+    pageUrls: ["https://example.com"],
+    repeatability: "not_retested",
+    sessionCount: 1,
+    surfaces: [],
+    testConditions: ["Single heuristic-only public session."]
+  };
+
+  const findings = generateAllRegulatoryFindings(artifacts);
+  assert.equal(findings.some((finding) => finding.findingId === "privacy.ca.pre_choice_tracking_observed"), false);
+});
+
+test("missing privacy choice findings stay suppressed when a likely rights surface is already discovered", () => {
+  const artifacts: RegulatoryReviewArtifacts = {
+    accessibilityIssues: [],
+    behaviors: [],
+    claims: [
+      {
+        id: "claim-1",
+        kind: "privacy",
+        pageUrl: "https://example.com/privacy-center",
+        sourceUrl: "https://example.com/privacy-center",
+        surface: "privacy_policy",
+        text: "You can opt out of targeted advertising in our privacy center.",
+        timestamp: "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    comparedAgainstControl: false,
+    evidence: buildEvidenceRefs({
+      domSnapshots: [
+        {
+          excerpt: "You can opt out of targeted advertising in our privacy center.",
+          id: "dom-1",
+          pageUrl: "https://example.com/privacy-center",
+          selector: "main",
+          timestamp: "2026-03-22T12:00:00.000Z"
+        }
+      ],
+      pageUrls: ["https://example.com", "https://example.com/privacy-center"]
+    }),
+    methodology: makeMethodology("scan-rights-surface"),
+    pageUrls: ["https://example.com", "https://example.com/privacy-center"],
+    repeatability: "not_retested",
+    sessionCount: 1,
+    surfaces: [
+      {
+        detected: false,
+        evidence: buildEvidenceRefs({
+          domSnapshots: [
+            {
+              excerpt: "Privacy center page discovered.",
+              id: "dom-2",
+              pageUrl: "https://example.com/privacy-center",
+              selector: "main",
+              timestamp: "2026-03-22T12:00:00.000Z"
+            }
+          ],
+          pageUrls: ["https://example.com/privacy-center"]
+        }),
+        pageUrl: "https://example.com/privacy-center",
+        surfaceKey: "targeted_ads_opt_out",
+        timestamp: "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    testConditions: ["Discovered privacy center but did not functionally exercise controls."]
+  };
+
+  const findings = generateAllRegulatoryFindings(artifacts);
+  assert.equal(findings.some((finding) => finding.findingId === "privacy.state.targeted_ads_opt_out_missing"), false);
+});
+
+test("aspirational accessibility language does not trigger claim-gap findings by itself", () => {
+  const artifacts: RegulatoryReviewArtifacts = {
+    accessibilityIssues: [
+      {
+        id: "acc-1",
+        impact: "serious",
+        pageUrl: "https://example.com/accessibility",
+        summary: "Automated accessibility issue observed.",
+        timestamp: "2026-03-22T12:02:00.000Z"
+      }
+    ],
+    behaviors: [
+      {
+        contradictsClaim: true,
+        evidenceRefs: ["acc-1"],
+        id: "behavior-1",
+        kind: "accessibility",
+        pageUrl: "https://example.com/accessibility",
+        signal: "automated_accessibility_barriers",
+        summary: "Automated accessibility testing identified barriers on tested pages.",
+        timestamp: "2026-03-22T12:03:00.000Z"
+      }
+    ],
+    claims: [
+      {
+        id: "claim-1",
+        kind: "accessibility",
+        pageUrl: "https://example.com/accessibility",
+        sourceUrl: "https://example.com/accessibility",
+        surface: "accessibility_statement",
+        text: "We strive to make our content accessible to all users.",
+        timestamp: "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    comparedAgainstControl: false,
+    evidence: buildEvidenceRefs({
+      domSnapshots: [
+        {
+          excerpt: "We strive to make our content accessible to all users.",
+          id: "dom-1",
+          pageUrl: "https://example.com/accessibility",
+          selector: "main",
+          timestamp: "2026-03-22T12:00:00.000Z"
+        }
+      ],
+      pageUrls: ["https://example.com/accessibility"]
+    }),
+    methodology: makeMethodology("scan-aspirational-claim"),
+    pageUrls: ["https://example.com/accessibility"],
+    repeatability: "not_retested",
+    sessionCount: 1,
+    surfaces: [],
+    testConditions: ["Aspirational accessibility statement with automated issue evidence."]
+  };
+
+  const findings = generateAllRegulatoryFindings(artifacts);
+  assert.equal(findings.some((finding) => finding.findingId === "accessibility.eu.claim_gap"), false);
+});

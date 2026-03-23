@@ -44,6 +44,70 @@ function mergeEvidence(...sources: Array<EvidenceArtifactCollection | undefined>
   return buildEvidenceRefs(merged);
 }
 
+function hasConcreteBehaviorEvidence(evidence: EvidencePacket) {
+  return evidence.networkEvents.length > 0 || evidence.cookies.length > 0 || evidence.storageWrites.length > 0;
+}
+
+function hasSignalComparisonEvidence(evidence: EvidencePacket) {
+  const phases = new Set<string>();
+  for (const entry of evidence.networkEvents) {
+    if (entry.phase === "signal_enabled" || entry.phase === "signal_disabled") {
+      phases.add(entry.phase);
+    }
+  }
+  for (const entry of evidence.cookies) {
+    if (entry.phase === "signal_enabled" || entry.phase === "signal_disabled") {
+      phases.add(entry.phase);
+    }
+  }
+  for (const entry of evidence.storageWrites) {
+    if (entry.phase === "signal_enabled" || entry.phase === "signal_disabled") {
+      phases.add(entry.phase);
+    }
+  }
+  return phases.has("signal_enabled") && phases.has("signal_disabled");
+}
+
+function hasPostChoiceEvidence(evidence: EvidencePacket) {
+  return (
+    evidence.cookies.some((entry) => entry.phase === "after_choice") ||
+    evidence.storageWrites.some((entry) => entry.phase === "after_choice") ||
+    evidence.networkEvents.some((entry) => entry.phase === "after_choice")
+  );
+}
+
+function hasClaimMatch(artifacts: RegulatoryReviewArtifacts, pattern: RegExp) {
+  return artifacts.claims.some((claim) => pattern.test(claim.text));
+}
+
+function hasPageUrlMatch(artifacts: RegulatoryReviewArtifacts, pattern: RegExp) {
+  return artifacts.pageUrls.some((pageUrl) => pattern.test(pageUrl));
+}
+
+function hasPotentialPrivacyChoiceSurface(artifacts: RegulatoryReviewArtifacts) {
+  return (
+    hasClaimMatch(artifacts, /opt out|do not sell|do not share|privacy choices|privacy rights|targeted ads|manage settings/i) ||
+    hasPageUrlMatch(artifacts, /privacy|do-not-share|opt-?out|privacy-center|manage-settings|rights/i)
+  );
+}
+
+function isAspirationalAccessibilityClaim(text: string) {
+  return /we strive|we aim|we seek|we are committed|we endeavor/i.test(text);
+}
+
+function filterEvidenceByPage(evidence: EvidenceArtifactCollection, pageUrls: string[]) {
+  const allowed = new Set(pageUrls);
+  return buildEvidenceRefs({
+    cookies: (evidence.cookies ?? []).filter((entry) => allowed.has(entry.pageUrl)),
+    domSnapshots: (evidence.domSnapshots ?? []).filter((entry) => allowed.has(entry.pageUrl)),
+    networkEvents: (evidence.networkEvents ?? []).filter((entry) => allowed.has(entry.pageUrl)),
+    pageUrls: (evidence.pageUrls ?? []).filter((pageUrl) => allowed.has(pageUrl)),
+    screenshots: (evidence.screenshots ?? []).filter((entry) => allowed.has(entry.pageUrl)),
+    sessionLogs: (evidence.sessionLogs ?? []).filter((entry) => !entry.pageUrl || allowed.has(entry.pageUrl)),
+    storageWrites: (evidence.storageWrites ?? []).filter((entry) => allowed.has(entry.pageUrl))
+  });
+}
+
 function findSurface(artifacts: RegulatoryReviewArtifacts, surfaceKey: SurfaceObservation["surfaceKey"]) {
   return artifacts.surfaces.find((surface) => surface.surfaceKey === surfaceKey);
 }
@@ -111,7 +175,7 @@ export function generateCaliforniaPrivacyChoiceFindings(artifacts: RegulatoryRev
     }
   }
 
-  if (optOut?.detected === false) {
+  if (optOut?.detected === false && !hasPotentialPrivacyChoiceSurface(artifacts)) {
     const finding = createFinding({
       artifacts,
       evidence: mergeEvidence(artifacts.evidence, optOut.evidence),
@@ -125,37 +189,54 @@ export function generateCaliforniaPrivacyChoiceFindings(artifacts: RegulatoryRev
   }
 
   if (browserSignal?.detected === false) {
-    const finding = createFinding({
-      artifacts,
-      evidence: mergeEvidence(artifacts.evidence, browserSignal.evidence),
-      findingId: "privacy.ca.browser_signal_not_evident",
-      observations: ["The retained public evidence did not show a visible response to the tested browser-level opt-out signal."],
-      recommendedReview: "Manual review recommended to confirm whether browser-level opt-out handling exists in other regions, account states, or private flows.",
-      whatWasTested: ["Compared tested browser sessions for observable browser-level opt-out signal handling."]
+    const pageUrl = browserSignal.pageUrl ?? artifacts.pageUrls[0];
+    const evidence = mergeEvidence(filterEvidenceByPage(artifacts.evidence, pageUrl ? [pageUrl] : []), {
+      cookies: artifacts.evidence.cookies?.filter((entry) => entry.phase === "signal_disabled" || entry.phase === "signal_enabled"),
+      networkEvents: artifacts.evidence.networkEvents?.filter((entry) => entry.phase === "signal_disabled" || entry.phase === "signal_enabled"),
+      pageUrls: pageUrl ? [pageUrl] : [],
+      screenshots: artifacts.evidence.screenshots?.filter((entry) => entry.pageUrl === pageUrl),
+      sessionLogs: artifacts.evidence.sessionLogs?.filter((entry) => /browser_signal|consent_surface_observation/i.test(entry.eventType)),
+      storageWrites: artifacts.evidence.storageWrites?.filter((entry) => entry.phase === "signal_disabled" || entry.phase === "signal_enabled")
     });
-    if (finding) {
-      findings.push(finding);
+    if (hasConcreteBehaviorEvidence(evidence) && hasSignalComparisonEvidence(evidence)) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.ca.browser_signal_not_evident",
+        observations: [
+          "No visible response to the tested browser-level opt-out signal was observed during the compared public sessions.",
+          "The retained public evidence did not establish whether any server-side or region-specific signal handling may occur outside the tested conditions."
+        ],
+        recommendedReview: "Manual review recommended to confirm whether browser-level opt-out handling exists in other regions, account states, or private flows.",
+        whatWasTested: ["Compared tested browser sessions for observable browser-level opt-out signal handling."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
   if (trackingBeforeChoice.length > 0) {
     const evidence = mergeEvidence(artifacts.evidence, {
-      cookies: artifacts.evidence.cookies?.filter((entry) => entry.phase === "before_choice"),
-      networkEvents: artifacts.evidence.networkEvents?.filter((entry) => entry.phase === "before_choice"),
+      cookies: artifacts.evidence.cookies?.filter((entry) => entry.phase === "before_choice" || entry.phase === "signal_disabled"),
+      networkEvents: artifacts.evidence.networkEvents?.filter((entry) => entry.phase === "before_choice" || entry.phase === "signal_disabled"),
       pageUrls: trackingBeforeChoice.map((entry) => entry.pageUrl),
       sessionLogs: artifacts.evidence.sessionLogs?.filter((entry) =>
         trackingBeforeChoice.some((behavior) => behavior.evidenceRefs.includes(entry.id))
-      )
+      ),
+      storageWrites: artifacts.evidence.storageWrites?.filter((entry) => entry.phase === "before_choice" || entry.phase === "signal_disabled")
     });
-    const finding = createFinding({
-      artifacts,
-      evidence,
-      findingId: "privacy.ca.pre_choice_tracking_observed",
-      observations: uniqueStrings(trackingBeforeChoice.map((entry) => entry.summary)),
-      whatWasTested: ["Observed tracking-related network, cookie, storage, and session activity before any privacy choice interaction."]
-    });
-    if (finding) {
-      findings.push(finding);
+    if (hasConcreteBehaviorEvidence(evidence)) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.ca.pre_choice_tracking_observed",
+        observations: uniqueStrings(trackingBeforeChoice.map((entry) => entry.summary)),
+        whatWasTested: ["Observed tracking-related network, cookie, storage, and session activity before any privacy choice interaction."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
@@ -193,7 +274,7 @@ export function generateUnifiedStatePrivacyFindings(artifacts: RegulatoryReviewA
   const adsOptOut = findSurface(artifacts, "targeted_ads_opt_out");
   const universalOptOut = findSurface(artifacts, "universal_opt_out");
 
-  if (consumerRights?.detected === false) {
+  if (consumerRights?.detected === false && !hasPotentialPrivacyChoiceSurface(artifacts)) {
     const finding = createFinding({
       artifacts,
       evidence: mergeEvidence(artifacts.evidence, consumerRights.evidence),
@@ -206,7 +287,7 @@ export function generateUnifiedStatePrivacyFindings(artifacts: RegulatoryReviewA
     }
   }
 
-  if (adsOptOut?.detected === false) {
+  if (adsOptOut?.detected === false && !hasPotentialPrivacyChoiceSurface(artifacts)) {
     const finding = createFinding({
       artifacts,
       evidence: mergeEvidence(artifacts.evidence, adsOptOut.evidence),
@@ -220,16 +301,23 @@ export function generateUnifiedStatePrivacyFindings(artifacts: RegulatoryReviewA
   }
 
   if (universalOptOut?.detected === false) {
-    const finding = createFinding({
-      artifacts,
-      evidence: mergeEvidence(artifacts.evidence, universalOptOut.evidence),
-      findingId: "privacy.state.universal_opt_out_not_evident",
-      observations: ["The retained evidence did not show observable handling of a universal opt-out signal under the tested conditions."],
-      recommendedReview: "Manual review recommended if universal opt-out support may exist only for certain regions, devices, or logged-in states.",
-      whatWasTested: ["Compared control and signal-enabled sessions for observable universal opt-out handling."]
-    });
-    if (finding) {
-      findings.push(finding);
+    const evidence = mergeEvidence(artifacts.evidence, universalOptOut.evidence);
+    if (
+      hasConcreteBehaviorEvidence(evidence) &&
+      hasSignalComparisonEvidence(evidence) &&
+      hasClaimMatch(artifacts, /global privacy control|gpc|universal opt-?out|browser-based opt-?out/i)
+    ) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.state.universal_opt_out_not_evident",
+        observations: ["The retained evidence did not show observable handling of a universal opt-out signal under the tested conditions."],
+        recommendedReview: "Manual review recommended if universal opt-out support may exist only for certain regions, devices, or logged-in states.",
+        whatWasTested: ["Compared control and signal-enabled sessions for observable universal opt-out handling."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
@@ -277,31 +365,36 @@ export function generateEUAccessibilityActPostureFindings(artifacts: RegulatoryR
   }
 
   if (artifacts.accessibilityIssues.length > 0) {
-    const evidence = mergeEvidence(artifacts.evidence, {
-      domSnapshots: artifacts.accessibilityIssues.map((issue) => ({
-        excerpt: issue.summary,
-        id: issue.id,
-        pageUrl: issue.pageUrl,
-        timestamp: issue.timestamp
-      })),
-      pageUrls: artifacts.accessibilityIssues.map((issue) => issue.pageUrl),
-      sessionLogs: artifacts.accessibilityIssues.map((issue) => ({
-        eventType: "accessibility_issue",
-        id: `log-${issue.id}`,
-        message: `${issue.impact} issue observed: ${issue.summary}`,
-        pageUrl: issue.pageUrl,
-        timestamp: issue.timestamp
-      }))
-    });
-    const finding = createFinding({
-      artifacts,
-      evidence,
-      findingId: "accessibility.eu.automated_barriers_detected",
-      observations: uniqueStrings(artifacts.accessibilityIssues.map((issue) => issue.summary)),
-      whatWasTested: ["Ran automated accessibility checks on tested public pages and retained representative issue evidence."]
-    });
-    if (finding) {
-      findings.push(finding);
+    const supportedIssues = artifacts.accessibilityIssues.filter(
+      (issue) => !/could not fully complete|scan error|import_|not a function|probe error/i.test(issue.summary)
+    );
+    if (supportedIssues.length > 0) {
+      const evidence = mergeEvidence(artifacts.evidence, {
+        domSnapshots: supportedIssues.map((issue) => ({
+          excerpt: issue.summary,
+          id: issue.id,
+          pageUrl: issue.pageUrl,
+          timestamp: issue.timestamp
+        })),
+        pageUrls: supportedIssues.map((issue) => issue.pageUrl),
+        sessionLogs: supportedIssues.map((issue) => ({
+          eventType: "accessibility_issue",
+          id: `log-${issue.id}`,
+          message: `${issue.impact} issue observed: ${issue.summary}`,
+          pageUrl: issue.pageUrl,
+          timestamp: issue.timestamp
+        }))
+      });
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "accessibility.eu.automated_barriers_detected",
+        observations: uniqueStrings(supportedIssues.map((issue) => issue.summary)),
+        whatWasTested: ["Ran automated accessibility checks on tested public pages and retained representative issue evidence."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
@@ -340,6 +433,9 @@ export function generateEUAccessibilityActPostureFindings(artifacts: RegulatoryR
   }
 
   for (const gap of detectClaimBehaviorGaps(extractPublicClaims(artifacts), artifacts.behaviors).filter((gap) => gap.kind === "accessibility")) {
+    if (isAspirationalAccessibilityClaim(gap.claimText)) {
+      continue;
+    }
     const finding = createFinding({
       artifacts,
       contradictionImportance: "moderate",
@@ -372,43 +468,55 @@ export function generateCaliforniaBrowserOptOutReadinessFindings(artifacts: Regu
   const confirmation = findSurface(artifacts, "privacy_preference_confirmation");
 
   if (readiness?.detected === false) {
-    const finding = createFinding({
-      artifacts,
-      evidence: mergeEvidence(artifacts.evidence, readiness.evidence),
-      findingId: "privacy.ca.browser_readiness_not_evident",
-      observations: ["Observable readiness for a browser-level privacy signal was not evident during the scan."],
-      recommendedReview: "Review whether readiness depends on regional routing, authenticated state, or untested preference APIs.",
-      whatWasTested: ["Compared tested browser sessions for observable browser-signal readiness."]
-    });
-    if (finding) {
-      findings.push(finding);
+    const evidence = mergeEvidence(artifacts.evidence, readiness.evidence);
+    if (
+      hasSignalComparisonEvidence(evidence) &&
+      hasClaimMatch(artifacts, /global privacy control|gpc|browser-based opt-?out|privacy signal/i)
+    ) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.ca.browser_readiness_not_evident",
+        observations: ["Observable readiness for a browser-level privacy signal was not evident during the scan."],
+        recommendedReview: "Review whether readiness depends on regional routing, authenticated state, or untested preference APIs.",
+        whatWasTested: ["Compared tested browser sessions for observable browser-signal readiness."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
   if (persistence?.detected === false) {
-    const finding = createFinding({
-      artifacts,
-      evidence: mergeEvidence(artifacts.evidence, persistence.evidence),
-      findingId: "privacy.ca.preference_persistence_not_evident",
-      observations: ["The retained evidence did not show observable persistence of the tested privacy preference across the scanned session states."],
-      recommendedReview: "Review whether privacy preferences persist in other devices, browsers, or authenticated user states.",
-      whatWasTested: ["Compared repeated page loads and session states for observable persistence of the tested privacy preference."]
-    });
-    if (finding) {
-      findings.push(finding);
+    const evidence = mergeEvidence(artifacts.evidence, persistence.evidence);
+    if (hasPostChoiceEvidence(evidence)) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.ca.preference_persistence_not_evident",
+        observations: ["The retained evidence did not show observable persistence of the tested privacy preference across the scanned session states."],
+        recommendedReview: "Review whether privacy preferences persist in other devices, browsers, or authenticated user states.",
+        whatWasTested: ["Compared repeated page loads and session states for observable persistence of the tested privacy preference."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 
   if (confirmation?.detected === false) {
-    const finding = createFinding({
-      artifacts,
-      evidence: mergeEvidence(artifacts.evidence, confirmation.evidence),
-      findingId: "privacy.ca.user_confirmation_not_evident",
-      observations: ["A visible user confirmation acknowledging receipt of the tested privacy preference was not evident during the scan."],
-      whatWasTested: ["Tested post-preference UI states for visible confirmation that a privacy preference was received."]
-    });
-    if (finding) {
-      findings.push(finding);
+    const evidence = mergeEvidence(artifacts.evidence, confirmation.evidence);
+    if (hasPostChoiceEvidence(evidence)) {
+      const finding = createFinding({
+        artifacts,
+        evidence,
+        findingId: "privacy.ca.user_confirmation_not_evident",
+        observations: ["A visible user confirmation acknowledging receipt of the tested privacy preference was not evident during the scan."],
+        whatWasTested: ["Tested post-preference UI states for visible confirmation that a privacy preference was received."]
+      });
+      if (finding) {
+        findings.push(finding);
+      }
     }
   }
 

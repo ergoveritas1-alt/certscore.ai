@@ -11,11 +11,6 @@ import type {
 
 const bannedReplacementRules: Array<{ pattern: RegExp; replacement: string; reason: string }> = [
   {
-    pattern: /\bcompliance\b/gi,
-    replacement: "posture",
-    reason: "Replace legal-certainty framing with posture language."
-  },
-  {
     pattern: /\bcompliant\b/gi,
     replacement: "aligned",
     reason: "Replace verdict-style legal language with conservative wording."
