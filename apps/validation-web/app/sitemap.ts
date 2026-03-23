@@ -4,6 +4,7 @@ import { SITE_URL } from "../lib/seo";
 const staticPaths = [
   "",
   "/how-it-works",
+  "/methodology",
   "/pricing",
   "/guides",
   "/faq",
