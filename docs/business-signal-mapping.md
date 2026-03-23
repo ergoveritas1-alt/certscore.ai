@@ -4,16 +4,16 @@ This document maps business-facing signal categories to the actual snapshot fiel
 
 ## Scope
 
-- Canonical source of truth: `ScanSnapshot` fields assembled in the worker snapshot pipeline.
+- Canonical source of truth: `ScanSnapshot` fields assembled in the scanner snapshot pipeline.
 - Secondary compatibility layer: a reduced `scan_signals` projection used for UI/history compatibility.
 - Interpretation rule: if a statement implies verified compliance behavior, legal sufficiency, or operational fulfillment, it is too strong unless the scanner directly tests that behavior.
 
 ## Source of Truth
 
 - Snapshot schema: [packages/shared/src/types/snapshots.ts](/Users/benmasek/WC01/packages/shared/src/types/snapshots.ts)
-- Snapshot derivation: [apps/worker/src/scan/snapshot/extractors.ts](/Users/benmasek/WC01/apps/worker/src/scan/snapshot/extractors.ts)
-- Snapshot assembly and scoring: [apps/worker/src/scan/snapshot/build-snapshot-bundle.ts](/Users/benmasek/WC01/apps/worker/src/scan/snapshot/build-snapshot-bundle.ts)
-- Compatibility signal persistence: [apps/worker/src/scan/run-full-scan.ts](/Users/benmasek/WC01/apps/worker/src/scan/run-full-scan.ts)
+- Snapshot assembly and scoring: [build-snapshot-bundle.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/snapshot/build-snapshot-bundle.ts)
+- Full scan orchestration and persistence: [run-full-scan.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/run-full-scan.ts)
+- Compatibility signal persistence: [derive-scan-signals.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/signals/derive-scan-signals.ts)
 
 ## Mapping Table
 

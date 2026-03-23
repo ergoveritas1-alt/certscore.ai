@@ -3,8 +3,8 @@
 This repo is split across platforms:
 
 - `apps/web` deploys to Vercel.
-- `apps/worker` deploys to a Cloud Run Worker Pool.
-- the hourly scheduler runs as a Cloud Run Job or a second worker-oriented container entrypoint.
+- scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
+- validation worker runtime remains a separate worker-style deploy path.
 
 ## 1. Push the monorepo to Git
 
@@ -52,51 +52,22 @@ Set the production environment variables in Vercel:
 
 Optional variables depend on the features you intend to enable.
 
-## 3. Build and deploy the worker
+## 3. Deploy scanner runtime separately
 
-The repo includes a helper script that:
+The primary scanner worker is no longer deployed from `WC01`.
 
-- creates the Artifact Registry repository if needed
-- builds the worker image from the monorepo root
-- deploys the worker to a Cloud Run Worker Pool
-- refuses to run if `REDIS_URL` still points at `localhost` or the old Upstash host
+Use the `WS01` repo for:
 
-```bash
-PROJECT_ID=<project-id> REGION=us-central1 ./deploy.sh
-```
+- scanner runtime deploys
+- scanner scheduler deploys
+- scanner crawler identity changes
+- scanner VM/service operations
 
-Best practice:
+`WC01` should only assume that scanner work is claimed through the shared database contract.
 
-- Vercel remains the source of truth for production web env vars.
-- Cloud Run worker pools should bind sensitive worker values from GCP Secret Manager, not from a repo-local env file.
-- The deploy scripts have production-safe defaults for non-secret Supabase/storage config, so a repo-local prod env file is no longer part of the normal deploy path.
-- The worker pools should run under dedicated runtime service accounts rather than the default compute service account.
-- Cloud Build should use a dedicated build service account with image push, storage, and logging permissions instead of the default compute service account.
+## 4. Run the scanner scheduler separately
 
-Optional values the script forwards if present:
-
-- `SUPABASE_STORAGE_BUCKET_SCREENSHOTS`
-- `SUPABASE_STORAGE_BUCKET_ARTIFACTS`
-- `OPENAI_API_KEY`
-- `LLM_ENRICHMENT_ENABLED`
-- `LLM_ENRICHMENT_TIMEOUT_MS`
-- `LLM_ENRICHMENT_MAX_ATTEMPTS`
-- `LLM_ENRICHMENT_MAX_CHUNKS`
-- `LLM_ENRICHMENT_FORCE_LAST_CHUNK`
-- `RESEND_API_KEY`
-- `SERVICE_ACCOUNT`
-
-Cloud Run Worker Pools are intended for continuous background work and do not expose a public URL. At the time of writing, Google documents this feature as Preview.
-
-## 4. Run the scheduler hourly
-
-The scheduler entrypoint is:
-
-```bash
-pnpm --filter @website-signal-risk-scanner/worker start:scheduler
-```
-
-Use a Cloud Run Job or a separate scheduled container target that runs this command once per execution.
+The scanner scheduler also lives in `WS01`, not in this repo. `WC01` should treat scanner queue pickup and schedule sweeps as external scanner-service responsibilities.
 
 ## 5. Point the production domain to Vercel
 
@@ -112,13 +83,13 @@ Validate in this order:
 
 1. web app loads on the Vercel domain
 2. login and callback flow work
-3. preview scan enqueues onto the shared Redis backend
-4. the Cloud Run Worker Pool consumes preview and full scans
+3. preview and full scan requests persist in the database as queued work
+4. the standalone scanner service claims and executes scans
 5. report data persists in Supabase
 6. PDFs generate
-7. the hourly scheduler path runs successfully
+7. the standalone scanner scheduler path runs successfully
 
-## 7. Monitor production worker health
+## 7. Monitor production runtime health
 
 The repo includes a lightweight production ops monitor:
 
@@ -129,10 +100,10 @@ pnpm ops:monitor:prod
 It checks:
 
 - validation worker heartbeat freshness from Supabase
-- Cloud Run readiness for `certscore-worker`
+- scanner service heartbeat freshness from Supabase
 - Cloud Run readiness for `certscore-validation-worker`
 
-If `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, and `OPS_ALERT_TO_EMAIL` are configured, it will email an alert and exit non-zero when a worker is stale or not ready.
+If `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, and `OPS_ALERT_TO_EMAIL` are configured, it will email an alert and exit non-zero when a runtime is stale or not ready.
 
 ## Validation Ops sibling deploy
 

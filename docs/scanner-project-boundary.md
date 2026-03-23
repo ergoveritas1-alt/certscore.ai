@@ -1,6 +1,6 @@
 # Scanner Project Boundary
 
-Phase 1 keeps scanner runtime in this monorepo, but the intended ownership boundary is now:
+`WS01` is now the standalone scanner project and runtime home. `WC01` should be treated as the product control plane that creates scans, reads scan state, and renders product-facing results.
 
 ## Scanner project responsibilities
 - scanner runtime entrypoints
@@ -14,11 +14,16 @@ Phase 1 keeps scanner runtime in this monorepo, but the intended ownership bound
 - scan-triggering UI and product workflows
 - organization, plan, and dashboard logic
 - validation UI and non-scanner product surfaces
+- compatibility shims needed while `WC01` still shares the database contract with the scanner
 
-## Phase 1 contract
+## Current contract
 - product apps persist scan requests as `scans.status = queued`
 - scanner service claims queued work from the database
 - scanner service owns execution pickup and heartbeat availability
-- `@website-signal-risk-scanner/scan-core` remains the shared engine until the scanner project is fully extracted
+- `WC01` should not be treated as the source of truth for scanner runtime behavior
 
-This document is the extraction boundary for the future standalone scanner repo/Codex project.
+## Transitional code still in `WC01`
+- `apps/scanner` and `packages/scan-core` remain here only as migration carryover and compatibility scaffolding
+- new scanner runtime, crawler identity, and operational changes should originate in `WS01`
+
+This document records the boundary now that the standalone scanner repo exists.
