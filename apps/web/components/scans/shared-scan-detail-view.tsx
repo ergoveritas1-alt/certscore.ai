@@ -2821,6 +2821,156 @@ function HomepagePreviewGate(input: {
   );
 }
 
+export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+
+  try {
+    const policyEnrichmentById = new Map(scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row]));
+    const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
+      const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
+
+      return {
+        description: formatReviewIssueDescription(String(row.reason ?? "")),
+        key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
+        pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
+        pageUrl:
+          typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string"
+            ? String(enrichment?.pageUrl ?? enrichment?.page_url)
+            : null,
+        reason: String(row.reason ?? ""),
+        reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
+        reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
+        summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
+      };
+    });
+    const preconsentViolationRows = derivePreconsentViolationRows({
+      persistedViolations: scanRecord.preconsentViolations,
+      runtimeArtifacts,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
+      policyEnrichments: scanRecord.policyEnrichment,
+      preconsentViolations: preconsentViolationRows,
+      runtimeArtifacts,
+      snapshot,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
+    const accessibilityIssueRows = deriveAccessibilityIssueRows(snapshot);
+    const accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
+      examples: scanRecord.accessibilityRuleExamples ?? [],
+      ruleCounts: scanRecord.accessibilityRuleCounts ?? []
+    });
+    const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
+      .sort((left, right) => right.weightedPriority - left.weightedPriority)
+      .slice(0, 6);
+    const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
+    const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
+      const sections = getReportSectionsForPillar(pillar.id).map((section) => {
+        const sectionCategoryIds = new Set(getReportEvidenceCategoriesForSection(section.id).map((category) => category.id));
+        const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
+          const items = getReportSignalsForEvidenceCategory(category.id)
+            .map(({ relation, signal }) => ({
+              key: signal.key,
+              label: signal.label,
+              relation,
+              source: signal.source,
+              value: getReportSignalValue({
+                policyEnrichment: scanRecord.policyEnrichment,
+                runtimeArtifacts: scanRecord.runtimeArtifacts,
+                signals: scanRecord.signals,
+                snapshot: scanRecord.snapshot,
+                signal
+              })
+            }))
+            .filter((item) => isSignalValuePopulated(item.key, item.value))
+            .sort((left, right) => {
+              const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
+              return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
+            });
+
+          const reviewFindings = buildReviewFindings({
+            categoryId: category.id,
+            issues: [],
+            prioritizedAccessibilityRuleRows,
+            runtimeArtifacts: scanRecord.runtimeArtifacts,
+            snapshot,
+            sectionId: section.id,
+            sectionItems: items,
+            validationFindingLookup
+          });
+
+          return {
+            category,
+            items,
+            reviewFindings
+          };
+        });
+
+        const issues = buildSectionReviewIssues({
+          accessibilityIssueRows,
+          consentAuditFindings,
+          policyBehaviorContradictions,
+          preconsentViolationRows,
+          scanReportReviewIssues,
+          sectionId: section.id,
+          snapshot
+        });
+        const issueFindings = buildReviewFindings({
+          issues,
+          prioritizedAccessibilityRuleRows,
+          runtimeArtifacts: scanRecord.runtimeArtifacts,
+          snapshot,
+          sectionId: section.id,
+          sectionItems: [],
+          validationFindingLookup
+        });
+
+        return {
+          categories,
+          issueFindings
+        };
+      });
+
+      return { sections };
+    });
+
+    const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
+      sections.flatMap((section) => [
+        ...section.categories.flatMap((category) => category.reviewFindings),
+        ...section.issueFindings
+      ])
+    );
+    const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: allReviewFindingCandidates,
+      validationFindings: scanRecord.validationFindings,
+      validationFindingLookup
+    }).filter((finding) => finding.presentationDecision.status !== "suppress");
+
+    return [
+      ...new Map(
+        sectionDrafts
+          .flatMap(({ sections }) =>
+            sections.flatMap((section) =>
+              globalUnifiedFindings.filter((finding) =>
+                section.categories.some(({ category }) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner")
+              )
+            )
+          )
+          .map((finding) => [finding.unifiedFindingId, finding])
+      ).values()
+    ];
+  } catch (error) {
+    console.error("Failed to build scan report unified findings", error);
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+}
+
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
   const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
