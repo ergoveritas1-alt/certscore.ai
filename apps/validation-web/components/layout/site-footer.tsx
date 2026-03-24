@@ -8,9 +8,6 @@ export function SiteFooter() {
           <div className="space-y-2">
             <p className="font-medium text-slate-700">CertScore.ai</p>
             <p>certscore.ai · Automated scanning for publicly observable website signals.</p>
-            <p className="max-w-2xl text-xs text-slate-500">
-              CertScore.ai provides automated telemetry on publicly observable website signals related to frameworks such as GDPR, WCAG accessibility standards, CCPA/CPRA, cookie consent systems, and privacy disclosures. CertScore.ai automated scan results based on observable website signals. Not legal or compliance advice. Results may be incomplete or inaccurate.
-            </p>
           </div>
           <div className="flex flex-wrap gap-4">
             <Link href="/how-it-works" className="hover:text-slate-900">
@@ -43,7 +40,7 @@ export function SiteFooter() {
           </div>
         </div>
         <div className="text-xs text-slate-400">
-          <p>Stored data includes scan metadata, derived signals, change history, evidence URLs, and limited policy or disclosure excerpts used for evidence context.</p>
+          <p>CertScore.ai automated scan results based on observable website signals. Not legal or compliance advice. Results may be incomplete or inaccurate. Stored data includes scan metadata, derived signals, change history, evidence URLs, and limited policy or disclosure excerpts used for evidence context.</p>
           <p>
             Privacy rights requests can be submitted at <Link href="/privacy-request" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">certscore.ai/privacy-request</Link> or by emailing <a href="mailto:privacy@certscore.ai" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">privacy@certscore.ai</a>.
           </p>

@@ -167,10 +167,10 @@ function SignalCheckIcon() {
 }
 
 const categories = [
-  "Policy and disclosure posture across privacy, terms, cookie, refund, subscription, and accessibility surfaces",
-  "Cookie-banner and consent evidence, including CMP detection, reject paths, and post-choice behavior",
-  "Tracker and third-party collection inventory, including pre-consent activity and vendor-level evidence",
-  "Policy vs behavior contradiction: the site’s public privacy and consent posture implied stricter tracking behavior than the runtime evidence supported."
+  "Scan consent flows, cookie banners, and user-choice mechanisms for privacy and consumer-protection risk signals",
+  "Surface trackers, third-party collection, and vendor-level evidence tied to privacy, data use, and disclosure posture",
+  "Flag contradictions between what a site says about privacy, pricing, consent, or financial promotions and what runtime evidence shows",
+  "Detect website signals relevant to FTC, CPPA, GDPR, COPPA, ADA, CFTC, and SEC frameworks"
 ];
 
 const whatHappensNext = [
@@ -242,9 +242,6 @@ export default async function MarketingHomePage() {
                 variant="secondary"
               />
             </div>
-            <p className="text-sm text-slate-500">
-              CertScore.ai provides automated telemetry on publicly observable website signals related to frameworks such as GDPR, WCAG accessibility standards, CCPA/CPRA, cookie consent systems, and privacy disclosures.
-            </p>
           </div>
 
           <div className="space-y-4">
