@@ -13,6 +13,7 @@ import type { ScanValidationFinding } from "../../lib/scans/validation-review-li
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { POLICY_POSITIVE_SIGNAL_SPECS } from "../../lib/scans/policy-positive-signal-contract";
+import { normalizePolicyEvidenceSnippetsRecord, normalizePolicySnippet } from "../../lib/scans/policy-snippet-normalization";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
@@ -339,7 +340,7 @@ function dereferencePolicyEvidenceSnippets(input: {
       return row;
     }
 
-    const resolved = Object.fromEntries(
+    const resolved = normalizePolicyEvidenceSnippetsRecord(Object.fromEntries(
       Object.entries(rawSnippets).map(([key, value]) => {
         if (looksLikeEvidenceHash(value)) {
           return [key, input.evidenceByHash.get(value) ?? value];
@@ -354,7 +355,7 @@ function dereferencePolicyEvidenceSnippets(input: {
 
         return [key, value];
       })
-    );
+    ));
 
     const resolvedPolicyRightsSignals = Array.isArray(row.policyRightsSignals)
       ? row.policyRightsSignals
@@ -370,6 +371,12 @@ function dereferencePolicyEvidenceSnippets(input: {
         policyRightsSignals: resolvedPolicyRightsSignals,
         policy_rights_signals: resolvedPolicyRightsSignals
       } : {}),
+      ...(typeof row.policySummaryShort === "string"
+        ? { policySummaryShort: normalizePolicySnippet(row.policySummaryShort) ?? row.policySummaryShort }
+        : {}),
+      ...(typeof row.policy_summary_short === "string"
+        ? { policy_summary_short: normalizePolicySnippet(row.policy_summary_short) ?? row.policy_summary_short }
+        : {}),
       policyEvidenceSnippets: resolved,
       policy_evidence_snippets: resolved
     };

@@ -38,6 +38,9 @@ import {
 import {
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
+import {
+  normalizePolicySnippet
+} from "./policy-snippet-normalization";
 
 export type UnifiedFindingDetails =
   | {
@@ -543,7 +546,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : typeof fallbackEvidence.signalValue === "string"
         ? fallbackEvidence.signalValue
         : null
-  ]).map((snippet) => normalizeFallbackSnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet));
+  ]).map((snippet) => normalizePolicySnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet));
 
   const counts: Record<string, number> = {};
   for (const key of [
@@ -644,43 +647,6 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
 
   return { counts, entities, flags, pageUrls, snippets, sourceUrls };
-}
-
-function normalizeFallbackSnippet(snippet: string) {
-  const collapsed = snippet.replace(/\s+/g, " ").trim();
-  if (!collapsed) {
-    return null;
-  }
-
-  const anchorPhrases = [
-    "On certain pages",
-    "We collect and receive",
-    "The right to",
-    "These Terms of Use",
-    "Dispute Resolution; Arbitration Agreement",
-    "including the right to opt out"
-  ] as const;
-  const anchored = anchorPhrases.reduce((current, phrase) => {
-    const index = current.indexOf(phrase);
-    return index > 0 ? current.slice(index).trim() : current;
-  }, collapsed);
-
-  const firstToken = anchored.match(/^\S+/)?.[0] ?? "";
-  const shouldTrimLeadingFragment =
-    /^[a-z]/.test(anchored) &&
-    (
-      firstToken.length <= 2 ||
-      /[-,;:]/.test(firstToken)
-    );
-
-  if (shouldTrimLeadingFragment) {
-    const trimmed = anchored.slice(firstToken.length).trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
-  }
-
-  return anchored;
 }
 
 function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | null) {

@@ -44,6 +44,10 @@ import {
   normalizePolicyPositiveSignalKey
 } from "../../lib/scans/policy-positive-signal-contract";
 import {
+  normalizePolicySnippet,
+  normalizePolicySnippetList
+} from "../../lib/scans/policy-snippet-normalization";
+import {
   type ContradictionEvidenceBundle
 } from "../../lib/scans/contradiction-evidence-contract";
 import {
@@ -67,39 +71,6 @@ import { PendingButtonLink } from "../ui/pending-link";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
-}
-
-function normalizePolicySnippet(snippet: string) {
-  const collapsed = snippet.replace(/\s+/g, " ").trim();
-  if (!collapsed) {
-    return null;
-  }
-
-  const anchorPhrases = [
-    "On certain pages",
-    "We collect and receive",
-    "The right to",
-    "These Terms of Use",
-    "Dispute Resolution; Arbitration Agreement",
-    "including the right to opt out"
-  ] as const;
-  const anchored = anchorPhrases.reduce((current, phrase) => {
-    const index = current.indexOf(phrase);
-    return index > 0 ? current.slice(index).trim() : current;
-  }, collapsed);
-
-  const firstToken = anchored.match(/^\S+/)?.[0] ?? "";
-  const shouldTrimLeadingFragment =
-    /^[a-z]/.test(anchored) &&
-    (
-      firstToken.length <= 2 ||
-      /[-,;:]/.test(firstToken)
-    );
-  const trimmedLeading = shouldTrimLeadingFragment
-    ? anchored.slice(firstToken.length).trim()
-    : anchored;
-
-  return trimmedLeading.length > 0 ? trimmedLeading : anchored;
 }
 
 function formatDateTime(value: string | null) {
@@ -1596,7 +1567,7 @@ function getPolicySignalFallbackEvidence(input: {
         .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
     : [];
-  const policySnippets = [...new Set([...topicSnippets, ...rightsSnippets].map((snippet) => normalizePolicySnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet)))];
+  const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
 
   return {
     pageUrl,
