@@ -401,13 +401,24 @@ function buildUnifiedFindingDetails(input: {
         : []),
       ...(Array.isArray(input.linkedValidationFinding?.evidence?.relatedVendors)
         ? (input.linkedValidationFinding?.evidence?.relatedVendors as string[])
+        : []),
+      ...(Array.isArray(input.fallbackEvidence?.runtimeVendors)
+        ? (input.fallbackEvidence?.runtimeVendors as string[])
+        : []),
+      ...(Array.isArray(input.fallbackEvidence?.relatedVendors)
+        ? (input.fallbackEvidence?.relatedVendors as string[])
         : [])
     ]);
 
     return {
       family,
       kind: input.findingId,
-      claim: typeof input.linkedValidationFinding?.evidence?.claim === "string" ? input.linkedValidationFinding.evidence.claim : null,
+      claim:
+        typeof input.linkedValidationFinding?.evidence?.claim === "string"
+          ? input.linkedValidationFinding.evidence.claim
+          : typeof input.fallbackEvidence?.claim === "string"
+            ? input.fallbackEvidence.claim
+            : null,
       observedBehavior: input.summary,
       vendors
     } satisfies UnifiedFindingDetails;
@@ -567,6 +578,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const entities: Record<string, string[]> = {};
   if (Array.isArray(fallbackEvidence.keyPageAttemptedUrls)) {
     entities.attemptedUrls = uniqueStrings(fallbackEvidence.keyPageAttemptedUrls as string[]);
+  }
+  if (Array.isArray(fallbackEvidence.relatedVendors)) {
+    entities.relatedVendors = uniqueStrings(fallbackEvidence.relatedVendors as string[]);
+  }
+  if (Array.isArray(fallbackEvidence.runtimeVendors)) {
+    entities.runtimeVendors = uniqueStrings(fallbackEvidence.runtimeVendors as string[]);
   }
   if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
     const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;

@@ -337,6 +337,39 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
   assert.equal(specificPacket?.presentationDecision.status, "surface");
 });
 
+test("retains both policy-side and runtime-side evidence on contradiction issue findings", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed adtech vendors include Google Ads.",
+        fallbackEvidence: {
+          claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          pageUrl: "https://www.example.com/privacy",
+          policySummaryShort: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
+          relatedVendors: ["Google Ads", "Meta Pixel"],
+          runtimeVendors: ["Google Ads", "Meta Pixel"],
+          sourceUrls: ["https://www.example.com/privacy"],
+          supportingSignals: ["policy_behavior_conflict_candidate"]
+        },
+        observedValue: "Observed adtech vendors include Google Ads.",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.details?.family, "contradiction");
+  assert.equal(packet?.details?.claim, "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.");
+  assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Google Ads", "Meta Pixel"]);
+  assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.example.com/privacy"]);
+  assert.match((packet?.evidence?.snippets ?? []).join(" "), /privacy policy/i);
+});
+
 test("keeps strong corroborated findings surfaced with a confidence rationale", () => {
   const validationFinding = makeValidationFinding({
     id: "val-6",

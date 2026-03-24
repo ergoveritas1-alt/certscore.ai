@@ -219,6 +219,10 @@ type PolicyBehaviorContradiction = {
   claim: string;
   evidence: string[];
   observedBehavior: string;
+  policyPageUrl: string | null;
+  policySummary: string | null;
+  relatedVendors: string[];
+  supportingSignals: string[];
   severity: "high" | "medium";
   status: "contradiction" | "violation risk" | "likely contradiction";
   title: string;
@@ -399,6 +403,14 @@ function derivePolicyBehaviorContradictions(input: {
       )
     : [];
   const policyDoNotSell = String(getPolicyField(privacyEnrichment, "policyDoNotSell", "policy_do_not_sell") ?? "unknown");
+  const policyPageUrl =
+    typeof (privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url) === "string"
+      ? String(privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url)
+      : null;
+  const policySummary =
+    typeof (privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short) === "string"
+      ? String(privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short)
+      : null;
 
   if (preconsentVendors.length > 0) {
     contradictions.push({
@@ -407,7 +419,11 @@ function derivePolicyBehaviorContradictions(input: {
       severity: "high",
       claim: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
       observedBehavior: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
-      evidence: preconsentEvidence.slice(0, 3)
+      evidence: preconsentEvidence.slice(0, 3),
+      policyPageUrl,
+      policySummary,
+      relatedVendors: preconsentVendors,
+      supportingSignals: ["consent_gating_claim"]
     });
   }
 
@@ -418,7 +434,11 @@ function derivePolicyBehaviorContradictions(input: {
       severity: "medium",
       claim: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
       observedBehavior: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
-      evidence: advertisingVendors.slice(0, 4)
+      evidence: advertisingVendors.slice(0, 4),
+      policyPageUrl,
+      policySummary,
+      relatedVendors: advertisingVendors,
+      supportingSignals: [policyDoNotSell]
     });
   }
 
@@ -438,7 +458,14 @@ function derivePolicyBehaviorContradictions(input: {
         ...(preconsentEvidence.slice(0, 2) ?? []),
         ...advertisingVendors.slice(0, 2),
         ...sessionReplayVendors.slice(0, 1)
-      ].slice(0, 4)
+      ].slice(0, 4),
+      policyPageUrl,
+      policySummary,
+      relatedVendors: uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6),
+      supportingSignals: uniqueStrings([
+        hasPolicyBehaviorConflict ? "policy_behavior_conflict_detected" : null,
+        policyFlags.includes("policy_behavior_conflict_candidate") ? "policy_behavior_conflict_candidate" : null
+      ])
     });
   }
 
@@ -896,6 +923,7 @@ type ResultDetail = {
 type CanonicalReviewIssue = {
   description: string;
   evidence?: string[];
+  fallbackEvidence?: Record<string, unknown>;
   linkedValidationRuleKeys?: string[];
   severity: "high" | "medium" | "low";
   title: string;
@@ -1276,6 +1304,15 @@ function buildSectionReviewIssues(input: {
       ...input.policyBehaviorContradictions.map((row) => ({
         description: row.observedBehavior,
         evidence: row.evidence,
+        fallbackEvidence: {
+          claim: row.claim,
+          pageUrl: row.policyPageUrl,
+          policySummaryShort: row.policySummary,
+          relatedVendors: row.relatedVendors,
+          runtimeVendors: row.relatedVendors,
+          sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
+          supportingSignals: row.supportingSignals
+        },
         severity: row.severity,
         title: row.title
       }))
@@ -1654,6 +1691,7 @@ function buildReviewFindings(input: {
     categoryId: input.categoryId ?? getDefaultIssueCategoryId(input.sectionId),
     description: issue.description,
     evidence: issue.evidence,
+    fallbackEvidence: issue.fallbackEvidence,
     id: `${input.sectionId}-issue-${index}`,
     linkedValidationFinding: input.validationFindingLookup
       ? findValidationFindingForKeys(
