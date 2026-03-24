@@ -2181,7 +2181,7 @@ function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
 }
 
 function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
-  const counts = new Map<string, { count: number; highCount: number; mediumCount: number }>();
+  const counts = new Map<string, { count: number; highCount: number; mediumCount: number; lowCount: number }>();
 
   for (const finding of findings) {
     let theme: string | null = null;
@@ -2213,11 +2213,12 @@ function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
     }
 
     if (theme) {
-      const current = counts.get(theme) ?? { count: 0, highCount: 0, mediumCount: 0 };
+      const current = counts.get(theme) ?? { count: 0, highCount: 0, mediumCount: 0, lowCount: 0 };
       counts.set(theme, {
         count: current.count + 1,
         highCount: current.highCount + (finding.severity === "high" ? 1 : 0),
-        mediumCount: current.mediumCount + (finding.severity === "medium" ? 1 : 0)
+        mediumCount: current.mediumCount + (finding.severity === "medium" ? 1 : 0),
+        lowCount: current.lowCount + (finding.severity === "low" ? 1 : 0)
       });
     }
   }
@@ -2336,6 +2337,7 @@ function AgencyAdvisorySummary(input: {
 }) {
   const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = input.findings.filter((finding) => finding.severity === "low").length;
   const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
   const topThemes = deriveThemeCounts(input.findings);
   const infrastructureItems = deriveInfrastructureContext(input.snapshot);
@@ -2348,13 +2350,16 @@ function AgencyAdvisorySummary(input: {
       : mediumPriorityCount > 0
         ? `This scan surfaced ${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
         : "This scan did not surface any high- or medium-priority findings in the main report.",
+    lowPriorityCount > 0
+      ? `The report also includes ${lowPriorityCount} additional blue finding${lowPriorityCount === 1 ? "" : "s"} shown in the detailed findings below.`
+      : null,
     themes.length > 0
       ? "The strongest patterns in this scan involve incomplete policy and disclosure coverage, gaps between stated site practices and observed behavior, and consent or tracking flows that may not give users a clear or balanced choice."
       : "The surfaced findings do not yet point to one dominant risk pattern.",
     "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
-  ];
+  ].filter((bullet): bullet is string => Boolean(bullet));
 
-  const totalPriorityFindings = highPriorityCount + mediumPriorityCount;
+  const totalFindings = highPriorityCount + mediumPriorityCount + lowPriorityCount;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -2364,7 +2369,7 @@ function AgencyAdvisorySummary(input: {
         {topThemes.length > 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Areas of concern</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Findings</p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
@@ -2374,13 +2379,25 @@ function AgencyAdvisorySummary(input: {
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
                   <span>Medium</span>
                 </span>
+                {lowPriorityCount > 0 ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                    <span>Blue findings</span>
+                  </span>
+                ) : null}
               </div>
             </div>
+            {lowPriorityCount > 0 ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Counts below include {lowPriorityCount} additional blue finding{lowPriorityCount === 1 ? "" : "s"}.
+              </p>
+            ) : null}
             <div className="mt-3 space-y-3">
               {topThemes.map((theme) => {
-                const width = totalPriorityFindings > 0 ? (theme.count / totalPriorityFindings) * 100 : 0;
+                const width = totalFindings > 0 ? (theme.count / totalFindings) * 100 : 0;
                 const highWidth = theme.count > 0 ? (theme.highCount / theme.count) * 100 : 0;
                 const mediumWidth = theme.count > 0 ? (theme.mediumCount / theme.count) * 100 : 0;
+                const lowWidth = theme.count > 0 ? (theme.lowCount / theme.count) * 100 : 0;
                 return (
                   <div key={theme.label} className="space-y-1">
                     <div className="flex items-center justify-between gap-3 text-sm text-slate-700">
@@ -2394,6 +2411,9 @@ function AgencyAdvisorySummary(input: {
                         ) : null}
                         {theme.mediumCount > 0 ? (
                           <div className="h-full bg-amber-400" style={{ width: `${mediumWidth}%` }} />
+                        ) : null}
+                        {theme.lowCount > 0 ? (
+                          <div className="h-full bg-sky-400" style={{ width: `${lowWidth}%` }} />
                         ) : null}
                       </div>
                     </div>
@@ -2656,6 +2676,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   });
   const highPriorityCount = sortedFindings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = sortedFindings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = sortedFindings.filter((finding) => finding.severity === "low").length;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -2677,6 +2698,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
               </span>
               <p className="mt-1 text-sm text-slate-500">
                 The main surfaced issues from this scan, prioritized for review and remediation.
+                {lowPriorityCount > 0 ? ` This scan also surfaced ${lowPriorityCount} additional blue finding${lowPriorityCount === 1 ? "" : "s"}.` : ""}
               </p>
             </span>
           </span>
