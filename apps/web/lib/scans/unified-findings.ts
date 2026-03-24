@@ -1225,6 +1225,16 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "consent_gated_tracking_claim_conflict"
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because consent-gated contradiction findings need tighter paired policy and runtime evidence before buyer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  if (
     input.packet.details?.family === "contradiction" &&
     (!input.packet.confidenceInputs.hasPolicyTextEvidence ||
       (!input.packet.confidenceInputs.hasDirectRuntimeEvidence && !input.packet.confidenceInputs.hasConcretePayloadEvidence))

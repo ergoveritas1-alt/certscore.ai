@@ -779,6 +779,32 @@ test("keeps contradiction findings audit-only without both policy text and concr
   assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
+test("keeps consent-gated tracking claim conflict audit-only even with partial contradiction support", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Compare the supporting evidence against the public-facing policy language and confirm whether the mismatch is real.",
+        fallbackEvidence: {
+          claim: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["The policy and consent surface imply tracking should begin only after a valid consent interaction."],
+          relatedVendors: ["Adobe Analytics", "Meta Pixel"],
+          runtimeVendors: ["Adobe Analytics", "Meta Pixel"]
+        },
+        observedValue: "Consent-gated tracking claim conflict",
+        severity: "high",
+        sourceType: "issue",
+        title: "Consent-gated tracking claim conflicts with runtime behavior"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

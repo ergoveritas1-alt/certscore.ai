@@ -1523,7 +1523,7 @@ function getPolicySignalFallbackEvidence(input: {
     pageUrls: pageUrl ? [pageUrl] : [],
     policySnippets,
     policyRightsSignals,
-    policySummaryShort,
+    policySummaryShort: policySnippets.length > 0 ? null : policySummaryShort,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
