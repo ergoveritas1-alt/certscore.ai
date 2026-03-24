@@ -83,10 +83,10 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.ftc.gov/business-guidance/privacy-security"
       },
       suggestedFix:
-        "Perform a technical audit to identify the specific session replay vendor (for example, FullStory, Hotjar, or LogRocket). Ensure the script is integrated into the Consent Management Platform and remains inactive until a positive consent signal is received. Verify that sensitive input fields are masked to prevent the collection of PII during the recording process.",
+        "Review the retained runtime artifacts to confirm whether session replay tooling is actually present, then verify that any confirmed replay script is disclosed and appropriately consent-gated.",
       whyThisMatters:
-        "The automated scan confirmed the presence of active session replay scripts, which record granular user interactions such as mouse movements, scrolling behavior, and keystrokes. These high-fidelity tracking tools create significant privacy risks if deployed without explicit disclosure or prior consent, as they capture the behavioral journey of the user rather than just page-level analytics.",
-      confidenceScore: "0.9"
+        "The automated scan retained signals that may indicate session replay tooling. Because replay findings are especially sensitive to false positives, the runtime artifacts should be confirmed before treating the behavior as a definite disclosure or consent issue.",
+      confidenceScore: "0.6"
     },
     evidenceAwareOverrides: [
       {
@@ -98,20 +98,16 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       {
         match: /session replay runtime vendors/i,
         override: {
-          suggestedFix:
-            "Verify that FullStory is explicitly listed in the privacy policy's third-party disclosure section. Ensure the script is integrated with the Consent Management Platform so that it remains inactive until the user provides consent for Functional or Analytical cookies. Additionally, confirm that sensitive input fields are technically masked within the FullStory configuration to prevent the ingestion of PII.",
-          whyThisMatters:
-            "The automated scan identified FullStory as an active session replay vendor on the domain. Session replay tools capture high-fidelity user interactions, including mouse movements, scrolling, and clicks, to reconstruct user sessions. Deploying these tools without explicit disclosure or proper consent gating can lead to the unintended collection of behavioral data and potential exposure of sensitive information entered into unmasked form fields.",
-          confidenceScore: "0.95"
+          confidenceScore: "0.8"
         }
       },
       {
         match: /session replay runtime detected/i,
         override: {
           suggestedFix:
-            "Perform a technical audit to identify the specific session replay vendor (for example, FullStory, Hotjar, or LogRocket). Ensure the script is integrated into the Consent Management Platform and remains inactive until a positive consent signal is received. Verify that sensitive input fields are masked to prevent the collection of PII during the recording process.",
+            "Inspect the retained runtime artifacts, confirm the specific replay vendor if present, and then verify disclosure, consent gating, and field masking for the confirmed integration.",
           whyThisMatters:
-            "The automated scan confirmed the presence of active session replay scripts. These tools record high-fidelity user interactions, including mouse movements, scrolling patterns, and keystrokes. Technical and regulatory risks arise when these scripts are deployed without explicit disclosure or prior consent, as they capture the behavioral journey of the user rather than just aggregate page-level metrics."
+            "The automated scan retained runtime evidence consistent with session replay behavior, but that evidence should be reviewed directly before treating the behavior as confirmed."
         }
       }
     ],
@@ -159,6 +155,20 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       }
     ],
     matches: [/low-confidence extraction/i, /low-confidence policy extraction/i, /low_confidence_critical_fields/i]
+  },
+  {
+    base: {
+      bestPracticeLink: {
+        label: "W3C",
+        title: "Data Privacy Vocabulary (DPV) for Automated Policy Processing",
+        url: "https://www.w3.org/TR/dpv/"
+      },
+      suggestedFix:
+        "Treat this as a parser-coverage issue first. Confirm the page was fetched successfully, then inspect whether the rendered structure exposes the expected disclosure sections consistently enough for extraction.",
+      whyThisMatters:
+        "The page appears to have been fetched, but automated extraction coverage was incomplete. That usually means the scan hit a parser or structure limit rather than proving the page was unavailable."
+    },
+    matches: [/extraction was limited/i, /linked but automated extraction was limited/i]
   },
   {
     base: {
@@ -412,9 +422,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/WAI/standards-guidelines/wcag/"
       },
       suggestedFix:
-        "Conduct a technical audit of the site's shared templates (header, footer, and navigation) to remediate the root causes of the risk score. Prioritize resolving Keyboard Traps and ensuring all interactive elements have unique, machine-readable ARIA labels. Refactor the focus-management logic to ensure a logical tab order across all dynamic page components.",
+        "Review the representative automated WCAG findings first, then manually verify whether the affected templates or components create real task-level barriers before prioritizing remediation.",
       whyThisMatters:
-        "The accessibility risk score of -4 indicates a significant departure from baseline WCAG compliance. In technical auditing, a negative or heavily outlier score typically correlates with a high density of unaddressed structural defects in the DOM, such as broken keyboard focus or missing ARIA landmarks, which create systemic barriers for users relying on assistive technologies."
+        "This automated accessibility indicator suggests the page has enough detected WCAG issues to merit manual review. The score helps prioritize investigation, but it does not by itself establish conformance status or the severity of user impact."
     },
     matches: [/elevated accessibility risk score/i, /accessibility risk score/i]
   },
@@ -745,6 +755,28 @@ function getNumericEvidence(
   return typeof signalValue === "number" && Number.isFinite(signalValue) ? signalValue : null;
 }
 
+function getBooleanEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[],
+  signalMatcher?: RegExp
+) {
+  for (const key of keys) {
+    if (evidence?.[key] === true) {
+      return true;
+    }
+    if (evidence?.[key] === false) {
+      return false;
+    }
+  }
+
+  if (!signalMatcher) {
+    return null;
+  }
+
+  const signalValue = getSupportingSignalValue(evidence, signalMatcher);
+  return typeof signalValue === "boolean" ? signalValue : null;
+}
+
 function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null | undefined) {
   const evidenceUrls = getStringArrayEvidence(
     evidence,
@@ -779,9 +811,28 @@ function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null |
     (typeof signalSummary?.totalObservedUrls === "number" && Number.isFinite(signalSummary.totalObservedUrls)
       ? signalSummary.totalObservedUrls
       : null);
+  const consentSurfaceObserved = getBooleanEvidence(
+    evidence,
+    ["consentSurfaceObserved", "consent_surface_observed", "consentBannerPresent", "cookieBannerPresent"],
+    /consent surface observed|consent banner present|cookie banner present/i
+  );
+  const consentActionableChoiceObserved = getBooleanEvidence(
+    evidence,
+    ["consentActionableChoiceObserved", "consent_actionable_choice_observed", "consentRejectInteractionSucceeded", "consentAcceptInteractionSucceeded"],
+    /consent actionable choice observed|reject interaction succeeded|accept interaction succeeded/i
+  );
+  const operatorRelationship =
+    typeof evidence?.operatorRelationship === "string"
+      ? evidence.operatorRelationship
+      : typeof evidence?.operator_relationship === "string"
+        ? evidence.operator_relationship
+        : "unknown";
 
   return {
+    consentActionableChoiceObserved,
+    consentSurfaceObserved,
     evidenceUrls: [...new Set([...summaryUrls, ...evidenceUrls])],
+    operatorRelationship,
     requestCount,
     vendors: [...new Set([...vendors, ...summaryVendors])],
     violationCount
@@ -791,7 +842,7 @@ function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null |
 function formatVendorList(vendors: string[]) {
   const distinct = [...new Set(vendors.filter((entry) => entry.trim().length > 0))];
   if (distinct.length === 0) {
-    return "multiple third-party ad and analytics vendors";
+    return "multiple analytics or tagging endpoints";
   }
   if (distinct.length === 1) {
     return distinct[0]!;
@@ -799,7 +850,37 @@ function formatVendorList(vendors: string[]) {
   if (distinct.length === 2) {
     return `${distinct[0]} and ${distinct[1]}`;
   }
-  return `${distinct.slice(0, 3).join(", ")}, and other third-party vendors`;
+  return `${distinct.slice(0, 3).join(", ")}, and other observed vendors`;
+}
+
+function getPolicyExtractionStatus(evidence: Record<string, unknown> | null | undefined) {
+  if (typeof evidence?.policyExtractionStatus === "string") {
+    return evidence.policyExtractionStatus;
+  }
+
+  if (typeof evidence?.policy_extraction_status === "string") {
+    return evidence.policy_extraction_status;
+  }
+
+  return null;
+}
+
+function getSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const vendors = getStringArrayEvidence(
+    evidence,
+    ["sessionReplayRuntimeVendors", "session_replay_runtime_vendors", "relatedVendors", "runtimeVendors"],
+    /session replay runtime vendors/i
+  );
+  const runtimeEvidenceArtifacts = getStringArrayEvidence(evidence, [
+    "runtimeEvidenceArtifacts",
+    "runtime_evidence_artifacts",
+    "runtimeEvidence"
+  ]);
+
+  return {
+    runtimeEvidenceArtifacts,
+    vendors
+  };
 }
 
 function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
@@ -1302,7 +1383,11 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     const preconsentEvidence = getPreconsentEvidenceSummary(input.evidence);
     const vendorList = formatVendorList(preconsentEvidence.vendors);
     const requestCount = preconsentEvidence.violationCount ?? preconsentEvidence.requestCount;
-    if (typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
+    const hasObservedConsentChoice =
+      preconsentEvidence.consentSurfaceObserved === true && preconsentEvidence.consentActionableChoiceObserved === true;
+    const canCallThirdParty = preconsentEvidence.operatorRelationship === "third_party";
+    const activityLabel = canCallThirdParty ? "third-party" : "tracking or measurement-related";
+    if (hasObservedConsentChoice && typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
       presentation.whyThisMatters =
         `The automated scan observed ${preconsentEvidence.violationCount} pre-consent tracking request${preconsentEvidence.violationCount === 1 ? "" : "s"} before the visitor could act on the consent interface. That pattern suggests one or more non-essential third-party tags or scripts began transmitting data during initial render rather than waiting for a confirmed consent state.`;
       presentation.suggestedFix =
@@ -1310,24 +1395,57 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       presentation.confidenceScore = "1.0";
     } else if (preconsentEvidence.evidenceUrls.length > 0) {
       presentation.whyThisMatters =
-        `The automated scan captured representative pre-consent requests to ${vendorList} during the initial page-load sequence. That evidence indicates that third-party measurement or advertising endpoints were contacted before the site's consent state had been clearly established.`;
+        hasObservedConsentChoice
+          ? `The automated scan captured representative requests to ${vendorList} during the initial page-load sequence before a consent choice could be recorded.`
+          : `The automated scan captured representative ${activityLabel} requests to ${vendorList} during the initial page-load sequence, before any consent state was confirmed in the retained evidence.`;
       presentation.suggestedFix =
-        "Block or defer these vendor requests until an affirmative consent choice is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent is granted.";
-      presentation.confidenceScore = "1.0";
+        hasObservedConsentChoice
+          ? "Block or defer these vendor requests until an affirmative consent choice is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent is granted."
+          : "Audit the scripts and network calls that run on initial page load, then defer any non-essential analytics, advertising, or measurement behavior until the site has a confirmed consent state.";
+      presentation.confidenceScore = hasObservedConsentChoice ? "1.0" : "0.85";
     } else if (preconsentEvidence.vendors.length > 0) {
       presentation.whyThisMatters =
-        `The automated scan observed multiple third-party ad and analytics vendors before consent, including ${vendorList}. That suggests non-essential vendor code is initializing before the visitor has made a privacy choice.`;
+        hasObservedConsentChoice
+          ? `The automated scan observed vendor activity before a recorded consent choice, including ${vendorList}. That suggests non-essential vendor code may be initializing too early.`
+          : `The automated scan observed initial-load vendor activity, including ${vendorList}. That is useful technical evidence to review, but it does not by itself prove a consent violation without a clearly observed consent surface and timing relationship.`;
       presentation.suggestedFix =
-        "Identify where these vendor tags are loaded and gate them behind a positive consent signal. The default behavior should suppress non-essential advertising, analytics, and measurement vendors until the visitor opts in.";
-      presentation.confidenceScore = "1.0";
+        hasObservedConsentChoice
+          ? "Identify where these vendor tags are loaded and gate them behind a positive consent signal. The default behavior should suppress non-essential advertising, analytics, and measurement vendors until the visitor opts in."
+          : "Trace where these vendors are initialized on first render and confirm whether they are essential. If they are non-essential, defer them until the site has a confirmed consent state.";
+      presentation.confidenceScore = hasObservedConsentChoice ? "1.0" : "0.8";
     } else if (typeof requestCount === "number" && requestCount > 0) {
       presentation.whyThisMatters =
-        `The automated scan observed ${requestCount} pre-consent tracking-related request${requestCount === 1 ? "" : "s"} before the visitor had a meaningful chance to choose. That pattern indicates at least some non-essential tracking logic is firing before consent has been applied.`;
+        hasObservedConsentChoice
+          ? `The automated scan observed ${requestCount} tracking-related request${requestCount === 1 ? "" : "s"} before the visitor had a meaningful chance to choose.`
+          : `The automated scan observed ${requestCount} tracking- or measurement-related request${requestCount === 1 ? "" : "s"} during initial page load. That is a useful signal to review, but the retained evidence does not by itself prove that the activity occurred before an actionable consent choice.`;
       presentation.suggestedFix =
         "Audit the scripts and network calls that run during initial render, then suppress non-essential advertising, analytics, and measurement behavior until a positive consent state is present.";
-      presentation.confidenceScore = "0.95";
+      presentation.confidenceScore = hasObservedConsentChoice ? "0.95" : "0.75";
     } else {
-      presentation.confidenceScore = /pre-consent tracking detected/i.test(input.haystack) ? "0.85" : "0.95";
+      presentation.whyThisMatters =
+        "The automated scan retained signals consistent with initial-load tracking or measurement activity. Additional evidence is needed before treating that activity as a confirmed pre-consent violation.";
+      presentation.suggestedFix =
+        "Review the retained requests alongside the live consent flow and confirm whether any non-essential vendors initialize before the site has a confirmed consent state.";
+      presentation.confidenceScore = /pre-consent tracking detected/i.test(input.haystack) ? "0.7" : "0.8";
+    }
+  }
+
+  if (/session replay/i.test(input.haystack)) {
+    const replayEvidence = getSessionReplayEvidence(input.evidence);
+    const vendorList = replayEvidence.vendors.length > 0 ? formatVendorList(replayEvidence.vendors) : null;
+
+    if (replayEvidence.vendors.length > 0) {
+      presentation.whyThisMatters =
+        `The automated scan retained runtime artifacts associated with ${vendorList}. That is stronger evidence than a generic detector hit, but the behavior should still be reviewed directly before treating it as a confirmed disclosure or consent failure.`;
+      presentation.suggestedFix =
+        `Verify whether ${vendorList} is intentionally deployed on the scanned surface. If so, confirm that the behavior is disclosed clearly and that the integration is consent-gated where required.`;
+      presentation.confidenceScore = replayEvidence.runtimeEvidenceArtifacts.length > 0 ? "0.85" : "0.75";
+    } else if (replayEvidence.runtimeEvidenceArtifacts.length === 0) {
+      presentation.whyThisMatters =
+        "The automated scan retained only indirect signals that may correspond to session replay tooling. Those indirect signals should not be treated as a confirmed replay deployment without direct runtime review.";
+      presentation.suggestedFix =
+        "Audit the retained detector output and confirm whether a specific replay vendor, script, object, or endpoint was actually present before escalating this finding.";
+      presentation.confidenceScore = "0.45";
     }
   }
 

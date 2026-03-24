@@ -388,7 +388,7 @@ test("keeps page-specific findings in audit only when page attribution is still 
 
   assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /affected pages/i);
+  assert.match(packet?.presentationDecision.rationale ?? "", /runtime artifacts/i);
 });
 
 test("surfaces GPC failures as runtime-backed unified findings", () => {

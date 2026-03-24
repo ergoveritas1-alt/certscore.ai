@@ -50,6 +50,22 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
     return "Bounded key-page discovery unresolved";
   }
 
+  if (
+    /^(session replay without disclosure detected|possible replay\/disclosure mismatch)(?:\s+(privacy policy|tos|terms of service))?$/i.test(
+      normalized
+    )
+  ) {
+    return "Possible replay/disclosure mismatch";
+  }
+
+  if (
+    /^(missing dsar high exposure|possible missing privacy-rights path)(?:\s+(privacy policy|tos|terms of service))?$/i.test(
+      normalized
+    )
+  ) {
+    return "Possible missing privacy-rights path";
+  }
+
   if (/^high-sensitivity data collection detected$/i.test(normalized)) {
     return "Potential high-sensitivity data collection risk";
   }

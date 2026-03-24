@@ -13,7 +13,7 @@ test("buildStandardPolicyReviewNote returns the canonical session replay note", 
       reason: "session_replay_without_disclosure_detected",
       reviewVerdict: "needs_followup"
     }),
-    "Technical evidence suggests Microsoft Clarity or similar session replay is likely present, but the record does not clearly establish that the behavior is undisclosed in the site's privacy disclosures. This finding is best marked inconclusive pending direct policy-text verification."
+    "Technical evidence suggests a session replay vendor or similar replay tooling is likely present, but the record does not clearly establish that the behavior is undisclosed in the site's privacy disclosures. This finding is best marked inconclusive pending direct policy-text verification."
   );
 });
 
@@ -46,7 +46,7 @@ test("buildStandardPolicyReviewNote returns the canonical alias session replay n
       reason: "session_replay_detected_without_disclosure",
       reviewVerdict: "needs_followup"
     }),
-    "Technical evidence suggests Microsoft Clarity or similar session replay is likely present, but the record does not clearly establish that the behavior is undisclosed in the site's privacy disclosures. This finding is best marked inconclusive pending direct policy-text verification."
+    "Technical evidence suggests a session replay vendor or similar replay tooling is likely present, but the record does not clearly establish that the behavior is undisclosed in the site's privacy disclosures. This finding is best marked inconclusive pending direct policy-text verification."
   );
 });
 

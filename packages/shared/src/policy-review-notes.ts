@@ -38,12 +38,12 @@ const POLICY_REVIEW_NOTE_TEMPLATES: Record<string, PolicyReviewNoteTemplate> = {
     verificationStep: "direct policy-text and runtime-evidence verification"
   },
   session_replay_detected_without_disclosure: {
-    supportedClaim: "Microsoft Clarity or similar session replay is likely present",
+    supportedClaim: "a session replay vendor or similar replay tooling is likely present",
     disputedClaim: "that the behavior is undisclosed in the site's privacy disclosures",
     verificationStep: "direct policy-text verification"
   },
   session_replay_without_disclosure_detected: {
-    supportedClaim: "Microsoft Clarity or similar session replay is likely present",
+    supportedClaim: "a session replay vendor or similar replay tooling is likely present",
     disputedClaim: "that the behavior is undisclosed in the site's privacy disclosures",
     verificationStep: "direct policy-text verification"
   }

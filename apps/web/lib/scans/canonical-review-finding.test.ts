@@ -36,6 +36,8 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
         ruleKey: "privacy.trackers_before_consent_detected",
         title: "Trackers observed before consent",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           preconsent_tracker_vendors: ["Meta Pixel"]
         }
       }),
@@ -49,11 +51,11 @@ test("uses rich pre-consent tracking presentation when linked validation evidenc
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /multiple third-party ad and analytics vendors|Meta Pixel|before consent|privacy choice/i
+    /Meta Pixel|before a recorded consent choice|too early/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Identify where these vendor tags are loaded|gate them behind a positive consent signal|suppress non-essential/i
+    /Identify where these vendor tags are loaded|gate them behind a positive consent signal|until the visitor opts in/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.equal(presentation.confidenceScore, "1.0");
@@ -67,6 +69,8 @@ test("does not leak healthcare-specific pre-consent tracking copy when medical t
         ruleKey: "privacy.trackers_before_consent_detected",
         title: "Pre-consent tracking detected",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           pageUrl: "https://mcw.edu/clinical-programs",
           preconsent_tracker_vendors: ["Meta Pixel"],
           supportingSignals: ["medical institution domain mcw.edu", "possible PHI exposure"]
@@ -108,14 +112,14 @@ test("uses plain-language copy for pre-consent tracking activity", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /third-party tracking activity|meaningful chance to make a consent choice|consent state has been applied/i
+    /initial-load tracking or measurement activity|Additional evidence is needed|confirmed pre-consent violation/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Block or defer non-essential advertising, analytics, and measurement scripts|default state remains off until consent is granted/i
+    /Review the retained requests|confirmed consent state/i
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
-  assert.equal(presentation.confidenceScore, "0.95");
+  assert.equal(presentation.confidenceScore, "0.8");
 });
 
 test("uses calibrated generic copy for pre-consent tracking detected", () => {
@@ -140,14 +144,14 @@ test("uses calibrated generic copy for pre-consent tracking detected", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /third-party network requests initiating before a consent choice could be recorded|zero-delay execution|ePrivacy Directive and GDPR/i
+    /initial-load tracking or measurement activity|Additional evidence is needed|confirmed pre-consent violation/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Tag Manager or header scripts|denied or decoupled state|consent management platform \(CMP\) confirms an affirmative choice/i
+    /Review the retained requests|confirmed consent state/i
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
-  assert.equal(presentation.confidenceScore, "0.85");
+  assert.equal(presentation.confidenceScore, "0.7");
 });
 
 test("uses max-confidence evidence-url copy for pre-consent tracker evidence URLs", () => {
@@ -158,6 +162,8 @@ test("uses max-confidence evidence-url copy for pre-consent tracker evidence URL
         ruleKey: "privacy.preconsent_tracker_evidence_urls",
         title: "Pre-consent tracker evidence URLs",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           preconsent_tracker_evidence_urls: [
             "https://example-ad-network.test/pixel",
             "https://example-analytics.test/collect"
@@ -175,7 +181,7 @@ test("uses max-confidence evidence-url copy for pre-consent tracker evidence URL
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /captured representative pre-consent requests|during the initial page-load sequence|before the site's consent state had been clearly established/i
+    /captured representative requests|initial page-load sequence|before a consent choice could be recorded/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -193,6 +199,8 @@ test("uses max-confidence vendor copy for pre-consent tracker vendors", () => {
         ruleKey: "privacy.preconsent_tracker_vendors",
         title: "Pre-consent tracker vendors",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           preconsent_tracker_vendors: ["Google Analytics", "Reddit Pixel"],
           runtimeEvidence: ["vendor requests fired during initial page load"]
         }
@@ -207,7 +215,7 @@ test("uses max-confidence vendor copy for pre-consent tracker vendors", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /multiple third-party ad and analytics vendors before consent|Google Analytics and Reddit Pixel/i
+    /vendor activity before a recorded consent choice|Google Analytics and Reddit Pixel/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -226,6 +234,8 @@ test("uses count-based copy for pre-consent tracker violations", () => {
         title: "Pre-consent tracker violations",
         evidence: {
           count: 8,
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           runtimeEvidence: ["8 third-party scripts fired during initial page load"],
           supportingSignals: ["tag manager initialization before consent"]
         }
@@ -258,6 +268,8 @@ test("uses calibrated max-confidence copy for 71 pre-consent tracking requests",
         ruleKey: "privacy.preconsent_tracker_violations",
         title: "Trackers observed before consent",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           preconsent_tracker_violations: 71,
           runtimeEvidence: ["third-party requests fired before consent choice"]
         }
@@ -290,6 +302,8 @@ test("uses summarized pre-consent evidence from supporting signals without requi
         ruleKey: "privacy.trackers_before_consent_detected",
         title: "Trackers observed before consent",
         evidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
           supportingSignals: [
             {
               key: "privacy.preconsent_tracker_evidence_urls",
@@ -766,14 +780,14 @@ test("uses strong systemic accessibility copy for negative accessibility risk sc
   assert.equal(presentation.findingName, "Accessibility risk score");
   assert.match(
     presentation.whyThisMatters,
-    /accessibility risk score of -4|significant departure from baseline WCAG compliance|missing ARIA landmarks/i
+    /automated accessibility indicator|merit manual review|does not by itself establish conformance/i
   );
   assert.match(
     presentation.suggestedFix,
-    /shared templates|Keyboard Traps|machine-readable ARIA labels|focus-management logic/i
+    /representative automated WCAG findings|manually verify|task-level barriers/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.ok(Number(presentation.confidenceScore) >= 0.95);
+  assert.ok(Number(presentation.confidenceScore) >= 0.7);
 });
 
 test("uses max-strength accessibility risk copy for critical negative outliers", () => {
@@ -1853,14 +1867,14 @@ test("uses session-replay copy and moderate confidence for detector-backed repla
   assert.equal(presentation.findingName, "Session replay tool detected");
   assert.match(
     presentation.whyThisMatters,
-    /active session replay scripts|mouse movements, scrolling behavior, and keystrokes|behavioral journey of the user/i
+    /indirect signals that may correspond to session replay tooling|should not be treated as a confirmed replay deployment/i
   );
   assert.match(
     presentation.suggestedFix,
-    /specific session replay vendor|FullStory, Hotjar, or LogRocket|Consent Management Platform|masked to prevent the collection of PII/i
+    /confirm whether a specific replay vendor|before escalating this finding/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
-  assert.equal(presentation.confidenceScore, "0.9");
+  assert.equal(presentation.confidenceScore, "0.45");
 });
 
 test("uses stronger runtime session-replay copy and high confidence", () => {
@@ -1892,14 +1906,14 @@ test("uses stronger runtime session-replay copy and high confidence", () => {
   assert.equal(presentation.findingName, "Session replay runtime detected");
   assert.match(
     presentation.whyThisMatters,
-    /active session replay scripts|scrolling patterns|behavioral journey of the user|aggregate page-level metrics/i
+    /runtime evidence consistent with session replay behavior|should be reviewed directly before treating the behavior as confirmed/i
   );
   assert.match(
     presentation.suggestedFix,
-    /specific session replay vendor|FullStory, Hotjar, or LogRocket|Consent Management Platform|masked to prevent the collection of PII/i
+    /confirm the specific replay vendor if present|consent gating|field masking/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
-  assert.equal(presentation.confidenceScore, "0.9");
+  assert.ok(Number(presentation.confidenceScore) >= 0.6);
 });
 
 test("uses vendor-specific runtime session-replay copy and elevated confidence", () => {
@@ -1931,14 +1945,14 @@ test("uses vendor-specific runtime session-replay copy and elevated confidence",
   assert.equal(presentation.findingName, "Session replay runtime vendors");
   assert.match(
     presentation.whyThisMatters,
-    /FullStory as an active session replay vendor|mouse movements, scrolling, and clicks|unintended collection of behavioral data|unmasked form fields/i
+    /FullStory|runtime artifacts associated with/i
   );
   assert.match(
     presentation.suggestedFix,
-    /FullStory is explicitly listed|Consent Management Platform|Functional or Analytical cookies|masked within the FullStory configuration/i
+    /Verify whether FullStory is intentionally deployed|confirm that the behavior is disclosed clearly|consent-gated/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
-  assert.equal(presentation.confidenceScore, "0.95");
+  assert.equal(presentation.confidenceScore, "0.85");
 });
 
 test("uses low-confidence extraction copy for policy extraction title without linked validation finding", () => {
@@ -2007,6 +2021,18 @@ test("normalizeFindingName removes confidence-colored prefixes from display name
   assert.equal(normalizeFindingName("Cookie policy unavailable"), "Cookie policy not retrievable");
   assert.equal(normalizeFindingName("Accessibility statement unavailable"), "Accessibility statement not retrievable");
   assert.equal(normalizeFindingName("Contact page unavailable"), "Contact page not retrievable");
+  assert.equal(
+    normalizeFindingName("Session Replay Without Disclosure Detected Privacy Policy"),
+    "Possible replay/disclosure mismatch"
+  );
+  assert.equal(
+    normalizeFindingName("Possible replay/disclosure mismatch Privacy Policy"),
+    "Possible replay/disclosure mismatch"
+  );
+  assert.equal(
+    normalizeFindingName("Missing Dsar High Exposure Privacy Policy"),
+    "Possible missing privacy-rights path"
+  );
   assert.equal(normalizeFindingName("Missing technical disclosure"), "Missing technical disclosure");
   assert.equal(normalizeFindingName({ type: "click" } as unknown as string), "");
 });

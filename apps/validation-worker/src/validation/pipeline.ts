@@ -5,7 +5,6 @@ import {
   VALIDATION_VERDICT_JOB,
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
-import { buildFindingComparisonKey, runFullScanJob } from "@website-signal-risk-scanner/scan-core";
 import {
   claimNextAutomaticTarget,
   createScanForValidationRun,
@@ -24,8 +23,31 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
+import { buildFindingComparisonKey } from "./finding-comparison";
 import { validateFindingWithLlm } from "./llm-client";
 import { createValidationCollectQueue, createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
+
+const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
+
+export function determineValidationCollectAction(scanStatus: string | null | undefined) {
+  if (scanStatus === "queued") {
+    return "wait_for_scan" as const;
+  }
+
+  if (scanStatus === "running" || scanStatus === "processing") {
+    return "wait_for_completion" as const;
+  }
+
+  if (scanStatus === "completed") {
+    return "rank" as const;
+  }
+
+  if (scanStatus === "failed") {
+    return "fail" as const;
+  }
+
+  return "unexpected" as const;
+}
 
 function severityWeight(severity: string) {
   if (severity === "high") {
@@ -138,6 +160,48 @@ function hasSparsePolicyExtraction(input: {
   }
 
   return typeof input.summaryShort !== "string" || input.summaryShort.trim().length === 0;
+}
+
+function derivePolicyExtractionStatus(input: {
+  confidence: number | null;
+  flags: string[];
+  pageType: string | null;
+  snippetCount: number | null;
+  structurallyWeak: boolean;
+}) {
+  if (input.flags.includes("policy_fetch_insufficient_content")) {
+    return "parser_incomplete";
+  }
+
+  if (input.flags.includes("llm_partial_coverage") || input.flags.includes("llm_budget_exhausted")) {
+    return "llm_partial";
+  }
+
+  if (
+    input.structurallyWeak ||
+    input.flags.includes("low_confidence") ||
+    (typeof input.confidence === "number" && input.confidence < 0.6) ||
+    (typeof input.snippetCount === "number" && input.snippetCount === 0)
+  ) {
+    return "structurally_weak";
+  }
+
+  return "fetched";
+}
+
+function getPolicyRightsSignals(enrichment: Record<string, unknown>) {
+  const candidates =
+    Array.isArray(enrichment.policy_rights_signals)
+      ? enrichment.policy_rights_signals
+      : Array.isArray(enrichment.policyRightsSignals)
+        ? enrichment.policyRightsSignals
+        : [];
+
+  return candidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function hasConcreteSessionReplayEvidence(flags: string[]) {
+  return flags.includes("session_replay_vendor_artifact_present");
 }
 
 function buildPolicyRuntimeFinding(input: {
@@ -454,8 +518,17 @@ function derivePolicySectionFindings(input: {
         : null;
     const policyStructurallyWeak = enrichment.policy_structurally_weak === true;
     const summaryShort = enrichment.policy_summary_short ?? null;
+    const policyRightsSignals = getPolicyRightsSignals(enrichment);
+    const policyExtractionStatus = derivePolicyExtractionStatus({
+      confidence,
+      flags,
+      pageType,
+      snippetCount: policySnippetCount,
+      structurallyWeak: policyStructurallyWeak
+    });
     const typeLabel = pageTypeLabel(pageType);
     const baseEvidence = {
+      policy_extraction_status: policyExtractionStatus,
       page_type: pageType,
       policy_actionable_flags: flags,
       policy_ambiguity_score: ambiguity,
@@ -466,13 +539,20 @@ function derivePolicySectionFindings(input: {
       policy_field_coverage: enrichment.policy_field_coverage ?? {},
       policy_governing_law: enrichment.policy_governing_law ?? null,
       policy_notice_contact_present: enrichment.policy_notice_contact_present ?? null,
+      policy_rights_signals: policyRightsSignals,
       policy_semantic_confidence: confidence,
       policy_snippet_count: policySnippetCount,
       policy_structurally_weak: policyStructurallyWeak,
       policy_summary_short: summaryShort
     };
 
-    if (pageType === "privacy_policy" && dsarMechanism === "absent") {
+    if (
+      pageType === "privacy_policy" &&
+      dsarMechanism === "absent" &&
+      policyExtractionStatus === "fetched" &&
+      policyRightsSignals.length === 0 &&
+      (confidence ?? 0) >= 0.6
+    ) {
       findings.push(
         buildSectionIssueFinding({
           description: `${typeLabel} did not provide a clear DSAR or privacy-request path.`,
@@ -489,7 +569,14 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (dsarMechanism === "absent" && highExposure) {
+    if (
+      pageType === "privacy_policy" &&
+      dsarMechanism === "absent" &&
+      highExposure &&
+      policyExtractionStatus === "fetched" &&
+      policyRightsSignals.length === 0 &&
+      (confidence ?? 0) >= 0.6
+    ) {
       findings.push(
         buildSectionIssueFinding({
           description: "The site appears exposed to GDPR or California privacy obligations, but the policy did not provide a clear access, deletion, or privacy-request path.",
@@ -508,25 +595,31 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (reasons.has("session_replay_without_disclosure_detected")) {
+    if (reasons.has("session_replay_without_disclosure_detected") && hasConcreteSessionReplayEvidence(flags)) {
       findings.push(
         buildSectionIssueFinding({
-          description: "Session replay technology was observed at runtime, but the policy did not clearly disclose session recording or replay behavior.",
-          evidence: baseEvidence,
+          description: "Observed runtime artifacts matched session replay tooling, but the policy did not clearly disclose session recording or replay behavior.",
+          evidence: {
+            ...baseEvidence,
+            runtime_evidence_artifacts: ["session_replay_vendor_artifact_present"]
+          },
           pageType,
           pageUrl,
           ruleKey: "section_review.session_replay_detected_without_disclosure",
           severity: "high",
-          title: "Session replay detected without clear disclosure"
+          title: "Possible session replay without clear disclosure"
         })
       );
     }
 
-    if (pageType === "terms_of_service" && flags.includes("session_replay_undisclosed")) {
+    if (pageType === "terms_of_service" && flags.includes("session_replay_undisclosed") && hasConcreteSessionReplayEvidence(flags)) {
       findings.push(
         buildSectionIssueFinding({
-          description: "Session replay activity was detected, but the policy text did not clearly disclose it.",
-          evidence: baseEvidence,
+          description: "Observed runtime artifacts matched session replay tooling, but the policy text did not clearly disclose it.",
+          evidence: {
+            ...baseEvidence,
+            runtime_evidence_artifacts: ["session_replay_vendor_artifact_present"]
+          },
           pageType,
           pageUrl,
           ruleKey: "section_review.session_replay_may_be_undisclosed",
@@ -900,11 +993,16 @@ export function deriveValidationFindings(input: Awaited<ReturnType<typeof loadCo
 }
 
 export async function enqueueValidationCollect(runId: string) {
+  await enqueueValidationCollectWithDelay(runId, 0);
+}
+
+async function enqueueValidationCollectWithDelay(runId: string, delayMs: number) {
   await createValidationCollectQueue().add(
     VALIDATION_COLLECT_JOB,
     { validationRunId: runId },
     {
       attempts: 2,
+      delay: delayMs,
       removeOnComplete: 50,
       removeOnFail: 50
     }
@@ -943,16 +1041,42 @@ export async function processValidationCollectJob(validationRunId: string) {
 
   try {
     const scanId = await createScanForValidationRun(validationRunId);
-    await runFullScanJob(scanId);
-
     const run = await getValidationRun(validationRunId);
     if (!run?.scan_id) {
       throw new Error("Validation run scan was not created.");
     }
 
     const artifacts = await loadCompletedScanArtifacts(run.scan_id);
-    if (artifacts.scan?.status !== "completed") {
-      throw new Error(String(artifacts.scan?.error_message ?? "Validation scan did not complete."));
+    const scanStatus = String(artifacts.scan?.status ?? "");
+
+    const collectAction = determineValidationCollectAction(scanStatus || null);
+
+    if (collectAction === "wait_for_scan") {
+      if (run.status !== "waiting_for_scan") {
+        await updateValidationRun(validationRunId, {
+          status: "waiting_for_scan"
+        });
+      }
+      await enqueueValidationCollectWithDelay(validationRunId, VALIDATION_SCAN_HANDOFF_POLL_MS);
+      return;
+    }
+
+    if (collectAction === "wait_for_completion") {
+      if (run.status !== "collecting") {
+        await updateValidationRun(validationRunId, {
+          status: "collecting"
+        });
+      }
+      await enqueueValidationCollectWithDelay(validationRunId, VALIDATION_SCAN_HANDOFF_POLL_MS);
+      return;
+    }
+
+    if (collectAction === "fail") {
+      throw new Error(String(artifacts.scan?.error_message ?? "Validation scan failed."));
+    }
+
+    if (collectAction !== "rank") {
+      throw new Error(`Validation scan entered unexpected status: ${scanStatus || "unknown"}.`);
     }
 
     await updateValidationRun(validationRunId, {

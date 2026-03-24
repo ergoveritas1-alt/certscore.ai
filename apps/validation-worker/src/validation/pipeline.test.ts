@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveValidationFindings } from "./pipeline";
+import { deriveValidationFindings, determineValidationCollectAction } from "./pipeline";
 
 function buildArtifacts(overrides?: {
   policyEnrichments?: Array<Record<string, unknown>>;
@@ -65,6 +65,15 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
 });
 
+test("validation collect hands off queued and running scans to WS01 execution", () => {
+  assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
+  assert.equal(determineValidationCollectAction("running"), "wait_for_completion");
+  assert.equal(determineValidationCollectAction("processing"), "wait_for_completion");
+  assert.equal(determineValidationCollectAction("completed"), "rank");
+  assert.equal(determineValidationCollectAction("failed"), "fail");
+  assert.equal(determineValidationCollectAction(null), "unexpected");
+});
+
 test("deriveValidationFindings carries policy review evidence into the validation finding", () => {
   const findings = deriveValidationFindings(buildArtifacts());
   const finding = findings.find((item) => item.ruleKey === "scan_report_review.policy_behavior_conflict_candidate");
@@ -102,7 +111,12 @@ test("deriveValidationFindings emits terms section review rows that match report
           id: "terms-1",
           page_type: "terms_of_service",
           page_url: "https://www.example.com/terms",
-          policy_actionable_flags: ["llm_provider_error", "low_confidence", "session_replay_undisclosed"],
+          policy_actionable_flags: [
+            "llm_provider_error",
+            "low_confidence",
+            "session_replay_undisclosed",
+            "session_replay_vendor_artifact_present"
+          ],
           policy_dsar_mechanism: "absent",
           policy_transfer_mechanisms: [],
           policy_retention_periods: [],
@@ -138,7 +152,7 @@ test("deriveValidationFindings emits terms section review rows that match report
   );
 
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.session_replay_detected_without_disclosure"));
-  assert.ok(findings.some((finding) => finding.findingFamily === "policy_section_review"));
+  assert.ok(findings.some((finding) => finding.findingFamily === "section_review"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.session_replay_may_be_undisclosed"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.rule_only_row_present"));
@@ -191,7 +205,7 @@ test("terms low confidence plus friction score synthesizes functional misalignme
   assert.equal(finding?.evidence.policy_structurally_weak, true);
 });
 
-test("deriveValidationFindings does not emit provider or extraction-confidence review rows for privacy pages", () => {
+test("deriveValidationFindings keeps low-confidence privacy DSAR gaps audit-only while allowing replay findings with concrete artifacts", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyEnrichments: [
@@ -199,7 +213,12 @@ test("deriveValidationFindings does not emit provider or extraction-confidence r
           id: "policy-1",
           page_type: "privacy_policy",
           page_url: "https://www.example.com/privacy",
-          policy_actionable_flags: ["llm_provider_error", "low_confidence", "session_replay_undisclosed"],
+          policy_actionable_flags: [
+            "llm_provider_error",
+            "low_confidence",
+            "session_replay_undisclosed",
+            "session_replay_vendor_artifact_present"
+          ],
           policy_dsar_mechanism: "absent",
           policy_transfer_mechanisms: [],
           policy_retention_periods: [],
@@ -219,12 +238,43 @@ test("deriveValidationFindings does not emit provider or extraction-confidence r
     })
   );
 
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_dsar_mechanism"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_dsar_mechanism"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.session_replay_detected_without_disclosure"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.confidence_66"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.session_replay_may_be_undisclosed"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.policy_extraction_provider_error"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.low_extraction_confidence"));
+});
+
+test("deriveValidationFindings suppresses replay disclosure findings without concrete runtime artifacts", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "policy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: ["session_replay_undisclosed"],
+          policy_dsar_mechanism: "present",
+          policy_transfer_mechanisms: [],
+          policy_retention_periods: [],
+          policy_ambiguity_score: 22,
+          policy_semantic_confidence: 0.81,
+          policy_summary_short: "Privacy page."
+        }
+      ],
+      policyReviewQueue: [
+        {
+          id: "review-1",
+          policy_enrichment_id: "policy-1",
+          reason: "session_replay_without_disclosure_detected",
+          review_status: "pending"
+        }
+      ]
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.session_replay_detected_without_disclosure"));
 });
 
 test("low confidence policy extraction alone does not synthesize stronger runtime findings", () => {

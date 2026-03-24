@@ -6,6 +6,14 @@ export function isHighSensitivitySignal(key: string) {
   return /commerce\.high_sensitivity_data_collection_detected/i.test(key);
 }
 
+export function isSessionReplaySignal(key: string) {
+  return /session_replay/i.test(key);
+}
+
+export function isDsarSignal(key: string) {
+  return /missing_dsar|no_dsar_mechanism/i.test(key);
+}
+
 export function hasConcreteConsentEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -94,6 +102,64 @@ export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | 
   );
 }
 
+function hasTruthyArrayValue(value: unknown) {
+  return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  return (
+    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
+    hasTruthyArrayValue(evidence.runtimeEvidence) ||
+    hasTruthyArrayValue(evidence.relatedVendors) ||
+    hasTruthyArrayValue(evidence.runtimeVendors) ||
+    hasTruthyArrayValue(evidence.sessionReplayRuntimeVendors) ||
+    evidence.sessionReplayVendorArtifactPresent === true ||
+    evidence.session_replay_vendor_artifact_present === true
+  );
+}
+
+export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  const dsarMechanism =
+    typeof evidence.policyDsarMechanism === "string"
+      ? evidence.policyDsarMechanism
+      : typeof evidence.policy_dsar_mechanism === "string"
+        ? evidence.policy_dsar_mechanism
+        : null;
+  const policySemanticConfidence =
+    typeof evidence.policySemanticConfidence === "number"
+      ? evidence.policySemanticConfidence
+      : typeof evidence.policy_semantic_confidence === "number"
+        ? evidence.policy_semantic_confidence
+        : null;
+  const extractionStatus =
+    typeof evidence.policyExtractionStatus === "string"
+      ? evidence.policyExtractionStatus
+      : typeof evidence.policy_extraction_status === "string"
+        ? evidence.policy_extraction_status
+        : null;
+  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
+    ? evidence.policyRightsSignals
+    : Array.isArray(evidence.policy_rights_signals)
+      ? evidence.policy_rights_signals
+      : [];
+
+  return (
+    dsarMechanism === "absent" &&
+    extractionStatus === "fetched" &&
+    typeof policySemanticConfidence === "number" &&
+    policySemanticConfidence >= 0.6 &&
+    policyRightsSignals.length === 0
+  );
+}
+
 export function shouldSurfacePrimarySignalFinding(input: {
   fallbackEvidence: Record<string, unknown> | null | undefined;
   key: string;
@@ -110,6 +176,17 @@ export function shouldSurfacePrimarySignalFinding(input: {
     return (
       hasSensitivePayloadEvidence(input.linkedValidationEvidence) || hasSensitivePayloadEvidence(input.fallbackEvidence)
     );
+  }
+
+  if (isSessionReplaySignal(input.key)) {
+    return (
+      hasConcreteSessionReplayEvidence(input.linkedValidationEvidence) ||
+      hasConcreteSessionReplayEvidence(input.fallbackEvidence)
+    );
+  }
+
+  if (isDsarSignal(input.key)) {
+    return hasConcreteDsarEvidence(input.linkedValidationEvidence) || hasConcreteDsarEvidence(input.fallbackEvidence);
   }
 
   return true;

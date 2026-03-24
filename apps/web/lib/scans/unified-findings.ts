@@ -1136,6 +1136,17 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    ["session_replay_observed", "session_replay_undisclosed"].includes(input.packet.unifiedFindingId) &&
+    !input.packet.confidenceInputs.hasDirectRuntimeEvidence
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because the current record does not retain concrete runtime artifacts for the replay behavior.",
+      status: "audit_only"
+    };
+  }
+
+  if (
     needsPageAttribution &&
     !input.packet.confidenceInputs.hasPageAttribution &&
     !input.packet.confidenceInputs.hasKeyPageDiscoveryEvidence &&

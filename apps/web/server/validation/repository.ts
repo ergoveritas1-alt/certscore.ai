@@ -674,60 +674,6 @@ function getSupplementalFindingTitle(row: ScanSignalRow) {
   return row.signal_label;
 }
 
-function buildSupplementalValidationFindingRows(existingFindings: ValidationRunFindingRow[], scanSignals: ScanSignalRow[]) {
-  const existingRuleKeys = new Set(existingFindings.map((row) => row.rule_key));
-  const existingTitles = new Set(existingFindings.map((row) => row.title.trim().toLowerCase()));
-  const supplements: ValidationRunFindingRow[] = [];
-
-  for (const row of scanSignals) {
-    if (!isConcerningValidationSignal(row)) {
-      continue;
-    }
-
-    const title = getSupplementalFindingTitle(row);
-    const fallbackEvidence = {
-      signalCategory: row.category,
-      signalKey: row.signal_key,
-      signalLabel: row.signal_label,
-      signalValue: row.signal_value_json
-    } satisfies Record<string, unknown>;
-
-    if (
-      !shouldSurfacePrimarySignalFinding({
-        fallbackEvidence,
-        key: row.signal_key,
-        linkedValidationEvidence: null
-      })
-    ) {
-      continue;
-    }
-
-    if (existingRuleKeys.has(`scan_signal.${row.signal_key}`) || existingTitles.has(title.trim().toLowerCase())) {
-      continue;
-    }
-
-    supplements.push({
-      category: row.category,
-      description: getValidationConcernReason(row),
-      evidence_json: {
-        signalKey: row.signal_key,
-        signalLabel: row.signal_label,
-        signalValue: row.signal_value_json,
-        signalCategory: row.category
-      },
-      finding_rank: existingFindings.length + supplements.length + 1,
-      id: `supplemental:${row.signal_key}`,
-      page_url: null,
-      rule_key: `scan_signal.${row.signal_key}`,
-      severity: getValidationSignalSeverity(row),
-      subtype: "scan_signal_review",
-      title
-    });
-  }
-
-  return supplements;
-}
-
 function normalizePolicyPageTypeLabel(pageType: string | null) {
   switch (pageType) {
     case "privacy_policy":
@@ -746,13 +692,26 @@ function buildPolicyReviewDescription(reason: string) {
     case "policy_behavior_conflict_candidate":
       return "Observed site behavior may conflict with the site’s public-facing policy language.";
     case "session_replay_without_disclosure_detected":
-      return "Session replay behavior may be present without a clear matching disclosure in the scanned policy pages.";
+      return "Indirect replay-related signals may be present without a clear matching disclosure in the scanned policy pages.";
     case "missing_dsar_high_exposure":
-      return "The site may have elevated exposure while still lacking a clear DSAR path in policy disclosures.";
+      return "The site may have elevated exposure while the policy text does not yet show a clearly indexed privacy-rights request path.";
     case "low_confidence_critical_fields":
       return "Critical policy extraction fields were low confidence and need manual review in the scan report.";
     default:
       return `This issue was added to the scan report review queue under ${reason.replaceAll("_", " ")}.`;
+  }
+}
+
+function buildPolicyReviewTitle(input: { pageTypeLabel: string; reason: string }) {
+  switch (input.reason) {
+    case "low_confidence_critical_fields":
+      return `Low-confidence extraction ${input.pageTypeLabel}`;
+    case "session_replay_without_disclosure_detected":
+      return `Possible replay/disclosure mismatch ${input.pageTypeLabel}`;
+    case "missing_dsar_high_exposure":
+      return `Possible missing privacy-rights path ${input.pageTypeLabel}`;
+    default:
+      return `${input.reason.replaceAll("_", " ")} ${input.pageTypeLabel}`.replace(/\b\w/g, (char) => char.toUpperCase());
   }
 }
 
@@ -883,10 +842,10 @@ function buildSupplementalPolicyQueueFindings(input: {
     const enrichment = row.policy_enrichment_id ? input.policyEnrichmentById.get(row.policy_enrichment_id) : undefined;
     const pageType = enrichment?.page_type ?? "unknown";
     const pageTypeLabel = normalizePolicyPageTypeLabel(pageType);
-    const title =
-      row.reason === "low_confidence_critical_fields"
-        ? `Low-confidence extraction ${pageTypeLabel}`
-        : `${row.reason.replaceAll("_", " ")} ${pageTypeLabel}`.replace(/\b\w/g, (char) => char.toUpperCase());
+    const title = buildPolicyReviewTitle({
+      pageTypeLabel,
+      reason: row.reason
+    });
     const ruleKey = `policy_review.${row.reason}.${String(pageType).toLowerCase()}`;
 
     if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.trim().toLowerCase())) {
@@ -989,16 +948,11 @@ async function loadSupplementalValidationFindings(input: {
 
   const supabase = createAdminClient();
   const [
-    { data: scanSignals, error: scanSignalsError },
     { data: snapshot, error: snapshotError },
     { data: policyQueue, error: policyQueueError },
     { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
   ] =
     await Promise.all([
-      supabase
-        .from("scan_signals")
-        .select("category, signal_key, signal_label, signal_value_json, value_type")
-        .eq("scan_id", input.scanId),
       supabase
         .from("scan_snapshots")
         .select("retargeting_pixel_detected, accessibility_litigation_risk_score")
@@ -1015,10 +969,6 @@ async function loadSupplementalValidationFindings(input: {
         .order("node_count", { ascending: false })
         .limit(10)
     ]);
-
-  if (scanSignalsError) {
-    throw new Error(`Failed to load supplemental scan signals for ${input.scanId}: ${scanSignalsError.message}`);
-  }
 
   if (snapshotError) {
     throw new Error(`Failed to load supplemental snapshot context for ${input.scanId}: ${snapshotError.message}`);
@@ -1052,34 +1002,20 @@ async function loadSupplementalValidationFindings(input: {
   }
   const policyEnrichmentById = new Map(policyEnrichmentRows.map((row) => [row.id, row]));
 
-  const existingFindingRows = input.existingFindings.map((row, index) => ({
-    category: "privacy",
-    description: "",
-    evidence_json: {},
-    finding_rank: index + 1,
-    id: `existing:${index}`,
-    page_url: null,
-    rule_key: row.rule_key,
-    severity: "medium",
-    subtype: null,
-    title: row.title
-  })) satisfies ValidationRunFindingRow[];
-
-  const signalSupplements = buildSupplementalValidationFindingRows(existingFindingRows, (scanSignals ?? []) as ScanSignalRow[]);
   const policySupplements = buildSupplementalPolicyQueueFindings({
-    existingFindings: [...input.existingFindings, ...signalSupplements],
+    existingFindings: input.existingFindings,
     policyEnrichmentById,
     policyReviewQueueRows: queueRows,
-    startingRank: input.existingFindings.length + signalSupplements.length
+    startingRank: input.existingFindings.length
   });
   const snapshotSupplements = buildSupplementalSnapshotFindings({
     accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as ScanAccessibilityRuleExampleRow[],
-    existingFindings: [...input.existingFindings, ...signalSupplements, ...policySupplements],
+    existingFindings: [...input.existingFindings, ...policySupplements],
     snapshot: (snapshot as SnapshotSupplementRow | null) ?? null,
-    startingRank: input.existingFindings.length + signalSupplements.length + policySupplements.length
+    startingRank: input.existingFindings.length + policySupplements.length
   });
 
-  return [...signalSupplements, ...policySupplements, ...snapshotSupplements].map((row, index) => ({
+  return [...policySupplements, ...snapshotSupplements].map((row, index) => ({
     ...row,
     finding_rank: input.existingFindings.length + index + 1
   }));
