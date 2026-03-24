@@ -43,6 +43,22 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "replay with vendor-only hints still stays internal",
+      concern: makeConcern({
+        originKey: "privacy.session_replay_runtime_detected",
+        suggestedUnifiedFindingId: "session_replay_undisclosed",
+        title: "Possible replay/disclosure mismatch"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        sessionReplayRuntimeVendors: ["Hotjar"]
+      },
+      expected: {
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only"
+      }
+    },
+    {
       name: "dsar with fetched high-confidence evidence stays eligible",
       concern: makeConcern({
         originKey: "section_review.missing_dsar_high_exposure",

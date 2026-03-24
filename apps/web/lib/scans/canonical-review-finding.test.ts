@@ -336,6 +336,35 @@ test("uses summarized pre-consent evidence from supporting signals without requi
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
+test("uses initial-load wording when pre-consent evidence points to same-operator measurement infrastructure", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1h-same-operator",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Trackers observed before consent",
+        evidence: {
+          consentActionableChoiceObserved: false,
+          consentSurfaceObserved: false,
+          consentBaselineTrackerOperatorRelationships: [
+            "vendor:Google Analytics|relationship:first_party|endpoint:first_party_collection_proxy|host:www.google-analytics.com|source_url:https://www.google-analytics.com/g/collect?v=2"
+          ],
+          preconsent_tracker_vendors: ["Google Analytics"],
+          preconsent_tracker_evidence_urls: ["https://www.google-analytics.com/g/collect?v=2"]
+        }
+      }),
+      observedValue: "Google Analytics",
+      severity: "high",
+      title: "Trackers observed before consent"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(presentation.whyThisMatters, /tracking or measurement-related requests|initial page-load sequence/i);
+  assert.doesNotMatch(presentation.whyThisMatters, /third-party requests/i);
+});
+
 test("uses post-reject tracking copy for trackers persisted after reject", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -1914,6 +1943,31 @@ test("uses stronger runtime session-replay copy and high confidence", () => {
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
   assert.ok(Number(presentation.confidenceScore) >= 0.6);
+});
+
+test("uses runtime artifact keys from scanner evidence for session replay copy", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-2b",
+        ruleKey: "commerce.session_replay_runtime_detected",
+        title: "Session replay runtime detected",
+        evidence: {
+          session_replay_runtime_artifacts: [
+            "vendor:Microsoft Clarity|signature:clarity|host:clarity.ms|source:script_signature"
+          ],
+          session_replay_runtime_vendors: ["Microsoft Clarity"]
+        }
+      }),
+      observedValue: "Session replay runtime detected",
+      severity: "high",
+      title: "Session replay runtime detected"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /Microsoft Clarity|runtime artifacts associated/i);
+  assert.ok(Number(presentation.confidenceScore) >= 0.8);
 });
 
 test("uses vendor-specific runtime session-replay copy and elevated confidence", () => {

@@ -87,10 +87,8 @@ export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknow
 
   return (
     hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
+    hasTruthyArrayValue(evidence.session_replay_runtime_artifacts) ||
     hasTruthyArrayValue(evidence.runtimeEvidence) ||
-    hasTruthyArrayValue(evidence.relatedVendors) ||
-    hasTruthyArrayValue(evidence.runtimeVendors) ||
-    hasTruthyArrayValue(evidence.sessionReplayRuntimeVendors) ||
     evidence.sessionReplayVendorArtifactPresent === true ||
     evidence.session_replay_vendor_artifact_present === true
   );

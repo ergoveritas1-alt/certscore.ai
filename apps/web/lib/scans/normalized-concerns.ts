@@ -203,10 +203,20 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/runtime_vendors?|sessionReplayRuntimeVendors|relatedVendors/i.test(key)) {
+      addEntity(entities, key, stringValues);
+      continue;
+    }
+
     if (/runtime|request|network|artifact/i.test(key)) {
       for (const entry of stringValues) {
         runtimeArtifacts.add(entry);
       }
+      continue;
+    }
+
+    if (/operator_relationship|rights_signals?/i.test(key)) {
+      addEntity(entities, key, stringValues);
       continue;
     }
 

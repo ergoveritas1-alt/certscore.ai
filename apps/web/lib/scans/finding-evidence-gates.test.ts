@@ -151,6 +151,21 @@ test("shouldSurfacePrimarySignalFinding keeps session-replay findings with concr
   );
 });
 
+test("shouldSurfacePrimarySignalFinding hides session-replay findings with vendor-only hints", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        sessionReplayRuntimeVendors: ["Hotjar"],
+        signalKey: "privacy.session_replay_runtime_detected",
+        signalValue: true
+      },
+      key: "privacy.session_replay_runtime_detected",
+      linkedValidationEvidence: null
+    }),
+    false
+  );
+});
+
 test("shouldSurfacePrimarySignalFinding hides DSAR findings when extraction remains weak", () => {
   assert.equal(
     shouldSurfacePrimarySignalFinding({

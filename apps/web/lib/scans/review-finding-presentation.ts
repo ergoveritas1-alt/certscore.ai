@@ -821,18 +821,39 @@ function getPreconsentEvidenceSummary(evidence: Record<string, unknown> | null |
     ["consentActionableChoiceObserved", "consent_actionable_choice_observed", "consentRejectInteractionSucceeded", "consentAcceptInteractionSucceeded"],
     /consent actionable choice observed|reject interaction succeeded|accept interaction succeeded/i
   );
-  const operatorRelationship =
-    typeof evidence?.operatorRelationship === "string"
-      ? evidence.operatorRelationship
-      : typeof evidence?.operator_relationship === "string"
-        ? evidence.operator_relationship
-        : "unknown";
+  const operatorRelationshipHints = getStringArrayEvidence(evidence, [
+    "consentBaselineTrackerOperatorRelationships",
+    "consent_baseline_tracker_operator_relationships"
+  ]);
+  const normalizedOperatorRelationship = (() => {
+    if (typeof evidence?.operatorRelationship === "string") {
+      return evidence.operatorRelationship;
+    }
+    if (typeof evidence?.operator_relationship === "string") {
+      return evidence.operator_relationship;
+    }
+    if (
+      operatorRelationshipHints.some((entry) => /relationship:third_party|endpoint:direct_third_party/i.test(entry))
+    ) {
+      return "third_party";
+    }
+    if (
+      operatorRelationshipHints.some(
+        (entry) => /relationship:first_party|endpoint:first_party_collection_proxy|endpoint:first_party_subdomain/i.test(entry)
+      )
+    ) {
+      return "same_operator";
+    }
+
+    return "unknown";
+  })();
 
   return {
     consentActionableChoiceObserved,
     consentSurfaceObserved,
     evidenceUrls: [...new Set([...summaryUrls, ...evidenceUrls])],
-    operatorRelationship,
+    operatorRelationship: normalizedOperatorRelationship,
+    operatorRelationshipHints,
     requestCount,
     vendors: [...new Set([...vendors, ...summaryVendors])],
     violationCount
@@ -873,6 +894,7 @@ function getSessionReplayEvidence(evidence: Record<string, unknown> | null | und
   );
   const runtimeEvidenceArtifacts = getStringArrayEvidence(evidence, [
     "runtimeEvidenceArtifacts",
+    "session_replay_runtime_artifacts",
     "runtime_evidence_artifacts",
     "runtimeEvidence"
   ]);
