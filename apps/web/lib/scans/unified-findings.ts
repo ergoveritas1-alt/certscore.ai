@@ -13,6 +13,11 @@ import {
   type ReviewFindingSeverity
 } from "./canonical-review-finding";
 import {
+  isDomainLevelChildrenDisclosureFinding,
+  isDomainLevelSensitiveContextFinding,
+  packetNeedsPageAttribution
+} from "./concern-policy";
+import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns,
   type ConcernBackedUnifiedFindingCandidate,
@@ -1090,9 +1095,9 @@ function buildPresentationDecision(input: {
     };
   }
 
-  const isDomainLevelSensitiveContext = input.packet.unifiedFindingId === "minors_or_age_gated_collection_context";
+  const isDomainLevelSensitiveContext = isDomainLevelSensitiveContextFinding(input.packet.unifiedFindingId);
   const isDomainLevelChildrenDisclosureContext =
-    input.packet.unifiedFindingId === "children_privacy_context_without_supporting_disclosure";
+    isDomainLevelChildrenDisclosureFinding(input.packet.unifiedFindingId);
   const minorsContextEvidenceCount = [
     "age_gate_present",
     "children_audience_likely",
@@ -1121,13 +1126,10 @@ function buildPresentationDecision(input: {
     typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
       ? input.packet.evidence.counts.childrenPrivacyRiskScore
       : null;
-  const needsPageAttribution =
-    (input.packet.details?.family === "consent_tracking" &&
-      !["gpc_signal_not_honored", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.packet.unifiedFindingId)) ||
-    input.packet.details?.family === "contradiction" ||
-    (input.packet.details?.family === "sensitive_data" &&
-      !isDomainLevelSensitiveContext &&
-      !isDomainLevelChildrenDisclosureContext);
+  const needsPageAttribution = packetNeedsPageAttribution({
+    family: input.packet.details?.family,
+    unifiedFindingId: input.packet.unifiedFindingId
+  });
 
   if (
     input.packet.unifiedFindingId === "policy_behavior_conflict" &&

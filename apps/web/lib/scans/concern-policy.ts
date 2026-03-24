@@ -18,6 +18,14 @@ const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "accessibility_claim_mismatch"
 ]);
 
+const DOMAIN_LEVEL_SENSITIVE_CONTEXT_IDS = new Set([
+  "minors_or_age_gated_collection_context"
+]);
+
+const DOMAIN_LEVEL_CHILDREN_DISCLOSURE_IDS = new Set([
+  "children_privacy_context_without_supporting_disclosure"
+]);
+
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
@@ -142,6 +150,12 @@ function isReplayConcern(
   return /session_replay|replay\/disclosure|undisclosed session replay|possible replay/.test(haystack);
 }
 
+export function concernRequiresDirectRuntime(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  return isReplayConcern(concern);
+}
+
 function isRightsFrictionConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -204,7 +218,7 @@ function getPolicyRightsSignals(rawEvidence: Record<string, unknown> | null | un
       : [];
 }
 
-function needsConcretePageAttribution(
+export function concernRequiresPageAttribution(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   const findingId = concern.suggestedUnifiedFindingId;
@@ -213,6 +227,28 @@ function needsConcretePageAttribution(
   }
 
   return ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(findingId);
+}
+
+export function isDomainLevelSensitiveContextFinding(unifiedFindingId: string) {
+  return DOMAIN_LEVEL_SENSITIVE_CONTEXT_IDS.has(unifiedFindingId);
+}
+
+export function isDomainLevelChildrenDisclosureFinding(unifiedFindingId: string) {
+  return DOMAIN_LEVEL_CHILDREN_DISCLOSURE_IDS.has(unifiedFindingId);
+}
+
+export function packetNeedsPageAttribution(input: {
+  family: string | undefined;
+  unifiedFindingId: string;
+}) {
+  return (
+    (input.family === "consent_tracking" &&
+      !["gpc_signal_not_honored", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.unifiedFindingId)) ||
+    input.family === "contradiction" ||
+    (input.family === "sensitive_data" &&
+      !isDomainLevelSensitiveContextFinding(input.unifiedFindingId) &&
+      !isDomainLevelChildrenDisclosureFinding(input.unifiedFindingId))
+  );
 }
 
 export function deriveConcernPolicy(input: {
@@ -227,7 +263,7 @@ export function deriveConcernPolicy(input: {
   const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
   const hasKeyPageDiscovery = input.evidenceStrengthFlags.includes("key_page_discovery");
 
-  if (isReplayConcern(input.concern)) {
+  if (concernRequiresDirectRuntime(input.concern)) {
     if (input.concern.originType === "policy_review_queue") {
       return {
         externalSurfacingEligibility: "audit_only",
@@ -291,7 +327,7 @@ export function deriveConcernPolicy(input: {
     }
   }
 
-  if (needsConcretePageAttribution(input.concern) && !hasDirectRuntime && !hasPageAttribution && !hasKeyPageDiscovery) {
+  if (concernRequiresPageAttribution(input.concern) && !hasDirectRuntime && !hasPageAttribution && !hasKeyPageDiscovery) {
     return {
       externalSurfacingEligibility: "audit_only",
       promotionEligibility: "internal_only"

@@ -17,3 +17,11 @@
 
 - These instructions apply to the web app deployment path.
 - Worker deployments still use the existing GCP deployment flow and helper scripts unless the user asks to change that setup.
+
+## Finding flow note
+
+- New `WC01` finding surfacing or gating logic should prefer this order:
+  1. normalize inputs into a concern
+  2. apply concern policy
+  3. promote eligible concerns into unified findings
+- Avoid adding new raw signal-key or raw policy-row gating paths when the same rule can live in the normalized concern pipeline.
