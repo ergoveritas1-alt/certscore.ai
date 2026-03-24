@@ -110,7 +110,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         error:
           input.planCode === "free"
             ? "Free plan domains can only be re-scanned once every 30 days."
-            : "This domain was scanned recently. Pro and Ultra plans allow one re-scan every 5 minutes per domain.",
+            : "This domain was scanned recently. Pro and Ultra plans allow one re-scan every 3 minutes per domain.",
         scanId: null
       };
     }

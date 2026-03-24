@@ -18,7 +18,7 @@ const comparisonRows = [
   { label: "Domains", values: { individual: "1", pro: "20", team: "100" } },
   { label: "Coverage", values: { individual: "Expanded domain coverage", pro: "Expanded domain coverage", team: "Expanded domain coverage" } },
   { label: "Recurring scan cadence", values: { individual: "Up to hourly", pro: "Up to hourly", team: "Up to hourly" } },
-  { label: "Manual re-scan cooldown", values: { individual: "Every 5 minutes per domain", pro: "Every 5 minutes per domain", team: "Every 5 minutes per domain" } },
+  { label: "Manual re-scan cooldown", values: { individual: "Every 3 minutes per domain", pro: "Every 3 minutes per domain", team: "Every 3 minutes per domain" } },
   { label: "Scan history", values: { individual: "Included", pro: "Included", team: "Included" } },
   { label: "API access", values: { individual: "Not included", pro: "Not included", team: API_ACCESS_COMING_SOON_LABEL } }
 ];
@@ -73,7 +73,7 @@ const planCardContent = {
     bullets: [
       "Expanded domain coverage",
       "Recurring scans up to hourly",
-      "On-demand re-scans every 5 minutes per domain",
+      "On-demand re-scans every 3 minutes per domain",
       "Built for solo operators who only need one monitored domain"
     ],
     footerNote: "Individual matches Pro coverage and cadence, but is limited to one domain.",
@@ -95,7 +95,7 @@ const planCardContent = {
     bullets: [
       "Expanded domain coverage",
       "Good fit for in-house teams monitoring up to twenty domains",
-      "Recurring scans up to hourly and on-demand re-scans every 5 minutes per domain"
+      "Recurring scans up to hourly and on-demand re-scans every 3 minutes per domain"
     ],
     footerNote: "Pro is the cleanest upgrade path if you need recurring monitoring and richer scan history.",
     ctaHref: "/login?next=/app",
@@ -116,7 +116,7 @@ const planCardContent = {
     bullets: [
       "Expanded domain coverage at portfolio scale",
       "Best for agencies and consultants monitoring up to one hundred domains",
-      "Recurring scans up to hourly; on-demand re-scans every 5 minutes per domain"
+      "Recurring scans up to hourly; on-demand re-scans every 3 minutes per domain"
     ],
     footerNote: "Ultra is built for agencies, consultants, and teams reviewing many domains in parallel.",
     ctaHref: process.env.NEXT_PUBLIC_ULTRA_CHECKOUT_URL || "/login?next=/app",
