@@ -905,6 +905,59 @@ test("surfaces behavioral analytics disclosure present from policy enrichment ev
   ]);
 });
 
+test("normalizes clipped policy snippets but preserves natural lowercase starts", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear policy-based privacy-rights request path.",
+        fallbackEvidence: {
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["ng on where you live, you may have the following rights regarding your personal information."],
+          signalKey: "privacy.privacy_rights_path_present",
+          signalLabel: "Privacy-rights path present",
+          signalValue: true
+        },
+        observedValue: "Privacy-rights path present",
+        severity: "low",
+        signalKey: "privacy.privacy_rights_path_present",
+        signalLabel: "Privacy-rights path present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Privacy-rights path present"
+      },
+      {
+        description: "The scan retained a disclosure indicating how the site says it handles Global Privacy Control.",
+        fallbackEvidence: {
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["for each device or browser you use, we will treat the Global Privacy Control signal as a request to opt out."],
+          signalKey: "privacy.gpc_disclosure_present",
+          signalLabel: "GPC handling disclosed",
+          signalValue: true
+        },
+        observedValue: "GPC handling disclosed",
+        severity: "low",
+        signalKey: "privacy.gpc_disclosure_present",
+        signalLabel: "GPC handling disclosed",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "GPC handling disclosed"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const rightsPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_rights_path_present");
+  const gpcPacket = packets.find((packet) => packet.unifiedFindingId === "gpc_disclosure_present");
+
+  assert.deepEqual(rightsPacket?.evidence?.snippets, [
+    "on where you live, you may have the following rights regarding your personal information."
+  ]);
+  assert.deepEqual(gpcPacket?.evidence?.snippets, [
+    "for each device or browser you use, we will treat the Global Privacy Control signal as a request to opt out."
+  ]);
+});
+
 test("surfaces child-directed context without supporting privacy disclosure", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

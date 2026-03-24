@@ -538,7 +538,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : typeof fallbackEvidence.signalValue === "string"
         ? fallbackEvidence.signalValue
         : null
-  ]);
+  ]).map((snippet) => normalizeFallbackSnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet));
 
   const counts: Record<string, number> = {};
   for (const key of [
@@ -632,6 +632,30 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
 
   return { counts, entities, flags, pageUrls, snippets, sourceUrls };
+}
+
+function normalizeFallbackSnippet(snippet: string) {
+  const collapsed = snippet.replace(/\s+/g, " ").trim();
+  if (!collapsed) {
+    return null;
+  }
+
+  const firstToken = collapsed.match(/^\S+/)?.[0] ?? "";
+  const shouldTrimLeadingFragment =
+    /^[a-z]/.test(collapsed) &&
+    (
+      firstToken.length <= 2 ||
+      /[-,;:]/.test(firstToken)
+    );
+
+  if (shouldTrimLeadingFragment) {
+    const trimmed = collapsed.slice(firstToken.length).trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return collapsed;
 }
 
 function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | null) {

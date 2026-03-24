@@ -60,6 +60,26 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function normalizePolicySnippet(snippet: string) {
+  const collapsed = snippet.replace(/\s+/g, " ").trim();
+  if (!collapsed) {
+    return null;
+  }
+
+  const firstToken = collapsed.match(/^\S+/)?.[0] ?? "";
+  const shouldTrimLeadingFragment =
+    /^[a-z]/.test(collapsed) &&
+    (
+      firstToken.length <= 2 ||
+      /[-,;:]/.test(firstToken)
+    );
+  const trimmedLeading = shouldTrimLeadingFragment
+    ? collapsed.slice(firstToken.length).trim()
+    : collapsed;
+
+  return trimmedLeading.length > 0 ? trimmedLeading : collapsed;
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "Not available";
@@ -1499,6 +1519,8 @@ function getPolicySignalFallbackEvidence(input: {
           ? "topic:targeted_advertising_disclosure"
           : /behavioral_analytics_disclosure_present/i.test(input.signalKey)
             ? "topic:session_replay_disclosure"
+            : /arbitration_clause_present/i.test(input.signalKey)
+              ? "arbitration"
             : null;
   const pageType = /commerce\.arbitration_clause_present/i.test(input.signalKey) ? "terms_of_service" : "privacy_policy";
   const row =
@@ -1532,7 +1554,7 @@ function getPolicySignalFallbackEvidence(input: {
         .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
     : [];
-  const policySnippets = [...new Set([...topicSnippets, ...rightsSnippets])];
+  const policySnippets = [...new Set([...topicSnippets, ...rightsSnippets].map((snippet) => normalizePolicySnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet)))];
 
   return {
     pageUrl,
