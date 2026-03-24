@@ -89,6 +89,7 @@ test("collapses signal, issue, and validation sources into one unified finding p
     packets[0]?.concernContext?.originTypes.sort(),
     ["compatibility_signal", "snapshot_signal", "validation_rule"]
   );
+  assert.ok(packets[0]?.concernContext?.assertionLevels.includes("moderate"));
 });
 
 test("resolves validation-backed unified findings without a direct signal candidate", () => {
@@ -332,7 +333,7 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
   const genericPacket = packets.find((packet) => packet.unifiedFindingId === "policy_behavior_conflict");
   const specificPacket = packets.find((packet) => packet.unifiedFindingId === "session_replay_undisclosed");
 
-  assert.equal(genericPacket?.presentationDecision.status, "suppress");
+  assert.equal(genericPacket?.presentationDecision.status, "audit_only");
   assert.equal(specificPacket?.presentationDecision.status, "surface");
 });
 

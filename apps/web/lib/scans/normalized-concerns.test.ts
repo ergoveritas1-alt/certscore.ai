@@ -62,6 +62,8 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
   assert.equal(concerns[0]?.originType, "snapshot_signal");
   assert.equal(concerns[0]?.promotionEligibility, "eligible");
   assert.equal(concerns[0]?.externalSurfacingEligibility, "eligible");
+  assert.equal(concerns[0]?.allowedNarrativeTier, "moderate");
+  assert.deepEqual(concerns[0]?.negativeEvidenceFlags, ["no_consent_surface_observed"]);
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
 });
 

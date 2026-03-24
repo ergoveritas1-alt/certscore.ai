@@ -31,6 +31,19 @@ export type NormalizedConcernPromotionEligibility = "eligible" | "internal_only"
 
 export type NormalizedConcernExternalSurfacingEligibility = "eligible" | "audit_only" | "suppress";
 
+export type NormalizedConcernAssertionLevel = "weak" | "moderate" | "strong";
+
+export type NormalizedConcernNegativeEvidenceFlag =
+  | "no_consent_surface_observed"
+  | "no_consent_actionable_choice_observed"
+  | "no_direct_runtime_replay_artifact_observed"
+  | "policy_rights_language_observed"
+  | "policy_target_retrievable"
+  | "policy_target_parsing_incomplete"
+  | "missing_behavior_side_evidence"
+  | "missing_policy_side_evidence"
+  | "missing_contradiction_mapping";
+
 export type NormalizedConcernEvidenceBundle = {
   counts: Record<string, number>;
   entities: Record<string, string[]>;
@@ -43,6 +56,7 @@ export type NormalizedConcernEvidenceBundle = {
 };
 
 export type NormalizedConcern = {
+  allowedNarrativeTier: NormalizedConcernAssertionLevel;
   categoryId?: string;
   canonicalConcernKey: string;
   description: string;
@@ -51,6 +65,7 @@ export type NormalizedConcern = {
   externalSurfacingEligibility: NormalizedConcernExternalSurfacingEligibility;
   linkedValidationFinding?: ScanValidationFinding | null;
   linkedValidationRuleKeys?: string[];
+  negativeEvidenceFlags: NormalizedConcernNegativeEvidenceFlag[];
   observedValue: string | null;
   originKey: string;
   originType: NormalizedConcernOriginType;
@@ -451,6 +466,7 @@ function buildConcernFromSharedInput(input: {
   });
 
   return {
+    allowedNarrativeTier: eligibility.allowedNarrativeTier,
     categoryId: input.categoryId,
     canonicalConcernKey,
     description: input.description,
@@ -458,6 +474,7 @@ function buildConcernFromSharedInput(input: {
     evidenceStrengthFlags,
     externalSurfacingEligibility: eligibility.externalSurfacingEligibility,
     linkedValidationFinding: input.linkedValidationFinding ?? null,
+    negativeEvidenceFlags: eligibility.negativeEvidenceFlags,
     observedValue: input.observedValue,
     originKey: input.originKey,
     originType: input.originType,
@@ -557,12 +574,14 @@ export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedCo
       evidence: [...concern.evidenceBundle.pageUrls, ...concern.evidenceBundle.sourceUrls],
       fallbackEvidence: {
         ...(concern.evidenceBundle.rawEvidence ?? {}),
+        normalizedConcernAllowedNarrativeTier: concern.allowedNarrativeTier,
         normalizedConcernCanonicalKey: concern.canonicalConcernKey,
         normalizedConcernOriginType: concern.originType,
         normalizedConcernPageScope: concern.pageScope,
         normalizedConcernPromotionEligibility: concern.promotionEligibility,
         normalizedConcernExternalSurfacingEligibility: concern.externalSurfacingEligibility,
         normalizedConcernEvidenceStrengthFlags: concern.evidenceStrengthFlags,
+        normalizedConcernNegativeEvidenceFlags: concern.negativeEvidenceFlags,
         runtimeEvidenceArtifacts: concern.evidenceBundle.runtimeArtifacts,
         policySnippets: concern.evidenceBundle.policySnippets,
         pageUrls: concern.evidenceBundle.pageUrls,

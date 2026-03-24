@@ -260,6 +260,27 @@ test("uses count-based copy for pre-consent tracker violations", () => {
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
+test("respects a weak narrative ceiling for pre-consent findings even when count evidence is present", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        consentActionableChoiceObserved: true,
+        consentSurfaceObserved: true,
+        normalizedConcernMaxAssertionLevel: "weak",
+        normalizedConcernNegativeEvidenceFlags: ["no_consent_surface_observed"],
+        preconsent_tracker_violations: 8
+      },
+      observedValue: "8",
+      severity: "high",
+      title: "Pre-consent tracking detected"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /tracking-related requests|meaningful chance to choose|Additional evidence/i);
+  assert.doesNotMatch(presentation.whyThisMatters, /8 pre-consent tracking requests before the visitor could act/i);
+});
+
 test("uses calibrated max-confidence copy for 71 pre-consent tracking requests", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

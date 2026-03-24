@@ -38,8 +38,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         runtimeEvidenceArtifacts: []
       },
       expected: {
+        allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only"
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["no_direct_runtime_replay_artifact_observed"]
       }
     },
     {
@@ -54,8 +56,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         sessionReplayRuntimeVendors: ["Hotjar"]
       },
       expected: {
+        allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only"
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["no_direct_runtime_replay_artifact_observed"]
       }
     },
     {
@@ -73,8 +77,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         policySemanticConfidence: 0.8
       },
       expected: {
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible"
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: ["policy_target_retrievable"]
       }
     },
     {
@@ -89,8 +95,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         consentEvidencePassCount: 1
       },
       expected: {
+        allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
-        externalSurfacingEligibility: "suppress"
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
       }
     },
     {
@@ -110,8 +118,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         ]
       },
       expected: {
+        allowedNarrativeTier: "strong",
         promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible"
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
       }
     },
     {
@@ -127,8 +137,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         value: -4
       },
       expected: {
+        allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only"
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
       }
     }
   ];
@@ -181,4 +193,29 @@ test("concern policy helper primitives stay aligned with packet usage", () => {
     }),
     false
   );
+});
+
+test("deriveConcernPolicy weakens contradiction concerns when one side of the mismatch is missing", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "context.policy_behavior_conflict_detected",
+      suggestedUnifiedFindingId: "policy_behavior_conflict",
+      title: "Policy/behavior conflict detected"
+    }),
+    evidenceStrengthFlags: ["fallback_only"],
+    rawEvidence: {
+      signalValue: true
+    }
+  });
+
+  assert.deepEqual(policy, {
+    allowedNarrativeTier: "weak",
+    promotionEligibility: "internal_only",
+    externalSurfacingEligibility: "audit_only",
+    negativeEvidenceFlags: [
+      "missing_behavior_side_evidence",
+      "missing_policy_side_evidence",
+      "missing_contradiction_mapping"
+    ]
+  });
 });

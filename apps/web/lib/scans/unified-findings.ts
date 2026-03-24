@@ -20,9 +20,11 @@ import {
 import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns,
+  type NormalizedConcernAssertionLevel,
   type ConcernBackedUnifiedFindingCandidate,
   type NormalizedConcernEvidenceStrengthFlag,
   type NormalizedConcernExternalSurfacingEligibility,
+  type NormalizedConcernNegativeEvidenceFlag,
   type NormalizedConcernOriginType,
   type NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
@@ -122,8 +124,10 @@ export type UnifiedFindingPacket = {
   };
   details?: UnifiedFindingDetails;
   concernContext?: {
+    assertionLevels: NormalizedConcernAssertionLevel[];
     evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
     externalSurfacingEligibilities: NormalizedConcernExternalSurfacingEligibility[];
+    negativeEvidenceFlags: NormalizedConcernNegativeEvidenceFlag[];
     originTypes: NormalizedConcernOriginType[];
     promotionEligibilities: NormalizedConcernPromotionEligibility[];
   };
@@ -1374,8 +1378,10 @@ export function buildUnifiedFindingPackets(input: {
       evidence: undefined,
       details: undefined,
       concernContext: {
+        assertionLevels: [],
         evidenceStrengthFlags: [],
         externalSurfacingEligibilities: [],
+        negativeEvidenceFlags: [],
         originTypes: [],
         promotionEligibilities: []
       }
@@ -1414,6 +1420,10 @@ export function buildUnifiedFindingPackets(input: {
       candidate.fallbackEvidence
     ]);
     nextPacket.concernContext = {
+      assertionLevels: uniqueConcernFlags([
+        ...(existing?.concernContext?.assertionLevels ?? []),
+        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.allowedNarrativeTier] : [])
+      ]),
       evidenceStrengthFlags: uniqueConcernFlags([
         ...(existing?.concernContext?.evidenceStrengthFlags ?? []),
         ...(candidate.normalizedConcern?.evidenceStrengthFlags ?? [])
@@ -1421,6 +1431,10 @@ export function buildUnifiedFindingPackets(input: {
       externalSurfacingEligibilities: uniqueConcernFlags([
         ...(existing?.concernContext?.externalSurfacingEligibilities ?? []),
         ...(candidate.normalizedConcern ? [candidate.normalizedConcern.externalSurfacingEligibility] : [])
+      ]),
+      negativeEvidenceFlags: uniqueConcernFlags([
+        ...(existing?.concernContext?.negativeEvidenceFlags ?? []),
+        ...(candidate.normalizedConcern?.negativeEvidenceFlags ?? [])
       ]),
       originTypes: uniqueConcernFlags([
         ...(existing?.concernContext?.originTypes ?? []),
@@ -1508,6 +1522,14 @@ export function buildUnifiedFindingDisplayPackets(input: {
         evidence: packet.evidence?.pageUrls ?? [],
         fallbackEvidence: {
           ...(packet.evidence ?? {}),
+          normalizedConcernAssertionLevels: packet.concernContext?.assertionLevels ?? [],
+          normalizedConcernMaxAssertionLevel:
+            packet.concernContext?.assertionLevels?.includes("weak")
+              ? "weak"
+              : packet.concernContext?.assertionLevels?.includes("moderate")
+                ? "moderate"
+                : "strong",
+          normalizedConcernNegativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
           summary: packet.summary,
           unifiedFindingId: packet.unifiedFindingId
         },

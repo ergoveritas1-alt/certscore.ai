@@ -11,6 +11,8 @@ export type ReviewFindingPresentation = {
   whyThisMatters: string;
 };
 
+type AssertionLevel = "weak" | "moderate" | "strong";
+
 type ReviewFindingPresentationInput = {
   evidence?: Record<string, unknown> | null;
   findingTitle?: string | null;
@@ -73,7 +75,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         }
       }
     ],
-    matches: [/preconsent/i, /tracking_before_consent/i, /trackers_before_consent/i, /trackers persisted after reject/i]
+    matches: [/pre-?consent/i, /tracking_before_consent/i, /trackers_before_consent/i, /trackers persisted after reject/i]
   },
   {
     base: {
@@ -642,7 +644,7 @@ function inferDetectorStrength(haystack: string) {
     return 0.7;
   }
 
-  if (/preconsent|tracking_before_consent|trackers_before_consent|cookie_runtime\.disclosure_gap|retargeting pixel|missing technical disclosure/i.test(haystack)) {
+  if (/pre-?consent|tracking_before_consent|trackers_before_consent|cookie_runtime\.disclosure_gap|retargeting pixel|missing technical disclosure/i.test(haystack)) {
     return 0.6;
   }
 
@@ -903,6 +905,40 @@ function getSessionReplayEvidence(evidence: Record<string, unknown> | null | und
     runtimeEvidenceArtifacts,
     vendors
   };
+}
+
+function getMaxAssertionLevel(evidence: Record<string, unknown> | null | undefined): AssertionLevel {
+  const directValue =
+    typeof evidence?.normalizedConcernMaxAssertionLevel === "string"
+      ? evidence.normalizedConcernMaxAssertionLevel
+      : typeof evidence?.normalized_concern_max_assertion_level === "string"
+        ? evidence.normalized_concern_max_assertion_level
+        : null;
+
+  if (directValue === "weak" || directValue === "moderate" || directValue === "strong") {
+    return directValue;
+  }
+
+  const levels = getStringArrayEvidence(evidence, [
+    "normalizedConcernAssertionLevels",
+    "normalized_concern_assertion_levels"
+  ]);
+  if (levels.includes("weak")) {
+    return "weak";
+  }
+  if (levels.includes("moderate")) {
+    return "moderate";
+  }
+  return "strong";
+}
+
+function getNegativeEvidenceFlags(evidence: Record<string, unknown> | null | undefined) {
+  return new Set(
+    getStringArrayEvidence(evidence, [
+      "normalizedConcernNegativeEvidenceFlags",
+      "normalized_concern_negative_evidence_flags"
+    ])
+  );
 }
 
 function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
@@ -1316,7 +1352,7 @@ function computeSupportStrength(input: {
       score += 0.05;
     }
   }
-  if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
+  if (/pre-?consent|tracking_before_consent|trackers_before_consent|before consent/i.test(input.haystack)) {
     const preconsentEvidence = getPreconsentEvidenceSummary(evidence);
     if (preconsentEvidence.vendors.length > 0) {
       score += 0.08;
@@ -1401,21 +1437,28 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     }
   }
 
-  if (/preconsent|tracking_before_consent|trackers_before_consent/i.test(input.haystack)) {
+  if (/pre-?consent|tracking_before_consent|trackers_before_consent|before consent/i.test(input.haystack)) {
     const preconsentEvidence = getPreconsentEvidenceSummary(input.evidence);
+    const maxAssertionLevel = getMaxAssertionLevel(input.evidence);
+    const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
     const vendorList = formatVendorList(preconsentEvidence.vendors);
     const requestCount = preconsentEvidence.violationCount ?? preconsentEvidence.requestCount;
     const hasObservedConsentChoice =
       preconsentEvidence.consentSurfaceObserved === true && preconsentEvidence.consentActionableChoiceObserved === true;
     const canCallThirdParty = preconsentEvidence.operatorRelationship === "third_party";
     const activityLabel = canCallThirdParty ? "third-party" : "tracking or measurement-related";
-    if (hasObservedConsentChoice && typeof preconsentEvidence.violationCount === "number" && preconsentEvidence.violationCount > 0) {
+    if (
+      maxAssertionLevel === "strong" &&
+      hasObservedConsentChoice &&
+      typeof preconsentEvidence.violationCount === "number" &&
+      preconsentEvidence.violationCount > 0
+    ) {
       presentation.whyThisMatters =
         `The automated scan observed ${preconsentEvidence.violationCount} pre-consent tracking request${preconsentEvidence.violationCount === 1 ? "" : "s"} before the visitor could act on the consent interface. That pattern suggests one or more non-essential third-party tags or scripts began transmitting data during initial render rather than waiting for a confirmed consent state.`;
       presentation.suggestedFix =
         `Audit the non-essential scripts responsible for these ${preconsentEvidence.violationCount} request${preconsentEvidence.violationCount === 1 ? "" : "s"} and block them by default. They should initialize only after the Consent Management Platform, consent banner, or equivalent control records an affirmative opt-in state.`;
       presentation.confidenceScore = "1.0";
-    } else if (preconsentEvidence.evidenceUrls.length > 0) {
+    } else if (preconsentEvidence.evidenceUrls.length > 0 && maxAssertionLevel !== "weak") {
       presentation.whyThisMatters =
         hasObservedConsentChoice
           ? `The automated scan captured representative requests to ${vendorList} during the initial page-load sequence before a consent choice could be recorded.`
@@ -1425,7 +1468,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
           ? "Block or defer these vendor requests until an affirmative consent choice is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent is granted."
           : "Audit the scripts and network calls that run on initial page load, then defer any non-essential analytics, advertising, or measurement behavior until the site has a confirmed consent state.";
       presentation.confidenceScore = hasObservedConsentChoice ? "1.0" : "0.85";
-    } else if (preconsentEvidence.vendors.length > 0) {
+    } else if (preconsentEvidence.vendors.length > 0 && maxAssertionLevel !== "weak") {
       presentation.whyThisMatters =
         hasObservedConsentChoice
           ? `The automated scan observed vendor activity before a recorded consent choice, including ${vendorList}. That suggests non-essential vendor code may be initializing too early.`
@@ -1445,7 +1488,9 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       presentation.confidenceScore = hasObservedConsentChoice ? "0.95" : "0.75";
     } else {
       presentation.whyThisMatters =
-        "The automated scan retained signals consistent with initial-load tracking or measurement activity. Additional evidence is needed before treating that activity as a confirmed pre-consent violation.";
+        negativeEvidenceFlags.has("no_consent_surface_observed") || negativeEvidenceFlags.has("no_consent_actionable_choice_observed")
+          ? "The automated scan retained signals consistent with initial-load tracking or measurement activity, but no clear consent surface or actionable choice was retained in the evidence. Additional evidence is needed before treating that activity as a confirmed pre-consent violation."
+          : "The automated scan retained signals consistent with initial-load tracking or measurement activity. Additional evidence is needed before treating that activity as a confirmed pre-consent violation.";
       presentation.suggestedFix =
         "Review the retained requests alongside the live consent flow and confirm whether any non-essential vendors initialize before the site has a confirmed consent state.";
       presentation.confidenceScore = /pre-consent tracking detected/i.test(input.haystack) ? "0.7" : "0.8";
@@ -1454,15 +1499,17 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
   if (/session replay/i.test(input.haystack)) {
     const replayEvidence = getSessionReplayEvidence(input.evidence);
+    const maxAssertionLevel = getMaxAssertionLevel(input.evidence);
+    const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
     const vendorList = replayEvidence.vendors.length > 0 ? formatVendorList(replayEvidence.vendors) : null;
 
-    if (replayEvidence.vendors.length > 0) {
+    if (maxAssertionLevel !== "weak" && replayEvidence.vendors.length > 0) {
       presentation.whyThisMatters =
         `The automated scan retained runtime artifacts associated with ${vendorList}. That is stronger evidence than a generic detector hit, but the behavior should still be reviewed directly before treating it as a confirmed disclosure or consent failure.`;
       presentation.suggestedFix =
         `Verify whether ${vendorList} is intentionally deployed on the scanned surface. If so, confirm that the behavior is disclosed clearly and that the integration is consent-gated where required.`;
       presentation.confidenceScore = replayEvidence.runtimeEvidenceArtifacts.length > 0 ? "0.85" : "0.75";
-    } else if (replayEvidence.runtimeEvidenceArtifacts.length === 0) {
+    } else if (replayEvidence.runtimeEvidenceArtifacts.length === 0 || negativeEvidenceFlags.has("no_direct_runtime_replay_artifact_observed")) {
       presentation.whyThisMatters =
         "The automated scan retained only indirect signals that may correspond to session replay tooling. Those indirect signals should not be treated as a confirmed replay deployment without direct runtime review.";
       presentation.suggestedFix =
