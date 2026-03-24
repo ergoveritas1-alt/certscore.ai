@@ -5,6 +5,7 @@ import {
   VALIDATION_VERDICT_JOB,
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
+import { buildFindingComparisonKey } from "../../../../packages/scan-core/src/scan/history/build-finding-comparison-key";
 import {
   claimNextAutomaticTarget,
   createScanForValidationRun,
@@ -23,7 +24,6 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
-import { buildFindingComparisonKey } from "./finding-comparison";
 import { validateFindingWithLlm } from "./llm-client";
 import { createValidationCollectQueue, createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
 
