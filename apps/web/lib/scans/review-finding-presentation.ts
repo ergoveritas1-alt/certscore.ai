@@ -237,7 +237,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
   {
     base: {
       bestPracticeLink: {
-        label: "Drafting",
+        label: "FTC",
         title: "FTC privacy and data security guidance",
         url: "https://www.ftc.gov/business-guidance/privacy-security"
       },

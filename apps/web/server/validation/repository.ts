@@ -18,6 +18,7 @@ import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidat
 import { getWebServerEnv } from "../../lib/env";
 import { requireValidationAdminContext } from "./auth";
 import { shouldSurfacePrimarySignalFinding } from "../../lib/scans/finding-evidence-gates";
+import { shouldSurfaceSupplementalPolicyReviewFinding } from "../../lib/scans/supplemental-policy-review-gates";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
@@ -847,20 +848,31 @@ function buildSupplementalPolicyQueueFindings(input: {
       reason: row.reason
     });
     const ruleKey = `policy_review.${row.reason}.${String(pageType).toLowerCase()}`;
+    const evidencePayload = buildPolicyReviewEvidencePayload({
+      enrichment,
+      policyEnrichmentId: row.policy_enrichment_id,
+      reason: row.reason,
+      reviewStatus: row.review_status
+    });
 
     if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.trim().toLowerCase())) {
+      continue;
+    }
+
+    if (
+      !shouldSurfaceSupplementalPolicyReviewFinding({
+        evidence: evidencePayload,
+        reason: row.reason,
+        ruleKey
+      })
+    ) {
       continue;
     }
 
     supplements.push({
       category: "legal",
       description: buildPolicyReviewDescription(row.reason),
-      evidence_json: buildPolicyReviewEvidencePayload({
-        enrichment,
-        policyEnrichmentId: row.policy_enrichment_id,
-        reason: row.reason,
-        reviewStatus: row.review_status
-      }),
+      evidence_json: evidencePayload,
       finding_rank: input.startingRank + supplements.length + 1,
       id: `supplemental:policy_review:${row.id}`,
       page_url: enrichment?.page_url ?? null,
