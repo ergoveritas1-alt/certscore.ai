@@ -1041,7 +1041,7 @@ function findPersistedSignalValue(
 function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
   for (const row of policyEnrichment) {
     const value = getPolicyField(row, key, toSnakeCase(key));
-    if (value !== null) {
+    if (value !== null && isSignalValuePopulated(key, value)) {
       return value;
     }
 
@@ -1056,7 +1056,7 @@ function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown
         ? (evidenceSnippets.policy_rights_signals as string[])
         : null;
 
-      if (nestedRightsSignals && nestedRightsSignals.length > 0) {
+      if (nestedRightsSignals && isSignalValuePopulated(key, nestedRightsSignals)) {
         return nestedRightsSignals;
       }
     }
