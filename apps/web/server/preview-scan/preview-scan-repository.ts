@@ -648,7 +648,7 @@ export async function getPreviewRuntimeArtifacts(scanId: string): Promise<Runtim
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("scan_runtime_artifacts")
-    .select("build_phase_summaries")
+    .select("*")
     .eq("scan_id", scanId)
     .maybeSingle();
 
