@@ -99,6 +99,8 @@ Compatibility note:
 
 ## Local development setup
 
+Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here and can fail DNS resolution for Supabase-backed auth and app routes on localhost.
+
 1. Install dependencies:
    - `pnpm install`
 2. Copy the environment template:

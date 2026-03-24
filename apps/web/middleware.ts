@@ -3,6 +3,20 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "./lib/supabase/server";
 import { PASSWORD_AUTH_COOKIE_NAME } from "./server/password-auth/constants";
 
+function isSupabaseNetworkError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const cause = error.cause;
+  const code =
+    cause && typeof cause === "object" && "code" in cause && typeof (cause as { code?: unknown }).code === "string"
+      ? (cause as { code: string }).code
+      : null;
+
+  return code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "EAI_AGAIN";
+}
+
 export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname === "/" &&
@@ -52,9 +66,23 @@ export async function middleware(request: NextRequest) {
     }
   });
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  let user = null;
+
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (error) {
+    if (isSupabaseNetworkError(error)) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.search = "";
+      loginUrl.searchParams.set("error", "auth_service_unavailable");
+      loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    throw error;
+  }
 
   if (!user) {
     const loginUrl = request.nextUrl.clone();

@@ -95,6 +95,8 @@ export function LoginForm(input?: {
       ? "That verification link is invalid or expired."
       : initialError === "bad_oauth_state"
         ? "Google sign-in expired or became stale. Try again."
+        : initialError === "auth_service_unavailable"
+          ? "Authentication is temporarily unavailable from this local runtime. If you're on localhost, use a supported Node LTS version and confirm DNS access to Supabase."
         : initialError
   );
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);

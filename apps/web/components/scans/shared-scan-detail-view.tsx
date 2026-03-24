@@ -2351,7 +2351,7 @@ function AgencyAdvisorySummary(input: {
         ? `This scan surfaced ${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
         : "This scan did not surface any high- or medium-priority findings in the main report.",
     lowPriorityCount > 0
-      ? `The report also includes ${lowPriorityCount} additional blue finding${lowPriorityCount === 1 ? "" : "s"} shown in the detailed findings below.`
+      ? `The report also includes ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue in the detailed findings below.`
       : null,
     themes.length > 0
       ? "The strongest patterns in this scan involve incomplete policy and disclosure coverage, gaps between stated site practices and observed behavior, and consent or tracking flows that may not give users a clear or balanced choice."
@@ -2359,7 +2359,7 @@ function AgencyAdvisorySummary(input: {
     "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
   ].filter((bullet): bullet is string => Boolean(bullet));
 
-  const totalFindings = highPriorityCount + mediumPriorityCount + lowPriorityCount;
+  const maxThemeCount = topThemes.reduce((max, theme) => Math.max(max, theme.count), 0);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -2382,19 +2382,19 @@ function AgencyAdvisorySummary(input: {
                 {lowPriorityCount > 0 ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
-                    <span>Blue findings</span>
+                    <span>Advisory</span>
                   </span>
                 ) : null}
               </div>
             </div>
             {lowPriorityCount > 0 ? (
               <p className="mt-2 text-xs text-slate-500">
-                Counts below include {lowPriorityCount} additional blue finding{lowPriorityCount === 1 ? "" : "s"}.
+                Counts below include {lowPriorityCount} advisory finding{lowPriorityCount === 1 ? "" : "s"} shown in blue.
               </p>
             ) : null}
             <div className="mt-3 space-y-3">
               {topThemes.map((theme) => {
-                const width = totalFindings > 0 ? (theme.count / totalFindings) * 100 : 0;
+                const width = maxThemeCount > 0 ? (theme.count / maxThemeCount) * 75 : 0;
                 const highWidth = theme.count > 0 ? (theme.highCount / theme.count) * 100 : 0;
                 const mediumWidth = theme.count > 0 ? (theme.mediumCount / theme.count) * 100 : 0;
                 const lowWidth = theme.count > 0 ? (theme.lowCount / theme.count) * 100 : 0;
@@ -2690,15 +2690,18 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-base font-semibold text-slate-900">Noteworthy Findings</span>
                 <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
-                  {highPriorityCount} high priority
+                  {highPriorityCount} high
                 </span>
                 <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
-                  {mediumPriorityCount} medium priority
+                  {mediumPriorityCount} medium
+                </span>
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-sky-800">
+                  {lowPriorityCount} advisory
                 </span>
               </span>
               <p className="mt-1 text-sm text-slate-500">
                 The main surfaced issues from this scan, prioritized for review and remediation.
-                {lowPriorityCount > 0 ? ` This scan also surfaced ${lowPriorityCount} additional blue finding${lowPriorityCount === 1 ? "" : "s"}.` : ""}
+                {lowPriorityCount > 0 ? ` This scan also surfaced ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue.` : ""}
               </p>
             </span>
           </span>
