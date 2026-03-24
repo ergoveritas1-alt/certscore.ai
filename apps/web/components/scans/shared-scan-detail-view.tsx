@@ -1545,7 +1545,8 @@ function buildReviewFindings(input: {
       if (!shouldSurfacePrimarySignalFinding({
         fallbackEvidence,
         key: item.key,
-        linkedValidationEvidence: linkedValidationFinding?.evidence ?? null
+        linkedValidationEvidence: linkedValidationFinding?.evidence ?? null,
+        signalSource: item.source
       })) {
         return [];
       }

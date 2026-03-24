@@ -118,6 +118,114 @@ function getStringArrayEvidence(value: unknown) {
     : [];
 }
 
+function hasTruthyArrayValue(value: unknown) {
+  return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  const optInClicks =
+    typeof evidence.consentOptInClicks === "number"
+      ? evidence.consentOptInClicks
+      : typeof evidence.consent_accept_click_count === "number"
+        ? evidence.consent_accept_click_count
+        : null;
+  const optOutClicks =
+    typeof evidence.consentOptOutClicks === "number"
+      ? evidence.consentOptOutClicks
+      : typeof evidence.consent_reject_click_count === "number"
+        ? evidence.consent_reject_click_count
+        : null;
+  const frictionDelta = typeof evidence.consentFrictionDelta === "number" ? evidence.consentFrictionDelta : null;
+  const blockerType = typeof evidence.consentBlockerType === "string" ? evidence.consentBlockerType : null;
+  const blockerUrl = typeof evidence.consentBlockerUrl === "string" ? evidence.consentBlockerUrl : null;
+
+  return (
+    evidence.consentRedirectOrAuthRequired === true ||
+    blockerType !== null ||
+    blockerUrl !== null ||
+    (typeof frictionDelta === "number" && frictionDelta > 0) ||
+    (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks)
+  );
+}
+
+export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  const directViolations = Array.isArray(evidence.sensitivePayloadViolations)
+    ? evidence.sensitivePayloadViolations
+    : Array.isArray(evidence.sensitive_payload_violations)
+      ? evidence.sensitive_payload_violations
+      : [];
+
+  return directViolations.some(
+    (entry) =>
+      Boolean(entry) &&
+      typeof entry === "object" &&
+      typeof (entry as { requestUrl?: unknown }).requestUrl === "string" &&
+      ((entry as { requestUrl?: string }).requestUrl?.length ?? 0) > 0
+  );
+}
+
+export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  return (
+    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
+    hasTruthyArrayValue(evidence.runtimeEvidence) ||
+    hasTruthyArrayValue(evidence.relatedVendors) ||
+    hasTruthyArrayValue(evidence.runtimeVendors) ||
+    hasTruthyArrayValue(evidence.sessionReplayRuntimeVendors) ||
+    evidence.sessionReplayVendorArtifactPresent === true ||
+    evidence.session_replay_vendor_artifact_present === true
+  );
+}
+
+export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  const dsarMechanism =
+    typeof evidence.policyDsarMechanism === "string"
+      ? evidence.policyDsarMechanism
+      : typeof evidence.policy_dsar_mechanism === "string"
+        ? evidence.policy_dsar_mechanism
+        : null;
+  const policySemanticConfidence =
+    typeof evidence.policySemanticConfidence === "number"
+      ? evidence.policySemanticConfidence
+      : typeof evidence.policy_semantic_confidence === "number"
+        ? evidence.policy_semantic_confidence
+        : null;
+  const extractionStatus =
+    typeof evidence.policyExtractionStatus === "string"
+      ? evidence.policyExtractionStatus
+      : typeof evidence.policy_extraction_status === "string"
+        ? evidence.policy_extraction_status
+        : null;
+  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
+    ? evidence.policyRightsSignals
+    : Array.isArray(evidence.policy_rights_signals)
+      ? evidence.policy_rights_signals
+      : [];
+
+  return (
+    dsarMechanism === "absent" &&
+    extractionStatus === "fetched" &&
+    typeof policySemanticConfidence === "number" &&
+    policySemanticConfidence >= 0.6 &&
+    policyRightsSignals.length === 0
+  );
+}
+
 function hasConcretePayloadEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!Array.isArray(rawEvidence?.sensitivePayloadViolations) && !Array.isArray(rawEvidence?.sensitive_payload_violations)) {
     return false;
@@ -414,6 +522,38 @@ function isReplayConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" 
   return /session_replay|replay\/disclosure|undisclosed session replay|possible replay/.test(haystack);
 }
 
+function isRightsFrictionConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /user_rights_friction|functional_misalignment|policy_runtime_functional_misalignment/.test(haystack);
+}
+
+function isHighSensitivityConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /high_sensitivity_data_collection/.test(haystack);
+}
+
 function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">) {
   const haystack = [
     concern.canonicalConcernKey,
@@ -451,6 +591,28 @@ function deriveConcernEligibility(input: {
     }
   }
 
+  if (
+    isRightsFrictionConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasStrongRightsFrictionEvidence(input.rawEvidence)
+  ) {
+    return {
+      externalSurfacingEligibility: "suppress" as const,
+      promotionEligibility: "blocked" as const
+    };
+  }
+
+  if (
+    isHighSensitivityConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasSensitivePayloadEvidence(input.rawEvidence)
+  ) {
+    return {
+      externalSurfacingEligibility: "suppress" as const,
+      promotionEligibility: "blocked" as const
+    };
+  }
+
   if (isDsarConcern(input.concern)) {
     const extractionStatus = getPolicyExtractionStatus(input.rawEvidence);
     const rightsSignals = getPolicyRightsSignals(input.rawEvidence);
@@ -463,6 +625,13 @@ function deriveConcernEligibility(input: {
     }
 
     if (rightsSignals.length > 0) {
+      return {
+        externalSurfacingEligibility: "suppress" as const,
+        promotionEligibility: "blocked" as const
+      };
+    }
+
+    if (input.concern.originType !== "validation_rule" && !hasConcreteDsarEvidence(input.rawEvidence)) {
       return {
         externalSurfacingEligibility: "suppress" as const,
         promotionEligibility: "blocked" as const

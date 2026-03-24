@@ -1,3 +1,11 @@
+import {
+  hasConcreteDsarEvidence as hasConcreteDsarEvidenceFromConcern,
+  hasConcreteSessionReplayEvidence as hasConcreteSessionReplayEvidenceFromConcern,
+  hasSensitivePayloadEvidence as hasSensitivePayloadEvidenceFromConcern,
+  hasStrongRightsFrictionEvidence as hasStrongRightsFrictionEvidenceFromConcern,
+  normalizeConcernFromReviewFindingCandidate
+} from "./normalized-concerns";
+
 export function isRightsFrictionSignal(key: string) {
   return /privacy\.(policy_runtime_functional_misalignment_detected|user_rights_friction_score)/i.test(key);
 }
@@ -53,141 +61,45 @@ export function hasConcreteConsentEvidence(evidence: Record<string, unknown> | n
 }
 
 export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  const optInClicks =
-    typeof evidence.consentOptInClicks === "number"
-      ? evidence.consentOptInClicks
-      : typeof evidence.consent_accept_click_count === "number"
-        ? evidence.consent_accept_click_count
-        : null;
-  const optOutClicks =
-    typeof evidence.consentOptOutClicks === "number"
-      ? evidence.consentOptOutClicks
-      : typeof evidence.consent_reject_click_count === "number"
-        ? evidence.consent_reject_click_count
-        : null;
-  const frictionDelta = typeof evidence.consentFrictionDelta === "number" ? evidence.consentFrictionDelta : null;
-  const blockerType = typeof evidence.consentBlockerType === "string" ? evidence.consentBlockerType : null;
-  const blockerUrl = typeof evidence.consentBlockerUrl === "string" ? evidence.consentBlockerUrl : null;
-
-  return (
-    evidence.consentRedirectOrAuthRequired === true ||
-    blockerType !== null ||
-    blockerUrl !== null ||
-    (typeof frictionDelta === "number" && frictionDelta > 0) ||
-    (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks)
-  );
+  return hasStrongRightsFrictionEvidenceFromConcern(evidence);
 }
 
 export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  const directViolations = Array.isArray(evidence.sensitivePayloadViolations)
-    ? evidence.sensitivePayloadViolations
-    : Array.isArray(evidence.sensitive_payload_violations)
-      ? evidence.sensitive_payload_violations
-      : [];
-
-  return directViolations.some(
-    (entry) =>
-      Boolean(entry) &&
-      typeof entry === "object" &&
-      typeof (entry as { requestUrl?: unknown }).requestUrl === "string" &&
-      ((entry as { requestUrl?: string }).requestUrl?.length ?? 0) > 0
-  );
-}
-
-function hasTruthyArrayValue(value: unknown) {
-  return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+  return hasSensitivePayloadEvidenceFromConcern(evidence);
 }
 
 export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  return (
-    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
-    hasTruthyArrayValue(evidence.runtimeEvidence) ||
-    hasTruthyArrayValue(evidence.relatedVendors) ||
-    hasTruthyArrayValue(evidence.runtimeVendors) ||
-    hasTruthyArrayValue(evidence.sessionReplayRuntimeVendors) ||
-    evidence.sessionReplayVendorArtifactPresent === true ||
-    evidence.session_replay_vendor_artifact_present === true
-  );
+  return hasConcreteSessionReplayEvidenceFromConcern(evidence);
 }
 
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  const dsarMechanism =
-    typeof evidence.policyDsarMechanism === "string"
-      ? evidence.policyDsarMechanism
-      : typeof evidence.policy_dsar_mechanism === "string"
-        ? evidence.policy_dsar_mechanism
-        : null;
-  const policySemanticConfidence =
-    typeof evidence.policySemanticConfidence === "number"
-      ? evidence.policySemanticConfidence
-      : typeof evidence.policy_semantic_confidence === "number"
-        ? evidence.policy_semantic_confidence
-        : null;
-  const extractionStatus =
-    typeof evidence.policyExtractionStatus === "string"
-      ? evidence.policyExtractionStatus
-      : typeof evidence.policy_extraction_status === "string"
-        ? evidence.policy_extraction_status
-        : null;
-  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
-    ? evidence.policyRightsSignals
-    : Array.isArray(evidence.policy_rights_signals)
-      ? evidence.policy_rights_signals
-      : [];
-
-  return (
-    dsarMechanism === "absent" &&
-    extractionStatus === "fetched" &&
-    typeof policySemanticConfidence === "number" &&
-    policySemanticConfidence >= 0.6 &&
-    policyRightsSignals.length === 0
-  );
+  return hasConcreteDsarEvidenceFromConcern(evidence);
 }
 
 export function shouldSurfacePrimarySignalFinding(input: {
   fallbackEvidence: Record<string, unknown> | null | undefined;
   key: string;
   linkedValidationEvidence: Record<string, unknown> | null | undefined;
+  signalSource?: "snapshot_signal" | "runtime_artifact_signal" | "policy_enrichment_signal";
 }) {
-  if (isRightsFrictionSignal(input.key)) {
-    return (
-      hasStrongRightsFrictionEvidence(input.linkedValidationEvidence) ||
-      hasStrongRightsFrictionEvidence(input.fallbackEvidence)
-    );
-  }
+  const mergedEvidence = {
+    ...(input.fallbackEvidence ?? {}),
+    ...(input.linkedValidationEvidence ?? {})
+  };
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: `Primary signal candidate for ${input.key}.`,
+    fallbackEvidence: mergedEvidence,
+    observedValue: null,
+    severity: "medium",
+    signalKey: input.key,
+    signalLabel: input.key,
+    signalSource: input.signalSource ?? "snapshot_signal",
+    sourceType: "signal",
+    title: input.key
+  });
 
-  if (isHighSensitivitySignal(input.key)) {
-    return (
-      hasSensitivePayloadEvidence(input.linkedValidationEvidence) || hasSensitivePayloadEvidence(input.fallbackEvidence)
-    );
-  }
-
-  if (isSessionReplaySignal(input.key)) {
-    return (
-      hasConcreteSessionReplayEvidence(input.linkedValidationEvidence) ||
-      hasConcreteSessionReplayEvidence(input.fallbackEvidence)
-    );
-  }
-
-  if (isDsarSignal(input.key)) {
-    return hasConcreteDsarEvidence(input.linkedValidationEvidence) || hasConcreteDsarEvidence(input.fallbackEvidence);
-  }
-
-  return true;
+  return (
+    concern.promotionEligibility === "eligible" &&
+    concern.externalSurfacingEligibility === "eligible"
+  );
 }

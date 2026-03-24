@@ -17,7 +17,6 @@ import { enqueueFullScanJob } from "../queue/full-scan-queue";
 import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
 import { getWebServerEnv } from "../../lib/env";
 import { requireValidationAdminContext } from "./auth";
-import { shouldSurfacePrimarySignalFinding } from "../../lib/scans/finding-evidence-gates";
 import { shouldSurfaceSupplementalPolicyReviewFinding } from "../../lib/scans/supplemental-policy-review-gates";
 
 type ValidationSettingsRow = {
