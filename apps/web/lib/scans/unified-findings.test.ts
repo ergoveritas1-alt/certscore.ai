@@ -609,6 +609,7 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
           signalKey: "privacy.privacy_rights_path_present",
           signalLabel: "Privacy-rights path present",
           signalValue: true,
+          policySnippets: ["You may request access to, delete, or export your information through our Privacy Rights Center."],
           policyRightsSignals: ["access", "delete", "export"],
           pageUrl: "https://www.example.com/privacy"
         },
@@ -628,6 +629,9 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
   assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /privacy-rights path/i);
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "You may request access to, delete, or export your information through our Privacy Rights Center."
+  ]);
 });
 
 test("suppresses guessed-only cookie policy unavailable findings", () => {
@@ -803,6 +807,9 @@ test("surfaces tracking technologies disclosure present from policy enrichment e
   assert.equal(packet?.unifiedFindingId, "tracking_technologies_disclosure_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /tracking-technologies disclosure/i);
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "We use cookies, pixels, tags, beacons, scripts, and similar technologies."
+  ]);
 });
 
 test("surfaces behavioral analytics disclosure present from policy enrichment evidence", () => {
@@ -833,6 +840,9 @@ test("surfaces behavioral analytics disclosure present from policy enrichment ev
   assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /behavioral analytics/i);
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "On certain pages, we use third-party tools to observe mouse movements, clicks, keystrokes, entered text, and pages visited."
+  ]);
 });
 
 test("surfaces child-directed context without supporting privacy disclosure", () => {

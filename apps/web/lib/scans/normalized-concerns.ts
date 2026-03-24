@@ -231,7 +231,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    if (/operator_relationship|rights_signals?/i.test(key)) {
+    if (/operator_relationship|policyRightsSignals|rights_signals?/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;
     }

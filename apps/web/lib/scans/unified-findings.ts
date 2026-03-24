@@ -527,9 +527,17 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const snippets = uniqueStrings([
     typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null,
     typeof fallbackEvidence.policyChildrenReference === "string" ? fallbackEvidence.policyChildrenReference : null,
-    typeof fallbackEvidence.policySummaryShort === "string" ? fallbackEvidence.policySummaryShort : null,
+    Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
+      ? null
+      : typeof fallbackEvidence.policySummaryShort === "string"
+        ? fallbackEvidence.policySummaryShort
+        : null,
     ...(Array.isArray(fallbackEvidence.policySnippets) ? (fallbackEvidence.policySnippets as string[]) : []),
-    typeof fallbackEvidence.signalValue === "string" ? fallbackEvidence.signalValue : null
+    Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
+      ? null
+      : typeof fallbackEvidence.signalValue === "string"
+        ? fallbackEvidence.signalValue
+        : null
   ]);
 
   const counts: Record<string, number> = {};

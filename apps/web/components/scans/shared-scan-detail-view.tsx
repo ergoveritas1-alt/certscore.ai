@@ -1459,8 +1459,23 @@ function getPolicySignalFallbackEvidence(input: {
   signalLabel: string;
   signalValue: unknown;
 }) {
+  const rightsSnippetKeys = [
+    "dsar",
+    "access",
+    "delete",
+    "correct",
+    "export",
+    "manage",
+    "state_rights",
+    "authorized_agent",
+    "appeal",
+    "privacy_controls",
+    "privacy_contact"
+  ] as const;
   const topicKey =
-    /gpc_disclosure_present/i.test(input.signalKey)
+    /privacy_rights_path_present/i.test(input.signalKey)
+      ? null
+      : /gpc_disclosure_present/i.test(input.signalKey)
       ? "topic:gpc_disclosure"
       : /tracking_technologies_disclosure_present/i.test(input.signalKey)
         ? "topic:tracking_technologies_disclosure"
@@ -1494,8 +1509,14 @@ function getPolicySignalFallbackEvidence(input: {
       : Array.isArray(evidenceSnippets?.policy_rights_signals)
         ? (evidenceSnippets.policy_rights_signals as string[])
         : [];
-  const policySnippets =
+  const topicSnippets =
     topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
+  const rightsSnippets = /privacy_rights_path_present/i.test(input.signalKey)
+    ? rightsSnippetKeys
+        .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
+        .slice(0, 2)
+    : [];
+  const policySnippets = [...new Set([...topicSnippets, ...rightsSnippets])];
 
   return {
     pageUrl,
