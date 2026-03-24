@@ -173,24 +173,6 @@ const categories = [
   "Policy vs behavior contradiction: the site’s public privacy and consent posture implied stricter tracking behavior than the runtime evidence supported."
 ];
 
-const workflow = [
-  {
-    step: "1",
-    title: "Start with a homepage preview",
-    description: "Run a quick preview first, then expand into full domain coverage once you want deeper evidence and scan history."
-  },
-  {
-    step: "2",
-    title: "Collect runtime and policy evidence",
-    description: "The scanner checks trackers, consent flows, accessibility signals, and public policy/disclosure pages."
-  },
-  {
-    step: "3",
-    title: "Review contradictions and changes",
-    description: "See where the site’s behavior conflicts with its claims, then monitor what changed between scans."
-  }
-];
-
 const whatHappensNext = [
   {
     step: "01",
@@ -410,35 +392,6 @@ export default async function MarketingHomePage() {
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="max-w-2xl space-y-3">
-          <Badge tone="neutral">Workflow</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">From homepage preview to ongoing domain monitoring.</h2>
-        </div>
-        <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          {workflow.map((item, index) => (
-            <div key={item.step} className="rounded-3xl border border-slate-200 bg-white p-6">
-              <div className="flex items-center gap-3">
-                <div
-                  className={
-                    index === 0
-                      ? "flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] text-sm font-semibold text-sky-700 ring-1 ring-sky-200"
-                      : index === 1
-                        ? "flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(236,253,245,0.96)_0%,rgba(240,253,244,0.98)_100%)] text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200"
-                        : "flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(241,245,249,0.98)_100%)] text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
-                  }
-                >
-                  {item.step}
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Step</p>
-              </div>
-              <p className="mt-3 text-lg font-medium text-slate-950">{item.title}</p>
-              <p className="mt-2 text-sm text-slate-600">{item.description}</p>
-            </div>
-          ))}
         </div>
       </section>
 
