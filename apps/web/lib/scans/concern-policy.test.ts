@@ -121,6 +121,29 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "rights friction with thin preference-center evidence stays blocked when rights path exists",
+      concern: makeConcern({
+        originKey: "privacy.user_rights_friction_score",
+        suggestedUnifiedFindingId: "rights_fulfillment_friction",
+        title: "Rights fulfillment friction"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        consentOptOutClicks: 2,
+        consentRedirectOrAuthRequired: true,
+        consentBlockerTextSnippet:
+          "Allow Sale, Sharing for Cross-Context Behavioral Advertising, or Targeted Advertising Save Settings",
+        consentEvidencePassCount: 1,
+        policyRightsSignals: ["access", "delete", "privacy_controls"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "high-sensitivity concern with request evidence stays eligible",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",

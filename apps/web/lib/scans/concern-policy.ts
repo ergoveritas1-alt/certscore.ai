@@ -68,13 +68,45 @@ export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown
   const frictionDelta = typeof evidence.consentFrictionDelta === "number" ? evidence.consentFrictionDelta : null;
   const blockerType = typeof evidence.consentBlockerType === "string" ? evidence.consentBlockerType : null;
   const blockerUrl = typeof evidence.consentBlockerUrl === "string" ? evidence.consentBlockerUrl : null;
+  const blockerSnippet =
+    typeof evidence.consentBlockerTextSnippet === "string" ? evidence.consentBlockerTextSnippet.trim() : null;
+  const evidencePassCount =
+    typeof evidence.consentEvidencePassCount === "number" ? evidence.consentEvidencePassCount : null;
+  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
+    ? evidence.policyRightsSignals
+    : Array.isArray(evidence.policy_rights_signals)
+      ? evidence.policy_rights_signals
+      : [];
+
+  const redirectGate = evidence.consentRedirectOrAuthRequired === true;
+  const blockerPresent = blockerType !== null || blockerUrl !== null;
+  const repeatedDeadEnd =
+    typeof frictionDelta === "number" &&
+    frictionDelta >= 2 &&
+    typeof optOutClicks === "number" &&
+    optOutClicks >= 2;
+  const blockerBackedByEvidence =
+    blockerPresent &&
+    typeof evidencePassCount === "number" &&
+    evidencePassCount >= 2 &&
+    blockerSnippet !== null &&
+    blockerSnippet.length >= 40;
+  const redirectBackedByEvidence =
+    redirectGate &&
+    typeof evidencePassCount === "number" &&
+    evidencePassCount >= 2 &&
+    (blockerPresent || (typeof blockerSnippet === "string" && blockerSnippet.length >= 40));
+  const asymmetricClicksWithoutRightsPath =
+    typeof optInClicks === "number" &&
+    typeof optOutClicks === "number" &&
+    optOutClicks > optInClicks &&
+    policyRightsSignals.length === 0;
 
   return (
-    evidence.consentRedirectOrAuthRequired === true ||
-    blockerType !== null ||
-    blockerUrl !== null ||
-    (typeof frictionDelta === "number" && frictionDelta > 0) ||
-    (typeof optInClicks === "number" && typeof optOutClicks === "number" && optOutClicks > optInClicks)
+    redirectBackedByEvidence ||
+    blockerBackedByEvidence ||
+    repeatedDeadEnd ||
+    asymmetricClicksWithoutRightsPath
   );
 }
 
@@ -202,7 +234,9 @@ function isRightsFrictionConcern(
     .join(" ")
     .toLowerCase();
 
-  return /user_rights_friction|functional_misalignment|policy_runtime_functional_misalignment/.test(haystack);
+  return /user_rights_friction|rights_fulfillment_friction|functional_misalignment|policy_runtime_functional_misalignment/.test(
+    haystack
+  );
 }
 
 function isHighSensitivityConcern(
