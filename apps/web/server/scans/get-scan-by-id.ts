@@ -355,8 +355,20 @@ function dereferencePolicyEvidenceSnippets(input: {
       })
     );
 
+    const resolvedPolicyRightsSignals = Array.isArray(row.policyRightsSignals)
+      ? row.policyRightsSignals
+      : Array.isArray(row.policy_rights_signals)
+        ? row.policy_rights_signals
+        : Array.isArray(resolved.policy_rights_signals)
+          ? resolved.policy_rights_signals
+          : null;
+
     return {
       ...row,
+      ...(resolvedPolicyRightsSignals ? {
+        policyRightsSignals: resolvedPolicyRightsSignals,
+        policy_rights_signals: resolvedPolicyRightsSignals
+      } : {}),
       policyEvidenceSnippets: resolved,
       policy_evidence_snippets: resolved
     };
