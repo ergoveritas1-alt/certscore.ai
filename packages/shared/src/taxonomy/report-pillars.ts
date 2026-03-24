@@ -2023,10 +2023,26 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "policy_enrichment_signal",
+    "privacy.tracking_technologies_disclosure_present",
+    "Tracking technologies disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
     "privacy.targeted_advertising_disclosure_present",
     "Targeted advertising disclosure present",
     "data_handling_disclosures",
     ["sale_sharing_targeted_advertising_controls"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.behavioral_analytics_disclosure_present",
+    "Behavioral analytics disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
   ),
   defineReportSignal(
@@ -2414,6 +2430,14 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.gpc_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "tracking_technologies_disclosure_present",
+    label: "Tracking technologies disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.tracking_technologies_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
     id: "weak_cookie_security_attributes",
     label: "Weak cookie security attributes",
     owner: "third_party_network_cookie_surface",
@@ -2633,6 +2657,14 @@ export const REPORT_UNIFIED_FINDINGS = [
     mirrors: ["sale_sharing_targeted_advertising_controls"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
     signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.targeted_advertising_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "behavioral_analytics_disclosure_present",
+    label: "Behavioral analytics disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
   }),
 
   defineReportUnifiedFinding({

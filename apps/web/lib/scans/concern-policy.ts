@@ -279,7 +279,9 @@ function isPositiveInfrastructureConcern(
   return [
     "privacy_rights_path_present",
     "gpc_disclosure_present",
+    "tracking_technologies_disclosure_present",
     "targeted_advertising_disclosure_present",
+    "behavioral_analytics_disclosure_present",
     "accessibility_support_path_present",
     "arbitration_clause_present"
   ].includes(concern.suggestedUnifiedFindingId ?? "");

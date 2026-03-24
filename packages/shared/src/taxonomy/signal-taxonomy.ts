@@ -702,10 +702,20 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Privacy Rights & Controls",
       regulatoryTags: ["ccpa_cpra"]
     },
+    "privacy.tracking_technologies_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
     "privacy.targeted_advertising_disclosure_present": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Privacy Rights & Controls",
       regulatoryTags: ["ccpa_cpra", "gdpr_eu_privacy"]
+    },
+    "privacy.behavioral_analytics_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
     },
     "commerce.arbitration_clause_present": {
       primaryCategory: "consumer_transparency_disclosures",

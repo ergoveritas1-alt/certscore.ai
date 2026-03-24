@@ -689,6 +689,66 @@ test("surfaces accessibility support path present from snapshot evidence", () =>
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 
+test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a disclosure describing cookies, pixels, tags, beacons, scripts, or similar technologies.",
+        fallbackEvidence: {
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["We use cookies, pixels, tags, beacons, scripts, and similar technologies."],
+          signalKey: "privacy.tracking_technologies_disclosure_present",
+          signalLabel: "Tracking technologies disclosure present",
+          signalValue: true
+        },
+        observedValue: "Tracking technologies disclosure present",
+        severity: "low",
+        signalKey: "privacy.tracking_technologies_disclosure_present",
+        signalLabel: "Tracking technologies disclosure present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Tracking technologies disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "tracking_technologies_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /tracking-technologies disclosure/i);
+});
+
+test("surfaces behavioral analytics disclosure present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a disclosure describing behavioral analytics or replay-style tooling.",
+        fallbackEvidence: {
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["On certain pages, we use third-party tools to observe mouse movements, clicks, keystrokes, entered text, and pages visited."],
+          signalKey: "privacy.behavioral_analytics_disclosure_present",
+          signalLabel: "Behavioral analytics disclosure present",
+          signalValue: true
+        },
+        observedValue: "Behavioral analytics disclosure present",
+        severity: "low",
+        signalKey: "privacy.behavioral_analytics_disclosure_present",
+        signalLabel: "Behavioral analytics disclosure present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Behavioral analytics disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /behavioral analytics/i);
+});
+
 test("surfaces child-directed context without supporting privacy disclosure", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

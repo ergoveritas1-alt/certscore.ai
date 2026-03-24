@@ -563,9 +563,21 @@ function deriveSupplementalPolicySignals(input: {
   );
   pushBoolean(
     "privacy",
+    "privacy.tracking_technologies_disclosure_present",
+    "Tracking technologies disclosure present",
+    hasPolicyMention("tracking_technologies_disclosure")
+  );
+  pushBoolean(
+    "privacy",
     "privacy.targeted_advertising_disclosure_present",
     "Targeted advertising disclosure present",
     hasPolicyMention("targeted_advertising_disclosure")
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.behavioral_analytics_disclosure_present",
+    "Behavioral analytics disclosure present",
+    hasPolicyMention("session_replay_disclosure")
   );
   pushBoolean(
     "commerce",

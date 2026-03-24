@@ -1073,11 +1073,23 @@ function buildPresentationCopy(
         suggestedFix: "Keep the GPC disclosure aligned with actual enforcement behavior and any related sale, sharing, or targeted-advertising controls.",
         whyThisMatters: "A public GPC disclosure gives users and reviewers a clearer picture of how browser-level privacy preference signals are expected to be handled."
       };
+    case "tracking_technologies_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the tracking-technologies disclosure specific about the cookies, pixels, tags, beacons, scripts, or similar technologies the site says it uses.",
+        whyThisMatters: "Clear tracking-technologies disclosure helps people understand what kinds of tracking tools may be active and where to look for more detailed controls or explanations."
+      };
     case "targeted_advertising_disclosure_present":
       return {
         ...base,
         suggestedFix: "Keep the targeted-advertising disclosure specific about the technologies, purposes, and control paths users can rely on.",
         whyThisMatters: "Clear targeted-advertising disclosure helps users understand when sale, sharing, or ad-personalization practices may apply and where to find related controls."
+      };
+    case "behavioral_analytics_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the behavioral-analytics disclosure aligned with the actual tooling, pages, and monitoring practices the site uses.",
+        whyThisMatters: "A public disclosure about behavioral analytics or replay-style tooling helps users and reviewers understand when more detailed interaction monitoring may occur."
       };
     case "accessibility_support_path_missing":
       return {
@@ -1270,6 +1282,22 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "tracking_technologies_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "privacy.tracking_technologies_disclosure_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a disclosure about cookies, pixels, tags, beacons, scripts, or similar technologies.",
+      status: "surface"
+    };
+  }
+
+  if (
     input.packet.unifiedFindingId === "accessibility_support_path_missing" &&
     input.packet.evidence?.flags?.includes("accessibility.accessibility_support_path_missing")
   ) {
@@ -1319,6 +1347,22 @@ function buildPresentationDecision(input: {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because structured policy evidence retained a targeted-advertising or sale/sharing disclosure.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "behavioral_analytics_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "privacy.behavioral_analytics_disclosure_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a disclosure about behavioral analytics or replay-style monitoring.",
       status: "surface"
     };
   }

@@ -56,6 +56,10 @@ import {
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "Not available";
@@ -1185,7 +1189,7 @@ function isConcerningSignal(key: string, value: unknown) {
   }
 
   if (
-    /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+    /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
       key
     )
   ) {
@@ -1257,8 +1261,16 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "The scan retained a disclosure indicating how the site says it handles Global Privacy Control or similar browser-level opt-out signals.";
   }
 
+  if (/tracking_technologies_disclosure_present/i.test(key)) {
+    return "The scan retained a disclosure describing cookies, pixels, tags, beacons, scripts, or similar tracking technologies used on the site.";
+  }
+
   if (/targeted_advertising_disclosure_present/i.test(key)) {
     return "The scan retained a disclosure describing targeted advertising, sale, or sharing practices and related user controls.";
+  }
+
+  if (/behavioral_analytics_disclosure_present/i.test(key)) {
+    return "The scan retained a disclosure describing behavioral analytics, session-observation, or replay-style tooling on at least some pages.";
   }
 
   if (/accessibility_contact_method_present/i.test(key)) {
@@ -1447,6 +1459,16 @@ function getPolicySignalFallbackEvidence(input: {
   signalLabel: string;
   signalValue: unknown;
 }) {
+  const topicKey =
+    /gpc_disclosure_present/i.test(input.signalKey)
+      ? "topic:gpc_disclosure"
+      : /tracking_technologies_disclosure_present/i.test(input.signalKey)
+        ? "topic:tracking_technologies_disclosure"
+        : /targeted_advertising_disclosure_present/i.test(input.signalKey)
+          ? "topic:targeted_advertising_disclosure"
+          : /behavioral_analytics_disclosure_present/i.test(input.signalKey)
+            ? "topic:session_replay_disclosure"
+            : null;
   const pageType = /commerce\.arbitration_clause_present/i.test(input.signalKey) ? "terms_of_service" : "privacy_policy";
   const row =
     input.policyEnrichment.find((entry) => (entry.pageType ?? entry.page_type) === pageType) ??
@@ -1472,10 +1494,13 @@ function getPolicySignalFallbackEvidence(input: {
       : Array.isArray(evidenceSnippets?.policy_rights_signals)
         ? (evidenceSnippets.policy_rights_signals as string[])
         : [];
+  const policySnippets =
+    topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
 
   return {
     pageUrl,
     pageUrls: pageUrl ? [pageUrl] : [],
+    policySnippets,
     policyRightsSignals,
     policySummaryShort,
     signalKey: input.signalKey,
@@ -1593,7 +1618,7 @@ function buildReviewFindings(input: {
               signalValue: item.value
             }
           : item.source === "policy_enrichment_signal" &&
-              /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|arbitration_clause_present/i.test(
+              /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|arbitration_clause_present/i.test(
                 item.key
               )
             ? getPolicySignalFallbackEvidence({
@@ -1723,7 +1748,7 @@ function getDefaultIssueCategoryId(sectionId: string) {
 
 function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
   if (
-    /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+    /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
       key
     )
   ) {
