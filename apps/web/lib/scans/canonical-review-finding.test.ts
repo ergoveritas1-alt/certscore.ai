@@ -260,6 +260,27 @@ test("uses count-based copy for pre-consent tracker violations", () => {
   assert.equal(presentation.confidenceScore, "1.0");
 });
 
+test("respects a weak narrative ceiling for pre-consent findings even when count evidence is present", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      fallbackEvidence: {
+        consentActionableChoiceObserved: true,
+        consentSurfaceObserved: true,
+        normalizedConcernMaxAssertionLevel: "weak",
+        normalizedConcernNegativeEvidenceFlags: ["no_consent_surface_observed"],
+        preconsent_tracker_violations: 8
+      },
+      observedValue: "8",
+      severity: "high",
+      title: "Pre-consent tracking detected"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /tracking-related requests|meaningful chance to choose|Additional evidence/i);
+  assert.doesNotMatch(presentation.whyThisMatters, /8 pre-consent tracking requests before the visitor could act/i);
+});
+
 test("uses calibrated max-confidence copy for 71 pre-consent tracking requests", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -334,6 +355,35 @@ test("uses summarized pre-consent evidence from supporting signals without requi
     /Block or defer these vendor requests until an affirmative consent choice is stored/i
   );
   assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("uses initial-load wording when pre-consent evidence points to same-operator measurement infrastructure", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "1h-same-operator",
+        ruleKey: "privacy.trackers_before_consent_detected",
+        title: "Trackers observed before consent",
+        evidence: {
+          consentActionableChoiceObserved: false,
+          consentSurfaceObserved: false,
+          consentBaselineTrackerOperatorRelationships: [
+            "vendor:Google Analytics|relationship:first_party|endpoint:first_party_collection_proxy|host:www.google-analytics.com|source_url:https://www.google-analytics.com/g/collect?v=2"
+          ],
+          preconsent_tracker_vendors: ["Google Analytics"],
+          preconsent_tracker_evidence_urls: ["https://www.google-analytics.com/g/collect?v=2"]
+        }
+      }),
+      observedValue: "Google Analytics",
+      severity: "high",
+      title: "Trackers observed before consent"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Trackers observed before consent");
+  assert.match(presentation.whyThisMatters, /tracking or measurement-related requests|initial page-load sequence/i);
+  assert.doesNotMatch(presentation.whyThisMatters, /third-party requests/i);
 });
 
 test("uses post-reject tracking copy for trackers persisted after reject", () => {
@@ -1495,6 +1545,69 @@ test("uses healthcare-specific retargeting-pixel copy on medical domains", () =>
   assert.equal(presentation.confidenceScore, "0.9");
 });
 
+test("keeps retargeting copy weak when the retained evidence is only a boolean detector hit", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "pixel-weak-1",
+        ruleKey: "scan_snapshot.commerce.retargeting_pixel_detected",
+        title: "Retargeting pixel detected",
+        evidence: {
+          snapshotField: "retargeting_pixel_detected",
+          value: true,
+          normalizedConcernMaxAssertionLevel: "weak",
+          normalizedConcernNegativeEvidenceFlags: ["no_direct_runtime_retargeting_artifact_observed"]
+        }
+      }),
+      observedValue: "true",
+      severity: "high",
+      title: "Retargeting pixel detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Retargeting pixel detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /retargeting-related signal|does not by itself confirm|specific pixel deployment|confirmed retargeting implementation/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /retained detector output|specific advertising pixel|concrete runtime artifacts/i
+  );
+  assert.equal(presentation.confidenceScore, "0.45");
+});
+
+test("uses fallback narrative ceilings even when a linked validation finding is present", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "pixel-weak-2",
+        ruleKey: "scan_snapshot.commerce.retargeting_pixel_detected",
+        title: "Retargeting pixel detected",
+        evidence: {
+          snapshotField: "retargeting_pixel_detected",
+          value: true
+        }
+      }),
+      fallbackEvidence: {
+        normalizedConcernMaxAssertionLevel: "weak",
+        normalizedConcernNegativeEvidenceFlags: ["no_direct_runtime_retargeting_artifact_observed"]
+      },
+      observedValue: "true",
+      severity: "high",
+      title: "Retargeting pixel detected"
+    },
+    []
+  );
+
+  assert.match(
+    presentation.whyThisMatters,
+    /retargeting-related signal|does not by itself confirm|confirmed retargeting implementation/i
+  );
+  assert.equal(presentation.confidenceScore, "0.45");
+});
+
 test("uses confirmed exfiltration copy when plaintext third-party payload evidence is present", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -1914,6 +2027,31 @@ test("uses stronger runtime session-replay copy and high confidence", () => {
   );
   assert.equal(presentation.suggestedBestPractice?.label, "FTC");
   assert.ok(Number(presentation.confidenceScore) >= 0.6);
+});
+
+test("uses runtime artifact keys from scanner evidence for session replay copy", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-2b",
+        ruleKey: "commerce.session_replay_runtime_detected",
+        title: "Session replay runtime detected",
+        evidence: {
+          session_replay_runtime_artifacts: [
+            "vendor:Microsoft Clarity|signature:clarity|host:clarity.ms|source:script_signature"
+          ],
+          session_replay_runtime_vendors: ["Microsoft Clarity"]
+        }
+      }),
+      observedValue: "Session replay runtime detected",
+      severity: "high",
+      title: "Session replay runtime detected"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /Microsoft Clarity|runtime artifacts associated/i);
+  assert.ok(Number(presentation.confidenceScore) >= 0.8);
 });
 
 test("uses vendor-specific runtime session-replay copy and elevated confidence", () => {

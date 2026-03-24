@@ -42,3 +42,12 @@
 - scan execution keeps page-level failures isolated where practical
 - PDF and regression failures do not invalidate the rest of the scan result
 - forward migrations are used for schema cleanup instead of rewriting history
+
+## Finding lifecycle
+
+- `WS01` owns scanner evidence collection and artifact quality
+- `WC01` normalizes scanner-derived inputs into internal concerns before unified finding assembly
+- concern policy decides whether a concern is eligible, audit-only, or suppressed before it becomes a unified finding candidate
+- canonical taxonomy IDs and unified finding IDs remain stable across that pipeline
+
+See [normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).

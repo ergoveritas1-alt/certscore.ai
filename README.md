@@ -99,6 +99,8 @@ Compatibility note:
 
 ## Local development setup
 
+Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here and can fail DNS resolution for Supabase-backed auth and app routes on localhost.
+
 1. Install dependencies:
    - `pnpm install`
 2. Copy the environment template:
@@ -149,6 +151,8 @@ Accessibility-specific validation:
 - `pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility:assert`
 
 The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
+
+The normalized concern lifecycle in `WC01` is documented in [docs/normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).
 
 ## CI accessibility validation
 

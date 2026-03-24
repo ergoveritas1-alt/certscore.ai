@@ -117,6 +117,13 @@ function buildFallbackEvidence(input: ReviewFindingPresentationSource) {
   } satisfies Record<string, unknown>;
 }
 
+function buildPresentationEvidence(input: ReviewFindingPresentationSource) {
+  return {
+    ...(input.linkedValidationFinding?.evidence ?? {}),
+    ...buildFallbackEvidence(input)
+  } satisfies Record<string, unknown>;
+}
+
 export function buildCanonicalReviewFindingPresentation(
   finding: ReviewFindingPresentationSource,
   siblingFindings: ReviewFindingPresentationSource[]
@@ -127,7 +134,7 @@ export function buildCanonicalReviewFindingPresentation(
   });
 
   const presentation = getReviewFindingPresentation({
-    evidence: finding.linkedValidationFinding?.evidence ?? buildFallbackEvidence(finding),
+    evidence: buildPresentationEvidence(finding),
     findingTitle: finding.linkedValidationFinding?.title ?? finding.title,
     keyOrTitle: finding.linkedValidationFinding?.ruleKey ?? finding.title,
     siblingFindingKeysOrTitles

@@ -1,6 +1,9 @@
-import { normalizeFindingName } from "../../../../../lib/scans/canonical-review-finding";
+import {
+  buildCanonicalReviewFindingPresentation,
+  normalizeFindingName
+} from "../../../../../lib/scans/canonical-review-finding";
 import { compactEvidenceJsonForDisplay } from "../../../../../lib/scans/compact-evidence-json";
-import { getReviewFindingPresentation } from "../../../../../lib/scans/review-finding-presentation";
+import type { UnifiedFindingDisplayPacket } from "../../../../../lib/scans/unified-findings";
 
 export type JsonViewFindingInput = {
   evidence: Record<string, unknown> | null;
@@ -19,6 +22,60 @@ export type JsonViewFindingRow = {
   summaryJson: string;
   title: string;
 };
+
+function buildJsonRow(input: {
+  domainHostname: string | null;
+  evidence: Record<string, unknown> | null;
+  id: string;
+  observation: string;
+  pageLabel: string;
+  ruleSummary: string;
+  title: string;
+  summary: {
+    confidenceScore: string;
+    findingName: string;
+    observation: string;
+    suggestedBestPractice: { organization: string; title: string; url: string } | null;
+    suggestedFix: string;
+    url: string;
+    whyThisMatters: string;
+  };
+}) {
+  return {
+    evidenceJson: JSON.stringify(compactEvidenceJsonForDisplay(input.evidence ?? {}), null, 2),
+    id: input.id,
+    pageLabel: input.pageLabel,
+    ruleSummary: input.ruleSummary,
+    summaryJson: JSON.stringify(input.summary, null, 2),
+    title: normalizeFindingName(input.title)
+  } satisfies JsonViewFindingRow;
+}
+
+function buildJsonPresentationEvidence(finding: JsonViewFindingInput) {
+  const evidence = { ...(finding.evidence ?? {}) } as Record<string, unknown>;
+
+  if (
+    finding.ruleKey === "scan_snapshot.commerce.retargeting_pixel_detected" &&
+    evidence.snapshotField === "retargeting_pixel_detected" &&
+    evidence.value === true &&
+    !Array.isArray(evidence.runtimeEvidence) &&
+    !Array.isArray(evidence.runtimeEvidenceArtifacts) &&
+    !Array.isArray(evidence.retargetingEvidenceUrls) &&
+    !Array.isArray(evidence.retargeting_evidence_urls)
+  ) {
+    evidence.normalizedConcernMaxAssertionLevel = "weak";
+    evidence.normalizedConcernNegativeEvidenceFlags = [
+      ...new Set([
+        ...(Array.isArray(evidence.normalizedConcernNegativeEvidenceFlags)
+          ? evidence.normalizedConcernNegativeEvidenceFlags.filter((value): value is string => typeof value === "string")
+          : []),
+        "no_direct_runtime_retargeting_artifact_observed"
+      ])
+    ];
+  }
+
+  return evidence;
+}
 
 function getFindingPriority(finding: {
   ruleKey: string;
@@ -86,6 +143,10 @@ function deriveObservation(finding: JsonViewFindingInput) {
     return "The automated accessibility check found WCAG issues that could affect how people use the site.";
   }
 
+  if (normalizedTitle === "Accessibility risk score") {
+    return "The scan retained representative automated accessibility rule outputs that elevated the page's manual-review priority.";
+  }
+
   if (/missing$/i.test(normalizedTitle)) {
     const missingPageLabel = normalizedTitle.toLowerCase().replace(/ missing$/i, "");
     if (evidence.keyPageGuessedOnly === true) {
@@ -121,40 +182,57 @@ export function mapFindingsForJsonView(input: {
 }) {
   return input.findings
     .map((finding) => {
-      const presentation = getReviewFindingPresentation({
-        evidence: finding.evidence ?? {},
-        findingTitle: finding.title,
-        keyOrTitle: finding.ruleKey,
-        siblingFindingKeysOrTitles: []
-      });
+      const presentationEvidence = buildJsonPresentationEvidence(finding);
+      const presentation = buildCanonicalReviewFindingPresentation(
+        {
+          fallbackEvidence: presentationEvidence,
+          linkedValidationFinding: {
+            evidence: presentationEvidence,
+            pageUrl: finding.pageUrl,
+            ruleKey: finding.ruleKey,
+            title: finding.title
+          },
+          observedValue: null,
+          severity:
+            finding.severity === "high" || finding.severity === "medium" || finding.severity === "low"
+              ? finding.severity
+              : "medium",
+          title: finding.title
+        },
+        []
+      );
       const pageLabel = finding.pageUrl ?? input.domainHostname ?? "Unknown website";
       const summaryJson = {
         url: pageLabel,
-        findingName: normalizeFindingName(finding.title),
+        findingName: presentation.findingName,
         observation: deriveObservation(finding),
         confidenceScore: presentation.confidenceScore ?? "NA",
         whyThisMatters: presentation.whyThisMatters,
         suggestedFix: presentation.suggestedFix,
-        suggestedBestPractice: presentation.bestPracticeLink
+        suggestedBestPractice: presentation.suggestedBestPractice
           ? {
-              organization: presentation.bestPracticeLink.label,
-              title: presentation.bestPracticeLink.title,
-              url: presentation.bestPracticeLink.url
+              organization: presentation.suggestedBestPractice.label,
+              title: presentation.suggestedBestPractice.title,
+              url: presentation.suggestedBestPractice.url
             }
           : null
       };
 
       return {
-        evidenceJson: JSON.stringify(compactEvidenceJsonForDisplay(finding.evidence ?? {}), null, 2),
-        id: finding.id,
-        pageLabel,
-        ruleSummary: `${finding.ruleKey} · ${finding.severity ?? "unknown"} · ${input.domainHostname ?? "unknown host"}`,
+        ...buildJsonRow({
+          domainHostname: input.domainHostname,
+          evidence: finding.evidence,
+          id: finding.id,
+          observation: summaryJson.observation,
+          pageLabel,
+          ruleSummary: `${finding.ruleKey} · ${finding.severity ?? "unknown"} · ${input.domainHostname ?? "unknown host"}`,
+          summary: summaryJson,
+          title: finding.title
+        }),
         sortPriority: getFindingPriority({
           ruleKey: finding.ruleKey,
           title: finding.title
-        }),
-        summaryJson: JSON.stringify(summaryJson, null, 2),
-        title: normalizeFindingName(finding.title)
+        })
       };
     })
     .sort((left, right) => {
@@ -169,4 +247,43 @@ export function mapFindingsForJsonView(input: {
       return left.id.localeCompare(right.id);
     })
     .map(({ sortPriority: _sortPriority, ...finding }) => finding satisfies JsonViewFindingRow);
+}
+
+export function mapUnifiedPacketsForJsonView(input: {
+  domainHostname: string | null;
+  packets: UnifiedFindingDisplayPacket[];
+}) {
+  return input.packets.map((packet) => {
+    const pageLabel = packet.primaryPageUrl ?? input.domainHostname ?? "Unknown website";
+    const summaryJson = {
+      url: pageLabel,
+      findingName: packet.presentation.findingName,
+      observation: packet.observedValue ?? packet.summary,
+      confidenceScore: packet.presentation.confidenceScore ?? "NA",
+      whyThisMatters: packet.presentation.whyThisMatters,
+      suggestedFix: packet.presentation.suggestedFix,
+      suggestedBestPractice: packet.presentation.suggestedBestPractice
+        ? {
+            organization: packet.presentation.suggestedBestPractice.label,
+            title: packet.presentation.suggestedBestPractice.title,
+            url: packet.presentation.suggestedBestPractice.url
+          }
+        : null
+    };
+
+    return buildJsonRow({
+      domainHostname: input.domainHostname,
+      evidence: {
+        ...(packet.evidence ?? {}),
+        presentationDecisionStatus: packet.presentationDecision.status,
+        unifiedFindingId: packet.unifiedFindingId
+      },
+      id: `unified:${packet.unifiedFindingId}`,
+      observation: summaryJson.observation,
+      pageLabel,
+      ruleSummary: `${packet.unifiedFindingId} · ${packet.severity} · ${input.domainHostname ?? "unknown host"}`,
+      summary: summaryJson,
+      title: packet.presentation.findingName
+    });
+  });
 }

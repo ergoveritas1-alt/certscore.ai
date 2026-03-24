@@ -692,6 +692,36 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Accessibility Claims & Statements",
       regulatoryTags: ["accessibility_ada_wcag"]
     },
+    "privacy.privacy_rights_path_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy Rights & Controls",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "privacy.gpc_disclosure_present": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Privacy Rights & Controls",
+      regulatoryTags: ["ccpa_cpra"]
+    },
+    "privacy.tracking_technologies_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "privacy.targeted_advertising_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy Rights & Controls",
+      regulatoryTags: ["ccpa_cpra", "gdpr_eu_privacy"]
+    },
+    "privacy.behavioral_analytics_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "commerce.arbitration_clause_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Subscription & Billing Transparency",
+      regulatoryTags: ["ftc_consumer_protection"]
+    },
     "context.privacy_cookie_policy_conflict_detected": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Policy Consistency & Behavior",

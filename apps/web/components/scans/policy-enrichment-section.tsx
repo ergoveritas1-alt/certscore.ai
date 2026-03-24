@@ -122,12 +122,16 @@ function renderPolicyRecord(
       <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
         <div className="grid gap-3 md:grid-cols-2">
           {renderInlineFact("DSAR", getField(enrichment, "policyDsarMechanism", "policy_dsar_mechanism"))}
+          {renderInlineFact("Rights signals", getField(enrichment, "policyRightsSignals", "policy_rights_signals"))}
           {renderInlineFact("Do not sell", getField(enrichment, "policyDoNotSell", "policy_do_not_sell"))}
+          {renderInlineFact("Privacy contact", getField(enrichment, "privacyContactChannelType", "privacy_contact_channel_type"))}
           {renderInlineFact("Data categories", getField(enrichment, "policyDataCategories", "policy_data_categories"))}
           {renderInlineFact("Transfer mechanisms", formatTopicList(getField(enrichment, "policyTransferMechanisms", "policy_transfer_mechanisms"), "mechanism"))}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
+          {renderInlineFact("Arbitration", getField(enrichment, "policyArbitrationPresent", "policy_arbitration_present"))}
+          {renderInlineFact("Notice contact", getField(enrichment, "policyNoticeContactPresent", "policy_notice_contact_present"))}
           {renderInlineFact("Actionable flags", getField(enrichment, "policyActionableFlags", "policy_actionable_flags"))}
           {renderInlineFact("Policy mentions", formatTopicList(getField(enrichment, "policyMentions", "policy_mentions"), "topic"))}
           {renderInlineFact("Retention periods", compactSummary(formatTopicList(getField(enrichment, "policyRetentionPeriods", "policy_retention_periods"), "periodText"), 120))}

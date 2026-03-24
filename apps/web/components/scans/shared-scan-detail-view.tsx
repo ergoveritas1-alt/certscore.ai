@@ -38,6 +38,19 @@ import {
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
+  getPolicyPositiveSignalSpec,
+  isPolicyPositiveSignalKey,
+  isPrivacyRightsSignalKey,
+  normalizePolicyPositiveSignalKey
+} from "../../lib/scans/policy-positive-signal-contract";
+import {
+  normalizePolicySnippet,
+  normalizePolicySnippetList
+} from "../../lib/scans/policy-snippet-normalization";
+import {
+  type ContradictionEvidenceBundle
+} from "../../lib/scans/contradiction-evidence-contract";
+import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
@@ -55,6 +68,10 @@ import {
 } from "../../lib/scans/tracker-risk";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -219,6 +236,13 @@ type PolicyBehaviorContradiction = {
   claim: string;
   evidence: string[];
   observedBehavior: string;
+  policyPageUrl: string | null;
+  policySnippet: string | null;
+  policySummary: string | null;
+  relatedVendors: string[];
+  runtimeSummary: string;
+  runtimeVendors: string[];
+  supportingSignals: string[];
   severity: "high" | "medium";
   status: "contradiction" | "violation risk" | "likely contradiction";
   title: string;
@@ -399,6 +423,14 @@ function derivePolicyBehaviorContradictions(input: {
       )
     : [];
   const policyDoNotSell = String(getPolicyField(privacyEnrichment, "policyDoNotSell", "policy_do_not_sell") ?? "unknown");
+  const policyPageUrl =
+    typeof (privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url) === "string"
+      ? String(privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url)
+      : null;
+  const policySummary =
+    typeof (privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short) === "string"
+      ? String(privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short)
+      : null;
 
   if (preconsentVendors.length > 0) {
     contradictions.push({
@@ -407,7 +439,14 @@ function derivePolicyBehaviorContradictions(input: {
       severity: "high",
       claim: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
       observedBehavior: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
-      evidence: preconsentEvidence.slice(0, 3)
+      evidence: preconsentEvidence.slice(0, 3),
+      policyPageUrl,
+      policySnippet: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
+      policySummary,
+      relatedVendors: preconsentVendors,
+      runtimeSummary: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
+      runtimeVendors: preconsentVendors,
+      supportingSignals: ["consent_gating_claim"]
     });
   }
 
@@ -418,7 +457,14 @@ function derivePolicyBehaviorContradictions(input: {
       severity: "medium",
       claim: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
       observedBehavior: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
-      evidence: advertisingVendors.slice(0, 4)
+      evidence: advertisingVendors.slice(0, 4),
+      policyPageUrl,
+      policySnippet: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
+      policySummary,
+      relatedVendors: advertisingVendors,
+      runtimeSummary: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
+      runtimeVendors: advertisingVendors,
+      supportingSignals: [policyDoNotSell]
     });
   }
 
@@ -438,7 +484,22 @@ function derivePolicyBehaviorContradictions(input: {
         ...(preconsentEvidence.slice(0, 2) ?? []),
         ...advertisingVendors.slice(0, 2),
         ...sessionReplayVendors.slice(0, 1)
-      ].slice(0, 4)
+      ].slice(0, 4),
+      policyPageUrl,
+      policySnippet: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+      policySummary,
+      relatedVendors: uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6),
+      runtimeSummary:
+        advertisingVendors.length > 0
+          ? `Observed adtech vendors include ${advertisingVendors.join(", ")}${sessionReplayVendors.length > 0 ? `; session replay tooling includes ${sessionReplayVendors.join(", ")}.` : "."}`
+          : trackerVendors.length > 0
+            ? `Observed tracker vendors include ${trackerVendors.slice(0, 6).join(", ")}.`
+            : "The scan flagged a policy/behavior conflict based on runtime evidence and policy semantics.",
+      runtimeVendors: uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6),
+      supportingSignals: uniqueStrings([
+        hasPolicyBehaviorConflict ? "policy_behavior_conflict_detected" : null,
+        policyFlags.includes("policy_behavior_conflict_candidate") ? "policy_behavior_conflict_candidate" : null
+      ])
     });
   }
 
@@ -896,6 +957,7 @@ type ResultDetail = {
 type CanonicalReviewIssue = {
   description: string;
   evidence?: string[];
+  fallbackEvidence?: Record<string, unknown>;
   linkedValidationRuleKeys?: string[];
   severity: "high" | "medium" | "low";
   title: string;
@@ -1007,10 +1069,28 @@ function findPersistedSignalValue(
 }
 
 function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
+  const canonicalKey = normalizePolicyPositiveSignalKey(key);
+
   for (const row of policyEnrichment) {
-    const value = getPolicyField(row, key, toSnakeCase(key));
-    if (value !== null) {
+    const value = getPolicyField(row, canonicalKey, toSnakeCase(canonicalKey), key, toSnakeCase(key));
+    if (value !== null && isSignalValuePopulated(canonicalKey, value)) {
       return value;
+    }
+
+    if (isPrivacyRightsSignalKey(canonicalKey)) {
+      const evidenceSnippets =
+        row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+          ? (row.policyEvidenceSnippets as Record<string, unknown>)
+          : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+            ? (row.policy_evidence_snippets as Record<string, unknown>)
+            : null;
+      const nestedRightsSignals = Array.isArray(evidenceSnippets?.policy_rights_signals)
+        ? (evidenceSnippets.policy_rights_signals as string[])
+        : null;
+
+      if (nestedRightsSignals && isSignalValuePopulated(canonicalKey, nestedRightsSignals)) {
+        return nestedRightsSignals;
+      }
     }
   }
 
@@ -1156,6 +1236,10 @@ function isConcerningSignal(key: string, value: unknown) {
     return true;
   }
 
+  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present/i.test(key)) {
+    return true;
+  }
+
   if (typeof value === "number") {
     if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
       return value > 0;
@@ -1213,6 +1297,36 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "Promotional or choice architecture may need closer disclosure review.";
   }
 
+  const policyPositiveSpec = getPolicyPositiveSignalSpec(key);
+
+  if (policyPositiveSpec?.unifiedFindingId === "privacy_rights_path_present") {
+    return "The scan retained a clear policy-based privacy-rights request path that users can rely on when seeking access, deletion, export, or related controls.";
+  }
+
+  if (policyPositiveSpec?.unifiedFindingId === "gpc_disclosure_present") {
+    return "The scan retained a disclosure indicating how the site says it handles Global Privacy Control or similar browser-level opt-out signals.";
+  }
+
+  if (policyPositiveSpec?.unifiedFindingId === "tracking_technologies_disclosure_present") {
+    return "The scan retained a disclosure describing cookies, pixels, tags, beacons, scripts, or similar tracking technologies used on the site.";
+  }
+
+  if (policyPositiveSpec?.unifiedFindingId === "targeted_advertising_disclosure_present") {
+    return "The scan retained a disclosure describing targeted advertising, sale, or sharing practices and related user controls.";
+  }
+
+  if (policyPositiveSpec?.unifiedFindingId === "behavioral_analytics_disclosure_present") {
+    return "The scan retained a disclosure describing behavioral analytics, session-observation, or replay-style tooling on at least some pages.";
+  }
+
+  if (/accessibility_contact_method_present/i.test(key)) {
+    return "The scan retained a visible accessibility support or accommodation path that users can use when they need help.";
+  }
+
+  if (policyPositiveSpec?.unifiedFindingId === "arbitration_clause_present") {
+    return "The scan retained terms language that appears to include arbitration or dispute-resolution provisions worth reading directly.";
+  }
+
   if (/store_credit_only/i.test(key)) {
     return "Post-purchase remedy may be more restrictive than expected.";
   }
@@ -1248,6 +1362,30 @@ function buildSectionReviewIssues(input: {
       ...input.policyBehaviorContradictions.map((row) => ({
         description: row.observedBehavior,
         evidence: row.evidence,
+        fallbackEvidence: {
+          contradictionEvidence: {
+            claim: row.claim,
+            policySnippet: row.policySnippet ?? row.claim,
+            policySourceUrl: row.policyPageUrl,
+            policySummaryShort: row.policySummary,
+            relatedVendors: row.relatedVendors,
+            runtimeEvidenceArtifacts: row.evidence,
+            runtimeSummary: row.runtimeSummary,
+            runtimeVendors: row.runtimeVendors,
+            sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
+            supportingSignals: row.supportingSignals
+          } satisfies ContradictionEvidenceBundle,
+          claim: row.claim,
+          pageUrl: row.policyPageUrl,
+          policySnippets: row.policySnippet ? [row.policySnippet] : [],
+          policySummaryShort: row.policySummary,
+          relatedVendors: row.relatedVendors,
+          runtimeEvidenceArtifacts: row.evidence,
+          runtimeSummary: row.runtimeSummary,
+          runtimeVendors: row.runtimeVendors,
+          sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
+          supportingSignals: row.supportingSignals
+        },
         severity: row.severity,
         title: row.title
       }))
@@ -1376,6 +1514,74 @@ function getKeyPageTypeForSignal(key: string) {
   return null;
 }
 
+function getPolicySignalFallbackEvidence(input: {
+  policyEnrichment: Array<Record<string, unknown>>;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+}) {
+  const rightsSnippetKeys = [
+    "dsar",
+    "access",
+    "delete",
+    "correct",
+    "export",
+    "manage",
+    "state_rights",
+    "authorized_agent",
+    "appeal",
+    "privacy_controls",
+    "privacy_contact"
+  ] as const;
+  const policyPositiveSpec = getPolicyPositiveSignalSpec(input.signalKey);
+  const topicKey = policyPositiveSpec?.evidenceSnippetKey ?? null;
+  const pageType = policyPositiveSpec?.pageType ?? "privacy_policy";
+  const row =
+    input.policyEnrichment.find((entry) => (entry.pageType ?? entry.page_type) === pageType) ??
+    input.policyEnrichment[0] ??
+    null;
+
+  const pageUrl =
+    row && typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+  const policySummaryShort =
+    row && typeof (row.policySummaryShort ?? row.policy_summary_short) === "string"
+      ? String(row.policySummaryShort ?? row.policy_summary_short)
+      : null;
+  const evidenceSnippets =
+    row?.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+      ? (row.policyEvidenceSnippets as Record<string, unknown>)
+      : row?.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+        ? (row.policy_evidence_snippets as Record<string, unknown>)
+        : null;
+  const policyRightsSignals = Array.isArray(row?.policyRightsSignals)
+    ? row.policyRightsSignals
+    : Array.isArray(row?.policy_rights_signals)
+      ? row.policy_rights_signals
+      : Array.isArray(evidenceSnippets?.policy_rights_signals)
+        ? (evidenceSnippets.policy_rights_signals as string[])
+        : [];
+  const topicSnippets =
+    topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
+  const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
+    ? rightsSnippetKeys
+        .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
+        .slice(0, 2)
+    : [];
+  const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
+
+  return {
+    pageUrl,
+    pageUrls: pageUrl ? [pageUrl] : [],
+    policySnippets,
+    policyRightsSignals,
+    policySummaryShort: policySnippets.length > 0 ? null : policySummaryShort,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue,
+    sourceUrls: pageUrl ? [pageUrl] : []
+  };
+}
+
 function getKeyPageDiscoveryPageSummary(
   summary: unknown,
   pageType: string
@@ -1419,6 +1625,7 @@ function getKeyPageDiscoveryPageSummary(
 function buildReviewFindings(input: {
   categoryId?: string;
   issues: CanonicalReviewIssue[];
+  policyEnrichment?: Array<Record<string, unknown>>;
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
   snapshot?: Record<string, unknown> | null;
@@ -1482,6 +1689,13 @@ function buildReviewFindings(input: {
               signalLabel: item.label,
               signalValue: item.value
             }
+          : item.source === "policy_enrichment_signal" && isPolicyPositiveSignalKey(item.key)
+            ? getPolicySignalFallbackEvidence({
+                policyEnrichment: input.policyEnrichment ?? [],
+                signalKey: item.key,
+                signalLabel: item.label,
+                signalValue: item.value
+              })
           : /privacy\.gpc_signal_not_honored/i.test(item.key)
             ? {
                 gpcVerification:
@@ -1545,7 +1759,8 @@ function buildReviewFindings(input: {
       if (!shouldSurfacePrimarySignalFinding({
         fallbackEvidence,
         key: item.key,
-        linkedValidationEvidence: linkedValidationFinding?.evidence ?? null
+        linkedValidationEvidence: linkedValidationFinding?.evidence ?? null,
+        signalSource: item.source
       })) {
         return [];
       }
@@ -1570,6 +1785,7 @@ function buildReviewFindings(input: {
     categoryId: input.categoryId ?? getDefaultIssueCategoryId(input.sectionId),
     description: issue.description,
     evidence: issue.evidence,
+    fallbackEvidence: issue.fallbackEvidence,
     id: `${input.sectionId}-issue-${index}`,
     linkedValidationFinding: input.validationFindingLookup
       ? findValidationFindingForKeys(
@@ -1600,6 +1816,10 @@ function getDefaultIssueCategoryId(sectionId: string) {
 }
 
 function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
+  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present/i.test(key)) {
+    return "low";
+  }
+
   if (/preconsent|tracking_before_consent|session_replay|conflict|mismatch/i.test(key)) {
     return "high";
   }
@@ -1961,7 +2181,7 @@ function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
 }
 
 function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
-  const counts = new Map<string, { count: number; highCount: number; mediumCount: number }>();
+  const counts = new Map<string, { count: number; highCount: number; mediumCount: number; lowCount: number }>();
 
   for (const finding of findings) {
     let theme: string | null = null;
@@ -1993,11 +2213,12 @@ function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
     }
 
     if (theme) {
-      const current = counts.get(theme) ?? { count: 0, highCount: 0, mediumCount: 0 };
+      const current = counts.get(theme) ?? { count: 0, highCount: 0, mediumCount: 0, lowCount: 0 };
       counts.set(theme, {
         count: current.count + 1,
         highCount: current.highCount + (finding.severity === "high" ? 1 : 0),
-        mediumCount: current.mediumCount + (finding.severity === "medium" ? 1 : 0)
+        mediumCount: current.mediumCount + (finding.severity === "medium" ? 1 : 0),
+        lowCount: current.lowCount + (finding.severity === "low" ? 1 : 0)
       });
     }
   }
@@ -2116,6 +2337,7 @@ function AgencyAdvisorySummary(input: {
 }) {
   const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = input.findings.filter((finding) => finding.severity === "low").length;
   const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
   const topThemes = deriveThemeCounts(input.findings);
   const infrastructureItems = deriveInfrastructureContext(input.snapshot);
@@ -2128,12 +2350,16 @@ function AgencyAdvisorySummary(input: {
       : mediumPriorityCount > 0
         ? `This scan surfaced ${mediumPriorityCount} medium-priority finding${mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
         : "This scan did not surface any high- or medium-priority findings in the main report.",
+    lowPriorityCount > 0
+      ? `The report also includes ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue in the detailed findings below.`
+      : null,
     themes.length > 0
       ? "The strongest patterns in this scan involve incomplete policy and disclosure coverage, gaps between stated site practices and observed behavior, and consent or tracking flows that may not give users a clear or balanced choice."
       : "The surfaced findings do not yet point to one dominant risk pattern.",
     "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
-  ];
-  const totalPriorityFindings = highPriorityCount + mediumPriorityCount;
+  ].filter((bullet): bullet is string => Boolean(bullet));
+
+  const maxThemeCount = topThemes.reduce((max, theme) => Math.max(max, theme.count), 0);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -2143,23 +2369,35 @@ function AgencyAdvisorySummary(input: {
         {topThemes.length > 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Areas of concern</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Findings</p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                 <span className="inline-flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                <span>High</span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                  <span>High</span>
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
                   <span>Medium</span>
                 </span>
+                {lowPriorityCount > 0 ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                    <span>Advisory</span>
+                  </span>
+                ) : null}
               </div>
             </div>
+            {lowPriorityCount > 0 ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Counts below include {lowPriorityCount} advisory finding{lowPriorityCount === 1 ? "" : "s"} shown in blue.
+              </p>
+            ) : null}
             <div className="mt-3 space-y-3">
               {topThemes.map((theme) => {
-                const width = totalPriorityFindings > 0 ? (theme.count / totalPriorityFindings) * 100 : 0;
+                const width = maxThemeCount > 0 ? (theme.count / maxThemeCount) * 75 : 0;
                 const highWidth = theme.count > 0 ? (theme.highCount / theme.count) * 100 : 0;
                 const mediumWidth = theme.count > 0 ? (theme.mediumCount / theme.count) * 100 : 0;
+                const lowWidth = theme.count > 0 ? (theme.lowCount / theme.count) * 100 : 0;
                 return (
                   <div key={theme.label} className="space-y-1">
                     <div className="flex items-center justify-between gap-3 text-sm text-slate-700">
@@ -2173,6 +2411,9 @@ function AgencyAdvisorySummary(input: {
                         ) : null}
                         {theme.mediumCount > 0 ? (
                           <div className="h-full bg-amber-400" style={{ width: `${mediumWidth}%` }} />
+                        ) : null}
+                        {theme.lowCount > 0 ? (
+                          <div className="h-full bg-sky-400" style={{ width: `${lowWidth}%` }} />
                         ) : null}
                       </div>
                     </div>
@@ -2435,6 +2676,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   });
   const highPriorityCount = sortedFindings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = sortedFindings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = sortedFindings.filter((finding) => finding.severity === "low").length;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -2448,14 +2690,18 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-base font-semibold text-slate-900">Noteworthy Findings</span>
                 <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
-                  {highPriorityCount} high priority
+                  {highPriorityCount} high
                 </span>
                 <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-800">
-                  {mediumPriorityCount} medium priority
+                  {mediumPriorityCount} medium
+                </span>
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-sky-800">
+                  {lowPriorityCount} advisory
                 </span>
               </span>
               <p className="mt-1 text-sm text-slate-500">
                 The main surfaced issues from this scan, prioritized for review and remediation.
+                {lowPriorityCount > 0 ? ` This scan also surfaced ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue.` : ""}
               </p>
             </span>
           </span>
@@ -2784,6 +3030,171 @@ function HomepagePreviewGate(input: {
   );
 }
 
+export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+
+  try {
+    const policyEnrichmentById = new Map(scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row]));
+    const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
+      const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
+
+      return {
+        description: formatReviewIssueDescription(String(row.reason ?? "")),
+        key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
+        pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
+        pageUrl:
+          typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string"
+            ? String(enrichment?.pageUrl ?? enrichment?.page_url)
+            : null,
+        reason: String(row.reason ?? ""),
+        reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
+        reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
+        summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
+      };
+    });
+    const preconsentViolationRows = derivePreconsentViolationRows({
+      persistedViolations: scanRecord.preconsentViolations,
+      runtimeArtifacts,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
+      policyEnrichments: scanRecord.policyEnrichment,
+      preconsentViolations: preconsentViolationRows,
+      runtimeArtifacts,
+      snapshot,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
+    const accessibilityIssueRows = deriveAccessibilityIssueRows(snapshot);
+    const accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
+      examples: scanRecord.accessibilityRuleExamples ?? [],
+      ruleCounts: scanRecord.accessibilityRuleCounts ?? []
+    });
+    const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
+      .sort((left, right) => right.weightedPriority - left.weightedPriority)
+      .slice(0, 6);
+    const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
+    const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
+      const sections = getReportSectionsForPillar(pillar.id).map((section) => {
+        const sectionCategoryIds = new Set(getReportEvidenceCategoriesForSection(section.id).map((category) => category.id));
+        const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
+          const items = getReportSignalsForEvidenceCategory(category.id)
+            .map(({ relation, signal }) => ({
+              key: signal.key,
+              label: signal.label,
+              relation,
+              source: signal.source,
+              value: getReportSignalValue({
+                policyEnrichment: scanRecord.policyEnrichment,
+                runtimeArtifacts: scanRecord.runtimeArtifacts,
+                signals: scanRecord.signals,
+                snapshot: scanRecord.snapshot,
+                signal
+              })
+            }))
+            .filter((item) => isSignalValuePopulated(item.key, item.value))
+            .sort((left, right) => {
+              const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
+              return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
+            });
+
+          const reviewFindings = buildReviewFindings({
+            categoryId: category.id,
+            issues: [],
+            policyEnrichment: scanRecord.policyEnrichment,
+            prioritizedAccessibilityRuleRows,
+            runtimeArtifacts: scanRecord.runtimeArtifacts,
+            snapshot,
+            sectionId: section.id,
+            sectionItems: items,
+            validationFindingLookup
+          });
+
+          return {
+            category,
+            items,
+            reviewFindings
+          };
+        });
+
+        const issues = buildSectionReviewIssues({
+          accessibilityIssueRows,
+          consentAuditFindings,
+          policyBehaviorContradictions,
+          preconsentViolationRows,
+          scanReportReviewIssues,
+          sectionId: section.id,
+          snapshot
+        });
+        const issueFindings = buildReviewFindings({
+          issues,
+          policyEnrichment: scanRecord.policyEnrichment,
+          prioritizedAccessibilityRuleRows,
+          runtimeArtifacts: scanRecord.runtimeArtifacts,
+          snapshot,
+          sectionId: section.id,
+          sectionItems: [],
+          validationFindingLookup
+        });
+
+        return {
+          categories,
+          issueFindings,
+          sectionCategoryIds
+        };
+      });
+
+      return { sections };
+    });
+
+    const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
+      sections.flatMap((section) => [
+        ...section.categories.flatMap((category) => category.reviewFindings),
+        ...section.issueFindings
+      ])
+    );
+    const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: allReviewFindingCandidates,
+      validationFindings: scanRecord.validationFindings,
+      validationFindingLookup
+    }).filter((finding) => finding.presentationDecision.status !== "suppress");
+
+    const pillarSections = sectionDrafts.map(({ sections }) => {
+      return {
+        sections: sections.map(({ categories, sectionCategoryIds }) => {
+          const reviewFindings = globalUnifiedFindings.filter((finding) =>
+            finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
+          );
+          const ownerReviewFindings = reviewFindings.filter((finding) => {
+            const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
+            return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
+          });
+
+          return {
+            ownerReviewFindings
+          };
+        })
+      };
+    });
+
+    return [
+      ...new Map(
+        pillarSections
+          .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
+          .map((finding) => [finding.unifiedFindingId, finding])
+      ).values()
+    ];
+  } catch (error) {
+    console.error("Failed to build scan report unified findings", error);
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+}
+
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
   const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
@@ -2816,6 +3227,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         const reviewFindings = buildReviewFindings({
           categoryId: category.id,
           issues: [],
+          policyEnrichment: input.scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
           runtimeArtifacts: input.scanRecord.runtimeArtifacts,
           snapshot: input.snapshot,
@@ -2843,6 +3255,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       });
       const issueFindings = buildReviewFindings({
         issues,
+        policyEnrichment: input.scanRecord.policyEnrichment,
         prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
         runtimeArtifacts: input.scanRecord.runtimeArtifacts,
         snapshot: input.snapshot,

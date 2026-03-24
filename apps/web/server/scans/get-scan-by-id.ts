@@ -12,9 +12,15 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
+import { POLICY_POSITIVE_SIGNAL_SPECS } from "../../lib/scans/policy-positive-signal-contract";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
+import {
+  collectPolicyEvidenceHashes,
+  dereferencePolicyEvidenceSnippets,
+  derivePositivePolicySignalMap
+} from "./policy-enrichment-normalization";
 
 export type ScanDetailRecord = {
   id: string;
@@ -169,6 +175,13 @@ type SupplementalCoverageSignal = {
   key: string;
   label: string;
   snapshotField: string;
+  value: boolean | number | string | string[];
+};
+
+type SupplementalPolicySignal = {
+  category: string;
+  key: string;
+  label: string;
   value: boolean | number | string | string[];
 };
 
@@ -391,7 +404,7 @@ function deriveSupplementalCoverageSignals(input: {
 function deriveSupplementalSnapshotSignals(input: {
   existingSignals: ScanSignalRecord[];
   snapshot: Record<string, unknown> | null;
-}) {
+}): ScanSignalRecord[] {
   if (!input.snapshot) {
     return [];
   }
@@ -472,6 +485,64 @@ function deriveSupplementalSnapshotSignals(input: {
     "Accessibility support path missing",
     snapshot.accessibility_contact_method_present === false
   );
+
+  return supplementalSignals.map((signal) => {
+    const taxonomy = mapSignalKeyToTaxonomy({
+      category: signal.category,
+      key: signal.key,
+      label: signal.label
+    });
+
+    return {
+      category: signal.category,
+      primaryCategory: taxonomy.primaryCategory,
+      primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+      key: signal.key,
+      label: signal.label,
+      subcategory: taxonomy.subcategory ?? null,
+      value: signal.value,
+      valueType: "boolean"
+    } satisfies ScanSignalRecord;
+  });
+}
+
+function deriveSupplementalPolicySignals(input: {
+  existingSignals: ScanSignalRecord[];
+  policyEnrichment: Array<Record<string, unknown>>;
+  primaryPolicyEnrichment: Record<string, unknown> | null;
+}): ScanSignalRecord[] {
+  const supplementalSignals: SupplementalPolicySignal[] = [];
+  const existingKeys = new Set(input.existingSignals.map((signal) => signal.key));
+  const primaryPolicy = input.primaryPolicyEnrichment;
+
+  if (!primaryPolicy) {
+    return [];
+  }
+
+  const positivePolicySignalMap = derivePositivePolicySignalMap({
+    policyEnrichment: input.policyEnrichment,
+    primaryPolicyEnrichment: primaryPolicy
+  });
+
+  const pushBoolean = (category: string, key: string, label: string, value: boolean) => {
+    if (!value || existingKeys.has(key)) {
+      return;
+    }
+
+    supplementalSignals.push({ category, key, label, value: true });
+  };
+
+  for (const spec of POLICY_POSITIVE_SIGNAL_SPECS) {
+    const value = positivePolicySignalMap.get(spec.canonicalSignalKey) === true;
+
+    pushBoolean(
+      spec.canonicalSignalKey.startsWith("commerce.") ? "commerce" : "privacy",
+      spec.canonicalSignalKey,
+      spec.label,
+      value
+    );
+  }
 
   return supplementalSignals.map((signal) => {
     const taxonomy = mapSignalKeyToTaxonomy({
@@ -788,7 +859,30 @@ async function loadScanDetailRecord(input: {
         await supabase.from("policy_enrichment").select("*").eq("scan_id", previousScan.id).order("created_at", { ascending: true })
       ).data ?? []
     : [];
-  const normalizedPolicyEnrichment = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
+  const rawPolicyEnrichmentRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
+  const policyEvidenceHashes = collectPolicyEvidenceHashes(rawPolicyEnrichmentRows);
+  const policyEvidenceByHash =
+    policyEvidenceHashes.length > 0
+      ? new Map(
+          (
+            (
+              await supabase
+                .from("policy_evidence")
+                .select("evidence_hash, snippet")
+                .in("evidence_hash", policyEvidenceHashes)
+            ).data ?? []
+          )
+            .filter(
+              (row): row is { evidence_hash: string; snippet: string } =>
+                Boolean(row) && typeof row.evidence_hash === "string" && typeof row.snippet === "string"
+            )
+            .map((row) => [row.evidence_hash, row.snippet] as const)
+        )
+      : new Map<string, string>();
+  const normalizedPolicyEnrichment = dereferencePolicyEvidenceSnippets({
+    evidenceByHash: policyEvidenceByHash,
+    rows: rawPolicyEnrichmentRows
+  });
   const normalizedPolicyReviewQueue = ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(normalizedPolicyEnrichment);
   const previousPrimaryPolicyEnrichment = getPrimaryPolicyEnrichment((previousPolicyRows as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)));
@@ -839,6 +933,11 @@ async function loadScanDetailRecord(input: {
   const supplementalSnapshotSignals = deriveSupplementalSnapshotSignals({
     existingSignals: normalizedSignals,
     snapshot: normalizedSnapshot
+  });
+  const supplementalPolicySignals = deriveSupplementalPolicySignals({
+    existingSignals: normalizedSignals,
+    policyEnrichment: normalizedPolicyEnrichment,
+    primaryPolicyEnrichment
   });
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
   const regulatoryRisk = snapshot
@@ -1028,6 +1127,7 @@ async function loadScanDetailRecord(input: {
     signals: [
       ...normalizedSignals,
       ...supplementalSnapshotSignals,
+      ...supplementalPolicySignals,
       ...supplementalCoverageSignals.supplementalSignals.map((signal) => {
         const taxonomy = mapSignalKeyToTaxonomy({
           category: "disclosure",

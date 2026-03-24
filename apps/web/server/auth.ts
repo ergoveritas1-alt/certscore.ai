@@ -7,6 +7,24 @@ import { bootstrapAppUserSession, bootstrapUserFromSession, type BootstrapResult
 import { getPasswordSessionUser } from "./password-auth/session";
 import type { AuthenticatedAppUser } from "./password-auth/types";
 
+function isSupabaseNetworkError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const cause = error.cause;
+  const code =
+    cause && typeof cause === "object" && "code" in cause && typeof (cause as { code?: unknown }).code === "string"
+      ? (cause as { code: string }).code
+      : null;
+
+  return code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "EAI_AGAIN";
+}
+
+function redirectToLoginWithNetworkError(nextPath = "/app"): never {
+  redirect(`/login?error=auth_service_unavailable&next=${encodeURIComponent(nextPath)}`);
+}
+
 function mapSupabaseUser(user: User): AuthenticatedAppUser | null {
   if (!user.email) {
     return null;
@@ -50,9 +68,18 @@ export const getCurrentUser = cache(async (): Promise<AuthenticatedAppUser | nul
     }
   });
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  let user: User | null = null;
+
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (error) {
+    if (isSupabaseNetworkError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 
   return user ? mapSupabaseUser(user) : null;
 });
@@ -83,9 +110,18 @@ export const getDashboardContext = cache(async (): Promise<BootstrapResult> => {
     }
   });
 
-  const {
-    data: { user: supabaseUser }
-  } = await supabase.auth.getUser();
+  let supabaseUser: User | null = null;
+
+  try {
+    const result = await supabase.auth.getUser();
+    supabaseUser = result.data.user;
+  } catch (error) {
+    if (isSupabaseNetworkError(error)) {
+      redirectToLoginWithNetworkError();
+    }
+
+    throw error;
+  }
 
   if (!supabaseUser) {
     redirect("/login");

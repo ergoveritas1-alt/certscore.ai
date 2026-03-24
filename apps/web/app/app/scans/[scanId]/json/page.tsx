@@ -1,13 +1,14 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { notFound } from "next/navigation";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import { buildScanReportUnifiedFindings } from "../../../../../components/scans/shared-scan-detail-view";
 import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-pane";
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
-import { mapFindingsForJsonView } from "./findings";
+import { mapUnifiedPacketsForJsonView } from "./findings";
 
 type ScanJsonPageProps = {
   params: Promise<{
@@ -74,16 +75,9 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
           : null
       : null;
 
-  const findings = mapFindingsForJsonView({
+  const allFindings = mapUnifiedPacketsForJsonView({
     domainHostname: scanRecord.scan.domainHostname,
-    findings: scanRecord.validationFindings.map((finding) => ({
-      evidence: finding.evidence ?? null,
-      id: finding.id,
-      pageUrl: finding.pageUrl,
-      ruleKey: finding.ruleKey,
-      severity: finding.severity,
-      title: finding.title
-    }))
+    packets: buildScanReportUnifiedFindings(scanRecord)
   });
 
   return (
@@ -112,9 +106,9 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
       </div>
 
       <ScanFindingsPane
-        title={`All findings (${findings.length})`}
-        description="Every finding attached to this scan, including supplemental validation findings, rendered without collapsing duplicates."
-        findings={findings}
+        title={`All findings (${allFindings.length})`}
+        description="Unified findings for this scan, using the same surfaced and audit-only finding pipeline as the report view."
+        findings={allFindings}
       />
     </div>
   );

@@ -2007,6 +2007,53 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "policy_enrichment_signal",
+    "policyRightsSignals",
+    "Privacy-rights path present",
+    "rights_request_mechanisms",
+    ["privacy_contacts_accountability"],
+    ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.gpc_disclosure_present",
+    "GPC handling disclosed",
+    "sale_sharing_targeted_advertising_controls",
+    ["data_handling_disclosures"],
+    ["consumer_rights_request_handling", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.tracking_technologies_disclosure_present",
+    "Tracking technologies disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.targeted_advertising_disclosure_present",
+    "Targeted advertising disclosure present",
+    "data_handling_disclosures",
+    ["sale_sharing_targeted_advertising_controls"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.behavioral_analytics_disclosure_present",
+    "Behavioral analytics disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "commerce.arbitration_clause_present",
+    "Arbitration clause present",
+    "terms_coverage_enforceability_signals",
+    ["legal_commercial_disclosure_coverage"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
     "policyClaimNoSale",
     "Policy claim no sale",
     "data_handling_disclosures",
@@ -2198,6 +2245,17 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["Missing privacy contact channel", "No clear privacy contact channel"]
   }),
   defineReportUnifiedFinding({
+    id: "privacy_rights_path_present",
+    label: "Privacy-rights path present",
+    owner: "rights_request_mechanisms",
+    mirrors: ["privacy_contacts_accountability"],
+    overlays: ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"],
+    signalMappings: [
+      { source: "policy_enrichment_signal", key: "policyRightsSignals" },
+      { source: "policy_enrichment_signal", key: "privacy.privacy_rights_path_present" }
+    ]
+  }),
+  defineReportUnifiedFinding({
     id: "missing_dsar_high_exposure",
     label: "Missing DSAR mechanism on high-exposure site",
     owner: "rights_request_mechanisms",
@@ -2362,6 +2420,22 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_signal_not_honored" }],
     aliases: ["Global Privacy Control signal not honored", "GPC signal ignored"]
+  }),
+  defineReportUnifiedFinding({
+    id: "gpc_disclosure_present",
+    label: "GPC handling disclosed",
+    owner: "sale_sharing_targeted_advertising_controls",
+    mirrors: ["data_handling_disclosures"],
+    overlays: ["consumer_rights_request_handling", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.gpc_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "tracking_technologies_disclosure_present",
+    label: "Tracking technologies disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.tracking_technologies_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "weak_cookie_security_attributes",
@@ -2569,6 +2643,29 @@ export const REPORT_UNIFIED_FINDINGS = [
       { source: "snapshot_signal", key: "commerce.service_suspension_or_termination_terms_present" }
     ]
   }),
+  defineReportUnifiedFinding({
+    id: "arbitration_clause_present",
+    label: "Arbitration clause present",
+    owner: "terms_coverage_enforceability_signals",
+    mirrors: ["legal_commercial_disclosure_coverage"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "commerce.arbitration_clause_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "targeted_advertising_disclosure_present",
+    label: "Targeted advertising disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["sale_sharing_targeted_advertising_controls"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.targeted_advertising_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "behavioral_analytics_disclosure_present",
+    label: "Behavioral analytics disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
+  }),
 
   defineReportUnifiedFinding({
     id: "wcag_issue_summary",
@@ -2662,6 +2759,13 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["accessibility_commitments_support_paths"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.accessibility_support_path_missing" }],
     aliases: ["Accessibility support path missing", "No accessibility support path detected", "Accessibility contact path missing"]
+  }),
+  defineReportUnifiedFinding({
+    id: "accessibility_support_path_present",
+    label: "Accessibility support path present",
+    owner: "support_accommodation_contact_paths",
+    overlays: ["accessibility_commitments_support_paths"],
+    signalMappings: [{ source: "snapshot_signal", key: "accessibility.accessibility_contact_method_present" }]
   }),
   ...FINANCIAL_REPORT_UNIFIED_FINDINGS
 ] satisfies ReportUnifiedFindingDefinition[];
