@@ -13,10 +13,14 @@ import type { ScanValidationFinding } from "../../lib/scans/validation-review-li
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { POLICY_POSITIVE_SIGNAL_SPECS } from "../../lib/scans/policy-positive-signal-contract";
-import { normalizePolicyEvidenceSnippetsRecord, normalizePolicySnippet } from "../../lib/scans/policy-snippet-normalization";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
+import {
+  collectPolicyEvidenceHashes,
+  dereferencePolicyEvidenceSnippets,
+  derivePositivePolicySignalMap
+} from "./policy-enrichment-normalization";
 
 export type ScanDetailRecord = {
   id: string;
@@ -284,105 +288,6 @@ function stripTimestampFields(record: Record<string, unknown>) {
   return next;
 }
 
-function looksLikeEvidenceHash(value: unknown): value is string {
-  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
-}
-
-function collectPolicyEvidenceHashes(rows: Array<Record<string, unknown>>) {
-  const hashes = new Set<string>();
-
-  for (const row of rows) {
-    const snippets =
-      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-        ? (row.policyEvidenceSnippets as Record<string, unknown>)
-        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-          ? (row.policy_evidence_snippets as Record<string, unknown>)
-          : null;
-
-    if (!snippets) {
-      continue;
-    }
-
-    for (const value of Object.values(snippets)) {
-      if (looksLikeEvidenceHash(value)) {
-        hashes.add(value);
-        continue;
-      }
-
-      if (!Array.isArray(value)) {
-        continue;
-      }
-
-      for (const entry of value) {
-        if (looksLikeEvidenceHash(entry)) {
-          hashes.add(entry);
-        }
-      }
-    }
-  }
-
-  return [...hashes];
-}
-
-function dereferencePolicyEvidenceSnippets(input: {
-  evidenceByHash: Map<string, string>;
-  rows: Array<Record<string, unknown>>;
-}) {
-  return input.rows.map((row) => {
-    const rawSnippets =
-      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-        ? (row.policyEvidenceSnippets as Record<string, unknown>)
-        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-          ? (row.policy_evidence_snippets as Record<string, unknown>)
-          : null;
-
-    if (!rawSnippets) {
-      return row;
-    }
-
-    const resolved = normalizePolicyEvidenceSnippetsRecord(Object.fromEntries(
-      Object.entries(rawSnippets).map(([key, value]) => {
-        if (looksLikeEvidenceHash(value)) {
-          return [key, input.evidenceByHash.get(value) ?? value];
-        }
-
-        if (Array.isArray(value)) {
-          return [
-            key,
-            value.map((entry) => (looksLikeEvidenceHash(entry) ? input.evidenceByHash.get(entry) ?? entry : entry))
-          ];
-        }
-
-        return [key, value];
-      })
-    ));
-
-    const resolvedPolicyRightsSignals = Array.isArray(row.policyRightsSignals)
-      ? row.policyRightsSignals
-      : Array.isArray(row.policy_rights_signals)
-        ? row.policy_rights_signals
-        : Array.isArray(resolved.policy_rights_signals)
-          ? resolved.policy_rights_signals
-          : null;
-
-    return {
-      ...row,
-      ...(resolvedPolicyRightsSignals ? {
-        policyRightsSignals: resolvedPolicyRightsSignals,
-        policy_rights_signals: resolvedPolicyRightsSignals
-      } : {}),
-      ...(typeof row.policySummaryShort === "string"
-        ? { policySummaryShort: normalizePolicySnippet(row.policySummaryShort) ?? row.policySummaryShort }
-        : {}),
-      ...(typeof row.policy_summary_short === "string"
-        ? { policy_summary_short: normalizePolicySnippet(row.policy_summary_short) ?? row.policy_summary_short }
-        : {}),
-      policyEvidenceSnippets: resolved,
-      policy_evidence_snippets: resolved
-    };
-  });
-}
-
 function deriveSupplementalCoverageSignals(input: {
   events: ScanEventRecord[];
   existingSignals: ScanSignalRecord[];
@@ -615,6 +520,11 @@ function deriveSupplementalPolicySignals(input: {
     return [];
   }
 
+  const positivePolicySignalMap = derivePositivePolicySignalMap({
+    policyEnrichment: input.policyEnrichment,
+    primaryPolicyEnrichment: primaryPolicy
+  });
+
   const pushBoolean = (category: string, key: string, label: string, value: boolean) => {
     if (!value || existingKeys.has(key)) {
       return;
@@ -623,50 +533,8 @@ function deriveSupplementalPolicySignals(input: {
     supplementalSignals.push({ category, key, label, value: true });
   };
 
-  const primaryEvidenceSnippets =
-    primaryPolicy.policyEvidenceSnippets && typeof primaryPolicy.policyEvidenceSnippets === "object"
-      ? primaryPolicy.policyEvidenceSnippets
-      : primaryPolicy.policy_evidence_snippets && typeof primaryPolicy.policy_evidence_snippets === "object"
-        ? primaryPolicy.policy_evidence_snippets
-        : null;
-
-  const policyRightsSignals = Array.isArray(primaryPolicy.policyRightsSignals)
-    ? primaryPolicy.policyRightsSignals
-    : Array.isArray(primaryPolicy.policy_rights_signals)
-      ? primaryPolicy.policy_rights_signals
-      : Array.isArray((primaryEvidenceSnippets as { policy_rights_signals?: unknown } | null)?.policy_rights_signals)
-        ? (((primaryEvidenceSnippets as { policy_rights_signals: string[] }).policy_rights_signals))
-      : [];
-  const policyMentions = Array.isArray(primaryPolicy.policyMentions)
-    ? primaryPolicy.policyMentions
-    : Array.isArray(primaryPolicy.policy_mentions)
-      ? primaryPolicy.policy_mentions
-      : [];
-  const hasPolicyMention = (topic: string) =>
-    policyMentions.some(
-      (entry) =>
-        Boolean(entry) &&
-        typeof entry === "object" &&
-        (((entry as { topic?: unknown }).topic as string | undefined) ?? "").toLowerCase() === topic
-    );
-
   for (const spec of POLICY_POSITIVE_SIGNAL_SPECS) {
-    const value =
-      spec.unifiedFindingId === "privacy_rights_path_present"
-        ? policyRightsSignals.length > 0
-        : spec.unifiedFindingId === "arbitration_clause_present"
-          ? input.policyEnrichment.some(
-              (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
-            )
-          : spec.evidenceSnippetKey === "topic:gpc_disclosure"
-            ? hasPolicyMention("gpc_disclosure")
-            : spec.evidenceSnippetKey === "topic:tracking_technologies_disclosure"
-              ? hasPolicyMention("tracking_technologies_disclosure")
-              : spec.evidenceSnippetKey === "topic:targeted_advertising_disclosure"
-                ? hasPolicyMention("targeted_advertising_disclosure")
-                : spec.evidenceSnippetKey === "topic:session_replay_disclosure"
-                  ? hasPolicyMention("session_replay_disclosure")
-                  : false;
+    const value = positivePolicySignalMap.get(spec.canonicalSignalKey) === true;
 
     pushBoolean(
       spec.canonicalSignalKey.startsWith("commerce.") ? "commerce" : "privacy",
