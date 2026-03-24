@@ -3,6 +3,7 @@ import {
   normalizeFindingName
 } from "../../../../../lib/scans/canonical-review-finding";
 import { compactEvidenceJsonForDisplay } from "../../../../../lib/scans/compact-evidence-json";
+import type { UnifiedFindingDisplayPacket } from "../../../../../lib/scans/unified-findings";
 
 export type JsonViewFindingInput = {
   evidence: Record<string, unknown> | null;
@@ -21,6 +22,34 @@ export type JsonViewFindingRow = {
   summaryJson: string;
   title: string;
 };
+
+function buildJsonRow(input: {
+  domainHostname: string | null;
+  evidence: Record<string, unknown> | null;
+  id: string;
+  observation: string;
+  pageLabel: string;
+  ruleSummary: string;
+  title: string;
+  summary: {
+    confidenceScore: string;
+    findingName: string;
+    observation: string;
+    suggestedBestPractice: { organization: string; title: string; url: string } | null;
+    suggestedFix: string;
+    url: string;
+    whyThisMatters: string;
+  };
+}) {
+  return {
+    evidenceJson: JSON.stringify(compactEvidenceJsonForDisplay(input.evidence ?? {}), null, 2),
+    id: input.id,
+    pageLabel: input.pageLabel,
+    ruleSummary: input.ruleSummary,
+    summaryJson: JSON.stringify(input.summary, null, 2),
+    title: normalizeFindingName(input.title)
+  } satisfies JsonViewFindingRow;
+}
 
 function buildJsonPresentationEvidence(finding: JsonViewFindingInput) {
   const evidence = { ...(finding.evidence ?? {}) } as Record<string, unknown>;
@@ -190,16 +219,20 @@ export function mapFindingsForJsonView(input: {
       };
 
       return {
-        evidenceJson: JSON.stringify(compactEvidenceJsonForDisplay(finding.evidence ?? {}), null, 2),
-        id: finding.id,
-        pageLabel,
-        ruleSummary: `${finding.ruleKey} · ${finding.severity ?? "unknown"} · ${input.domainHostname ?? "unknown host"}`,
+        ...buildJsonRow({
+          domainHostname: input.domainHostname,
+          evidence: finding.evidence,
+          id: finding.id,
+          observation: summaryJson.observation,
+          pageLabel,
+          ruleSummary: `${finding.ruleKey} · ${finding.severity ?? "unknown"} · ${input.domainHostname ?? "unknown host"}`,
+          summary: summaryJson,
+          title: finding.title
+        }),
         sortPriority: getFindingPriority({
           ruleKey: finding.ruleKey,
           title: finding.title
-        }),
-        summaryJson: JSON.stringify(summaryJson, null, 2),
-        title: normalizeFindingName(finding.title)
+        })
       };
     })
     .sort((left, right) => {
@@ -214,4 +247,43 @@ export function mapFindingsForJsonView(input: {
       return left.id.localeCompare(right.id);
     })
     .map(({ sortPriority: _sortPriority, ...finding }) => finding satisfies JsonViewFindingRow);
+}
+
+export function mapUnifiedPacketsForJsonView(input: {
+  domainHostname: string | null;
+  packets: UnifiedFindingDisplayPacket[];
+}) {
+  return input.packets.map((packet) => {
+    const pageLabel = packet.primaryPageUrl ?? input.domainHostname ?? "Unknown website";
+    const summaryJson = {
+      url: pageLabel,
+      findingName: packet.presentation.findingName,
+      observation: packet.observedValue ?? packet.summary,
+      confidenceScore: packet.presentation.confidenceScore ?? "NA",
+      whyThisMatters: packet.presentation.whyThisMatters,
+      suggestedFix: packet.presentation.suggestedFix,
+      suggestedBestPractice: packet.presentation.suggestedBestPractice
+        ? {
+            organization: packet.presentation.suggestedBestPractice.label,
+            title: packet.presentation.suggestedBestPractice.title,
+            url: packet.presentation.suggestedBestPractice.url
+          }
+        : null
+    };
+
+    return buildJsonRow({
+      domainHostname: input.domainHostname,
+      evidence: {
+        ...(packet.evidence ?? {}),
+        presentationDecisionStatus: packet.presentationDecision.status,
+        unifiedFindingId: packet.unifiedFindingId
+      },
+      id: `unified:${packet.unifiedFindingId}`,
+      observation: summaryJson.observation,
+      pageLabel,
+      ruleSummary: `${packet.unifiedFindingId} · ${packet.severity} · ${input.domainHostname ?? "unknown host"}`,
+      summary: summaryJson,
+      title: packet.presentation.findingName
+    });
+  });
 }
