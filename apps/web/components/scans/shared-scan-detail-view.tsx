@@ -1189,7 +1189,7 @@ function isConcerningSignal(key: string, value: unknown) {
   }
 
   if (
-    /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+    /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
       key
     )
   ) {
@@ -1253,7 +1253,7 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "Promotional or choice architecture may need closer disclosure review.";
   }
 
-  if (/privacy_rights_path_present/i.test(key)) {
+  if (/privacy_rights_path_present|policyRightsSignals/i.test(key)) {
     return "The scan retained a clear policy-based privacy-rights request path that users can rely on when seeking access, deletion, export, or related controls.";
   }
 
@@ -1473,7 +1473,7 @@ function getPolicySignalFallbackEvidence(input: {
     "privacy_contact"
   ] as const;
   const topicKey =
-    /privacy_rights_path_present/i.test(input.signalKey)
+    /privacy_rights_path_present|policyRightsSignals/i.test(input.signalKey)
       ? null
       : /gpc_disclosure_present/i.test(input.signalKey)
       ? "topic:gpc_disclosure"
@@ -1511,7 +1511,7 @@ function getPolicySignalFallbackEvidence(input: {
         : [];
   const topicSnippets =
     topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
-  const rightsSnippets = /privacy_rights_path_present/i.test(input.signalKey)
+  const rightsSnippets = /privacy_rights_path_present|policyRightsSignals/i.test(input.signalKey)
     ? rightsSnippetKeys
         .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
@@ -1639,7 +1639,7 @@ function buildReviewFindings(input: {
               signalValue: item.value
             }
           : item.source === "policy_enrichment_signal" &&
-              /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|arbitration_clause_present/i.test(
+              /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|arbitration_clause_present/i.test(
                 item.key
               )
             ? getPolicySignalFallbackEvidence({
@@ -1769,7 +1769,7 @@ function getDefaultIssueCategoryId(sectionId: string) {
 
 function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
   if (
-    /privacy_rights_path_present|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+    /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
       key
     )
   ) {
