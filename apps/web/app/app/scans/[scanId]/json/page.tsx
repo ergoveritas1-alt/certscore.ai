@@ -77,7 +77,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
 
   const allFindings = mapUnifiedPacketsForJsonView({
     domainHostname: scanRecord.scan.domainHostname,
-    packets: buildScanReportUnifiedFindings(scanRecord).filter((packet) => packet.presentationDecision.status === "surface")
+    packets: buildScanReportUnifiedFindings(scanRecord)
   });
 
   return (
@@ -107,7 +107,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
 
       <ScanFindingsPane
         title={`All findings (${allFindings.length})`}
-        description="Surfaced findings for this scan, using the same unified finding pipeline as the report view."
+        description="Unified findings for this scan, using the same surfaced and audit-only finding pipeline as the report view."
         findings={allFindings}
       />
     </div>
