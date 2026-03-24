@@ -32,6 +32,9 @@ import {
   findValidationFindingForKeys,
   type ScanValidationFinding
 } from "./validation-review-linking";
+import {
+  getPolicyPositiveSignalKeysForFinding
+} from "./policy-positive-signal-contract";
 
 export type UnifiedFindingDetails =
   | {
@@ -1315,7 +1318,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        (sourceRef.key === "privacy.privacy_rights_path_present" || sourceRef.key === "policyRightsSignals")
+        getPolicyPositiveSignalKeysForFinding("privacy_rights_path_present").includes(sourceRef.key)
     )
   ) {
     return {
@@ -1342,7 +1345,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "privacy.gpc_disclosure_present"
+        getPolicyPositiveSignalKeysForFinding("gpc_disclosure_present").includes(sourceRef.key)
     )
   ) {
     return {
@@ -1358,7 +1361,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "privacy.tracking_technologies_disclosure_present"
+        getPolicyPositiveSignalKeysForFinding("tracking_technologies_disclosure_present").includes(sourceRef.key)
     )
   ) {
     return {
@@ -1412,7 +1415,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "privacy.targeted_advertising_disclosure_present"
+        getPolicyPositiveSignalKeysForFinding("targeted_advertising_disclosure_present").includes(sourceRef.key)
     )
   ) {
     return {
@@ -1428,7 +1431,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "privacy.behavioral_analytics_disclosure_present"
+        getPolicyPositiveSignalKeysForFinding("behavioral_analytics_disclosure_present").includes(sourceRef.key)
     )
   ) {
     return {
@@ -1475,7 +1478,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "commerce.arbitration_clause_present"
+        getPolicyPositiveSignalKeysForFinding("arbitration_clause_present").includes(sourceRef.key)
     )
   ) {
     return {

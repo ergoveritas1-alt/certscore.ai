@@ -12,6 +12,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
+import { POLICY_POSITIVE_SIGNAL_SPECS } from "../../lib/scans/policy-positive-signal-contract";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
@@ -642,44 +643,31 @@ function deriveSupplementalPolicySignals(input: {
         (((entry as { topic?: unknown }).topic as string | undefined) ?? "").toLowerCase() === topic
     );
 
-  pushBoolean(
-    "privacy",
-    "privacy.privacy_rights_path_present",
-    "Privacy-rights path present",
-    policyRightsSignals.length > 0
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.gpc_disclosure_present",
-    "GPC handling disclosed",
-    hasPolicyMention("gpc_disclosure")
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.tracking_technologies_disclosure_present",
-    "Tracking technologies disclosure present",
-    hasPolicyMention("tracking_technologies_disclosure")
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.targeted_advertising_disclosure_present",
-    "Targeted advertising disclosure present",
-    hasPolicyMention("targeted_advertising_disclosure")
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.behavioral_analytics_disclosure_present",
-    "Behavioral analytics disclosure present",
-    hasPolicyMention("session_replay_disclosure")
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.arbitration_clause_present",
-    "Arbitration clause present",
-    input.policyEnrichment.some(
-      (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
-    )
-  );
+  for (const spec of POLICY_POSITIVE_SIGNAL_SPECS) {
+    const value =
+      spec.unifiedFindingId === "privacy_rights_path_present"
+        ? policyRightsSignals.length > 0
+        : spec.unifiedFindingId === "arbitration_clause_present"
+          ? input.policyEnrichment.some(
+              (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
+            )
+          : spec.evidenceSnippetKey === "topic:gpc_disclosure"
+            ? hasPolicyMention("gpc_disclosure")
+            : spec.evidenceSnippetKey === "topic:tracking_technologies_disclosure"
+              ? hasPolicyMention("tracking_technologies_disclosure")
+              : spec.evidenceSnippetKey === "topic:targeted_advertising_disclosure"
+                ? hasPolicyMention("targeted_advertising_disclosure")
+                : spec.evidenceSnippetKey === "topic:session_replay_disclosure"
+                  ? hasPolicyMention("session_replay_disclosure")
+                  : false;
+
+    pushBoolean(
+      spec.canonicalSignalKey.startsWith("commerce.") ? "commerce" : "privacy",
+      spec.canonicalSignalKey,
+      spec.label,
+      value
+    );
+  }
 
   return supplementalSignals.map((signal) => {
     const taxonomy = mapSignalKeyToTaxonomy({

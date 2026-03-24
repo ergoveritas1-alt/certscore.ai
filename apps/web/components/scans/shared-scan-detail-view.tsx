@@ -38,6 +38,12 @@ import {
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
+  getPolicyPositiveSignalSpec,
+  isPolicyPositiveSignalKey,
+  isPrivacyRightsSignalKey,
+  normalizePolicyPositiveSignalKey
+} from "../../lib/scans/policy-positive-signal-contract";
+import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
@@ -1072,13 +1078,15 @@ function findPersistedSignalValue(
 }
 
 function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
+  const canonicalKey = normalizePolicyPositiveSignalKey(key);
+
   for (const row of policyEnrichment) {
-    const value = getPolicyField(row, key, toSnakeCase(key));
-    if (value !== null && isSignalValuePopulated(key, value)) {
+    const value = getPolicyField(row, canonicalKey, toSnakeCase(canonicalKey), key, toSnakeCase(key));
+    if (value !== null && isSignalValuePopulated(canonicalKey, value)) {
       return value;
     }
 
-    if (/^policyRightsSignals$|^privacy\.privacy_rights_path_present$/i.test(key)) {
+    if (isPrivacyRightsSignalKey(canonicalKey)) {
       const evidenceSnippets =
         row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
           ? (row.policyEvidenceSnippets as Record<string, unknown>)
@@ -1089,7 +1097,7 @@ function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown
         ? (evidenceSnippets.policy_rights_signals as string[])
         : null;
 
-      if (nestedRightsSignals && isSignalValuePopulated(key, nestedRightsSignals)) {
+      if (nestedRightsSignals && isSignalValuePopulated(canonicalKey, nestedRightsSignals)) {
         return nestedRightsSignals;
       }
     }
@@ -1237,11 +1245,7 @@ function isConcerningSignal(key: string, value: unknown) {
     return true;
   }
 
-  if (
-    /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
-      key
-    )
-  ) {
+  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present/i.test(key)) {
     return true;
   }
 
@@ -1302,23 +1306,25 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "Promotional or choice architecture may need closer disclosure review.";
   }
 
-  if (/privacy_rights_path_present|policyRightsSignals/i.test(key)) {
+  const policyPositiveSpec = getPolicyPositiveSignalSpec(key);
+
+  if (policyPositiveSpec?.unifiedFindingId === "privacy_rights_path_present") {
     return "The scan retained a clear policy-based privacy-rights request path that users can rely on when seeking access, deletion, export, or related controls.";
   }
 
-  if (/gpc_disclosure_present/i.test(key)) {
+  if (policyPositiveSpec?.unifiedFindingId === "gpc_disclosure_present") {
     return "The scan retained a disclosure indicating how the site says it handles Global Privacy Control or similar browser-level opt-out signals.";
   }
 
-  if (/tracking_technologies_disclosure_present/i.test(key)) {
+  if (policyPositiveSpec?.unifiedFindingId === "tracking_technologies_disclosure_present") {
     return "The scan retained a disclosure describing cookies, pixels, tags, beacons, scripts, or similar tracking technologies used on the site.";
   }
 
-  if (/targeted_advertising_disclosure_present/i.test(key)) {
+  if (policyPositiveSpec?.unifiedFindingId === "targeted_advertising_disclosure_present") {
     return "The scan retained a disclosure describing targeted advertising, sale, or sharing practices and related user controls.";
   }
 
-  if (/behavioral_analytics_disclosure_present/i.test(key)) {
+  if (policyPositiveSpec?.unifiedFindingId === "behavioral_analytics_disclosure_present") {
     return "The scan retained a disclosure describing behavioral analytics, session-observation, or replay-style tooling on at least some pages.";
   }
 
@@ -1326,7 +1332,7 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "The scan retained a visible accessibility support or accommodation path that users can use when they need help.";
   }
 
-  if (/arbitration_clause_present/i.test(key)) {
+  if (policyPositiveSpec?.unifiedFindingId === "arbitration_clause_present") {
     return "The scan retained terms language that appears to include arbitration or dispute-resolution provisions worth reading directly.";
   }
 
@@ -1521,21 +1527,9 @@ function getPolicySignalFallbackEvidence(input: {
     "privacy_controls",
     "privacy_contact"
   ] as const;
-  const topicKey =
-    /privacy_rights_path_present|policyRightsSignals/i.test(input.signalKey)
-      ? null
-      : /gpc_disclosure_present/i.test(input.signalKey)
-      ? "topic:gpc_disclosure"
-      : /tracking_technologies_disclosure_present/i.test(input.signalKey)
-        ? "topic:tracking_technologies_disclosure"
-        : /targeted_advertising_disclosure_present/i.test(input.signalKey)
-          ? "topic:targeted_advertising_disclosure"
-          : /behavioral_analytics_disclosure_present/i.test(input.signalKey)
-            ? "topic:session_replay_disclosure"
-            : /arbitration_clause_present/i.test(input.signalKey)
-              ? "arbitration"
-            : null;
-  const pageType = /commerce\.arbitration_clause_present/i.test(input.signalKey) ? "terms_of_service" : "privacy_policy";
+  const policyPositiveSpec = getPolicyPositiveSignalSpec(input.signalKey);
+  const topicKey = policyPositiveSpec?.evidenceSnippetKey ?? null;
+  const pageType = policyPositiveSpec?.pageType ?? "privacy_policy";
   const row =
     input.policyEnrichment.find((entry) => (entry.pageType ?? entry.page_type) === pageType) ??
     input.policyEnrichment[0] ??
@@ -1562,7 +1556,7 @@ function getPolicySignalFallbackEvidence(input: {
         : [];
   const topicSnippets =
     topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
-  const rightsSnippets = /privacy_rights_path_present|policyRightsSignals/i.test(input.signalKey)
+  const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
     ? rightsSnippetKeys
         .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
@@ -1689,10 +1683,7 @@ function buildReviewFindings(input: {
               signalLabel: item.label,
               signalValue: item.value
             }
-          : item.source === "policy_enrichment_signal" &&
-              /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|arbitration_clause_present/i.test(
-                item.key
-              )
+          : item.source === "policy_enrichment_signal" && isPolicyPositiveSignalKey(item.key)
             ? getPolicySignalFallbackEvidence({
                 policyEnrichment: input.policyEnrichment ?? [],
                 signalKey: item.key,
@@ -1819,11 +1810,7 @@ function getDefaultIssueCategoryId(sectionId: string) {
 }
 
 function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
-  if (
-    /privacy_rights_path_present|policyRightsSignals|gpc_disclosure_present|tracking_technologies_disclosure_present|targeted_advertising_disclosure_present|behavioral_analytics_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
-      key
-    )
-  ) {
+  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present/i.test(key)) {
     return "low";
   }
 
