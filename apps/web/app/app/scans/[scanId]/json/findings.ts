@@ -1,6 +1,8 @@
-import { normalizeFindingName } from "../../../../../lib/scans/canonical-review-finding";
+import {
+  buildCanonicalReviewFindingPresentation,
+  normalizeFindingName
+} from "../../../../../lib/scans/canonical-review-finding";
 import { compactEvidenceJsonForDisplay } from "../../../../../lib/scans/compact-evidence-json";
-import { getReviewFindingPresentation } from "../../../../../lib/scans/review-finding-presentation";
 
 export type JsonViewFindingInput = {
   evidence: Record<string, unknown> | null;
@@ -86,6 +88,10 @@ function deriveObservation(finding: JsonViewFindingInput) {
     return "The automated accessibility check found WCAG issues that could affect how people use the site.";
   }
 
+  if (normalizedTitle === "Accessibility risk score") {
+    return "The scan retained representative automated accessibility rule outputs that elevated the page's manual-review priority.";
+  }
+
   if (/missing$/i.test(normalizedTitle)) {
     const missingPageLabel = normalizedTitle.toLowerCase().replace(/ missing$/i, "");
     if (evidence.keyPageGuessedOnly === true) {
@@ -121,25 +127,37 @@ export function mapFindingsForJsonView(input: {
 }) {
   return input.findings
     .map((finding) => {
-      const presentation = getReviewFindingPresentation({
-        evidence: finding.evidence ?? {},
-        findingTitle: finding.title,
-        keyOrTitle: finding.ruleKey,
-        siblingFindingKeysOrTitles: []
-      });
+      const presentation = buildCanonicalReviewFindingPresentation(
+        {
+          fallbackEvidence: finding.evidence ?? {},
+          linkedValidationFinding: {
+            evidence: finding.evidence ?? {},
+            pageUrl: finding.pageUrl,
+            ruleKey: finding.ruleKey,
+            title: finding.title
+          },
+          observedValue: null,
+          severity:
+            finding.severity === "high" || finding.severity === "medium" || finding.severity === "low"
+              ? finding.severity
+              : "medium",
+          title: finding.title
+        },
+        []
+      );
       const pageLabel = finding.pageUrl ?? input.domainHostname ?? "Unknown website";
       const summaryJson = {
         url: pageLabel,
-        findingName: normalizeFindingName(finding.title),
+        findingName: presentation.findingName,
         observation: deriveObservation(finding),
         confidenceScore: presentation.confidenceScore ?? "NA",
         whyThisMatters: presentation.whyThisMatters,
         suggestedFix: presentation.suggestedFix,
-        suggestedBestPractice: presentation.bestPracticeLink
+        suggestedBestPractice: presentation.suggestedBestPractice
           ? {
-              organization: presentation.bestPracticeLink.label,
-              title: presentation.bestPracticeLink.title,
-              url: presentation.bestPracticeLink.url
+              organization: presentation.suggestedBestPractice.label,
+              title: presentation.suggestedBestPractice.title,
+              url: presentation.suggestedBestPractice.url
             }
           : null
       };
