@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { DomainScanForm } from "../../../components/marketing/domain-scan-form";
+import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 
@@ -63,6 +64,7 @@ export default function PreviewPage() {
           <PendingButtonLink href="/login?next=/app" idleContent="Create account to continue" pendingContent="Opening..." />
         </div>
       </section>
+      <SiteFooter />
     </main>
   );
 }

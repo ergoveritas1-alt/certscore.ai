@@ -1,6 +1,7 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PreviewScanResolvedState } from "../../../../components/marketing/preview-scan-resolved-state";
 import { PreviewScanState } from "../../../../components/marketing/preview-scan-state";
+import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { getPreviewScan } from "../../../../server/preview-scan/get-preview-scan";
 
@@ -48,6 +49,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
           </div>
         )}
       </section>
+      <SiteFooter />
     </main>
   );
 }
