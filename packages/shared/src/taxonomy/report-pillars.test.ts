@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 89);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 94);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -224,7 +224,9 @@ test("returns signals attached to an evidence category by relation", () => {
       "policy_enrichment_signal:policyDsarMechanism",
       "snapshot_signal:privacy.privacy_contact_channel_missing",
       "policy_enrichment_signal:policyDoNotSell",
-      "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected"
+      "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected",
+      "policy_enrichment_signal:policyRightsSignals",
+      "policy_enrichment_signal:privacy.gpc_disclosure_present"
     ]
   );
 });
@@ -283,6 +285,26 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.sale_sharing_controls_missing")?.id,
     "sale_sharing_controls_missing"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("policy_enrichment_signal", "policyRightsSignals")?.id,
+    "privacy_rights_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.gpc_disclosure_present")?.id,
+    "gpc_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.targeted_advertising_disclosure_present")?.id,
+    "targeted_advertising_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("policy_enrichment_signal", "commerce.arbitration_clause_present")?.id,
+    "arbitration_clause_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "accessibility.accessibility_contact_method_present")?.id,
+    "accessibility_support_path_present"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.children_privacy_context_without_supporting_disclosure")?.id,

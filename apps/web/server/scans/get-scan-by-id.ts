@@ -172,6 +172,13 @@ type SupplementalCoverageSignal = {
   value: boolean | number | string | string[];
 };
 
+type SupplementalPolicySignal = {
+  category: string;
+  key: string;
+  label: string;
+  value: boolean | number | string | string[];
+};
+
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
   return rows.find((row) => row.page_type === "privacy_policy" || row.pageType === "privacy_policy") ?? rows[0] ?? null;
 }
@@ -391,7 +398,7 @@ function deriveSupplementalCoverageSignals(input: {
 function deriveSupplementalSnapshotSignals(input: {
   existingSignals: ScanSignalRecord[];
   snapshot: Record<string, unknown> | null;
-}) {
+}): ScanSignalRecord[] {
   if (!input.snapshot) {
     return [];
   }
@@ -471,6 +478,90 @@ function deriveSupplementalSnapshotSignals(input: {
     "accessibility.accessibility_support_path_missing",
     "Accessibility support path missing",
     snapshot.accessibility_contact_method_present === false
+  );
+
+  return supplementalSignals.map((signal) => {
+    const taxonomy = mapSignalKeyToTaxonomy({
+      category: signal.category,
+      key: signal.key,
+      label: signal.label
+    });
+
+    return {
+      category: signal.category,
+      primaryCategory: taxonomy.primaryCategory,
+      primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+      key: signal.key,
+      label: signal.label,
+      subcategory: taxonomy.subcategory ?? null,
+      value: signal.value,
+      valueType: "boolean"
+    } satisfies ScanSignalRecord;
+  });
+}
+
+function deriveSupplementalPolicySignals(input: {
+  existingSignals: ScanSignalRecord[];
+  primaryPolicyEnrichment: Record<string, unknown> | null;
+}): ScanSignalRecord[] {
+  const supplementalSignals: SupplementalPolicySignal[] = [];
+  const existingKeys = new Set(input.existingSignals.map((signal) => signal.key));
+  const primaryPolicy = input.primaryPolicyEnrichment;
+
+  if (!primaryPolicy) {
+    return [];
+  }
+
+  const pushBoolean = (category: string, key: string, label: string, value: boolean) => {
+    if (!value || existingKeys.has(key)) {
+      return;
+    }
+
+    supplementalSignals.push({ category, key, label, value: true });
+  };
+
+  const policyRightsSignals = Array.isArray(primaryPolicy.policyRightsSignals)
+    ? primaryPolicy.policyRightsSignals
+    : Array.isArray(primaryPolicy.policy_rights_signals)
+      ? primaryPolicy.policy_rights_signals
+      : [];
+  const policyMentions = Array.isArray(primaryPolicy.policyMentions)
+    ? primaryPolicy.policyMentions
+    : Array.isArray(primaryPolicy.policy_mentions)
+      ? primaryPolicy.policy_mentions
+      : [];
+  const hasPolicyMention = (topic: string) =>
+    policyMentions.some(
+      (entry) =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        (((entry as { topic?: unknown }).topic as string | undefined) ?? "").toLowerCase() === topic
+    );
+
+  pushBoolean(
+    "privacy",
+    "privacy.privacy_rights_path_present",
+    "Privacy-rights path present",
+    policyRightsSignals.length > 0
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.gpc_disclosure_present",
+    "GPC handling disclosed",
+    hasPolicyMention("gpc_disclosure")
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.targeted_advertising_disclosure_present",
+    "Targeted advertising disclosure present",
+    hasPolicyMention("targeted_advertising_disclosure")
+  );
+  pushBoolean(
+    "commerce",
+    "commerce.arbitration_clause_present",
+    "Arbitration clause present",
+    primaryPolicy.policyArbitrationPresent === true || primaryPolicy.policy_arbitration_present === true
   );
 
   return supplementalSignals.map((signal) => {
@@ -840,6 +931,10 @@ async function loadScanDetailRecord(input: {
     existingSignals: normalizedSignals,
     snapshot: normalizedSnapshot
   });
+  const supplementalPolicySignals = deriveSupplementalPolicySignals({
+    existingSignals: normalizedSignals,
+    primaryPolicyEnrichment
+  });
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
   const regulatoryRisk = snapshot
     ? buildRegulatoryRiskAssessment({
@@ -1028,6 +1123,7 @@ async function loadScanDetailRecord(input: {
     signals: [
       ...normalizedSignals,
       ...supplementalSnapshotSignals,
+      ...supplementalPolicySignals,
       ...supplementalCoverageSignals.supplementalSignals.map((signal) => {
         const taxonomy = mapSignalKeyToTaxonomy({
           category: "disclosure",

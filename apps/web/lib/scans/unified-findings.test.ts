@@ -567,6 +567,65 @@ test("surfaces missing sale or sharing controls as a domain-level rights finding
   assert.match(packet?.presentation.whyThisMatters ?? "", /privacy choice/i);
 });
 
+test("surfaces privacy-rights path present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear policy-based privacy-rights request path.",
+        fallbackEvidence: {
+          signalKey: "policyRightsSignals",
+          signalLabel: "Privacy-rights path present",
+          signalValue: true,
+          policyRightsSignals: ["access", "delete", "export"],
+          pageUrl: "https://www.example.com/privacy"
+        },
+        observedValue: "Privacy-rights path present",
+        severity: "low",
+        signalKey: "policyRightsSignals",
+        signalLabel: "Privacy-rights path present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Privacy-rights path present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /privacy-rights path/i);
+});
+
+test("surfaces accessibility support path present from snapshot evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a visible accessibility support or accommodation path.",
+        fallbackEvidence: {
+          signalKey: "accessibility.accessibility_contact_method_present",
+          signalLabel: "Accessibility contact method detected",
+          signalValue: true,
+          accessibilityContactMethodPresent: true
+        },
+        observedValue: "Accessibility support path present",
+        severity: "low",
+        signalKey: "accessibility.accessibility_contact_method_present",
+        signalLabel: "Accessibility contact method detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Accessibility contact method detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
+});
+
 test("surfaces child-directed context without supporting privacy disclosure", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

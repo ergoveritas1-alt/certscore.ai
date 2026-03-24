@@ -1156,6 +1156,14 @@ function isConcerningSignal(key: string, value: unknown) {
     return true;
   }
 
+  if (
+    /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+      key
+    )
+  ) {
+    return true;
+  }
+
   if (typeof value === "number") {
     if (/risk_score|ambiguity_score|friction_score/i.test(key)) {
       return value > 0;
@@ -1211,6 +1219,26 @@ function getSignalConcernReason(key: string, value: unknown) {
 
   if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
     return "Promotional or choice architecture may need closer disclosure review.";
+  }
+
+  if (/privacy_rights_path_present/i.test(key)) {
+    return "The scan retained a clear policy-based privacy-rights request path that users can rely on when seeking access, deletion, export, or related controls.";
+  }
+
+  if (/gpc_disclosure_present/i.test(key)) {
+    return "The scan retained a disclosure indicating how the site says it handles Global Privacy Control or similar browser-level opt-out signals.";
+  }
+
+  if (/targeted_advertising_disclosure_present/i.test(key)) {
+    return "The scan retained a disclosure describing targeted advertising, sale, or sharing practices and related user controls.";
+  }
+
+  if (/accessibility_contact_method_present/i.test(key)) {
+    return "The scan retained a visible accessibility support or accommodation path that users can use when they need help.";
+  }
+
+  if (/arbitration_clause_present/i.test(key)) {
+    return "The scan retained terms language that appears to include arbitration or dispute-resolution provisions worth reading directly.";
   }
 
   if (/store_credit_only/i.test(key)) {
@@ -1601,6 +1629,14 @@ function getDefaultIssueCategoryId(sectionId: string) {
 }
 
 function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewFinding["severity"] {
+  if (
+    /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|accessibility_contact_method_present|arbitration_clause_present/i.test(
+      key
+    )
+  ) {
+    return "low";
+  }
+
   if (/preconsent|tracking_before_consent|session_replay|conflict|mismatch/i.test(key)) {
     return "high";
   }

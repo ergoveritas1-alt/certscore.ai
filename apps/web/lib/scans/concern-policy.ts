@@ -222,6 +222,10 @@ function isHighSensitivityConcern(
 }
 
 function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">) {
+  if (concern.suggestedUnifiedFindingId === "privacy_rights_path_present") {
+    return false;
+  }
+
   const haystack = [
     concern.canonicalConcernKey,
     concern.suggestedUnifiedFindingId,
@@ -233,6 +237,18 @@ function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | 
     .toLowerCase();
 
   return /dsar|privacy-rights|missing_dsar|no dsar mechanism/.test(haystack);
+}
+
+function isPositiveInfrastructureConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return [
+    "privacy_rights_path_present",
+    "gpc_disclosure_present",
+    "targeted_advertising_disclosure_present",
+    "accessibility_support_path_present",
+    "arbitration_clause_present"
+  ].includes(concern.suggestedUnifiedFindingId ?? "");
 }
 
 function isPreconsentConcern(
@@ -549,6 +565,15 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isPositiveInfrastructureConcern(input.concern)) {
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
     };
   }
 

@@ -1033,17 +1033,47 @@ function buildPresentationCopy(
         suggestedFix: "Add a clearly labeled privacy contact path or request channel so people can reliably reach the site owner about privacy and rights-related questions.",
         whyThisMatters: "If there is no clear privacy contact path, people may struggle to ask questions or exercise privacy-related rights."
       };
+    case "privacy_rights_path_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the disclosed rights-request path current and easy to reach anywhere people look for privacy controls.",
+        whyThisMatters: "A clear privacy-rights path makes it easier for people to understand how to request access, deletion, export, correction, or related privacy controls."
+      };
     case "sale_sharing_controls_missing":
       return {
         ...base,
         suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
         whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
       };
+    case "gpc_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the GPC disclosure aligned with actual enforcement behavior and any related sale, sharing, or targeted-advertising controls.",
+        whyThisMatters: "A public GPC disclosure gives users and reviewers a clearer picture of how browser-level privacy preference signals are expected to be handled."
+      };
+    case "targeted_advertising_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the targeted-advertising disclosure specific about the technologies, purposes, and control paths users can rely on.",
+        whyThisMatters: "Clear targeted-advertising disclosure helps users understand when sale, sharing, or ad-personalization practices may apply and where to find related controls."
+      };
     case "accessibility_support_path_missing":
       return {
         ...base,
         suggestedFix: "Add a clearly labeled accessibility support or accommodation contact path so people know how to request help or report access barriers.",
         whyThisMatters: "If there is no visible accessibility support path, people may not know how to ask for help when they hit an access barrier."
+      };
+    case "accessibility_support_path_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the accessibility support path easy to find and make sure the linked contact or help channel remains current.",
+        whyThisMatters: "A visible accessibility support path gives people a clearer way to request help, accommodations, or barrier remediation support."
+      };
+    case "arbitration_clause_present":
+      return {
+        ...base,
+        suggestedFix: "Keep arbitration and dispute-resolution terms easy to find and aligned with the latest legal text on the live terms page.",
+        whyThisMatters: "A visible arbitration clause can materially affect how users understand dispute resolution and consumer remedies."
       };
     case "children_privacy_context_without_supporting_disclosure":
       return {
@@ -1175,12 +1205,44 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "privacy_rights_path_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "policyRightsSignals"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a concrete privacy-rights path.",
+      status: "surface"
+    };
+  }
+
+  if (
     input.packet.unifiedFindingId === "consent_surface_missing" &&
     input.packet.evidence?.flags?.includes("privacy.consent_surface_missing")
   ) {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because the scan retained a clear domain-level signal that no user-facing consent surface was detected.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "gpc_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "privacy.gpc_disclosure_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a clear disclosure about GPC handling.",
       status: "surface"
     };
   }
@@ -1197,12 +1259,60 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "accessibility_support_path_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "accessibility.accessibility_contact_method_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a clear domain-level accessibility support path.",
+      status: "surface"
+    };
+  }
+
+  if (
     input.packet.unifiedFindingId === "sale_sharing_controls_missing" &&
     input.packet.evidence?.flags?.includes("privacy.sale_sharing_controls_missing")
   ) {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "targeted_advertising_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "privacy.targeted_advertising_disclosure_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a targeted-advertising or sale/sharing disclosure.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "arbitration_clause_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        sourceRef.key === "commerce.arbitration_clause_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained an arbitration or dispute-resolution clause.",
       status: "surface"
     };
   }
