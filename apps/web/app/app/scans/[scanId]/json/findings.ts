@@ -22,6 +22,32 @@ export type JsonViewFindingRow = {
   title: string;
 };
 
+function buildJsonPresentationEvidence(finding: JsonViewFindingInput) {
+  const evidence = { ...(finding.evidence ?? {}) } as Record<string, unknown>;
+
+  if (
+    finding.ruleKey === "scan_snapshot.commerce.retargeting_pixel_detected" &&
+    evidence.snapshotField === "retargeting_pixel_detected" &&
+    evidence.value === true &&
+    !Array.isArray(evidence.runtimeEvidence) &&
+    !Array.isArray(evidence.runtimeEvidenceArtifacts) &&
+    !Array.isArray(evidence.retargetingEvidenceUrls) &&
+    !Array.isArray(evidence.retargeting_evidence_urls)
+  ) {
+    evidence.normalizedConcernMaxAssertionLevel = "weak";
+    evidence.normalizedConcernNegativeEvidenceFlags = [
+      ...new Set([
+        ...(Array.isArray(evidence.normalizedConcernNegativeEvidenceFlags)
+          ? evidence.normalizedConcernNegativeEvidenceFlags.filter((value): value is string => typeof value === "string")
+          : []),
+        "no_direct_runtime_retargeting_artifact_observed"
+      ])
+    ];
+  }
+
+  return evidence;
+}
+
 function getFindingPriority(finding: {
   ruleKey: string;
   title: string;
@@ -127,11 +153,12 @@ export function mapFindingsForJsonView(input: {
 }) {
   return input.findings
     .map((finding) => {
+      const presentationEvidence = buildJsonPresentationEvidence(finding);
       const presentation = buildCanonicalReviewFindingPresentation(
         {
-          fallbackEvidence: finding.evidence ?? {},
+          fallbackEvidence: presentationEvidence,
           linkedValidationFinding: {
-            evidence: finding.evidence ?? {},
+            evidence: presentationEvidence,
             pageUrl: finding.pageUrl,
             ruleKey: finding.ruleKey,
             title: finding.title
