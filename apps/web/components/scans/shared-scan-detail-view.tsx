@@ -1044,6 +1044,22 @@ function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown
     if (value !== null) {
       return value;
     }
+
+    if (/^policyRightsSignals$|^privacy\.privacy_rights_path_present$/i.test(key)) {
+      const evidenceSnippets =
+        row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+          ? (row.policyEvidenceSnippets as Record<string, unknown>)
+          : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+            ? (row.policy_evidence_snippets as Record<string, unknown>)
+            : null;
+      const nestedRightsSignals = Array.isArray(evidenceSnippets?.policy_rights_signals)
+        ? (evidenceSnippets.policy_rights_signals as string[])
+        : null;
+
+      if (nestedRightsSignals && nestedRightsSignals.length > 0) {
+        return nestedRightsSignals;
+      }
+    }
   }
 
   return null;
