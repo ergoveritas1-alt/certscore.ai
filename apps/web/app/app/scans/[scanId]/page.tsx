@@ -11,10 +11,10 @@ import {
   type PreviewSampleFinding,
   type ReportSignalDefinition
 } from "@website-signal-risk-scanner/shared";
-import { Badge } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../../../../components/scans/collapsible-section-card";
 import { FullScanProgressCard } from "../../../../components/scans/full-scan-progress-card";
 import { InfoTip } from "../../../../components/scans/info-tip";
+import { ScanPageHeader } from "../../../../components/scans/scan-page-header";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
   EMPHASIS_METRIC_CARD_VALUE_CLASS,
@@ -75,10 +75,6 @@ function formatDateTime(value: string | null) {
     hour12: true,
     timeZoneName: "short"
   }).format(new Date(value));
-}
-
-function formatStatus(status: string) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
@@ -3294,30 +3290,22 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   });
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-3">
-          <Badge tone={scanRecord.scan.status === "completed" ? "success" : "warning"}>
-            {formatStatus(scanRecord.scan.status)}
-          </Badge>
-          <div className="flex flex-wrap items-end gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}
-            </h1>
-            <span className="text-sm font-normal text-slate-400">
-              Created {formatDateTime(scanRecord.scan.createdAt)}
-            </span>
-          </div>
-          <ScanStatusAutoRefresh status={scanRecord.scan.status} />
-        </div>
-        <ScanViewActions
-          alternateHref={`/app/scans/${scanRecord.scan.id}/json`}
-          alternateLabel="json-view"
-          canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
-          cooldownMessage={rescanCooldownMessage}
-          domainId={scanRecord.scan.domainId}
-          rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
-        />
-      </div>
+      <ScanPageHeader
+        actions={
+          <ScanViewActions
+            alternateHref={`/app/scans/${scanRecord.scan.id}/json`}
+            alternateLabel="json-view"
+            canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
+            cooldownMessage={rescanCooldownMessage}
+            domainId={scanRecord.scan.domainId}
+            rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
+          />
+        }
+        autoRefresh={<ScanStatusAutoRefresh status={scanRecord.scan.status} />}
+        createdAtLabel={`Created ${formatDateTime(scanRecord.scan.createdAt)}`}
+        status={scanRecord.scan.status}
+        title={`Scan: ${scanRecord.scan.domainHostname ?? "Unknown website"}`}
+      />
       {(scanRecord.scan.status === "queued" || scanRecord.scan.status === "running") ? (
         <FullScanProgressCard
           buildPhaseSummaries={buildPhaseSummaries}

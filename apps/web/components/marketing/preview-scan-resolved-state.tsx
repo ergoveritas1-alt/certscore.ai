@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { PreviewSampleFinding, PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "../scans/collapsible-section-card";
 import { InfoTip } from "../scans/info-tip";
 import { ReportExecutiveSummary } from "../scans/report-executive-summary";
+import { ScanPageHeader } from "../scans/scan-page-header";
 import {
   SectionSubsection,
 } from "../scans/report-primitives";
@@ -92,23 +93,28 @@ export function PreviewScanResolvedState({ loginHref, scan }: PreviewScanResolve
   }
 
   const groupedFindings = groupFindings(payload.sampleFindings);
+  const createdAtLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    timeZoneName: "short"
+  }).format(new Date(scan.createdAt));
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-3">
-          <Badge tone="success">Preview complete</Badge>
-          <div className="flex flex-wrap items-end gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">Scan: {scan.hostname}</h1>
-          </div>
-          <p className="max-w-3xl text-sm text-slate-600">
-            {payload.disclaimer} Create an account to save websites, run deeper scans, and track changes over time.
-          </p>
-        </div>
-        <div className="flex justify-end md:pt-0.5">
-          <PendingButtonLink href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />
-        </div>
-      </div>
+      <ScanPageHeader
+        actions={<PendingButtonLink href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />}
+        createdAtLabel={`Created ${createdAtLabel}`}
+        status={scan.status}
+        title={`Scan: ${scan.hostname}`}
+      />
+      <p className="max-w-3xl text-sm text-slate-600">
+        {payload.disclaimer} Create an account to save websites, run deeper scans, and track changes over time.
+      </p>
 
       <ReportExecutiveSummary
         titleTooltip="This mirrors the signed-in scan summary component, but only includes the lighter homepage preview evidence available before signup."

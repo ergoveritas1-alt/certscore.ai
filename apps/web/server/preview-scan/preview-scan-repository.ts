@@ -1,9 +1,12 @@
 import {
   buildAgencyMappings,
+  getScannerExecutionSummary,
   PREVIEW_SCAN_EVENT_TYPES,
   type AgencyMapping,
+  type PreviewBuildPhaseSummary,
   type PreviewIssueCounts,
   type PreviewScanPayload,
+  type PreviewScanEvent,
   type PreviewScanStatusResponse,
   type ScanSnapshot,
   type ScanStatus,
@@ -114,6 +117,10 @@ type ScanEventRow = {
   message: string;
   metadata_json: Record<string, unknown> | null;
 };
+
+type RuntimeArtifactsRow = {
+  build_phase_summaries?: Array<Record<string, unknown>> | null;
+} | null;
 
 function getStatusMessage(status: ScanStatus) {
   if (status === "queued") {
@@ -622,15 +629,74 @@ export async function getRecentPreviewScanEvents(scanId: string): Promise<ScanEv
   return (data as ScanEventRow[] | null) ?? [];
 }
 
+export async function getAllPreviewScanEvents(scanId: string): Promise<ScanEventRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("scan_events")
+    .select("event_type, message, metadata_json, created_at")
+    .eq("scan_id", scanId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load preview scan events: ${error.message}`);
+  }
+
+  return (data as ScanEventRow[] | null) ?? [];
+}
+
+export async function getPreviewRuntimeArtifacts(scanId: string): Promise<RuntimeArtifactsRow> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("scan_runtime_artifacts")
+    .select("build_phase_summaries")
+    .eq("scan_id", scanId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load preview scan runtime artifacts: ${error.message}`);
+  }
+
+  return (data as RuntimeArtifactsRow) ?? null;
+}
+
+function serializePreviewEvents(events: ScanEventRow[]): PreviewScanEvent[] {
+  return events.map((event) => ({
+    createdAt: event.created_at,
+    eventType: event.event_type,
+    message: event.message,
+    metadataJson: event.metadata_json
+  }));
+}
+
+function serializeBuildPhaseSummaries(runtimeArtifacts: RuntimeArtifactsRow): PreviewBuildPhaseSummary[] {
+  const rows = runtimeArtifacts?.build_phase_summaries;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows.map((row) => ({
+    attempts: typeof row.attempts === "number" ? row.attempts : null,
+    completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
+    durationMs: typeof row.durationMs === "number" ? row.durationMs : null,
+    error: typeof row.error === "string" ? row.error : null,
+    outcome: typeof row.outcome === "string" ? row.outcome : "unknown",
+    phase: typeof row.phase === "string" ? row.phase : "unknown",
+    startedAt: typeof row.startedAt === "string" ? row.startedAt : null
+  }));
+}
+
 export function serializePreviewScan(input: {
   agencyMappings?: AgencyMapping[];
   domain: DomainRow | null;
+  events?: ScanEventRow[];
   latestEvent?: ScanEventRow | null;
   recentEvents?: ScanEventRow[];
   regulatoryRisk?: PreviewScanStatusResponse["regulatoryRisk"];
+  runtimeArtifacts?: RuntimeArtifactsRow;
   scan: ScanRow;
 }): PreviewScanStatusResponse {
   const payload = getPreviewPayload(input.scan);
+  const events = input.events ?? input.recentEvents ?? [];
 
   return {
     scanId: input.scan.id,
@@ -652,6 +718,9 @@ export function serializePreviewScan(input: {
     activityDetails: buildActivityDetails(input.scan, input.latestEvent ?? null),
     activityFeed: buildActivityFeed(input.scan, input.recentEvents ?? []),
     activityRef: buildActivityRef(input.scan.id, input.latestEvent ?? null),
+    events: serializePreviewEvents(events),
+    executionSummary: getScannerExecutionSummary(input.scan.scan_config_json),
+    buildPhaseSummaries: serializeBuildPhaseSummaries(input.runtimeArtifacts ?? null),
     agencyMappings: input.agencyMappings ?? [],
     regulatoryRisk: input.regulatoryRisk ?? null,
     previewPayload: payload

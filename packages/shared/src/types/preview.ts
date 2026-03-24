@@ -1,6 +1,24 @@
 import type { AgencyMapping } from "../scoring/agency-mapping";
 import type { RegulatoryRiskAssessment } from "../scoring/regulatory-risk";
 import type { FindingCategory, FindingSeverity, ScanStatus, ScanType } from "./entities";
+import type { ScannerExecutionSummary } from "./scanner-execution";
+
+export type PreviewScanEvent = {
+  createdAt: string;
+  eventType: string;
+  message: string;
+  metadataJson: unknown;
+};
+
+export type PreviewBuildPhaseSummary = {
+  attempts: number | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+  outcome: string;
+  phase: string;
+  startedAt: string | null;
+};
 
 export type PreviewSampleFinding = {
   category: FindingCategory;
@@ -52,6 +70,9 @@ export type PreviewScanStatusResponse = {
   activityDetails: string[];
   activityFeed: string[];
   activityRef: string | null;
+  events: PreviewScanEvent[];
+  executionSummary: ScannerExecutionSummary | null;
+  buildPhaseSummaries: PreviewBuildPhaseSummary[];
   agencyMappings: AgencyMapping[];
   regulatoryRisk: RegulatoryRiskAssessment | null;
   previewPayload: PreviewScanPayload | null;

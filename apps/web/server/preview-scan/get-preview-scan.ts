@@ -4,9 +4,11 @@ import { buildPreviewPayloadFromSnapshot } from "./build-preview-payload";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import {
+  getAllPreviewScanEvents,
   getLatestPreviewScanEvent,
   getRecentPreviewScanEvents,
   getPreviewScanRecord,
+  getPreviewRuntimeArtifacts,
   getPreviewScanSnapshot,
   serializePreviewScan
 } from "./preview-scan-repository";
@@ -18,11 +20,18 @@ export async function getPreviewScan(scanId: string) {
     return null;
   }
 
-  const [latestEvent, recentEvents] = await Promise.all([getLatestPreviewScanEvent(scanId), getRecentPreviewScanEvents(scanId)]);
+  const [latestEvent, recentEvents, events, runtimeArtifacts] = await Promise.all([
+    getLatestPreviewScanEvent(scanId),
+    getRecentPreviewScanEvents(scanId),
+    getAllPreviewScanEvents(scanId),
+    getPreviewRuntimeArtifacts(scanId)
+  ]);
   const response = serializePreviewScan({
     ...record,
+    events,
     latestEvent,
-    recentEvents
+    recentEvents,
+    runtimeArtifacts
   });
   const snapshot = await getPreviewScanSnapshot(scanId);
 
