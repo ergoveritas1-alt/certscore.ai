@@ -1,12 +1,11 @@
 "use client";
 
 import type { PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { FullScanProgressCard } from "../scans/full-scan-progress-card";
 import { ScanPageHeader } from "../scans/scan-page-header";
 import { ScanStatusAutoRefresh } from "../scans/scan-status-auto-refresh";
-import { PreviewScanResolvedState } from "./preview-scan-resolved-state";
 
 type PreviewScanStateProps = {
   initialScan: PreviewScanStatusResponse;
@@ -25,19 +24,9 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function createLoginHref(scan: PreviewScanStatusResponse) {
-  const params = new URLSearchParams({
-    domain: scan.hostname,
-    next: "/app",
-    previewScanId: scan.scanId
-  });
-
-  return `/login?${params.toString()}`;
-}
-
 export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
+  const router = useRouter();
   const [scan, setScan] = useState(initialScan);
-  const loginHref = useMemo(() => createLoginHref(scan), [scan]);
 
   useEffect(() => {
     if (scan.status !== "queued" && scan.status !== "running") {
@@ -55,6 +44,11 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
         }
 
         const payload = (await response.json()) as PreviewScanStatusResponse;
+        if (payload.status !== "queued" && payload.status !== "running") {
+          setScan(payload);
+          router.refresh();
+          return;
+        }
         setScan(payload);
       } catch {
         // Ignore transient polling failures and let the next refresh retry.
@@ -64,7 +58,7 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [scan]);
+  }, [router, scan]);
 
   if (scan.status === "queued" || scan.status === "running") {
     return (
@@ -89,5 +83,14 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
     );
   }
 
-  return <PreviewScanResolvedState loginHref={loginHref} scan={scan} />;
+  return (
+    <div className="space-y-4">
+      <ScanPageHeader
+        createdAtLabel={`Created ${formatDateTime(scan.createdAt)}`}
+        status={scan.status}
+        title={`Scan: ${scan.hostname}`}
+      />
+      <p className="text-sm text-slate-600">Refreshing the final scan report…</p>
+    </div>
+  );
 }

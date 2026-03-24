@@ -533,9 +533,16 @@ function mergeRelatedPreviewSnapshot(
   return merged;
 }
 
-export async function getScanById(input: { organizationId: string; scanId: string; viewerEmail?: string | null }) {
+async function loadScanDetailRecord(input: {
+  organizationId: string | null;
+  scanId: string;
+  allowAnonymousFallback?: boolean;
+  anonymousOnly?: boolean;
+  viewerEmail?: string | null;
+}) {
   const supabase = createAdminClient();
   const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
+  const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
 
   const loadScan = async (organizationId: string | null) => {
     let query = supabase
@@ -548,11 +555,12 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     return query.maybeSingle();
   };
 
-  const primaryScanResult = await loadScan(input.organizationId);
+  const primaryOrganizationId = input.anonymousOnly ? null : input.organizationId;
+  const primaryScanResult = await loadScan(primaryOrganizationId);
   let scan = primaryScanResult.data;
   let error = primaryScanResult.error;
 
-  if (!scan && !error && adminCanViewAnonymousScans) {
+  if (!scan && !error && !input.anonymousOnly && allowAnonymousAccess) {
     const anonymousScanResult = await loadScan(null);
     scan = anonymousScanResult.data;
     error = anonymousScanResult.error;
@@ -1043,3 +1051,23 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     events: normalizedEvents
   };
 }
+
+export async function getScanById(input: { organizationId: string; scanId: string; viewerEmail?: string | null }) {
+  return loadScanDetailRecord({
+    allowAnonymousFallback: false,
+    organizationId: input.organizationId,
+    scanId: input.scanId,
+    viewerEmail: input.viewerEmail
+  });
+}
+
+export async function getAnonymousScanById(scanId: string) {
+  return loadScanDetailRecord({
+    anonymousOnly: true,
+    organizationId: null,
+    scanId,
+    viewerEmail: null
+  });
+}
+
+export type ScanDetailResponse = NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
