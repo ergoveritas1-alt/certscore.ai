@@ -282,6 +282,87 @@ function stripTimestampFields(record: Record<string, unknown>) {
   return next;
 }
 
+function looksLikeEvidenceHash(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function collectPolicyEvidenceHashes(rows: Array<Record<string, unknown>>) {
+  const hashes = new Set<string>();
+
+  for (const row of rows) {
+    const snippets =
+      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+        ? (row.policyEvidenceSnippets as Record<string, unknown>)
+        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+          ? (row.policy_evidence_snippets as Record<string, unknown>)
+          : null;
+
+    if (!snippets) {
+      continue;
+    }
+
+    for (const value of Object.values(snippets)) {
+      if (looksLikeEvidenceHash(value)) {
+        hashes.add(value);
+        continue;
+      }
+
+      if (!Array.isArray(value)) {
+        continue;
+      }
+
+      for (const entry of value) {
+        if (looksLikeEvidenceHash(entry)) {
+          hashes.add(entry);
+        }
+      }
+    }
+  }
+
+  return [...hashes];
+}
+
+function dereferencePolicyEvidenceSnippets(input: {
+  evidenceByHash: Map<string, string>;
+  rows: Array<Record<string, unknown>>;
+}) {
+  return input.rows.map((row) => {
+    const rawSnippets =
+      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+        ? (row.policyEvidenceSnippets as Record<string, unknown>)
+        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+          ? (row.policy_evidence_snippets as Record<string, unknown>)
+          : null;
+
+    if (!rawSnippets) {
+      return row;
+    }
+
+    const resolved = Object.fromEntries(
+      Object.entries(rawSnippets).map(([key, value]) => {
+        if (looksLikeEvidenceHash(value)) {
+          return [key, input.evidenceByHash.get(value) ?? value];
+        }
+
+        if (Array.isArray(value)) {
+          return [
+            key,
+            value.map((entry) => (looksLikeEvidenceHash(entry) ? input.evidenceByHash.get(entry) ?? entry : entry))
+          ];
+        }
+
+        return [key, value];
+      })
+    );
+
+    return {
+      ...row,
+      policyEvidenceSnippets: resolved,
+      policy_evidence_snippets: resolved
+    };
+  });
+}
+
 function deriveSupplementalCoverageSignals(input: {
   events: ScanEventRecord[];
   existingSignals: ScanSignalRecord[];
@@ -903,7 +984,30 @@ async function loadScanDetailRecord(input: {
         await supabase.from("policy_enrichment").select("*").eq("scan_id", previousScan.id).order("created_at", { ascending: true })
       ).data ?? []
     : [];
-  const normalizedPolicyEnrichment = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
+  const rawPolicyEnrichmentRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
+  const policyEvidenceHashes = collectPolicyEvidenceHashes(rawPolicyEnrichmentRows);
+  const policyEvidenceByHash =
+    policyEvidenceHashes.length > 0
+      ? new Map(
+          (
+            (
+              await supabase
+                .from("policy_evidence")
+                .select("evidence_hash, snippet")
+                .in("evidence_hash", policyEvidenceHashes)
+            ).data ?? []
+          )
+            .filter(
+              (row): row is { evidence_hash: string; snippet: string } =>
+                Boolean(row) && typeof row.evidence_hash === "string" && typeof row.snippet === "string"
+            )
+            .map((row) => [row.evidence_hash, row.snippet] as const)
+        )
+      : new Map<string, string>();
+  const normalizedPolicyEnrichment = dereferencePolicyEvidenceSnippets({
+    evidenceByHash: policyEvidenceByHash,
+    rows: rawPolicyEnrichmentRows
+  });
   const normalizedPolicyReviewQueue = ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(normalizedPolicyEnrichment);
   const previousPrimaryPolicyEnrichment = getPrimaryPolicyEnrichment((previousPolicyRows as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)));
