@@ -37,6 +37,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "no_consent_surface_observed"
   | "no_consent_actionable_choice_observed"
   | "no_direct_runtime_replay_artifact_observed"
+  | "no_direct_runtime_retargeting_artifact_observed"
   | "policy_rights_language_observed"
   | "policy_target_retrievable"
   | "policy_target_parsing_incomplete"

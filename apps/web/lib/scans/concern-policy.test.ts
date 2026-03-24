@@ -63,6 +63,25 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "retargeting without retained runtime artifacts stays surfaceable but weakly worded",
+      concern: makeConcern({
+        originKey: "scan_snapshot.commerce.retargeting_pixel_detected",
+        suggestedUnifiedFindingId: "retargeting_pixel_observed",
+        title: "Retargeting pixel detected"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        snapshotField: "retargeting_pixel_detected",
+        value: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: ["no_direct_runtime_retargeting_artifact_observed"]
+      }
+    },
+    {
       name: "dsar with fetched high-confidence evidence stays eligible",
       concern: makeConcern({
         originKey: "section_review.missing_dsar_high_exposure",

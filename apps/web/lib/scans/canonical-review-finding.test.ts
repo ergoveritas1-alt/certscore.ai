@@ -1545,6 +1545,39 @@ test("uses healthcare-specific retargeting-pixel copy on medical domains", () =>
   assert.equal(presentation.confidenceScore, "0.9");
 });
 
+test("keeps retargeting copy weak when the retained evidence is only a boolean detector hit", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "pixel-weak-1",
+        ruleKey: "scan_snapshot.commerce.retargeting_pixel_detected",
+        title: "Retargeting pixel detected",
+        evidence: {
+          snapshotField: "retargeting_pixel_detected",
+          value: true,
+          normalizedConcernMaxAssertionLevel: "weak",
+          normalizedConcernNegativeEvidenceFlags: ["no_direct_runtime_retargeting_artifact_observed"]
+        }
+      }),
+      observedValue: "true",
+      severity: "high",
+      title: "Retargeting pixel detected"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Retargeting pixel detected");
+  assert.match(
+    presentation.whyThisMatters,
+    /retargeting-related signal|does not by itself confirm|specific pixel deployment|confirmed retargeting implementation/i
+  );
+  assert.match(
+    presentation.suggestedFix,
+    /retained detector output|specific advertising pixel|concrete runtime artifacts/i
+  );
+  assert.equal(presentation.confidenceScore, "0.45");
+});
+
 test("uses confirmed exfiltration copy when plaintext third-party payload evidence is present", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

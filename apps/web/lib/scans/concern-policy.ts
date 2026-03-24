@@ -112,6 +112,23 @@ export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknow
   );
 }
 
+export function hasConcreteRetargetingEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+
+  return (
+    hasTruthyArrayValue(evidence.runtimeEvidence) ||
+    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
+    hasTruthyArrayValue(evidence.runtime_evidence_artifacts) ||
+    hasTruthyArrayValue(evidence.retargetingEvidenceUrls) ||
+    hasTruthyArrayValue(evidence.retargeting_evidence_urls) ||
+    hasTruthyArrayValue(evidence.runtimeEvidenceUrls) ||
+    evidence.retargetingPixelArtifactPresent === true ||
+    evidence.retargeting_pixel_artifact_present === true
+  );
+}
+
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -232,6 +249,22 @@ function isPreconsentConcern(
     .toLowerCase();
 
   return /preconsent|tracking_before_consent|trackers_before_consent/.test(haystack);
+}
+
+function isRetargetingConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /retargeting_pixel|retargeting pixel|retargeting_pixel_observed/.test(haystack);
 }
 
 function isContradictionConcern(
@@ -462,6 +495,27 @@ export function deriveConcernPolicy(input: {
         promotionEligibility: "blocked"
       };
     }
+  }
+
+  if (isRetargetingConcern(input.concern)) {
+    const hasConcreteRetargetingRuntime = hasConcreteRetargetingEvidence(input.rawEvidence);
+
+    if (!hasConcreteRetargetingRuntime) {
+      negativeEvidenceFlags.add("no_direct_runtime_retargeting_artifact_observed");
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
   }
 
   if (isContradictionConcern(input.concern)) {

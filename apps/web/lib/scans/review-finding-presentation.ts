@@ -1519,13 +1519,33 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   }
 
   if (/retargeting pixel|retargeting_pixel/i.test(input.haystack)) {
+    const maxAssertionLevel = getMaxAssertionLevel(input.evidence);
+    const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
     const evidenceText = JSON.stringify(input.evidence ?? {}).toLowerCase();
-    if (/mcw\.edu|medical institution domain|clinical|health/i.test(evidenceText)) {
+    const hasConcreteRuntimeArtifact =
+      !negativeEvidenceFlags.has("no_direct_runtime_retargeting_artifact_observed") &&
+      /runtimeevidence|runtimeevidenceartifacts|retargetingevidenceurls|retargeting pixel network request|pixel request|adtech request/i.test(
+        evidenceText
+      );
+
+    if (/mcw\.edu|medical institution domain|clinical|health/i.test(evidenceText) && hasConcreteRuntimeArtifact) {
       presentation.whyThisMatters =
         "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. On a medical institution domain, this signal is particularly critical as it indicates that visitor behavior, such as viewing specific clinical or educational pages, is being synced with broader advertising profiles, potentially creating significant HIPAA and privacy exposure.";
       presentation.suggestedFix =
         "Perform a network stack audit to identify the specific third-party script, such as Meta, Google, or Criteo, firing the pixel. Reconfigure the Tag Manager to gate this script behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal. Verify that no health-related page metadata is being passed in the pixel's payload.";
       presentation.confidenceScore = "0.9";
+    } else if (maxAssertionLevel === "weak" || negativeEvidenceFlags.has("no_direct_runtime_retargeting_artifact_observed")) {
+      presentation.whyThisMatters =
+        "The automated scan retained an advertising or retargeting-related signal, but the retained evidence does not by itself confirm a specific pixel deployment, vendor, or cross-site syncing behavior. This should be reviewed directly before treating it as a confirmed retargeting implementation.";
+      presentation.suggestedFix =
+        "Review the retained detector output and network evidence to confirm whether a specific advertising pixel, script, or endpoint was actually present. Only escalate to a confirmed retargeting finding when concrete runtime artifacts are retained.";
+      presentation.confidenceScore = "0.45";
+    } else if (maxAssertionLevel === "moderate") {
+      presentation.whyThisMatters =
+        "The automated scan retained runtime evidence consistent with advertising or retargeting-related behavior. That is stronger than a bare boolean detector hit, but it still should be reviewed directly before being described as a confirmed third-party pixel deployment.";
+      presentation.suggestedFix =
+        "Inspect the retained network or script evidence to identify the specific advertising vendor and confirm whether the integration is intentionally deployed, properly disclosed, and gated behind the appropriate marketing-choice controls.";
+      presentation.confidenceScore = "0.7";
     }
   }
 
