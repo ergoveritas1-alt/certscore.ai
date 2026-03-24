@@ -35,6 +35,9 @@ import {
 import {
   getPolicyPositiveSignalKeysForFinding
 } from "./policy-positive-signal-contract";
+import {
+  getContradictionEvidenceBundle
+} from "./contradiction-evidence-contract";
 
 export type UnifiedFindingDetails =
   | {
@@ -65,6 +68,8 @@ export type UnifiedFindingDetails =
       kind: string;
       claim?: string | null;
       observedBehavior?: string | null;
+      policySourceUrl?: string | null;
+      runtimeEvidenceArtifacts?: string[];
       vendors?: string[];
     }
   | {
@@ -402,31 +407,21 @@ function buildUnifiedFindingDetails(input: {
   }
 
   if (family === "contradiction") {
+    const contradictionEvidence =
+      getContradictionEvidenceBundle(input.linkedValidationFinding?.evidence as Record<string, unknown> | null | undefined) ??
+      getContradictionEvidenceBundle(input.fallbackEvidence);
     const vendors = uniqueStrings([
-      ...(Array.isArray(input.linkedValidationFinding?.evidence?.runtimeVendors)
-        ? (input.linkedValidationFinding?.evidence?.runtimeVendors as string[])
-        : []),
-      ...(Array.isArray(input.linkedValidationFinding?.evidence?.relatedVendors)
-        ? (input.linkedValidationFinding?.evidence?.relatedVendors as string[])
-        : []),
-      ...(Array.isArray(input.fallbackEvidence?.runtimeVendors)
-        ? (input.fallbackEvidence?.runtimeVendors as string[])
-        : []),
-      ...(Array.isArray(input.fallbackEvidence?.relatedVendors)
-        ? (input.fallbackEvidence?.relatedVendors as string[])
-        : [])
+      ...(contradictionEvidence?.runtimeVendors ?? []),
+      ...(contradictionEvidence?.relatedVendors ?? [])
     ]);
 
     return {
       family,
       kind: input.findingId,
-      claim:
-        typeof input.linkedValidationFinding?.evidence?.claim === "string"
-          ? input.linkedValidationFinding.evidence.claim
-          : typeof input.fallbackEvidence?.claim === "string"
-            ? input.fallbackEvidence.claim
-            : null,
-      observedBehavior: input.summary,
+      claim: contradictionEvidence?.claim ?? null,
+      observedBehavior: contradictionEvidence?.runtimeSummary ?? input.summary,
+      policySourceUrl: contradictionEvidence?.policySourceUrl ?? null,
+      runtimeEvidenceArtifacts: contradictionEvidence?.runtimeEvidenceArtifacts ?? [],
       vendors
     } satisfies UnifiedFindingDetails;
   }
@@ -513,9 +508,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     };
   }
 
+  const contradictionEvidence = getContradictionEvidenceBundle(fallbackEvidence);
   const pageUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
     ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
+    ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
     typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null,
     typeof fallbackEvidence.consentBlockerUrl === "string" ? fallbackEvidence.consentBlockerUrl : null
   ]);
@@ -523,6 +520,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const sourceUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.sourceUrls) ? (fallbackEvidence.sourceUrls as string[]) : []),
     ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
+    ...(contradictionEvidence?.sourceUrls ?? []),
     typeof fallbackEvidence.sourceUrl === "string" ? fallbackEvidence.sourceUrl : null,
     typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null
   ]);
@@ -530,6 +528,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const snippets = uniqueStrings([
     typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null,
     typeof fallbackEvidence.policyChildrenReference === "string" ? fallbackEvidence.policyChildrenReference : null,
+    contradictionEvidence?.claim,
+    contradictionEvidence?.policySnippet,
+    contradictionEvidence?.runtimeSummary,
+    ...(contradictionEvidence?.runtimeEvidenceArtifacts ?? []),
     Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
       ? null
       : typeof fallbackEvidence.policySummaryShort === "string"
@@ -597,8 +599,14 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(fallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(fallbackEvidence.relatedVendors as string[]);
   }
+  if ((contradictionEvidence?.relatedVendors.length ?? 0) > 0) {
+    entities.relatedVendors = uniqueStrings([...(entities.relatedVendors ?? []), ...((contradictionEvidence?.relatedVendors ?? []) as string[])]);
+  }
   if (Array.isArray(fallbackEvidence.runtimeVendors)) {
     entities.runtimeVendors = uniqueStrings(fallbackEvidence.runtimeVendors as string[]);
+  }
+  if ((contradictionEvidence?.runtimeVendors.length ?? 0) > 0) {
+    entities.runtimeVendors = uniqueStrings([...(entities.runtimeVendors ?? []), ...((contradictionEvidence?.runtimeVendors ?? []) as string[])]);
   }
   if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
     const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
@@ -631,6 +639,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     fallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
     fallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
     fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
+    ...(contradictionEvidence?.supportingSignals ?? []),
     typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
   ]);
 
@@ -862,12 +871,20 @@ function deriveConfidenceInputs(input: {
   const hasDirectRuntimeEvidence =
     input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
     normalizedConcernStrengthFlags.includes("direct_runtime") ||
+    input.fallbackEvidenceRows.some((row) => (getContradictionEvidenceBundle(row)?.runtimeEvidenceArtifacts.length ?? 0) > 0) ||
     validationEvidenceRows.some((row) =>
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
     );
 
   const hasPolicyTextEvidence = normalizedConcernStrengthFlags.includes("policy_text") || allEvidenceRows.some((row) =>
-    Object.keys(row).some((key) => /claim|policy|disclosure|summary|snippet|description|pageurl|page_url/i.test(key))
+    {
+      const contradictionEvidence = getContradictionEvidenceBundle(row);
+      return (
+        Boolean(contradictionEvidence?.policySnippet) ||
+        Boolean(contradictionEvidence?.claim) ||
+        Object.keys(row).some((key) => /claim|policy|disclosure|summary|snippet|description|pageurl|page_url/i.test(key))
+      );
+    }
   );
 
   const hasKeyPageDiscoveryEvidence = normalizedConcernStrengthFlags.includes("key_page_discovery") || allEvidenceRows.some((row) =>

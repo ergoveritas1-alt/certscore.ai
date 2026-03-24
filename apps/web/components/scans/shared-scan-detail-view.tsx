@@ -44,6 +44,9 @@ import {
   normalizePolicyPositiveSignalKey
 } from "../../lib/scans/policy-positive-signal-contract";
 import {
+  type ContradictionEvidenceBundle
+} from "../../lib/scans/contradiction-evidence-contract";
+import {
   buildValidationFindingLookup,
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
@@ -263,8 +266,11 @@ type PolicyBehaviorContradiction = {
   evidence: string[];
   observedBehavior: string;
   policyPageUrl: string | null;
+  policySnippet: string | null;
   policySummary: string | null;
   relatedVendors: string[];
+  runtimeSummary: string;
+  runtimeVendors: string[];
   supportingSignals: string[];
   severity: "high" | "medium";
   status: "contradiction" | "violation risk" | "likely contradiction";
@@ -464,8 +470,11 @@ function derivePolicyBehaviorContradictions(input: {
       observedBehavior: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
       evidence: preconsentEvidence.slice(0, 3),
       policyPageUrl,
+      policySnippet: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
       policySummary,
       relatedVendors: preconsentVendors,
+      runtimeSummary: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
+      runtimeVendors: preconsentVendors,
       supportingSignals: ["consent_gating_claim"]
     });
   }
@@ -479,8 +488,11 @@ function derivePolicyBehaviorContradictions(input: {
       observedBehavior: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
       evidence: advertisingVendors.slice(0, 4),
       policyPageUrl,
+      policySnippet: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
       policySummary,
       relatedVendors: advertisingVendors,
+      runtimeSummary: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
+      runtimeVendors: advertisingVendors,
       supportingSignals: [policyDoNotSell]
     });
   }
@@ -503,8 +515,16 @@ function derivePolicyBehaviorContradictions(input: {
         ...sessionReplayVendors.slice(0, 1)
       ].slice(0, 4),
       policyPageUrl,
+      policySnippet: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
       policySummary,
       relatedVendors: uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6),
+      runtimeSummary:
+        advertisingVendors.length > 0
+          ? `Observed adtech vendors include ${advertisingVendors.join(", ")}${sessionReplayVendors.length > 0 ? `; session replay tooling includes ${sessionReplayVendors.join(", ")}.` : "."}`
+          : trackerVendors.length > 0
+            ? `Observed tracker vendors include ${trackerVendors.slice(0, 6).join(", ")}.`
+            : "The scan flagged a policy/behavior conflict based on runtime evidence and policy semantics.",
+      runtimeVendors: uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6),
       supportingSignals: uniqueStrings([
         hasPolicyBehaviorConflict ? "policy_behavior_conflict_detected" : null,
         policyFlags.includes("policy_behavior_conflict_candidate") ? "policy_behavior_conflict_candidate" : null
@@ -1372,11 +1392,26 @@ function buildSectionReviewIssues(input: {
         description: row.observedBehavior,
         evidence: row.evidence,
         fallbackEvidence: {
+          contradictionEvidence: {
+            claim: row.claim,
+            policySnippet: row.policySnippet ?? row.claim,
+            policySourceUrl: row.policyPageUrl,
+            policySummaryShort: row.policySummary,
+            relatedVendors: row.relatedVendors,
+            runtimeEvidenceArtifacts: row.evidence,
+            runtimeSummary: row.runtimeSummary,
+            runtimeVendors: row.runtimeVendors,
+            sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
+            supportingSignals: row.supportingSignals
+          } satisfies ContradictionEvidenceBundle,
           claim: row.claim,
           pageUrl: row.policyPageUrl,
+          policySnippets: row.policySnippet ? [row.policySnippet] : [],
           policySummaryShort: row.policySummary,
           relatedVendors: row.relatedVendors,
-          runtimeVendors: row.relatedVendors,
+          runtimeEvidenceArtifacts: row.evidence,
+          runtimeSummary: row.runtimeSummary,
+          runtimeVendors: row.runtimeVendors,
           sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
           supportingSignals: row.supportingSignals
         },
@@ -2347,6 +2382,7 @@ function AgencyAdvisorySummary(input: {
       : "The surfaced findings do not yet point to one dominant risk pattern.",
     "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
   ];
+
   const totalPriorityFindings = highPriorityCount + mediumPriorityCount;
 
   return (
@@ -2360,8 +2396,8 @@ function AgencyAdvisorySummary(input: {
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Areas of concern</p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                 <span className="inline-flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                <span>High</span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                  <span>High</span>
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />

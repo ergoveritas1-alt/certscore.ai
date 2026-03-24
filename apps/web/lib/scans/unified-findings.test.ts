@@ -365,9 +365,50 @@ test("retains both policy-side and runtime-side evidence on contradiction issue 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.details?.family, "contradiction");
   assert.equal(packet?.details?.claim, "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.");
+  assert.equal(packet?.details?.policySourceUrl, "https://www.example.com/privacy");
+  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, ["Google Ads", "Meta Pixel"]);
   assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Google Ads", "Meta Pixel"]);
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.example.com/privacy"]);
   assert.match((packet?.evidence?.snippets ?? []).join(" "), /privacy policy/i);
+});
+
+test("prefers structured contradiction evidence bundles over loose fallback fields", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed replay tooling during the homepage session.",
+        fallbackEvidence: {
+          claim: "stale claim",
+          contradictionEvidence: {
+            claim: "Policy does not clearly disclose replay tooling.",
+            policySnippet: "Policy does not clearly disclose replay tooling.",
+            policySourceUrl: "https://www.example.com/privacy",
+            policySummaryShort: "We describe our privacy controls in the privacy policy.",
+            relatedVendors: ["Microsoft Clarity"],
+            runtimeEvidenceArtifacts: ["Replay script observed during homepage load"],
+            runtimeSummary: "Observed replay tooling during the homepage session.",
+            runtimeVendors: ["Microsoft Clarity"],
+            sourceUrls: ["https://www.example.com/privacy"],
+            supportingSignals: ["session replay tool detected"]
+          },
+          relatedVendors: ["Some Other Vendor"]
+        },
+        observedValue: "Observed replay tooling during the homepage session.",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.details?.family, "contradiction");
+  assert.equal(packet?.details?.claim, "Policy does not clearly disclose replay tooling.");
+  assert.deepEqual(packet?.details?.vendors, ["Microsoft Clarity"]);
+  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, ["Replay script observed during homepage load"]);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeVendors, ["Microsoft Clarity"]);
+  assert.ok((packet?.evidence?.snippets ?? []).includes("Replay script observed during homepage load"));
 });
 
 test("keeps strong corroborated findings surfaced with a confidence rationale", () => {

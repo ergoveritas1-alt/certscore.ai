@@ -6,6 +6,7 @@ import type {
   NormalizedConcernNegativeEvidenceFlag,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
+import { getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -357,12 +358,14 @@ function hasBehaviorSideEvidence(
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
+  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   return (
     evidenceStrengthFlags.includes("direct_runtime") ||
     evidenceStrengthFlags.includes("concrete_payload") ||
     hasTruthyArrayValue(rawEvidence?.runtimeEvidence) ||
     hasTruthyArrayValue(rawEvidence?.runtimeEvidenceArtifacts) ||
-    hasTruthyArrayValue(rawEvidence?.runtime_evidence_artifacts)
+    hasTruthyArrayValue(rawEvidence?.runtime_evidence_artifacts) ||
+    (contradictionEvidence?.runtimeEvidenceArtifacts.length ?? 0) > 0
   );
 }
 
@@ -370,12 +373,15 @@ function hasPolicySideEvidence(
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
+  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   return (
     evidenceStrengthFlags.includes("policy_text") ||
     typeof rawEvidence?.claim === "string" ||
     typeof rawEvidence?.policySummary === "string" ||
     typeof rawEvidence?.policySummaryShort === "string" ||
-    typeof rawEvidence?.policy_summary_short === "string"
+    typeof rawEvidence?.policy_summary_short === "string" ||
+    Boolean(contradictionEvidence?.policySnippet) ||
+    Boolean(contradictionEvidence?.claim)
   );
 }
 
@@ -383,10 +389,12 @@ function hasContradictionMappingEvidence(
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
+  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   return (
     evidenceStrengthFlags.includes("structured_validation") ||
     typeof rawEvidence?.claim === "string" ||
-    hasTruthyArrayValue(rawEvidence?.supportingSignals)
+    hasTruthyArrayValue(rawEvidence?.supportingSignals) ||
+    (contradictionEvidence?.supportingSignals.length ?? 0) > 0
   );
 }
 
