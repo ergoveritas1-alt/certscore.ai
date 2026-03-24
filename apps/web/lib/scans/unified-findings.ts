@@ -328,6 +328,10 @@ function getCoveragePageType(id: string) {
   return "unknown";
 }
 
+function hasConfirmedLinkedDiscoverySource(source: string | null | undefined) {
+  return ["footer_link", "header_link", "body_link", "legal_hub"].includes(source ?? "");
+}
+
 function buildUnifiedFindingDetails(input: {
   fallbackEvidence?: Record<string, unknown> | null;
   findingId: string;
@@ -1213,6 +1217,18 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.details?.family === "contradiction" &&
+    (!input.packet.confidenceInputs.hasPolicyTextEvidence ||
+      (!input.packet.confidenceInputs.hasDirectRuntimeEvidence && !input.packet.confidenceInputs.hasConcretePayloadEvidence))
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because contradiction findings need both concrete policy text and concrete runtime evidence before buyer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  if (
     isDomainLevelSensitiveContext &&
     (
       explicitMinorsCollectionFlagPresent ||
@@ -1370,12 +1386,31 @@ function buildPresentationDecision(input: {
   if (
     (input.packet.unifiedFindingId === "cookie_policy_unavailable" ||
       input.packet.unifiedFindingId === "accessibility_statement_unavailable") &&
-    input.packet.evidence?.flags?.includes("guessed_only")
+    (input.packet.evidence?.flags?.includes("guessed_only") ||
+      !hasConfirmedLinkedDiscoverySource(
+        input.packet.details?.family === "coverage_gap" ? input.packet.details.bestDiscoverySource : null
+      ))
   ) {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the unavailable page came only from guessed discovery paths rather than a confirmed site-linked target.",
+      rationale: "Suppressed because the unavailable page was not tied to a strong confirmed linked target from the scanned site.",
       status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "weak_cookie_security_attributes" &&
+    ![
+      ...(input.packet.evidence?.entities?.missingSecureCookieNames ?? []),
+      ...(input.packet.evidence?.entities?.missingHttpOnlyCookieNames ?? []),
+      ...(input.packet.evidence?.entities?.weakSameSiteCookieNames ?? []),
+      ...(input.packet.evidence?.entities?.thirdPartyWeakAttributeCookieNames ?? [])
+    ].some((value) => typeof value === "string" && value.trim().length > 0)
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because the current evidence does not retain concrete cookie examples for the weak attribute claim.",
+      status: "audit_only"
     };
   }
 

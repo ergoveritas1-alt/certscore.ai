@@ -178,8 +178,8 @@ test("marks fallback-only low-confidence packets as audit-only and refines cover
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /fallback-only/i);
+  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.match(packet?.presentationDecision.rationale ?? "", /not tied to a strong confirmed linked target/i);
   assert.match(packet?.presentation.suggestedFix ?? "", /repair the cookie policy url/i);
 });
 
@@ -660,6 +660,37 @@ test("suppresses guessed-only cookie policy unavailable findings", () => {
   assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
+test("suppresses discovery-only cookie policy unavailable findings without strong linked-source evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A cookie policy target discovered during bounded scanning could not be retrieved successfully.",
+        fallbackEvidence: {
+          keyPageAttemptCount: 2,
+          keyPageAttemptedUrls: ["https://example.com/cookiebeleid", "https://example.com/Cookiebeleid"],
+          keyPageDiscoverySource: "same_brand_subdomain",
+          keyPageGuessedOnly: false,
+          signalKey: "disclosure.cookie_policy_fetch_failed",
+          signalLabel: "Cookie policy not retrievable",
+          signalValue: true
+        },
+        observedValue: "Cookie policy not retrievable",
+        severity: "medium",
+        signalKey: "disclosure.cookie_policy_fetch_failed",
+        signalLabel: "Cookie policy not retrievable",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Cookie policy not retrievable"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_unavailable");
+  assert.equal(packet?.presentationDecision.status, "suppress");
+});
+
 test("surfaces accessibility support path present from snapshot evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -687,6 +718,61 @@ test("surfaces accessibility support path present from snapshot evidence", () =>
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
+});
+
+test("keeps weak cookie security attributes audit-only without cookie examples", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed cookies appear to rely on weaker security attributes than expected.",
+        fallbackEvidence: {
+          cookieAttributeSummary: {
+            missingSecureCount: 2,
+            weakSameSiteCount: 1
+          },
+          signalKey: "privacy.weak_cookie_security_attributes_detected",
+          signalLabel: "Weak cookie security attributes",
+          signalValue: true
+        },
+        observedValue: "Weak cookie security attributes",
+        severity: "medium",
+        signalKey: "privacy.weak_cookie_security_attributes_detected",
+        signalLabel: "Weak cookie security attributes",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Weak cookie security attributes"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("keeps contradiction findings audit-only without both policy text and concrete runtime evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Compare the supporting evidence against the public-facing policy language and confirm whether the mismatch is real.",
+        fallbackEvidence: {
+          claim: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
+          pageUrl: "https://www.example.com/privacy",
+          relatedVendors: ["Adobe Analytics", "Meta Pixel"]
+        },
+        observedValue: "Consent-gated tracking claim conflict",
+        severity: "high",
+        sourceType: "issue",
+        title: "Consent-gated tracking claim conflicts with runtime behavior"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
