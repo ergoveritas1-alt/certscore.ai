@@ -6,8 +6,7 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-8 text-sm text-slate-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <p className="font-medium text-slate-700">CertScore.ai</p>
-            <p>certscore.ai · Automated scanning for publicly observable website signals.</p>
+            <p className="font-medium text-slate-700">CertScore.ai · Automated scanning for publicly observable website signals.</p>
           </div>
           <div className="flex flex-wrap gap-4">
             <Link href="/how-it-works" className="hover:text-slate-900">
