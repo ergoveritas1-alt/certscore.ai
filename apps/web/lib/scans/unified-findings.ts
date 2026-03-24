@@ -13,6 +13,15 @@ import {
   type ReviewFindingSeverity
 } from "./canonical-review-finding";
 import {
+  buildNormalizedConcerns,
+  buildUnifiedFindingCandidatesFromConcerns,
+  type ConcernBackedUnifiedFindingCandidate,
+  type NormalizedConcernEvidenceStrengthFlag,
+  type NormalizedConcernExternalSurfacingEligibility,
+  type NormalizedConcernOriginType,
+  type NormalizedConcernPromotionEligibility
+} from "./normalized-concerns";
+import {
   findValidationFindingForKeys,
   type ScanValidationFinding
 } from "./validation-review-linking";
@@ -107,6 +116,12 @@ export type UnifiedFindingPacket = {
     sourceUrls?: string[];
   };
   details?: UnifiedFindingDetails;
+  concernContext?: {
+    evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
+    externalSurfacingEligibilities: NormalizedConcernExternalSurfacingEligibility[];
+    originTypes: NormalizedConcernOriginType[];
+    promotionEligibilities: NormalizedConcernPromotionEligibility[];
+  };
 };
 
 export type UnifiedFindingPresentationDecision = {
@@ -236,6 +251,10 @@ const SPECIFIC_CONTRADICTION_FINDING_IDS = new Set([
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function uniqueConcernFlags<T extends string>(values: T[]) {
+  return [...new Set(values)];
 }
 
 function getSeverityWeight(severity: ReviewFindingSeverity | null | undefined) {
@@ -721,6 +740,18 @@ function hasConcretePayloadEvidence(fallbackEvidence?: Record<string, unknown> |
   );
 }
 
+function getNormalizedConcernStrengthFlags(rows: Array<Record<string, unknown> | null | undefined>) {
+  return uniqueConcernFlags(
+    rows.flatMap((row) =>
+      Array.isArray(row?.normalizedConcernEvidenceStrengthFlags)
+        ? row.normalizedConcernEvidenceStrengthFlags.filter(
+            (flag): flag is NormalizedConcernEvidenceStrengthFlag => typeof flag === "string"
+          )
+        : []
+    )
+  );
+}
+
 function deriveConfidenceInputs(input: {
   packet: UnifiedFindingPacket;
   validationFindings: ScanValidationFinding[];
@@ -734,8 +765,10 @@ function deriveConfidenceInputs(input: {
     .map((finding) => finding.evidence)
     .filter((evidence): evidence is Record<string, unknown> => Boolean(evidence) && typeof evidence === "object");
   const allEvidenceRows = [...validationEvidenceRows, ...input.fallbackEvidenceRows.filter(Boolean) as Record<string, unknown>[]];
+  const normalizedConcernStrengthFlags = getNormalizedConcernStrengthFlags(input.fallbackEvidenceRows);
   const evidenceQualityFlags = uniqueStrings([
     ...(input.packet.evidence?.flags ?? []),
+    ...normalizedConcernStrengthFlags,
     ...allEvidenceRows.flatMap((row) =>
       Object.entries(row)
         .filter(([, value]) => value === true)
@@ -745,23 +778,31 @@ function deriveConfidenceInputs(input: {
 
   const hasDirectRuntimeEvidence =
     input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
+    normalizedConcernStrengthFlags.includes("direct_runtime") ||
     validationEvidenceRows.some((row) =>
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
     );
 
-  const hasPolicyTextEvidence = allEvidenceRows.some((row) =>
+  const hasPolicyTextEvidence = normalizedConcernStrengthFlags.includes("policy_text") || allEvidenceRows.some((row) =>
     Object.keys(row).some((key) => /claim|policy|disclosure|summary|snippet|description|pageurl|page_url/i.test(key))
   );
 
-  const hasKeyPageDiscoveryEvidence = allEvidenceRows.some((row) =>
+  const hasKeyPageDiscoveryEvidence = normalizedConcernStrengthFlags.includes("key_page_discovery") || allEvidenceRows.some((row) =>
     Object.keys(row).some((key) => /keyPage|attemptedUrls|attemptCount|stopReason|discovery/i.test(key))
   );
 
-  const hasStructuredValidationEvidence = validationEvidenceRows.length > 0;
-  const concretePayloadEvidence = input.fallbackEvidenceRows.some((row) => hasConcretePayloadEvidence(row));
-  const isFallbackOnly = validationCount === 0 && !hasDirectRuntimeEvidence && signalCount > 0;
+  const hasStructuredValidationEvidence =
+    normalizedConcernStrengthFlags.includes("structured_validation") || validationEvidenceRows.length > 0;
+  const concretePayloadEvidence =
+    normalizedConcernStrengthFlags.includes("concrete_payload") || input.fallbackEvidenceRows.some((row) => hasConcretePayloadEvidence(row));
+  const isFallbackOnly =
+    (normalizedConcernStrengthFlags.includes("fallback_only") ||
+      (validationCount === 0 && !hasDirectRuntimeEvidence && signalCount > 0)) &&
+    !hasStructuredValidationEvidence;
   const hasPageAttribution =
-    (input.packet.affectedPageCount ?? 0) > 0 || (input.packet.evidence?.sourceUrls?.length ?? 0) > 0;
+    normalizedConcernStrengthFlags.includes("page_attributed") ||
+    (input.packet.affectedPageCount ?? 0) > 0 ||
+    (input.packet.evidence?.sourceUrls?.length ?? 0) > 0;
 
   return {
     evidenceQualityFlags,
@@ -1022,6 +1063,33 @@ function buildPresentationDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
 }): UnifiedFindingPresentationDecision {
+  const concernExternalSurfacingEligibilities = input.packet.concernContext?.externalSurfacingEligibilities ?? [];
+  const concernPromotionEligibilities = input.packet.concernContext?.promotionEligibilities ?? [];
+  const hasConcernExternalEligibility = concernExternalSurfacingEligibilities.includes("eligible");
+  const hasConcernAuditOnlyEligibility = concernExternalSurfacingEligibilities.includes("audit_only");
+  const allConcernEligibilitiesAreSuppressed =
+    concernExternalSurfacingEligibilities.length > 0 &&
+    concernExternalSurfacingEligibilities.every((eligibility) => eligibility === "suppress");
+  const allConcernPromotionsBlocked =
+    concernPromotionEligibilities.length > 0 &&
+    concernPromotionEligibilities.every((eligibility) => eligibility === "blocked");
+
+  if (allConcernPromotionsBlocked || allConcernEligibilitiesAreSuppressed) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because normalized concern gating marked this concern as ineligible for external surfacing.",
+      status: "suppress"
+    };
+  }
+
+  if (!hasConcernExternalEligibility && hasConcernAuditOnlyEligibility) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because normalized concern gating retained it for internal review but not customer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
   const isDomainLevelSensitiveContext = input.packet.unifiedFindingId === "minors_or_age_gated_collection_context";
   const isDomainLevelChildrenDisclosureContext =
     input.packet.unifiedFindingId === "children_privacy_context_without_supporting_disclosure";
@@ -1268,13 +1336,18 @@ export function buildUnifiedFindingPackets(input: {
   reviewFindingCandidates: UnifiedFindingCandidate[];
   validationFindings: ScanValidationFinding[];
 }) {
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: input.reviewFindingCandidates,
+    validationFindings: input.validationFindings
+  });
+  const normalizedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);
   const packets = new Map<string, UnifiedFindingPacket>();
   const validationByPacket = new Map<string, ScanValidationFinding[]>();
   const fallbackEvidenceByPacket = new Map<string, Array<Record<string, unknown> | null | undefined>>();
 
   const addCandidate = (
     findingId: string,
-    candidate: UnifiedFindingCandidate,
+    candidate: ConcernBackedUnifiedFindingCandidate,
     linkedValidationFinding?: ScanValidationFinding | null
   ) => {
     const definition = getReportUnifiedFinding(findingId);
@@ -1310,7 +1383,13 @@ export function buildUnifiedFindingPackets(input: {
       categoryAlignments: definition.categoryAlignments,
       sourceRefs: [],
       evidence: undefined,
-      details: undefined
+      details: undefined,
+      concernContext: {
+        evidenceStrengthFlags: [],
+        externalSurfacingEligibilities: [],
+        originTypes: [],
+        promotionEligibilities: []
+      }
     };
 
     nextPacket.severity = maxSeverity(nextPacket.severity, candidate.severity);
@@ -1345,6 +1424,24 @@ export function buildUnifiedFindingPackets(input: {
       ...(fallbackEvidenceByPacket.get(findingId) ?? []),
       candidate.fallbackEvidence
     ]);
+    nextPacket.concernContext = {
+      evidenceStrengthFlags: uniqueConcernFlags([
+        ...(existing?.concernContext?.evidenceStrengthFlags ?? []),
+        ...(candidate.normalizedConcern?.evidenceStrengthFlags ?? [])
+      ]),
+      externalSurfacingEligibilities: uniqueConcernFlags([
+        ...(existing?.concernContext?.externalSurfacingEligibilities ?? []),
+        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.externalSurfacingEligibility] : [])
+      ]),
+      originTypes: uniqueConcernFlags([
+        ...(existing?.concernContext?.originTypes ?? []),
+        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.originType] : [])
+      ]),
+      promotionEligibilities: uniqueConcernFlags([
+        ...(existing?.concernContext?.promotionEligibilities ?? []),
+        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.promotionEligibility] : [])
+      ])
+    };
 
     nextPacket.evidence = mergeEvidence(nextPacket.evidence, fallbackEvidence, candidate.evidence, linkedValidationFinding);
     const attributedUrls = uniqueStrings([
@@ -1370,48 +1467,24 @@ export function buildUnifiedFindingPackets(input: {
     packets.set(findingId, nextPacket);
   };
 
-  for (const candidate of input.reviewFindingCandidates) {
+  for (const candidate of normalizedCandidates) {
     const mappedFinding =
-      candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
+      (candidate.normalizedConcern?.suggestedUnifiedFindingId
+        ? getReportUnifiedFinding(candidate.normalizedConcern.suggestedUnifiedFindingId)
+        : null) ??
+      (candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
         ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey) ??
           getReportUnifiedFindingByAlias(candidate.title)
         : getReportUnifiedFindingByAlias(candidate.title) ??
           (candidate.linkedValidationFinding
             ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)
-            : null);
+            : null));
 
     if (!mappedFinding) {
       continue;
     }
 
     addCandidate(mappedFinding.id, candidate, candidate.linkedValidationFinding ?? null);
-  }
-
-  for (const validationFinding of input.validationFindings) {
-    const mappedFinding =
-      getReportUnifiedFindingForValidationRule(validationFinding.ruleKey) ??
-      getReportUnifiedFindingByAlias(validationFinding.title);
-
-    if (!mappedFinding) {
-      continue;
-    }
-
-    const syntheticCandidate: UnifiedFindingCandidate = {
-      categoryId: undefined,
-      description: validationFinding.description ?? validationFinding.title,
-      evidence: [],
-      fallbackEvidence: validationFinding.evidence ?? undefined,
-      linkedValidationFinding: validationFinding,
-      observedValue: null,
-      severity:
-        validationFinding.severity === "high" || validationFinding.severity === "medium" || validationFinding.severity === "low"
-          ? validationFinding.severity
-          : "medium",
-      sourceType: "issue",
-      title: validationFinding.title
-    };
-
-    addCandidate(mappedFinding.id, syntheticCandidate, validationFinding);
   }
 
   return [...packets.values()].sort(

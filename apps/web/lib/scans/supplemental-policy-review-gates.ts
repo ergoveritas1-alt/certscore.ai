@@ -1,19 +1,21 @@
-import { shouldSurfacePrimarySignalFinding } from "./finding-evidence-gates";
+import { normalizeConcernFromPolicyReviewQueue } from "./normalized-concerns";
 
 export function shouldSurfaceSupplementalPolicyReviewFinding(input: {
   evidence: Record<string, unknown> | null | undefined;
   reason: string;
   ruleKey: string;
 }) {
-  // Replay/disclosure review queue items stay analyst-only unless a concrete
-  // validation finding already exists elsewhere in the report.
-  if (input.reason === "session_replay_without_disclosure_detected") {
-    return false;
-  }
-
-  return shouldSurfacePrimarySignalFinding({
-    fallbackEvidence: input.evidence,
-    key: input.ruleKey,
-    linkedValidationEvidence: null
+  const concern = normalizeConcernFromPolicyReviewQueue({
+    description: `Supplemental policy review signal for ${input.reason}.`,
+    evidence: input.evidence,
+    reason: input.reason,
+    ruleKey: input.ruleKey,
+    severity: "medium",
+    title: input.ruleKey
   });
+
+  return (
+    concern.promotionEligibility === "eligible" &&
+    concern.externalSurfacingEligibility === "eligible"
+  );
 }

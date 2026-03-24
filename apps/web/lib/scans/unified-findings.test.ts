@@ -83,8 +83,12 @@ test("collapses signal, issue, and validation sources into one unified finding p
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "issue"));
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "validation"));
   assert.equal(packets[0]?.confidenceInputs.validationCount, 1);
-  assert.equal(packets[0]?.confidenceInputs.hasStructuredValidationEvidence, false);
+  assert.equal(packets[0]?.confidenceInputs.hasStructuredValidationEvidence, true);
   assert.equal(packets[0]?.confidenceInputs.hasDirectRuntimeEvidence, false);
+  assert.deepEqual(
+    packets[0]?.concernContext?.originTypes.sort(),
+    ["compatibility_signal", "snapshot_signal", "validation_rule"]
+  );
 });
 
 test("resolves validation-backed unified findings without a direct signal candidate", () => {
@@ -104,7 +108,7 @@ test("resolves validation-backed unified findings without a direct signal candid
   assert.equal(packets.length, 1);
   assert.equal(packets[0]?.unifiedFindingId, "missing_transfer_disclosure");
   assert.equal(packets[0]?.severity, "medium");
-  assert.equal(packets[0]?.confidenceBand, "moderate");
+  assert.equal(packets[0]?.confidenceBand, "high");
   assert.equal(packets[0]?.confidenceInputs.validationCount, 1);
 });
 
@@ -196,7 +200,7 @@ test("exposes owner and mirror category relations on unified finding packets", (
   assert.equal(getUnifiedFindingOwnerCategoryId(packet!), "policy_to_behavior_contradictions");
   assert.equal(getUnifiedFindingCategoryRelation(packet!, "adtech_analytics_replay_footprint"), "mirror");
   assert.equal(packet?.confidenceInputs.validationCount, 1);
-  assert.equal(packet?.confidenceInputs.hasStructuredValidationEvidence, false);
+  assert.equal(packet?.confidenceInputs.hasStructuredValidationEvidence, true);
 });
 
 test("rolls structured validation evidence into unified finding packets", () => {
@@ -262,7 +266,7 @@ test("treats concrete payload evidence as a confidence booster for sensitive-dat
 
   assert.equal(packet?.unifiedFindingId, "high_sensitivity_data_collection");
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
-  assert.equal(packet?.confidenceBand, "moderate");
+  assert.equal(packet?.confidenceBand, "high");
 });
 
 test("keeps the unified finding name canonical even when validation titles add judgment language", () => {
@@ -388,7 +392,7 @@ test("keeps page-specific findings in audit only when page attribution is still 
 
   assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /runtime artifacts/i);
+  assert.match(packet?.presentationDecision.rationale ?? "", /internal review/i);
 });
 
 test("surfaces GPC failures as runtime-backed unified findings", () => {
