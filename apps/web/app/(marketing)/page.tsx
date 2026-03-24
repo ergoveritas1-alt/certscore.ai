@@ -49,12 +49,12 @@ const personas = [
   {
     title: "Due diligence and risk analysts",
     detail:
-      "When evaluating a company or counterparty, public-facing privacy posture can be an early signal. CertScore gives you a fast, structured read on observable website signals before deeper review."
+      "When evaluating a company or counterparty, public-facing privacy posture can be an early signal. CertScore gives you a fast, structured read on observable website signals relevant to FTC, CPPA, GDPR, COPPA, ADA, CFTC, and SEC frameworks for deeper review."
   },
   {
     title: "Developers responsible for compliance implementation",
     detail:
-      "You own the implementation but don't always have visibility into what's firing on production. CertScore scans the live site the way a browser does — catching trackers that load before consent and flows that don't behave as configured."
+      "You own the implementation but may not see what's firing in production. CertScore scans the live site like a browser, catching trackers that load before consent and flows that don't behave as configured."
   }
 ];
 
@@ -322,32 +322,11 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <Badge tone="neutral">Signals</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Monitor the specific surfaces that drive risk and change.</h2>
-            </div>
-            <div className="space-y-4 text-sm text-slate-600">
-              {categories.map((item) => (
-                <div key={item} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <SignalCheckIcon />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="bg-slate-50">
         <div className="mx-auto max-w-6xl px-6 py-10">
           <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
             <div className="max-w-4xl space-y-6">
-              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Ready to secure your digital footprint?
-              </h2>
+              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">Get a live read on website compliance risk.</h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
                 Join privacy-forward teams using CertScore to automate scanning, surface evidence, and rebuild trust around digital governance.
               </p>
