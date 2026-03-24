@@ -573,7 +573,7 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
       {
         description: "The scan retained a clear policy-based privacy-rights request path.",
         fallbackEvidence: {
-          signalKey: "policyRightsSignals",
+          signalKey: "privacy.privacy_rights_path_present",
           signalLabel: "Privacy-rights path present",
           signalValue: true,
           policyRightsSignals: ["access", "delete", "export"],
@@ -581,7 +581,7 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
         },
         observedValue: "Privacy-rights path present",
         severity: "low",
-        signalKey: "policyRightsSignals",
+        signalKey: "privacy.privacy_rights_path_present",
         signalLabel: "Privacy-rights path present",
         signalSource: "policy_enrichment_signal",
         sourceType: "signal",
@@ -595,6 +595,36 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
   assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /privacy-rights path/i);
+});
+
+test("suppresses guessed-only cookie policy unavailable findings", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A guessed cookie policy target could not be retrieved successfully.",
+        fallbackEvidence: {
+          keyPageAttemptCount: 2,
+          keyPageAttemptedUrls: ["https://example.com/cookiebeleid", "https://example.com/Cookiebeleid"],
+          keyPageGuessedOnly: true,
+          signalKey: "disclosure.cookie_policy_fetch_failed",
+          signalLabel: "Cookie policy not retrievable",
+          signalValue: true
+        },
+        observedValue: "Cookie policy not retrievable",
+        severity: "medium",
+        signalKey: "disclosure.cookie_policy_fetch_failed",
+        signalLabel: "Cookie policy not retrievable",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Cookie policy not retrievable"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_unavailable");
+  assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
 test("surfaces accessibility support path present from snapshot evidence", () => {

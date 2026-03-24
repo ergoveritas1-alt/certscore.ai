@@ -291,6 +291,10 @@ test("maps signals and validation rules into unified findings", () => {
     "privacy_rights_path_present"
   );
   assert.equal(
+    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.privacy_rights_path_present")?.id,
+    "privacy_rights_path_present"
+  );
+  assert.equal(
     getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.gpc_disclosure_present")?.id,
     "gpc_disclosure_present"
   );

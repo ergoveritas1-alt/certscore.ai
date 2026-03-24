@@ -2234,7 +2234,10 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "rights_request_mechanisms",
     mirrors: ["privacy_contacts_accountability"],
     overlays: ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "policyRightsSignals" }]
+    signalMappings: [
+      { source: "policy_enrichment_signal", key: "policyRightsSignals" },
+      { source: "policy_enrichment_signal", key: "privacy.privacy_rights_path_present" }
+    ]
   }),
   defineReportUnifiedFinding({
     id: "missing_dsar_high_exposure",

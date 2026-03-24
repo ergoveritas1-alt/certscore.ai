@@ -1404,6 +1404,50 @@ function getKeyPageTypeForSignal(key: string) {
   return null;
 }
 
+function getPolicySignalFallbackEvidence(input: {
+  policyEnrichment: Array<Record<string, unknown>>;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+}) {
+  const pageType = /commerce\.arbitration_clause_present/i.test(input.signalKey) ? "terms_of_service" : "privacy_policy";
+  const row =
+    input.policyEnrichment.find((entry) => (entry.pageType ?? entry.page_type) === pageType) ??
+    input.policyEnrichment[0] ??
+    null;
+
+  const pageUrl =
+    row && typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+  const policySummaryShort =
+    row && typeof (row.policySummaryShort ?? row.policy_summary_short) === "string"
+      ? String(row.policySummaryShort ?? row.policy_summary_short)
+      : null;
+  const evidenceSnippets =
+    row?.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+      ? (row.policyEvidenceSnippets as Record<string, unknown>)
+      : row?.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+        ? (row.policy_evidence_snippets as Record<string, unknown>)
+        : null;
+  const policyRightsSignals = Array.isArray(row?.policyRightsSignals)
+    ? row.policyRightsSignals
+    : Array.isArray(row?.policy_rights_signals)
+      ? row.policy_rights_signals
+      : Array.isArray(evidenceSnippets?.policy_rights_signals)
+        ? (evidenceSnippets.policy_rights_signals as string[])
+        : [];
+
+  return {
+    pageUrl,
+    pageUrls: pageUrl ? [pageUrl] : [],
+    policyRightsSignals,
+    policySummaryShort,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue,
+    sourceUrls: pageUrl ? [pageUrl] : []
+  };
+}
+
 function getKeyPageDiscoveryPageSummary(
   summary: unknown,
   pageType: string
@@ -1447,6 +1491,7 @@ function getKeyPageDiscoveryPageSummary(
 function buildReviewFindings(input: {
   categoryId?: string;
   issues: CanonicalReviewIssue[];
+  policyEnrichment?: Array<Record<string, unknown>>;
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
   snapshot?: Record<string, unknown> | null;
@@ -1510,6 +1555,16 @@ function buildReviewFindings(input: {
               signalLabel: item.label,
               signalValue: item.value
             }
+          : item.source === "policy_enrichment_signal" &&
+              /privacy_rights_path_present|gpc_disclosure_present|targeted_advertising_disclosure_present|arbitration_clause_present/i.test(
+                item.key
+              )
+            ? getPolicySignalFallbackEvidence({
+                policyEnrichment: input.policyEnrichment ?? [],
+                signalKey: item.key,
+                signalLabel: item.label,
+                signalValue: item.value
+              })
           : /privacy\.gpc_signal_not_honored/i.test(item.key)
             ? {
                 gpcVerification:
@@ -2897,6 +2952,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
           const reviewFindings = buildReviewFindings({
             categoryId: category.id,
             issues: [],
+            policyEnrichment: scanRecord.policyEnrichment,
             prioritizedAccessibilityRuleRows,
             runtimeArtifacts: scanRecord.runtimeArtifacts,
             snapshot,
@@ -2923,6 +2979,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
         });
         const issueFindings = buildReviewFindings({
           issues,
+          policyEnrichment: scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows,
           runtimeArtifacts: scanRecord.runtimeArtifacts,
           snapshot,
@@ -3016,6 +3073,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         const reviewFindings = buildReviewFindings({
           categoryId: category.id,
           issues: [],
+          policyEnrichment: input.scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
           runtimeArtifacts: input.scanRecord.runtimeArtifacts,
           snapshot: input.snapshot,
@@ -3043,6 +3101,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       });
       const issueFindings = buildReviewFindings({
         issues,
+        policyEnrichment: input.scanRecord.policyEnrichment,
         prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
         runtimeArtifacts: input.scanRecord.runtimeArtifacts,
         snapshot: input.snapshot,

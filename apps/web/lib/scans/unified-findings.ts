@@ -498,17 +498,22 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const pageUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
     ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
+    typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null,
     typeof fallbackEvidence.consentBlockerUrl === "string" ? fallbackEvidence.consentBlockerUrl : null
   ]);
 
   const sourceUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.sourceUrls) ? (fallbackEvidence.sourceUrls as string[]) : []),
-    ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : [])
+    ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
+    typeof fallbackEvidence.sourceUrl === "string" ? fallbackEvidence.sourceUrl : null,
+    typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null
   ]);
 
   const snippets = uniqueStrings([
     typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null,
     typeof fallbackEvidence.policyChildrenReference === "string" ? fallbackEvidence.policyChildrenReference : null,
+    typeof fallbackEvidence.policySummaryShort === "string" ? fallbackEvidence.policySummaryShort : null,
+    ...(Array.isArray(fallbackEvidence.policySnippets) ? (fallbackEvidence.policySnippets as string[]) : []),
     typeof fallbackEvidence.signalValue === "string" ? fallbackEvidence.signalValue : null
   ]);
 
@@ -1210,7 +1215,7 @@ function buildPresentationDecision(input: {
       (sourceRef) =>
         sourceRef.kind === "signal" &&
         sourceRef.source === "policy_enrichment_signal" &&
-        sourceRef.key === "policyRightsSignals"
+        (sourceRef.key === "privacy.privacy_rights_path_present" || sourceRef.key === "policyRightsSignals")
     )
   ) {
     return {
@@ -1298,6 +1303,18 @@ function buildPresentationDecision(input: {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because structured policy evidence retained a targeted-advertising or sale/sharing disclosure.",
       status: "surface"
+    };
+  }
+
+  if (
+    (input.packet.unifiedFindingId === "cookie_policy_unavailable" ||
+      input.packet.unifiedFindingId === "accessibility_statement_unavailable") &&
+    input.packet.evidence?.flags?.includes("guessed_only")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because the unavailable page came only from guessed discovery paths rather than a confirmed site-linked target.",
+      status: "suppress"
     };
   }
 
