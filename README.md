@@ -150,6 +150,8 @@ Accessibility-specific validation:
 
 The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
 
+The normalized concern lifecycle in `WC01` is documented in [docs/normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).
+
 ## CI accessibility validation
 
 GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)

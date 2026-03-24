@@ -2,9 +2,9 @@ import {
   hasConcreteDsarEvidence as hasConcreteDsarEvidenceFromConcern,
   hasConcreteSessionReplayEvidence as hasConcreteSessionReplayEvidenceFromConcern,
   hasSensitivePayloadEvidence as hasSensitivePayloadEvidenceFromConcern,
-  hasStrongRightsFrictionEvidence as hasStrongRightsFrictionEvidenceFromConcern,
-  normalizeConcernFromReviewFindingCandidate
-} from "./normalized-concerns";
+  hasStrongRightsFrictionEvidence as hasStrongRightsFrictionEvidenceFromConcern
+} from "./concern-policy";
+import { normalizeConcernFromReviewFindingCandidate } from "./normalized-concerns";
 
 export function isRightsFrictionSignal(key: string) {
   return /privacy\.(policy_runtime_functional_misalignment_detected|user_rights_friction_score)/i.test(key);
