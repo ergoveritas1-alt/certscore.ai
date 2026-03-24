@@ -39,6 +39,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
             <PreviewScanState initialScan={scan} />
           ) : loginHref && fullScanRecord ? (
             <SharedScanDetailView
+              createAccountHref={loginHref}
               headerActions={
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <PendingButtonLink href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />
@@ -50,6 +51,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                   />
                 </div>
               }
+              previewMode="homepage"
               scanRecord={fullScanRecord}
             />
           ) : null

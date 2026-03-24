@@ -54,6 +54,7 @@ import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { PendingButtonLink } from "../ui/pending-link";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -921,6 +922,7 @@ type ScanRecordData = ScanDetailResponse;
 type CanonicalTaxonomyReviewProps = {
   accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
   consentAuditFindings: PreviewSampleFinding[];
+  createAccountHref?: string | null;
   executiveSummary: {
     badges: Array<{
       label: string;
@@ -942,6 +944,7 @@ type CanonicalTaxonomyReviewProps = {
   policyBehaviorContradictions: PolicyBehaviorContradiction[];
   preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
   prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows>;
+  previewMode?: "full" | "homepage";
   scanRecord: ScanRecordData;
   scanReportReviewIssues: Array<{
     description: string;
@@ -2759,7 +2762,30 @@ function CoverageMatrix(input: {
   );
 }
 
+function HomepagePreviewGate(input: {
+  href: string;
+  mode: "partial" | "full";
+}) {
+  return (
+    <div
+      className={
+        input.mode === "full"
+          ? "pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-white/85 px-6 py-8 backdrop-blur-[2px]"
+          : "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex min-h-[45%] items-end justify-center rounded-b-[inherit] bg-[linear-gradient(180deg,rgba(248,250,252,0)_0%,rgba(248,250,252,0.86)_28%,rgba(255,255,255,0.97)_100%)] px-6 py-8"
+      }
+    >
+      <PendingButtonLink
+        href={input.href}
+        idleContent="Create account to view"
+        pendingContent="Opening..."
+        className="pointer-events-auto border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+      />
+    </div>
+  );
+}
+
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
+  const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
   const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
   const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
     const sections = getReportSectionsForPillar(pillar.id).map((section) => {
@@ -2932,19 +2958,29 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         statusCallout={input.executiveSummary.statusCallout}
         vendorGroups={vendorGroups}
       />
-      <FindingsOverview findings={reviewFindings} />
+      <div className="relative overflow-hidden rounded-2xl">
+        <FindingsOverview findings={reviewFindings} />
+        {showHomepagePreviewGate && input.createAccountHref ? (
+          <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
+        ) : null}
+      </div>
 
-      <CoverageMatrix
-        pillarSections={pillarSections.map(({ pillar, sections }) => ({
-          pillar,
-          sections: sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => ({
-            alignedReviewFindings,
-            ownerReviewFindings,
-            section,
-            visibleCategories
-          }))
-        }))}
-      />
+      <div className="relative overflow-hidden rounded-2xl">
+        <CoverageMatrix
+          pillarSections={pillarSections.map(({ pillar, sections }) => ({
+            pillar,
+            sections: sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => ({
+              alignedReviewFindings,
+              ownerReviewFindings,
+              section,
+              visibleCategories
+            }))
+          }))}
+        />
+        {showHomepagePreviewGate && input.createAccountHref ? (
+          <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3104,13 +3140,17 @@ function ResultCategorySection(input: {
 
 type SharedScanDetailViewProps = {
   autoRefresh?: ReactNode;
+  createAccountHref?: string | null;
   headerActions?: ReactNode;
+  previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
 };
 
 export function SharedScanDetailView({
   autoRefresh = null,
+  createAccountHref = null,
   headerActions = null,
+  previewMode = "full",
   scanRecord
 }: SharedScanDetailViewProps) {
   const snapshot = scanRecord.snapshot;
@@ -3232,6 +3272,7 @@ export function SharedScanDetailView({
     getFiniteNumber(snapshot?.accessibility_score),
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
+  const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     consentAuditCompleted,
@@ -3279,6 +3320,7 @@ export function SharedScanDetailView({
             renderCanonicalTaxonomyReviewSafely({
               accessibilityIssueRows,
               consentAuditFindings,
+              createAccountHref,
               executiveSummary: {
                 badges: [
                   ...(policyBehaviorContradictions.length > 0
@@ -3364,6 +3406,7 @@ export function SharedScanDetailView({
               },
               policyBehaviorContradictions,
               preconsentViolationRows,
+              previewMode,
               prioritizedAccessibilityRuleRows,
               scanRecord,
               scanReportReviewIssues,
@@ -3373,113 +3416,113 @@ export function SharedScanDetailView({
         </>
       ) : null}
 
+      <div className="relative overflow-hidden rounded-2xl">
+        <CollapsibleSectionCard
+          title={
+            <span className="flex items-center gap-1.5">
+              <span>Advanced diagnostics</span>
+              <InfoTip text="Raw scan records, execution metadata, and lower-level evidence retained for deeper review or troubleshooting. This area is intentionally schema-heavier than the primary result sections above." />
+            </span>
+          }
+          contentClassName="space-y-6"
+        >
+          {snapshot ? (
+            <CollapsibleSectionCard
+              title={
+                <span className="flex items-center gap-1.5">
+                  <span>AI, Automation & Emerging Practices</span>
+                  <InfoTip text="AI assistants, automation disclosures, AI answer experiences, and related emerging-practice signals kept in diagnostics for research and lower-priority review." />
+                </span>
+              }
+            >
+              <ResultCategorySection
+                title={PRIMARY_SCAN_CATEGORY_META.ai_automation_emerging_practices.label}
+                collapsible={false}
+                metrics={[
+                  {
+                    label: "AI chatbot",
+                    value: formatCompactValue(snapshot.ai_chatbot_present),
+                    tooltip:
+                      "Whether the scan detected a likely visible chatbot or assistant experience based on vendor signatures, widget markers, and explicit assistant language."
+                  },
+                  {
+                    label: "AI vendor",
+                    value: formatCompactValue(snapshot.ai_chatbot_vendor),
+                    tooltip:
+                      "The strongest visible AI or chat-assistant vendor signature detected on the site during the scan, if any."
+                  },
+                  {
+                    label: "AI disclosure",
+                    value: formatCompactValue(snapshot.ai_disclosure_text_present),
+                    tooltip:
+                      "Whether visible page text suggested explicit AI-related disclosure language such as AI-generated responses, powered by AI, or automated assistant messaging."
+                  },
+                  {
+                    label: "AI search/answers",
+                    value: formatCompactValue(snapshot.ai_search_or_answer_experience_detected),
+                    tooltip:
+                      "Whether the scan detected a clearly AI-labeled question-to-answer or instant-answer experience, beyond generic site search."
+                  }
+                ]}
+                details={[
+                  { label: "AI assistant widget", value: snapshot.ai_assistant_widget_detected },
+                  { label: "AI policy reference", value: snapshot.ai_terms_or_policy_ai_reference },
+                  { label: "AI help-center reference", value: snapshot.ai_help_center_ai_reference },
+                  { label: "Hiring automation signal", value: snapshot.ai_hiring_automation_signal_detected }
+                ]}
+              />
+            </CollapsibleSectionCard>
+          ) : null}
 
-      <CollapsibleSectionCard
-        title={
-          <span className="flex items-center gap-1.5">
-            <span>Advanced diagnostics</span>
-            <InfoTip text="Raw scan records, execution metadata, and lower-level evidence retained for deeper review or troubleshooting. This area is intentionally schema-heavier than the primary result sections above." />
-          </span>
-        }
-        contentClassName="space-y-6"
-      >
-        {snapshot ? (
-          <CollapsibleSectionCard
-            title={
-              <span className="flex items-center gap-1.5">
-                <span>AI, Automation & Emerging Practices</span>
-                <InfoTip text="AI assistants, automation disclosures, AI answer experiences, and related emerging-practice signals kept in diagnostics for research and lower-priority review." />
-              </span>
-            }
-          >
+          {snapshot ? (
             <ResultCategorySection
-              title={PRIMARY_SCAN_CATEGORY_META.ai_automation_emerging_practices.label}
+              title={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.label}
+              intro={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.description}
+              includes="Transport and headers, DNS authentication, trust and disclosure pages, and incident or vulnerability transparency signals."
               collapsible={false}
               metrics={[
                 {
-                  label: "AI chatbot",
-                  value: formatCompactValue(snapshot.ai_chatbot_present),
+                  label: "TLS minimum",
+                  value: formatCompactValue(snapshot.tls_version_min_supported),
                   tooltip:
-                    "Whether the scan detected a likely visible chatbot or assistant experience based on vendor signatures, widget markers, and explicit assistant language."
+                    "The minimum TLS protocol version observed or inferred for the site, used as a basic indicator of transport security posture."
                 },
                 {
-                  label: "AI vendor",
-                  value: formatCompactValue(snapshot.ai_chatbot_vendor),
+                  label: "HSTS",
+                  value: formatCompactValue(snapshot.hsts_enabled),
                   tooltip:
-                    "The strongest visible AI or chat-assistant vendor signature detected on the site during the scan, if any."
+                    "Whether HTTP Strict Transport Security was observed, which helps enforce HTTPS usage in supported browsers."
                 },
                 {
-                  label: "AI disclosure",
-                  value: formatCompactValue(snapshot.ai_disclosure_text_present),
+                  label: "CSP",
+                  value: formatCompactValue(snapshot.csp_header_present),
                   tooltip:
-                    "Whether visible page text suggested explicit AI-related disclosure language such as AI-generated responses, powered by AI, or automated assistant messaging."
+                    "Whether a Content Security Policy header was observed, which is a basic indicator of script and resource-loading controls."
                 },
                 {
-                  label: "AI search/answers",
-                  value: formatCompactValue(snapshot.ai_search_or_answer_experience_detected),
+                  label: "DMARC",
+                  value: formatCompactValue(snapshot.dmarc_record_present),
                   tooltip:
-                    "Whether the scan detected a clearly AI-labeled question-to-answer or instant-answer experience, beyond generic site search."
+                    "Whether a DMARC record was detected for the domain, which is a useful public signal of email authentication governance."
                 }
               ]}
               details={[
-                { label: "AI assistant widget", value: snapshot.ai_assistant_widget_detected },
-                { label: "AI policy reference", value: snapshot.ai_terms_or_policy_ai_reference },
-                { label: "AI help-center reference", value: snapshot.ai_help_center_ai_reference },
-                { label: "Hiring automation signal", value: snapshot.ai_hiring_automation_signal_detected }
+                { label: "Permissions policy", value: snapshot.permissions_policy_present },
+                { label: "security.txt", value: snapshot.security_txt_present },
+                { label: "Vulnerability disclosure page", value: snapshot.vulnerability_disclosure_page_present },
+                { label: "Trust center", value: snapshot.trust_center_present },
+                { label: "Incident status page", value: snapshot.incident_status_page_present },
+                { label: "DNSSEC", value: snapshot.dnssec_enabled },
+                { label: "SPF", value: snapshot.spf_record_present },
+                { label: "DKIM", value: snapshot.dkim_record_detected },
+                { label: "Certificate authority", value: snapshot.certificate_authority },
+                { label: "Security posture changed", value: snapshot.security_header_posture_changed },
+                { label: "Infrastructure changed", value: snapshot.infrastructure_change_detected },
+                { label: "Country inferred", value: snapshot.country_inferred },
+                { label: "Jurisdiction guess", value: snapshot.jurisdiction_guess }
               ]}
             />
-          </CollapsibleSectionCard>
-        ) : null}
-
-        {snapshot ? (
-          <ResultCategorySection
-            title={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.label}
-            intro={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.description}
-            includes="Transport and headers, DNS authentication, trust and disclosure pages, and incident or vulnerability transparency signals."
-            collapsible={false}
-            metrics={[
-              {
-                label: "TLS minimum",
-                value: formatCompactValue(snapshot.tls_version_min_supported),
-                tooltip:
-                  "The minimum TLS protocol version observed or inferred for the site, used as a basic indicator of transport security posture."
-              },
-              {
-                label: "HSTS",
-                value: formatCompactValue(snapshot.hsts_enabled),
-                tooltip:
-                  "Whether HTTP Strict Transport Security was observed, which helps enforce HTTPS usage in supported browsers."
-              },
-              {
-                label: "CSP",
-                value: formatCompactValue(snapshot.csp_header_present),
-                tooltip:
-                  "Whether a Content Security Policy header was observed, which is a basic indicator of script and resource-loading controls."
-              },
-              {
-                label: "DMARC",
-                value: formatCompactValue(snapshot.dmarc_record_present),
-                tooltip:
-                  "Whether a DMARC record was detected for the domain, which is a useful public signal of email authentication governance."
-              }
-            ]}
-            details={[
-              { label: "Permissions policy", value: snapshot.permissions_policy_present },
-              { label: "security.txt", value: snapshot.security_txt_present },
-              { label: "Vulnerability disclosure page", value: snapshot.vulnerability_disclosure_page_present },
-              { label: "Trust center", value: snapshot.trust_center_present },
-              { label: "Incident status page", value: snapshot.incident_status_page_present },
-              { label: "DNSSEC", value: snapshot.dnssec_enabled },
-              { label: "SPF", value: snapshot.spf_record_present },
-              { label: "DKIM", value: snapshot.dkim_record_detected },
-              { label: "Certificate authority", value: snapshot.certificate_authority },
-              { label: "Security posture changed", value: snapshot.security_header_posture_changed },
-              { label: "Infrastructure changed", value: snapshot.infrastructure_change_detected },
-              { label: "Country inferred", value: snapshot.country_inferred },
-              { label: "Jurisdiction guess", value: snapshot.jurisdiction_guess }
-            ]}
-          />
-        ) : null}
+          ) : null}
 
         <CollapsibleSectionCard
           title={
@@ -3595,8 +3638,11 @@ export function SharedScanDetailView({
             <p>DOM structure hash: {formatValue(runtimeArtifacts.dom_structure_hash)}</p>
           </CollapsibleSectionCard>
         ) : null}
-
-      </CollapsibleSectionCard>
+        </CollapsibleSectionCard>
+        {showHomepagePreviewGate && createAccountHref ? (
+          <HomepagePreviewGate href={createAccountHref} mode="full" />
+        ) : null}
+      </div>
     </div>
   );
 }
