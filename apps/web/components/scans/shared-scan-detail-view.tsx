@@ -2933,7 +2933,8 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
 
         return {
           categories,
-          issueFindings
+          issueFindings,
+          sectionCategoryIds
         };
       });
 
@@ -2952,16 +2953,28 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
       validationFindingLookup
     }).filter((finding) => finding.presentationDecision.status !== "suppress");
 
+    const pillarSections = sectionDrafts.map(({ sections }) => {
+      return {
+        sections: sections.map(({ categories, sectionCategoryIds }) => {
+          const reviewFindings = globalUnifiedFindings.filter((finding) =>
+            finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
+          );
+          const ownerReviewFindings = reviewFindings.filter((finding) => {
+            const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
+            return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
+          });
+
+          return {
+            ownerReviewFindings
+          };
+        })
+      };
+    });
+
     return [
       ...new Map(
-        sectionDrafts
-          .flatMap(({ sections }) =>
-            sections.flatMap((section) =>
-              globalUnifiedFindings.filter((finding) =>
-                section.categories.some(({ category }) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner")
-              )
-            )
-          )
+        pillarSections
+          .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
           .map((finding) => [finding.unifiedFindingId, finding])
       ).values()
     ];
