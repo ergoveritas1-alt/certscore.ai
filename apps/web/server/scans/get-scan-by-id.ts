@@ -503,6 +503,7 @@ function deriveSupplementalSnapshotSignals(input: {
 
 function deriveSupplementalPolicySignals(input: {
   existingSignals: ScanSignalRecord[];
+  policyEnrichment: Array<Record<string, unknown>>;
   primaryPolicyEnrichment: Record<string, unknown> | null;
 }): ScanSignalRecord[] {
   const supplementalSignals: SupplementalPolicySignal[] = [];
@@ -521,10 +522,19 @@ function deriveSupplementalPolicySignals(input: {
     supplementalSignals.push({ category, key, label, value: true });
   };
 
+  const primaryEvidenceSnippets =
+    primaryPolicy.policyEvidenceSnippets && typeof primaryPolicy.policyEvidenceSnippets === "object"
+      ? primaryPolicy.policyEvidenceSnippets
+      : primaryPolicy.policy_evidence_snippets && typeof primaryPolicy.policy_evidence_snippets === "object"
+        ? primaryPolicy.policy_evidence_snippets
+        : null;
+
   const policyRightsSignals = Array.isArray(primaryPolicy.policyRightsSignals)
     ? primaryPolicy.policyRightsSignals
     : Array.isArray(primaryPolicy.policy_rights_signals)
       ? primaryPolicy.policy_rights_signals
+      : Array.isArray((primaryEvidenceSnippets as { policy_rights_signals?: unknown } | null)?.policy_rights_signals)
+        ? (((primaryEvidenceSnippets as { policy_rights_signals: string[] }).policy_rights_signals))
       : [];
   const policyMentions = Array.isArray(primaryPolicy.policyMentions)
     ? primaryPolicy.policyMentions
@@ -561,7 +571,9 @@ function deriveSupplementalPolicySignals(input: {
     "commerce",
     "commerce.arbitration_clause_present",
     "Arbitration clause present",
-    primaryPolicy.policyArbitrationPresent === true || primaryPolicy.policy_arbitration_present === true
+    input.policyEnrichment.some(
+      (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
+    )
   );
 
   return supplementalSignals.map((signal) => {
@@ -933,6 +945,7 @@ async function loadScanDetailRecord(input: {
   });
   const supplementalPolicySignals = deriveSupplementalPolicySignals({
     existingSignals: normalizedSignals,
+    policyEnrichment: normalizedPolicyEnrichment,
     primaryPolicyEnrichment
   });
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
