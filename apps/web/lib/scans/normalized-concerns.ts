@@ -236,6 +236,10 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/^signalValue$/i.test(key)) {
+      continue;
+    }
+
     if (/vendor|cookie|selector|url|page|rule|entity/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;

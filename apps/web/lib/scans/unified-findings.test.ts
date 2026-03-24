@@ -634,6 +634,40 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
   ]);
 });
 
+test("surfaces privacy-rights path present from the policyRightsSignals report key", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear policy-based privacy-rights request path.",
+        fallbackEvidence: {
+          signalKey: "policyRightsSignals",
+          signalLabel: "Privacy-rights path present",
+          signalValue: ["access", "delete", "authorized_agent"],
+          policySnippets: ["Use our Privacy Rights Center to submit access and deletion requests."],
+          policyRightsSignals: ["access", "delete", "authorized_agent"],
+          pageUrl: "https://www.example.com/privacy"
+        },
+        observedValue: "Privacy-rights path present",
+        severity: "low",
+        signalKey: "policyRightsSignals",
+        signalLabel: "Privacy-rights path present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Privacy-rights path present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /privacy-rights path/i);
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "Use our Privacy Rights Center to submit access and deletion requests."
+  ]);
+});
+
 test("suppresses guessed-only cookie policy unavailable findings", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
