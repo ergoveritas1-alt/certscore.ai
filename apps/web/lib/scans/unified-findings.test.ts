@@ -912,7 +912,7 @@ test("normalizes clipped policy snippets but preserves natural lowercase starts"
         description: "The scan retained a clear policy-based privacy-rights request path.",
         fallbackEvidence: {
           pageUrl: "https://www.example.com/privacy",
-          policySnippets: ["ng on where you live, you may have the following rights regarding your personal information."],
+          policySnippets: ["ng on where you live, you may have the following rights regarding your personal information. The right to request access to, and a copy of, the information we hold about you."],
           signalKey: "privacy.privacy_rights_path_present",
           signalLabel: "Privacy-rights path present",
           signalValue: true
@@ -942,6 +942,24 @@ test("normalizes clipped policy snippets but preserves natural lowercase starts"
         sourceType: "signal",
         title: "GPC handling disclosed"
       }
+      ,
+      {
+        description: "The scan retained a disclosure describing behavioral analytics or replay-style tooling.",
+        fallbackEvidence: {
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["tracking technologies such as cookies, pixels, tags, beacons, scripts, and similar technologies. On certain pages, we use third-party tools to help us look at mouse movements, clicks, keystrokes, data or text entered, and the pages you visit."],
+          signalKey: "privacy.behavioral_analytics_disclosure_present",
+          signalLabel: "Behavioral analytics disclosure present",
+          signalValue: true
+        },
+        observedValue: "Behavioral analytics disclosure present",
+        severity: "low",
+        signalKey: "privacy.behavioral_analytics_disclosure_present",
+        signalLabel: "Behavioral analytics disclosure present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Behavioral analytics disclosure present"
+      }
     ],
     validationFindings: [],
     validationFindingLookup: new Map()
@@ -949,12 +967,16 @@ test("normalizes clipped policy snippets but preserves natural lowercase starts"
 
   const rightsPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_rights_path_present");
   const gpcPacket = packets.find((packet) => packet.unifiedFindingId === "gpc_disclosure_present");
+  const replayPacket = packets.find((packet) => packet.unifiedFindingId === "behavioral_analytics_disclosure_present");
 
   assert.deepEqual(rightsPacket?.evidence?.snippets, [
-    "on where you live, you may have the following rights regarding your personal information."
+    "The right to request access to, and a copy of, the information we hold about you."
   ]);
   assert.deepEqual(gpcPacket?.evidence?.snippets, [
     "for each device or browser you use, we will treat the Global Privacy Control signal as a request to opt out."
+  ]);
+  assert.deepEqual(replayPacket?.evidence?.snippets, [
+    "On certain pages, we use third-party tools to help us look at mouse movements, clicks, keystrokes, data or text entered, and the pages you visit."
   ]);
 });
 

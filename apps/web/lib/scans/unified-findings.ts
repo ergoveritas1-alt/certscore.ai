@@ -640,22 +640,35 @@ function normalizeFallbackSnippet(snippet: string) {
     return null;
   }
 
-  const firstToken = collapsed.match(/^\S+/)?.[0] ?? "";
+  const anchorPhrases = [
+    "On certain pages",
+    "We collect and receive",
+    "The right to",
+    "These Terms of Use",
+    "Dispute Resolution; Arbitration Agreement",
+    "including the right to opt out"
+  ] as const;
+  const anchored = anchorPhrases.reduce((current, phrase) => {
+    const index = current.indexOf(phrase);
+    return index > 0 ? current.slice(index).trim() : current;
+  }, collapsed);
+
+  const firstToken = anchored.match(/^\S+/)?.[0] ?? "";
   const shouldTrimLeadingFragment =
-    /^[a-z]/.test(collapsed) &&
+    /^[a-z]/.test(anchored) &&
     (
       firstToken.length <= 2 ||
       /[-,;:]/.test(firstToken)
     );
 
   if (shouldTrimLeadingFragment) {
-    const trimmed = collapsed.slice(firstToken.length).trim();
+    const trimmed = anchored.slice(firstToken.length).trim();
     if (trimmed.length > 0) {
       return trimmed;
     }
   }
 
-  return collapsed;
+  return anchored;
 }
 
 function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | null) {

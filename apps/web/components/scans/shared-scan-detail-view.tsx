@@ -66,18 +66,31 @@ function normalizePolicySnippet(snippet: string) {
     return null;
   }
 
-  const firstToken = collapsed.match(/^\S+/)?.[0] ?? "";
+  const anchorPhrases = [
+    "On certain pages",
+    "We collect and receive",
+    "The right to",
+    "These Terms of Use",
+    "Dispute Resolution; Arbitration Agreement",
+    "including the right to opt out"
+  ] as const;
+  const anchored = anchorPhrases.reduce((current, phrase) => {
+    const index = current.indexOf(phrase);
+    return index > 0 ? current.slice(index).trim() : current;
+  }, collapsed);
+
+  const firstToken = anchored.match(/^\S+/)?.[0] ?? "";
   const shouldTrimLeadingFragment =
-    /^[a-z]/.test(collapsed) &&
+    /^[a-z]/.test(anchored) &&
     (
       firstToken.length <= 2 ||
       /[-,;:]/.test(firstToken)
     );
   const trimmedLeading = shouldTrimLeadingFragment
-    ? collapsed.slice(firstToken.length).trim()
-    : collapsed;
+    ? anchored.slice(firstToken.length).trim()
+    : anchored;
 
-  return trimmedLeading.length > 0 ? trimmedLeading : collapsed;
+  return trimmedLeading.length > 0 ? trimmedLeading : anchored;
 }
 
 function formatDateTime(value: string | null) {
