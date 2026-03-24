@@ -101,6 +101,23 @@ test("replay validation concerns with runtime artifacts are eligible for externa
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
 
+test("page-specific concerns without attribution are kept internal at the concern stage", () => {
+  const concern = normalizeConcernFromValidationFinding(
+    makeValidationFinding({
+      id: "a11y-1",
+      ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
+      severity: "medium",
+      title: "Accessibility risk score",
+      evidence: {
+        value: -4
+      }
+    })
+  );
+
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+});
+
 test("dsar concerns with parser-incomplete extraction are blocked before unified finding generation", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

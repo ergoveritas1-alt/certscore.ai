@@ -1122,8 +1122,6 @@ function buildPresentationDecision(input: {
       ? input.packet.evidence.counts.childrenPrivacyRiskScore
       : null;
   const needsPageAttribution =
-    (input.packet.details?.family === "accessibility" &&
-      !["accessibility_support_path_missing"].includes(input.packet.unifiedFindingId)) ||
     (input.packet.details?.family === "consent_tracking" &&
       !["gpc_signal_not_honored", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.packet.unifiedFindingId)) ||
     input.packet.details?.family === "contradiction" ||
@@ -1200,17 +1198,6 @@ function buildPresentationDecision(input: {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior.",
       status: "surface"
-    };
-  }
-
-  if (
-    ["session_replay_observed", "session_replay_undisclosed"].includes(input.packet.unifiedFindingId) &&
-    !input.packet.confidenceInputs.hasDirectRuntimeEvidence
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because the current record does not retain concrete runtime artifacts for the replay behavior.",
-      status: "audit_only"
     };
   }
 

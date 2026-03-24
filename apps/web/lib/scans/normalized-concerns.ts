@@ -95,6 +95,19 @@ export type PolicyReviewConcernInput = {
   title: string;
 };
 
+const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
+  "wcag_issue_summary",
+  "accessibility_risk_score",
+  "contrast_failures",
+  "form_label_issues",
+  "link_name_issues",
+  "keyboard_navigation_issues",
+  "focus_indicator_issues",
+  "landmark_issues",
+  "aria_issues",
+  "accessibility_claim_mismatch"
+]);
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -568,12 +581,27 @@ function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | 
   return /dsar|privacy-rights|missing_dsar|no dsar mechanism/.test(haystack);
 }
 
+function needsConcretePageAttribution(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  const findingId = concern.suggestedUnifiedFindingId;
+  if (!findingId) {
+    return false;
+  }
+
+  return (
+    ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(findingId)
+  );
+}
+
 function deriveConcernEligibility(input: {
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "originType" | "suggestedUnifiedFindingId" | "title">;
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
   rawEvidence?: Record<string, unknown> | null;
 }) {
   const hasDirectRuntime = input.evidenceStrengthFlags.includes("direct_runtime");
+  const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
+  const hasKeyPageDiscovery = input.evidenceStrengthFlags.includes("key_page_discovery");
 
   if (isReplayConcern(input.concern)) {
     if (input.concern.originType === "policy_review_queue") {
@@ -637,6 +665,13 @@ function deriveConcernEligibility(input: {
         promotionEligibility: "blocked" as const
       };
     }
+  }
+
+  if (needsConcretePageAttribution(input.concern) && !hasDirectRuntime && !hasPageAttribution && !hasKeyPageDiscovery) {
+    return {
+      externalSurfacingEligibility: "audit_only" as const,
+      promotionEligibility: "internal_only" as const
+    };
   }
 
   return {
