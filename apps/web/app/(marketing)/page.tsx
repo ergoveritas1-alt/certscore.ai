@@ -16,16 +16,22 @@ export const metadata: Metadata = createPageMetadata({
 
 const featureCards = [
   {
-    title: "Catch policy-vs-behavior conflicts",
-    description: "Compare what the site claims in privacy and disclosure pages with what the runtime evidence shows."
+    icon: "🛡",
+    metric: "94",
+    title: "Privacy Protection",
+    description: "Comprehensive analysis of tracking technology and user data collection practices across your digital properties."
   },
   {
-    title: "Surface pre-consent tracking fast",
-    description: "See which trackers fired before consent and whether reject actually changed behavior."
+    icon: "©",
+    metric: "88",
+    title: "Consent Health",
+    description: "Evaluating the integrity of consent flows and the timing of your controls relative to explicit user preference signals."
   },
   {
-    title: "Track vendor and disclosure drift",
-    description: "Monitor third-party collection, policy coverage, and accessibility/disclosure posture as the site changes."
+    icon: "⚖",
+    metric: "76",
+    title: "Regulatory Alignment",
+    description: "Surface signals tied to specific framework requirements including GDPR, CCPA, and broader public disclosures."
   }
 ];
 
@@ -92,24 +98,6 @@ function PersonaIcon({ index }: { index: number }) {
     </span>
   );
 }
-
-const deeperInsights = [
-  {
-    eyebrow: "Shadow IT Discovery",
-    title: "Detect unauthorized marketing tags injected by rogue third-party plugins.",
-    description: "Catch scripts and vendors that appear outside the expected marketing stack before they quietly expand collection and attribution scope."
-  },
-  {
-    eyebrow: "Consent Flow Breakage",
-    title: 'Identify whether a "Privacy Request Form" or "Reject" button might be missing.',
-    description: "Spot broken consent journeys where user controls are absent, incomplete, or fail to present the paths the site implies should exist."
-  },
-  {
-    eyebrow: "SEO, GEO & Trust Indexing",
-    title: "Correlate technical accessibility and privacy posture with potential algorithmic trust penalties.",
-    description: "Use scan evidence as an early signal when weak consent, disclosure, or accessibility posture may be compounding reputation and discoverability risk."
-  }
-];
 
 function ObservableSignalsIcon() {
   return (
@@ -213,7 +201,7 @@ export default async function MarketingHomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
       <SiteHeader />
 
-      <section className="border-b border-slate-200 bg-white">
+      <section className="border-b border-slate-200 bg-[radial-gradient(circle_at_50%_-12%,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.72)_24%,rgba(238,242,255,0.88)_58%,rgba(244,246,255,0.98)_100%)]">
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="space-y-5">
             <h1
@@ -222,26 +210,18 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              Scan websites for privacy, consent, accessibility, and regulatory compliance signals.
+              Scan websites for privacy, consent, accessibility, and regulatory{" "}
+              <span
+                className="bg-clip-text text-transparent"
+                style={{ backgroundImage: "linear-gradient(180deg, #2f63ea 0%, #5b83ee 52%, #8ea5f2 100%)" }}
+              >
+                compliance
+              </span>{" "}
+              signals.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
               Automated telemetry for pre-consent tracking, consent flow failures, third-party data collection, and policy-to-behavior contradictions. Built for teams that need scan evidence, not checklists.
             </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <PendingButtonLink
-                className="w-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04] sm:w-auto"
-                href="/preview"
-                idleContent="Run a scan"
-                pendingContent="Opening..."
-              />
-              <PendingButtonLink
-                className="w-full border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50 sm:w-auto"
-                href="/how-it-works"
-                idleContent="How it works"
-                pendingContent="Opening..."
-                variant="secondary"
-              />
-            </div>
           </div>
 
           <div className="space-y-4">
@@ -259,77 +239,46 @@ export default async function MarketingHomePage() {
               </CardContent>
             </Card>
 
-            <div className="rounded-[1.9rem] border border-slate-200 bg-white p-4 shadow-none">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">What happens next?</p>
-                <p className="text-sm text-slate-600">Move from findings into workflow without losing the scan context.</p>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {whatHappensNext.map((item, index) => (
-                  <div
-                    key={item.title}
-                    className={
-                      index === 0
-                        ? "rounded-2xl border border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.96)_0%,rgba(255,255,255,1)_100%)] px-4 py-3"
-                        : index === 1
-                          ? "rounded-2xl border border-emerald-100 bg-[linear-gradient(180deg,rgba(249,253,250,0.96)_0%,rgba(255,255,255,1)_100%)] px-4 py-3"
-                          : "rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                    }
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{item.step}</span>
-                      <div className="h-px flex-1 bg-slate-200" />
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-slate-950">{item.title}</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="max-w-2xl space-y-3">
-          <Badge tone="neutral">What you can catch</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">The highest-value findings show up immediately.</h2>
-          <p className="text-sm text-slate-600">
-            CertScore.ai is strongest where policy, consent, trackers, and accessibility evidence intersect. The output is structured for review, prioritization, and change monitoring.
-          </p>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl space-y-4">
+            <div className="inline-flex rounded-full bg-[linear-gradient(180deg,rgba(241,245,249,0.98)_0%,rgba(226,232,240,0.98)_100%)] px-5 py-2.5 text-[12px] font-medium text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+              What you can catch
+            </div>
+            <h2 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Authoritative insights into digital governance.</h2>
+          </div>
+          <Link href="/preview" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
+            View Sample Scan →
+          </Link>
         </div>
-        <div className="mt-8 grid gap-5 lg:grid-cols-3">
+        <div className="mt-10 grid gap-5 lg:grid-cols-3">
           {featureCards.map((item, index) => {
-            const FeatureIcon = index === 0 ? ObservableSignalsIcon : index === 1 ? MinimalStoredDataIcon : ChangeTrackingIcon;
-
             return (
               <Card
                 key={item.title}
                 className={
                   index === 0
-                    ? "relative overflow-hidden border border-sky-100 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(248,252,255,0.98)_100%)] shadow-none"
+                    ? "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
                     : index === 1
-                      ? "relative overflow-hidden border border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(249,253,250,0.98)_100%)] shadow-none"
-                      : "relative overflow-hidden border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(250,251,252,0.98)_100%)] shadow-none"
+                      ? "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
+                      : "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
                 }
               >
-                <div
-                  aria-hidden="true"
-                  className={
-                    index === 0
-                      ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]"
-                      : index === 1
-                        ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(71,181,74,0.18)_0%,rgba(124,207,121,0.28)_100%)]"
-                        : "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(148,163,184,0.22)_0%,rgba(226,232,240,0.4)_100%)]"
-                  }
-                />
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <FeatureIcon />
-                    <span>{item.title}</span>
-                  </CardTitle>
+                <CardHeader className="space-y-5 p-6 pb-0">
+                  <div className="text-[1.7rem] leading-none text-slate-500">{item.icon}</div>
+                  <div className="space-y-3">
+                    <p className="text-6xl font-light leading-none tracking-[-0.06em] text-slate-950">{item.metric}</p>
+                    <CardTitle className="text-[1.7rem] leading-none tracking-tight text-slate-950">{item.title}</CardTitle>
+                  </div>
                 </CardHeader>
-                <CardContent className="text-sm text-slate-600">{item.description}</CardContent>
+                <CardContent className="p-6 pt-5">
+                  <p className="min-h-[112px] text-lg leading-9 text-slate-500">{item.description}</p>
+                  <div className="mt-8 h-1 rounded-full bg-[linear-gradient(90deg,#4f6edb_0%,#7ea2ff_100%)]" />
+                </CardContent>
               </Card>
             );
           })}
@@ -392,44 +341,32 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="space-y-3">
-            <Badge tone="neutral">Deeper insights</Badge>
-            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-slate-950">Get deeper insights based on scanned signals.</h2>
-            <p className="max-w-2xl text-sm text-slate-600">
-              CertScore.ai can do more than surface obvious findings. It helps teams connect runtime evidence to hidden operational risk, broken user controls, and broader trust posture.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-3 md:grid-cols-3">
-            {deeperInsights.map((item, index) => (
-              <Card
-                key={item.eyebrow}
-                className={
-                  index === 0
-                    ? "relative overflow-hidden border border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.92)_0%,rgba(255,255,255,1)_100%)] shadow-none"
-                    : index === 1
-                      ? "relative overflow-hidden border border-emerald-100 bg-[linear-gradient(180deg,rgba(249,253,250,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none"
-                      : "relative overflow-hidden border border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none"
-                }
-              >
-                <div
-                  aria-hidden="true"
-                  className={
-                    index === 0
-                      ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(245,158,11,0.72)_0%,rgba(251,191,36,0.5)_100%)]"
-                      : index === 1
-                        ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(71,181,74,0.78)_0%,rgba(124,207,121,0.48)_100%)]"
-                        : "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.8)_0%,rgba(103,199,240,0.46)_100%)]"
-                  }
+      <section className="bg-slate-50">
+        <div className="mx-auto max-w-6xl px-6 py-10">
+          <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
+            <div className="max-w-4xl space-y-6">
+              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+                Ready to secure your digital footprint?
+              </h2>
+              <p className="max-w-3xl text-lg leading-8 text-slate-300">
+                Join privacy-forward teams using CertScore to automate scanning, surface evidence, and rebuild trust around digital governance.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <PendingButtonLink
+                  className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
+                  href="/preview"
+                  idleContent="Start Free Scan"
+                  pendingContent="Opening..."
                 />
-                <CardHeader className="space-y-2 p-4">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.eyebrow}</p>
-                  <CardTitle className="text-base leading-5 tracking-tight text-slate-950">{item.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4 pt-0 text-[13px] leading-5 text-slate-600">{item.description}</CardContent>
-              </Card>
-            ))}
+                <PendingButtonLink
+                  className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
+                  href="/contact-sales"
+                  idleContent="Schedule Demo"
+                  pendingContent="Opening..."
+                  variant="secondary"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>

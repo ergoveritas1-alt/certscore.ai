@@ -17,6 +17,27 @@ export const metadata: Metadata = createPageMetadata({
   title: "Methodology"
 });
 
+const deeperInsights = [
+  {
+    eyebrow: "Shadow IT Discovery",
+    title: "Detect unauthorized marketing tags injected by rogue third-party plugins.",
+    description:
+      "Catch scripts and vendors that appear outside the expected marketing stack before they quietly expand collection and attribution scope."
+  },
+  {
+    eyebrow: "Consent Flow Breakage",
+    title: 'Identify whether a "Privacy Request Form" or "Reject" button might be missing.',
+    description:
+      "Spot broken consent journeys where user controls are absent, incomplete, or fail to present the paths the site implies should exist."
+  },
+  {
+    eyebrow: "SEO, GEO & Trust Indexing",
+    title: "Correlate technical accessibility and privacy posture with potential algorithmic trust penalties.",
+    description:
+      "Use scan evidence as an early signal when weak consent, disclosure, or accessibility posture may be compounding reputation and discoverability risk."
+  }
+];
+
 export default function MethodologyPage() {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -45,6 +66,48 @@ export default function MethodologyPage() {
               <CardContent className="pt-0 text-sm leading-7 text-slate-600">{section.body}</CardContent>
             </Card>
           ))}
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-5xl px-6 py-14">
+          <div className="max-w-3xl space-y-3">
+            <Badge tone="neutral">Deeper insights</Badge>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Get deeper insights based on scanned signals.</h2>
+            <p className="text-sm text-slate-600">
+              CertScore.ai can do more than surface obvious findings. It helps teams connect runtime evidence to hidden operational risk, broken user controls, and broader trust posture.
+            </p>
+          </div>
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {deeperInsights.map((item, index) => (
+              <Card
+                key={item.eyebrow}
+                className={
+                  index === 0
+                    ? "relative overflow-hidden border border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.92)_0%,rgba(255,255,255,1)_100%)] shadow-none"
+                    : index === 1
+                      ? "relative overflow-hidden border border-emerald-100 bg-[linear-gradient(180deg,rgba(249,253,250,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none"
+                      : "relative overflow-hidden border border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none"
+                }
+              >
+                <div
+                  aria-hidden="true"
+                  className={
+                    index === 0
+                      ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(245,158,11,0.72)_0%,rgba(251,191,36,0.5)_100%)]"
+                      : index === 1
+                        ? "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(71,181,74,0.78)_0%,rgba(124,207,121,0.48)_100%)]"
+                        : "absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.8)_0%,rgba(103,199,240,0.46)_100%)]"
+                  }
+                />
+                <CardHeader className="space-y-2 p-4">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.eyebrow}</p>
+                  <CardTitle className="text-base leading-5 tracking-tight text-slate-950">{item.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 pt-0 text-[13px] leading-5 text-slate-600">{item.description}</CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </section>
 
