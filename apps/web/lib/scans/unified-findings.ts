@@ -278,6 +278,32 @@ function uniqueConcernFlags<T extends string>(values: T[]) {
   return [...new Set(values)];
 }
 
+function isRawMarkerToken(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  return /^[a-z]+(?:_[a-z0-9]+)+$/i.test(trimmed) && !/\s/.test(trimmed);
+}
+
+function isReviewerFacingSnippet(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  const looksLikeJsonBlob =
+    (/^\s*[\[{]/.test(trimmed) && /"\w+"\s*:/.test(trimmed)) ||
+    /"schemaType"\s*:|"schemaVersion"\s*:|"notices"\s*:|"content"\s*:/i.test(trimmed);
+
+  if (looksLikeJsonBlob) {
+    return false;
+  }
+
+  return !isRawMarkerToken(trimmed);
+}
+
 function getSeverityWeight(severity: ReviewFindingSeverity | null | undefined) {
   if (severity === "high") {
     return 3;
@@ -515,7 +541,6 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const contradictionEvidence = getContradictionEvidenceBundle(fallbackEvidence);
   const pageUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
-    ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
     typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null,
     typeof fallbackEvidence.consentBlockerUrl === "string" ? fallbackEvidence.consentBlockerUrl : null
@@ -523,7 +548,6 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
 
   const sourceUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.sourceUrls) ? (fallbackEvidence.sourceUrls as string[]) : []),
-    ...(Array.isArray(fallbackEvidence.keyPageAttemptedUrls) ? (fallbackEvidence.keyPageAttemptedUrls as string[]) : []),
     ...(contradictionEvidence?.sourceUrls ?? []),
     typeof fallbackEvidence.sourceUrl === "string" ? fallbackEvidence.sourceUrl : null,
     typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null
@@ -544,7 +568,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     ...(Array.isArray(fallbackEvidence.policySnippets)
       ? (fallbackEvidence.policySnippets as unknown[]).filter((entry): entry is string => isMeaningfulPolicyText(entry))
       : []),
-    Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
+    (
+      Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
+    ) ||
+    isMeaningfulPolicyText(fallbackEvidence.policySummaryShort)
       ? null
       : isMeaningfulPolicyText(fallbackEvidence.signalValue)
         ? fallbackEvidence.signalValue
@@ -688,7 +715,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
         } else {
           sourceUrls.add(value);
         }
-      } else if (/claim|observed|summary|snippet|evidence|description|rationale/i.test(key)) {
+      } else if (/claim|observed|summary|snippet|evidence|description|rationale/i.test(key) && isReviewerFacingSnippet(value)) {
         snippets.add(value);
       }
       continue;
@@ -726,7 +753,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     } else if (/vendor|cookie|selector|url|page|rule/i.test(key)) {
       addEntity(key, stringValues);
     } else {
-      for (const entry of stringValues.slice(0, 5)) {
+      for (const entry of stringValues.filter(isReviewerFacingSnippet).slice(0, 5)) {
         snippets.add(entry);
       }
     }
@@ -749,6 +776,10 @@ function mergeEvidence(
   linkedValidationFinding?: ScanValidationFinding | null
 ) {
   const validationEvidence = extractEvidenceFromValidationFinding(linkedValidationFinding);
+  const candidateSnippetEvidence = (candidateEvidence ?? [])
+    .filter((entry) => !/^https?:\/\//i.test(entry.trim()))
+    .filter(isReviewerFacingSnippet)
+    .slice(0, 2);
   const pageUrls = uniqueStrings([
     ...(current?.pageUrls ?? []),
     ...(next.pageUrls ?? []),
@@ -767,7 +798,7 @@ function mergeEvidence(
     ...(current?.snippets ?? []),
     ...(next.snippets ?? []),
     ...(validationEvidence.snippets ?? []),
-    ...(candidateEvidence ?? []).filter((entry) => !/^https?:\/\//i.test(entry.trim())).slice(0, 2)
+    ...candidateSnippetEvidence
   ]);
 
   return {
@@ -784,8 +815,345 @@ function mergeEvidence(
   };
 }
 
+function isWeakRootLikeUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.trim();
+    return pathname === "" || pathname === "/";
+  } catch {
+    return /\/?#?$/.test(value);
+  }
+}
+
+function isMachineReadablePolicyEndpoint(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    return (
+      host === "privacyportal.onetrust.com" ||
+      path.includes("/request/v1/enterprisepolicy/") ||
+      path.includes("/digitalpolicy/content") ||
+      path.includes("/api/")
+    );
+  } catch {
+    return /privacyportal\.onetrust\.com|\/request\/v1\/enterprisepolicy\/|\/digitalpolicy\/content|\/api\//i.test(value);
+  }
+}
+
+function isLikelyLocaleSubdomainUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const labels = host.split(".");
+    if (labels.length < 3) {
+      return false;
+    }
+
+    const subdomain = labels[0] ?? "";
+    return /^(arabic|ar|es|fr|de|it|pt|jp|ja|kr|ko|cn|zh|ru|tr|nl|sv|no|da|fi|pl|cs|he|id|th|vi)$/i.test(
+      subdomain
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isAccessibilitySpecificUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return /accessibility|caption|audio-description|closed-caption/i.test(parsed.pathname);
+  } catch {
+    return /accessibility|caption|audio-description|closed-caption/i.test(value);
+  }
+}
+
+function isLikelyHomepageTitle(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.includes("breaking news") ||
+    normalized.includes("latest news and videos") ||
+    normalized === "home" ||
+    normalized.endsWith("| home")
+  );
+}
+
+function isLikelyPrivacyChoiceSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return /privacy choices|privacy rights|do not sell|do not share|targeted advertising|opt out of targeted advertising|manage cookies|cookie settings/i.test(
+    value
+  );
+}
+
+function dedupeEquivalentSnippets(snippets: string[]) {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const snippet of snippets) {
+    const normalizedKey = snippet.trim().toLowerCase().replace(/[.!?]+$/g, "");
+    if (normalizedKey.length === 0 || seen.has(normalizedKey)) {
+      continue;
+    }
+    seen.add(normalizedKey);
+    next.push(snippet);
+  }
+
+  return next;
+}
+
+function preferMoreSpecificSameHostUrls(urls: string[]) {
+  const normalized = uniqueStrings(urls);
+
+  return normalized.filter((candidate) => {
+    try {
+      const parsedCandidate = new URL(candidate);
+      const candidatePath = parsedCandidate.pathname.trim();
+      const candidateIsRoot = candidatePath === "" || candidatePath === "/";
+      if (!candidateIsRoot) {
+        return true;
+      }
+
+      return !normalized.some((other) => {
+        if (other === candidate) {
+          return false;
+        }
+
+        try {
+          const parsedOther = new URL(other);
+          const otherPath = parsedOther.pathname.trim();
+          return (
+            parsedOther.hostname.toLowerCase() === parsedCandidate.hostname.toLowerCase() &&
+            (otherPath !== "" && otherPath !== "/")
+          );
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return true;
+    }
+  });
+}
+
+function sanitizeEvidenceForFinding(
+  findingId: string,
+  evidence: UnifiedFindingPacket["evidence"] | undefined
+) {
+  if (!evidence) {
+    return evidence;
+  }
+
+  const next = {
+    counts: { ...(evidence.counts ?? {}) },
+    entities: { ...(evidence.entities ?? {}) },
+    flags: [...(evidence.flags ?? [])],
+    pageUrls: [...(evidence.pageUrls ?? [])],
+    snippets: [...(evidence.snippets ?? [])]
+      .filter(isReviewerFacingSnippet)
+      .map((snippet) => normalizePolicySnippet(snippet))
+      .filter((snippet): snippet is string => Boolean(snippet)),
+    sourceUrls: [...(evidence.sourceUrls ?? [])]
+  };
+
+  if (
+    findingId === "affiliate_disclosure_present" ||
+    findingId === "bounded_key_page_discovery_unresolved" ||
+    findingId === "privacy_policy_present" ||
+    findingId === "terms_of_service_present" ||
+    findingId === "contact_support_path_present" ||
+    findingId === "targeted_advertising_choices_present"
+  ) {
+    const humanFacingPageUrls = next.pageUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+    if (humanFacingPageUrls.length > 0) {
+      next.pageUrls = humanFacingPageUrls;
+    }
+  }
+
+  if (findingId === "privacy_policy_present") {
+    const humanFacingSourceUrls = next.sourceUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+    if (humanFacingSourceUrls.length > 0) {
+      next.sourceUrls = humanFacingSourceUrls;
+    }
+
+    next.snippets = dedupeEquivalentSnippets(next.snippets);
+  }
+
+  if (findingId === "contact_support_path_present") {
+    const preferredPageUrls = preferMoreSpecificSameHostUrls(next.pageUrls);
+    if (preferredPageUrls.length > 0) {
+      next.pageUrls = preferredPageUrls;
+    }
+
+    const preferredSourceUrls = preferMoreSpecificSameHostUrls(next.sourceUrls);
+    if (preferredSourceUrls.length > 0) {
+      next.sourceUrls = preferredSourceUrls;
+    }
+  }
+
+  if (findingId === "targeted_advertising_choices_present") {
+    const preferredPageUrls = next.pageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url));
+    if (preferredPageUrls.length > 0) {
+      next.pageUrls = preferredPageUrls;
+    }
+
+    const preferredSourceUrls = next.sourceUrls.filter(
+      (url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)
+    );
+    if (preferredSourceUrls.length > 0) {
+      next.sourceUrls = preferredSourceUrls;
+    }
+
+    const specificPageUrls = preferMoreSpecificSameHostUrls(next.pageUrls);
+    if (specificPageUrls.length > 0) {
+      next.pageUrls = specificPageUrls;
+    }
+
+    const specificSourceUrls = preferMoreSpecificSameHostUrls(next.sourceUrls);
+    if (specificSourceUrls.length > 0) {
+      next.sourceUrls = specificSourceUrls;
+    }
+
+    const nonHomepageSnippets = next.snippets.filter((snippet) => !isLikelyHomepageTitle(snippet));
+    if (nonHomepageSnippets.length > 0) {
+      next.snippets = nonHomepageSnippets;
+    }
+
+    const privacyChoiceSnippets = next.snippets.filter((snippet) => isLikelyPrivacyChoiceSnippet(snippet));
+    if (privacyChoiceSnippets.length > 0) {
+      next.snippets = privacyChoiceSnippets;
+    }
+  }
+
+  if (findingId === "terms_of_service_present") {
+    const nonLocalePageUrls = next.pageUrls.filter((url) => !isLikelyLocaleSubdomainUrl(url));
+    if (nonLocalePageUrls.length > 0) {
+      next.pageUrls = nonLocalePageUrls;
+    }
+
+    const nonLocaleSourceUrls = next.sourceUrls.filter((url) => !isLikelyLocaleSubdomainUrl(url));
+    if (nonLocaleSourceUrls.length > 0) {
+      next.sourceUrls = nonLocaleSourceUrls;
+    }
+
+    const allUrls = [...next.pageUrls, ...next.sourceUrls];
+    const hasOnlyLocaleUrls = allUrls.length > 0 && allUrls.every((url) => isLikelyLocaleSubdomainUrl(url));
+    if (hasOnlyLocaleUrls) {
+      next.pageUrls = [];
+      next.sourceUrls = [];
+      next.snippets = [];
+    }
+  }
+
+  if (findingId === "accessibility_support_path_present") {
+    const accessibilitySpecificPageUrls = next.pageUrls.filter((url) => isAccessibilitySpecificUrl(url));
+    if (accessibilitySpecificPageUrls.length > 0) {
+      next.pageUrls = accessibilitySpecificPageUrls;
+    }
+
+    const accessibilitySpecificSourceUrls = next.sourceUrls.filter((url) => isAccessibilitySpecificUrl(url));
+    if (accessibilitySpecificSourceUrls.length > 0) {
+      next.sourceUrls = accessibilitySpecificSourceUrls;
+    }
+  }
+
+  if (findingId === "cookie_policy_present") {
+    next.pageUrls = next.pageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url));
+    next.sourceUrls = next.sourceUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url));
+    if (next.pageUrls.length === 0) {
+      next.snippets = [];
+    }
+  }
+
+  if (findingId === "cookie_policy_structurally_obstructed") {
+    const allUrls = [...next.pageUrls, ...next.sourceUrls];
+    const hasOnlyWeakRootUrls = allUrls.length > 0 && allUrls.every((url) => isWeakRootLikeUrl(url));
+    if (hasOnlyWeakRootUrls) {
+      next.pageUrls = [];
+      next.sourceUrls = [];
+      next.snippets = [];
+    }
+  }
+
+  return next;
+}
+
 function getSourceUrl(packet: UnifiedFindingPacket) {
   return packet.primaryPageUrl ?? packet.evidence?.pageUrls?.[0] ?? packet.evidence?.sourceUrls?.[0];
+}
+
+function isGenericObservationText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === "this signal is worth reviewer attention." ||
+    normalized === "promotional or choice architecture may need closer disclosure review." ||
+    normalized === "the scan flagged age-related or youth-directed context that may raise children’s privacy review expectations."
+  );
+}
+
+function looksSynthesizedPolicySummary(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  const dateLikeMatches = trimmed.match(
+    /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},\s+\d{4}\b/gi
+  );
+  return Boolean((dateLikeMatches?.length ?? 0) >= 2 || trimmed.includes("—"));
+}
+
+function selectObservedValue(packet: UnifiedFindingPacket) {
+  const snippet = packet.evidence?.snippets?.[0] ?? null;
+  const summary = packet.summary;
+
+  if (packet.unifiedFindingId === "retargeting_pixel_observed") {
+    return "The scan retained a detector-backed retargeting or remarketing signal that merits manual confirmation.";
+  }
+
+  if (packet.unifiedFindingId === "arbitration_clause_present") {
+    if (snippet && !looksSynthesizedPolicySummary(snippet) && !isGenericObservationText(snippet)) {
+      return snippet;
+    }
+
+    return "The scan retained terms language that appears to include arbitration or dispute-resolution provisions worth reading directly.";
+  }
+
+  if (snippet && !isGenericObservationText(snippet)) {
+    return snippet;
+  }
+
+  return getBestObservedValue([summary]) ?? null;
 }
 
 function hasConcretePayloadEvidence(fallbackEvidence?: Record<string, unknown> | null) {
@@ -1105,11 +1473,47 @@ function buildPresentationCopy(
         suggestedFix: "Keep the privacy contact path easy to find and make sure the listed email, form, or portal stays current.",
         whyThisMatters: "A clear privacy contact path makes it easier for people to ask privacy questions or reach the site owner about data-handling concerns."
       };
+    case "privacy_policy_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the privacy policy linked from stable footer, legal, or help surfaces and make sure the destination remains crawlable.",
+        whyThisMatters: "A visible privacy policy surface helps users and reviewers find the site's core notice and data-handling disclosures."
+      };
+    case "terms_of_service_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the terms surface stable and easy to reach from footer, legal, or help navigation.",
+        whyThisMatters: "A visible terms surface helps users and reviewers locate the site's core legal and dispute-resolution terms."
+      };
+    case "cookie_policy_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the cookie policy or cookie-settings surface easy to reach and make sure the linked destination remains crawlable.",
+        whyThisMatters: "A visible cookie policy or settings surface helps users find tracking disclosures and related controls more reliably."
+      };
+    case "contact_support_path_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the contact or feedback path easy to find and make sure the linked help channel remains current.",
+        whyThisMatters: "A visible contact or feedback path gives people a clearer way to reach the operator when they need help or have questions."
+      };
+    case "targeted_advertising_choices_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the targeted-advertising choice path easy to reach anywhere users would expect privacy or ad-preference controls.",
+        whyThisMatters: "A visible targeted-advertising choice path helps users find sale, sharing, or ad-preference controls more reliably."
+      };
     case "sale_sharing_controls_missing":
       return {
         ...base,
         suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
         whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
+      };
+    case "retargeting_pixel_observed":
+      return {
+        ...base,
+        suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",
+        whyThisMatters: "A retargeting-related signal can indicate advertising or remarketing infrastructure, but detector-only evidence should be confirmed against retained runtime artifacts before treating it as a confirmed pixel deployment."
       };
     case "gpc_disclosure_present":
       return {
@@ -1256,6 +1660,11 @@ function buildPresentationDecision(input: {
     typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
       ? input.packet.evidence.counts.childrenPrivacyRiskScore
       : null;
+  const hasConcreteMinorsContextAttribution =
+    input.packet.confidenceInputs.hasPageAttribution ||
+    (input.packet.evidence?.pageUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
+    (input.packet.evidence?.sourceUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
+    (input.packet.evidence?.snippets?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false);
   const needsPageAttribution = packetNeedsPageAttribution({
     family: input.packet.details?.family,
     unifiedFindingId: input.packet.unifiedFindingId
@@ -1324,7 +1733,8 @@ function buildPresentationDecision(input: {
     isDomainLevelSensitiveContext &&
     (
       explicitMinorsCollectionFlagPresent ||
-      (strongMinorsContextEvidenceCount >= 1 &&
+      (hasConcreteMinorsContextAttribution &&
+        strongMinorsContextEvidenceCount >= 1 &&
         (minorsContextEvidenceCount >= 2 || (childrenPrivacyRiskScore !== null && childrenPrivacyRiskScore >= 60)))
     )
   ) {
@@ -1342,6 +1752,167 @@ function buildPresentationDecision(input: {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because youth-directed or age-related context was retained alongside missing privacy-supporting disclosure signals.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "cookie_policy_structurally_obstructed" &&
+    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.snippets?.length ?? 0) === 0 &&
+    input.siblingRows.some((row) => row.unifiedFindingId === "cookie_policy_present")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because the scan already retained a cookie-policy or cookie-settings surface, and the obstruction evidence here is only a weak discovery artifact.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "cookie_policy_present" &&
+    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.snippets?.length ?? 0) === 0
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because the scan did not retain a concrete cookie-policy or cookie-settings page after weak placeholder cleanup.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "terms_of_service_present" &&
+    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
+    (input.packet.evidence?.snippets?.length ?? 0) === 0
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because the retained terms surface was only a locale-specific alternate and the scan did not retain a canonical terms page for the root-domain experience.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "affiliate_disclosure_present" &&
+    (input.packet.evidence?.snippets?.length ?? 0) === 0
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept audit-only because the scan retained an affiliate-page path but did not retain visible page text from that page on this run.",
+      status: "audit_only"
+    };
+  }
+
+  if (input.packet.unifiedFindingId === "arbitration_clause_present") {
+    const allUrls = [...(input.packet.evidence?.pageUrls ?? []), ...(input.packet.evidence?.sourceUrls ?? [])];
+    const hasOnlyLocaleUrls = allUrls.length > 0 && allUrls.every((url) => isLikelyLocaleSubdomainUrl(url));
+
+    if (hasOnlyLocaleUrls) {
+      return {
+        confidenceRationale: buildConfidenceRationale(input.packet),
+        rationale:
+          "Suppressed because the retained arbitration evidence only points to a locale-specific alternate terms page and the scan did not retain canonical root-domain terms attribution for this clause.",
+        status: "suppress"
+      };
+    }
+  }
+
+  if (
+    input.packet.unifiedFindingId === "contact_page_missing_surface" &&
+    input.siblingRows.some(
+      (row) =>
+        row.unifiedFindingId === "accessibility_support_path_present" ||
+        row.unifiedFindingId === "privacy_contact_path_present" ||
+        row.unifiedFindingId === "contact_support_path_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because another retained support or contact path already gives users a visible way to reach help on this scan.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "privacy_policy_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "disclosure.privacy_policy_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a reachable privacy-policy surface.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "terms_of_service_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "disclosure.terms_of_service_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a reachable terms surface.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "cookie_policy_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "disclosure.cookie_policy_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a reachable cookie-policy or cookie-settings surface.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "contact_support_path_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "disclosure.contact_page_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a reachable contact or feedback path.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "targeted_advertising_choices_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "privacy.do_not_sell_link_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a targeted-advertising or do-not-sell/share choice path.",
       status: "surface"
     };
   }
@@ -1835,6 +2406,7 @@ export function buildUnifiedFindingPackets(input: {
     };
 
     nextPacket.evidence = mergeEvidence(nextPacket.evidence, fallbackEvidence, candidate.evidence, linkedValidationFinding);
+    nextPacket.evidence = sanitizeEvidenceForFinding(findingId, nextPacket.evidence);
     const attributedUrls = uniqueStrings([
       ...(nextPacket.evidence?.pageUrls ?? []),
       ...(nextPacket.evidence?.sourceUrls ?? []),
@@ -1940,11 +2512,12 @@ export function buildUnifiedFindingDisplayPackets(input: {
       siblingRows: siblingRows
     });
     const resolvedPresentation = buildPresentationCopy(packet, presentation);
+    const observedValue = selectObservedValue(packet);
 
     return {
       ...packet,
       linkedValidationFinding,
-      observedValue: getBestObservedValue([packet.evidence?.snippets?.[0] ?? null, packet.summary]),
+      observedValue,
       presentationDecision,
       presentation: {
         ...resolvedPresentation,

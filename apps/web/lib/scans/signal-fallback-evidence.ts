@@ -4,6 +4,10 @@ import {
   normalizePolicySnippetList
 } from "./policy-snippet-normalization";
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
 export function buildChildContextFallbackEvidence(input: {
   signalKey: string;
   signalLabel: string;
@@ -69,6 +73,186 @@ function getPolicyEnrichmentSnippetRecord(row: Record<string, unknown>) {
     : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
       ? (row.policy_evidence_snippets as Record<string, unknown>)
       : null;
+}
+
+function getPolicyPageUrl(row: Record<string, unknown> | null) {
+  if (!row) {
+    return null;
+  }
+
+  return typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+}
+
+function getPolicySummaryShort(row: Record<string, unknown> | null) {
+  if (!row) {
+    return null;
+  }
+
+  return isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
+    ? String(row.policySummaryShort ?? row.policy_summary_short)
+    : null;
+}
+
+function getKeyPageSummaryRowsForTypes(summary: unknown, pageTypes: string[]) {
+  const wantedTypes = new Set(pageTypes);
+  return getKeyPageDiscoverySummaryRows(summary).filter((row) => wantedTypes.has(String(row.pageType ?? "")));
+}
+
+function getSuccessfulKeyPageUrls(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.successfulUrl === "string" && row.successfulUrl.trim().length > 0 ? [row.successfulUrl] : []
+  );
+}
+
+function getSuccessfulKeyPageTitles(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.successfulPageTitle === "string" && row.successfulPageTitle.trim().length > 0 ? [row.successfulPageTitle] : []
+  );
+}
+
+function getSuccessfulKeyPageTitleRecords(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.successfulPageTitle === "string" && row.successfulPageTitle.trim().length > 0
+      ? [
+          {
+            title: row.successfulPageTitle,
+            url: typeof row.successfulUrl === "string" ? row.successfulUrl : null
+          }
+        ]
+      : []
+  );
+}
+
+function getAttemptedKeyPageUrls(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    Array.isArray(row.attemptedUrls) ? row.attemptedUrls.filter((value): value is string => typeof value === "string") : []
+  );
+}
+
+function getBestCandidateKeyPageUrls(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.bestCandidateUrl === "string" && row.bestCandidateUrl.trim().length > 0 ? [row.bestCandidateUrl] : []
+  );
+}
+
+function getBestCandidateAnchorTexts(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.bestCandidateAnchorText === "string" && row.bestCandidateAnchorText.trim().length > 0
+      ? [row.bestCandidateAnchorText]
+      : []
+  );
+}
+
+function getStopReasons(summaryRows: Array<Record<string, unknown>>) {
+  return summaryRows.flatMap((row) =>
+    typeof row.stopReason === "string" && row.stopReason.trim().length > 0 ? [row.stopReason] : []
+  );
+}
+
+function getPolicyRowByPageTypes(policyEnrichment: Array<Record<string, unknown>>, pageTypes: string[]) {
+  const wantedTypes = new Set(pageTypes);
+  return (
+    policyEnrichment.find((row) => wantedTypes.has(String(row.pageType ?? row.page_type ?? ""))) ??
+    null
+  );
+}
+
+function getPolicySnippetCandidates(row: Record<string, unknown> | null, snippetKeys: string[]) {
+  if (!row) {
+    return [] as string[];
+  }
+
+  const snippets = getPolicyEnrichmentSnippetRecord(row);
+  const keyedSnippets = snippetKeys.flatMap((key) =>
+    isMeaningfulPolicyText(snippets?.[key]) ? [String(snippets?.[key])] : []
+  );
+
+  return normalizePolicySnippetList([
+    ...keyedSnippets,
+    ...(getPolicySummaryShort(row) ? [getPolicySummaryShort(row)] : [])
+  ]);
+}
+
+function isWeakRootLikeUrl(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.trim();
+    const isRootPath = pathname === "" || pathname === "/";
+    return isRootPath;
+  } catch {
+    return /\/?#?$/.test(value);
+  }
+}
+
+function isMachineReadablePolicyEndpoint(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    return (
+      host === "privacyportal.onetrust.com" ||
+      path.includes("/request/v1/enterprisepolicy/") ||
+      path.includes("/digitalpolicy/content") ||
+      path.includes("/api/")
+    );
+  } catch {
+    return /privacyportal\.onetrust\.com|\/request\/v1\/enterprisepolicy\/|\/digitalpolicy\/content|\/api\//i.test(value);
+  }
+}
+
+function isLikelyHomepageTitle(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.includes("breaking news") ||
+    normalized.includes("latest news and videos") ||
+    normalized === "home" ||
+    normalized.endsWith("| home")
+  );
+}
+
+function isLikelyPrivacyChoiceSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return /privacy choices|privacy rights|do not sell|do not share|targeted advertising|opt out of targeted advertising|cookie settings/i.test(
+    value
+  );
+}
+
+function isLikelyLocaleSubdomainUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const labels = host.split(".");
+    if (labels.length < 3) {
+      return false;
+    }
+
+    const subdomain = labels[0] ?? "";
+    return /^(arabic|ar|es|fr|de|it|pt|jp|ja|kr|ko|cn|zh|ru|tr|nl|sv|no|da|fi|pl|cs|he|id|th|vi)$/i.test(
+      subdomain
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getAffiliatePolicyFallbackRow(policyEnrichment: Array<Record<string, unknown>>) {
@@ -137,7 +321,14 @@ function getAffiliatePolicyFallbackSnippet(row: Record<string, unknown> | null) 
         ? row.policy_summary_short
         : null;
 
-  if (isMeaningfulPolicyText(summary) && /\baffiliate disclosure\b/i.test(summary)) {
+  if (
+    isMeaningfulPolicyText(summary) &&
+    (/\baffiliate disclosure\b/i.test(summary) ||
+      /\baffiliate\b/i.test(summary) ||
+      /\bcommission\b/i.test(summary) ||
+      /\bearn(?:s|ed|ing)?\b.{0,40}\b(?:purchase|purchases|link|links|recommendation|recommendations)\b/i.test(summary) ||
+      /\brevenue\b.{0,40}\b(?:purchase|purchases|link|links|recommendation|recommendations)\b/i.test(summary))
+  ) {
     return normalizePolicySnippet(summary);
   }
 
@@ -147,44 +338,205 @@ function getAffiliatePolicyFallbackSnippet(row: Record<string, unknown> | null) 
 export function buildSnapshotDisclosureFallbackEvidence(input: {
   keyPageDiscoverySummary?: unknown;
   policyEnrichment?: Array<Record<string, unknown>>;
+  relatedSignals?: Array<{ key: string; value: unknown }>;
   signalKey: string;
   signalLabel: string;
   signalValue: unknown;
   snapshot?: Record<string, unknown> | null;
 }) {
   const summaryRows = getKeyPageDiscoverySummaryRows(input.keyPageDiscoverySummary);
-  const relevantPageTypes = /commerce\.affiliate_disclosure_present/i.test(input.signalKey)
+  const isAffiliateSignal = /commerce\.affiliate_disclosure_present/i.test(input.signalKey);
+  const isPrivacySurfaceSignal = /disclosure\.privacy_policy_present/i.test(input.signalKey);
+  const isTermsSurfaceSignal = /disclosure\.terms_of_service_present/i.test(input.signalKey);
+  const isCookieSurfaceSignal = /disclosure\.cookie_policy_present/i.test(input.signalKey);
+  const isContactSurfaceSignal = /disclosure\.contact_page_present/i.test(input.signalKey);
+  const isDoNotSellSignal = /privacy\.do_not_sell_link_present/i.test(input.signalKey);
+  const relevantPageTypes = isAffiliateSignal
     ? new Set(["affiliate_disclosure"])
-    : new Set([
-        "privacy_policy",
-        "terms_of_service",
-        "contact",
-        "contact_page",
-        "affiliate_disclosure"
-      ]);
+    : isPrivacySurfaceSignal
+      ? new Set(["privacy_policy"])
+      : isTermsSurfaceSignal
+        ? new Set(["terms_of_service"])
+        : isCookieSurfaceSignal
+          ? new Set(["cookie_policy"])
+          : isContactSurfaceSignal
+            ? new Set(["contact", "contact_page"])
+            : isDoNotSellSignal
+              ? new Set(["privacy_policy", "cookie_policy"])
+            : new Set([
+                "privacy_policy",
+                "terms_of_service",
+                "contact",
+                "contact_page",
+                "affiliate_disclosure"
+              ]);
   const relevantRows = summaryRows.filter((row) => relevantPageTypes.has(String(row.pageType ?? "")));
-  const attemptedUrls = relevantRows.flatMap((row) =>
-    Array.isArray(row.attemptedUrls) ? row.attemptedUrls.filter((value): value is string => typeof value === "string") : []
+  const attemptedUrls = getAttemptedKeyPageUrls(relevantRows);
+  const bestCandidateUrls = getBestCandidateKeyPageUrls(relevantRows);
+  const successfulUrls = getSuccessfulKeyPageUrls(relevantRows);
+  const successfulTitles = getSuccessfulKeyPageTitles(relevantRows);
+  const successfulTitleRecords = getSuccessfulKeyPageTitleRecords(relevantRows);
+  const bestCandidateAnchorTexts = getBestCandidateAnchorTexts(relevantRows);
+  const stopReasons = getStopReasons(relevantRows);
+  const relatedSignals = Array.isArray(input.relatedSignals) ? input.relatedSignals : [];
+  const relatedSignalUrls = uniqueStrings(
+    relatedSignals.flatMap((signal) =>
+      typeof signal.value === "string" && signal.value.trim().length > 0 ? [signal.value] : []
+    )
   );
-  const successfulUrls = relevantRows.flatMap((row) =>
-    typeof row.successfulUrl === "string" && row.successfulUrl.trim().length > 0 ? [row.successfulUrl] : []
-  );
-  const successfulTitles = relevantRows.flatMap((row) =>
-    typeof row.successfulPageTitle === "string" && row.successfulPageTitle.trim().length > 0 ? [row.successfulPageTitle] : []
-  );
-  const stopReasons = relevantRows.flatMap((row) =>
-    typeof row.stopReason === "string" && row.stopReason.trim().length > 0 ? [row.stopReason] : []
+  const canonicalTermsSignalUrls = isTermsSurfaceSignal
+    ? relatedSignalUrls.filter(
+        (url) => !isMachineReadablePolicyEndpoint(url) && !isWeakRootLikeUrl(url) && !isLikelyLocaleSubdomainUrl(url)
+      )
+    : [];
+  const genericPolicyRow = getPolicyRowByPageTypes(
+    input.policyEnrichment ?? [],
+    isPrivacySurfaceSignal
+      ? ["privacy_policy"]
+      : isTermsSurfaceSignal
+        ? ["terms_of_service"]
+        : isCookieSurfaceSignal
+          ? ["cookie_policy"]
+          : isContactSurfaceSignal
+            ? ["contact", "contact_page"]
+            : isDoNotSellSignal
+              ? ["privacy_policy", "cookie_policy"]
+            : []
   );
   const affiliatePolicyRow =
-    /commerce\.affiliate_disclosure_present/i.test(input.signalKey)
+    isAffiliateSignal
       ? getAffiliatePolicyFallbackRow(input.policyEnrichment ?? [])
       : null;
+  const affiliateAttemptedUrls = attemptedUrls.filter((url) => /affiliate/i.test(url));
+  const preferredAffiliateSuccessfulUrls = successfulUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+  const hasAffiliateSuccessfulUrl =
+    preferredAffiliateSuccessfulUrls.some((url) => /affiliate/i.test(url)) ||
+    successfulUrls.some((url) => /affiliate/i.test(url) && !isMachineReadablePolicyEndpoint(url));
   const affiliatePolicyPageUrl =
-    affiliatePolicyRow && typeof (affiliatePolicyRow.pageUrl ?? affiliatePolicyRow.page_url) === "string"
-      ? String(affiliatePolicyRow.pageUrl ?? affiliatePolicyRow.page_url)
+    !hasAffiliateSuccessfulUrl
+      ? getPolicyPageUrl(affiliatePolicyRow)
       : null;
   const affiliatePolicySnippet = getAffiliatePolicyFallbackSnippet(affiliatePolicyRow);
   const affiliateTitleSnippet = successfulTitles.find((title) => /\baffiliate disclosure\b/i.test(title)) ?? null;
+  const nonMachineSuccessfulUrls = successfulUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+  const nonMachineAttemptedUrls = attemptedUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+  const nonMachineBestCandidateUrls = bestCandidateUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+  const nonWeakSuccessfulUrls = nonMachineSuccessfulUrls.filter((url) => !isWeakRootLikeUrl(url));
+  const nonWeakAttemptedUrls = nonMachineAttemptedUrls.filter((url) => !isWeakRootLikeUrl(url));
+  const nonWeakBestCandidateUrls = nonMachineBestCandidateUrls.filter((url) => !isWeakRootLikeUrl(url));
+  const genericPolicyPageUrl = getPolicyPageUrl(genericPolicyRow);
+  const genericHumanPolicyPageUrl =
+    genericPolicyPageUrl && !isMachineReadablePolicyEndpoint(genericPolicyPageUrl) ? genericPolicyPageUrl : null;
+  const shouldUseGenericPolicySnippetCandidates = !(
+    isTermsSurfaceSignal &&
+    canonicalTermsSignalUrls.length > 0 &&
+    isLikelyLocaleSubdomainUrl(genericPolicyPageUrl)
+  );
+  const genericTitleSnippets = normalizePolicySnippetList(
+    successfulTitleRecords
+      .filter(
+        ({ title, url }) =>
+          !/\baffiliate disclosure\b/i.test(title) &&
+          !((isCookieSurfaceSignal || isDoNotSellSignal) && isLikelyHomepageTitle(title)) &&
+          !(
+            isTermsSurfaceSignal &&
+            canonicalTermsSignalUrls.length > 0 &&
+            isLikelyLocaleSubdomainUrl(url)
+          )
+      )
+      .map(({ title }) => title)
+  );
+  const affiliatePageUrls =
+    /commerce\.affiliate_disclosure_present/i.test(input.signalKey)
+      ? uniqueStrings([
+          ...(preferredAffiliateSuccessfulUrls.length > 0 ? preferredAffiliateSuccessfulUrls : affiliateAttemptedUrls),
+          ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])
+        ])
+      : uniqueStrings([
+          ...(nonMachineSuccessfulUrls.length > 0 ? nonMachineSuccessfulUrls : []),
+          ...attemptedUrls,
+          ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])
+        ]);
+  const affiliateSourceUrls =
+    /commerce\.affiliate_disclosure_present/i.test(input.signalKey)
+      ? uniqueStrings([
+          ...affiliatePageUrls,
+          ...successfulUrls.filter((url) => isMachineReadablePolicyEndpoint(url))
+        ])
+      : uniqueStrings([
+          ...affiliatePageUrls,
+          ...successfulUrls.filter((url) => isMachineReadablePolicyEndpoint(url))
+        ]);
+
+  const genericPageUrls =
+    isPrivacySurfaceSignal || isTermsSurfaceSignal || isCookieSurfaceSignal || isContactSurfaceSignal || isDoNotSellSignal
+      ? uniqueStrings([
+          ...(isTermsSurfaceSignal ? canonicalTermsSignalUrls : []),
+          ...((isCookieSurfaceSignal || isDoNotSellSignal)
+            ? (nonWeakSuccessfulUrls.length > 0
+                ? nonWeakSuccessfulUrls
+                : nonWeakAttemptedUrls.length > 0
+                  ? nonWeakAttemptedUrls
+                  : nonWeakBestCandidateUrls)
+            : nonMachineSuccessfulUrls.length > 0
+              ? nonMachineSuccessfulUrls
+              : nonMachineAttemptedUrls.length > 0
+                ? nonMachineAttemptedUrls
+                : nonMachineBestCandidateUrls),
+          ...((genericHumanPolicyPageUrl &&
+            !(
+              isCookieSurfaceSignal &&
+              isWeakRootLikeUrl(genericHumanPolicyPageUrl)
+            ))
+            ? [genericHumanPolicyPageUrl]
+            : [])
+        ])
+      : affiliatePageUrls;
+  const genericSourceUrls =
+    isPrivacySurfaceSignal || isTermsSurfaceSignal || isCookieSurfaceSignal || isContactSurfaceSignal || isDoNotSellSignal
+      ? uniqueStrings([
+          ...genericPageUrls,
+          ...(isTermsSurfaceSignal ? canonicalTermsSignalUrls : []),
+          ...(isCookieSurfaceSignal ? [] : successfulUrls.filter((url) => isMachineReadablePolicyEndpoint(url)))
+        ])
+      : affiliateSourceUrls;
+  const genericPolicySnippets =
+    isAffiliateSignal
+      ? normalizePolicySnippetList([
+          ...(affiliateTitleSnippet ? [affiliateTitleSnippet] : []),
+          ...(affiliatePolicySnippet && affiliatePolicySnippet !== affiliateTitleSnippet ? [affiliatePolicySnippet] : [])
+        ])
+      : normalizePolicySnippetList([
+          ...genericTitleSnippets,
+          ...(((genericTitleSnippets.length === 0 || isDoNotSellSignal) && shouldUseGenericPolicySnippetCandidates)
+            ? getPolicySnippetCandidates(genericPolicyRow, [
+                "privacy_notice",
+                "terms_summary",
+                "cookie_notice",
+                "cookie_table",
+                "cookies",
+                "targeted_advertising",
+                "privacy_choices",
+                "do_not_sell",
+                "contact"
+              ])
+            : []),
+          ...((genericTitleSnippets.length === 0 || isDoNotSellSignal) ? bestCandidateAnchorTexts : [])
+        ]);
+
+  const preferredDoNotSellPageUrls = isDoNotSellSignal
+    ? uniqueStrings(genericPageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)))
+    : [];
+  const preferredDoNotSellSourceUrls = isDoNotSellSignal
+    ? uniqueStrings(genericSourceUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)))
+    : [];
+  const preferredDoNotSellSnippets = isDoNotSellSignal
+    ? normalizePolicySnippetList(
+        genericPolicySnippets.filter(
+          (snippet) => !isLikelyHomepageTitle(snippet) && isLikelyPrivacyChoiceSnippet(snippet)
+        )
+      )
+    : [];
 
   return {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
@@ -193,17 +545,102 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
     keyPageAttemptedUrls: [...new Set(attemptedUrls)],
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
     keyPageStopReason: stopReasons[0] ?? null,
-    pageUrls: [...new Set([...successfulUrls, ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])])],
-    policySnippets: normalizePolicySnippetList([
-      ...(affiliatePolicySnippet ? [affiliatePolicySnippet] : []),
-      ...(affiliateTitleSnippet ? [affiliateTitleSnippet] : [])
-    ]),
+    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : genericPageUrls,
+    policySnippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
+    doNotSellLinkPresent: input.snapshot?.do_not_sell_link_present === true,
     privacyPolicyPresent: input.snapshot?.privacy_policy_present === true,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
-    sourceUrls: [...new Set([...successfulUrls, ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])])],
-    termsOfServicePresent: input.snapshot?.terms_of_service_present === true
+    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : genericSourceUrls,
+    termsOfServicePresent: input.snapshot?.terms_of_service_present === true,
+    policySummaryShort:
+      genericPolicySnippets.length === 0 && genericPolicyRow ? getPolicySummaryShort(genericPolicyRow) : null
+  };
+}
+
+export function buildAccessibilitySupportFallbackEvidence(input: {
+  keyPageDiscoverySummary?: unknown;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+  snapshot?: Record<string, unknown> | null;
+}) {
+  const relevantRows = getKeyPageSummaryRowsForTypes(input.keyPageDiscoverySummary, [
+    "accessibility_statement",
+    "contact",
+    "contact_page"
+  ]);
+  const accessibilityRows = relevantRows.filter((row) => String(row.pageType ?? "") === "accessibility_statement");
+  const preferredRows = accessibilityRows.length > 0 ? accessibilityRows : relevantRows;
+  const successfulUrls = uniqueStrings(getSuccessfulKeyPageUrls(preferredRows));
+  const attemptedUrls = uniqueStrings(getAttemptedKeyPageUrls(relevantRows));
+  const titleSnippets = normalizePolicySnippetList(getSuccessfulKeyPageTitles(preferredRows));
+  const stopReasons = getStopReasons(relevantRows);
+
+  return {
+    accessibilityContactMethodPresent: input.snapshot?.accessibility_contact_method_present === true,
+    keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
+    keyPageAttemptedUrls: attemptedUrls,
+    keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
+    keyPageStopReason: stopReasons[0] ?? null,
+    pageUrls: successfulUrls,
+    policySnippets: titleSnippets,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue,
+    sourceUrls: successfulUrls
+  };
+}
+
+export function buildCookiePolicyFallbackEvidence(input: {
+  keyPageDiscoverySummary?: unknown;
+  policyEnrichment?: Array<Record<string, unknown>>;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+}) {
+  const cookiePolicyRows = getKeyPageSummaryRowsForTypes(input.keyPageDiscoverySummary, ["cookie_policy"]);
+  const successfulUrls = uniqueStrings(getSuccessfulKeyPageUrls(cookiePolicyRows));
+  const attemptedUrls = uniqueStrings(getAttemptedKeyPageUrls(cookiePolicyRows));
+  const titleSnippets = normalizePolicySnippetList(getSuccessfulKeyPageTitles(cookiePolicyRows));
+  const stopReasons = getStopReasons(cookiePolicyRows);
+  const policyRow = getPolicyRowByPageTypes(input.policyEnrichment ?? [], ["cookie_policy"]);
+  const primarySuccessfulUrl = successfulUrls[0] ?? null;
+  const policyPageUrl = getPolicyPageUrl(policyRow);
+  const shouldPreferPolicyRow = isWeakRootLikeUrl(primarySuccessfulUrl) && !isWeakRootLikeUrl(policyPageUrl);
+  const shouldDropWeakRootFallback =
+    isWeakRootLikeUrl(primarySuccessfulUrl) &&
+    !policyPageUrl;
+  const retainedPageUrls = shouldPreferPolicyRow
+    ? uniqueStrings([policyPageUrl])
+    : shouldDropWeakRootFallback
+      ? []
+    : uniqueStrings([...successfulUrls, ...(policyPageUrl && successfulUrls.length === 0 ? [policyPageUrl] : [])]);
+  const policySnippets =
+    titleSnippets.length > 0 && !shouldPreferPolicyRow && !shouldDropWeakRootFallback
+      ? titleSnippets
+      : getPolicySnippetCandidates(policyRow, [
+          "cookie_table",
+          "cookie_notice",
+          "cookies",
+          "tracking_technologies",
+          "targeted_advertising"
+        ]);
+
+  return {
+    keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
+    keyPageAttemptedUrls: attemptedUrls,
+    keyPageDiscoverySource: getBestDiscoverySource(cookiePolicyRows),
+    keyPageStopReason: stopReasons[0] ?? null,
+    pageUrl: retainedPageUrls[0] ?? null,
+    pageUrls: retainedPageUrls,
+    policySnippets,
+    policySummaryShort: titleSnippets.length === 0 || shouldPreferPolicyRow ? getPolicySummaryShort(policyRow) : null,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue,
+    sourceUrls: retainedPageUrls
   };
 }
 

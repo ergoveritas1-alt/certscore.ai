@@ -22,6 +22,10 @@ test("normalizePolicySnippet trims clipped leading fragments", () => {
   );
 });
 
+test("normalizePolicySnippet collapses escaped newline markers into clean text", () => {
+  assert.equal(normalizePolicySnippet("\\n Manage Cookies\\n"), "Manage Cookies");
+});
+
 test("normalizePolicySnippetList dedupes cleaned snippets", () => {
   assert.deepEqual(
     normalizePolicySnippetList([

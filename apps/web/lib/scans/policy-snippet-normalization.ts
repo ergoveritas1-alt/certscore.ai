@@ -16,7 +16,7 @@ const POLICY_SNIPPET_ANCHOR_PHRASES = [
 ] as const;
 
 export function normalizePolicySnippet(snippet: string) {
-  const collapsed = snippet.replace(/\s+/g, " ").trim();
+  const collapsed = snippet.replace(/\\[nrt]+/g, " ").replace(/\s+/g, " ").trim();
   if (!collapsed || isPolicyPlaceholder(collapsed)) {
     return null;
   }
