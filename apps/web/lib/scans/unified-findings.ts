@@ -1524,6 +1524,15 @@ function buildPresentationDecision(input: {
     };
   }
 
+  if (input.packet.unifiedFindingId === "accessibility_risk_score") {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale:
+        "Kept for audit only because automated accessibility risk scores are still best treated as reviewer triage, even when representative examples are retained.",
+      status: "audit_only"
+    };
+  }
+
   if (
     input.packet.unifiedFindingId === "arbitration_clause_present" &&
     input.packet.sourceRefs.some(

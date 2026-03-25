@@ -671,6 +671,32 @@ test("surfaces missing accessibility support path as a domain-level accessibilit
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 
+test("keeps accessibility risk score audit-only even when representative examples are retained", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-accessibility-risk",
+    ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
+    severity: "medium",
+    title: "Accessibility risk score",
+    evidence: {
+      pageUrl: "https://www.example.com/",
+      supportingSignals: [
+        "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
+        "on https://www.example.com/ (.hero-title)",
+        "Accessibility risk score: 14."
+      ]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
 test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
