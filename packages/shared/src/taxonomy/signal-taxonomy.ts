@@ -697,6 +697,11 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Privacy Rights & Controls",
       regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
     },
+    "privacy.privacy_contact_path_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy Rights & Controls",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
     "privacy.gpc_disclosure_present": {
       primaryCategory: "privacy_consent_user_choice",
       subcategory: "Privacy Rights & Controls",
@@ -712,7 +717,17 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Privacy Rights & Controls",
       regulatoryTags: ["ccpa_cpra", "gdpr_eu_privacy"]
     },
+    "privacy.third_party_advertising_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["ccpa_cpra", "gdpr_eu_privacy"]
+    },
     "privacy.behavioral_analytics_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "privacy.children_privacy_disclosure_present": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Privacy & Cookie Disclosures",
       regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]

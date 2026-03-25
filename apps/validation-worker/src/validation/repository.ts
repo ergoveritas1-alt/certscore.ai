@@ -6,8 +6,14 @@ import {
   type ValidationAgreementScore,
   type ValidationRunMode
 } from "@website-signal-risk-scanner/validation-shared";
-import { getCrawlerProductToken, getCrawlerPublicUrl, getCrawlerUserAgent } from "@website-signal-risk-scanner/scan-core";
-import { extractHostname, getPlanDefinition, normalizeUrl } from "@website-signal-risk-scanner/shared";
+import {
+  extractHostname,
+  getCrawlerProductToken,
+  getCrawlerPublicUrl,
+  getCrawlerUserAgent,
+  getPlanDefinition,
+  normalizeUrl
+} from "@website-signal-risk-scanner/shared";
 import { getWorkerEnv } from "../env";
 
 const VALIDATION_SETTINGS_KEY = "default";
@@ -51,13 +57,13 @@ type ValidationRunRow = {
   normalized_url: string;
   rank_band: string | null;
   scan_id: string | null;
-  status: "queued" | "collecting" | "ranking" | "validating" | "completed" | "failed";
+  status: "queued" | "waiting_for_scan" | "collecting" | "ranking" | "validating" | "completed" | "failed";
   tranco_rank: number | null;
   trigger_mode: ValidationRunMode;
   validation_target_id: string | null;
 };
 
-const ACTIVE_RUN_STATUSES = ["queued", "collecting", "ranking", "validating"] as const;
+const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 
 function rankBandForRank(rank: number | null) {

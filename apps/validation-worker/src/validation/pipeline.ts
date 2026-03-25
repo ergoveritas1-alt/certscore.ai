@@ -3,9 +3,9 @@ import {
   VALIDATION_COLLECT_JOB,
   VALIDATION_RANK_JOB,
   VALIDATION_VERDICT_JOB,
+  buildFindingComparisonKey,
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
-import { buildFindingComparisonKey } from "../../../../packages/scan-core/src/scan/history/build-finding-comparison-key";
 import {
   claimNextAutomaticTarget,
   createScanForValidationRun,

@@ -12,20 +12,74 @@ import {
 import type { NormalizedConcern } from "./normalized-concerns";
 
 function makeConcern(
-  overrides: Partial<Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "originType" | "suggestedUnifiedFindingId" | "title">>
+  overrides: Partial<
+    Pick<
+      NormalizedConcern,
+      "canonicalConcernKey" | "originKey" | "originType" | "policyIsPrimarySource" | "policyPageType" | "suggestedUnifiedFindingId" | "title"
+    >
+  >
 ) {
   return {
     canonicalConcernKey: "test",
     originKey: "test",
     originType: "snapshot_signal",
+    policyIsPrimarySource: null,
+    policyPageType: null,
     suggestedUnifiedFindingId: undefined,
     title: "Test concern",
     ...overrides
-  } satisfies Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "originType" | "suggestedUnifiedFindingId" | "title">;
+  } satisfies Pick<
+    NormalizedConcern,
+    "canonicalConcernKey" | "originKey" | "originType" | "policyIsPrimarySource" | "policyPageType" | "suggestedUnifiedFindingId" | "title"
+  >;
 }
 
 test("deriveConcernPolicy handles the main concern families consistently", () => {
   const cases = [
+    {
+      name: "low-confidence policy extraction on a non-policy page is blocked",
+      concern: makeConcern({
+        originKey: "policySemanticConfidence",
+        originType: "policy_enrichment",
+        policyPageType: "non_policy",
+        suggestedUnifiedFindingId: "low_confidence_policy_extraction",
+        title: "Low-confidence policy extraction"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        pageType: "non_policy",
+        policySemanticConfidence: 0.5
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "low-confidence policy extraction on a non-primary policy row is blocked",
+      concern: makeConcern({
+        originKey: "policySemanticConfidence",
+        originType: "policy_enrichment",
+        policyIsPrimarySource: false,
+        policyPageType: "privacy_policy",
+        suggestedUnifiedFindingId: "low_confidence_policy_extraction",
+        title: "Low-confidence policy extraction"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        isPrimaryPolicy: false,
+        pageType: "privacy_policy",
+        policySemanticConfidence: 0.5
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
     {
       name: "replay without direct runtime stays internal",
       concern: makeConcern({
@@ -103,6 +157,25 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "consent surface missing without concrete absence evidence stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.consent_surface_missing",
+        suggestedUnifiedFindingId: "consent_surface_missing",
+        title: "Consent surface missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        keyPageAttemptCount: 3,
+        keyPageDiscoverySource: "footer_link"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "rights friction without a real barrier is blocked",
       concern: makeConcern({
         originKey: "privacy.user_rights_friction_score",
@@ -140,6 +213,27 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
         externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "weak cookie posture without concrete secure or samesite examples stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.weak_cookie_security_attributes_detected",
+        suggestedUnifiedFindingId: "weak_cookie_security_attributes",
+        title: "Weak cookie security attributes"
+      }),
+      evidenceStrengthFlags: ["direct_runtime"] as const,
+      rawEvidence: {
+        cookieAttributeSummary: {
+          missingHttpOnlyCount: 4,
+          missingHttpOnlyCookieNames: ["_ga", "_ga_test"]
+        }
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
         negativeEvidenceFlags: []
       }
     },

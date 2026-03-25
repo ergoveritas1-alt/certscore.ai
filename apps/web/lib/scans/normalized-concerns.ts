@@ -26,6 +26,15 @@ export type NormalizedConcernEvidenceStrengthFlag =
   | "fallback_only";
 
 export type NormalizedConcernPageScope = "domain" | "page" | "multi_page" | "policy_page";
+export type NormalizedConcernPolicyPageType =
+  | "privacy_policy"
+  | "cookie_policy"
+  | "terms_of_service"
+  | "accessibility_statement"
+  | "contact_page"
+  | "unknown_policy"
+  | "non_policy"
+  | null;
 
 export type NormalizedConcernPromotionEligibility = "eligible" | "internal_only" | "blocked";
 
@@ -50,6 +59,8 @@ export type NormalizedConcernEvidenceBundle = {
   entities: Record<string, string[]>;
   flags: string[];
   pageUrls: string[];
+  policyIsPrimarySource: boolean | null;
+  policyPageType: NormalizedConcernPolicyPageType;
   policySnippets: string[];
   rawEvidence: Record<string, unknown> | null;
   runtimeArtifacts: string[];
@@ -71,6 +82,8 @@ export type NormalizedConcern = {
   originKey: string;
   originType: NormalizedConcernOriginType;
   pageScope: NormalizedConcernPageScope;
+  policyIsPrimarySource: boolean | null;
+  policyPageType: NormalizedConcernPolicyPageType;
   promotionEligibility: NormalizedConcernPromotionEligibility;
   severity: ReviewFindingSeverity;
   signalKey?: string;
@@ -135,6 +148,14 @@ function getStringArrayEvidence(value: unknown) {
     : [];
 }
 
+function getStringValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getBooleanValue(value: unknown) {
+  return typeof value === "boolean" ? value : null;
+}
+
 function hasConcretePayloadEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!Array.isArray(rawEvidence?.sensitivePayloadViolations) && !Array.isArray(rawEvidence?.sensitive_payload_violations)) {
     return false;
@@ -161,6 +182,8 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       entities: {} as Record<string, string[]>,
       flags: [] as string[],
       pageUrls: [] as string[],
+      policyIsPrimarySource: null,
+      policyPageType: null as NormalizedConcernPolicyPageType,
       policySnippets: [] as string[],
       runtimeArtifacts: [] as string[],
       sourceUrls: [] as string[]
@@ -259,6 +282,12 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     entities,
     flags: [...flags],
     pageUrls: [...pageUrls],
+    policyIsPrimarySource: derivePolicyPrimarySource(rawEvidence),
+    policyPageType: derivePolicyPageType({
+      pageUrls: [...pageUrls],
+      rawEvidence,
+      sourceUrls: [...sourceUrls]
+    }),
     policySnippets: [...policySnippets],
     runtimeArtifacts: [...runtimeArtifacts],
     sourceUrls: [...sourceUrls]
@@ -283,6 +312,8 @@ function mergeConcernEvidenceBundles(
       ...right.pageUrls,
       ...(candidateEvidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim()))
     ]),
+    policyIsPrimarySource: left.policyIsPrimarySource ?? right.policyIsPrimarySource,
+    policyPageType: left.policyPageType ?? right.policyPageType,
     policySnippets: uniqueStrings([
       ...left.policySnippets,
       ...right.policySnippets,
@@ -295,8 +326,116 @@ function mergeConcernEvidenceBundles(
 }
 
 function isPolicyLikeUrl(url: string) {
+  return derivePolicyPageTypeFromUrl(url) !== "non_policy";
+}
+
+function derivePolicyPageTypeFromUrl(url: string): Exclude<NormalizedConcernPolicyPageType, null> {
   const lowered = url.toLowerCase();
-  return /\/privacy|\/terms|\/cookie|policy|notice/.test(lowered);
+  let pathname = lowered;
+
+  try {
+    pathname = new URL(url).pathname.toLowerCase();
+  } catch {
+    pathname = lowered;
+  }
+
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  const pathSegments = normalizedPath.split("/").filter(Boolean);
+  const leaf = pathSegments[pathSegments.length - 1] ?? "";
+  const legalLeafPattern =
+    /^(privacy|privacy-policy|privacy_notice|privacy-notice|cookie-policy|cookies|cookie-notice|cookie_notice|terms|terms-of-service|terms_of_service|tos|accessibility|accessibility-statement|accessibility_statement|contact|contact-us|contact_us)$/;
+
+  if (pathSegments.length > 0 && !legalLeafPattern.test(leaf)) {
+    return "non_policy";
+  }
+
+  if (/\/privacy(?:[-_/]policy|[-_/]notice)?$|^\/privacy(?:[-_/]policy|[-_/]notice)?$/i.test(normalizedPath)) {
+    return "privacy_policy";
+  }
+  if (/\/(?:cookie-policy|cookie_notice|cookie-notice|cookies)$/.test(normalizedPath)) {
+    return "cookie_policy";
+  }
+  if (/\/(?:terms|terms-of-service|terms_of_service|tos|conditions)$/.test(normalizedPath)) {
+    return "terms_of_service";
+  }
+  if (/\/(?:accessibility|accessibility-statement|accessibility_statement)$/.test(normalizedPath)) {
+    return "accessibility_statement";
+  }
+  if (/\/(?:contact|contact-us|contact_us)$/.test(normalizedPath)) {
+    return "contact_page";
+  }
+  if (/\/(?:policy|notice|legal)$/.test(normalizedPath)) {
+    return "unknown_policy";
+  }
+  return "non_policy";
+}
+
+function normalizePolicyPageType(value: unknown): NormalizedConcernPolicyPageType {
+  const normalized = getStringValue(value)?.toLowerCase();
+  switch (normalized) {
+    case "privacy_policy":
+    case "cookie_policy":
+    case "terms_of_service":
+    case "accessibility_statement":
+    case "contact_page":
+    case "unknown_policy":
+    case "non_policy":
+      return normalized;
+    default:
+      return null;
+  }
+}
+
+function derivePolicyPageType(input: {
+  pageUrls: string[];
+  rawEvidence: Record<string, unknown>;
+  sourceUrls: string[];
+}): NormalizedConcernPolicyPageType {
+  const explicitType =
+    normalizePolicyPageType(input.rawEvidence.policyPageType) ??
+    normalizePolicyPageType(input.rawEvidence.policy_page_type) ??
+    normalizePolicyPageType(input.rawEvidence.pageType) ??
+    normalizePolicyPageType(input.rawEvidence.page_type) ??
+    normalizePolicyPageType(input.rawEvidence.normalizedConcernPolicyPageType);
+
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const urls = uniqueStrings([...input.pageUrls, ...input.sourceUrls]);
+  if (urls.length === 0) {
+    return null;
+  }
+
+  return derivePolicyPageTypeFromUrl(urls[0]!);
+}
+
+function derivePolicyPrimarySource(rawEvidence: Record<string, unknown>) {
+  const explicit =
+    getBooleanValue(rawEvidence.policyIsPrimarySource) ??
+    getBooleanValue(rawEvidence.policy_is_primary_source) ??
+    getBooleanValue(rawEvidence.isPrimaryPolicy) ??
+    getBooleanValue(rawEvidence.is_primary_policy) ??
+    getBooleanValue(rawEvidence.isPrimaryPolicyEnrichment) ??
+    getBooleanValue(rawEvidence.is_primary_policy_enrichment);
+
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  const sourceRole =
+    getStringValue(rawEvidence.policySourceRole) ??
+    getStringValue(rawEvidence.policy_source_role) ??
+    getStringValue(rawEvidence.normalizedConcernPolicySourceRole);
+
+  if (sourceRole === "primary_policy") {
+    return true;
+  }
+  if (sourceRole === "secondary_policy" || sourceRole === "non_policy") {
+    return false;
+  }
+
+  return null;
 }
 
 function derivePageScope(bundle: NormalizedConcernEvidenceBundle): NormalizedConcernPageScope {
@@ -463,6 +602,8 @@ function buildConcernFromSharedInput(input: {
       canonicalConcernKey,
       originKey: input.originKey,
       originType: input.originType,
+      policyIsPrimarySource: evidenceBundle.policyIsPrimarySource,
+      policyPageType: evidenceBundle.policyPageType,
       suggestedUnifiedFindingId,
       title: input.title
     },
@@ -484,6 +625,8 @@ function buildConcernFromSharedInput(input: {
     originKey: input.originKey,
     originType: input.originType,
     pageScope: derivePageScope(evidenceBundle),
+    policyIsPrimarySource: evidenceBundle.policyIsPrimarySource,
+    policyPageType: evidenceBundle.policyPageType,
     promotionEligibility: eligibility.promotionEligibility,
     severity: input.severity,
     signalKey: input.signalKey,
@@ -583,6 +726,8 @@ export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedCo
         normalizedConcernCanonicalKey: concern.canonicalConcernKey,
         normalizedConcernOriginType: concern.originType,
         normalizedConcernPageScope: concern.pageScope,
+        normalizedConcernPolicyIsPrimarySource: concern.policyIsPrimarySource,
+        normalizedConcernPolicyPageType: concern.policyPageType,
         normalizedConcernPromotionEligibility: concern.promotionEligibility,
         normalizedConcernExternalSurfacingEligibility: concern.externalSurfacingEligibility,
         normalizedConcernEvidenceStrengthFlags: concern.evidenceStrengthFlags,

@@ -44,6 +44,7 @@ import {
   normalizePolicyPositiveSignalKey
 } from "../../lib/scans/policy-positive-signal-contract";
 import {
+  isMeaningfulPolicyText,
   normalizePolicySnippet,
   normalizePolicySnippetList
 } from "../../lib/scans/policy-snippet-normalization";
@@ -1544,7 +1545,7 @@ function getPolicySignalFallbackEvidence(input: {
   const pageUrl =
     row && typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
   const policySummaryShort =
-    row && typeof (row.policySummaryShort ?? row.policy_summary_short) === "string"
+    row && isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
       ? String(row.policySummaryShort ?? row.policy_summary_short)
       : null;
   const evidenceSnippets =
@@ -1560,20 +1561,38 @@ function getPolicySignalFallbackEvidence(input: {
       : Array.isArray(evidenceSnippets?.policy_rights_signals)
         ? (evidenceSnippets.policy_rights_signals as string[])
         : [];
-  const topicSnippets =
-    topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
+  const topicSnippetKeys = topicKey
+    ? [topicKey]
+    : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
+      ? ["privacy_contact", "notice_contact", "dsar"]
+      : policyPositiveSpec?.unifiedFindingId === "children_privacy_disclosure_present"
+        ? ["topic:children", "children"]
+        : [];
+  const topicSnippets = topicSnippetKeys.flatMap((key) =>
+    isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []
+  );
   const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
     ? rightsSnippetKeys
-        .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
+        .flatMap((key) => (isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
+  const privacyContactChannelType =
+    row && isMeaningfulPolicyText(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
+      ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
+      : null;
+  const policyChildrenReference =
+    row && isMeaningfulPolicyText(row.policyChildrenReference ?? row.policy_children_reference)
+      ? String(row.policyChildrenReference ?? row.policy_children_reference)
+      : null;
 
   return {
     pageUrl,
     pageUrls: pageUrl ? [pageUrl] : [],
     policySnippets,
     policyRightsSignals,
+    privacyContactChannelType,
+    policyChildrenReference,
     policySummaryShort: policySnippets.length > 0 ? null : policySummaryShort,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
