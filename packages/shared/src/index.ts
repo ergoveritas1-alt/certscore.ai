@@ -12,6 +12,8 @@ export * from "./policy-review-notes";
 export * from "./validation-finding-taxonomy";
 export * from "./validators/domain";
 export * from "./utils/env";
+export * from "./utils/crawler-identity";
+export * from "./utils/finding-comparison";
 export * from "./utils/url";
 export * from "./utils/scheduling";
 export * from "./snapshots/project-snapshot-signals";

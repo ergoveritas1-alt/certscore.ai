@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@website-signal-risk-scanner/db": "workspace:*",
-    "@website-signal-risk-scanner/scan-core": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/validation-shared": "workspace:*",
     "bullmq": "^5.43.0",
