@@ -29,6 +29,7 @@ import {
   shouldSurfacePrimarySignalFinding
 } from "../../lib/scans/finding-evidence-gates";
 import {
+  buildSnapshotDisclosureFallbackEvidence,
   buildChildContextFallbackEvidence,
   isChildContextSignalKey
 } from "../../lib/scans/signal-fallback-evidence";
@@ -1237,7 +1238,7 @@ function isConcerningSignal(key: string, value: unknown) {
     return true;
   }
 
-  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present/i.test(key)) {
+  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present|affiliate_disclosure_present/i.test(key)) {
     return true;
   }
 
@@ -1296,6 +1297,10 @@ function getSignalConcernReason(key: string, value: unknown) {
 
   if (/dark_pattern|limited_time_offer_language_present|discount_claim_present|original_price_comparison_present/i.test(key)) {
     return "Promotional or choice architecture may need closer disclosure review.";
+  }
+
+  if (/affiliate_disclosure_present/i.test(key)) {
+    return "The scan retained a clear affiliate disclosure path that signals when recommendations or links may involve a financial relationship.";
   }
 
   const policyPositiveSpec = getPolicyPositiveSignalSpec(key);
@@ -1752,6 +1757,14 @@ function buildReviewFindings(input: {
                 }
             : isChildContextSignalKey(item.key)
               ? buildChildContextFallbackEvidence({
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value,
+                  snapshot: input.snapshot
+                })
+            : /commerce\.affiliate_disclosure_present|disclosure\.key_page_discovery_unresolved_after_bounded_search/i.test(item.key)
+              ? buildSnapshotDisclosureFallbackEvidence({
+                  keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value,

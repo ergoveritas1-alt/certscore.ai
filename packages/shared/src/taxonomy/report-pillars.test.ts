@@ -205,6 +205,18 @@ test("maps new accessibility and consumer MVP signals into stable evidence categ
       overlayEvidenceCategoryIds: ["disclosures_claim_substantiation", "transparency_notice_data_subject_rights"]
     }
   );
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "commerce.affiliate_disclosure_present"),
+    {
+      id: "snapshot_signal:commerce.affiliate_disclosure_present",
+      source: "snapshot_signal",
+      key: "commerce.affiliate_disclosure_present",
+      label: "Affiliate disclosure present",
+      primaryEvidenceCategoryId: "disclosures_claim_substantiation",
+      secondaryEvidenceCategoryIds: ["legal_commercial_disclosure_coverage"],
+      overlayEvidenceCategoryIds: []
+    }
+  );
 });
 
 test("returns signals attached to an evidence category by relation", () => {

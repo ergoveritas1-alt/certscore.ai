@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildSnapshotDisclosureFallbackEvidence,
   buildChildContextFallbackEvidence,
   isChildContextSignalKey
 } from "./signal-fallback-evidence";
@@ -34,4 +35,87 @@ test("builds child-context fallback evidence with disclosure support fields", ()
   assert.equal(evidence.privacyPolicyPresent, false);
   assert.equal(evidence.privacyContactChannelType, "none");
   assert.equal(evidence.signalKey, "privacy.children_privacy_context_without_supporting_disclosure");
+});
+
+test("builds snapshot disclosure fallback evidence with retained legal coverage and discovery context", () => {
+  const evidence = buildSnapshotDisclosureFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/privacy"],
+          bestDiscoverySource: "footer_link",
+          pageType: "privacy_policy",
+          stopReason: "resolved",
+          successfulUrl: "https://www.example.com/privacy"
+        },
+        {
+          attemptedUrls: ["https://www.example.com/terms"],
+          bestDiscoverySource: "legal_hub",
+          pageType: "terms_of_service",
+          stopReason: "resolved",
+          successfulUrl: "https://www.example.com/terms"
+        },
+        {
+          attemptedUrls: ["https://www.example.com/contact"],
+          bestDiscoverySource: "body_link",
+          pageType: "contact",
+          stopReason: "resolved",
+          successfulUrl: "https://www.example.com/contact"
+        }
+      ]
+    },
+    signalKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+    signalLabel: "Bounded key-page discovery unresolved",
+    signalValue: true,
+    snapshot: {
+      affiliate_disclosure_present: true,
+      contact_page_present: true,
+      privacy_policy_present: true,
+      terms_of_service_present: true
+    }
+  });
+
+  assert.equal(evidence.privacyPolicyPresent, true);
+  assert.equal(evidence.termsOfServicePresent, true);
+  assert.equal(evidence.contactPagePresent, true);
+  assert.equal(evidence.affiliateDisclosurePresent, true);
+  assert.equal(evidence.keyPageDiscoverySource, "footer_link");
+  assert.deepEqual(evidence.pageUrls, [
+    "https://www.example.com/privacy",
+    "https://www.example.com/terms",
+    "https://www.example.com/contact"
+  ]);
+});
+
+test("builds affiliate disclosure fallback evidence from affiliate page summaries only", () => {
+  const evidence = buildSnapshotDisclosureFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/privacy"],
+          bestDiscoverySource: "footer_link",
+          pageType: "privacy_policy",
+          stopReason: "resolved",
+          successfulUrl: "https://www.example.com/privacy"
+        },
+        {
+          attemptedUrls: ["https://www.example.com/affiliate-disclosure"],
+          bestDiscoverySource: "footer_link",
+          pageType: "affiliate_disclosure",
+          stopReason: "resolved",
+          successfulUrl: "https://www.example.com/affiliate-disclosure"
+        }
+      ]
+    },
+    signalKey: "commerce.affiliate_disclosure_present",
+    signalLabel: "Affiliate disclosure present",
+    signalValue: true,
+    snapshot: {
+      affiliate_disclosure_present: true
+    }
+  });
+
+  assert.equal(evidence.keyPageAttemptCount, 1);
+  assert.deepEqual(evidence.pageUrls, ["https://www.example.com/affiliate-disclosure"]);
+  assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/affiliate-disclosure"]);
 });

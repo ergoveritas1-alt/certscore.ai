@@ -1351,6 +1351,13 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "commerce.affiliate_disclosure_present",
+    "Affiliate disclosure present",
+    "disclosures_claim_substantiation",
+    ["legal_commercial_disclosure_coverage"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "disclosure.supervisory_authority_reference_present",
     "Supervisory authority reference present",
     "privacy_contacts_accountability",
