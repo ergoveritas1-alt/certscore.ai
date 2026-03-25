@@ -78,9 +78,6 @@ importers:
       '@website-signal-risk-scanner/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@website-signal-risk-scanner/scan-core':
-        specifier: workspace:*
-        version: link:../../packages/scan-core
       '@website-signal-risk-scanner/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -160,24 +157,6 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.98.0
         version: 2.98.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.25.76
-
-  packages/scan-core:
-    dependencies:
-      '@website-signal-risk-scanner/db':
-        specifier: workspace:*
-        version: link:../db
-      '@website-signal-risk-scanner/shared':
-        specifier: workspace:*
-        version: link:../shared
-      axe-core:
-        specifier: ^4.10.3
-        version: 4.11.1
-      playwright:
-        specifier: ^1.51.1
-        version: 1.58.2
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -694,10 +673,6 @@ packages:
     hasBin: true
     peerDependencies:
       postcss: ^8.1.0
-
-  axe-core@4.11.1:
-    resolution: {integrity: sha512-BASOg+YwO2C+346x3LZOeoovTIoTrRqEsqMa6fmfAV0P+U9mFr9NsyOEpiYvFjbc64NMrSswhV50WdXzdb/Z5A==}
-    engines: {node: '>=4'}
 
   baseline-browser-mapping@2.10.0:
     resolution: {integrity: sha512-lIyg0szRfYbiy67j9KN8IyeD7q7hcmqnJ1ddWmNt19ItGpNN64mnllmxUNFIOdOm6by97jlL6wfpTTJrmnjWAA==}
@@ -1592,8 +1567,6 @@ snapshots:
       picocolors: 1.1.1
       postcss: 8.5.8
       postcss-value-parser: 4.2.0
-
-  axe-core@4.11.1: {}
 
   baseline-browser-mapping@2.10.0: {}
 
