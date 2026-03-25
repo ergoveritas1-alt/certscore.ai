@@ -4,6 +4,7 @@ import type {
   NormalizedConcernEvidenceStrengthFlag,
   NormalizedConcernExternalSurfacingEligibility,
   NormalizedConcernNegativeEvidenceFlag,
+  NormalizedConcernPolicyPageType,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
 import { getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
@@ -279,10 +280,13 @@ function isPositiveInfrastructureConcern(
 ) {
   return [
     "privacy_rights_path_present",
+    "privacy_contact_path_present",
     "gpc_disclosure_present",
     "tracking_technologies_disclosure_present",
+    "third_party_advertising_disclosure_present",
     "targeted_advertising_disclosure_present",
     "behavioral_analytics_disclosure_present",
+    "children_privacy_disclosure_present",
     "accessibility_support_path_present",
     "arbitration_clause_present"
   ].includes(concern.suggestedUnifiedFindingId ?? "");
@@ -335,6 +339,111 @@ function isContradictionConcern(
 
   return /conflict|mismatch|contradiction|functional_misalignment|missing_technical_disclosure|session_replay_undisclosed/.test(
     haystack
+  );
+}
+
+function isLowConfidencePolicyExtractionConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "low_confidence_policy_extraction";
+}
+
+function isConsentSurfaceMissingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "consent_surface_missing";
+}
+
+function isWeakCookieSecurityAttributesConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "weak_cookie_security_attributes";
+}
+
+function isAccessibilityRiskScoreConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "accessibility_risk_score";
+}
+
+function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
+  return value === "privacy_policy" || value === "cookie_policy" || value === "terms_of_service";
+}
+
+function getConcernPolicyPageType(
+  concern: Pick<NormalizedConcern, "policyPageType">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  const explicit =
+    (typeof rawEvidence?.normalizedConcernPolicyPageType === "string"
+      ? rawEvidence.normalizedConcernPolicyPageType
+      : typeof rawEvidence?.policyPageType === "string"
+        ? rawEvidence.policyPageType
+        : typeof rawEvidence?.policy_page_type === "string"
+          ? rawEvidence.policy_page_type
+          : typeof rawEvidence?.pageType === "string"
+            ? rawEvidence.pageType
+            : typeof rawEvidence?.page_type === "string"
+              ? rawEvidence.page_type
+              : null) as NormalizedConcernPolicyPageType;
+
+  return explicit ?? concern.policyPageType ?? null;
+}
+
+function hasConcreteConsentSurfaceAbsenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const explicitNoSurface =
+    rawEvidence.consentSurfaceObserved === false ||
+    rawEvidence.consent_surface_observed === false ||
+    rawEvidence.cookieBannerPresent === false ||
+    rawEvidence.consentBannerPresent === false;
+  const noMechanismDeclared =
+    rawEvidence.consentMechanismType === "none" || rawEvidence.consent_mechanism_type === "none";
+  const noCmpDeclared = rawEvidence.cmpVendorName === null || rawEvidence.cmp_vendor_name === null;
+  const noInteractionModel =
+    rawEvidence.consentInteractionModel === "none" || rawEvidence.consent_interaction_model === "none";
+
+  const corroboratingSignals = [noMechanismDeclared, noCmpDeclared, noInteractionModel].filter(Boolean).length;
+  return explicitNoSurface && corroboratingSignals >= 1;
+}
+
+function hasMeaningfulWeakCookieAttributeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence?.cookieAttributeSummary || typeof rawEvidence.cookieAttributeSummary !== "object") {
+    return false;
+  }
+
+  const summary = rawEvidence.cookieAttributeSummary as Record<string, unknown>;
+  const missingSecureCount = typeof summary.missingSecureCount === "number" ? summary.missingSecureCount : 0;
+  const weakSameSiteCount = typeof summary.weakSameSiteCount === "number" ? summary.weakSameSiteCount : 0;
+  const thirdPartyWeakCount =
+    typeof summary.thirdPartyWeakAttributeCount === "number" ? summary.thirdPartyWeakAttributeCount : 0;
+
+  const missingSecureNames = Array.isArray(summary.missingSecureCookieNames) ? summary.missingSecureCookieNames : [];
+  const weakSameSiteNames = Array.isArray(summary.weakSameSiteCookieNames) ? summary.weakSameSiteCookieNames : [];
+  const thirdPartyWeakNames = Array.isArray(summary.thirdPartyWeakAttributeCookieNames)
+    ? summary.thirdPartyWeakAttributeCookieNames
+    : [];
+
+  return (
+    missingSecureCount > 0 ||
+    weakSameSiteCount > 0 ||
+    thirdPartyWeakCount > 0 ||
+    missingSecureNames.length > 0 ||
+    weakSameSiteNames.length > 0 ||
+    thirdPartyWeakNames.length > 0
+  );
+}
+
+function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  return (
+    Array.isArray(rawEvidence.accessibilityRuleExamples) && rawEvidence.accessibilityRuleExamples.length > 0
   );
 }
 
@@ -432,7 +541,10 @@ export function packetNeedsPageAttribution(input: {
 }
 
 export function deriveConcernPolicy(input: {
-  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "originType" | "suggestedUnifiedFindingId" | "title">;
+  concern: Pick<
+    NormalizedConcern,
+    "canonicalConcernKey" | "originKey" | "originType" | "policyPageType" | "suggestedUnifiedFindingId" | "title"
+  >;
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
   rawEvidence?: Record<string, unknown> | null;
 }): {
@@ -463,6 +575,19 @@ export function deriveConcernPolicy(input: {
   }
   if (consentActionableChoiceObserved === false) {
     negativeEvidenceFlags.add("no_consent_actionable_choice_observed");
+  }
+
+  if (isLowConfidencePolicyExtractionConcern(input.concern)) {
+    const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);
+
+    if (!isCanonicalPolicyPageType(policyPageType)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "blocked"
+      };
+    }
   }
 
   if (concernRequiresDirectRuntime(input.concern)) {
@@ -603,6 +728,40 @@ export function deriveConcernPolicy(input: {
     }
   }
 
+  if (isConsentSurfaceMissingConcern(input.concern) && !hasConcreteConsentSurfaceAbsenceEvidence(input.rawEvidence)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isWeakCookieSecurityAttributesConcern(input.concern) &&
+    !hasMeaningfulWeakCookieAttributeEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isAccessibilityRiskScoreConcern(input.concern) &&
+    !hasRepresentativeAccessibilityExamples(input.rawEvidence) &&
+    input.concern.originType !== "validation_rule"
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
   if (concernRequiresPageAttribution(input.concern) && !hasDirectRuntime && !hasPageAttribution && !hasKeyPageDiscovery) {
     return {
       allowedNarrativeTier: "weak",
@@ -613,6 +772,17 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isPositiveInfrastructureConcern(input.concern)) {
+    const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);
+
+    if (input.concern.originType === "policy_enrichment" && policyPageType === "non_policy") {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
     return {
       allowedNarrativeTier: "moderate",
       externalSurfacingEligibility: "eligible",

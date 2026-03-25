@@ -1096,6 +1096,12 @@ function buildPresentationCopy(
         suggestedFix: "Keep the disclosed rights-request path current and easy to reach anywhere people look for privacy controls.",
         whyThisMatters: "A clear privacy-rights path makes it easier for people to understand how to request access, deletion, export, correction, or related privacy controls."
       };
+    case "privacy_contact_path_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the privacy contact path easy to find and make sure the listed email, form, or portal stays current.",
+        whyThisMatters: "A clear privacy contact path makes it easier for people to ask privacy questions or reach the site owner about data-handling concerns."
+      };
     case "sale_sharing_controls_missing":
       return {
         ...base,
@@ -1120,11 +1126,23 @@ function buildPresentationCopy(
         suggestedFix: "Keep the targeted-advertising disclosure specific about the technologies, purposes, and control paths users can rely on.",
         whyThisMatters: "Clear targeted-advertising disclosure helps users understand when sale, sharing, or ad-personalization practices may apply and where to find related controls."
       };
+    case "third_party_advertising_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the third-party advertising disclosure specific about the ad partners, technologies, and where users can learn more about those practices.",
+        whyThisMatters: "A clear third-party advertising disclosure helps users understand when outside ad partners or related technologies may be involved."
+      };
     case "behavioral_analytics_disclosure_present":
       return {
         ...base,
         suggestedFix: "Keep the behavioral-analytics disclosure aligned with the actual tooling, pages, and monitoring practices the site uses.",
         whyThisMatters: "A public disclosure about behavioral analytics or replay-style tooling helps users and reviewers understand when more detailed interaction monitoring may occur."
+      };
+    case "children_privacy_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the children's privacy disclosure easy to find and aligned with the site's current age-related practices and contact paths.",
+        whyThisMatters: "A visible children's privacy disclosure helps users and reviewers understand how the site says it handles child- or youth-related privacy expectations."
       };
     case "accessibility_support_path_missing":
       return {
@@ -1312,6 +1330,22 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "privacy_contact_path_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        getPolicyPositiveSignalKeysForFinding("privacy_contact_path_present").includes(sourceRef.key)
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a clear privacy contact path.",
+      status: "surface"
+    };
+  }
+
+  if (
     input.packet.unifiedFindingId === "consent_surface_missing" &&
     input.packet.evidence?.flags?.includes("privacy.consent_surface_missing")
   ) {
@@ -1409,6 +1443,22 @@ function buildPresentationDecision(input: {
   }
 
   if (
+    input.packet.unifiedFindingId === "third_party_advertising_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        getPolicyPositiveSignalKeysForFinding("third_party_advertising_disclosure_present").includes(sourceRef.key)
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a disclosure about third-party advertising partners or related ad technologies.",
+      status: "surface"
+    };
+  }
+
+  if (
     input.packet.unifiedFindingId === "behavioral_analytics_disclosure_present" &&
     input.packet.sourceRefs.some(
       (sourceRef) =>
@@ -1420,6 +1470,22 @@ function buildPresentationDecision(input: {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because structured policy evidence retained a disclosure about behavioral analytics or replay-style monitoring.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "children_privacy_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        getPolicyPositiveSignalKeysForFinding("children_privacy_disclosure_present").includes(sourceRef.key)
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because structured policy evidence retained a children's or youth-related privacy disclosure.",
       status: "surface"
     };
   }

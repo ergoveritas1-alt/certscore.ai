@@ -2015,6 +2015,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "policy_enrichment_signal",
+    "privacy.privacy_contact_path_present",
+    "Privacy contact path present",
+    "privacy_contacts_accountability",
+    ["rights_request_mechanisms"],
+    ["privacy_governance_contactability", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
     "privacy.gpc_disclosure_present",
     "GPC handling disclosed",
     "sale_sharing_targeted_advertising_controls",
@@ -2039,11 +2047,27 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "policy_enrichment_signal",
+    "privacy.third_party_advertising_disclosure_present",
+    "Third-party advertising disclosure present",
+    "data_handling_disclosures",
+    ["adtech_analytics_replay_footprint"],
+    ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
     "privacy.behavioral_analytics_disclosure_present",
     "Behavioral analytics disclosure present",
     "data_handling_disclosures",
     ["adtech_analytics_replay_footprint"],
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
+  ),
+  defineReportSignal(
+    "policy_enrichment_signal",
+    "privacy.children_privacy_disclosure_present",
+    "Children's privacy disclosure present",
+    "data_handling_disclosures",
+    ["rights_request_mechanisms"],
+    ["notice_rights_baseline"]
   ),
   defineReportSignal(
     "policy_enrichment_signal",
@@ -2254,6 +2278,14 @@ export const REPORT_UNIFIED_FINDINGS = [
       { source: "policy_enrichment_signal", key: "policyRightsSignals" },
       { source: "policy_enrichment_signal", key: "privacy.privacy_rights_path_present" }
     ]
+  }),
+  defineReportUnifiedFinding({
+    id: "privacy_contact_path_present",
+    label: "Privacy contact path present",
+    owner: "privacy_contacts_accountability",
+    mirrors: ["rights_request_mechanisms"],
+    overlays: ["privacy_governance_contactability", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.privacy_contact_path_present" }]
   }),
   defineReportUnifiedFinding({
     id: "missing_dsar_high_exposure",
@@ -2659,12 +2691,28 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.targeted_advertising_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "third_party_advertising_disclosure_present",
+    label: "Third-party advertising disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.third_party_advertising_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
     id: "behavioral_analytics_disclosure_present",
     label: "Behavioral analytics disclosure present",
     owner: "data_handling_disclosures",
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
     signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "children_privacy_disclosure_present",
+    label: "Children's privacy disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["rights_request_mechanisms"],
+    overlays: ["notice_rights_baseline"],
+    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.children_privacy_disclosure_present" }]
   }),
 
   defineReportUnifiedFinding({

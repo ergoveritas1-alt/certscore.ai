@@ -19,6 +19,10 @@ const DATA_CATEGORY_PATTERNS = [
 const TOPIC_PATTERNS: Array<{ topic: PolicyTopicKey; pattern: RegExp }> = [
   { topic: "gdpr", pattern: /\bgdpr\b|general data protection regulation/i },
   { topic: "ccpa_or_cpra", pattern: /\bccpa\b|\bcpra\b|california consumer privacy/i },
+  {
+    topic: "third_party_advertising_disclosure",
+    pattern: /\badvertising partners?\b|\bthird-?party ad(?:vertising)? (?:partners?|servers?|networks?)\b|\bad servers?\b|\bad networks?\b/i
+  },
   { topic: "cross_border_transfer", pattern: /\bcross-border\b|international transfer|transfer.*outside/i },
   { topic: "data_retention", pattern: /\bretain|retention|keep your data|store.*for\b/i },
   { topic: "sensitive_data", pattern: /\bsensitive data\b|health data|biometric|financial information/i },

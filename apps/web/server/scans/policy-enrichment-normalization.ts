@@ -31,6 +31,22 @@ function getPolicyMentions(row: Record<string, unknown>) {
       : [];
 }
 
+function getPrivacyContactChannelType(row: Record<string, unknown>) {
+  return typeof row.privacyContactChannelType === "string"
+    ? row.privacyContactChannelType
+    : typeof row.privacy_contact_channel_type === "string"
+      ? row.privacy_contact_channel_type
+      : null;
+}
+
+function getPolicyChildrenReference(row: Record<string, unknown>) {
+  return typeof row.policyChildrenReference === "string"
+    ? row.policyChildrenReference
+    : typeof row.policy_children_reference === "string"
+      ? row.policy_children_reference
+      : null;
+}
+
 export function collectPolicyEvidenceHashes(rows: Array<Record<string, unknown>>) {
   const hashes = new Set<string>();
 
@@ -124,6 +140,8 @@ export function derivePositivePolicySignalMap(input: {
   const primaryEvidenceSnippets = getPolicyEvidenceSnippets(primaryPolicy);
   const policyRightsSignals = getPolicyRightsSignals(primaryPolicy, primaryEvidenceSnippets);
   const policyMentions = getPolicyMentions(primaryPolicy);
+  const privacyContactChannelType = getPrivacyContactChannelType(primaryPolicy);
+  const policyChildrenReference = getPolicyChildrenReference(primaryPolicy);
   const hasPolicyMention = (topic: string) =>
     policyMentions.some(
       (entry) =>
@@ -137,6 +155,8 @@ export function derivePositivePolicySignalMap(input: {
       const value =
         spec.unifiedFindingId === "privacy_rights_path_present"
           ? policyRightsSignals.length > 0
+          : spec.unifiedFindingId === "privacy_contact_path_present"
+            ? privacyContactChannelType !== null && privacyContactChannelType !== "none"
           : spec.unifiedFindingId === "arbitration_clause_present"
             ? input.policyEnrichment.some(
                 (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
@@ -147,8 +167,12 @@ export function derivePositivePolicySignalMap(input: {
                 ? hasPolicyMention("tracking_technologies_disclosure")
                 : spec.evidenceSnippetKey === "topic:targeted_advertising_disclosure"
                   ? hasPolicyMention("targeted_advertising_disclosure")
+                  : spec.evidenceSnippetKey === "topic:third_party_advertising_disclosure"
+                    ? hasPolicyMention("third_party_advertising_disclosure")
                   : spec.evidenceSnippetKey === "topic:session_replay_disclosure"
                     ? hasPolicyMention("session_replay_disclosure")
+                    : spec.evidenceSnippetKey === "topic:children"
+                      ? hasPolicyMention("children") || (policyChildrenReference !== null && !["none", "unknown"].includes(policyChildrenReference))
                     : false;
 
       return [spec.canonicalSignalKey, value];

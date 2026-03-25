@@ -14,6 +14,7 @@ export type PolicyTopicKey =
   | "gdpr"
   | "ccpa_or_cpra"
   | "session_replay_disclosure"
+  | "third_party_advertising_disclosure"
   | "cross_border_transfer"
   | "data_retention"
   | "sensitive_data"

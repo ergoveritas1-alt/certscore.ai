@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns,
+  normalizeConcernFromReviewFindingCandidate,
   normalizeConcernFromPolicyReviewQueue,
   normalizeConcernFromValidationFinding
 } from "./normalized-concerns";
@@ -118,6 +119,29 @@ test("page-specific concerns without attribution are kept internal at the concer
 
   assert.equal(concern.promotionEligibility, "internal_only");
   assert.equal(concern.externalSurfacingEligibility, "audit_only");
+});
+
+test("low-confidence policy extraction on a non-policy page is blocked at normalization time", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Critical policy extraction fields were low confidence and need manual review.",
+    fallbackEvidence: {
+      pageUrl: "https://www.example.com/components/product-123",
+      pageType: "non_policy",
+      policySemanticConfidence: 0.5,
+      signalValue: 0.5
+    },
+    observedValue: "Policy extraction",
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Low-confidence policy extraction"
+  });
+
+  assert.equal(concern.policyPageType, "non_policy");
+  assert.equal(concern.promotionEligibility, "blocked");
+  assert.equal(concern.externalSurfacingEligibility, "suppress");
 });
 
 test("dsar concerns with parser-incomplete extraction are blocked before unified finding generation", () => {

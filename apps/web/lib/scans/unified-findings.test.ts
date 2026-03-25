@@ -550,6 +550,37 @@ test("surfaces weak cookie security attributes from runtime artifact evidence", 
   assert.equal(packet?.evidence?.counts?.missingSecureCount, 2);
 });
 
+test("keeps weak cookie security attributes audit-only when only HttpOnly examples are retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed cookies appear to rely on weaker security attributes than expected.",
+        fallbackEvidence: {
+          cookieAttributeSummary: {
+            missingHttpOnlyCount: 4,
+            missingHttpOnlyCookieNames: ["_ga", "_ga_H1SWTMGGJ4"]
+          },
+          signalKey: "privacy.weak_cookie_security_attributes_detected",
+          signalLabel: "Weak cookie security attributes detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "privacy.weak_cookie_security_attributes_detected",
+        signalLabel: "Weak cookie security attributes detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Weak cookie security attributes detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
 test("surfaces missing consent surface as a domain-level consent finding", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -580,6 +611,35 @@ test("surfaces missing consent surface as a domain-level consent finding", () =>
   assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible consent surface/i);
+});
+
+test("keeps consent surface missing audit-only when only weak discovery evidence is retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A consent surface may be missing, but the retained evidence is discovery-only.",
+        fallbackEvidence: {
+          signalKey: "privacy.consent_surface_missing",
+          signalLabel: "Consent surface missing",
+          signalValue: true,
+          keyPageAttemptCount: 3,
+          keyPageDiscoverySource: "footer_link"
+        },
+        observedValue: "No consent surface detected",
+        severity: "high",
+        signalKey: "privacy.consent_surface_missing",
+        signalLabel: "Consent surface missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Consent surface missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces missing accessibility support path as a domain-level accessibility finding", () => {
@@ -673,6 +733,37 @@ test("surfaces privacy-rights path present from policy enrichment evidence", () 
   assert.deepEqual(packet?.evidence?.snippets, [
     "You may request access to, delete, or export your information through our Privacy Rights Center."
   ]);
+});
+
+test("surfaces privacy contact path present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear privacy-specific contact path in the policy.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["If you have questions about this Privacy Policy, contact us at privacy@example.com."],
+          privacyContactChannelType: "email",
+          signalKey: "privacy.privacy_contact_path_present",
+          signalLabel: "Privacy contact path present",
+          signalValue: true
+        },
+        observedValue: "Privacy contact path present",
+        severity: "low",
+        signalKey: "privacy.privacy_contact_path_present",
+        signalLabel: "Privacy contact path present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Privacy contact path present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "privacy_contact_path_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces privacy-rights path present from the policyRightsSignals report key", () => {
@@ -913,6 +1004,36 @@ test("surfaces tracking technologies disclosure present from policy enrichment e
   ]);
 });
 
+test("surfaces third-party advertising disclosure present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a disclosure describing advertising partners or related third-party ad technologies.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: ["Our advertising partners may use cookies, JavaScript, or web beacons in their respective advertisements and links."],
+          signalKey: "privacy.third_party_advertising_disclosure_present",
+          signalLabel: "Third-party advertising disclosure present",
+          signalValue: true
+        },
+        observedValue: "Third-party advertising disclosure present",
+        severity: "low",
+        signalKey: "privacy.third_party_advertising_disclosure_present",
+        signalLabel: "Third-party advertising disclosure present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Third-party advertising disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "third_party_advertising_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("surfaces behavioral analytics disclosure present from policy enrichment evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -944,6 +1065,66 @@ test("surfaces behavioral analytics disclosure present from policy enrichment ev
   assert.deepEqual(packet?.evidence?.snippets, [
     "On certain pages, we use third-party tools to observe mouse movements, clicks, keystrokes, entered text, and pages visited."
   ]);
+});
+
+test("surfaces children's privacy disclosure present from policy enrichment evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a children's privacy disclosure.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          pageUrl: "https://www.example.com/privacy",
+          policyChildrenReference: "We do not knowingly collect personal information from children under 13.",
+          policySnippets: ["We do not knowingly collect personal information from children under 13."],
+          signalKey: "privacy.children_privacy_disclosure_present",
+          signalLabel: "Children's privacy disclosure present",
+          signalValue: true
+        },
+        observedValue: "Children's privacy disclosure present",
+        severity: "low",
+        signalKey: "privacy.children_privacy_disclosure_present",
+        signalLabel: "Children's privacy disclosure present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Children's privacy disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "children_privacy_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("blocks low-confidence policy extraction on a non-policy page before packet assembly", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Critical policy extraction fields were low confidence and need manual review.",
+        fallbackEvidence: {
+          pageType: "non_policy",
+          pageUrl: "https://www.example.com/components/pbtfans-cookies-n-creme",
+          policySemanticConfidence: 0.5,
+          signalKey: "policySemanticConfidence",
+          signalLabel: "Policy semantic confidence",
+          signalValue: 0.5
+        },
+        observedValue: "Policy extraction",
+        severity: "medium",
+        signalKey: "policySemanticConfidence",
+        signalLabel: "Policy semantic confidence",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Low-confidence policy extraction"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.length, 0);
 });
 
 test("normalizes clipped policy snippets but preserves natural lowercase starts", () => {

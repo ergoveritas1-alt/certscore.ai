@@ -6,10 +6,13 @@ export type PolicyPositiveSignalSpec = {
   pageType: "privacy_policy" | "terms_of_service";
   unifiedFindingId:
     | "privacy_rights_path_present"
+    | "privacy_contact_path_present"
     | "gpc_disclosure_present"
     | "tracking_technologies_disclosure_present"
+    | "third_party_advertising_disclosure_present"
     | "targeted_advertising_disclosure_present"
     | "behavioral_analytics_disclosure_present"
+    | "children_privacy_disclosure_present"
     | "arbitration_clause_present";
 };
 
@@ -21,6 +24,14 @@ export const POLICY_POSITIVE_SIGNAL_SPECS: PolicyPositiveSignalSpec[] = [
     label: "Privacy-rights path present",
     pageType: "privacy_policy",
     unifiedFindingId: "privacy_rights_path_present"
+  },
+  {
+    aliases: [],
+    canonicalSignalKey: "privacy.privacy_contact_path_present",
+    evidenceSnippetKey: null,
+    label: "Privacy contact path present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "privacy_contact_path_present"
   },
   {
     aliases: [],
@@ -48,11 +59,27 @@ export const POLICY_POSITIVE_SIGNAL_SPECS: PolicyPositiveSignalSpec[] = [
   },
   {
     aliases: [],
+    canonicalSignalKey: "privacy.third_party_advertising_disclosure_present",
+    evidenceSnippetKey: "topic:third_party_advertising_disclosure",
+    label: "Third-party advertising disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "third_party_advertising_disclosure_present"
+  },
+  {
+    aliases: [],
     canonicalSignalKey: "privacy.behavioral_analytics_disclosure_present",
     evidenceSnippetKey: "topic:session_replay_disclosure",
     label: "Behavioral analytics disclosure present",
     pageType: "privacy_policy",
     unifiedFindingId: "behavioral_analytics_disclosure_present"
+  },
+  {
+    aliases: [],
+    canonicalSignalKey: "privacy.children_privacy_disclosure_present",
+    evidenceSnippetKey: "topic:children",
+    label: "Children's privacy disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "children_privacy_disclosure_present"
   },
   {
     aliases: [],
