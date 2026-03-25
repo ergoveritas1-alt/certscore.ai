@@ -144,6 +144,51 @@ test("low-confidence policy extraction on a non-policy page is blocked at normal
   assert.equal(concern.externalSurfacingEligibility, "suppress");
 });
 
+test("fallback URL classification does not treat product pages with cookie terms as policy pages", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Critical policy extraction fields were low confidence and need manual review.",
+    fallbackEvidence: {
+      pageUrl: "https://www.kbdlab.io/components/pbtfans-cookies-n-creme",
+      policySemanticConfidence: 0.5,
+      signalValue: 0.5
+    },
+    observedValue: "Policy extraction",
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Low-confidence policy extraction"
+  });
+
+  assert.equal(concern.policyPageType, "non_policy");
+  assert.equal(concern.promotionEligibility, "blocked");
+});
+
+test("low-confidence policy extraction is blocked for non-primary policy rows even with canonical page type", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Critical policy extraction fields were low confidence and need manual review.",
+    fallbackEvidence: {
+      isPrimaryPolicy: false,
+      pageType: "privacy_policy",
+      pageUrl: "https://www.kbdlab.io/components/pbtfans-cookies-n-creme",
+      policySemanticConfidence: 0.5,
+      signalValue: 0.5
+    },
+    observedValue: "Policy extraction",
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Low-confidence policy extraction"
+  });
+
+  assert.equal(concern.policyIsPrimarySource, false);
+  assert.equal(concern.promotionEligibility, "blocked");
+  assert.equal(concern.externalSurfacingEligibility, "suppress");
+});
+
 test("dsar concerns with parser-incomplete extraction are blocked before unified finding generation", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

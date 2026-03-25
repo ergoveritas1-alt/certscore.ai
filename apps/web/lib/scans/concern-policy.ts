@@ -370,6 +370,30 @@ function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
   return value === "privacy_policy" || value === "cookie_policy" || value === "terms_of_service";
 }
 
+function getConcernPolicyPrimarySource(
+  concern: Pick<NormalizedConcern, "policyIsPrimarySource">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  const explicit =
+    typeof rawEvidence?.normalizedConcernPolicyIsPrimarySource === "boolean"
+      ? rawEvidence.normalizedConcernPolicyIsPrimarySource
+      : typeof rawEvidence?.policyIsPrimarySource === "boolean"
+        ? rawEvidence.policyIsPrimarySource
+        : typeof rawEvidence?.policy_is_primary_source === "boolean"
+          ? rawEvidence.policy_is_primary_source
+          : typeof rawEvidence?.isPrimaryPolicy === "boolean"
+            ? rawEvidence.isPrimaryPolicy
+            : typeof rawEvidence?.is_primary_policy === "boolean"
+              ? rawEvidence.is_primary_policy
+              : typeof rawEvidence?.isPrimaryPolicyEnrichment === "boolean"
+                ? rawEvidence.isPrimaryPolicyEnrichment
+                : typeof rawEvidence?.is_primary_policy_enrichment === "boolean"
+                  ? rawEvidence.is_primary_policy_enrichment
+                  : null;
+
+  return explicit ?? concern.policyIsPrimarySource ?? null;
+}
+
 function getConcernPolicyPageType(
   concern: Pick<NormalizedConcern, "policyPageType">,
   rawEvidence: Record<string, unknown> | null | undefined
@@ -543,7 +567,13 @@ export function packetNeedsPageAttribution(input: {
 export function deriveConcernPolicy(input: {
   concern: Pick<
     NormalizedConcern,
-    "canonicalConcernKey" | "originKey" | "originType" | "policyPageType" | "suggestedUnifiedFindingId" | "title"
+    | "canonicalConcernKey"
+    | "originKey"
+    | "originType"
+    | "policyIsPrimarySource"
+    | "policyPageType"
+    | "suggestedUnifiedFindingId"
+    | "title"
   >;
   evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
   rawEvidence?: Record<string, unknown> | null;
@@ -579,8 +609,9 @@ export function deriveConcernPolicy(input: {
 
   if (isLowConfidencePolicyExtractionConcern(input.concern)) {
     const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);
+    const isPrimaryPolicySource = getConcernPolicyPrimarySource(input.concern, input.rawEvidence);
 
-    if (!isCanonicalPolicyPageType(policyPageType)) {
+    if (!isCanonicalPolicyPageType(policyPageType) || isPrimaryPolicySource !== true) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "suppress",

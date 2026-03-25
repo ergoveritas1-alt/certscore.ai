@@ -1127,6 +1127,36 @@ test("blocks low-confidence policy extraction on a non-policy page before packet
   assert.equal(packets.length, 0);
 });
 
+test("blocks low-confidence policy extraction on non-primary policy rows before packet assembly", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Critical policy extraction fields were low confidence and need manual review.",
+        fallbackEvidence: {
+          isPrimaryPolicy: false,
+          pageType: "privacy_policy",
+          pageUrl: "https://www.kbdlab.io/components/pbtfans-cookies-n-creme",
+          policySemanticConfidence: 0.5,
+          signalKey: "policySemanticConfidence",
+          signalLabel: "Policy semantic confidence",
+          signalValue: 0.5
+        },
+        observedValue: "Policy extraction",
+        severity: "medium",
+        signalKey: "policySemanticConfidence",
+        signalLabel: "Policy semantic confidence",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Low-confidence policy extraction"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.length, 0);
+});
+
 test("normalizes clipped policy snippets but preserves natural lowercase starts", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

@@ -31,6 +31,14 @@ function getPolicyMentions(row: Record<string, unknown>) {
       : [];
 }
 
+function getPolicySummaryText(row: Record<string, unknown>) {
+  return typeof row.policySummaryShort === "string"
+    ? row.policySummaryShort
+    : typeof row.policy_summary_short === "string"
+      ? row.policy_summary_short
+      : null;
+}
+
 function getPrivacyContactChannelType(row: Record<string, unknown>) {
   return typeof row.privacyContactChannelType === "string"
     ? row.privacyContactChannelType
@@ -140,6 +148,7 @@ export function derivePositivePolicySignalMap(input: {
   const primaryEvidenceSnippets = getPolicyEvidenceSnippets(primaryPolicy);
   const policyRightsSignals = getPolicyRightsSignals(primaryPolicy, primaryEvidenceSnippets);
   const policyMentions = getPolicyMentions(primaryPolicy);
+  const policySummaryText = getPolicySummaryText(primaryPolicy)?.toLowerCase() ?? "";
   const privacyContactChannelType = getPrivacyContactChannelType(primaryPolicy);
   const policyChildrenReference = getPolicyChildrenReference(primaryPolicy);
   const hasPolicyMention = (topic: string) =>
@@ -149,6 +158,9 @@ export function derivePositivePolicySignalMap(input: {
         typeof entry === "object" &&
         ((((entry as { topic?: unknown }).topic as string | undefined) ?? "").toLowerCase() === topic)
     );
+  const hasEvidenceSnippet = (...keys: string[]) =>
+    keys.some((key) => typeof primaryEvidenceSnippets?.[key] === "string" && String(primaryEvidenceSnippets[key]).trim().length > 0);
+  const summaryMatches = (pattern: RegExp) => pattern.test(policySummaryText);
 
   return new Map(
     POLICY_POSITIVE_SIGNAL_SPECS.map((spec) => {
@@ -156,7 +168,9 @@ export function derivePositivePolicySignalMap(input: {
         spec.unifiedFindingId === "privacy_rights_path_present"
           ? policyRightsSignals.length > 0
           : spec.unifiedFindingId === "privacy_contact_path_present"
-            ? privacyContactChannelType !== null && privacyContactChannelType !== "none"
+            ? (privacyContactChannelType !== null && privacyContactChannelType !== "none") ||
+              hasEvidenceSnippet("privacy_contact", "dsar") ||
+              summaryMatches(/\bprivacy\b.{0,80}\b(contact|email|request|questions?)\b|\bcontact us\b.{0,80}\bprivacy\b/)
           : spec.unifiedFindingId === "arbitration_clause_present"
             ? input.policyEnrichment.some(
                 (row) => row.policyArbitrationPresent === true || row.policy_arbitration_present === true
@@ -168,12 +182,17 @@ export function derivePositivePolicySignalMap(input: {
                 : spec.evidenceSnippetKey === "topic:targeted_advertising_disclosure"
                   ? hasPolicyMention("targeted_advertising_disclosure")
                   : spec.evidenceSnippetKey === "topic:third_party_advertising_disclosure"
-                    ? hasPolicyMention("third_party_advertising_disclosure")
+                    ? hasPolicyMention("third_party_advertising_disclosure") ||
+                      hasEvidenceSnippet("topic:third_party_advertising_disclosure") ||
+                      summaryMatches(/\badvertising partners?\b|\bthird-?party ad(?:vertising)?\b|\bad networks?\b|\bad servers?\b/)
                   : spec.evidenceSnippetKey === "topic:session_replay_disclosure"
                     ? hasPolicyMention("session_replay_disclosure")
                     : spec.evidenceSnippetKey === "topic:children"
-                      ? hasPolicyMention("children") || (policyChildrenReference !== null && !["none", "unknown"].includes(policyChildrenReference))
-                    : false;
+                      ? hasPolicyMention("children") ||
+                        hasEvidenceSnippet("topic:children", "children") ||
+                        (policyChildrenReference !== null && !["none", "unknown"].includes(policyChildrenReference)) ||
+                        summaryMatches(/\bchildren\b|\bunder 13\b|\bunder 16\b/)
+                      : false;
 
       return [spec.canonicalSignalKey, value];
     })

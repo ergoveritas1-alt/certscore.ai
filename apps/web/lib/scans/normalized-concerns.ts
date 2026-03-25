@@ -326,29 +326,45 @@ function mergeConcernEvidenceBundles(
 }
 
 function isPolicyLikeUrl(url: string) {
-  const lowered = url.toLowerCase();
-  return /\/privacy|\/terms|\/cookie|policy|notice/.test(lowered);
+  return derivePolicyPageTypeFromUrl(url) !== "non_policy";
 }
 
 function derivePolicyPageTypeFromUrl(url: string): Exclude<NormalizedConcernPolicyPageType, null> {
   const lowered = url.toLowerCase();
+  let pathname = lowered;
 
-  if (/privacy/.test(lowered)) {
+  try {
+    pathname = new URL(url).pathname.toLowerCase();
+  } catch {
+    pathname = lowered;
+  }
+
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  const pathSegments = normalizedPath.split("/").filter(Boolean);
+  const leaf = pathSegments[pathSegments.length - 1] ?? "";
+  const legalLeafPattern =
+    /^(privacy|privacy-policy|privacy_notice|privacy-notice|cookie-policy|cookies|cookie-notice|cookie_notice|terms|terms-of-service|terms_of_service|tos|accessibility|accessibility-statement|accessibility_statement|contact|contact-us|contact_us)$/;
+
+  if (pathSegments.length > 0 && !legalLeafPattern.test(leaf)) {
+    return "non_policy";
+  }
+
+  if (/\/privacy(?:[-_/]policy|[-_/]notice)?$|^\/privacy(?:[-_/]policy|[-_/]notice)?$/i.test(normalizedPath)) {
     return "privacy_policy";
   }
-  if (/cookie/.test(lowered)) {
+  if (/\/(?:cookie-policy|cookie_notice|cookie-notice|cookies)$/.test(normalizedPath)) {
     return "cookie_policy";
   }
-  if (/terms|tos|conditions/.test(lowered)) {
+  if (/\/(?:terms|terms-of-service|terms_of_service|tos|conditions)$/.test(normalizedPath)) {
     return "terms_of_service";
   }
-  if (/accessibility/.test(lowered)) {
+  if (/\/(?:accessibility|accessibility-statement|accessibility_statement)$/.test(normalizedPath)) {
     return "accessibility_statement";
   }
-  if (/contact/.test(lowered)) {
+  if (/\/(?:contact|contact-us|contact_us)$/.test(normalizedPath)) {
     return "contact_page";
   }
-  if (/policy|notice/.test(lowered)) {
+  if (/\/(?:policy|notice|legal)$/.test(normalizedPath)) {
     return "unknown_policy";
   }
   return "non_policy";
@@ -586,6 +602,7 @@ function buildConcernFromSharedInput(input: {
       canonicalConcernKey,
       originKey: input.originKey,
       originType: input.originType,
+      policyIsPrimarySource: evidenceBundle.policyIsPrimarySource,
       policyPageType: evidenceBundle.policyPageType,
       suggestedUnifiedFindingId,
       title: input.title

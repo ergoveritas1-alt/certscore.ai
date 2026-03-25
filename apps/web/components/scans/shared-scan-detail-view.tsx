@@ -1560,20 +1560,38 @@ function getPolicySignalFallbackEvidence(input: {
       : Array.isArray(evidenceSnippets?.policy_rights_signals)
         ? (evidenceSnippets.policy_rights_signals as string[])
         : [];
-  const topicSnippets =
-    topicKey && typeof evidenceSnippets?.[topicKey] === "string" ? [String(evidenceSnippets[topicKey])] : [];
+  const topicSnippetKeys = topicKey
+    ? [topicKey]
+    : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
+      ? ["privacy_contact", "dsar"]
+      : policyPositiveSpec?.unifiedFindingId === "children_privacy_disclosure_present"
+        ? ["topic:children", "children"]
+        : [];
+  const topicSnippets = topicSnippetKeys.flatMap((key) =>
+    typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []
+  );
   const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
     ? rightsSnippetKeys
         .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
+  const privacyContactChannelType =
+    row && typeof (row.privacyContactChannelType ?? row.privacy_contact_channel_type) === "string"
+      ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
+      : null;
+  const policyChildrenReference =
+    row && typeof (row.policyChildrenReference ?? row.policy_children_reference) === "string"
+      ? String(row.policyChildrenReference ?? row.policy_children_reference)
+      : null;
 
   return {
     pageUrl,
     pageUrls: pageUrl ? [pageUrl] : [],
     policySnippets,
     policyRightsSignals,
+    privacyContactChannelType,
+    policyChildrenReference,
     policySummaryShort: policySnippets.length > 0 ? null : policySummaryShort,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
