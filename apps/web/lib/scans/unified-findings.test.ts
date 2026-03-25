@@ -447,6 +447,28 @@ test("keeps strong corroborated findings surfaced with a confidence rationale", 
   assert.match(packet?.presentation.suggestedFix ?? "", /block non-essential trackers/i);
 });
 
+test("keeps pre-consent tracking audit-only when concrete runtime vendors and URLs are not retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed before a clear user choice was made.",
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
 test("keeps page-specific findings in audit only when page attribution is still missing", () => {
   const validationFinding = makeValidationFinding({
     id: "val-8",
@@ -790,6 +812,39 @@ test("surfaces privacy contact path present from policy enrichment evidence", ()
 
   assert.equal(packet?.unifiedFindingId, "privacy_contact_path_present");
   assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("prefers contact-specific snippets over rights snippets for privacy contact path", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear privacy-specific contact path in the policy.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          pageUrl: "https://www.example.com/privacy",
+          policySnippets: [
+            "If you have questions about this Privacy Policy, contact us at privacy@example.com.",
+            "You may request access to, delete, or export your information through our Privacy Rights Center."
+          ],
+          privacyContactChannelType: "email",
+          signalKey: "privacy.privacy_contact_path_present",
+          signalLabel: "Privacy contact path present",
+          signalValue: true
+        },
+        observedValue: "Privacy contact path present",
+        severity: "low",
+        signalKey: "privacy.privacy_contact_path_present",
+        signalLabel: "Privacy contact path present",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Privacy contact path present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.evidence?.snippets?.[0], "If you have questions about this Privacy Policy, contact us at privacy@example.com.");
 });
 
 test("surfaces privacy-rights path present from the policyRightsSignals report key", () => {

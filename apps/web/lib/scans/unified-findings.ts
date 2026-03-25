@@ -1278,6 +1278,30 @@ function buildPresentationDecision(input: {
     };
   }
 
+  if (input.packet.unifiedFindingId === "preconsent_tracking") {
+    const detailVendors = input.packet.details?.family === "consent_tracking" ? input.packet.details.vendors ?? [] : [];
+    const detailRequestUrls =
+      input.packet.details?.family === "consent_tracking" ? input.packet.details.requestUrls ?? [] : [];
+    const runtimeVendors = input.packet.evidence?.entities?.runtimeVendors ?? [];
+    const relatedVendors = input.packet.evidence?.entities?.relatedVendors ?? [];
+    const evidenceUrls = input.packet.evidence?.pageUrls ?? [];
+    const hasConcreteRuntimeVendorEvidence =
+      [...detailVendors, ...runtimeVendors, ...relatedVendors].some((value) => typeof value === "string" && value.trim().length > 0);
+    const hasConcreteRuntimeUrlEvidence = [...detailRequestUrls, ...evidenceUrls].some(
+      (value) => typeof value === "string" && /^https?:\/\//i.test(value)
+    );
+    const hasValidationBacking = input.packet.confidenceInputs.validationCount > 0;
+
+    if (!(hasValidationBacking && hasConcreteRuntimeVendorEvidence && hasConcreteRuntimeUrlEvidence)) {
+      return {
+        confidenceRationale: buildConfidenceRationale(input.packet),
+        rationale:
+          "Kept for audit only because pre-consent tracking should surface buyer-facing only when validation-backed runtime evidence retains both concrete vendors and concrete request URLs.",
+        status: "audit_only"
+      };
+    }
+  }
+
   if (
     input.packet.details?.family === "contradiction" &&
     (!input.packet.confidenceInputs.hasPolicyTextEvidence ||

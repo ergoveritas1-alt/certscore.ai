@@ -1564,7 +1564,7 @@ function getPolicySignalFallbackEvidence(input: {
   const topicSnippetKeys = topicKey
     ? [topicKey]
     : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
-      ? ["privacy_contact", "dsar"]
+      ? ["privacy_contact", "notice_contact", "dsar"]
       : policyPositiveSpec?.unifiedFindingId === "children_privacy_disclosure_present"
         ? ["topic:children", "children"]
         : [];
