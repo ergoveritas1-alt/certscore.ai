@@ -236,8 +236,8 @@ test("ruleBasedPolicyPreprocess ignores exclusionary under-13 boilerplate", () =
   });
 
   assert.equal(result.childrenReference, "none");
-  assert.ok(!result.mentions.some((mention) => mention.topic === "children"));
-  assert.equal(result.evidenceSnippets.children, undefined);
+  assert.ok(result.mentions.some((mention) => mention.topic === "children"));
+  assert.match(result.evidenceSnippets["topic:children"] ?? "", /children under the age of 13/i);
 });
 
 test("validatePolicyChunkJson normalizes unsupported retention categories into other", () => {

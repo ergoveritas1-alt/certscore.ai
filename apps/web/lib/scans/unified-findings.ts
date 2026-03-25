@@ -39,6 +39,7 @@ import {
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
 import {
+  isMeaningfulPolicyText,
   normalizePolicySnippet
 } from "./policy-snippet-normalization";
 
@@ -529,21 +530,23 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
 
   const snippets = uniqueStrings([
-    typeof fallbackEvidence.consentBlockerTextSnippet === "string" ? fallbackEvidence.consentBlockerTextSnippet : null,
-    typeof fallbackEvidence.policyChildrenReference === "string" ? fallbackEvidence.policyChildrenReference : null,
+    isMeaningfulPolicyText(fallbackEvidence.consentBlockerTextSnippet) ? fallbackEvidence.consentBlockerTextSnippet : null,
+    isMeaningfulPolicyText(fallbackEvidence.policyChildrenReference) ? fallbackEvidence.policyChildrenReference : null,
     contradictionEvidence?.claim,
     contradictionEvidence?.policySnippet,
     contradictionEvidence?.runtimeSummary,
     ...(contradictionEvidence?.runtimeEvidenceArtifacts ?? []),
     Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
       ? null
-      : typeof fallbackEvidence.policySummaryShort === "string"
+      : isMeaningfulPolicyText(fallbackEvidence.policySummaryShort)
         ? fallbackEvidence.policySummaryShort
         : null,
-    ...(Array.isArray(fallbackEvidence.policySnippets) ? (fallbackEvidence.policySnippets as string[]) : []),
+    ...(Array.isArray(fallbackEvidence.policySnippets)
+      ? (fallbackEvidence.policySnippets as unknown[]).filter((entry): entry is string => isMeaningfulPolicyText(entry))
+      : []),
     Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
       ? null
-      : typeof fallbackEvidence.signalValue === "string"
+      : isMeaningfulPolicyText(fallbackEvidence.signalValue)
         ? fallbackEvidence.signalValue
         : null
   ]).map((snippet) => normalizePolicySnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet));

@@ -44,6 +44,7 @@ import {
   normalizePolicyPositiveSignalKey
 } from "../../lib/scans/policy-positive-signal-contract";
 import {
+  isMeaningfulPolicyText,
   normalizePolicySnippet,
   normalizePolicySnippetList
 } from "../../lib/scans/policy-snippet-normalization";
@@ -1544,7 +1545,7 @@ function getPolicySignalFallbackEvidence(input: {
   const pageUrl =
     row && typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
   const policySummaryShort =
-    row && typeof (row.policySummaryShort ?? row.policy_summary_short) === "string"
+    row && isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
       ? String(row.policySummaryShort ?? row.policy_summary_short)
       : null;
   const evidenceSnippets =
@@ -1568,20 +1569,20 @@ function getPolicySignalFallbackEvidence(input: {
         ? ["topic:children", "children"]
         : [];
   const topicSnippets = topicSnippetKeys.flatMap((key) =>
-    typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []
+    isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []
   );
   const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
     ? rightsSnippetKeys
-        .flatMap((key) => (typeof evidenceSnippets?.[key] === "string" ? [String(evidenceSnippets[key])] : []))
+        .flatMap((key) => (isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []))
         .slice(0, 2)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
   const privacyContactChannelType =
-    row && typeof (row.privacyContactChannelType ?? row.privacy_contact_channel_type) === "string"
+    row && isMeaningfulPolicyText(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
       ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
       : null;
   const policyChildrenReference =
-    row && typeof (row.policyChildrenReference ?? row.policy_children_reference) === "string"
+    row && isMeaningfulPolicyText(row.policyChildrenReference ?? row.policy_children_reference)
       ? String(row.policyChildrenReference ?? row.policy_children_reference)
       : null;
 

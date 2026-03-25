@@ -313,6 +313,8 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     affirmativePatterns: AFFIRMATIVE_UNDER_16_PATTERNS,
     exclusionaryPatterns: EXCLUSIONARY_UNDER_16_PATTERNS
   });
+  const hasAnyUnder13Disclosure = GENERIC_UNDER_13_PATTERNS.some((pattern) => pattern.test(normalizedText));
+  const hasAnyUnder16Disclosure = GENERIC_UNDER_16_PATTERNS.some((pattern) => pattern.test(normalizedText));
 
   const addEvidence = (key: string, snippet: string | null) => {
     if (snippet) {
@@ -330,8 +332,8 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     return [{ topic: entry.topic, confidence: 0.82 }];
   });
 
-  if (meaningfulUnder13Reference || meaningfulUnder16Reference) {
-    const childrenSnippet = meaningfulUnder13Reference
+  if (hasAnyUnder13Disclosure || hasAnyUnder16Disclosure) {
+    const childrenSnippet = hasAnyUnder13Disclosure
       ? getSnippetForPattern(normalizedText, /under 13|children under the age of 13/i)
       : getSnippetForPattern(normalizedText, /under 16|children under the age of 16/i);
 

@@ -2,6 +2,10 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function isPolicyPlaceholder(value: string) {
+  return /^(none|unknown|absent|null|n\/a)$/i.test(value.trim());
+}
+
 const POLICY_SNIPPET_ANCHOR_PHRASES = [
   "On certain pages",
   "We collect and receive",
@@ -13,7 +17,7 @@ const POLICY_SNIPPET_ANCHOR_PHRASES = [
 
 export function normalizePolicySnippet(snippet: string) {
   const collapsed = snippet.replace(/\s+/g, " ").trim();
-  if (!collapsed) {
+  if (!collapsed || isPolicyPlaceholder(collapsed)) {
     return null;
   }
 
@@ -38,6 +42,10 @@ export function normalizePolicySnippet(snippet: string) {
   }
 
   return anchored;
+}
+
+export function isMeaningfulPolicyText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && !isPolicyPlaceholder(value);
 }
 
 export function normalizePolicySnippetList(snippets: string[]) {
