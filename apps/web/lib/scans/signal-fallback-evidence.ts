@@ -1,3 +1,9 @@
+import {
+  isMeaningfulPolicyText,
+  normalizePolicySnippet,
+  normalizePolicySnippetList
+} from "./policy-snippet-normalization";
+
 export function buildChildContextFallbackEvidence(input: {
   signalKey: string;
   signalLabel: string;
@@ -57,8 +63,90 @@ function getBestDiscoverySource(summaryRows: Array<Record<string, unknown>>) {
   return typeof fallback?.bestDiscoverySource === "string" ? fallback.bestDiscoverySource : null;
 }
 
+function getPolicyEnrichmentSnippetRecord(row: Record<string, unknown>) {
+  return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+    ? (row.policyEvidenceSnippets as Record<string, unknown>)
+    : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+      ? (row.policy_evidence_snippets as Record<string, unknown>)
+      : null;
+}
+
+function getAffiliatePolicyFallbackRow(policyEnrichment: Array<Record<string, unknown>>) {
+  const hasAffiliateEvidence = (row: Record<string, unknown>) => {
+    const summary =
+      typeof row.policySummaryShort === "string"
+        ? row.policySummaryShort
+        : typeof row.policy_summary_short === "string"
+          ? row.policy_summary_short
+          : null;
+    const pageUrl =
+      typeof row.pageUrl === "string"
+        ? row.pageUrl
+        : typeof row.page_url === "string"
+          ? row.page_url
+          : null;
+    const snippets = getPolicyEnrichmentSnippetRecord(row);
+
+    return (
+      (typeof row.pageType === "string" && row.pageType === "affiliate_disclosure") ||
+      (typeof row.page_type === "string" && row.page_type === "affiliate_disclosure") ||
+      (typeof pageUrl === "string" && /affiliate/i.test(pageUrl)) ||
+      (isMeaningfulPolicyText(summary) && /\baffiliate disclosure\b/i.test(summary)) ||
+      Object.entries(snippets ?? {}).some(
+        ([key, value]) =>
+          /affiliate/i.test(key) &&
+          ((typeof value === "string" && isMeaningfulPolicyText(value)) ||
+            (Array.isArray(value) && value.some((entry) => typeof entry === "string" && isMeaningfulPolicyText(entry))))
+      )
+    );
+  };
+
+  return policyEnrichment.find(hasAffiliateEvidence) ?? null;
+}
+
+function getAffiliatePolicyFallbackSnippet(row: Record<string, unknown> | null) {
+  if (!row) {
+    return null;
+  }
+
+  const snippets = getPolicyEnrichmentSnippetRecord(row);
+  const explicitAffiliateSnippet = Object.entries(snippets ?? {}).flatMap(([key, value]) => {
+    if (!/affiliate/i.test(key)) {
+      return [];
+    }
+
+    if (typeof value === "string" && isMeaningfulPolicyText(value)) {
+      return [value];
+    }
+
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && isMeaningfulPolicyText(entry));
+    }
+
+    return [];
+  });
+
+  if (explicitAffiliateSnippet.length > 0) {
+    return normalizePolicySnippetList(explicitAffiliateSnippet)[0] ?? null;
+  }
+
+  const summary =
+    typeof row.policySummaryShort === "string"
+      ? row.policySummaryShort
+      : typeof row.policy_summary_short === "string"
+        ? row.policy_summary_short
+        : null;
+
+  if (isMeaningfulPolicyText(summary) && /\baffiliate disclosure\b/i.test(summary)) {
+    return normalizePolicySnippet(summary);
+  }
+
+  return null;
+}
+
 export function buildSnapshotDisclosureFallbackEvidence(input: {
   keyPageDiscoverySummary?: unknown;
+  policyEnrichment?: Array<Record<string, unknown>>;
   signalKey: string;
   signalLabel: string;
   signalValue: unknown;
@@ -81,9 +169,22 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
   const successfulUrls = relevantRows.flatMap((row) =>
     typeof row.successfulUrl === "string" && row.successfulUrl.trim().length > 0 ? [row.successfulUrl] : []
   );
+  const successfulTitles = relevantRows.flatMap((row) =>
+    typeof row.successfulPageTitle === "string" && row.successfulPageTitle.trim().length > 0 ? [row.successfulPageTitle] : []
+  );
   const stopReasons = relevantRows.flatMap((row) =>
     typeof row.stopReason === "string" && row.stopReason.trim().length > 0 ? [row.stopReason] : []
   );
+  const affiliatePolicyRow =
+    /commerce\.affiliate_disclosure_present/i.test(input.signalKey)
+      ? getAffiliatePolicyFallbackRow(input.policyEnrichment ?? [])
+      : null;
+  const affiliatePolicyPageUrl =
+    affiliatePolicyRow && typeof (affiliatePolicyRow.pageUrl ?? affiliatePolicyRow.page_url) === "string"
+      ? String(affiliatePolicyRow.pageUrl ?? affiliatePolicyRow.page_url)
+      : null;
+  const affiliatePolicySnippet = getAffiliatePolicyFallbackSnippet(affiliatePolicyRow);
+  const affiliateTitleSnippet = successfulTitles.find((title) => /\baffiliate disclosure\b/i.test(title)) ?? null;
 
   return {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
@@ -92,12 +193,16 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
     keyPageAttemptedUrls: [...new Set(attemptedUrls)],
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
     keyPageStopReason: stopReasons[0] ?? null,
-    pageUrls: [...new Set(successfulUrls)],
+    pageUrls: [...new Set([...successfulUrls, ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])])],
+    policySnippets: normalizePolicySnippetList([
+      ...(affiliatePolicySnippet ? [affiliatePolicySnippet] : []),
+      ...(affiliateTitleSnippet ? [affiliateTitleSnippet] : [])
+    ]),
     privacyPolicyPresent: input.snapshot?.privacy_policy_present === true,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
-    sourceUrls: [...new Set(successfulUrls)],
+    sourceUrls: [...new Set([...successfulUrls, ...(affiliatePolicyPageUrl ? [affiliatePolicyPageUrl] : [])])],
     termsOfServicePresent: input.snapshot?.terms_of_service_present === true
   };
 }

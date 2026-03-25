@@ -118,4 +118,42 @@ test("builds affiliate disclosure fallback evidence from affiliate page summarie
   assert.equal(evidence.keyPageAttemptCount, 1);
   assert.deepEqual(evidence.pageUrls, ["https://www.example.com/affiliate-disclosure"]);
   assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/affiliate-disclosure"]);
+  assert.deepEqual(evidence.policySnippets, []);
+});
+
+test("falls back to retained policy enrichment evidence for affiliate disclosure when no affiliate page summary exists", () => {
+  const evidence = buildSnapshotDisclosureFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/privacy-policy"],
+          bestDiscoverySource: "footer_link",
+          pageType: "privacy_policy",
+          stopReason: "covered",
+          successfulPageTitle: "Affiliate Disclosure | Example",
+          successfulUrl: "https://www.example.com/privacy-policy"
+        }
+      ]
+    },
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy-policy",
+        policy_summary_short:
+          "Affiliate Disclosure | Example This site may earn a commission from qualifying links and recommendations."
+      }
+    ],
+    signalKey: "commerce.affiliate_disclosure_present",
+    signalLabel: "Affiliate disclosure present",
+    signalValue: true,
+    snapshot: {
+      affiliate_disclosure_present: true
+    }
+  });
+
+  assert.deepEqual(evidence.pageUrls, ["https://www.example.com/privacy-policy"]);
+  assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/privacy-policy"]);
+  assert.deepEqual(evidence.policySnippets, [
+    "Affiliate Disclosure | Example This site may earn a commission from qualifying links and recommendations."
+  ]);
 });

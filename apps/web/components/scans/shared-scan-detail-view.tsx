@@ -1765,6 +1765,7 @@ function buildReviewFindings(input: {
             : /commerce\.affiliate_disclosure_present|disclosure\.key_page_discovery_unresolved_after_bounded_search/i.test(item.key)
               ? buildSnapshotDisclosureFallbackEvidence({
                   keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
+                  policyEnrichment: input.policyEnrichment ?? [],
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value,
