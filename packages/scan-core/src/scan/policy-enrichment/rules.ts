@@ -21,7 +21,8 @@ const TOPIC_PATTERNS: Array<{ topic: PolicyTopicKey; pattern: RegExp }> = [
   { topic: "ccpa_or_cpra", pattern: /\bccpa\b|\bcpra\b|california consumer privacy/i },
   {
     topic: "third_party_advertising_disclosure",
-    pattern: /\badvertising partners?\b|\bthird-?party ad(?:vertising)? (?:partners?|servers?|networks?)\b|\bad servers?\b|\bad networks?\b/i
+    pattern:
+      /\badvertising partners?\b|\badvertising partners privacy policies\b|\bthird-?party ad(?:vertising)? (?:partners?|servers?|networks?)\b|\bad servers?\b|\bad networks?\b|\brespective advertisements and links\b/i
   },
   { topic: "cross_border_transfer", pattern: /\bcross-border\b|international transfer|transfer.*outside/i },
   { topic: "data_retention", pattern: /\bretain|retention|keep your data|store.*for\b/i },
@@ -31,6 +32,7 @@ const TOPIC_PATTERNS: Array<{ topic: PolicyTopicKey; pattern: RegExp }> = [
 
 const GENERIC_UNDER_13_PATTERNS = [/\bunder 13\b/i, /\bchildren under the age of 13\b/i];
 const GENERIC_UNDER_16_PATTERNS = [/\bunder 16\b/i, /\bchildren under the age of 16\b/i];
+const CHILDREN_DISCLOSURE_SECTION_PATTERNS = [/\bchildren'?s information\b/i, /\bchildren'?s privacy\b/i];
 const EXCLUSIONARY_UNDER_13_PATTERNS = [
   /do(?:es)? not knowingly collect[^.]{0,160}\bchildren under (?:the age of )?13\b/i,
   /do(?:es)? not knowingly collect[^.]{0,160}\bfrom children under (?:the age of )?13\b/i,
@@ -315,6 +317,7 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
   });
   const hasAnyUnder13Disclosure = GENERIC_UNDER_13_PATTERNS.some((pattern) => pattern.test(normalizedText));
   const hasAnyUnder16Disclosure = GENERIC_UNDER_16_PATTERNS.some((pattern) => pattern.test(normalizedText));
+  const hasChildrenDisclosureSection = CHILDREN_DISCLOSURE_SECTION_PATTERNS.some((pattern) => pattern.test(normalizedText));
 
   const addEvidence = (key: string, snippet: string | null) => {
     if (snippet) {
@@ -332,10 +335,12 @@ export function ruleBasedPolicyPreprocess(input: { html?: string; pageType?: Pol
     return [{ topic: entry.topic, confidence: 0.82 }];
   });
 
-  if (hasAnyUnder13Disclosure || hasAnyUnder16Disclosure) {
+  if (hasAnyUnder13Disclosure || hasAnyUnder16Disclosure || hasChildrenDisclosureSection) {
     const childrenSnippet = hasAnyUnder13Disclosure
       ? getSnippetForPattern(normalizedText, /under 13|children under the age of 13/i)
-      : getSnippetForPattern(normalizedText, /under 16|children under the age of 16/i);
+      : hasAnyUnder16Disclosure
+        ? getSnippetForPattern(normalizedText, /under 16|children under the age of 16/i)
+        : getSnippetForPattern(normalizedText, /children'?s information|children'?s privacy/i);
 
     addEvidence("topic:children", childrenSnippet);
     if (childrenSnippet) {

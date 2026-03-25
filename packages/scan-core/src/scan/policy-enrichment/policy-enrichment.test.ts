@@ -240,6 +240,19 @@ test("ruleBasedPolicyPreprocess ignores exclusionary under-13 boilerplate", () =
   assert.match(result.evidenceSnippets["topic:children"] ?? "", /children under the age of 13/i);
 });
 
+test("ruleBasedPolicyPreprocess detects children disclosure headings and advertising partner language", () => {
+  const result = ruleBasedPolicyPreprocess({
+    pageType: "privacy_policy",
+    text:
+      "Advertising Partners Privacy Policies. Third-party ad servers or ad networks use cookies, JavaScript, or Web Beacons that are used in their respective advertisements and links that appear on our site. Children's Information. We do not knowingly collect personal information from children under the age of 13."
+  });
+
+  assert.ok(result.mentions.some((mention) => mention.topic === "third_party_advertising_disclosure"));
+  assert.match(result.evidenceSnippets["topic:third_party_advertising_disclosure"] ?? "", /advertising partners privacy policies|respective advertisements and links/i);
+  assert.ok(result.mentions.some((mention) => mention.topic === "children"));
+  assert.match(result.evidenceSnippets["topic:children"] ?? "", /children'?s information|children under the age of 13/i);
+});
+
 test("validatePolicyChunkJson normalizes unsupported retention categories into other", () => {
   const normalized = validatePolicyChunkJson({
     chunkText: "We retain customer data for as long as needed to provide the service.",
