@@ -17,6 +17,7 @@ const FAILURE_PREVIEW_MAX_CHARS = 600;
 const DEFAULT_LLM_ATTEMPTS = 1;
 const DEFAULT_TOTAL_LLM_BUDGET_MS = 12_000;
 const DEFAULT_CHUNK_TIMEOUT_MS = 5_000;
+const POLICY_RULES_CACHE_VERSION = "rules_v2";
 
 function getMaxLlmAttempts(env: NodeJS.ProcessEnv = process.env) {
   const parsed = Number.parseInt(env.LLM_ENRICHMENT_MAX_ATTEMPTS ?? String(DEFAULT_LLM_ATTEMPTS), 10);
@@ -409,7 +410,7 @@ export async function enrichPolicyPages(input: EnrichPolicyPagesInput): Promise<
   for (const page of selectPolicyPagesForEnrichment(input.pages)) {
     const allowTermsClauses = allowTermsOnlyLegalClauses(page.pageType);
     const promptName = resolvePolicyPromptName(page.pageType);
-    const promptVersion = promptName.replace(".txt", "");
+    const promptVersion = `${promptName.replace(".txt", "")}:${POLICY_RULES_CACHE_VERSION}`;
     const ruleResult = ruleBasedPolicyPreprocess({
       html: page.html,
       pageType: page.pageType,
