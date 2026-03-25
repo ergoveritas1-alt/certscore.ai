@@ -2683,6 +2683,13 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "policy_enrichment_signal", key: "commerce.arbitration_clause_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "affiliate_disclosure_present",
+    label: "Affiliate disclosure present",
+    owner: "disclosures_claim_substantiation",
+    mirrors: ["legal_commercial_disclosure_coverage"],
+    signalMappings: [{ source: "snapshot_signal", key: "commerce.affiliate_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
     id: "targeted_advertising_disclosure_present",
     label: "Targeted advertising disclosure present",
     owner: "data_handling_disclosures",

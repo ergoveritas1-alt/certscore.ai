@@ -176,6 +176,28 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "bounded key-page discovery unresolved is blocked when stable linked discovery already retained privacy, terms, and contact coverage",
+      concern: makeConcern({
+        originKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        suggestedUnifiedFindingId: "bounded_key_page_discovery_unresolved",
+        title: "Bounded key-page discovery unresolved"
+      }),
+      evidenceStrengthFlags: ["key_page_discovery", "page_attributed"] as const,
+      rawEvidence: {
+        contactPagePresent: true,
+        keyPageAttemptCount: 4,
+        keyPageDiscoverySource: "footer_link",
+        privacyPolicyPresent: true,
+        termsOfServicePresent: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "rights friction without a real barrier is blocked",
       concern: makeConcern({
         originKey: "privacy.user_rights_friction_score",

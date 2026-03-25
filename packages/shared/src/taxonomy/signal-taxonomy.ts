@@ -617,6 +617,11 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Subscription & Billing Transparency"
     },
+    "commerce.affiliate_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Consumer Policies",
+      regulatoryTags: ["ftc_consumer_protection"]
+    },
     "commerce.discount_claim_present": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Subscription & Billing Transparency",

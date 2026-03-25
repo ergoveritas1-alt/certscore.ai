@@ -1148,6 +1148,35 @@ test("surfaces behavioral analytics disclosure present from policy enrichment ev
   ]);
 });
 
+test("surfaces affiliate disclosure present from snapshot evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear affiliate disclosure path.",
+        fallbackEvidence: {
+          pageUrl: "https://www.kbdlab.io/affiliate-disclosure",
+          signalKey: "commerce.affiliate_disclosure_present",
+          signalLabel: "Affiliate disclosure present",
+          signalValue: true
+        },
+        observedValue: "Affiliate disclosure present",
+        severity: "low",
+        signalKey: "commerce.affiliate_disclosure_present",
+        signalLabel: "Affiliate disclosure present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Affiliate disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.whyThisMatters ?? "", /affiliate disclosure/i);
+});
+
 test("surfaces children's privacy disclosure present from policy enrichment evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

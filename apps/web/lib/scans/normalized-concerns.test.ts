@@ -189,6 +189,29 @@ test("low-confidence policy extraction is blocked for non-primary policy rows ev
   assert.equal(concern.externalSurfacingEligibility, "suppress");
 });
 
+test("bounded key-page discovery unresolved is blocked when stable linked legal coverage is already retained", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Bounded key-page discovery could not fully resolve every legal target.",
+    fallbackEvidence: {
+      contactPagePresent: true,
+      keyPageAttemptCount: 4,
+      keyPageDiscoverySource: "footer_link",
+      privacyPolicyPresent: true,
+      termsOfServicePresent: true
+    },
+    observedValue: "Bounded key-page discovery unresolved",
+    severity: "medium",
+    signalKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+    signalLabel: "Bounded key-page discovery unresolved",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Bounded key-page discovery unresolved"
+  });
+
+  assert.equal(concern.promotionEligibility, "blocked");
+  assert.equal(concern.externalSurfacingEligibility, "suppress");
+});
+
 test("dsar concerns with parser-incomplete extraction are blocked before unified finding generation", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

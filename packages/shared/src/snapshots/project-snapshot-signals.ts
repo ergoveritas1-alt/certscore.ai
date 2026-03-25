@@ -96,6 +96,12 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushBoolean("privacy", "privacy.data_deletion_request_present", "Deletion request flow present", snapshot.dataDeletionRequestPresent === true);
   pushBoolean("privacy", "privacy.do_not_sell_link_present", "Do-not-sell link present", snapshot.doNotSellLinkPresent);
   pushBoolean(
+    "commerce",
+    "commerce.affiliate_disclosure_present",
+    "Affiliate disclosure present",
+    snapshot.affiliateDisclosurePresent === true
+  );
+  pushBoolean(
     "privacy",
     "privacy.sale_sharing_controls_missing",
     "Sale/sharing controls missing",

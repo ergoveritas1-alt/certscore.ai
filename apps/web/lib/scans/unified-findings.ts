@@ -1165,6 +1165,12 @@ function buildPresentationCopy(
         suggestedFix: "Keep arbitration and dispute-resolution terms easy to find and aligned with the latest legal text on the live terms page.",
         whyThisMatters: "A visible arbitration clause can materially affect how users understand dispute resolution and consumer remedies."
       };
+    case "affiliate_disclosure_present":
+      return {
+        ...base,
+        suggestedFix: "Keep the affiliate disclosure easy to reach anywhere endorsements, recommendations, or affiliate-linked product references appear.",
+        whyThisMatters: "A visible affiliate disclosure helps users understand when recommendations or links may carry a financial relationship."
+      };
     case "children_privacy_context_without_supporting_disclosure":
       return {
         ...base,
@@ -1449,6 +1455,22 @@ function buildPresentationDecision(input: {
     return {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior.",
+      status: "surface"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "affiliate_disclosure_present" &&
+    input.packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "snapshot_signal" &&
+        sourceRef.key === "commerce.affiliate_disclosure_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Surfaced because the scan retained a clear domain-level affiliate disclosure signal.",
       status: "surface"
     };
   }

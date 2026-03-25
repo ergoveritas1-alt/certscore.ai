@@ -366,6 +366,12 @@ function isAccessibilityRiskScoreConcern(
   return concern.suggestedUnifiedFindingId === "accessibility_risk_score";
 }
 
+function isBoundedKeyPageDiscoveryUnresolvedConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "bounded_key_page_discovery_unresolved";
+}
+
 function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
   return value === "privacy_policy" || value === "cookie_policy" || value === "terms_of_service";
 }
@@ -469,6 +475,35 @@ function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unkn
   return (
     Array.isArray(rawEvidence.accessibilityRuleExamples) && rawEvidence.accessibilityRuleExamples.length > 0
   );
+}
+
+function hasExpectedLegalPageCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const pageCoverageCount = [
+    getBooleanEvidence(rawEvidence, ["privacyPolicyPresent", "privacy_policy_present"]),
+    getBooleanEvidence(rawEvidence, ["termsOfServicePresent", "terms_of_service_present"]),
+    getBooleanEvidence(rawEvidence, ["contactPagePresent", "contact_page_present"])
+  ].filter((value) => value === true).length;
+
+  return pageCoverageCount >= 3;
+}
+
+function hasStableLinkedDiscoveryPath(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const discoverySource =
+    typeof rawEvidence.keyPageDiscoverySource === "string"
+      ? rawEvidence.keyPageDiscoverySource
+      : typeof rawEvidence.key_page_discovery_source === "string"
+        ? rawEvidence.key_page_discovery_source
+        : null;
+
+  return ["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(discoverySource ?? "");
 }
 
 function getPolicyExtractionStatus(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -790,6 +825,19 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isBoundedKeyPageDiscoveryUnresolvedConcern(input.concern) &&
+    hasStableLinkedDiscoveryPath(input.rawEvidence) &&
+    hasExpectedLegalPageCoverage(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "blocked"
     };
   }
 
