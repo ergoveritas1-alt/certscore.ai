@@ -275,6 +275,19 @@ const VENDOR_RULES: Array<{ category: VendorCategory; name: string; patterns: st
   { name: "Snap", category: "advertising_marketing", patterns: ["sc-static.net", "tr.snapchat.com"] }
 ];
 
+const SECURITY_INTERSTITIAL_PATTERNS = [
+  "captcha-delivery.com",
+  "geo.captcha-delivery.com",
+  "/captcha/",
+  "datadome",
+  "perimeterx",
+  "px-captcha",
+  "cloudflare/challenge-platform",
+  "arkoselabs",
+  "humansecurity",
+  "bot protection"
+];
+
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -285,6 +298,10 @@ function truncate(value: string, size = 160) {
 
 function classifyArtifact(input: string): { category: VendorCategory; vendorName: string | null } {
   const haystack = input.toLowerCase();
+  if (SECURITY_INTERSTITIAL_PATTERNS.some((pattern) => haystack.includes(pattern))) {
+    return { category: "strictly_necessary", vendorName: "Security / anti-bot" };
+  }
+
   const match = VENDOR_RULES.find((rule) => rule.patterns.some((pattern) => haystack.includes(pattern.toLowerCase())));
   if (match) {
     return { category: match.category, vendorName: match.name };
@@ -553,7 +570,8 @@ async function findAction(frame: Frame, patterns: RegExp[]) {
 async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
   for (const frame of await getAllFrames(page)) {
     const surface = await frame.evaluate(function (keywords) {
-      const elements = [...document.querySelectorAll("dialog, [role='dialog'], aside, section, div, form")];
+      const elements = [...document.querySelectorAll("dialog, [role='dialog'], [aria-modal='true'], aside, section, div, form, iframe")];
+      let bestMatch: { html: string; score: number; selector: string; text: string } | null = null;
       for (const element of elements) {
         const style = window.getComputedStyle(element as HTMLElement);
         const rect = (element as HTMLElement).getBoundingClientRect();
@@ -561,23 +579,63 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
           continue;
         }
         const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
-        if (text.length === 0) {
+        if (text.length < 24 || text.length > 2000) {
           continue;
         }
-        let matched = false;
+        let keywordHits = 0;
         for (const keyword of keywords as string[]) {
           if (text.toLowerCase().includes(keyword)) {
-            matched = true;
-            break;
+            keywordHits += 1;
           }
         }
-        if (matched) {
-          return {
+        if (keywordHits === 0) {
+          continue;
+        }
+
+        const lowerText = text.toLowerCase();
+        const position = style.position;
+        const zIndex = Number.parseInt(style.zIndex || "0", 10);
+        const selector = element.id ? `#${element.id}` : element.getAttribute("aria-label") ? `[aria-label="${element.getAttribute("aria-label")}"]` : element.tagName.toLowerCase();
+
+        let score = keywordHits * 5;
+        if (element.tagName.toLowerCase() === "dialog" || element.getAttribute("role") === "dialog" || element.getAttribute("aria-modal") === "true") {
+          score += 12;
+        }
+        if (element.tagName.toLowerCase() === "iframe") {
+          score += 8;
+        }
+        if (position === "fixed" || position === "sticky") {
+          score += 8;
+        }
+        if (zIndex >= 100) {
+          score += 6;
+        }
+        if (lowerText.includes("accept") || lowerText.includes("reject") || lowerText.includes("preferences") || lowerText.includes("settings")) {
+          score += 10;
+        }
+        if (rect.height <= window.innerHeight * 0.75 && rect.width >= window.innerWidth * 0.2) {
+          score += 4;
+        }
+        if (rect.top <= 80 || rect.bottom >= window.innerHeight - 80) {
+          score += 4;
+        }
+
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = {
             html: element.outerHTML.slice(0, 15_000),
-            selector: element.id ? `#${element.id}` : element.getAttribute("aria-label") ? `[aria-label="${element.getAttribute("aria-label")}"]` : element.tagName.toLowerCase(),
+            score,
+            selector,
             text: text.slice(0, 4_000)
           };
         }
+      }
+
+      if (bestMatch && bestMatch.score >= 12) {
+        return {
+          html: bestMatch.html,
+          selector: bestMatch.selector,
+          text: bestMatch.text
+        };
       }
       return null;
     }, CONSENT_KEYWORDS);
@@ -740,6 +798,32 @@ function nonEssentialStorage(snapshot: StorageSnapshot) {
 
 function collectLikelyVendors(entries: Array<{ vendorName: string | null }>) {
   return [...new Set(entries.map((entry) => entry.vendorName).filter((value): value is string => Boolean(value)))].sort();
+}
+
+function securityInterstitialRequests(entries: NetworkEntry[]) {
+  return entries.filter((entry) => entry.vendorName === "Security / anti-bot");
+}
+
+function securityInterstitialObserved(result: ScenarioResult) {
+  return (
+    securityInterstitialRequests(result.network).length > 0 ||
+    result.notes.some((note) => /captcha|interstitial|bot/i.test(note)) ||
+    result.url.toLowerCase().includes("captcha")
+  );
+}
+
+function postRejectResidualEvidence(reject: ScenarioResult) {
+  const postRejectRequests = nonEssentialNetwork(reject.network.filter((entry) => entry.phase === "after_choice"));
+  const postRefreshRequests = reject.refresh ? nonEssentialNetwork(reject.refresh.network) : [];
+  const postRejectCookies = reject.storageAfterAction ? nonEssentialCookies(reject.storageAfterAction) : [];
+  const postRejectStorage = reject.storageAfterAction ? nonEssentialStorage(reject.storageAfterAction) : [];
+
+  return {
+    postRefreshRequests,
+    postRejectCookies,
+    postRejectRequests,
+    postRejectStorage
+  };
 }
 
 async function runScenario(siteDir: string, url: string, scenarioName: ScenarioName): Promise<ScenarioResult> {
@@ -1006,19 +1090,23 @@ function buildFindings(report: SiteReport): FindingRecord[] {
     });
   }
 
-  if (reject.storageAfterAction && reject.refresh) {
-    const postRejectRequests = nonEssentialNetwork(reject.network.filter((entry) => entry.phase === "after_choice"));
-    const postRefreshRequests = nonEssentialNetwork(reject.refresh.network);
-    if (postRejectRequests.length > 0 || postRefreshRequests.length > 0) {
+  if (reject.actionSummary.rejectPath.attempted) {
+    const residual = postRejectResidualEvidence(reject);
+    if (
+      residual.postRejectRequests.length > 0 ||
+      residual.postRefreshRequests.length > 0 ||
+      residual.postRejectCookies.length > 0 ||
+      residual.postRejectStorage.length > 0
+    ) {
       findings.push({
-        confidenceScore: postRefreshRequests.length > 0 ? 0.82 : 0.7,
+        confidenceScore: residual.postRefreshRequests.length > 0 ? 0.82 : 0.7,
         conservativeWording: "reject path may not suppress non-essential tracking",
         evidence: {
-          cookies: nonEssentialCookies(reject.storageAfterAction).map((cookie) => `${cookie.name} @ ${cookie.domain}`),
+          cookies: residual.postRejectCookies.map((cookie) => `${cookie.name} @ ${cookie.domain}`),
           pageUrls: [reject.url],
-          requests: [...postRejectRequests, ...postRefreshRequests].slice(0, 12).map((entry) => entry.url),
+          requests: [...residual.postRejectRequests, ...residual.postRefreshRequests].slice(0, 12).map((entry) => entry.url),
           screenshots: [reject.banner.screenshots.banner, reject.banner.screenshots.preferencesCenter].filter((value): value is string => Boolean(value)),
-          storage: nonEssentialStorage(reject.storageAfterAction).map((entry) => `${entry.key}=${truncate(entry.preview, 60)}`),
+          storage: residual.postRejectStorage.map((entry) => `${entry.key}=${truncate(entry.preview, 60)}`),
           uiText: [reject.banner.bannerText ?? "", ...reject.notes].filter(Boolean)
         },
         findingId: "F003",
@@ -1080,6 +1168,14 @@ function buildFindings(report: SiteReport): FindingRecord[] {
 }
 
 function classifyFinal(report: SiteReport): SiteReport["finalClassification"] {
+  if (
+    securityInterstitialObserved(report.scenarios.fresh_visit) &&
+    !report.scenarios.fresh_visit.banner.bannerPresent &&
+    report.findings.every((finding) => finding.findingId !== "F002" && finding.findingId !== "F003")
+  ) {
+    return "inconclusive / needs manual review";
+  }
+
   const titles = report.findings.map((finding) => finding.title);
   if (titles.some((title) => /Reject path may not fully suppress/i.test(title))) {
     return "reject path may not suppress non-essential tracking";
@@ -1104,6 +1200,8 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
   const preConsentRequests = nonEssentialNetwork(fresh.network.filter((entry) => entry.phase === "before_interaction"));
   const preConsentCookies = nonEssentialCookies(fresh.storageBeforeInteraction);
   const preConsentStorage = nonEssentialStorage(fresh.storageBeforeInteraction);
+  const freshSecurityInterstitial = securityInterstitialObserved(fresh);
+  const rejectResidual = postRejectResidualEvidence(reject);
   const equalProminenceAssessment =
     fresh.banner.bannerPresent && !fresh.actionSummary.rejectPath.attempted && fresh.actionSummary.acceptPath.attempted
       ? "accept appears more prominent than reject based on detected first-layer controls"
@@ -1121,7 +1219,8 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
       darkPatternIndicatorsObserved: [
         ...(fresh.banner.bannerPresent && !fresh.actionSummary.rejectPath.attempted ? ["reject not detected on first layer"] : []),
         ...(equalProminenceAssessment.includes("more prominent") ? ["accept control appears more prominent than reject"] : []),
-        ...(scenarios.custom_preferences.preferences?.optionalCategoriesPreselected ? ["optional categories appear pre-enabled"] : [])
+        ...(scenarios.custom_preferences.preferences?.optionalCategoriesPreselected ? ["optional categories appear pre-enabled"] : []),
+        ...(freshSecurityInterstitial ? ["security or anti-bot interstitial observed during testing"] : [])
       ],
       equalProminenceAssessment,
       rejectAllFirstLayer:
@@ -1134,7 +1233,12 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
     executiveSummary: {
       confidenceLevel: fresh.errors.length > 0 ? "low" : preConsentRequests.length > 0 || (reject.refresh?.network.length ?? 0) > 0 ? "medium" : "low",
       manualReviewRecommended: true,
-      overallTestingStatus: fresh.errors.length > 0 ? "partially completed with blocking or anti-automation issues on some scenarios" : "completed for the configured scenarios",
+      overallTestingStatus:
+        fresh.errors.length > 0
+          ? "partially completed with blocking or anti-automation issues on some scenarios"
+          : freshSecurityInterstitial
+            ? "completed, but security or anti-bot interstitial behavior affected at least one scenario"
+            : "completed for the configured scenarios",
       strongestObservedRisks: []
     },
     finalClassification: "inconclusive / needs manual review",
@@ -1154,12 +1258,12 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
     },
     rejectPathEffectivenessSummary: {
       refreshPreservedRejectOutcome:
-        reject.refresh && nonEssentialNetwork(reject.refresh.network).length === 0 ? "no obvious reintroduction observed on refresh" : "tracking-like activity still appeared or refresh evidence was inconclusive",
-      stillFiredAfterReject: nonEssentialNetwork(reject.network.filter((entry) => entry.phase === "after_choice")).map((entry) => entry.url),
+        reject.refresh && rejectResidual.postRefreshRequests.length === 0 ? "no obvious reintroduction observed on refresh" : "tracking-like activity still appeared or refresh evidence was inconclusive",
+      stillFiredAfterReject: rejectResidual.postRejectRequests.map((entry) => entry.url),
       whatChangedAfterReject: reject.storageAfterAction
         ? [
             `${Math.max(0, preConsentCookies.length - nonEssentialCookies(reject.storageAfterAction).length)} non-essential cookie(s) no longer present after reject`,
-            `${Math.max(0, preConsentRequests.length - nonEssentialNetwork(reject.network.filter((entry) => entry.phase === "after_choice")).length)} fewer likely non-essential request(s) after reject`
+            `${Math.max(0, preConsentRequests.length - rejectResidual.postRejectRequests.length)} fewer likely non-essential request(s) after reject`
           ]
         : ["reject scenario did not capture a stable post-choice storage snapshot"]
     },
