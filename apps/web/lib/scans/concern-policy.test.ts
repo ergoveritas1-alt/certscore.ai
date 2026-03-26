@@ -176,6 +176,45 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "coverage gap missing surface without corroborating discovery stays audit-only",
+      concern: makeConcern({
+        originKey: "disclosure.privacy_policy_surface_missing",
+        suggestedUnifiedFindingId: "privacy_policy_missing_surface",
+        title: "Privacy policy missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        privacyPolicyPresent: false
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "coverage gap missing surface with corroborated discovery stays eligible",
+      concern: makeConcern({
+        originKey: "disclosure.privacy_policy_surface_missing",
+        suggestedUnifiedFindingId: "privacy_policy_missing_surface",
+        title: "Privacy policy missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "key_page_discovery", "page_attributed"] as const,
+      rawEvidence: {
+        keyPageAttemptCount: 2,
+        keyPageAttemptedUrls: ["https://example.com/privacy", "https://example.com/privacy-policy"],
+        keyPageDiscoverySource: "footer_link",
+        privacyPolicyPresent: false
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "financial fee disclosure with retained snippet and url stays eligible but conservative",
       concern: makeConcern({
         originKey: "commercial.explicit_fee_disclosure_text_present",
@@ -255,6 +294,25 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
         externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "bounded key-page discovery unresolved stays audit-only even when unresolved evidence remains",
+      concern: makeConcern({
+        originKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        suggestedUnifiedFindingId: "bounded_key_page_discovery_unresolved",
+        title: "Bounded key-page discovery unresolved"
+      }),
+      evidenceStrengthFlags: ["key_page_discovery", "page_attributed"] as const,
+      rawEvidence: {
+        keyPageAttemptCount: 2,
+        keyPageAttemptedUrls: ["https://example.com/contact", "https://example.com/contact-us"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
         negativeEvidenceFlags: []
       }
     },
@@ -434,7 +492,32 @@ test("deriveConcernPolicy weakens contradiction concerns when one side of the mi
     negativeEvidenceFlags: [
       "missing_behavior_side_evidence",
       "missing_policy_side_evidence",
-      "missing_contradiction_mapping"
+      "missing_contradiction_mapping",
+      "missing_explicit_contradiction_basis"
     ]
+  });
+});
+
+test("deriveConcernPolicy keeps generic policy-behavior conflicts internal when no explicit contradiction basis is retained", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "context.policy_behavior_conflict_detected",
+      suggestedUnifiedFindingId: "policy_behavior_conflict",
+      title: "Policy/behavior conflict detected"
+    }),
+    evidenceStrengthFlags: ["policy_text", "direct_runtime"],
+    rawEvidence: {
+      claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+      policySnippet: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
+      runtimeEvidenceArtifacts: ["Google Ads"],
+      supportingSignals: ["policy_behavior_conflict_candidate"]
+    }
+  });
+
+  assert.deepEqual(policy, {
+    allowedNarrativeTier: "weak",
+    promotionEligibility: "internal_only",
+    externalSurfacingEligibility: "audit_only",
+    negativeEvidenceFlags: ["missing_explicit_contradiction_basis"]
   });
 });

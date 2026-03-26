@@ -27,6 +27,8 @@ function getFirstString(record: Record<string, unknown> | null | undefined, keys
 
 export type ContradictionEvidenceBundle = {
   claim: string | null;
+  contradictionBasis: string | null;
+  explicitPolicySnippet: string | null;
   policySnippet: string | null;
   policySourceUrl: string | null;
   policySummaryShort: string | null;
@@ -50,9 +52,18 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
   const source = nested ?? record;
 
   const claim = getFirstString(source, ["claim"]);
-  const policySnippet =
+  const contradictionBasis = getFirstString(source, [
+    "contradictionBasis",
+    "contradiction_basis",
+    "conflictBasis",
+    "conflict_basis",
+    "mismatchReason",
+    "mismatch_reason"
+  ]);
+  const explicitPolicySnippet =
     getStringArray(source, ["policySnippets", "policy_snippets"])[0] ??
-    getFirstString(source, ["policySnippet", "policy_snippet", "claim"]);
+    getFirstString(source, ["policySnippet", "policy_snippet"]);
+  const policySnippet = explicitPolicySnippet ?? claim;
   const policySourceUrl = getFirstString(source, ["policySourceUrl", "policy_source_url", "pageUrl", "page_url", "sourceUrl", "source_url"]);
   const policySummaryShort = getFirstString(source, ["policySummaryShort", "policy_summary_short", "policySummary", "policy_summary"]);
   const runtimeSummary = getFirstString(source, ["runtimeSummary", "runtime_summary", "observedBehavior", "observed_behavior"]);
@@ -72,6 +83,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
 
   const hasContent =
     Boolean(claim) ||
+    Boolean(contradictionBasis) ||
     Boolean(policySnippet) ||
     Boolean(policySourceUrl) ||
     Boolean(policySummaryShort) ||
@@ -87,6 +99,8 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
 
   return {
     claim,
+    contradictionBasis,
+    explicitPolicySnippet,
     policySnippet,
     policySourceUrl,
     policySummaryShort,

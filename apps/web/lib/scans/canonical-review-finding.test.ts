@@ -2157,6 +2157,31 @@ test("falls back to generic presentation for unmatched findings without linked v
   assert.equal(presentation.confidenceScore, "0.55");
 });
 
+test("raises contact-path confidence when family-packet support evidence retains a concrete help surface", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      evidence: ["https://help.example.com"],
+      fallbackEvidence: {
+        flags: [
+          "family_packet_backed",
+          "family_packet:support_access",
+          "family_packet_finding:contact_support_path_present"
+        ],
+        pageUrls: ["https://help.example.com"],
+        snippets: ["Example Help Center", "Give Feedback", "Contact Us"]
+      },
+      observedValue: "Example Help Center",
+      severity: "medium",
+      title: "Contact or feedback path present"
+    },
+    []
+  );
+
+  assert.equal(presentation.findingName, "Contact or feedback path present");
+  assert.match(presentation.whyThisMatters, /clearer way to reach the operator/i);
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
 test("uses bounded key-page discovery presentation for unresolved bounded search findings", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

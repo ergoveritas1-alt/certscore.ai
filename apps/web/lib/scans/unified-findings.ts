@@ -48,7 +48,6 @@ import {
   getFinancialValidationEvidenceBundle,
   isFinancialValidationFindingId
 } from "./financial-validation-contract";
-import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
 
 export type UnifiedFindingDetails =
   | {
@@ -78,6 +77,8 @@ export type UnifiedFindingDetails =
       family: "contradiction";
       kind: string;
       claim?: string | null;
+      contradictionBasis?: string | null;
+      policySnippet?: string | null;
       observedBehavior?: string | null;
       policySourceUrl?: string | null;
       runtimeEvidenceArtifacts?: string[];
@@ -96,6 +97,14 @@ export type UnifiedFindingDetails =
     }
   | {
       family: "commercial";
+      kind: string;
+    }
+  | {
+      family: "context";
+      kind: string;
+    }
+  | {
+      family: "financial_promotion";
       kind: string;
     }
   | {
@@ -189,6 +198,7 @@ type FamilyPacketTargetRecord = {
 
 type FamilyPacketFindingRecord = {
   evidenceUrls?: unknown;
+  evidencePayload?: unknown;
   findingId?: unknown;
   reason?: unknown;
   sourceSurfaceTypes?: unknown;
@@ -294,6 +304,53 @@ const COMMERCIAL_FINDING_IDS = new Set([
   "restrictive_termination_or_suspension_terms"
 ]);
 
+const CONTEXT_FINDING_IDS = new Set([
+  "regulator_operated_mock_investment_example"
+]);
+
+const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
+  "ai_financial_advice_or_trading_claims_without_disclosure",
+  "apr_or_interest_rate_disclosure_present",
+  "fee_disclosure_missing_or_opaque",
+  "fee_disclosure_present",
+  "guaranteed_or_high_return_claims_present",
+  "high_risk_product_risk_disclosure_missing",
+  "hypothetical_performance_disclosure_missing",
+  "investment_purchase_by_credit_card_present",
+  "investment_risk_disclosure_missing",
+  "investment_risk_disclosure_present",
+  "investment_urgency_countdown_present",
+  "legal_entity_name_present",
+  "leveraged_or_high_risk_product_promotion",
+  "material_terms_hard_to_locate",
+  "operator_contact_path_present",
+  "past_performance_disclaimer_present",
+  "performance_claims_without_context",
+  "promo_to_terms_conflict",
+  "pump_and_dump_language_present",
+  "registration_claim_support_missing",
+  "registration_identifier_missing",
+  "regulatory_compliance_claim_present",
+  "testimonial_endorsement_financial_promotion_risk",
+  "vague_whitepaper_or_technical_obfuscation_present",
+  "yield_or_return_claims_high_risk"
+]);
+
+const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
+  "ai_financial_advice_or_trading_claims_without_disclosure",
+  "guaranteed_or_high_return_claims_present",
+  "high_risk_product_risk_disclosure_missing",
+  "investment_purchase_by_credit_card_present",
+  "investment_risk_disclosure_missing",
+  "investment_urgency_countdown_present",
+  "performance_claims_without_context",
+  "pump_and_dump_language_present",
+  "regulatory_compliance_claim_present",
+  "testimonial_endorsement_financial_promotion_risk",
+  "vague_whitepaper_or_technical_obfuscation_present",
+  "yield_or_return_claims_high_risk"
+]);
+
 const SPECIFIC_CONTRADICTION_FINDING_IDS = new Set([
   "consent_gated_tracking_claim_conflict",
   "do_not_sell_sharing_disclosure_conflict",
@@ -310,6 +367,56 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 function uniqueConcernFlags<T extends string>(values: T[]) {
   return [...new Set(values)];
+}
+
+function isDistinctExplicitPolicySnippet(
+  candidate: string | null | undefined,
+  claim: string | null | undefined
+) {
+  if (typeof candidate !== "string" || candidate.trim().length === 0) {
+    return false;
+  }
+
+  const normalizedCandidate = normalizePolicySnippet(candidate);
+  const normalizedClaim = normalizePolicySnippet(claim ?? "");
+
+  if (!normalizedCandidate) {
+    return false;
+  }
+
+  return !normalizedClaim || normalizedCandidate !== normalizedClaim;
+}
+
+function getExplicitPolicySnippetCandidate(record: Record<string, unknown> | null | undefined) {
+  return (
+    (Array.isArray(record?.policySnippets)
+      ? record.policySnippets.find((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : null) ??
+    (typeof record?.policySnippet === "string" && record.policySnippet.trim().length > 0
+      ? record.policySnippet
+      : typeof record?.policy_snippet === "string" && record.policy_snippet.trim().length > 0
+        ? record.policy_snippet
+        : null)
+  );
+}
+
+function getBestExplicitPolicySnippet(
+  record: Record<string, unknown> | null | undefined,
+  contradictionEvidence: ReturnType<typeof getContradictionEvidenceBundle>
+) {
+  const claim = contradictionEvidence?.claim ?? null;
+  const rawCandidate = getExplicitPolicySnippetCandidate(record);
+
+  if (isDistinctExplicitPolicySnippet(rawCandidate, claim)) {
+    return rawCandidate;
+  }
+
+  const bundleCandidate = contradictionEvidence?.explicitPolicySnippet ?? null;
+  if (isDistinctExplicitPolicySnippet(bundleCandidate, claim)) {
+    return bundleCandidate;
+  }
+
+  return null;
 }
 
 function isRawMarkerToken(value: string) {
@@ -374,6 +481,12 @@ function getFindingFamily(id: string): UnifiedFindingDetails["family"] {
   }
   if (SENSITIVE_DATA_FINDING_IDS.has(id)) {
     return "sensitive_data";
+  }
+  if (CONTEXT_FINDING_IDS.has(id)) {
+    return "context";
+  }
+  if (FINANCIAL_PROMOTION_FINDING_IDS.has(id)) {
+    return "financial_promotion";
   }
   if (COMMERCIAL_FINDING_IDS.has(id)) {
     return "commercial";
@@ -474,6 +587,11 @@ function buildUnifiedFindingDetails(input: {
     const contradictionEvidence =
       getContradictionEvidenceBundle(input.linkedValidationFinding?.evidence as Record<string, unknown> | null | undefined) ??
       getContradictionEvidenceBundle(input.fallbackEvidence);
+    const explicitPolicySnippet =
+      getBestExplicitPolicySnippet(
+        (input.linkedValidationFinding?.evidence as Record<string, unknown> | null | undefined) ?? input.fallbackEvidence,
+        contradictionEvidence
+      ) ?? null;
     const vendors = uniqueStrings([
       ...(contradictionEvidence?.runtimeVendors ?? []),
       ...(contradictionEvidence?.relatedVendors ?? [])
@@ -482,7 +600,12 @@ function buildUnifiedFindingDetails(input: {
     return {
       family,
       kind: input.findingId,
-      claim: contradictionEvidence?.claim ?? null,
+      claim:
+        contradictionEvidence?.claim ??
+        contradictionEvidence?.contradictionBasis ??
+        null,
+      contradictionBasis: contradictionEvidence?.contradictionBasis ?? null,
+      policySnippet: explicitPolicySnippet,
       observedBehavior: contradictionEvidence?.runtimeSummary ?? input.summary,
       policySourceUrl: contradictionEvidence?.policySourceUrl ?? null,
       runtimeEvidenceArtifacts: contradictionEvidence?.runtimeEvidenceArtifacts ?? [],
@@ -543,6 +666,10 @@ function buildUnifiedFindingDetails(input: {
     return { family, kind: input.findingId } satisfies UnifiedFindingDetails;
   }
 
+  if (family === "context" || family === "financial_promotion") {
+    return { family, kind: input.findingId } satisfies UnifiedFindingDetails;
+  }
+
   if (family === "accessibility") {
     return {
       family,
@@ -573,6 +700,28 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
 
   const contradictionEvidence = getContradictionEvidenceBundle(fallbackEvidence);
+  const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(fallbackEvidence, contradictionEvidence);
+  const isContradictionEvidenceContext =
+    Boolean(contradictionEvidence?.contradictionBasis) ||
+    (contradictionEvidence?.runtimeEvidenceArtifacts.length ?? 0) > 0 ||
+    (contradictionEvidence?.runtimeVendors.length ?? 0) > 0 ||
+    (contradictionEvidence?.relatedVendors.length ?? 0) > 0 ||
+    (contradictionEvidence?.supportingSignals.some((signal) => /conflict|misalignment|undisclosed|technical_disclosure/i.test(signal)) ?? false) ||
+    (typeof fallbackEvidence.unifiedFindingId === "string" && CONTRADICTION_FINDING_IDS.has(fallbackEvidence.unifiedFindingId)) ||
+    (typeof fallbackEvidence.familyPacketFindingId === "string" && CONTRADICTION_FINDING_IDS.has(fallbackEvidence.familyPacketFindingId));
+  const hasExplicitPolicySnippet =
+    isContradictionEvidenceContext &&
+    isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim);
+  const hasExplicitRuntimeArtifact =
+    isContradictionEvidenceContext &&
+    ((Array.isArray(fallbackEvidence.runtimeEvidenceArtifacts) &&
+      fallbackEvidence.runtimeEvidenceArtifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(fallbackEvidence.runtime_evidence_artifacts) &&
+      fallbackEvidence.runtime_evidence_artifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(fallbackEvidence.runtimeEvidence) &&
+      fallbackEvidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(fallbackEvidence.runtime_evidence) &&
+      fallbackEvidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)));
   const pageUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
@@ -713,6 +862,8 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     fallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
     fallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
     fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
+    hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
+    hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
     typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
   ]);
@@ -733,6 +884,28 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
   }
 
   const evidence = finding.evidence as Record<string, unknown>;
+  const contradictionEvidence = getContradictionEvidenceBundle(evidence);
+  const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(evidence, contradictionEvidence);
+  const isContradictionEvidenceContext =
+    Boolean(contradictionEvidence?.contradictionBasis) ||
+    (contradictionEvidence?.runtimeEvidenceArtifacts.length ?? 0) > 0 ||
+    (contradictionEvidence?.runtimeVendors.length ?? 0) > 0 ||
+    (contradictionEvidence?.relatedVendors.length ?? 0) > 0 ||
+    (contradictionEvidence?.supportingSignals.some((signal) => /conflict|misalignment|undisclosed|technical_disclosure/i.test(signal)) ?? false) ||
+    (typeof evidence.unifiedFindingId === "string" && CONTRADICTION_FINDING_IDS.has(evidence.unifiedFindingId));
+  const hasExplicitPolicySnippet =
+    isContradictionEvidenceContext &&
+    isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim);
+  const hasExplicitRuntimeArtifact =
+    isContradictionEvidenceContext &&
+    ((Array.isArray(evidence.runtimeEvidenceArtifacts) &&
+      evidence.runtimeEvidenceArtifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(evidence.runtime_evidence_artifacts) &&
+      evidence.runtime_evidence_artifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(evidence.runtimeEvidence) &&
+      evidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    (Array.isArray(evidence.runtime_evidence) &&
+      evidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)));
   const pageUrls = new Set<string>();
   const sourceUrls = new Set<string>();
   const snippets = new Set<string>();
@@ -803,7 +976,11 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
   return {
     counts,
     entities,
-    flags: [...flags],
+    flags: [
+      ...flags,
+      ...(hasExplicitPolicySnippet ? ["explicit_policy_snippet_retained"] : []),
+      ...(hasExplicitRuntimeArtifact ? ["contradiction_runtime_artifact_retained"] : [])
+    ],
     pageUrls: [...pageUrls],
     snippets: [...snippets],
     sourceUrls: [...sourceUrls]
@@ -841,6 +1018,7 @@ function mergeEvidence(
     ...(validationEvidence.snippets ?? []),
     ...candidateSnippetEvidence
   ]);
+  const flags = uniqueStrings([...(current?.flags ?? []), ...(next.flags ?? []), ...(validationEvidence.flags ?? [])]);
 
   return {
     counts: { ...(current?.counts ?? {}), ...(next.counts ?? {}), ...(validationEvidence.counts ?? {}) },
@@ -849,7 +1027,7 @@ function mergeEvidence(
       ...(next.entities ?? {}),
       ...(validationEvidence.entities ?? {})
     },
-    flags: uniqueStrings([...(current?.flags ?? []), ...(next.flags ?? []), ...(validationEvidence.flags ?? [])]),
+    flags,
     pageUrls,
     snippets,
     sourceUrls
@@ -1295,9 +1473,7 @@ function deriveConfidenceInputs(input: {
   const hasDirectRuntimeEvidence =
     input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
     normalizedConcernStrengthFlags.includes("direct_runtime") ||
-    input.fallbackEvidenceRows.some(
-      (row) => Boolean(row?.gpcVerification) && typeof row.gpcVerification === "object"
-    ) ||
+    input.fallbackEvidenceRows.some((row) => Boolean(row?.gpcVerification) && typeof row?.gpcVerification === "object") ||
     input.fallbackEvidenceRows.some((row) => (getContradictionEvidenceBundle(row)?.runtimeEvidenceArtifacts.length ?? 0) > 0) ||
     validationEvidenceRows.some((row) =>
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
@@ -1696,7 +1872,7 @@ function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): Uni
       !hasConcreteHumanFacingUrl([...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])])
     )
   ) {
-    const rationaleByFindingId: Partial<Record<UnifiedFindingId, string>> = {
+    const rationaleByFindingId: Partial<Record<string, string>> = {
       affiliate_disclosure_present:
         "Kept audit-only because affiliate disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
       behavioral_analytics_disclosure_present:
@@ -1746,21 +1922,15 @@ function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): Uni
     return null;
   }
 
-  const storedJudge = getStoredFinancialJudgeOutput({
-    financialJudgeVerdict: packet.details && "financialJudgeVerdict" in packet.details ? null : null,
-    ...((packet.sourceRefs.find((ref) => ref.kind === "signal")?.fallbackEvidence as Record<string, unknown> | undefined) ?? {})
+  const judge = evaluateFinancialJudgeInput({
+    candidateFindingId: packet.unifiedFindingId,
+    evidence,
+    negativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
+    scanContext: {
+      domain: packet.primaryPageUrl,
+      pageType: "unknown"
+    }
   });
-  const judge =
-    storedJudge ??
-    evaluateFinancialJudgeInput({
-      candidateFindingId: packet.unifiedFindingId,
-      evidence,
-      negativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
-      scanContext: {
-        domain: packet.primaryPageUrl,
-        pageType: "unknown"
-      }
-    });
 
   if (judge.verdict === "confirm") {
     return null;
@@ -1825,6 +1995,30 @@ function getCoverageSiblingSuppressionDecision(input: {
       confidenceRationale: buildConfidenceRationale(input.packet),
       rationale: "Suppressed because another retained support or contact path already gives users a visible way to reach help on this scan.",
       status: "suppress"
+    };
+  }
+
+  return null;
+}
+
+function getMockInvestmentContextDecision(input: {
+  packet: UnifiedFindingPacket;
+  siblingRows: UnifiedFindingPacket[];
+}): UnifiedFindingPresentationDecision | null {
+  const regulatorMockContextPresent = input.siblingRows.some(
+    (row) => row.unifiedFindingId === "regulator_operated_mock_investment_example"
+  );
+
+  if (!regulatorMockContextPresent) {
+    return null;
+  }
+
+  if (COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId) || input.packet.unifiedFindingId === "accessibility_risk_score") {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale:
+        "Kept for audit only because this site also appears to be a regulator-operated mock investment example, so generic support-page and triage findings are less important than the financial-promotion context.",
+      status: "audit_only"
     };
   }
 
@@ -1912,6 +2106,52 @@ function getContradictionDecision(input: {
       rationale: "Kept for audit only because contradiction findings need both concrete policy text and concrete runtime evidence before buyer-facing surfacing.",
       status: "audit_only"
     };
+  }
+
+  if (input.packet.unifiedFindingId === "policy_behavior_conflict") {
+    const hasExplicitBasis =
+      (input.packet.details?.family === "contradiction" && Boolean(input.packet.details.contradictionBasis)) ||
+      input.siblingRows.some(
+        (row) => row.unifiedFindingId === "policy_behavior_conflict" && row.details?.family === "contradiction" && Boolean(row.details.contradictionBasis)
+      );
+    const contradictionClaim =
+      input.packet.details?.family === "contradiction" && typeof input.packet.details.claim === "string"
+        ? input.packet.details.claim.trim()
+        : null;
+    const hasPolicySnippet =
+      (input.packet.evidence?.flags?.includes("explicit_policy_snippet_retained") ?? false) &&
+      (input.packet.evidence?.snippets?.some((snippet) => {
+        if (typeof snippet !== "string") {
+          return false;
+        }
+        const normalized = snippet.trim();
+        if (!normalized || normalized === contradictionClaim) {
+          return false;
+        }
+
+        return /(do not|does not|only|except|without|never|unless|will not|won't|not share|not sell|not use|not disclose)/i.test(normalized);
+      }) ?? false);
+    const hasRetainedRuntimeEvidence =
+      (input.packet.evidence?.flags?.includes("contradiction_runtime_artifact_retained") ?? false) ||
+      (input.packet.evidence?.entities?.runtimeVendors?.some((vendor) => typeof vendor === "string" && vendor.trim().length > 0) ?? false);
+
+    if (!hasExplicitBasis) {
+      return {
+        confidenceRationale: buildConfidenceRationale(input.packet),
+        rationale:
+          "Kept for audit only because generic policy-behavior conflicts need an explicit retained contradiction basis, not just policy text plus observed adtech or vendor evidence.",
+        status: "audit_only"
+      };
+    }
+
+    if (!hasPolicySnippet || !hasRetainedRuntimeEvidence) {
+      return {
+        confidenceRationale: buildConfidenceRationale(input.packet),
+        rationale:
+          "Kept for audit only because generic policy-behavior conflicts should retain a concrete policy snippet and runtime evidence artifact before buyer-facing surfacing.",
+        status: "audit_only"
+      };
+    }
   }
 
   return null;
@@ -2114,12 +2354,13 @@ function getSpecializedPresentationDecision(input: {
   siblingRows: UnifiedFindingPacket[];
 }): UnifiedFindingPresentationDecision | null {
   return (
+    getCoverageSiblingSuppressionDecision(input) ??
+    getMockInvestmentContextDecision(input) ??
     getConcernGatingDecision(input.packet) ??
     getContradictionDecision(input) ??
     getPreconsentTrackingDecision(input.packet) ??
     getMinorsContextDecision(input.packet) ??
     getThinFinancialTransparencyDecision(input.packet) ??
-    getCoverageSiblingSuppressionDecision(input) ??
     getPacketizedFindingEvidenceDecision(input.packet) ??
     getArbitrationLocaleSuppressionDecision(input.packet)
   );
@@ -2358,13 +2599,25 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Keep the operating legal entity easy to identify on public-facing legal, about, or contact surfaces and make sure the retained text matches the live operator identity.",
     whyThisMatters: "A visible legal entity name helps users and reviewers understand who operates the site and who is accountable for the offer."
   },
+  guaranteed_or_high_return_claims_present: {
+    suggestedFix: "Review return language anywhere the site promotes an investment and remove or qualify claims that imply guaranteed, unusually high, or low-risk returns without strong substantiation and nearby risk context.",
+    whyThisMatters: "Guaranteed or unusually high return claims are a core financial-promotion risk signal because they can overstate likely outcomes and understate investor risk."
+  },
   operator_contact_path_present: {
     suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",
     whyThisMatters: "A visible operator contact path helps users and reviewers understand how to reach the business behind the offer."
   },
+  regulatory_compliance_claim_present: {
+    suggestedFix: "Review any regulatory, registration, exchange, or compliance claims and make sure the site can substantiate them clearly wherever they appear.",
+    whyThisMatters: "Regulatory-compliance framing can materially affect how users judge trust and legality, so weak or misleading claims deserve close review."
+  },
   investment_risk_disclosure_present: {
     suggestedFix: "Keep investment-risk disclosures easy to find anywhere yield, return, or high-risk product claims appear, and make sure the language matches the live offer.",
     whyThisMatters: "A visible investment-risk disclosure helps users and reviewers understand when returns or financial-product claims are accompanied by meaningful cautionary context."
+  },
+  investment_purchase_by_credit_card_present: {
+    suggestedFix: "Review whether the offer encourages users to fund an investment or speculative product by credit card, and add clearer risk framing or product guardrails where needed.",
+    whyThisMatters: "Credit-card funding can intensify consumer harm in speculative or investment contexts because it lowers friction while layering borrowing risk on top of the promoted offer."
   },
   fee_disclosure_present: {
     suggestedFix: "Keep fee disclosures easy to find anywhere account, pricing, trading, lending, or managed-service costs are described, and make sure the retained text matches the live offer.",
@@ -2377,6 +2630,22 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   apr_or_interest_rate_disclosure_present: {
     suggestedFix: "Keep APR or interest-rate disclosures easy to find anywhere lending, savings, financing, or credit terms are promoted, and make sure the retained rate language matches the live offer.",
     whyThisMatters: "A visible APR or interest-rate disclosure helps users and reviewers understand when a financial offer includes concrete rate terms."
+  },
+  investment_urgency_countdown_present: {
+    suggestedFix: "Review countdowns, scarcity language, and deadline-driven investment prompts so users are not pressured into acting before they can assess risks and disclosures.",
+    whyThisMatters: "Urgency tactics can distort decision-making in investment contexts, especially when paired with return claims or credibility cues."
+  },
+  pump_and_dump_language_present: {
+    suggestedFix: "Investigate whether the site is using insider-style timing language, coordinated hype claims, or other market-manipulation cues, and remove them from the offer surface.",
+    whyThisMatters: "Pump-and-dump style language is a strong financial-promotion red flag because it frames value around artificial hype or coordinated price movement rather than legitimate product information."
+  },
+  vague_whitepaper_or_technical_obfuscation_present: {
+    suggestedFix: "Review the white paper, technical explanation, or token mechanics language and replace vague jargon with concrete, user-facing explanations of what the product is and how it works.",
+    whyThisMatters: "Jargon-heavy offering materials can make a speculative product seem more credible while leaving users without a clear explanation of the underlying offer."
+  },
+  regulator_operated_mock_investment_example: {
+    suggestedFix: "Treat this as important scan context and distinguish the site’s educational or mock-offer role from the deceptive financial-promotion signals it is intentionally demonstrating.",
+    whyThisMatters: "If a site is a regulator-operated mock investment example, readers need that context so they do not mistake the report for a standard trust review of a live issuer."
   },
   children_privacy_context_without_supporting_disclosure: {
     suggestedFix: "Add clear child- or youth-related privacy disclosure and a supporting privacy contact path wherever the site presents youth-directed cues or age-related collection context.",
@@ -2574,6 +2843,58 @@ function appendUniqueValidationFinding(
     : [...findings, nextFinding];
 }
 
+function getUnifiedFindingBaseSortPriority(unifiedFindingId: string) {
+  if (DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS.has(unifiedFindingId)) {
+    return 500;
+  }
+  if (CONTEXT_FINDING_IDS.has(unifiedFindingId)) {
+    return 450;
+  }
+  if (FINANCIAL_PROMOTION_FINDING_IDS.has(unifiedFindingId)) {
+    return 350;
+  }
+  if (COVERAGE_FINDING_IDS.has(unifiedFindingId) || unifiedFindingId === "accessibility_risk_score") {
+    return 100;
+  }
+  return 250;
+}
+
+function compareUnifiedFindingPackets(left: UnifiedFindingPacket, right: UnifiedFindingPacket) {
+  const priorityDelta =
+    getUnifiedFindingBaseSortPriority(right.unifiedFindingId) - getUnifiedFindingBaseSortPriority(left.unifiedFindingId);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const severityDelta = getSeverityWeight(right.severity) - getSeverityWeight(left.severity);
+  if (severityDelta !== 0) {
+    return severityDelta;
+  }
+
+  return left.title.localeCompare(right.title);
+}
+
+function getDisplayPacketSortPriority(input: {
+  hasRegulatorMockContext: boolean;
+  packet: UnifiedFindingDisplayPacket;
+}) {
+  let priority = getUnifiedFindingBaseSortPriority(input.packet.unifiedFindingId);
+
+  if (input.hasRegulatorMockContext && (COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId) || input.packet.unifiedFindingId === "accessibility_risk_score")) {
+    priority -= 100;
+  }
+
+  if (input.packet.presentationDecision.status === "surface") {
+    priority += 20;
+  } else if (input.packet.presentationDecision.status === "audit_only") {
+    priority -= 10;
+  } else {
+    priority -= 20;
+  }
+
+  return priority;
+}
+
 function getStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
@@ -2680,13 +3001,13 @@ function buildFamilyPacketFallbackEvidence(input: {
     policyPageType: input.policyPageType,
     policySnippets: input.policySnippets,
     policySummaryShort: input.firstSnippet,
-    sourceUrl: input.sourceUrls[0] ?? input.firstPageUrl,
+    sourceUrl: input.sourceUrls[0] ?? input.firstPageUrl ?? null,
     sourceUrls: input.sourceUrls
   };
 }
 
 function createInitialUnifiedFindingPacket(
-  definition: ReturnType<typeof getReportUnifiedFinding>,
+  definition: NonNullable<ReturnType<typeof getReportUnifiedFinding>>,
   candidate: ConcernBackedUnifiedFindingCandidate
 ): UnifiedFindingPacket {
   return {
@@ -2839,7 +3160,7 @@ function getFamilyPacketReviewFindingCandidates(scanEvents?: UnifiedFindingScanE
         const findingId = typeof finding.findingId === "string" ? finding.findingId : null;
         const definition = findingId ? getReportUnifiedFinding(findingId) : null;
         const packetizedSupportRule = findingId ? getPacketizedFindingSupportRule(findingId) : null;
-        if (!definition || !packetizedSupportRule) {
+        if (!findingId || !definition || !packetizedSupportRule) {
           continue;
         }
 
@@ -2907,9 +3228,10 @@ function resolveUnifiedFindingIdForCandidate(candidate: UnifiedFindingCandidate)
           : null);
 }
 
-function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate) {
+function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate | ConcernBackedUnifiedFindingCandidate) {
   const findingId =
-    candidate.normalizedConcern?.suggestedUnifiedFindingId ?? resolveUnifiedFindingIdForCandidate(candidate);
+    ("normalizedConcern" in candidate ? candidate.normalizedConcern?.suggestedUnifiedFindingId : null) ??
+    resolveUnifiedFindingIdForCandidate(candidate);
 
   return findingId ? getReportUnifiedFinding(findingId) : null;
 }
@@ -2998,10 +3320,7 @@ export function buildUnifiedFindingPackets(input: {
     addCandidate(mappedFinding.id, candidate, candidate.linkedValidationFinding ?? null);
   }
 
-  return [...packets.values()].sort(
-    (left, right) =>
-      getSeverityWeight(right.severity) - getSeverityWeight(left.severity) || left.title.localeCompare(right.title)
-  );
+  return [...packets.values()].sort(compareUnifiedFindingPackets);
 }
 
 export function buildUnifiedFindingDisplayPackets(input: {
@@ -3016,7 +3335,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
     validationFindings: input.validationFindings
   });
 
-  return packets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
+  const displayPackets = packets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
     const linkedValidationFinding = resolveLinkedValidationFindingForPacket(packet, input.validationFindingLookup);
 
     const siblingRows = rows.filter((row) => row.unifiedFindingId !== packet.unifiedFindingId);
@@ -3045,6 +3364,21 @@ export function buildUnifiedFindingDisplayPackets(input: {
       sourceLabel: getSourceLabel(packet),
       sourceUrl: getSourceUrl(packet)
     };
+  });
+
+  const hasRegulatorMockContext = displayPackets.some(
+    (packet) => packet.unifiedFindingId === "regulator_operated_mock_investment_example"
+  );
+
+  return [...displayPackets].sort((left, right) => {
+    const priorityDelta =
+      getDisplayPacketSortPriority({ hasRegulatorMockContext, packet: right }) -
+      getDisplayPacketSortPriority({ hasRegulatorMockContext, packet: left });
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return compareUnifiedFindingPackets(left, right);
   });
 }
 

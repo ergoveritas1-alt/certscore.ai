@@ -36,6 +36,14 @@ const DOMAIN_LEVEL_CHILDREN_DISCLOSURE_IDS = new Set([
   "children_privacy_context_without_supporting_disclosure"
 ]);
 
+const COVERAGE_GAP_SURFACE_MISSING_IDS = new Set([
+  "privacy_policy_missing_surface",
+  "terms_missing_surface",
+  "cookie_policy_missing_surface",
+  "accessibility_statement_missing_surface",
+  "contact_page_missing_surface"
+]);
+
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
@@ -396,6 +404,12 @@ function isBoundedKeyPageDiscoveryUnresolvedConcern(
   return concern.suggestedUnifiedFindingId === "bounded_key_page_discovery_unresolved";
 }
 
+function isCoverageGapSurfaceMissingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return COVERAGE_GAP_SURFACE_MISSING_IDS.has(concern.suggestedUnifiedFindingId ?? "");
+}
+
 function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
   return value === "privacy_policy" || value === "cookie_policy" || value === "terms_of_service";
 }
@@ -501,6 +515,93 @@ function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unkn
   );
 }
 
+function getNumberEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    if (typeof evidence?.[key] === "number" && Number.isFinite(evidence[key] as number)) {
+      return evidence[key] as number;
+    }
+  }
+
+  return null;
+}
+
+function getCoverageGapPresenceValue(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  const keyMap: Partial<Record<NonNullable<typeof concern.suggestedUnifiedFindingId>, string[]>> = {
+    accessibility_statement_missing_surface: ["accessibilityStatementPresent", "accessibility_statement_present"],
+    contact_page_missing_surface: ["contactPagePresent", "contact_page_present"],
+    cookie_policy_missing_surface: ["cookiePolicyPresent", "cookie_policy_present"],
+    privacy_policy_missing_surface: ["privacyPolicyPresent", "privacy_policy_present"],
+    terms_missing_surface: ["termsOfServicePresent", "terms_of_service_present"]
+  };
+
+  const keys = concern.suggestedUnifiedFindingId ? keyMap[concern.suggestedUnifiedFindingId] : null;
+  return keys ? getBooleanEvidence(rawEvidence, keys) : null;
+}
+
+function hasStrongCoverageGapSurfaceMissingEvidence(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
+  input: {
+    evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
+    rawEvidence: Record<string, unknown> | null | undefined;
+  }
+) {
+  const presenceValue = getCoverageGapPresenceValue(concern, input.rawEvidence);
+  const attemptedUrls = Array.isArray(input.rawEvidence?.keyPageAttemptedUrls)
+    ? input.rawEvidence.keyPageAttemptedUrls.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : Array.isArray(input.rawEvidence?.attemptedUrls)
+      ? input.rawEvidence.attemptedUrls.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+  const attemptCount =
+    getNumberEvidence(input.rawEvidence, ["keyPageAttemptCount", "key_page_attempt_count"]) ?? attemptedUrls.length;
+  const representativeSampleCount =
+    getNumberEvidence(input.rawEvidence, [
+      "representativePageCount",
+      "representative_page_count",
+      "sitewideSurfaceSampleCount",
+      "sitewide_surface_sample_count",
+      "surfaceAbsentAcrossTemplatesCount",
+      "surface_absent_across_templates_count"
+    ]) ?? 0;
+  const explicitAbsenceConfirmation =
+    getBooleanEvidence(input.rawEvidence, [
+      "surfaceMissingConfirmed",
+      "surface_missing_confirmed",
+      "navSurfaceAbsentConfirmed",
+      "nav_surface_absent_confirmed",
+      "legalNavSurfaceAbsentConfirmed",
+      "legal_nav_surface_absent_confirmed",
+      "footerSurfaceAbsentConfirmed",
+      "footer_surface_absent_confirmed",
+      "headerSurfaceAbsentConfirmed",
+      "header_surface_absent_confirmed",
+      "sitewideSurfaceMissingConfirmed",
+      "sitewide_surface_missing_confirmed"
+    ]) === true;
+  const hasConcreteReviewerEvidence =
+    input.evidenceStrengthFlags.includes("page_attributed") ||
+    attemptedUrls.length > 0 ||
+    (Array.isArray(input.rawEvidence?.sourceUrls) && input.rawEvidence.sourceUrls.length > 0) ||
+    (Array.isArray(input.rawEvidence?.policySnippets) && input.rawEvidence.policySnippets.length > 0);
+
+  if (presenceValue !== false && !explicitAbsenceConfirmation) {
+    return false;
+  }
+
+  return (
+    explicitAbsenceConfirmation ||
+    representativeSampleCount >= 2 ||
+    (attemptCount >= 2 && hasStableLinkedDiscoveryPath(input.rawEvidence)) ||
+    (attemptCount >= 2 && attemptedUrls.length > 0) ||
+    (presenceValue === false && hasConcreteReviewerEvidence)
+  );
+}
+
 function hasExpectedLegalPageCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
     return false;
@@ -589,6 +690,11 @@ function hasContradictionMappingEvidence(
     hasTruthyArrayValue(rawEvidence?.supportingSignals) ||
     (contradictionEvidence?.supportingSignals.length ?? 0) > 0
   );
+}
+
+function hasExplicitContradictionBasisEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
+  return Boolean(contradictionEvidence?.contradictionBasis);
 }
 
 export function concernRequiresPageAttribution(
@@ -798,6 +904,8 @@ export function deriveConcernPolicy(input: {
     const hasBehaviorEvidence = hasBehaviorSideEvidence(input.evidenceStrengthFlags, input.rawEvidence);
     const hasPolicyEvidence = hasPolicySideEvidence(input.evidenceStrengthFlags, input.rawEvidence);
     const hasMappingEvidence = hasContradictionMappingEvidence(input.evidenceStrengthFlags, input.rawEvidence);
+    const requiresExplicitBasis = input.concern.suggestedUnifiedFindingId === "policy_behavior_conflict";
+    const hasExplicitBasis = !requiresExplicitBasis || hasExplicitContradictionBasisEvidence(input.rawEvidence);
 
     if (!hasBehaviorEvidence) {
       negativeEvidenceFlags.add("missing_behavior_side_evidence");
@@ -808,8 +916,11 @@ export function deriveConcernPolicy(input: {
     if (!hasMappingEvidence) {
       negativeEvidenceFlags.add("missing_contradiction_mapping");
     }
+    if (!hasExplicitBasis) {
+      negativeEvidenceFlags.add("missing_explicit_contradiction_basis");
+    }
 
-    if (!hasBehaviorEvidence || !hasPolicyEvidence || !hasMappingEvidence) {
+    if (!hasBehaviorEvidence || !hasPolicyEvidence || !hasMappingEvidence || !hasExplicitBasis) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -854,6 +965,21 @@ export function deriveConcernPolicy(input: {
   }
 
   if (
+    isCoverageGapSurfaceMissingConcern(input.concern) &&
+    !hasStrongCoverageGapSurfaceMissingEvidence(input.concern, {
+      evidenceStrengthFlags: input.evidenceStrengthFlags,
+      rawEvidence: input.rawEvidence
+    })
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
     isBoundedKeyPageDiscoveryUnresolvedConcern(input.concern) &&
     hasStableLinkedDiscoveryPath(input.rawEvidence) &&
     hasExpectedLegalPageCoverage(input.rawEvidence)
@@ -863,6 +989,15 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "suppress",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "blocked"
+    };
+  }
+
+  if (isBoundedKeyPageDiscoveryUnresolvedConcern(input.concern)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
     };
   }
 

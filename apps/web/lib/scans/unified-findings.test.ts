@@ -868,16 +868,19 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
   assert.equal(specificPacket?.presentationDecision.status, "surface");
 });
 
-test("retains both policy-side and runtime-side evidence on contradiction issue findings", () => {
+test("keeps contradiction issue findings audit-only while retaining policy-side and runtime-side evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed adtech vendors include Google Ads.",
         fallbackEvidence: {
           claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          contradictionBasis: "undisclosed_vendor",
+          policySnippet: "We do not share browsing data with undisclosed advertising vendors.",
           pageUrl: "https://www.example.com/privacy",
           policySummaryShort: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
           relatedVendors: ["Google Ads", "Meta Pixel"],
+          runtimeEvidenceArtifacts: ["Google Ads tag requested before any disclosed vendor list appeared."],
           runtimeVendors: ["Google Ads", "Meta Pixel"],
           sourceUrls: ["https://www.example.com/privacy"],
           supportingSignals: ["policy_behavior_conflict_candidate"]
@@ -893,14 +896,107 @@ test("retains both policy-side and runtime-side evidence on contradiction issue 
   });
 
   assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.details?.family, "contradiction");
   assert.equal(packet?.details?.claim, "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.");
+  assert.equal(packet?.details?.contradictionBasis, "undisclosed_vendor");
   assert.equal(packet?.details?.policySourceUrl, "https://www.example.com/privacy");
-  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, ["Google Ads", "Meta Pixel"]);
+  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, [
+    "Google Ads tag requested before any disclosed vendor list appeared.",
+    "Google Ads",
+    "Meta Pixel"
+  ]);
   assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Google Ads", "Meta Pixel"]);
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.example.com/privacy"]);
   assert.match((packet?.evidence?.snippets ?? []).join(" "), /privacy policy/i);
+  assert.match((packet?.evidence?.snippets ?? []).join(" "), /do not share browsing data/i);
+});
+
+test("keeps generic policy-behavior conflicts audit-only when no explicit contradiction basis is retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed adtech vendors include Google Ads.",
+        fallbackEvidence: {
+          claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          pageUrl: "https://www.example.com/privacy",
+          policySummaryShort: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
+          relatedVendors: ["Google Ads"],
+          runtimeVendors: ["Google Ads"],
+          sourceUrls: ["https://www.example.com/privacy"],
+          supportingSignals: ["policy_behavior_conflict_candidate"]
+        },
+        observedValue: "Observed adtech vendors include Google Ads.",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.details?.family, "contradiction");
+  assert.equal(packet?.details?.contradictionBasis ?? null, null);
+});
+
+test("keeps generic policy-behavior conflicts audit-only when contradiction basis is present but policy snippet is not retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed adtech vendors include Google Ads.",
+        fallbackEvidence: {
+          claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          contradictionBasis: "undisclosed_vendor",
+          pageUrl: "https://www.example.com/privacy",
+          policySummaryShort: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
+          relatedVendors: ["Google Ads"],
+          runtimeVendors: ["Google Ads"],
+          sourceUrls: ["https://www.example.com/privacy"],
+          supportingSignals: ["policy_behavior_conflict_candidate"]
+        },
+        observedValue: "Observed adtech vendors include Google Ads.",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("does not retain an explicit policy snippet flag when the only snippet is the generic contradiction claim", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed adtech vendors include Google Ads.",
+        fallbackEvidence: {
+          claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          contradictionBasis: "undisclosed_vendor",
+          policySnippet: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+          relatedVendors: ["Google Ads"],
+          runtimeVendors: ["Google Ads"],
+          supportingSignals: ["policy_behavior_conflict_detected"]
+        },
+        observedValue: "Observed adtech vendors include Google Ads.",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.evidence?.flags?.includes("explicit_policy_snippet_retained"), false);
 });
 
 test("prefers structured contradiction evidence bundles over loose fallback fields", () => {
@@ -2713,7 +2809,8 @@ test("drops weak root-only cookie obstruction urls from final evidence packets",
       }
     ],
     validationFindings: [
-      {
+      makeValidationFinding({
+        id: "cookie-obstruction-validation",
         evidence: {
           pageUrl: "https://www.example.com/",
           title: "Example homepage"
@@ -2721,7 +2818,7 @@ test("drops weak root-only cookie obstruction urls from final evidence packets",
         pageUrl: "https://www.example.com/",
         ruleKey: "disclosure.cookie_policy_structurally_obstructed",
         title: "Cookie policy structurally obstructed"
-      }
+      })
     ],
     validationFindingLookup: new Map()
   });
@@ -2818,7 +2915,8 @@ test("filters raw marker tokens like under_13 out of merged evidence snippets", 
       }
     ],
     validationFindings: [
-      {
+      makeValidationFinding({
+        id: "arbitration-validation",
         evidence: {
           description: "under_13",
           pageUrl: "https://example.com/terms"
@@ -2826,7 +2924,7 @@ test("filters raw marker tokens like under_13 out of merged evidence snippets", 
         pageUrl: "https://example.com/terms",
         ruleKey: "scan_signal.commerce.arbitration_clause_present",
         title: "Arbitration clause present"
-      }
+      })
     ],
     validationFindingLookup: new Map()
   });
@@ -3229,4 +3327,118 @@ test("keeps minors-related context audit-only when only domain-level audience cu
 
   assert.equal(packet?.unifiedFindingId, "minors_or_age_gated_collection_context");
   assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("keeps weak coverage-gap missing-surface findings audit-only", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The snapshot did not retain a privacy policy surface.",
+        fallbackEvidence: {
+          privacyPolicyPresent: false,
+          signalKey: "disclosure.privacy_policy_surface_missing"
+        },
+        linkedValidationFinding: null,
+        observedValue: "Privacy policy missing",
+        severity: "high",
+        signalKey: "disclosure.privacy_policy_surface_missing",
+        signalLabel: "Privacy policy missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "privacy_policy_missing_surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("prioritizes deceptive financial-promotion findings ahead of generic coverage gaps", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The site did not retain a privacy policy surface.",
+        fallbackEvidence: {
+          privacyPolicyPresent: false,
+          signalKey: "disclosure.privacy_policy_surface_missing"
+        },
+        linkedValidationFinding: null,
+        observedValue: "Privacy policy missing",
+        severity: "high",
+        signalKey: "disclosure.privacy_policy_surface_missing",
+        signalLabel: "Privacy policy missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy missing"
+      },
+      {
+        description: "Guaranteed 15% returns were promoted next to an investment CTA.",
+        fallbackEvidence: {
+          matchedSnippet: "Guaranteed returns of 15% a year.",
+          pageUrl: "https://example.com/invest",
+          signalKey: "financial.guaranteed_return_language_present",
+          sourceUrls: ["https://example.com/invest"],
+          unifiedFindingId: "guaranteed_or_high_return_claims_present"
+        },
+        linkedValidationFinding: null,
+        observedValue: "Guaranteed returns of 15% a year.",
+        severity: "high",
+        signalKey: "financial.guaranteed_return_language_present",
+        signalLabel: "Guaranteed return language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Guaranteed return language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets[0]?.unifiedFindingId, "guaranteed_or_high_return_claims_present");
+  assert.equal(packets[1]?.unifiedFindingId, "privacy_policy_missing_surface");
+});
+
+test("demotes generic coverage findings when mock regulator context is also present", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The site appears to be a regulator-run educational mock investment example.",
+        fallbackEvidence: {
+          pageUrl: "https://example.com",
+          sourceUrls: ["https://example.com"],
+          unifiedFindingId: "regulator_operated_mock_investment_example"
+        },
+        linkedValidationFinding: null,
+        observedValue: "Mock or educational fraud example detected",
+        severity: "medium",
+        sourceType: "issue",
+        title: "Mock or educational fraud example detected"
+      },
+      {
+        description: "The scan retained an elevated automated accessibility risk score.",
+        fallbackEvidence: {
+          accessibilityRuleExamples: [{ ruleCode: "color-contrast" }],
+          signalValue: 10,
+          unifiedFindingId: "accessibility_risk_score"
+        },
+        linkedValidationFinding: null,
+        observedValue: "Accessibility risk score: 10",
+        severity: "medium",
+        signalKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        signalLabel: "Accessibility risk score",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Accessibility risk score"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets[0]?.unifiedFindingId, "regulator_operated_mock_investment_example");
+  assert.equal(packets[1]?.unifiedFindingId, "accessibility_risk_score");
+  assert.equal(packets[1]?.presentationDecision.status, "audit_only");
 });
