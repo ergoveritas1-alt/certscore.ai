@@ -8,6 +8,7 @@ function buildSnapshot(overrides: Partial<Parameters<typeof buildPreviewPayloadF
     certscoreOverall: 79,
     contactPagePresent: false,
     cookieBannerPresent: false,
+    finalUrl: "https://example.com",
     granularPreferencesPresent: false,
     homepageFetchStatus: "ok" as const,
     pagesScanned: 2,
@@ -16,6 +17,8 @@ function buildSnapshot(overrides: Partial<Parameters<typeof buildPreviewPayloadF
     privacyScore: 78,
     preconsentTrackingDetected: false,
     rejectAllPresent: false,
+    redirectCount: 0,
+    registeredDomain: "example.com",
     termsOfServicePresent: false,
     thirdPartyCookieSetBeforeConsent: false,
     totalSignals: 12,
@@ -67,4 +70,40 @@ test("broader preview coverage can still surface missing terms and contact findi
     payload.sampleFindings.some((finding) => finding.title === "Public contact path not detected"),
     true
   );
+});
+
+test("blocked or unreachable previews withhold scores and surface access blockers", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "chime.com",
+    normalizedUrl: "https://chime.com",
+    snapshot: buildSnapshot({
+      finalUrl: "https://chime.com",
+      homepageFetchStatus: "forbidden",
+      pagesScanned: 0,
+      partialScan: true,
+      trackingBeforeConsentDetected: true
+    })
+  });
+
+  assert.equal(payload.scores, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage blocked during live scan"), true);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
+  assert.equal(payload.summaryBullets.includes("Preview scores are withheld because the live pass did not verify a usable homepage surface."), true);
+});
+
+test("off-domain redirects surface an explicit redirect finding", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "hyperfund.com",
+    normalizedUrl: "https://hyperfund.com",
+    snapshot: buildSnapshot({
+      finalUrl: "https://nfund.com/",
+      registeredDomain: "hyperfund.com",
+      redirectCount: 1,
+      homepageFetchStatus: "error",
+      pagesScanned: 0
+    })
+  });
+
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Domain redirected to a different site"), true);
+  assert.equal(payload.summaryBullets.some((bullet) => bullet.includes("redirected to nfund.com")), true);
 });

@@ -163,13 +163,14 @@ function getPolicySnippetCandidates(row: Record<string, unknown> | null, snippet
   }
 
   const snippets = getPolicyEnrichmentSnippetRecord(row);
+  const policySummaryShort = getPolicySummaryShort(row);
   const keyedSnippets = snippetKeys.flatMap((key) =>
     isMeaningfulPolicyText(snippets?.[key]) ? [String(snippets?.[key])] : []
   );
 
   return normalizePolicySnippetList([
     ...keyedSnippets,
-    ...(getPolicySummaryShort(row) ? [getPolicySummaryShort(row)] : [])
+    ...(policySummaryShort ? [policySummaryShort] : [])
   ]);
 }
 

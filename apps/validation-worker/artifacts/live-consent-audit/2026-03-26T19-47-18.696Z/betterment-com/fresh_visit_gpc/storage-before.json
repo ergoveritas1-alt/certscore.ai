@@ -1,0 +1,1122 @@
+{
+  "cookies": [
+    {
+      "domain": "sc-static.net",
+      "expires": 1774640903.342103,
+      "httpOnly": false,
+      "name": "X-AB",
+      "path": "/scevent.min.js",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "9c2d8b209c744f93978e1ce1736746c2",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Snap"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774556301.055527,
+      "httpOnly": true,
+      "name": "__cf_bm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "rrJny89YwqfKLDeUd8D8cQgTEqJik4wobHeJJMtVITc-1774554501-1.0.1.1-7U.GID1ZFCsd0zs.C...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "vxAI2YDotlAIWYtD1RA9o6E4f9aMo8ptoZEBuZ2NsDI-1774554501065-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.betterment.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "aqCS2XU17lcxvFOqbffmy1nxxZh8AB_ed7ds9ktpMiw-1774554501318-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.betterment.com",
+      "expires": 1774556301.309129,
+      "httpOnly": true,
+      "name": "__cf_bm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "PSwFyn41tZOtPuVZSc2dcG1quyLBfjvYvVfneM5WHGk-1774554501-1.0.1.1-Ca6zlZ7c4XZUx7J8O...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.betterment.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "hs_ab_test",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "73471023189:208140837536",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".hubspot.com",
+      "expires": 1774556302.554116,
+      "httpOnly": true,
+      "name": "__cf_bm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "GgNqXHh1KtSM8Yrkbv_YtH9qTerdWwTt.hq7hrmMRlg-1774554502-1.0.1.1-LxBDqJmIZ1N861RBj...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".hubspot.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "e_UzuW0.O7XgoVXD7NJI0mNFDgBTwLRAp3oinhYHF00-1774554502561-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "bmt_prospect_info",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "{%22first_visit_on%22:1774554502618}",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090502,
+      "httpOnly": false,
+      "name": "tt_visitor_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fd642250-64ec-4fdb-b638-8229047e8c65",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114502.999982,
+      "httpOnly": false,
+      "name": "_swb",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "585a480a-f52f-4659-a1cf-7fca8e01cdcb",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114503.150902,
+      "httpOnly": false,
+      "name": "_ga_WC94RJTYEB",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GS2.1.s1774554502$o1$g0$t1774554502$j60$l0$h0",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1782330503,
+      "httpOnly": false,
+      "name": "_gcl_au",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1.1.596292371.1774554503",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114503.193442,
+      "httpOnly": false,
+      "name": "_ga",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GA1.2.625402186.1774554503",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774640903,
+      "httpOnly": false,
+      "name": "_gid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GA1.2.1072821319.1774554503",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774554563,
+      "httpOnly": false,
+      "name": "_gat",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114503,
+      "httpOnly": false,
+      "name": "_ketch_consent_v1_",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJhbmFseXRpY3MiOnsic3RhdHVzIjoiZ3JhbnRlZCIsImNhbm9uaWNhbFB1cnBvc2VzIjpbImFuYWx5...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1782330503,
+      "httpOnly": false,
+      "name": "_rdt_uuid",
+      "path": "/",
+      "sameSite": "Strict",
+      "secure": true,
+      "valuePreview": "1774554503303.488c9c04-91d4-45f7-bb23-e67f6312bc3c",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808768903,
+      "httpOnly": false,
+      "name": "_scid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "B9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808768903,
+      "httpOnly": false,
+      "name": "_scid_r",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "B9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".hsforms.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "as2R6GIgnY8a5y8l7S39LMSf0Jitszp9Jv3ualyFFuo-1774554503371-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pinterest.com",
+      "expires": 1806090503.585744,
+      "httpOnly": true,
+      "name": "ar_debug",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1808250503.468264,
+      "httpOnly": false,
+      "name": "_ttp",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "3BUrUEqoM69XQ5hjXVju2zfEkc6",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "TikTok"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090503,
+      "httpOnly": false,
+      "name": "_pin_unauth",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "dWlkPU5qazVZVFppTlRRdE5tUTNNaTAwTVRkaExXRTJZbVF0WkdSbFlqY3pPVEpqWkdGaw",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1775159303,
+      "httpOnly": false,
+      "name": "_swb_consent_",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJjb2xsZWN0ZWRBdCI6MTc3NDU1NDUwMywiY29udGV4dCI6eyJjb25maWd1cmF0aW9uSWQiOiJZbVYw...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "domain": "www.betterment.com",
+      "expires": 1809114503.485138,
+      "httpOnly": false,
+      "name": "tatari-cookie-test",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "36179288",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774554803,
+      "httpOnly": false,
+      "name": "t-ip",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ct.pinterest.com",
+      "expires": 1806090503.585775,
+      "httpOnly": false,
+      "name": "_pinterest_ct_ua",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "TWc9PSZXVlZLT0VLdGkwYzZUQ0JNYXc1d2hHc2xhcDJGeXZUTTM5dzNkTzl5RXpCWFVub2lERGkyZmJQ...",
+      "vendorCategory": "social_embedded_media",
+      "vendorName": "Pinterest"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808250503,
+      "httpOnly": false,
+      "name": "_tt_enable_cookie",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808250503,
+      "httpOnly": false,
+      "name": "_ttp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "01KMNV1PDNXCA6SDGAAW3K40FQ_.tt.1",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "TikTok"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1775159303,
+      "httpOnly": false,
+      "name": "_ScCbts",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%5B%5D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".w55c.net",
+      "expires": 1808718503.765391,
+      "httpOnly": false,
+      "name": "wfivefivec",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "RIMWIDhe1W5QGP2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".w55c.net",
+      "expires": 1777146503.765441,
+      "httpOnly": false,
+      "name": "matchgoogle",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782330503.855583,
+      "httpOnly": false,
+      "name": "XANDR_PANID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "jYpGjf5yys9LZ3eknrD_iv2EhImdM0dNU6uh2uwoCYEFnllWeZvjEEetUND2EAACPGg_xBJ0_R5q26Zx...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782330503.855636,
+      "httpOnly": true,
+      "name": "uuid2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "3417076676610502010",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".mountain.com",
+      "expires": 1806090503.851108,
+      "httpOnly": false,
+      "name": "rt",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"MzY1Mzc6MTc3NDU1NDUwMw==\"",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".px.mountain.com",
+      "expires": 1806090503.851161,
+      "httpOnly": false,
+      "name": "tt",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "H4sIAAAAAAAAAKtWKlOyMqoFAP609q8HAAAA",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mountain.com",
+      "expires": 1806090503.851174,
+      "httpOnly": false,
+      "name": "guid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "a78324c2-87a9-37ca-ab5e-23502ac6b27c",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782330503.855623,
+      "httpOnly": true,
+      "name": "anj",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "dTM7k!M4/8CxrEQF']wIg2Hb>H=](/!@wnf-Te9(>wL5L!!'*8$RBce",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808250503,
+      "httpOnly": false,
+      "name": "ttcsid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774554503608::OYaviOWGEVxOg-ifr0rF.1.1774554503865.0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808250503,
+      "httpOnly": false,
+      "name": "ttcsid_C5RE154247C0IGAK10RG",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774554503608::B_v38IhCZjxT4aQt-9Gw.1.1774554503865.0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808250503,
+      "httpOnly": false,
+      "name": "ttcsid_C5O9OGLO3VNUQLVLPCA0",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774554503608::zj1hvq8hTjvtAmYiklcP.1.1774554503865.0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1809114503.955916,
+      "httpOnly": false,
+      "name": "ID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "OPT_OUT",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1809114503.95595,
+      "httpOnly": false,
+      "name": "TapAd_TS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1809114503.955968,
+      "httpOnly": false,
+      "name": "TapAd_DID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "OptedOut",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon-adsystem.com",
+      "expires": 1809114503.988693,
+      "httpOnly": true,
+      "name": "ad-privacy",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Amazon Ads"
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1779738503.955984,
+      "httpOnly": false,
+      "name": "TapAd_3WAY_SYNCS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon-adsystem.com",
+      "expires": 1790884103.988646,
+      "httpOnly": true,
+      "name": "ad-id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "A2JjZ-UlbEBdpT0z9ZnIVc0",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Amazon Ads"
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806090504.02145,
+      "httpOnly": false,
+      "name": "visitor",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "7cff16ba-f082-48aa-87b7-fe3b69eaf8ce",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806090504.021476,
+      "httpOnly": false,
+      "name": "status",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".snapchat.com",
+      "expires": 1808250504.101382,
+      "httpOnly": false,
+      "name": "sc_at",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "v2|H4sIAAAAAAAA/03GwRGAMAgEwIqYAQ+C2E0YjypSvF/3tYw36uKS3WbizJHGUFgbDQJz1zHXxzI9w...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1808768904,
+      "httpOnly": false,
+      "name": "_sctr",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1%7C1774508400000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "tags.srv.stackadapt.com",
+      "expires": 1806090504.251889,
+      "httpOnly": false,
+      "name": "sa-user-id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3A0-531a1fe7-85e4-5a88-46cd-84d70bd2e80b.lPVxco6LBvnU%2BaBNc6%2FSNpGEeoB2i3Tc1...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".srv.stackadapt.com",
+      "expires": 1806090504.251925,
+      "httpOnly": false,
+      "name": "sa-user-id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3A0-531a1fe7-85e4-5a88-46cd-84d70bd2e80b.lPVxco6LBvnU%2BaBNc6%2FSNpGEeoB2i3Tc1...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "tags.srv.stackadapt.com",
+      "expires": 1806090504.251941,
+      "httpOnly": false,
+      "name": "sa-user-id-v2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3AUxof54XkWohGzYTXC9LoC0IbQPg.T99J%2F5fycji7bhtibmBZP8Rx98%2B%2FQzuFSURogAKseY...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".srv.stackadapt.com",
+      "expires": 1806090504.251956,
+      "httpOnly": false,
+      "name": "sa-user-id-v2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3AUxof54XkWohGzYTXC9LoC0IbQPg.T99J%2F5fycji7bhtibmBZP8Rx98%2B%2FQzuFSURogAKseY...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".doubleclick.net",
+      "expires": 1809114504.238916,
+      "httpOnly": true,
+      "name": "IDE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AHWqTUkBOuK04W1-lH126kS02HY3Laojnbc2Iz37gCqkd85TdwBUUxesi-eXDnyo",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "domain": "www.betterment.com",
+      "expires": 1774554804,
+      "httpOnly": false,
+      "name": "dicbo_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%7B%22dicbo_fetch%22%3A1774554504249%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "tags.srv.stackadapt.com",
+      "expires": 1806090504.251967,
+      "httpOnly": false,
+      "name": "sa-user-id-v3",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3AAQAKIImNwBjmIK1uL-UtqKjJZxWSfFFmIgf7NUwg0W_KYuCtEAMYAyCIm5bOBjABOgT-7j5aQgT6...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".srv.stackadapt.com",
+      "expires": 1806090504.251978,
+      "httpOnly": false,
+      "name": "sa-user-id-v3",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "s%3AAQAKIImNwBjmIK1uL-UtqKjJZxWSfFFmIgf7NUwg0W_KYuCtEAMYAyCIm5bOBjABOgT-7j5aQgT6...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adentifi.com",
+      "expires": 1809114504.253691,
+      "httpOnly": false,
+      "name": "adtheorent[cuid]",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "cuid_c0198fb2-294c-11f1-9f08-42010ab2ffef",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090504,
+      "httpOnly": false,
+      "name": "_hjSessionUser_2143990",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJpZCI6ImY0MGI4NTMzLWMzN2YtNTM3Yy1hN2Y0LWIxZDljMTg3MmE3OSIsImNyZWF0ZWQiOjE3NzQ1...",
+      "vendorCategory": "session_replay_behavioral_analytics",
+      "vendorName": "Hotjar"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774556304,
+      "httpOnly": false,
+      "name": "_hjSession_2143990",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJpZCI6Ijk5N2JiZmRiLWFkYjAtNGQ1Yy05NjdhLTU0OWRiMTEzNjEyZiIsImMiOjE3NzQ1NTQ1MDQy...",
+      "vendorCategory": "session_replay_behavioral_analytics",
+      "vendorName": "Hotjar"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1782330504,
+      "httpOnly": false,
+      "name": "_fbp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fb.1.1774554504293.312115963486782684",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090504,
+      "httpOnly": false,
+      "name": "ajs_user_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fd642250-64ec-4fdb-b638-8229047e8c65",
+      "vendorCategory": "analytics",
+      "vendorName": "Segment"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090504,
+      "httpOnly": false,
+      "name": "ajs_anonymous_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "70df491c-2cc6-476c-8b35-00fb3b5d50e4",
+      "vendorCategory": "analytics",
+      "vendorName": "Segment"
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1806090504,
+      "httpOnly": false,
+      "name": "mp_0523d4f8e034a64484dae3b08a396342_mixpanel",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%7B%22distinct_id%22%3A%22fd642250-64ec-4fdb-b638-8229047e8c65%22%2C%22%24device...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidr.io",
+      "expires": 1808668104.443635,
+      "httpOnly": false,
+      "name": "bito",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AAAfSU7TixsAAAA-vobL2A",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidr.io",
+      "expires": 1808668104.443678,
+      "httpOnly": false,
+      "name": "bitoIsSecure",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ok",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1790106504,
+      "httpOnly": false,
+      "name": "__hstc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "261775634.e349c42435deb5917eb6794e35100cc9.1774554504562.1774554504562.177455450...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1790106504,
+      "httpOnly": false,
+      "name": "hubspotutk",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "e349c42435deb5917eb6794e35100cc9",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "__hssrc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1774556304,
+      "httpOnly": false,
+      "name": "__hssc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "261775634.1.1774554504562",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114504.577631,
+      "httpOnly": false,
+      "name": "tatari-user-cookie",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fd642250-64ec-4fdb-b638-8229047e8c65",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".betterment.com",
+      "expires": 1809114504.58105,
+      "httpOnly": false,
+      "name": "tatari-session-cookie",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "af9c882c-419b-1bcf-f080-a7ef6f231d9d",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.betterment.com",
+      "expires": 1806090504,
+      "httpOnly": false,
+      "name": "_zitok",
+      "path": "/",
+      "sameSite": "Strict",
+      "secure": true,
+      "valuePreview": "442cf0ba27c8d67ddd0a1774554504",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".zoominfo.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "glfzb0PY_BAyEbJeb2g3vkNu9GPehmodMheOZdQYXYM-1774554505317-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [
+    "adroll",
+    "hs-cta-interactions",
+    "mixpanelBrowserDb"
+  ],
+  "localStorage": [
+    {
+      "key": "u_sclid",
+      "preview": "31kzy-XcMtTx87x7X6s4hsJt_0Adyl3yB9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "size": 64
+    },
+    {
+      "key": "__mpq_0523d4f8e034a64484dae3b08a396342_pp",
+      "preview": "[{\"id\":\"ndivqzrkewt25hm3\",\"flushAfter\":1774554514396,\"payload\":{\"$set_once\":{\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"0523d4f8e034a64484dae3b08a396342\",\"$distinct_id\":\"fd642250-64ec-4fdb-b638-8229047e8c",
+      "size": 348
+    },
+    {
+      "key": "com.adsmeasurement.pubsuite.SessionCount",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "com.adsmeasurement.pubsuite.ConversionQueue",
+      "preview": "[]",
+      "size": 2
+    },
+    {
+      "key": "_gcl_ls",
+      "preview": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":2,\"timeouts\":0,\"errors\":0,\"creationTimeMs\":1774554503729},\"expires\":1782330503729}}",
+      "size": 139
+    },
+    {
+      "key": "wistia-video-progress-2rdewgon11",
+      "preview": "{\"resumableKey\":\"1774554_7ec43918-52fe-4eb5-b54e-da622401b2af-09837e98b-042c3d53f2e8-97c3\"}",
+      "size": 91
+    },
+    {
+      "key": "_swb_consent_",
+      "preview": "eyJjb2xsZWN0ZWRBdCI6MTc3NDU1NDUwMywiY29udGV4dCI6eyJjb25maWd1cmF0aW9uSWQiOiJZbVYwZEdWeWJXVnVkQzlpWlhSMFpYSnRaVzUwWDJOdmJTOXdjbTlrZFdOMGFXOXVMMk53Y21FdlpXNHZNVGMzTWprMU5UQXdPQT09Iiwic291cmNlIjoibGVnYWxCYXNpc0RlZmF1bHQifSwiZW52aXJvbm1lbnRDb2Rl",
+      "size": 812
+    },
+    {
+      "key": "_swb_consent__metadata",
+      "preview": "eyJpYXQiOjE3NzQ1NTQ1MDMsImV4cCI6MTc3NDY0MDkwM30=",
+      "size": 48
+    },
+    {
+      "key": "u_sclid_r",
+      "preview": "31kzy-XcMtTx87x7X6s4hsJt_0Adyl3yB9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "size": 64
+    },
+    {
+      "key": "lastExternalReferrerTime",
+      "preview": "1774554504287",
+      "size": 13
+    },
+    {
+      "key": "wistia",
+      "preview": "{\"__distillery\":\"1774554_9df4dae6-0e8c-4838-a5d5-f2869570f67c-8b7df7003-303a04178232-6401\",\"accounts_loaded\":{\"wistia-production_1196736\":1774554502587},\"medias_loaded\":{\"2rdewgon11\":1774554502587},\"visitor_version\":0}",
+      "size": 218
+    },
+    {
+      "key": "__mpq_0523d4f8e034a64484dae3b08a396342_ev",
+      "preview": "[{\"id\":\"b7e630mq0gxhqo38\",\"flushAfter\":1774554514398,\"payload\":{\"event\":\"$identify\",\"properties\":{\"$os\":\"Mac OS X\",\"$browser\":\"Chrome\",\"$current_url\":\"https://www.betterment.com/\",\"$browser_version\":123,\"$screen_height\":2200,\"$screen_width\"",
+      "size": 2847
+    },
+    {
+      "key": "com.adsmeasurement.pubsuite.LastConfigDate",
+      "preview": "1774554503",
+      "size": 10
+    },
+    {
+      "key": "lastExternalReferrer",
+      "preview": "empty",
+      "size": 5
+    },
+    {
+      "key": "com.adsmeasurement.pubsuite.LastServerConfig",
+      "preview": "{}",
+      "size": 2
+    },
+    {
+      "key": "com.adsmeasurement.pubsuite.FirstStartDate",
+      "preview": "1774554503",
+      "size": 10
+    },
+    {
+      "key": "ajs_anonymous_id",
+      "preview": "\"70df491c-2cc6-476c-8b35-00fb3b5d50e4\"",
+      "size": 38
+    },
+    {
+      "key": "ajs_user_id",
+      "preview": "\"fd642250-64ec-4fdb-b638-8229047e8c65\"",
+      "size": 38
+    },
+    {
+      "key": "ajs_user_traits",
+      "preview": "{}",
+      "size": 2
+    },
+    {
+      "key": "_ketch_consent_v1_",
+      "preview": "eyJhbmFseXRpY3MiOnsic3RhdHVzIjoiZ3JhbnRlZCIsImNhbm9uaWNhbFB1cnBvc2VzIjpbImFuYWx5dGljcyJdfSwiZXNzZW50aWFsX3NlcnZpY2VzIjp7InN0YXR1cyI6ImdyYW50ZWQiLCJjYW5vbmljYWxQdXJwb3NlcyI6WyJlc3NlbnRpYWxfc2VydmljZXMiXX0sImJlaGF2aW9yYWxfYWR2ZXJ0aXNpbmciOnsi",
+      "size": 328
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "u_scsid_r",
+      "preview": "qxYz_WU1m4e_tGgI9Ot8A7cp_3KdI7al31kzy-XcMtTx87x7X6s4hsJt_0Adyl3yB9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "size": 96
+    },
+    {
+      "key": "user_intent_result",
+      "preview": "{\"signup_motivation\":null,\"account_interest\":null,\"portfolio_interest\":null,\"product_category\":null,\"page_type\":\"b4c-site\",\"url\":\"/\",\"cms_content_type\":\"b4c-site_page\"}",
+      "size": 168
+    },
+    {
+      "key": "ziwsSession",
+      "preview": "{\"eventId\":\"47f95f5b-faff-4af2-8cdf-1471276df18d\",\"websiteId\":\"66c4d2a764186482903a433d\",\"companyId\":\"19759687\",\"sessionId\":\"c8d4eba53a50e28822d57f1bc49b6f937bc2c18b3ccc2ddfd02fcf3a8ffa455b\",\"visitorId\":\"442cf0ba27c8d67ddd0a1774554504\",\"eve",
+      "size": 312
+    },
+    {
+      "key": "tt_appInfo",
+      "preview": "{\"platform\":\"pc\"}",
+      "size": 17
+    },
+    {
+      "key": "adroll_dqs",
+      "preview": "pv=19797614312.200935&arrfrr=https%3A%2F%2Fwww.betterment.com%2F&ats1=manual",
+      "size": 76
+    },
+    {
+      "key": "mp_gen_new_tab_id_mixpanel_0523d4f8e034a64484dae3b08a396342",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "u_scsid",
+      "preview": "qxYz_WU1m4e_tGgI9Ot8A7cp_3KdI7al31kzy-XcMtTx87x7X6s4hsJt_0Adyl3yB9pwiA0aC_fp6odH3IKVQR3vPA01CCYV",
+      "size": 96
+    },
+    {
+      "key": "ziwsSessionId",
+      "preview": "c8d4eba53a50e28822d57f1bc49b6f937bc2c18b3ccc2ddfd02fcf3a8ffa455b",
+      "size": 64
+    },
+    {
+      "key": "adroll_flgs",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "mp_tab_id_mixpanel_0523d4f8e034a64484dae3b08a396342",
+      "preview": "$tab-5ddb9bf0-d81a-4d8f-9e67-8b6b487d1220",
+      "size": 41
+    },
+    {
+      "key": "ziScriptSession",
+      "preview": "{\"sessionId\":\"c8d4eba53a50e28822d57f1bc49b6f937bc2c18b3ccc2ddfd02fcf3a8ffa455b\"}",
+      "size": 80
+    },
+    {
+      "key": "ziPendingTelemetry",
+      "preview": "[{\"event\":\"script.load.success\",\"ts\":1774554505311,\"feature\":\"ws\",\"src\":\"blob:https://www.betterment.com/f50a3494-d2fd-4858-b26a-79f23acc7a0e\"},{\"event\":\"perf.ttff\",\"ts\":1774554505312,\"feature\":\"ws\",\"firstFeatureLoadMs\":632},{\"event\":\"perf.",
+      "size": 311
+    },
+    {
+      "key": "is_eu",
+      "preview": "false",
+      "size": 5
+    },
+    {
+      "key": "unifiedScriptVerified",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "tt_sessionId",
+      "preview": "\"bfa0a06e-294c-11f1-ac73-b83fd2f4ef76::hGP3_0UWmw-veMPUomu9\"",
+      "size": 60
+    },
+    {
+      "key": "tt_pixel_session_index",
+      "preview": "{\"index\":0,\"main\":0}",
+      "size": 20
+    },
+    {
+      "key": "user_intent",
+      "preview": "[{\"account_interest\":{\"associated_page_type\":null,\"key\":null,\"motivation\":null},\"portfolio_interest\":{\"associated_page_type\":null,\"key\":null,\"motivation\":null},\"product_category\":{\"associated_page_type\":null,\"key\":null,\"motivation\":null},\"u",
+      "size": 313
+    }
+  ]
+}

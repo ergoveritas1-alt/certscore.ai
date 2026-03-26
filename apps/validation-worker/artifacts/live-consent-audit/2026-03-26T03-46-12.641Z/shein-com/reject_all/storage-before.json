@@ -1,0 +1,1656 @@
+{
+  "cookies": [
+    {
+      "domain": ".gateway.shein.com",
+      "expires": 1782272802.816725,
+      "httpOnly": true,
+      "name": "cee",
+      "path": "/events/dc621d6d3df8324f2b087836e4f9b557f33f31a41ee8d37aafbf738849c7d4f9",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5BCPoqVv5pDiAqpMPKvlkxvCOauHYjfz8haTz2HyKFk%3D.%7B%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "sc-static.net",
+      "expires": 1774583201.996064,
+      "httpOnly": false,
+      "name": "X-AB",
+      "path": "/scevent.min.js",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "9c2d8b209c744f93978e1ce1736746c2",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Snap"
+    },
+    {
+      "domain": "i.liadm.com",
+      "expires": 1777088804.650416,
+      "httpOnly": false,
+      "name": "_li_ss",
+      "path": "/s",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CggKBgj1ARCeHQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1775101594.211123,
+      "httpOnly": false,
+      "name": "language",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "us",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "us.shein.com",
+      "expires": 1777088794.211214,
+      "httpOnly": true,
+      "name": "AT",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "MDEwMDE.eyJiIjo3LCJnIjoxNzc0NDk2Nzk0LCJyIjoiUU5WbFd6IiwidCI6MX0.7a420b973f620618",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1809056799,
+      "httpOnly": false,
+      "name": "armorUuid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "2026032611463413fda17f96f0ab8494eafb8a3c9862cc00705b961a01276c00",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "us.shein.com",
+      "expires": 1774626399.849963,
+      "httpOnly": true,
+      "name": "sessionID_shein",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "s%3AiyYqhylBrlwGvqqsn6D1FBTyz1yBIFIO.pcUna%2FvSUtviWMQ%2Bqzx8DwmxK7ppyFqQXijNiKP...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1806032799.239707,
+      "httpOnly": true,
+      "name": "cf_clearance",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "FLo1SdhOJBj3vWWfkOZAwlpdiSMOeZW.xL4Bp4kCzNU-1774496799-1.2.1.1-UIWWKLkviveCw_MEb...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1805600799,
+      "httpOnly": false,
+      "name": "smidV2",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "202603252046394aae7ddd6f3dba4d2debff1ca9f16bbd001468ece1600c470",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1809056801,
+      "httpOnly": false,
+      "name": "zpnvSrwrNdywdz",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "us",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1782272802,
+      "httpOnly": false,
+      "name": "_cbp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fb.1.1774496802369.13047839",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1774583203.464392,
+      "httpOnly": false,
+      "name": "lidc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"b=VGST06:s=V:r=V:a=V:p=V:g=3484:u=1:x=1:i=1774496802:t=1774583202:v=2:sig=AQEiR...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1782272803.012536,
+      "httpOnly": false,
+      "name": "li_sugr",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "b6a2eb39-3d18-4fd6-a05b-cab9cd727324",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1806032803.012652,
+      "httpOnly": false,
+      "name": "bcookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"v=2&3434b82a-03dd-4acd-82b4-9cfcfa69a30c\"",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1777088802.483976,
+      "httpOnly": false,
+      "name": "UserMatchHistory",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AQLWvi9UxTwr0QAAAZ0oQGbAJxZ1Nkx4589nv_qqf7Pub_Q_adL0MUf-PkQgayXyN9ZDgcczUTnAjg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1777088802.483986,
+      "httpOnly": false,
+      "name": "AnalyticsSyncHistory",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AQItsItowtm4NgAAAZ0oQGbAtjyq2G6Q_M_K1x2WXCvCHza_M8P3t59CEnCVtLZ8zoj-erSpq6eXe2ZM...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1777175202,
+      "httpOnly": false,
+      "name": "ndp_session_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "a9945aed-fd7f-43f7-bf6a-63fc2c905b4c",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808192802.77267,
+      "httpOnly": false,
+      "name": "_twpid",
+      "path": "/",
+      "sameSite": "Strict",
+      "secure": true,
+      "valuePreview": "tw.1774496802770.746537749905195363",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1782272802,
+      "httpOnly": false,
+      "name": "_rdt_uuid",
+      "path": "/",
+      "sameSite": "Strict",
+      "secure": true,
+      "valuePreview": "1774496802779.d9799609-cb0d-40c7-b0f2-0e12070db93d",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808711202,
+      "httpOnly": false,
+      "name": "_scid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808711202,
+      "httpOnly": false,
+      "name": "_scid_r",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.linkedin.com",
+      "expires": 1806032802.852487,
+      "httpOnly": true,
+      "name": "bscookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"v=1&20260326034642b113e9e7-75a0-4999-8874-1e97cabbcdc9AQEyKE52MjYzqyzDmPAlQ656F...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1774498602.852769,
+      "httpOnly": true,
+      "name": "__cf_bm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "Mzc5t5oKXqwHJrHIEZnxpxscaUwH_e87Z_hDlDYMe00-1774496802-1.0.1.1-hjcgi9KMiBrCs3pxA...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1782272802,
+      "httpOnly": false,
+      "name": "_fbp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fb.1.1774496802920.691507923906725965",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "domain": ".twitter.com",
+      "expires": 1809056802.9715,
+      "httpOnly": false,
+      "name": "personalization_id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"v1_Oqn2cUoGEzLWvXX3iyvXBQ==\"",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1774583203,
+      "httpOnly": false,
+      "name": "_uetsid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "6781b14028c611f1a7d975d51f50af24",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808192803,
+      "httpOnly": false,
+      "name": "_uetvid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "6781e7c028c611f1b0bde58055e0bcdc",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "us.shein.com",
+      "expires": 1774497103,
+      "httpOnly": false,
+      "name": "dicbo_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%7B%22dicbo_fetch%22%3A1774496803048%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bat.bing.com",
+      "expires": 1775101604.158735,
+      "httpOnly": false,
+      "name": "MR",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1782272803,
+      "httpOnly": false,
+      "name": "_gcl_au",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1.1.1334339045.1774496803",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bing.com",
+      "expires": 1808192804.400786,
+      "httpOnly": false,
+      "name": "MUID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2E5DF819EE3460DD150BEF31EF0B61D1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".criteo.com",
+      "expires": 1808192803.30935,
+      "httpOnly": false,
+      "name": "uid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "d7b98857-7e4a-4285-a2d4-4e331cfc0ea4",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Criteo"
+    },
+    {
+      "domain": ".us.shein.com",
+      "expires": 1806032803,
+      "httpOnly": false,
+      "name": "_pin_unauth",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "dWlkPU1ERXlOVEEyTWprdE9XRmxaaTAwT0RsakxUbG1ZbVl0WldFeFpHUmxOelJsT1RnMQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".doubleclick.net",
+      "expires": 1774497703.483093,
+      "httpOnly": false,
+      "name": "test_cookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CheckForPermission",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "domain": ".pinterest.com",
+      "expires": 1806032803.690202,
+      "httpOnly": true,
+      "name": "ar_debug",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ct.pinterest.com",
+      "expires": 1806032803.690229,
+      "httpOnly": false,
+      "name": "_pinterest_ct_ua",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "TWc9PSYvT3Jvb3EvUzVMUG9uOXpCVTl4Tkx2OU94TlU2aGZ6cnhydldwWGFsQlRhS0VKRi9BbmhybFVF...",
+      "vendorCategory": "social_embedded_media",
+      "vendorName": "Pinterest"
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1775101603,
+      "httpOnly": false,
+      "name": "_ScCbts",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%5B%5D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808660803,
+      "httpOnly": false,
+      "name": "cto_bundle",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "7E1KkF9UZFRTc1lOUGJ1UFIzSVBRa2tURDQ5Q2lMaGtzMjdLZVZuTHRrWEpOMjVkVG1Hc1JmVGhocXFz...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "_cfuvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "QxVdoMF0MvctfNYofMBHX46d2.mjdBkHZF3aQ1P_Zpg-1774496804123-0.0.1.1-604800000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1779680804.232174,
+      "httpOnly": false,
+      "name": "TapAd_3WAY_SYNCS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1779680804.600607,
+      "httpOnly": false,
+      "name": "TapAd_TS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804167",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tapad.com",
+      "expires": 1779680804.600731,
+      "httpOnly": false,
+      "name": "TapAd_DID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "a302ca8c-e5ee-4ce2-af8b-5d6d66133fbb",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782272804.596204,
+      "httpOnly": false,
+      "name": "XANDR_PANID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "vyvnBAocrVJG1n2fJK7ePil1MhkfypL90Ao8XOs-54cSc2oTsqlJrgxc1ukauMIxOFeSrrdWWRjgdrHc...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782272804.596271,
+      "httpOnly": true,
+      "name": "uuid2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "7990103883708165060",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1806032804.354383,
+      "httpOnly": false,
+      "name": "CMID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "acSsJMAoIjUALOoDAVXQ.AAA",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1782272804.293194,
+      "httpOnly": false,
+      "name": "CMPS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2004",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1782272804.354406,
+      "httpOnly": false,
+      "name": "CMPRO",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2004",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1806032804.308635,
+      "httpOnly": false,
+      "name": "KADUSERCOOKIE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "F1A841B6-D854-4AD2-937C-8DCAC2701FF4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1777088804.30872,
+      "httpOnly": false,
+      "name": "SPugT",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "exchange.mediavine.com",
+      "expires": 1775706404.315809,
+      "httpOnly": false,
+      "name": "mv_tokens",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22mv_uuid%22%3A%2268464f70-28c6-11f1-afbd-d501e445fdec%22%2C%22version%22%3A...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "exchange.mediavine.com",
+      "expires": 1775706404.315897,
+      "httpOnly": false,
+      "name": "mv_tokens_invalidate-verizon-pushes",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22mv_uuid%22%3A%2268464f70-28c6-11f1-afbd-d501e445fdec%22%2C%22version%22%3A...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "exchange.mediavine.com",
+      "expires": 1775706404.315954,
+      "httpOnly": false,
+      "name": "am_tokens",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22mv_uuid%22%3A%2268464f70-28c6-11f1-afbd-d501e445fdec%22%2C%22version%22%3A...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "exchange.mediavine.com",
+      "expires": 1775706404.315989,
+      "httpOnly": false,
+      "name": "am_tokens_invalidate-verizon-pushes",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22mv_uuid%22%3A%2268464f70-28c6-11f1-afbd-d501e445fdec%22%2C%22version%22%3A...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "exchange.mediavine.com",
+      "expires": 1775706404.316012,
+      "httpOnly": false,
+      "name": "criteo",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22id%22%3A%22k-TnMzxPRG8GblML_ZCGYu0ko6jG8Cebxgnd7jnQ%22%2C%22version%22%3A%...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806032804.429532,
+      "httpOnly": false,
+      "name": "tuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "aae25f0c-9dd9-4b72-8eca-d154a094f830",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806032804.335996,
+      "httpOnly": false,
+      "name": "c",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806032804.429584,
+      "httpOnly": false,
+      "name": "tuuid_lu",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".snapchat.com",
+      "expires": 1808192804.338779,
+      "httpOnly": false,
+      "name": "sc_at",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "v2|H4sIAAAAAAAA/03GwRHAIAgEwIqYOeAQsJuMiVVYfL7ua3c+teEhNppCvCZlGrKQrisa/vVRYmom2...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".shein.com",
+      "expires": 1808711204,
+      "httpOnly": false,
+      "name": "_sctr",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1%7C1774422000000",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".c.bing.com",
+      "expires": 1775101604.400892,
+      "httpOnly": false,
+      "name": "MR",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".demdex.net",
+      "expires": 1790048804.482102,
+      "httpOnly": false,
+      "name": "demdex",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "70069274963514688071840645874155610063",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782272804.432689,
+      "httpOnly": true,
+      "name": "anj",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "dTM7k!M4/rCxrEQF']wIg2E>2duYU]!]tbPl@/D!9hy6]/Cwi@.zCyw2bhgg7]sK)0Y/b.7lRU`78ZY7...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782272804.450688,
+      "httpOnly": true,
+      "name": "tuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "dc4454eb-f1ba-4110-ab60-c3b9588b948a",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782272804.45075,
+      "httpOnly": true,
+      "name": "tuuid_lu",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".dpm.demdex.net",
+      "expires": 1790048804.482263,
+      "httpOnly": false,
+      "name": "dpm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "70069274963514688071840645874155610063",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".media.net",
+      "expires": 1790480804.483158,
+      "httpOnly": false,
+      "name": "usp_status",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".media.net",
+      "expires": 1806032804.483189,
+      "httpOnly": false,
+      "name": "visitor-id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "4174984045487842000V10",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".media.net",
+      "expires": 1777088804.483203,
+      "httpOnly": false,
+      "name": "data-c",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "k-oH3hjPRG8GblML_ZCGYu0ko6jG-Tm6P8PTLr6w~~3",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".media.net",
+      "expires": 1777088804.483317,
+      "httpOnly": false,
+      "name": "data-c-ts",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774496804",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".liadm.com",
+      "expires": 1809056804.650442,
+      "httpOnly": false,
+      "name": "lidid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "9d9efc78-08f4-40f0-be97-a9e7780cbc02",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806032804.549803,
+      "httpOnly": false,
+      "name": "visitor",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ab3f6abd-74a7-4aad-9d64-cabe7f5e7f42",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806032804.549861,
+      "httpOnly": false,
+      "name": "status",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".criteo.com",
+      "expires": 1808192804.552481,
+      "httpOnly": false,
+      "name": "cto_bundle",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "37PsDl93NVc5WEFZUGJ5TXRIZGZNWEdJTG5aSUlCaHFkTFNLaHBtOEVORGtlVTY5cDc0UWdneGRwYW5F...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Criteo"
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782272804.552669,
+      "httpOnly": true,
+      "name": "um",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "!38,iBF9pwzGkYVio25aHtDVFnhltB7U68su6hcWAAMLh4DzwVaBlcp7Z.it0AlGzrZZ3xtQQmJMPdbK...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782272804.552697,
+      "httpOnly": true,
+      "name": "umeh",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "!38,0,1836704804,-1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediawallahscript.com",
+      "expires": 1809056805.699034,
+      "httpOnly": false,
+      "name": "mCookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "67aad2c0-28c6-11f1-ae16-875dab997a30",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediawallahscript.com",
+      "expires": 1809056805.699122,
+      "httpOnly": false,
+      "name": "mUserCookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".revcontent.com",
+      "expires": 1777088804.564345,
+      "httpOnly": false,
+      "name": "v1_151",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".revcontent.com",
+      "expires": 1777088804.564402,
+      "httpOnly": false,
+      "name": "v2_151",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "k-CPt2uPRG8GblML_ZCGYu0ko6jG_Z3QE75xHZbQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806032804.601397,
+      "httpOnly": false,
+      "name": "audit_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|mr07+kuZh31pXxF4NEwX+7X4Y0tnVDXMbqYtXDj93/qThxEeUAnuQRwV+WUc1/kpOilEvFPZak+M1K...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806032804.601448,
+      "httpOnly": false,
+      "name": "khaos",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XKXE6-7-MCXF",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806032804.601485,
+      "httpOnly": false,
+      "name": "khaos_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XKXE6-7-MCXF",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806032804.601512,
+      "httpOnly": false,
+      "name": "audit",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|mr07+kuZh31pXxF4NEwX+7X4Y0tnVDXMbqYtXDj93/qThxEeUAnuQRwV+WUc1/kpOilEvFPZak+M1K...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1782272804.601526,
+      "httpOnly": true,
+      "name": "receive-cookie-deprecation",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".taboola.com",
+      "expires": 1806032804.636231,
+      "httpOnly": false,
+      "name": "t_gid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "38361563-ca9f-43af-8cb2-0e0c37d16dcc-tuct10be31a4",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".taboola.com",
+      "expires": 1806032804.636271,
+      "httpOnly": false,
+      "name": "t_pt_gid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "38361563-ca9f-43af-8cb2-0e0c37d16dcc-tuct10be31a4",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".agkn.com",
+      "expires": 1806032804.736119,
+      "httpOnly": false,
+      "name": "ab",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0001%3AH2JJXNeNd%2BN9Y%2BDRnwUHNRkr%2FjZB6R1n",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1782272805.771869,
+      "httpOnly": false,
+      "name": "pid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "3480506468040663593",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1808711205.771983,
+      "httpOnly": false,
+      "name": "TestIfCookieP",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ok",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1777088805.772021,
+      "httpOnly": false,
+      "name": "csync",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "79:k-GehY5vRG8GblML_ZCGYu0ko6jG83xe0Kdopv1w",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".teads.tv",
+      "expires": 1805946404.773224,
+      "httpOnly": false,
+      "name": "tt_viewer",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eb48a268-711e-4647-affa-00aabff9e863",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".crwdcntrl.net",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "_cc_cc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ctst",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tremorhub.com",
+      "expires": 1806053704.93409,
+      "httpOnly": false,
+      "name": "tvid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2e390b13e8d646f78f909f3d042747ed",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tremorhub.com",
+      "expires": 1777088804.935679,
+      "httpOnly": false,
+      "name": "tv_UICR",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "k-HIZKVPRG8GblML_ZCGYu0ko6jG9HqxCD2_Zw_g",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".3lift.com",
+      "expires": 1782272805.074445,
+      "httpOnly": false,
+      "name": "tluidp",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "168126469669906503615",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".3lift.com",
+      "expires": 1782272805.074525,
+      "httpOnly": false,
+      "name": "tluid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "168126469669906503615",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tpmn.co.kr",
+      "expires": 1777088804.957025,
+      "httpOnly": false,
+      "name": "criteo",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "k-7bceWvRG8GblML_ZCGYu0ko6jG96PVFCHejlNQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".1rx.io",
+      "expires": 1806032804.975037,
+      "httpOnly": true,
+      "name": "_rxuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22rx_uuid%22%3A%22RX-59c341e9-087c-4a00-89be-fb344987c1de-005%22%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".id5-sync.com",
+      "expires": 1782272805.157774,
+      "httpOnly": false,
+      "name": "id5",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "18449f20-c5c4-7c77-9962-93fb703a9cbe#1774496804823#1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adsrvr.org",
+      "expires": 1806032805.318442,
+      "httpOnly": false,
+      "name": "TDID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1e72375f-c1dd-4540-8198-9b5078afb098",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adsrvr.org",
+      "expires": 1806032805.31859,
+      "httpOnly": false,
+      "name": "TDCPM",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CAEYBSABKAIyCwjOq66Cob2FPxAFOAE.",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tpmn.io",
+      "expires": 1777088805.358015,
+      "httpOnly": false,
+      "name": "criteo",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "k-7bceWvRG8GblML_ZCGYu0ko6jG96PVFCHejlNQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".dotomi.com",
+      "expires": 1774496835.366874,
+      "httpOnly": false,
+      "name": "DotomiTest",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "106543700018797067",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".targeting.unrulymedia.com",
+      "expires": 1806032805.409188,
+      "httpOnly": true,
+      "name": "_rxuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22rx_uuid%22%3A%22RX-59c341e9-087c-4a00-89be-fb344987c1de-005%22%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".yahoo.com",
+      "expires": 1806054405.763648,
+      "httpOnly": true,
+      "name": "A3",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "d=AQABBCWsxGkCENacjglBkYlLGl09Cp5bWkwFEgEBAQH9xWnOadwr0iMA_eMDAA&S=AQAAAtZcsprOO...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediawallahscript.com",
+      "expires": 1774583205.699094,
+      "httpOnly": false,
+      "name": "mRemnantVisitedCookie_d41d8cd98f00b204e9800998ecf8427e_03_2026",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22N3D71%22%3A1%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".analytics.yahoo.com",
+      "expires": 1806032805.763584,
+      "httpOnly": false,
+      "name": "IDSYNC",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "19ab~2v0r",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".thrtle.com",
+      "expires": 1791776805.853656,
+      "httpOnly": false,
+      "name": "mc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJpZCI6ImM5NDkwYTI0LWRkYjUtNGM0MS1hMmJhLWNlMTMxODcwMjIxYSIsImwiOjE3NzQ0OTY4MDU4...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".thrtle.com",
+      "expires": 1791776805.853767,
+      "httpOnly": false,
+      "name": "sc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJpIjoiYzk0OTBhMjQtZGRiNS00YzQxLWEyYmEtY2UxMzE4NzAyMjFhIiwic2lkIjoic2lkLTY4YzQ5...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [
+    "endConfigDB",
+    "sada-store",
+    "skynet-db"
+  ],
+  "localStorage": [
+    {
+      "key": "privacy-sdk-cookie-id",
+      "preview": "{\"value\":\"47F3A21A_6539_4733_89A1_F109A811C5EA\",\"expiry\":1774518694402}",
+      "size": 71
+    },
+    {
+      "key": "WEB_UGID_INIT",
+      "preview": "1774496799440",
+      "size": 13
+    },
+    {
+      "key": "armorToken",
+      "preview": "T0_3.11.1_h5aVW6NV2c6k5d0TlfDNzyvx1Mst5G4xfczFS1xVPBz6nYtCPwQRDFGBcRudsmJ6ptthjrvBYGXClTbCX5GzVjAMKSqah_vGfFo472BCaBEgA7vdbCiYv4bfNXxI28D0yurUvbiL6ri61riEbfmAGaKWtNvhZIGvhl8EEgqvUt19AeEuf4DLInTusGud--sE_1774496800996",
+      "size": 216
+    },
+    {
+      "key": "skynet_repeat_daily",
+      "preview": "{\"value\":{\"data\":{\"offlineDailyCheck\":[\"1\"]},\"begin\":1774496799173},\"expire\":1774583199173}",
+      "size": 91
+    },
+    {
+      "key": "LOCATION_LIST",
+      "preview": "{\"value\":[{\"id\":\"2\",\"country\":\"Albania\",\"value\":\"AL\",\"phone_code\":\"+355\",\"host\":\"roe.shein.com\",\"lang\":\"en\",\"siteUid\":\"roe\"},{\"id\":\"5\",\"country\":\"Andorra\",\"value\":\"AD\",\"phone_code\":\"+376\",\"host\":\"roe.shein.com\",\"lang\":\"en\",\"siteUid\":\"roe\"},",
+      "size": 19034
+    },
+    {
+      "key": "u_sclid",
+      "preview": "8JRRzVRHnGQwMzHs8Eh3aQ-oHUKJxUa8S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "size": 64
+    },
+    {
+      "key": "eng_mt",
+      "preview": "{\"ver\":27,\"sessionStartTime\":1774496803549,\"scrollDepth\":100,\"sessionDepth\":[\"https://us.shein.com/?cdn_rsite=cf&ref=www&rep=dir&ret=us\"],\"timeOnSite\":0,\"numOfTimesMetricsSent\":1}",
+      "size": 179
+    },
+    {
+      "key": "_uetvid_exp",
+      "preview": "Tue, 20 Apr 2027 03:46:43 GMT",
+      "size": 29
+    },
+    {
+      "key": "cto_bundle",
+      "preview": "7E1KkF9UZFRTc1lOUGJ1UFIzSVBRa2tURDQ5Q2lMaGtzMjdLZVZuTHRrWEpOMjVkVG1Hc1JmVGhocXFzcDRrT2FFaTJSNjVGRWJmQ3hpNjREVXJrNWVrYndOcU9YaDM1Z0pXdnd6TVFrSFV2UGVBdzl5a3RpdHI4MWxIZTlVMXI2S3BLaEtaeEFYV0VNNkROak81M3hnSnF5dVVRanFLV1BIaXY1aUpYUmFWYm9vcVdMTU1P",
+      "size": 266
+    },
+    {
+      "key": "mMYjtYBcaM9stYCfmUE",
+      "preview": "MTc3NDQ5NjgwMDUwMg",
+      "size": 18
+    },
+    {
+      "key": "native_Gpc",
+      "preview": "{\"value\":false,\"expiry\":1774518694490}",
+      "size": 38
+    },
+    {
+      "key": "zpnvSrwrNdywdz",
+      "preview": "us",
+      "size": 2
+    },
+    {
+      "key": "RESOURCE_ADAPT__WEBP_SUPPORT",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "_gcl_ls",
+      "preview": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"creationTimeMs\":1774496803163},\"expires\":1782272803163}}",
+      "size": 139
+    },
+    {
+      "key": "default_currency_expire",
+      "preview": "{\"value\":1,\"end\":1774500399221}",
+      "size": 31
+    },
+    {
+      "key": "sky_eye_sample_control_config",
+      "preview": "{\"value\":{\"apiMap\":{\"/product/get_products_by_keywords\":{\"prop\":\"0.002\",\"samplingType\":\"probabilistic\"},\"/api/productInfo/realTimeData/query\":{\"prop\":\"0.002\",\"samplingType\":\"probabilistic\"},\"/api/productInfo/quickView/get\":{\"prop\":\"0.002\",\"",
+      "size": 355
+    },
+    {
+      "key": "smidV2",
+      "preview": "202603252046394aae7ddd6f3dba4d2debff1ca9f16bbd001468ece1600c470",
+      "size": 63
+    },
+    {
+      "key": "id5id_v2_3856268834750531",
+      "preview": "{\"data\":{\"response\":{\"signature\":\"ID5_AlnSGBaDdZxI-zvTM7IXI4KJIlltyxDKZR_5fhAq2PTyHC-icXiDjbobNMIjix7L52W1OrjZhfeKj7YaEM89fU5MmeHdczjVJqZ0y91zSuryGvqQ7iNi7GzeqgzOU1-uHb1og0nKe9SCiQIOhCS2ivrtRUwAQ72mY5jMfMKBNiBiQaGr-Hw\",\"created_at\":\"2026-03",
+      "size": 1133
+    },
+    {
+      "key": "_uetvid",
+      "preview": "6781e7c028c611f1b0bde58055e0bcdc",
+      "size": 32
+    },
+    {
+      "key": "lastExternalReferrer",
+      "preview": "empty",
+      "size": 5
+    },
+    {
+      "key": "currencyData",
+      "preview": "{\"CHF\":{\"currency_id\":13,\"currency_code\":\"CHF\",\"title\":\"Swiss franc\",\"exchange_rate\":0.7891,\"reverse_exchange_rate\":1.267267,\"symbol_left\":\"CHF\",\"symbol_right\":\"\",\"decimal_place\":2,\"special_rule\":\"1\",\"dec_point\":\",\",\"thousands_sep\":\".\",\"sor",
+      "size": 4072
+    },
+    {
+      "key": "monitor_session_id",
+      "preview": "{\"value\":\"94e95e26-b297-4072-9ecf-5cb392a8c6b0\",\"expire\":1774500399238}",
+      "size": 71
+    },
+    {
+      "key": "SmDeviceId",
+      "preview": "WHJMrwNw1k/Fa6VY3EQZM+QbW8HM01TWS0fqSXaiTJxdNl+dgyLPkrPrETC0q8wpcFecWwCVw9+7y4WAFc6wgJ48aoDfOH06bdCW1tldyDzmQI99+chXEitvJwIlA3SQ89lCUKKcsmkSqmJzoPeggw9GeLZs4wXJlkQE5YcNLqNriNYPfoOP/brSGTwDEQqy3FRRuSg/X1FURTkAd7H/eWjEkPiZnXqQiEReAvduDCqsf/QW",
+      "size": 282
+    },
+    {
+      "key": "ipCountry",
+      "preview": "{\"value\":{\"countryId\":\"226\",\"countryAbbr\":\"US\",\"formatCountryAbbr\":\"US\"},\"end\":1774756000106}",
+      "size": 93
+    },
+    {
+      "key": "li_adsId",
+      "preview": "1a2adaed-08fe-457f-a350-75a0a866085e",
+      "size": 36
+    },
+    {
+      "key": "criteo-id5id-fast-track",
+      "preview": "ID5*vtoF9VFNz0xI3IO1yWrcdQegyex_sxkURXhZfkXXmpD__2nErCVaAAEBCmnErCQAl4Rv7CU0opFSEoWintV1Kg",
+      "size": 90
+    },
+    {
+      "key": "id5id_v2_signature",
+      "preview": "{\"data\":{\"signature\":\"ID5_AlnSGBaDdZxI-zvTM7IXI4KJIlltyxDKZR_5fhAq2PTyHC-icXiDjbobNMIjix7L52W1OrjZhfeKj7YaEM89fU5MmeHdczjVJqZ0y91zSuryGvqQ7iNi7GzeqgzOU1-uHb1og0nKe9SCiQIOhCS2ivrtRUwAQ72mY5jMfMKBNiBiQaGr-Hw\"},\"expireAt\":1775792805160}",
+      "size": 233
+    },
+    {
+      "key": "LOCATION_CURRENT",
+      "preview": "{\"id\":\"226\",\"country\":\"United States\",\"value\":\"US\",\"phone_code\":\"+1\",\"host\":\"us.shein.com\",\"lang\":\"us\",\"siteUid\":\"us\"}",
+      "size": 118
+    },
+    {
+      "key": "__snI18NCC",
+      "preview": "{\"value\":\"MTkxQjZCMEJffDE3NzQ0OTY3OTQxMzR8RjNDOV85Nzc0XzczMjBfMkExQTgyNTY5MTMz\",\"expires\":1809056794405,\"i18nKey\":\"Curve + Plus\"}",
+      "size": 129
+    },
+    {
+      "key": "a_vndfsigb2jhqgrjvfhjreg",
+      "preview": "06942fbc37be6a98b8dee877d03ae8f6",
+      "size": 32
+    },
+    {
+      "key": "a_fkjerwhgkjhrewktjreterwt",
+      "preview": "[object Promise]",
+      "size": 16
+    },
+    {
+      "key": "anzrytku_akyepo_araxd",
+      "preview": "KBvdJgOMVOPLB+h7bo7mlaUG4TjeDhlyXd5iMTspyDWeAPPDGlUcqqgfDP7hnx0tL6f8Xkwvih3zQfGLk+OOACDSx99xn32kWoOYtWngOnvh6JQBud4ddrP7gJZ/aNcU/aEaTUVaDdCToxdo7xR20Q==",
+      "size": 152
+    },
+    {
+      "key": "zpnvYpnxIrzru",
+      "preview": "yiUFcFbWp2qN/5YjEsuhtQ==",
+      "size": 24
+    },
+    {
+      "key": "skynet_fetch_ids",
+      "preview": "{\"value\":[\"dc9f797e-df54-4ef0-b1f3-2c7be802d5c5\"],\"expire\":1774497100900}",
+      "size": 73
+    },
+    {
+      "key": "_uetsid",
+      "preview": "6781b14028c611f1a7d975d51f50af24",
+      "size": 32
+    },
+    {
+      "key": "id5id_privacy",
+      "preview": "{\"jurisdiction\":\"other\",\"id5_consent\":true}",
+      "size": 43
+    },
+    {
+      "key": "u_sclid_r",
+      "preview": "8JRRzVRHnGQwMzHs8Eh3aQ-oHUKJxUa8S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "size": 64
+    },
+    {
+      "key": "lastExternalReferrerTime",
+      "preview": "1774496802901",
+      "size": 13
+    },
+    {
+      "key": "GpcSDK-/privacy-banner-api/get_private_banner_gpc-{\"brand\":\"7\",\"platform\":\"\",\"domain\":\"us.shein.com\",\"siteUid\":\"us\",\"language\":\"en\",\"sa\":\"47F3A21A_6539_4733_89A1_F109A811C5EA\"}",
+      "preview": "{\"value\":{\"code\":\"0\",\"msg\":\"ok\",\"info\":{\"templateSchema\":\"{\\n  \\\"version\\\": \\\"1.0.0\\\",\\n  \\\"css\\\": {\\n    \\\"global\\\": \\\"__#gpc_slot#__ label {width: 45px;height: 25px;}__#gpc_slot#__ label .slider {border-radius: 20px;background: #f2f1f1;bo",
+      "size": 11385
+    },
+    {
+      "key": "PrivacySDK-/privacy-banner-api/get_private_banner-{\"brand\":7,\"domain\":\"us.shein.com\",\"siteUid\":\"us\",\"language\":\"en\"}",
+      "preview": "{\"value\":{\"code\":\"0\",\"msg\":\"ok\",\"info\":{\"cookieCategorys\":[{\"alwaysActive\":true,\"alwaysNoActive\":false,\"categoryId\":\"C0001\",\"cookies\":[{\"expiration\":\"0\",\"hostID\":\".linkedin.com\",\"hostname\":\".linkedin.com\",\"id\":\"9955\",\"key\":\"__cf_bm\"},{\"expi",
+      "size": 52203
+    },
+    {
+      "key": "_uetsid_exp",
+      "preview": "Fri, 27 Mar 2026 03:46:43 GMT",
+      "size": 29
+    },
+    {
+      "key": "id5id_privacy_exp",
+      "preview": "Sat, 25 Apr 2026 03:46:45 GMT",
+      "size": 29
+    },
+    {
+      "key": "armorUuid",
+      "preview": "2026032611463413fda17f96f0ab8494eafb8a3c9862cc00705b961a01276c00",
+      "size": 64
+    },
+    {
+      "key": "bi_session_id",
+      "preview": "{\"value\":\"bi_1774496799741_42495\",\"expire\":1774498605815}",
+      "size": 57
+    },
+    {
+      "key": "location",
+      "preview": "\"Null\"",
+      "size": 6
+    },
+    {
+      "key": "PrivacySDK-/privacy-banner-api/intercept_list-{\"brand\":7,\"domain\":\"us.shein.com\",\"siteUid\":\"us\",\"language\":\"en\"}",
+      "preview": "{\"value\":{\"code\":\"0\",\"msg\":\"ok\",\"info\":[{\"CategoryId\":[\"C0004\"],\"Tag\":\"https://sheinm.ltwebstatic.com/pwa_dist/js/sheinpush.v1.2.1.js\",\"Vendor\":null},{\"CategoryId\":[\"C0004\"],\"Tag\":\"https://sc.ltwebstatic.com/she_dist/js/webpush/sheinpush.v1",
+      "size": 12793
+    },
+    {
+      "key": "PC_POPUP_SDK_FREQUENCY_MANAGER__us",
+      "preview": "{\"ip\":{\"recentPopInfoList\":[{\"recentPopTime\":1774496801,\"recentPopScene\":\"global\",\"closeTimeType\":\"0\"}]}}",
+      "size": 105
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "armorToken",
+      "preview": "T0_3.11.1_h5aVW6NV2c6k5d0TlfDNzyvx1Mst5G4xfczFS1xVPBz6nYtCPwQRDFGBcRudsmJ6ptthjrvBYGXClTbCX5GzVjAMKSqah_vGfFo472BCaBEgA7vdbCiYv4bfNXxI28D0yurUvbiL6ri61riEbfmAGaKWtNvhZIGvhl8EEgqvUt19AeEuf4DLInTusGud--sE_1774496800996",
+      "size": 216
+    },
+    {
+      "key": "_HOME_DIALOG_QUEUE_REPORT",
+      "preview": "false",
+      "size": 5
+    },
+    {
+      "key": "u_scsid_r",
+      "preview": "A-UCuhU4GVjx-NeNuIRiWhn4zj9KtsOg8JRRzVRHnGQwMzHs8Eh3aQ-oHUKJxUa8S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "size": 96
+    },
+    {
+      "key": "PC_POPUP_SDK_PROGRESS_START_TIME",
+      "preview": "1774496799",
+      "size": 10
+    },
+    {
+      "key": "zpnvSrwrNdywdz",
+      "preview": "us",
+      "size": 2
+    },
+    {
+      "key": "ndp_settings",
+      "preview": "{\"b65c9b32-8c3c-4ec0-958e-d5adb7d303bf\":{\"am\":\"0\",\"em\":{},\"t\":1774469970574}}",
+      "size": 77
+    },
+    {
+      "key": "sa_analytics",
+      "preview": "{\"heart_no\":1}",
+      "size": 14
+    },
+    {
+      "key": "u_scsid",
+      "preview": "A-UCuhU4GVjx-NeNuIRiWhn4zj9KtsOg8JRRzVRHnGQwMzHs8Eh3aQ-oHUKJxUa8S649svebzFRsa9-bM0TEnkiz-TcsGXas",
+      "size": 96
+    },
+    {
+      "key": "ndp_settings_expiry",
+      "preview": "1774497103814",
+      "size": 13
+    },
+    {
+      "key": "SmDeviceIdAbt",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "startTime",
+      "preview": "Wed Mar 25 2026 20:46:39 GMT-0700 (Pacific Daylight Time)",
+      "size": 57
+    },
+    {
+      "key": "sa_track_source_cache",
+      "preview": "{\"page_param\":{\"tab_page_id\":\"\",\"tab_id\":\"\",\"mod1_id\":\"\"},\"activity_nm\":\"\",\"activity_param\":{\"src_module\":\"\",\"src_identifier\":\"\",\"tab_list\":\"\",\"block_id\":\"\",\"block_key\":\"\",\"activity_from\":\"\",\"title\":\"\",\"order_status\":\"\"}}",
+      "size": 221
+    },
+    {
+      "key": "s_router_history_data",
+      "preview": "{\"historyLength\":2,\"path\":\"/\",\"query\":{\"cdn_rsite\":\"cf\",\"ref\":\"www\",\"rep\":\"dir\",\"ret\":\"us\"}}",
+      "size": 92
+    },
+    {
+      "key": "is_eu",
+      "preview": "false",
+      "size": 5
+    },
+    {
+      "key": "smidV2",
+      "preview": "202603252046394aae7ddd6f3dba4d2debff1ca9f16bbd001468ece1600c470",
+      "size": 63
+    },
+    {
+      "key": "PC_POPUP_SDK_SESSION_INIT_IS_HOME__us",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "cccCompExposeMonitor",
+      "preview": "{\"topPolicyPc_1_-\":true,\"h1_1_All\":true,\"shopbycate_2_All\":true,\"allsalezone_superDeals_3_All\":true,\"allsalezone_trend_3_All\":true,\"allsalezone_brand_3_All\":true}",
+      "size": 162
+    },
+    {
+      "key": "SmDeviceId",
+      "preview": "WHJMrwNw1k/Fa6VY3EQZM+QbW8HM01TWS0fqSXaiTJxdNl+dgyLPkrPrETC0q8wpcFecWwCVw9+7y4WAFc6wgJ48aoDfOH06bdCW1tldyDzmQI99+chXEitvJwIlA3SQ89lCUKKcsmkSqmJzoPeggw9GeLZs4wXJlkQE5YcNLqNriNYPfoOP/brSGTwDEQqy3FRRuSg/X1FURTkAd7H/eWjEkPiZnXqQiEReAvduDCqsf/QW",
+      "size": 282
+    },
+    {
+      "key": "armorUuid",
+      "preview": "2026032611463413fda17f96f0ab8494eafb8a3c9862cc00705b961a01276c00",
+      "size": 64
+    },
+    {
+      "key": "visit_trajectory",
+      "preview": "[\"page_home\"]",
+      "size": 13
+    }
+  ]
+}

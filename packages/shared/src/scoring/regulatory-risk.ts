@@ -27,6 +27,11 @@ export type RegulatoryRiskAssessment = {
 };
 
 export type RegulatoryRiskSource = {
+  homepageFetchStatus?: "ok" | "error" | "blocked" | "forbidden" | "timeout" | "redirected" | "not_found" | null;
+  pagesScanned?: number | null;
+  partialScan?: boolean | null;
+  finalUrl?: string | null;
+  registeredDomain?: string | null;
   trackingBeforeConsentDetected?: boolean | null;
   thirdPartyCookieSetBeforeConsent?: boolean | null;
   cookieBannerPresent?: boolean | null;
@@ -96,6 +101,30 @@ function numberOrZero(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function hostnameFromUrl(value: string | null | undefined) {
+  if (typeof value !== "string" || value.length === 0) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDomain(value: string | null | undefined) {
+  return typeof value === "string" && value.length > 0 ? value.toLowerCase().replace(/^www\./, "") : null;
+}
+
+function finalUrlRedirectsOffDomain(source: RegulatoryRiskSource) {
+  const finalHostname = normalizeDomain(hostnameFromUrl(source.finalUrl));
+  const registeredDomain = normalizeDomain(source.registeredDomain);
+  if (!finalHostname || !registeredDomain) {
+    return false;
+  }
+  return finalHostname !== registeredDomain;
+}
+
 function buildPrivacyBucket(source: RegulatoryRiskSource): ScoredBucket {
   const drivers: RegulatoryRiskDriver[] = [];
   const mitigations: RegulatoryRiskDriver[] = [];
@@ -145,6 +174,23 @@ function buildConsentBucket(source: RegulatoryRiskSource): ScoredBucket {
 function buildConsumerBucket(source: RegulatoryRiskSource): ScoredBucket {
   const drivers: RegulatoryRiskDriver[] = [];
   const mitigations: RegulatoryRiskDriver[] = [];
+  pushIf(
+    numberOrZero(source.pagesScanned) === 0 &&
+      (source.homepageFetchStatus === "error" || source.homepageFetchStatus === "timeout" || source.homepageFetchStatus === "not_found"),
+    drivers,
+    { key: "site_unreachable", label: "Homepage unreachable during scan", impact: 26 }
+  );
+  pushIf(
+    numberOrZero(source.pagesScanned) === 0 &&
+      (source.homepageFetchStatus === "forbidden" || source.homepageFetchStatus === "blocked"),
+    drivers,
+    { key: "access_blocked", label: "Homepage blocked during scan", impact: 18 }
+  );
+  pushIf(finalUrlRedirectsOffDomain(source), drivers, {
+    key: "off_domain_redirect",
+    label: "Domain redirected to a different site",
+    impact: 30
+  });
   pushIf(source.policyBehaviorConflictDetected === true, drivers, { key: "policy_behavior_conflict", label: "Policy and behavior conflict", impact: 28 });
   pushIf(source.sessionReplayWithoutDisclosureDetected === true, drivers, { key: "session_replay_undisclosed", label: "Session replay without disclosure", impact: 22 });
   pushIf(numberOrZero(source.advertisingTrackerCount) > 0 && source.policyClaimNoSale === true, drivers, { key: "no_sale_vs_adtech", label: "No-sale claim conflicts with adtech", impact: 18 });
@@ -227,6 +273,9 @@ export function buildRegulatoryRiskAssessment(input: {
   );
 
   const observedFields = [
+    input.source.homepageFetchStatus,
+    input.source.pagesScanned,
+    input.source.finalUrl,
     input.source.trackingBeforeConsentDetected,
     input.source.rejectAllPresent,
     input.source.dsarRequestMechanismPresent,
@@ -238,7 +287,10 @@ export function buildRegulatoryRiskAssessment(input: {
     input.source.retentionDisclosureQuality
   ].filter((value) => value !== null && value !== undefined).length;
 
-  const confidence = Math.max(0.45, Math.min(0.96, observedFields / 10));
+  const confidence = Math.max(
+    numberOrZero(input.source.pagesScanned) === 0 ? 0.2 : 0.45,
+    Math.min(0.96, observedFields / 10)
+  );
   const topRiskDrivers = [...privacy.drivers, ...consent.drivers, ...consumer.drivers, ...accessibility.drivers, ...dataExposure.drivers]
     .sort((left, right) => right.impact - left.impact)
     .slice(0, 3);

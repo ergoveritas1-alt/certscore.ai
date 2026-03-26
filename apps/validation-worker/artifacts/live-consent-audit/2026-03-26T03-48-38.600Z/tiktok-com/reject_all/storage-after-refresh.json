@@ -1,0 +1,407 @@
+{
+  "cookies": [
+    {
+      "domain": ".tiktok.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "tt_csrf_token",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "tavveUH5-sFio3UTPTX4t_z2VighRBxc6tQ0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1790049386.1761,
+      "httpOnly": true,
+      "name": "tt_chain_token",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "uY3ZRhQX1J2pP1hg7T+GcQ==",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800417386,
+      "httpOnly": false,
+      "name": "tiktok_webapp_theme_source",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "auto",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800417386,
+      "httpOnly": false,
+      "name": "tiktok_webapp_theme",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "dark",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800417383,
+      "httpOnly": false,
+      "name": "delay_guest_mode_vid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "5",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1806033386.872161,
+      "httpOnly": true,
+      "name": "ttwid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1%7Cdodka00RuDfeL3ZZqkjRduJRRMKKSL4jChvkeFvhONc%7C1774497386%7C683245288a9a00012...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktokw.us",
+      "expires": 1775361390.523734,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "lhbRMGUWGKQZBISGpcj6p4sQrtKy6Jl-WY3pc4zwuhxtr82K1frMWAI-Kq2t9Cc3HUNyhIed1Q2MwMHV...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.tiktok.com",
+      "expires": 1782273390,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "lhbRMGUWGKQZBISGpcj6p4sQrtKy6Jl-WY3pc4zwuhxtr82K1frMWAI-Kq2t9Cc3HUNyhIed1Q2MwMHV...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1775361389.620729,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "SXp1Tn9SvnmOQ8KbZzsCv7aplcJvmg2vJMZRRP3-As7Yx907a4DPedcYfAB_oFiRccqoxjUx36wQle4x...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1775102190,
+      "httpOnly": false,
+      "name": "perf_feed_cache",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "{%22expireTimestamp%22:1774666800000%2C%22itemIds%22:[%227610112017453698334%22]...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [
+    "live-recs-db",
+    "sync-sdk-db"
+  ],
+  "localStorage": [
+    {
+      "key": "SLARDARtiktok_webapp_vmok",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMmZkNTQ5YWY0LWU4OWMtNGJlZC05YTY2LTNhNzAwM2YyZmU3ZiUyMiwlMjJkZXZpY2VJZCUyMjolMjIzOWMxZmU3Mi1jNjNlLTRhOTktYTRjNS04MzMwODI3MGQyZDMlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjczMzg4MDgyJTdE",
+      "size": 196
+    },
+    {
+      "key": "SLARDARwebmssdk",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjlkYjRhMzFjLWEwNmUtNDgyOC04MTlkLTA3Y2M2YTIzMzJkNiUyMiwlMjJkZXZpY2VJZCUyMjolMjIyMmY4N2I5OS1jNTc4LTQ3MjUtYTFhZS1mM2JjMWI0ZTZlODUlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjczMzg2NjQ4JTdE",
+      "size": 196
+    },
+    {
+      "key": "text.5dc26cf008d511e9b571e1bc0c9e23b5.WebApp_Login.en",
+      "preview": "{\"2-step_verification_TikTok\":\"2-step verification | TikTok\",\"2_step_verification_alt_method1\":\"Send code via SMS\",\"2_step_verification_alt_method2\":\"Send code via email\",\"2_step_verification_alt_method3\":\"Use authenticator app\",\"2_step_ver",
+      "size": 124297
+    },
+    {
+      "key": "__tea_cache_tokens_548444",
+      "preview": "{\"web_id\":\"7621408171843733005\",\"user_unique_id\":\"7621408171843733005\",\"timestamp\":1774497387963,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "ARGUS_XSS_V3",
+      "preview": "{\"Wk$kc2Nt%khPWEpNTTJSc1dXaz$NR0Z-ZERCa%1u%m1XbTFXWm1KSE9XNWhWelZtWkcwe*RtRXlSbmxhTTFaNg___2.0.0.134\":{\"time\":1774497384305}}",
+      "size": 125
+    },
+    {
+      "key": "ppf_eligibility_v2",
+      "preview": "[{\"decision_code\":\"0\",\"id_value\":\"account_control\",\"is_eligible\":true}]",
+      "size": 71
+    },
+    {
+      "key": "version.2e1fcc60aeaa11e99ef535aeebd27c9b.account_server.en",
+      "preview": "\"1773735039251267000\"",
+      "size": 21
+    },
+    {
+      "key": "LOCAL_IS_EFFECTIVE",
+      "preview": "0",
+      "size": 1
+    },
+    {
+      "key": "g_exp",
+      "preview": "1774497386870",
+      "size": 13
+    },
+    {
+      "key": "STM_TAB_ID_KEY",
+      "preview": "{\"tabID\":\"ff964392\",\"time\":1774497388106}",
+      "size": 41
+    },
+    {
+      "key": "fyp-feed-cache",
+      "preview": "{\"itemList\":[{\"AIGCDescription\":\"\",\"BAInfo\":\"\",\"CategoryType\":102,\"IsHDBitrate\":false,\"adLabelVersion\":2,\"anchors\":[{\"extra\":\"[{\\\"keyword\\\":\\\"Peach Slices Smoothing Solutio\\\",\\\"id\\\":\\\"1729553331716199364\\\",\\\"type\\\":33,\\\"icon\\\":{\\\"uri\\\":\\\"ti",
+      "size": 34821
+    },
+    {
+      "key": "hevc_support_key_time",
+      "preview": "1774497376563",
+      "size": 13
+    },
+    {
+      "key": "xmsi",
+      "preview": "5",
+      "size": 1
+    },
+    {
+      "key": "SLARDARpns_communication_service",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjMyMDRlZjYyLTNiZjYtNDg2Yy04ZDE4LTE3MjFjYzg0OTFmOSUyMiwlMjJkZXZpY2VJZCUyMjolMjI3MmJkM2IxZi01YjMzLTQwNzctOTE4Zi00Y2ZmYTI1MjJlMzglMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjczMzg2NTk4JTdE",
+      "size": 196
+    },
+    {
+      "key": "f_s_1",
+      "preview": "{\"3/25/2026\":{\"7621408171843733005\":{\"session_last_update_time\":1774497386790,\"stay_duration\":0.17,\"session_cnt\":1,\"os\":\"mac\",\"browser_brand\":\"chrome\",\"screen_resolution\":3168000,\"screen_orientation\":0,\"cpu_core_number\":8,\"network_downlink\"",
+      "size": 1618
+    },
+    {
+      "key": "pc_app_auto_tip",
+      "preview": "{\"date\":1774497390357,\"count\":1}",
+      "size": 32
+    },
+    {
+      "key": "PUMBAA_FREQ",
+      "preview": "{\"AbsoluteOrientationSensor\":2,\"Accelerometer\":2,\"addEventListener('devicemotion')\":0.01,\"addEventListener('deviceorientation')\":0.01,\"addEventListener('deviceorientationabsolute')\":1.1,\"addEventListener('MozOrientation')\":2,\"document.addEv",
+      "size": 1588
+    },
+    {
+      "key": "__tea_cache_first_548444",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "__tea_cache_first_345918",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "msToken",
+      "preview": "lhbRMGUWGKQZBISGpcj6p4sQrtKy6Jl-WY3pc4zwuhxtr82K1frMWAI-Kq2t9Cc3HUNyhIed1Q2MwMHV5zir_tpjgvpX3x9XfQwno88TM0lUmRyqGVQNoG35ACCSs6XgePDLUoEDdea1ZLxFMGvuawMTnhc=",
+      "size": 156
+    },
+    {
+      "key": "__PRE_CACHE__KEYS",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "SLARDARtiktok_webapp",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjc2MjE0MDgxNzE4NDM3MzMwMDUlMjIsJTIyZGV2aWNlSWQlMjI6JTIyNThkZjY5NmItMjVjOC00YjUyLTlkODMtYjMxZTg1YmM2MDQ0JTIyLCUyMmV4cGlyZXMlMjI6MTc4MjI3MzM4NjU5NiU3RA==",
+      "size": 176
+    },
+    {
+      "key": "g_ven",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "__tea_cache_first_1988",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "xg-decodeimg-scores-map",
+      "preview": "{\"https://lf16-tiktok-web.tiktokcdn-us.com/obj/tiktok-web-tx/tiktok/webapp/main/assets/perf_images/performance.jpeg\":[7.98,4.69]}",
+      "size": 129
+    },
+    {
+      "key": "text.2e1fcc60aeaa11e99ef535aeebd27c9b.account_server.en",
+      "preview": "{\"AI_Agent_IAB_half_screen_answers_Popular_items\":\"Popular items\",\"AI_Agent_IAB_half_screen_answers_brand_info\":\"Info\",\"AI_Agent_IAB_half_screen_answers_coupon\":\"Eligible promotions\",\"AI_Agent_IAB_half_screen_answers_coupon_copy\":\"Eligible ",
+      "size": 16241
+    },
+    {
+      "key": "SLARDARpns_cookie_banner_slardar",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjQ2ODIxOTMxLWUyMGMtNGVkYi05MmE1LTUyMDFmZDBhMjFhNCUyMiwlMjJkZXZpY2VJZCUyMjolMjJiN2E0M2VmZi0xYWQ0LTQyNDgtYWU2Zi1lMjAxMjU3NzU0MWUlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjczMzg3NzE1JTdE",
+      "size": 196
+    },
+    {
+      "key": "xmst",
+      "preview": "lhbRMGUWGKQZBISGpcj6p4sQrtKy6Jl-WY3pc4zwuhxtr82K1frMWAI-Kq2t9Cc3HUNyhIed1Q2MwMHV5zir_tpjgvpX3x9XfQwno88TM0lUmRyqGVQNoG35ACCSs6XgePDLUoEDdea1ZLxFMGvuawMTnhc=",
+      "size": 156
+    },
+    {
+      "key": "shopNotificationWID",
+      "preview": "7621408171843733005",
+      "size": 19
+    },
+    {
+      "key": "__tea_sdk_ab_version_1988",
+      "preview": "{\"data\":{\"can_show_podcast_page\":{\"val\":false,\"vid\":\"121374463\"},\"cr_blocking_popup\":{\"val\":true,\"vid\":\"121468990\"},\"creation_use_zti\":{\"val\":true,\"vid\":\"121439635\"},\"csi_tabs_fe_fallback\":{\"val\":{\"events\":{\"E_COMMERCE\":{\"SINGLE_TAB\":{\"forY",
+      "size": 5607
+    },
+    {
+      "key": "HYBRID_SLARDAR_WEBtiktok_pns_web_runtime",
+      "preview": "{\"userId\":\"283034c1-766b-49e9-8b95-6845d7c079c3\",\"deviceId\":\"0a869e03-6c74-4a76-ab1d-07c978c66290\"}",
+      "size": 99
+    },
+    {
+      "key": "__tea_cache_tokens_1988",
+      "preview": "{\"web_id\":\"7621408175523087885\",\"user_unique_id\":\"7621408171843733005\",\"timestamp\":1774497387581,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "__tea_cache_tokens_345918",
+      "preview": "{\"web_id\":\"7621408206602143246\",\"user_unique_id\":\"7621408206602143246\",\"timestamp\":1774497387577,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "__tea_cache_refer_1988",
+      "preview": "{\"refer_key\":\"\",\"refer_title\":\"TikTok - Make Your Day\",\"refer_manual_key\":\"\",\"routeChange\":false}",
+      "size": 97
+    },
+    {
+      "key": "ENABLED_FYP_DUMMY_REQUEST",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "version.5dc26cf008d511e9b571e1bc0c9e23b5.WebApp_Login.en",
+      "preview": "\"1773905899560302000\"",
+      "size": 21
+    },
+    {
+      "key": "ttwid",
+      "preview": "7621408171843733005",
+      "size": 19
+    },
+    {
+      "key": "tiktok-studio-guide-record_guest",
+      "preview": "\"2026-03-26T03:56:23.326Z\"",
+      "size": 26
+    },
+    {
+      "key": "hevc_support_key_v4",
+      "preview": "0",
+      "size": 1
+    },
+    {
+      "key": "SLARDARpns_consent_system",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMmRjMjlmNzE0LTY3NGQtNGUzZi04N2VmLTIzMDdmN2M4MmU0YiUyMiwlMjJkZXZpY2VJZCUyMjolMjJkNDliOTMyYS01MGU1LTRhODctYmJhYi0yNmZiY2UyNzQ3OGIlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjczMzg3NzE0JTdE",
+      "size": 196
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "__tea_session_id_345918",
+      "preview": "{\"sessionId\":\"7546b609-78a7-48cd-ba6c-e4a4e7950da0\",\"timestamp\":1774497387579}",
+      "size": 78
+    },
+    {
+      "key": "webapp-session-referer",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "webapp_fyp_feeder_landing",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "__tea_session_id_548444",
+      "preview": "{\"sessionId\":\"0dbaa1ce-dcfc-4808-b0e7-db1eb64fcd85\",\"timestamp\":1774497391123}",
+      "size": 78
+    },
+    {
+      "key": "__tea_session_id_1988",
+      "preview": "{\"sessionId\":\"26c60ff1-8366-410b-8101-b95b9515698a\",\"timestamp\":1774497389394}",
+      "size": 78
+    },
+    {
+      "key": "webapp_extra_data",
+      "preview": "{}",
+      "size": 2
+    },
+    {
+      "key": "webapp_tiktok_privious",
+      "preview": "{\"href\":\"https://www.tiktok.com/\",\"pageName\":\"homepage_hot\"}",
+      "size": 60
+    },
+    {
+      "key": "webapp_tiktok_open",
+      "preview": "homepage_hot",
+      "size": 12
+    },
+    {
+      "key": "STM_TAB_ID_KEY",
+      "preview": "ff964392",
+      "size": 8
+    },
+    {
+      "key": "webapp_launch_mode",
+      "preview": "direct",
+      "size": 6
+    },
+    {
+      "key": "webapp_session_id",
+      "preview": "76214081718437330051774497376425",
+      "size": 32
+    },
+    {
+      "key": "user_session",
+      "preview": "{\"uid\":\"0\",\"lastUpdated\":\"1774497376471\"}",
+      "size": 41
+    },
+    {
+      "key": "webapp_original_traffic_type",
+      "preview": "no_referrer",
+      "size": 11
+    },
+    {
+      "key": "_tea_cache_duration",
+      "preview": "{\"duration\":9386,\"page_title\":\"TikTok - Make Your Day\"}",
+      "size": 55
+    },
+    {
+      "key": "msToken",
+      "preview": "lhbRMGUWGKQZBISGpcj6p4sQrtKy6Jl-WY3pc4zwuhxtr82K1frMWAI-Kq2t9Cc3HUNyhIed1Q2MwMHV5zir_tpjgvpX3x9XfQwno88TM0lUmRyqGVQNoG35ACCSs6XgePDLUoEDdea1ZLxFMGvuawMTnhc=",
+      "size": 156
+    }
+  ]
+}

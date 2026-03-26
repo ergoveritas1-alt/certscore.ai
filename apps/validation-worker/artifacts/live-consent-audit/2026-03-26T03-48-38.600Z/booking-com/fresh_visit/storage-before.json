@@ -1,0 +1,663 @@
+{
+  "cookies": [
+    {
+      "domain": ".booking.com",
+      "expires": 1809057408.160951,
+      "httpOnly": true,
+      "name": "bkng_sso_auth",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "CAIQi4nT0gIaZqEUi+UOR2Z9wOgmGSL+B0XF4yvoic943vsQE3dH78P97Mq2DNVzsB5ijpZ5ILm2P32n...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1806033407.161309,
+      "httpOnly": true,
+      "name": "pcm_consent",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "analytical%3Dtrue%26countryCode%3DUS%26consentId%3D0a8fda1b-4d4a-44d3-aac5-a9fd8...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1774499210.639478,
+      "httpOnly": false,
+      "name": "bk_nav_search",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "%7B%22u%22%3A%22https%3A%2F%2Fwww.booking.com%2F%22%2C%22t%22%3A1774497410639%2C...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057411.612722,
+      "httpOnly": true,
+      "name": "bkng_sso_session",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "e30",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057411.612856,
+      "httpOnly": true,
+      "name": "bkng_sso_ses",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "e30",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".account.booking.com",
+      "expires": 1809057411.61262,
+      "httpOnly": true,
+      "name": "bkng_ap_sso_session",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "eyJib29raW5nX2dsb2JhbCI6eyJkYXRhX3N1YmplY3RfaWQiOiI1NTcwMzRlYy01YmNmLTRlYTgtYmQ0...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.booking.com",
+      "expires": 1806033410,
+      "httpOnly": false,
+      "name": "OptanonConsent",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "implicitConsentCountry=nonGDPR&implicitConsentDate=1774497410773&isGpcEnabled=0&...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1808193411,
+      "httpOnly": false,
+      "name": "__gads",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ID=a9d233b4f15f5cc5:T=1774497411:RT=1774497411:S=ALNI_MYPnF5EcuScS17OBV2VMvn63gS...",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1808193411,
+      "httpOnly": false,
+      "name": "__gpi",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "UID=000013a2344c95b9:T=1774497411:RT=1774497411:S=ALNI_MZfUXfzlAbAn3jRrUwLF1UvX2...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1790049411,
+      "httpOnly": false,
+      "name": "__eoi",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ID=de73390018130c6b:T=1774497411:RT=1774497411:S=AA-AfjaF708TFr4X9Z-ROjqtx4nr",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1782273412,
+      "httpOnly": false,
+      "name": "_gcl_au",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1.1.90834743.1774497412",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "bkng_prue",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1774499211.612417,
+      "httpOnly": false,
+      "name": "pcm_pac",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%5B%2229aa20efbebfee980e1904091ba3b27c16fedb1a01cd6ef6d6d9ae290f9db860%22%2C6%5D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1790049411,
+      "httpOnly": false,
+      "name": "g_state",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "{\"i_l\":0,\"i_ll\":1774497411676,\"i_b\":\"zw2lkCJwxAegJY7evnUdXOE7vicf1tr9NYYsaFuFU4w...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057411.786852,
+      "httpOnly": false,
+      "name": "_ga",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GA1.1.396659272.1774497412",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057411.794093,
+      "httpOnly": false,
+      "name": "_ga_A12345",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GS2.1.s1774497411$o1$g1$t1774497411$j60$l0$h1925533473",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".criteo.com",
+      "expires": 1808193411.80844,
+      "httpOnly": false,
+      "name": "uid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "44b84ea7-3b03-4197-affb-0f2c48d8b522",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Criteo"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1775102211.902933,
+      "httpOnly": false,
+      "name": "cgumid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "e7r7oF9JUHlZZzc3OGolMkZBNE1CVmslMkZBNFlZRDIxT2V2QVpoS0x4MVBGUFFQVGRNVjZkZEFGbUxi...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1774583811,
+      "httpOnly": false,
+      "name": "_uetsid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "d26bd26028c711f19b48af635170ab4c",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1808193411,
+      "httpOnly": false,
+      "name": "_uetvid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "d26bd89028c711f1b78d5bc761ec884e",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".creativecdn.com",
+      "expires": 1806033411.944038,
+      "httpOnly": false,
+      "name": "g",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "z9s9YhgXOBRtWUjiEcRI_1774497411949",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".creativecdn.com",
+      "expires": 1806033411.94408,
+      "httpOnly": false,
+      "name": "c",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "z9s9YhgXOBRtWUjiEcRI_ge2NGk4y4ajZVQiF8Qch_1774497411949",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".creativecdn.com",
+      "expires": 1806033411.944095,
+      "httpOnly": false,
+      "name": "ts",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497411",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bat.bing.com",
+      "expires": 1775102212.003801,
+      "httpOnly": false,
+      "name": "MR",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bing.com",
+      "expires": 1808193412.003573,
+      "httpOnly": false,
+      "name": "MUID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "156E17E344776D0F114100CB45F46CA4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adsrvr.org",
+      "expires": 1806033414.945809,
+      "httpOnly": false,
+      "name": "TDID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "06318edc-be09-45e6-9a42-8ca13d4e7dcb",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".criteo.com",
+      "expires": 1808193412.086552,
+      "httpOnly": false,
+      "name": "cto_bundle",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "9e9DIV9YR3IyZUlsWm42d1Z3R2pLUDhzbm5mbUNLT1pyT1F1ZTQzS1N4RTNWbXdYY1NwSSUyRmFvQW5v...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Criteo"
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057412.128692,
+      "httpOnly": true,
+      "name": "FPID",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "FPID2.2.OqxWln%2BJ%2Bxb9bAvzyrS2x%2FMpe4H%2BeUHD3GRBOwpEKNk%3D.1774497412",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1782273412.128912,
+      "httpOnly": false,
+      "name": "FPAU",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "1.1.90834743.1774497412",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1774569412.128805,
+      "httpOnly": false,
+      "name": "FPLC",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "zuSmOaSDCLuTSLcbYgYlnjFyCX%2FS%2BjKFihqdETR0IH7AO1FswzEW49X4EbSiJYSSd%2FaOPIG0H9...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1808661412,
+      "httpOnly": false,
+      "name": "cto_bundle",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "lcncQV9KQlFjbThPRnppbDBJUVJhQ2hwRCUyQmxFaWlOWmgzaTE5djZrc2cwd0tkN2MlMkZ4TG5QMWtk...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".doubleclick.net",
+      "expires": 1809057412.230475,
+      "httpOnly": true,
+      "name": "IDE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AHWqTUk7bCDLWxwYhtvo1pAXXo6jrGcjY0Dc8FE0_mWIBVX88sggo--Y45c_WJGiHyo",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273414.890955,
+      "httpOnly": false,
+      "name": "XANDR_PANID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5yZUFuRuwMf0cr-EeBmFS7hqEEdYB9d6CTF_1wOHWB3G1YTlOFGWpdWUWqrZRR17Y6m4VdSEqw0FC1QU...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273414.890997,
+      "httpOnly": true,
+      "name": "anj",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "dTM7k!M4/rD>6NRF']wIg2Hb9G_zlJ!@wnfH1YbZRGH!W=Aw.r.ydV'1I)nUf@x#(6Cts-.TB2c/@A3'...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273414.891018,
+      "httpOnly": true,
+      "name": "uuid2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "6048656117867387806",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033414.891986,
+      "httpOnly": false,
+      "name": "audit_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|AUO9VvgR3Ej6YIoLevMU8scusp8nlUmylHNN58B7dqTjNu2jw0LlLkaxvWaNn1IGK0EAnoMxOwUwHT...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033414.892032,
+      "httpOnly": false,
+      "name": "khaos",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XY0AU-1L-8L9I",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033414.892103,
+      "httpOnly": false,
+      "name": "khaos_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XY0AU-1L-8L9I",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033414.892161,
+      "httpOnly": false,
+      "name": "audit",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|AUO9VvgR3Ej6YIoLevMU8scusp8nlUmylHNN58B7dqTjNu2jw0LlLkaxvWaNn1IGK0EAnoMxOwUwHT...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033415.030227,
+      "httpOnly": false,
+      "name": "tuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "a7e3e332-59b8-41a2-afa1-acd4d899c575",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033414.903571,
+      "httpOnly": false,
+      "name": "c",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497414",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".adsrvr.org",
+      "expires": 1806033414.945899,
+      "httpOnly": false,
+      "name": "TDCPM",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CAESFQoGZ29vZ2xlEgsImOmJ8be9hT8QBRIWCgdydWJpY29uEgsIvomK8be9hT8QBRIXCghhcHBuZXh1...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033415.030297,
+      "httpOnly": false,
+      "name": "tuuid_lu",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497415",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1806033415,
+      "httpOnly": false,
+      "name": "_yjsu_yjad",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774497415.ac7d20dd-8b34-49e9-a13b-ff5494f39e75",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1809057415.181226,
+      "httpOnly": true,
+      "name": "bkng",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "11UmFuZG9tSVYkc2RlIyh9Yaa29%2F3xUOLbXpFeYC4TUhBQaaLhV81ZEY%2FyiqGkPnnqWqwjkis%2F...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".id5-sync.com",
+      "expires": 1782273415.239534,
+      "httpOnly": false,
+      "name": "id5",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0a9e8dba-4bc3-71c3-8c03-509d2cdea0d2#1774497414979#1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".booking.com",
+      "expires": 1774843017,
+      "httpOnly": false,
+      "name": "aws-waf-token",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "11a24d36-9952-427e-8f60-53771f485147:EwoAwSsbKH9VAAAA:TkcVLrMaRoIr6nnfQc0lLMZEhs...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [
+    {
+      "key": "aws_waf_token_challenge_attempts",
+      "preview": "{\"attempts\":1,\"lastAttemptTimestamp\":1774497408783}",
+      "size": 51
+    },
+    {
+      "key": "criteo-id5id-fast-track",
+      "preview": "ID5*f1g_e9MS5g9WXrXYTI4kysvBzlnOQde76KXy9kLnXdv__2nErodaAAEBCmnEroYAl4SOC1j0kge2bKIlhzg9mg",
+      "size": 90
+    },
+    {
+      "key": "_uetvid_exp",
+      "preview": "Tue, 20 Apr 2027 03:56:51 GMT",
+      "size": 29
+    },
+    {
+      "key": "cto_bundle",
+      "preview": "lcncQV9KQlFjbThPRnppbDBJUVJhQ2hwRCUyQmxFaWlOWmgzaTE5djZrc2cwd0tkN2MlMkZ4TG5QMWtkRDN5N2c5bFhJbWs0NUcxZzQwR25lUWNUQ0ZDZGY4MzE3RXNmamlyUGthUTZYV09KOVRzNHU4ajRNNjY4cXdrRGlINDFMY2F4bHU2dWJHZFR1ZlI0eEtlTXVxVWlUYlAySVlRJTNEJTNE",
+      "size": 220
+    },
+    {
+      "key": "id5id_v2_signature",
+      "preview": "{\"data\":{\"signature\":\"ID5_AmIlEkMJeJSL9QKX25gp_VbK9WnZCCJPfr2NtM99ypaIjoP_nJQSJMQ_ZxYkRfSFnEFrEx3oYkw3GEyLjOnROgnqZ735JABI0Zl_Cd8vQp6bJQPMUzoXbiWl3x5opbJyiUCVDsEIe5CVVK21WvG3kJNMd5vvNHgkDr0moOirNhlTpEsCMrI\"},\"expireAt\":1775793415241}",
+      "size": 233
+    },
+    {
+      "key": "_yjsu_yjad",
+      "preview": "1774497415.ac7d20dd-8b34-49e9-a13b-ff5494f39e75",
+      "size": 47
+    },
+    {
+      "key": "awswaf_session_storage",
+      "preview": "11a24d36-9952-427e-8f60-53771f485147:EwoAwSsbKIBVAAAA:eCS5d87ZNHnQNUVzleiiBops4niHbgHsS9szLmP8k5msNPvdbdhVa5YUmyg4LyQ5wgGEmSHAK5JXJjFPUqJc2MmtFjmfjKTyBp0mCvtA+LefRzNDQswDLHl6fOc/i1EjI6FFpHMtg/0etZu0q8Q00mj/WsqUTETz7lZIbgpCiv+hMROHFpNSGwmVy8",
+      "size": 834
+    },
+    {
+      "key": "_gcl_ls",
+      "preview": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"creationTimeMs\":1774497411579},\"expires\":1782273411579}}",
+      "size": 139
+    },
+    {
+      "key": "_uetsid",
+      "preview": "d26bd26028c711f19b48af635170ab4c",
+      "size": 32
+    },
+    {
+      "key": "id5id_privacy",
+      "preview": "{\"jurisdiction\":\"other\",\"id5_consent\":true}",
+      "size": 43
+    },
+    {
+      "key": "aws_waf_referrer",
+      "preview": "null",
+      "size": 4
+    },
+    {
+      "key": "_uetsid_exp",
+      "preview": "Fri, 27 Mar 2026 03:56:51 GMT",
+      "size": 29
+    },
+    {
+      "key": "id5id_v2_3856268834750531",
+      "preview": "{\"data\":{\"response\":{\"signature\":\"ID5_AmIlEkMJeJSL9QKX25gp_VbK9WnZCCJPfr2NtM99ypaIjoP_nJQSJMQ_ZxYkRfSFnEFrEx3oYkw3GEyLjOnROgnqZ735JABI0Zl_Cd8vQp6bJQPMUzoXbiWl3x5opbJyiUCVDsEIe5CVVK21WvG3kJNMd5vvNHgkDr0moOirNhlTpEsCMrI\",\"created_at\":\"2026-03",
+      "size": 1133
+    },
+    {
+      "key": "awswaf_token_refresh_timestamp",
+      "preview": "1774497408979",
+      "size": 13
+    },
+    {
+      "key": "_uetvid",
+      "preview": "d26bd89028c711f1b78d5bc761ec884e",
+      "size": 32
+    },
+    {
+      "key": "id5id_privacy_exp",
+      "preview": "Sat, 25 Apr 2026 03:56:55 GMT",
+      "size": 29
+    },
+    {
+      "key": "__rtbhouse.lid",
+      "preview": "b9ka7Rbrhq0l82Kv2i7m",
+      "size": 20
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "booking_product_session",
+      "preview": "{\"accommodations\":{\"productName\":\"accommodations\",\"lastPageType\":\"index\",\"pageParameters\":{},\"timestamp\":1774497410639,\"url\":\"https://www.booking.com/\"}}",
+      "size": 153
+    }
+  ]
+}

@@ -1,0 +1,312 @@
+{
+  "consentUxScorecard": {
+    "acceptRejectClickParity": "inconclusive",
+    "bannerPresent": "inconclusive",
+    "darkPatternIndicatorsObserved": [],
+    "equalProminenceAssessment": "inconclusive",
+    "rejectAllFirstLayer": "inconclusive"
+  },
+  "executiveSummary": {
+    "confidenceLevel": "low",
+    "manualReviewRecommended": true,
+    "overallTestingStatus": "partially completed with blocking or anti-automation issues on some scenarios",
+    "strongestObservedRisks": []
+  },
+  "finalClassification": "inconclusive / needs manual review",
+  "findings": [],
+  "methodology": {
+    "browserSignalsCompared": true,
+    "locale": "en-US",
+    "noInteractionWaitMs": 12000,
+    "testedAt": "2026-03-26T19:46:28.378Z",
+    "viewport": {
+      "width": 1440,
+      "height": 2200
+    }
+  },
+  "preConsentTrackingSummary": {
+    "cookiesSetBeforeInteraction": [],
+    "likelyVendorsObserved": [],
+    "nonEssentialRequestsBeforeInteraction": [],
+    "storageEntriesCreatedBeforeInteraction": []
+  },
+  "rejectPathEffectivenessSummary": {
+    "consentSignalsChangedAfterReject": [],
+    "refreshPreservedRejectOutcome": "tracking-like activity still appeared or refresh evidence was inconclusive",
+    "stillFiredAfterReject": [],
+    "whatChangedAfterReject": [
+      "reject scenario did not capture a stable post-choice storage snapshot"
+    ]
+  },
+  "scenarios": {
+    "fresh_visit": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": null,
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Scenario fresh_visit failed: frame.evaluate: ReferenceError: __name is not defined\n    at eval (eval at evaluate (:290:30), <anonymous>:1:190)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      ],
+      "network": [],
+      "notes": [],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T19:45:55.603Z",
+      "url": "https://betterment.com"
+    },
+    "fresh_visit_gpc": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": null,
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Scenario fresh_visit_gpc failed: frame.evaluate: ReferenceError: __name is not defined\n    at eval (eval at evaluate (:290:30), <anonymous>:1:190)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      ],
+      "network": [],
+      "notes": [],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T19:46:03.566Z",
+      "url": "https://betterment.com"
+    },
+    "accept_all": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": null,
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Scenario accept_all failed: frame.evaluate: ReferenceError: __name is not defined\n    at eval (eval at evaluate (:290:30), <anonymous>:1:190)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      ],
+      "network": [],
+      "notes": [],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T19:46:11.934Z",
+      "url": "https://betterment.com"
+    },
+    "reject_all": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": null,
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Scenario reject_all failed: frame.evaluate: ReferenceError: __name is not defined\n    at eval (eval at evaluate (:290:30), <anonymous>:1:190)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      ],
+      "network": [],
+      "notes": [],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T19:46:20.331Z",
+      "url": "https://betterment.com"
+    },
+    "custom_preferences": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": null,
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Scenario custom_preferences failed: frame.evaluate: ReferenceError: __name is not defined\n    at eval (eval at evaluate (:290:30), <anonymous>:1:190)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+      ],
+      "network": [],
+      "notes": [],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T19:46:28.377Z",
+      "url": "https://betterment.com"
+    }
+  },
+  "site": {
+    "hostname": "betterment.com",
+    "startUrl": "https://betterment.com"
+  }
+}

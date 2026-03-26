@@ -1,0 +1,51 @@
+[
+  {
+    "finalClassification": "reject path may not suppress non-essential tracking",
+    "hostname": "ebay.com",
+    "likelyVendorsObserved": [
+      "Criteo",
+      "DoubleClick",
+      "Google Tag Manager",
+      "Meta / Facebook",
+      "Pinterest",
+      "Snap"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 255,
+    "rejectResidualRequestCount": 0
+  },
+  {
+    "finalClassification": "reject path may not suppress non-essential tracking",
+    "hostname": "aliexpress.com",
+    "likelyVendorsObserved": [
+      "AppNexus / Xandr",
+      "Criteo",
+      "DoubleClick",
+      "Google Analytics",
+      "Google Tag Manager",
+      "Meta / Facebook",
+      "Pinterest"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 63,
+    "rejectResidualRequestCount": 0
+  },
+  {
+    "finalClassification": "possible pre-consent tracking",
+    "hostname": "etsy.com",
+    "likelyVendorsObserved": [
+      "DoubleClick"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 1,
+    "rejectResidualRequestCount": 0
+  },
+  {
+    "finalClassification": "reject path may not suppress non-essential tracking",
+    "hostname": "tripadvisor.com",
+    "likelyVendorsObserved": [],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 0,
+    "rejectResidualRequestCount": 0
+  }
+]

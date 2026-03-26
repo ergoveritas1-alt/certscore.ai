@@ -1,0 +1,188 @@
+{
+  "cookies": [
+    {
+      "domain": ".ebay.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "s",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "CgAD4ACBpxgBlMjg0YjJmMjkxOWQwYTQ3ZTE4MzNkMmNlZmViM2RlMWJCOrCz",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "ds2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "amsg/284b2f2919d0a47e1833d2cefeb3de1b^",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "ebay",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "%5Esbf%3D%23000000%5E",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.101045,
+      "httpOnly": false,
+      "name": "__uzma",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "3b38bf84-fda5-40c4-bb4d-9838cb0dffcc",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.101077,
+      "httpOnly": false,
+      "name": "__uzmb",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774497510",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.101263,
+      "httpOnly": false,
+      "name": "__uzmc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "556341026979",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.101303,
+      "httpOnly": false,
+      "name": "__uzmd",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1774497510",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.10134,
+      "httpOnly": false,
+      "name": "__uzme",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "4861",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.101376,
+      "httpOnly": false,
+      "name": "__uzmf",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "7f60000cf5d0ba-33b7-4e72-8212-7dfd1327b51017744975100050-238bc33d8c4d879910",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1790049510.82956,
+      "httpOnly": true,
+      "name": "__deba",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "JG3tVil19jlP9y8hu1VRuqZLFlUZ7g0hKaJ4ip4cHqdwcudq2Uc2f55ijPebmx5cXR8UW1J2_XMwSXzX...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1809057515.767882,
+      "httpOnly": false,
+      "name": "dp1",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "bbl/US6d8715eb^",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ebay.com",
+      "expires": 1809057515.767977,
+      "httpOnly": true,
+      "name": "nonsession",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "BAQAAAZxjvyf+AAaAADMABWul4ms5MjEzMADKACBthxXrMjg0YjJmMjkxOWQwYTQ3ZTE4MzNkMmNlZmV...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [
+    {
+      "key": "autocomplete_active_factors",
+      "preview": "{}",
+      "size": 2
+    },
+    {
+      "key": "autotrack_parent_impression_id",
+      "preview": "18003655-c27d-4539-9f44-20636714fd2e",
+      "size": 36
+    },
+    {
+      "key": "autotrack_branching_impressions",
+      "preview": "[{\"referer\":\"https://www.ebay.com/\",\"id\":\"18003655-c27d-4539-9f44-20636714fd2e\",\"page\":\"4624852\"}]",
+      "size": 98
+    },
+    {
+      "key": "autocomplete_dweb_last_updated",
+      "preview": "1774497510172",
+      "size": 13
+    },
+    {
+      "key": "autocomplete_dweb_url",
+      "preview": "https://ir.ebaystatic.com/cr/v/c01/ac-031226184928.dweb.min.js",
+      "size": 62
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "autotrack_tab_id",
+      "preview": "6d8e5ff5-24db-4072-975f-44d5f61a43dc",
+      "size": 36
+    },
+    {
+      "key": "ebay-rum-session-id",
+      "preview": "cbf75700-264d-42b6-a21f-a08a3850bb14",
+      "size": 36
+    }
+  ]
+}

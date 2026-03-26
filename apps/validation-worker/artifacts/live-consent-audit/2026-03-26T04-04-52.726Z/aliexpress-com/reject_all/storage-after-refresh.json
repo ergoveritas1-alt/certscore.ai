@@ -1,0 +1,124 @@
+{
+  "cookies": [
+    {
+      "domain": "www.aliexpress.com",
+      "expires": 1790050064.048904,
+      "httpOnly": false,
+      "name": "arms_uid",
+      "path": "///_____tmd_____",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "2275cd38-074c-4e6e-bcf0-8293d00d83e5",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mmstat.com",
+      "expires": 1806034067.120563,
+      "httpOnly": false,
+      "name": "cna",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "D59LIqfRlVUCAUIbQPiQ3aQe",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".aliexpress.com",
+      "expires": 1809058063.985064,
+      "httpOnly": false,
+      "name": "cna",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "D59LIqfRlVUCAUIbQPiQ3aQe",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ynuf.aliapp.org",
+      "expires": 1806034065.150936,
+      "httpOnly": false,
+      "name": "cbc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "T2gAqjCWhR7yWpCSocSBLiszHWjtnChEQqgIX99h6Dlajsxs_KiIvcP2JA3OxoJdZPw=",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".aliexpress.com",
+      "expires": 1790050066,
+      "httpOnly": false,
+      "name": "tfstk",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "gRxjUdGebCKr6RjTCZDzFhCPvWs2hYoFkR69KdE4BiIY65pdaxjwux29BdOQ0oJtiCt1w_fximmDaQJH...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [
+    {
+      "key": "APLUS_LS_KEY",
+      "preview": "[\"APLUS_S_CORE_1.0.20_20260108171550_4acefc95\"]",
+      "size": 47
+    },
+    {
+      "key": "APLUS_S_CORE_1.0.20_20260108171550_4acefc95",
+      "preview": "/*! 2026-01-08 15:03:35 v8.15.25 */\n!function(e){function i(n){if(o[n])return o[n].exports;var r=o[n]={exports:{},id:n,loaded:!1};return e[n].call(r.exports,r,r.exports,i),r.loaded=!0,r.exports}var o={};return i.m=e,i.c=o,i.p=\"\",i(0)}([func",
+      "size": 118323
+    },
+    {
+      "key": "tfstk__",
+      "preview": "gZ9sUAgy3EpEkoXYc1mUAKQFez6wfDkP6osvqneaDOBTkrKR8cX2_cqvDnT7QR-xSE9fJwbtSADM8e-kRKuiIAYe8wKY_sRN7oZMdUw4QVcMD-6VH4urUY-gjtXxzp71aKQGmHQxY1IaqH2lH4urLgyuVoBvbLfd5vtd-isY6-LAJ6Qh0PBAWsUL9gQdHtIAXWHdbieTWEBxAHQhDtI9k1nBvN-3NNn1-hiYWcqLto7vXwwY",
+      "size": 353
+    },
+    {
+      "key": "auyst",
+      "preview": "1774498061",
+      "size": 10
+    },
+    {
+      "key": "APLUS_CNA",
+      "preview": "20260325_D59LIqfRlVUCAUIbQPiQ3aQe",
+      "size": 33
+    },
+    {
+      "key": "__bx_storage__",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "syfhs",
+      "preview": "2786141629",
+      "size": 10
+    },
+    {
+      "key": "lswucn",
+      "preview": "T2gAfOUQ6o2cy0xW2lMZEkaxt0uhYvQDX39BHLAMQBd70qG-oszgIYFgMWTTEJjM6ME=@@1774498065",
+      "size": 80
+    },
+    {
+      "key": "ETLCD",
+      "preview": "false",
+      "size": 5
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "__bx_storage__",
+      "preview": "658096571",
+      "size": 9
+    },
+    {
+      "key": "x5referer",
+      "preview": "https://www.aliexpress.com/",
+      "size": 27
+    }
+  ]
+}

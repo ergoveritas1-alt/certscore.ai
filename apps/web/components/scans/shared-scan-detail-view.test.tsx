@@ -30,6 +30,59 @@ async function loadBuildScanReportUnifiedFindings() {
   }).buildScanReportUnifiedFindings;
 }
 
+async function loadExecutiveSummaryScanCondition() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveExecutiveSummaryScanCondition?: unknown; deriveUnverifiedHomepageReview?: unknown })
+      .deriveExecutiveSummaryScanCondition
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveExecutiveSummaryScanCondition: (snapshot: Record<string, unknown>) => string | null;
+  }).deriveExecutiveSummaryScanCondition;
+}
+
+async function loadUnverifiedHomepageReview() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveUnverifiedHomepageReview?: unknown })
+      .deriveUnverifiedHomepageReview
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveUnverifiedHomepageReview: (
+      snapshot: Record<string, unknown>,
+      scanEvents?: Array<{ eventType: string; message: string; metadataJson: unknown }>
+    ) => { title: string; message: string; reason: string; recommendationTitle: string; guidance: string[] } | null;
+  }).deriveUnverifiedHomepageReview;
+}
+
 test("buildScanReportUnifiedFindings keeps privacy-rights path when an earlier policy row has an empty rights array", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 
@@ -198,4 +251,131 @@ test("buildScanReportUnifiedFindings promotes snapshot-backed positive surfaces 
   assert.equal((choicesFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "surface");
   assert.ok(affiliateFinding);
   assert.equal((affiliateFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "audit_only");
+});
+
+test("deriveExecutiveSummaryScanCondition flags blocked homepage scans", async () => {
+  const deriveExecutiveSummaryScanCondition = await loadExecutiveSummaryScanCondition();
+
+  const summary = deriveExecutiveSummaryScanCondition({
+    homepage_fetch_status: "forbidden",
+    pages_scanned: 0
+  });
+
+  assert.match(summary ?? "", /blocked before it could verify the homepage/i);
+});
+
+test("deriveExecutiveSummaryScanCondition flags unreachable homepage scans", async () => {
+  const deriveExecutiveSummaryScanCondition = await loadExecutiveSummaryScanCondition();
+
+  const summary = deriveExecutiveSummaryScanCondition({
+    homepage_fetch_status: "error",
+    pages_scanned: 0
+  });
+
+  assert.match(summary ?? "", /could not reach a usable homepage/i);
+});
+
+test("deriveUnverifiedHomepageReview returns a one-off blocked-homepage explanation", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_status: "blocked",
+    homepage_fetch_http_status: 403,
+    pages_scanned: 0
+  });
+
+  assert.equal(review?.title, "No verified findings: homepage blocked");
+  assert.equal(review?.reason, "Reason: homepage request was blocked with HTTP 403.");
+  assert.equal(review?.recommendationTitle, "Protected-Site Workflow Recommended");
+  assert.ok(review?.guidance.some((item) => /protected-domain result/i.test(item)));
+  assert.match(review?.message ?? "", /did not produce a trustworthy public-site review/i);
+});
+
+test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_status: "blocked",
+    pages_scanned: 0,
+    robots_allowed: false
+  });
+
+  assert.equal(review?.title, "No verified findings: robots policy blocked scan access");
+  assert.match(review?.reason ?? "", /robots/i);
+  assert.match(review?.message ?? "", /robots policy disallowed access/i);
+});
+
+test("deriveUnverifiedHomepageReview returns an explicit unreachable-homepage reason", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_status: "error",
+    pages_scanned: 0
+  });
+
+  assert.equal(review?.title, "No verified findings: homepage unreachable");
+  assert.match(review?.reason ?? "", /connection, DNS, TLS, or other transport failure/i);
+});
+
+test("deriveUnverifiedHomepageReview prefers logged DNS failure reason when available", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview(
+    {
+      homepage_fetch_status: "error",
+      pages_scanned: 0
+    },
+    [
+      {
+        eventType: "runtime.browser_pass_diagnostic",
+        message: "Browser pass navigation error.",
+        metadataJson: {
+          error: "page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.com/"
+        }
+      }
+    ]
+  );
+
+  assert.equal(review?.title, "No verified findings: homepage unreachable");
+  assert.equal(review?.reason, "Reason: homepage could not be reached because the domain failed DNS resolution.");
+});
+
+test("deriveUnverifiedHomepageReview recommends protected-site workflow for cloudflare challenge evidence", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview(
+    {
+      homepage_fetch_status: "forbidden",
+      homepage_fetch_http_status: 403,
+      pages_scanned: 0,
+      robots_allowed: true
+    },
+    [
+      {
+        eventType: "access.limitations_detected",
+        message: "Access limitations detected.",
+        metadataJson: {
+          botChallengeDetected: true,
+          challengeHeaders: {
+            server: "cloudflare",
+            cfMitigated: "challenge"
+          }
+        }
+      }
+    ]
+  );
+
+  assert.equal(review?.recommendationTitle, "Protected-Site Workflow Recommended");
+  assert.ok(review?.guidance.some((item) => /allowlisting or a supported review path/i.test(item)));
+});
+
+test("deriveUnverifiedHomepageReview returns null when the homepage was actually scanned", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_status: "ok",
+    pages_scanned: 1
+  });
+
+  assert.equal(review, null);
 });

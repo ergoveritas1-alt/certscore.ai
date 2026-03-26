@@ -23,6 +23,20 @@ export function buildRegulatoryRiskSource(input: {
   const policy = input.primaryPolicyEnrichment ?? null;
 
   return {
+    homepageFetchStatus:
+      input.snapshot.homepage_fetch_status === "ok" ||
+      input.snapshot.homepage_fetch_status === "error" ||
+      input.snapshot.homepage_fetch_status === "blocked" ||
+      input.snapshot.homepage_fetch_status === "forbidden" ||
+      input.snapshot.homepage_fetch_status === "timeout" ||
+      input.snapshot.homepage_fetch_status === "redirected" ||
+      input.snapshot.homepage_fetch_status === "not_found"
+        ? input.snapshot.homepage_fetch_status
+        : null,
+    pagesScanned: toNumber(input.snapshot.pages_scanned),
+    partialScan: toBoolean(input.snapshot.partial_scan),
+    finalUrl: typeof input.snapshot.final_url === "string" ? input.snapshot.final_url : null,
+    registeredDomain: typeof input.snapshot.registered_domain === "string" ? input.snapshot.registered_domain : null,
     trackingBeforeConsentDetected: toBoolean(input.snapshot.tracking_before_consent_detected),
     thirdPartyCookieSetBeforeConsent: toBoolean(input.snapshot.third_party_cookie_set_before_consent),
     cookieBannerPresent: toBoolean(input.snapshot.cookie_banner_present),

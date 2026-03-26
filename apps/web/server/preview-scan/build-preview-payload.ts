@@ -5,6 +5,7 @@ type PreviewSnapshotSource = {
   certscoreOverall: ScanSnapshot["certscoreOverall"];
   contactPagePresent: ScanSnapshot["contactPagePresent"];
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
+  finalUrl: ScanSnapshot["finalUrl"];
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
   pagesScanned: ScanSnapshot["pagesScanned"];
@@ -13,6 +14,8 @@ type PreviewSnapshotSource = {
   privacyScore: ScanSnapshot["privacyScore"];
   preconsentTrackingDetected: ScanSnapshot["preconsentTrackingDetected"];
   rejectAllPresent: ScanSnapshot["rejectAllPresent"];
+  redirectCount: ScanSnapshot["redirectCount"];
+  registeredDomain: ScanSnapshot["registeredDomain"];
   termsOfServicePresent: ScanSnapshot["termsOfServicePresent"];
   thirdPartyCookieSetBeforeConsent: ScanSnapshot["thirdPartyCookieSetBeforeConsent"];
   totalSignals: ScanSnapshot["totalSignals"];
@@ -48,6 +51,17 @@ function deriveIssueCounts(findings: PreviewSampleFinding[]): PreviewIssueCounts
   );
 }
 
+function hostnameFromUrl(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
 export function buildPreviewPayloadFromSnapshot(input: {
   hostname: string;
   normalizedUrl: string;
@@ -56,10 +70,62 @@ export function buildPreviewPayloadFromSnapshot(input: {
   const findings: PreviewSampleFinding[] = [];
   const siteSurfaceUnverified =
     input.snapshot.pagesScanned === 0 ||
+    input.snapshot.homepageFetchStatus === "error" ||
     input.snapshot.homepageFetchStatus === "forbidden" ||
     input.snapshot.homepageFetchStatus === "blocked" ||
-    input.snapshot.homepageFetchStatus === "timeout";
+    input.snapshot.homepageFetchStatus === "timeout" ||
+    input.snapshot.homepageFetchStatus === "not_found";
   const secondarySurfaceCoverageLimited = input.snapshot.partialScan || input.snapshot.pagesScanned < 3;
+  const requestedHostname = input.hostname.toLowerCase().replace(/^www\./, "");
+  const finalHostname = hostnameFromUrl(input.snapshot.finalUrl);
+  const registeredDomain = input.snapshot.registeredDomain?.toLowerCase().replace(/^www\./, "") ?? null;
+  const offDomainRedirect =
+    Boolean(finalHostname) && finalHostname !== requestedHostname && (!registeredDomain || finalHostname !== registeredDomain);
+
+  pushFinding(
+    findings,
+    input.snapshot.pagesScanned === 0 &&
+      (input.snapshot.homepageFetchStatus === "forbidden" || input.snapshot.homepageFetchStatus === "blocked")
+      ? {
+          affectedPage: "Homepage",
+          category: "legal",
+          severity: "medium",
+          title: "Homepage blocked during live scan",
+          description:
+            "The live preview hit a bot-protection, security, or access-control barrier before it could verify the public site surface."
+        }
+      : null
+  );
+
+  pushFinding(
+    findings,
+    input.snapshot.pagesScanned === 0 &&
+      (input.snapshot.homepageFetchStatus === "error" ||
+        input.snapshot.homepageFetchStatus === "timeout" ||
+        input.snapshot.homepageFetchStatus === "not_found")
+      ? {
+          affectedPage: "Homepage",
+          category: "legal",
+          severity: "high",
+          title: "Homepage could not be reached reliably",
+          description:
+            "The live preview could not complete a usable homepage fetch, so downstream legal, privacy, and accessibility checks remained largely unverified."
+        }
+      : null
+  );
+
+  pushFinding(
+    findings,
+    offDomainRedirect
+      ? {
+          affectedPage: "Homepage",
+          category: "legal",
+          severity: "high",
+          title: "Domain redirected to a different site",
+          description: `The requested domain resolved to ${finalHostname}, which suggests the site may now redirect to a different operator or destination.`
+        }
+      : null
+  );
 
   pushFinding(
     findings,
@@ -79,9 +145,10 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    input.snapshot.trackingBeforeConsentDetected ||
+    !siteSurfaceUnverified &&
+    (input.snapshot.trackingBeforeConsentDetected ||
       input.snapshot.preconsentTrackingDetected ||
-      input.snapshot.thirdPartyCookieSetBeforeConsent
+      input.snapshot.thirdPartyCookieSetBeforeConsent)
       ? {
           affectedPage: "Homepage",
           category: "privacy",
@@ -174,21 +241,30 @@ export function buildPreviewPayloadFromSnapshot(input: {
     : secondarySurfaceCoverageLimited
       ? "This lightweight preview may not verify every secondary legal or contact route unless those pages are directly fetched during the live pass."
       : null;
+  const redirectDescriptor =
+    offDomainRedirect && finalHostname
+      ? `The requested domain redirected to ${finalHostname} during the live pass, so observed content may belong to a different destination site.`
+      : null;
 
   return {
     version: "preview-v1",
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
     issueCounts,
-    scores: {
-      overall: input.snapshot.certscoreOverall,
-      privacy: input.snapshot.privacyScore,
-      accessibility: input.snapshot.accessibilityScore
-    },
+    scores: siteSurfaceUnverified
+      ? undefined
+      : {
+          overall: input.snapshot.certscoreOverall,
+          privacy: input.snapshot.privacyScore,
+          accessibility: input.snapshot.accessibilityScore
+        },
     summaryBullets: [
       `${input.snapshot.totalSignals} structured signals were observed in this live preview.`,
-      `Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`,
+      ...(siteSurfaceUnverified
+        ? ["Preview scores are withheld because the live pass did not verify a usable homepage surface."]
+        : [`Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`]),
       pagesScannedDescriptor,
+      ...(redirectDescriptor ? [redirectDescriptor] : []),
       ...(confidenceDescriptor ? [confidenceDescriptor] : [])
     ],
     sampleFindings: findings,

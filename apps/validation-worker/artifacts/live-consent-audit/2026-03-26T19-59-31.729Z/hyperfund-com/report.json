@@ -1,0 +1,491 @@
+{
+  "consentUxScorecard": {
+    "acceptRejectClickParity": "inconclusive",
+    "bannerPresent": "inconclusive",
+    "darkPatternIndicatorsObserved": [],
+    "equalProminenceAssessment": "inconclusive",
+    "rejectAllFirstLayer": "inconclusive"
+  },
+  "executiveSummary": {
+    "confidenceLevel": "low",
+    "manualReviewRecommended": true,
+    "overallTestingStatus": "partially completed with blocking or anti-automation issues on some scenarios",
+    "strongestObservedRisks": []
+  },
+  "finalClassification": "inconclusive / needs manual review",
+  "findings": [],
+  "methodology": {
+    "browserSignalsCompared": true,
+    "locale": "en-US",
+    "noInteractionWaitMs": 12000,
+    "testedAt": "2026-03-26T20:04:51.574Z",
+    "viewport": {
+      "width": 1440,
+      "height": 2200
+    }
+  },
+  "preConsentTrackingSummary": {
+    "cookiesSetBeforeInteraction": [],
+    "likelyVendorsObserved": [],
+    "nonEssentialRequestsBeforeInteraction": [],
+    "storageEntriesCreatedBeforeInteraction": []
+  },
+  "rejectPathEffectivenessSummary": {
+    "consentSignalsChangedAfterReject": [],
+    "refreshPreservedRejectOutcome": "tracking-like activity still appeared or refresh evidence was inconclusive",
+    "stillFiredAfterReject": [],
+    "whatChangedAfterReject": [
+      "reject scenario did not capture a stable post-choice storage snapshot"
+    ]
+  },
+  "scenarios": {
+    "fresh_visit": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/hyperfund-com/fresh_visit/first-load.png",
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Navigation failed: page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://hyperfund.com/\nCall log:\n\u001b[2m  - navigating to \"https://hyperfund.com/\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      ],
+      "network": [
+        {
+          "documentUrl": "about:blank",
+          "hostname": "hyperfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:07.995Z",
+          "url": "https://hyperfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "about:blank",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:08.378Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        }
+      ],
+      "notes": [
+        "No consent surface detected with current heuristics on the tested first load.",
+        "No interaction wait completed for 12000 ms."
+      ],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T20:04:20.656Z",
+      "url": "chrome-error://chromewebdata/"
+    },
+    "fresh_visit_gpc": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/hyperfund-com/fresh_visit_gpc/first-load.png",
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Navigation failed: page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://hyperfund.com/\nCall log:\n\u001b[2m  - navigating to \"https://hyperfund.com/\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      ],
+      "network": [
+        {
+          "documentUrl": "about:blank",
+          "hostname": "hyperfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:20.904Z",
+          "url": "https://hyperfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "about:blank",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:21.302Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        }
+      ],
+      "notes": [
+        "No consent surface detected with current heuristics on the tested first load.",
+        "No interaction wait completed for 12000 ms."
+      ],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T20:04:33.573Z",
+      "url": "chrome-error://chromewebdata/"
+    },
+    "accept_all": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/hyperfund-com/accept_all/first-load.png",
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Navigation failed: page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://hyperfund.com/\nCall log:\n\u001b[2m  - navigating to \"https://hyperfund.com/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+        "Refresh failed: page.reload: net::ERR_CERT_COMMON_NAME_INVALID\nCall log:\n\u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m\n"
+      ],
+      "network": [
+        {
+          "documentUrl": "about:blank",
+          "hostname": "hyperfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:33.777Z",
+          "url": "https://hyperfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "about:blank",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:34.192Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "chrome-error://chromewebdata/",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "after_refresh",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:34.461Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        }
+      ],
+      "notes": [
+        "No consent surface detected with current heuristics on the tested first load.",
+        "No accept action detected."
+      ],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T20:04:39.586Z",
+      "url": "chrome-error://chromewebdata/"
+    },
+    "reject_all": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/hyperfund-com/reject_all/first-load.png",
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Navigation failed: page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://hyperfund.com/\nCall log:\n\u001b[2m  - navigating to \"https://hyperfund.com/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+        "Refresh failed: page.reload: net::ERR_CERT_COMMON_NAME_INVALID\nCall log:\n\u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m\n"
+      ],
+      "network": [
+        {
+          "documentUrl": "about:blank",
+          "hostname": "hyperfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:39.792Z",
+          "url": "https://hyperfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "about:blank",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:40.148Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "chrome-error://chromewebdata/",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "after_refresh",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:40.400Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        }
+      ],
+      "notes": [
+        "No consent surface detected with current heuristics on the tested first load.",
+        "No reject action detected."
+      ],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T20:04:45.519Z",
+      "url": "chrome-error://chromewebdata/"
+    },
+    "custom_preferences": {
+      "actionSummary": {
+        "acceptPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        },
+        "rejectPath": {
+          "attempted": false,
+          "clicks": null,
+          "labels": [],
+          "timeMs": null
+        }
+      },
+      "banner": {
+        "bannerHtmlPath": null,
+        "bannerPresent": false,
+        "bannerText": null,
+        "frameUrl": null,
+        "screenshots": {
+          "banner": null,
+          "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/hyperfund-com/custom_preferences/first-load.png",
+          "preferencesCenter": null
+        },
+        "visibleActions": {
+          "accept": false,
+          "manage": false,
+          "reject": false
+        }
+      },
+      "cmpSignals": [],
+      "errors": [
+        "Navigation failed: page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://hyperfund.com/\nCall log:\n\u001b[2m  - navigating to \"https://hyperfund.com/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+        "Refresh failed: page.reload: net::ERR_CERT_COMMON_NAME_INVALID\nCall log:\n\u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m\n"
+      ],
+      "network": [
+        {
+          "documentUrl": "about:blank",
+          "hostname": "hyperfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:45.760Z",
+          "url": "https://hyperfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "about:blank",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "before_interaction",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:46.171Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        },
+        {
+          "documentUrl": "chrome-error://chromewebdata/",
+          "hostname": "nfund.com",
+          "initiator": "document",
+          "method": "GET",
+          "phase": "after_refresh",
+          "resourceType": "document",
+          "timestamp": "2026-03-26T20:04:46.425Z",
+          "url": "https://nfund.com/",
+          "vendorCategory": "unknown_needs_manual_review",
+          "vendorName": null
+        }
+      ],
+      "notes": [
+        "No consent surface detected with current heuristics on the tested first load.",
+        "No manage action detected."
+      ],
+      "preferences": null,
+      "refresh": null,
+      "storageDiffs": {
+        "acceptPhase": null,
+        "refreshPhase": null
+      },
+      "storageAfterAction": null,
+      "storageBeforeInteraction": {
+        "cookies": [],
+        "indexedDbNames": [],
+        "localStorage": [],
+        "sessionStorage": []
+      },
+      "timestamp": "2026-03-26T20:04:51.543Z",
+      "url": "chrome-error://chromewebdata/"
+    }
+  },
+  "site": {
+    "hostname": "hyperfund.com",
+    "startUrl": "https://hyperfund.com"
+  }
+}

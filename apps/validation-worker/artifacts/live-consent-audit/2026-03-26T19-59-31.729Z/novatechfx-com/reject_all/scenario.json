@@ -1,0 +1,82 @@
+{
+  "actionSummary": {
+    "acceptPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    },
+    "rejectPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    }
+  },
+  "banner": {
+    "bannerHtmlPath": null,
+    "bannerPresent": false,
+    "bannerText": null,
+    "frameUrl": null,
+    "screenshots": {
+      "banner": null,
+      "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-59-31.729Z/novatechfx-com/reject_all/first-load.png",
+      "preferencesCenter": null
+    },
+    "visibleActions": {
+      "accept": false,
+      "manage": false,
+      "reject": false
+    }
+  },
+  "cmpSignals": [],
+  "errors": [
+    "Navigation failed: page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://novatechfx.com/\nCall log:\n\u001b[2m  - navigating to \"https://novatechfx.com/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+    "Refresh failed: page.reload: net::ERR_SSL_PROTOCOL_ERROR\nCall log:\n\u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m\n"
+  ],
+  "network": [
+    {
+      "documentUrl": "about:blank",
+      "hostname": "novatechfx.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T20:03:56.156Z",
+      "url": "https://novatechfx.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "chrome-error://chromewebdata/",
+      "hostname": "novatechfx.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T20:03:56.661Z",
+      "url": "https://novatechfx.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "notes": [
+    "No consent surface detected with current heuristics on the tested first load.",
+    "No reject action detected."
+  ],
+  "preferences": null,
+  "refresh": null,
+  "storageDiffs": {
+    "acceptPhase": null,
+    "refreshPhase": null
+  },
+  "storageAfterAction": null,
+  "storageBeforeInteraction": {
+    "cookies": [],
+    "indexedDbNames": [],
+    "localStorage": [],
+    "sessionStorage": []
+  },
+  "timestamp": "2026-03-26T20:04:02.014Z",
+  "url": "chrome-error://chromewebdata/"
+}

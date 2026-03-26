@@ -75,8 +75,11 @@ type SnapshotRow = {
   dsarRequestMechanismPresent: ScanSnapshot["dsarRequestMechanismPresent"];
   ecommerceSiteLikely: ScanSnapshot["ecommerceSiteLikely"];
   freeTrialDetected: ScanSnapshot["freeTrialDetected"];
+  finalUrl: ScanSnapshot["finalUrl"];
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
+  redirectCount: ScanSnapshot["redirectCount"];
+  registeredDomain: ScanSnapshot["registeredDomain"];
   mentionsCcpaOrCpra: ScanSnapshot["mentionsCcpaOrCpra"];
   mentionsCrossBorderTransfer: ScanSnapshot["mentionsCrossBorderTransfer"];
   mentionsDataRetention: ScanSnapshot["mentionsDataRetention"];
@@ -464,6 +467,9 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
         "total_signals",
         "pages_scanned",
         "homepage_fetch_status",
+        "final_url",
+        "registered_domain",
+        "redirect_count",
         "partial_scan",
         "certscore_overall",
         "privacy_score",
@@ -536,6 +542,9 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
     totalSignals: Number(row.total_signals ?? 0),
     pagesScanned: Number(row.pages_scanned ?? 0),
     homepageFetchStatus: typeof row.homepage_fetch_status === "string" ? (row.homepage_fetch_status as ScanSnapshot["homepageFetchStatus"]) : null,
+    finalUrl: typeof row.final_url === "string" ? (row.final_url as string) : null,
+    registeredDomain: typeof row.registered_domain === "string" ? (row.registered_domain as string) : null,
+    redirectCount: Number(row.redirect_count ?? 0),
     partialScan: typeof row.partial_scan === "boolean" ? (row.partial_scan as boolean) : false,
     certscoreOverall: Number(row.certscore_overall ?? 0),
     privacyScore: Number(row.privacy_score ?? 0),

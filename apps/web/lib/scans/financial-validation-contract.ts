@@ -216,7 +216,7 @@ export function getFinancialValidationEvidenceBundle(
     exactMatchTerm: matchedPhrases[0] ?? null,
     matchedPhrases,
     pageClassification: classifyFinancialPage(record),
-    pageUrl,
+    pageUrl: pageUrl ?? null,
     signalKeys,
     snippets,
     sourceUrls,

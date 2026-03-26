@@ -1,0 +1,37 @@
+{
+  "cookies": [
+    {
+      "domain": ".etsy.com",
+      "expires": 1779682531.693477,
+      "httpOnly": false,
+      "name": "exp_ebid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "m=dNpPNyt9%2BFXql8kDZCKEQk3dUqQL6SbodB5EPdgFbu4%3D,v=tf7jO06Ua7ombo6NTCQoYrL86JH...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".etsy.com",
+      "expires": 1806034531.693413,
+      "httpOnly": false,
+      "name": "datadome",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "~fHwWJOCLTF8kob1syh7pRUuiOxjmWZOqOWdmToJgaRKgQGk0liaXtAyZKLchVa4OUpjZABWcCam19wL...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Security / anti-bot"
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [],
+  "sessionStorage": [
+    {
+      "key": "ddOriginalReferrer",
+      "preview": "",
+      "size": 0
+    }
+  ]
+}

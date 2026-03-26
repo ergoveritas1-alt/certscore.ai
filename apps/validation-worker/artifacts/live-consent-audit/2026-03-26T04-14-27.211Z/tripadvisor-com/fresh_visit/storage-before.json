@@ -1,0 +1,37 @@
+{
+  "cookies": [
+    {
+      "domain": ".tripadvisor.com",
+      "expires": 1805602537.263886,
+      "httpOnly": false,
+      "name": "datadome",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "F4H6YBHUIqSqzYHyTK9HOOqo_aSJv7bpxKGJqAXDeH0EXDeKJIFoAdjrKteZ6Ue8_qw6xj2WgUuI5Xoz...",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Security / anti-bot"
+    },
+    {
+      "domain": "tripadvisor.com",
+      "expires": 1809058537.263958,
+      "httpOnly": true,
+      "name": "TAUnique",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "%1%enc%3ADlttJHd2LK9dEZocQVkrWDbE5d78qF%2Fl2bkhSWWSsBrAleD79kT08D7DVbFpo7jDNox8J...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [],
+  "sessionStorage": [
+    {
+      "key": "ddOriginalReferrer",
+      "preview": "",
+      "size": 0
+    }
+  ]
+}

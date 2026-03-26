@@ -991,6 +991,27 @@ function getNegativeEvidenceFlags(evidence: Record<string, unknown> | null | und
   );
 }
 
+function getSnippetEvidence(evidence: Record<string, unknown> | null | undefined) {
+  return getStringArrayEvidence(evidence, ["snippets", "policySnippets", "policy_snippets", "sourceEvidence"]);
+}
+
+function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const flags = getStringArrayEvidence(evidence, ["flags"]);
+  const snippets = getSnippetEvidence(evidence);
+  const pageUrls = getStringArrayEvidence(evidence, ["pageUrls"]);
+  const sourceUrls = getStringArrayEvidence(evidence, ["sourceUrls"]);
+  const allText = snippets.join(" ").toLowerCase();
+  const hasStrongUrl = [...pageUrls, ...sourceUrls].some((value) => /^https?:\/\//i.test(value));
+  const hasSupportLanguage =
+    /give feedback|feedback|contact us|contact|help center|help|support/i.test(allText);
+  const hasFamilyPacketBacking =
+    flags.includes("family_packet_backed") &&
+    flags.includes("family_packet:support_access") &&
+    flags.includes("family_packet_finding:contact_support_path_present");
+
+  return hasStrongUrl && hasSupportLanguage && hasFamilyPacketBacking;
+}
+
 function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
   const directViolations = Array.isArray(evidence?.sensitivePayloadViolations)
     ? evidence.sensitivePayloadViolations
@@ -1565,6 +1586,12 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       presentation.suggestedFix =
         "Audit the retained detector output and confirm whether a specific replay vendor, script, object, or endpoint was actually present before escalating this finding.";
       presentation.confidenceScore = "0.45";
+    }
+  }
+
+  if (/contact or feedback path present|contact_support_path_present/i.test(input.haystack)) {
+    if (hasStrongContactSurfaceEvidence(input.evidence)) {
+      presentation.confidenceScore = "0.85";
     }
   }
 

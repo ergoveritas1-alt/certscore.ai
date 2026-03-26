@@ -1,0 +1,173 @@
+{
+  "actionSummary": {
+    "acceptPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    },
+    "rejectPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    }
+  },
+  "banner": {
+    "bannerHtmlPath": null,
+    "bannerPresent": false,
+    "bannerText": null,
+    "frameUrl": null,
+    "screenshots": {
+      "banner": null,
+      "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T04-04-52.726Z/etsy-com/fresh_visit_gpc/first-load.png",
+      "preferencesCenter": null
+    }
+  },
+  "cmpSignals": [],
+  "errors": [],
+  "network": [
+    {
+      "documentUrl": "about:blank",
+      "hostname": "etsy.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:08:24.032Z",
+      "url": "https://etsy.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "about:blank",
+      "hostname": "www.etsy.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:08:24.160Z",
+      "url": "https://www.etsy.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://www.etsy.com/",
+      "hostname": "ct.captcha-delivery.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:24.276Z",
+      "url": "https://ct.captcha-delivery.com/c.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "",
+      "hostname": "geo.captcha-delivery.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:08:24.374Z",
+      "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAGPZN1oD2_EQAQhtA-A%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN~eeBlhwV9D2FWRZV3wVQjoetu5zHzCEXdN9x9JenPQIquQkz&t=bv&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=b5d6ea4b42462311a410243ec5e347ecb071b1290ee9f28d05f8560ac1b7be5e7c96a6b1f24715847851d07feee7d927&dm=cd",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAGPZN1oD2_EQAQhtA-A%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN~eeBlhwV9D2FWRZV3wVQjoetu5zHzCEXdN9x9JenPQIquQkz&t=bv&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=b5d6ea4b42462311a410243ec5e347ecb071b1290ee9f28d05f8560ac1b7be5e7c96a6b1f24715847851d07feee7d927&dm=cd",
+      "hostname": "static.captcha-delivery.com",
+      "initiator": "stylesheet",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "stylesheet",
+      "timestamp": "2026-03-26T04:08:24.477Z",
+      "url": "https://static.captcha-delivery.com/captcha/assets/tpl/6dc485c0c428c35b53577b146dc6f9179f55ef9ad41b327a2a179998839364bf/index.css",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAGPZN1oD2_EQAQhtA-A%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN~eeBlhwV9D2FWRZV3wVQjoetu5zHzCEXdN9x9JenPQIquQkz&t=bv&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=b5d6ea4b42462311a410243ec5e347ecb071b1290ee9f28d05f8560ac1b7be5e7c96a6b1f24715847851d07feee7d927&dm=cd",
+      "hostname": "static.captcha-delivery.com",
+      "initiator": "stylesheet",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "stylesheet",
+      "timestamp": "2026-03-26T04:08:24.477Z",
+      "url": "https://static.captcha-delivery.com/common/fonts/roboto/font-face.css",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAGPZN1oD2_EQAQhtA-A%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN~eeBlhwV9D2FWRZV3wVQjoetu5zHzCEXdN9x9JenPQIquQkz&t=bv&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=b5d6ea4b42462311a410243ec5e347ecb071b1290ee9f28d05f8560ac1b7be5e7c96a6b1f24715847851d07feee7d927&dm=cd",
+      "hostname": "static.captcha-delivery.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:08:24.477Z",
+      "url": "https://static.captcha-delivery.com/captcha/assets/set/e0aa99be678965d8c0263bcfd73bf046792f8a69/logo.png?update_cache=6819239588036702074",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAGPZN1oD2_EQAQhtA-A%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN~eeBlhwV9D2FWRZV3wVQjoetu5zHzCEXdN9x9JenPQIquQkz&t=bv&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=b5d6ea4b42462311a410243ec5e347ecb071b1290ee9f28d05f8560ac1b7be5e7c96a6b1f24715847851d07feee7d927&dm=cd",
+      "hostname": "static.captcha-delivery.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-03-26T04:08:24.579Z",
+      "url": "https://static.captcha-delivery.com/common/fonts/roboto/roboto.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "notes": [
+    "No consent surface detected with current heuristics on the tested first load.",
+    "No interaction wait completed for 12000 ms."
+  ],
+  "preferences": null,
+  "refresh": null,
+  "storageAfterAction": null,
+  "storageBeforeInteraction": {
+    "cookies": [
+      {
+        "domain": ".etsy.com",
+        "expires": 1806034104.26936,
+        "httpOnly": false,
+        "name": "datadome",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "valuePreview": "mUJsFxBSdgOmtO1QCw5RwtfNTdnu9kKV_XBvHQo9pcsYa7Lba~SSixaCKzJZIygq3jGNlyFVwxUdxKGN...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".etsy.com",
+        "expires": 1779682104.269439,
+        "httpOnly": false,
+        "name": "exp_ebid",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "valuePreview": "m=%2FA4mG15w2tF5r6fMBgoNwFIuOuynwO2JSnRh2Ztibyg%3D,v=rBSYgwUC8ZujvX45ige9J6h4Khf...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      }
+    ],
+    "indexedDbNames": [],
+    "localStorage": [],
+    "sessionStorage": [
+      {
+        "key": "ddOriginalReferrer",
+        "preview": "",
+        "size": 0
+      }
+    ]
+  },
+  "timestamp": "2026-03-26T04:08:41.582Z",
+  "url": "https://www.etsy.com/"
+}

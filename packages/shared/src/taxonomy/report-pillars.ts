@@ -409,6 +409,23 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     validationRuleKeys: ["section_review.claim_disclosure_distance_exceeds_threshold"]
   }),
   defineReportUnifiedFinding({
+    id: "guaranteed_or_high_return_claims_present",
+    label: "Guaranteed or high-return claims present",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
+    signalMappings: [
+      { source: "snapshot_signal", key: "financial.return_or_yield_percentage_present" },
+      { source: "snapshot_signal", key: "financial.investment_outperformance_language_present" },
+      { source: "snapshot_signal", key: "financial.guaranteed_return_language_present" },
+      { source: "snapshot_signal", key: "financial.low_risk_high_return_language_present" }
+    ],
+    aliases: [
+      "Guaranteed or high return claims present",
+      "High return claims present",
+      "Guaranteed return language present"
+    ]
+  }),
+  defineReportUnifiedFinding({
     id: "investment_risk_disclosure_missing",
     label: "Investment risk disclosure missing",
     owner: "performance_claim_context_and_risk_disclosure",
@@ -427,6 +444,52 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "consumer_financial_marketing_claims",
     mirrors: ["disclosures_claim_substantiation"],
     signalMappings: [{ source: "snapshot_signal", key: "financial.testimonial_or_review_block_near_financial_claim_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "regulatory_compliance_claim_present",
+    label: "Regulatory-compliance claim present",
+    owner: "registration_status_credibility",
+    mirrors: ["consumer_financial_marketing_claims", "contact_and_operator_disclosure_quality"],
+    signalMappings: [{ source: "snapshot_signal", key: "entity.regulatory_or_license_claim_text_present" }],
+    aliases: [
+      "Regulatory-compliance claim present",
+      "Regulatory legitimacy claim present",
+      "SEC-compliant exchange claim present"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "investment_purchase_by_credit_card_present",
+    label: "Investment purchase by credit card present",
+    owner: "consumer_choice_and_cost_transparency",
+    mirrors: ["identity_financial_data_collection", "consumer_financial_marketing_claims"],
+    signalMappings: [{ source: "snapshot_signal", key: "commerce.payment_card_input_present" }],
+    aliases: ["Investment purchase by credit card present", "Payment card funding path present"]
+  }),
+  defineReportUnifiedFinding({
+    id: "investment_urgency_countdown_present",
+    label: "Investment urgency or countdown present",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "offer_framing_promotional_mechanics"],
+    overlays: ["choice_architecture_dark_patterns"],
+    aliases: ["Investment urgency or countdown present", "Investment countdown timer present"]
+  }),
+  defineReportUnifiedFinding({
+    id: "pump_and_dump_language_present",
+    label: "Pump-and-dump language present",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["disclosures_claim_substantiation", "high_risk_product_promotion"],
+    aliases: ["Pump-and-dump language present", "Pre-planned pump language present"]
+  }),
+  defineReportUnifiedFinding({
+    id: "vague_whitepaper_or_technical_obfuscation_present",
+    label: "Vague white paper or technical obfuscation present",
+    owner: "disclosures_claim_substantiation",
+    mirrors: ["consumer_financial_marketing_claims", "performance_claim_context_and_risk_disclosure"],
+    aliases: [
+      "Vague white paper or technical obfuscation present",
+      "Vague white paper present",
+      "Technical obfuscation present"
+    ]
   }),
   defineReportUnifiedFinding({
     id: "registration_identifier_missing",
@@ -1578,6 +1641,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "commerce.payment_card_input_present",
+    "Payment card input detected",
+    "checkout_payment_disclosures",
+    ["collection_surface_entry_points", "identity_financial_data_collection"],
+    ["subscription_billing_cancellation_fairness"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "commerce.free_trial_detected",
     "Free trial detected",
     "offer_framing_promotional_mechanics",
@@ -2290,6 +2361,18 @@ export const REPORT_UNIFIED_FINDINGS = [
     mirrors: ["legal_commercial_disclosure_coverage", "notice_scope_entity_identity", "privacy_contacts_accountability"],
     overlays: ["consent_lawful_basis_user_choice", "transparency_notice_data_subject_rights", "notice_rights_baseline"],
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.key_page_discovery_unresolved_after_bounded_search" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "regulator_operated_mock_investment_example",
+    label: "Regulator-operated mock investment example",
+    owner: "manual_review_triggers",
+    mirrors: ["consumer_financial_marketing_claims", "registration_status_credibility"],
+    aliases: [
+      "Regulator-operated mock investment example",
+      "Regulator-run educational investment example",
+      "Regulator-operated mock scam example",
+      "Mock or educational fraud example detected"
+    ]
   }),
 
   defineReportUnifiedFinding({

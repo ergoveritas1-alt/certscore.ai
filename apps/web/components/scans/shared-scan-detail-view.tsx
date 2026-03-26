@@ -201,12 +201,20 @@ function getSnapshotBoolean(snapshot: Record<string, unknown>, key: string) {
   return snapshot[key] === true;
 }
 
-function getRecordBoolean(record: Record<string, unknown> | null | undefined, key: string) {
-  return record?.[key] === true;
+function getRecordBoolean(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return false;
+  }
+
+  return (record as Record<string, unknown>)[key] === true;
 }
 
-function getRecordNumber(record: Record<string, unknown> | null | undefined, key: string) {
-  const value = record?.[key];
+function getRecordNumber(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
@@ -1402,6 +1410,7 @@ function buildSectionReviewIssues(input: {
         fallbackEvidence: {
           contradictionEvidence: {
             claim: row.claim,
+            contradictionBasis: row.status,
             policySnippet: row.policySnippet ?? row.claim,
             policySourceUrl: row.policyPageUrl,
             policySummaryShort: row.policySummary,
@@ -2399,6 +2408,264 @@ function formatSectionScore(value: number) {
   return `${value.toFixed(1)}/5`;
 }
 
+type UnverifiedHomepageReview = {
+  guidance: string[];
+  message: string;
+  recommendationTitle: string;
+  reason: string;
+  title: string;
+};
+
+type ScanEventSummaryRecord = {
+  eventType: string;
+  message: string;
+  metadataJson: unknown;
+};
+
+function getRecordString(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getNestedRecord(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function deriveProtectedSiteRecommendation(snapshot: Record<string, unknown>, scanEvents: ScanEventSummaryRecord[]) {
+  const limitationEvent = [...scanEvents].reverse().find((event) => event.eventType === "access.limitations_detected");
+  const limitationMetadata = limitationEvent?.metadataJson ?? null;
+  const challengeHeaders = getNestedRecord(limitationMetadata, "challengeHeaders");
+  const challengeServer = getRecordString(challengeHeaders, "server");
+  const challengeMitigation = getRecordString(challengeHeaders, "cfMitigated");
+  const botChallengeDetected = getRecordBoolean(limitationMetadata, "botChallengeDetected");
+  const homepageFetchStatus =
+    typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status.toLowerCase() : null;
+  const homepageFetchHttpStatus = getRecordNumber(snapshot, "homepage_fetch_http_status");
+
+  const likelyProtectedSite =
+    botChallengeDetected === true ||
+    (typeof challengeServer === "string" && /cloudflare/i.test(challengeServer)) ||
+    (typeof challengeMitigation === "string" && /challenge/i.test(challengeMitigation)) ||
+    ((homepageFetchStatus === "forbidden" || homepageFetchStatus === "blocked") && homepageFetchHttpStatus === 403);
+
+  if (!likelyProtectedSite) {
+    return {
+      recommendationTitle: "Recommended next step",
+      guidance: [
+        "Confirm the site is reachable outside the scanner and rerun only after the underlying access issue is resolved.",
+        "Use the diagnostics below to separate robots restrictions, transport failure, and homepage availability issues before drawing conclusions."
+      ]
+    };
+  }
+
+  return {
+    recommendationTitle: "Protected-Site Workflow Recommended",
+    guidance: [
+      "Treat this as a protected-domain result: the site appears to allow robots access but is challenging or blocking automated browsing.",
+      "Use a manual or supervised browser review for evidence collection instead of relying on repeated automated reruns from the same scanner path.",
+      "If this domain matters operationally, request allowlisting or a supported review path from the site owner before treating automation as authoritative."
+    ]
+  };
+}
+
+function deriveLoggedNoResultsReason(scanEvents: ScanEventSummaryRecord[]) {
+  const shortCircuitEvent = [...scanEvents].reverse().find((event) => event.eventType === "runtime.build_phase_diagnostic" && (
+    getRecordString(event.metadataJson, "phase") === "scan_short_circuit" ||
+    getRecordString(event.metadataJson, "stepKey") === "scan_short_circuit"
+  ));
+
+  if (shortCircuitEvent) {
+    const metadata = shortCircuitEvent.metadataJson;
+    const reason = getRecordString(metadata, "reason");
+    const homepageFetchHttpStatus =
+      metadata && typeof metadata === "object" && !Array.isArray(metadata) && typeof (metadata as Record<string, unknown>).homepageFetchHttpStatus === "number"
+        ? Number((metadata as Record<string, unknown>).homepageFetchHttpStatus)
+        : null;
+
+    if (reason === "robots_disallowed") {
+      return "Reason: robots.txt disallowed scanner access to the homepage.";
+    }
+    if (reason === "homepage_blocked") {
+      return homepageFetchHttpStatus
+        ? `Reason: homepage request was blocked with HTTP ${homepageFetchHttpStatus}.`
+        : "Reason: homepage request was blocked by bot protection, access controls, or a forbidden response.";
+    }
+    if (reason === "homepage_timeout") {
+      return "Reason: homepage navigation timed out before the scanner could verify a usable page surface.";
+    }
+    if (reason === "homepage_not_found") {
+      return homepageFetchHttpStatus
+        ? `Reason: homepage returned HTTP ${homepageFetchHttpStatus} Not Found.`
+        : "Reason: homepage returned a not-found response.";
+    }
+    if (reason === "homepage_unreachable") {
+      return "Reason: homepage could not be reached reliably because of a connection, DNS, TLS, or other transport failure.";
+    }
+  }
+
+  const browserDiagnostic = [...scanEvents].reverse().find((event) => event.eventType === "runtime.browser_pass_diagnostic");
+  const browserError =
+    getRecordString(browserDiagnostic?.metadataJson, "error") ??
+    getRecordString(browserDiagnostic?.metadataJson, "navigationError") ??
+    browserDiagnostic?.message ??
+    null;
+
+  if (browserError) {
+    if (/err_name_not_resolved|dns|name not resolved/i.test(browserError)) {
+      return "Reason: homepage could not be reached because the domain failed DNS resolution.";
+    }
+    if (/ssl|tls|certificate|protocol/i.test(browserError)) {
+      return "Reason: homepage could not be reached because the connection failed during TLS or SSL setup.";
+    }
+    if (/timeout|timed out/i.test(browserError)) {
+      return "Reason: homepage navigation timed out before the scanner could verify a usable page surface.";
+    }
+    if (/403|forbidden|access denied|blocked/i.test(browserError)) {
+      return "Reason: homepage request was blocked by bot protection, access controls, or a forbidden response.";
+    }
+  }
+
+  return null;
+}
+
+function deriveUnverifiedHomepageReason(snapshot: Record<string, unknown>, scanEvents: ScanEventSummaryRecord[] = []) {
+  const loggedReason = deriveLoggedNoResultsReason(scanEvents);
+  if (loggedReason) {
+    return loggedReason;
+  }
+
+  const homepageFetchStatus =
+    typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status.toLowerCase() : null;
+  const homepageFetchHttpStatus =
+    typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null;
+  const robotsAllowed = snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null;
+  const robotsFetchStatus =
+    typeof snapshot.robots_fetch_status === "string" ? snapshot.robots_fetch_status.toLowerCase() : null;
+
+  if (robotsAllowed === false) {
+    return robotsFetchStatus === "ok"
+      ? "Reason: robots.txt disallowed scanner access to the homepage."
+      : "Reason: crawler access was disallowed by robots policy before homepage verification.";
+  }
+
+  if (homepageFetchStatus === "forbidden" || homepageFetchStatus === "blocked") {
+    return homepageFetchHttpStatus
+      ? `Reason: homepage request was blocked with HTTP ${homepageFetchHttpStatus}.`
+      : "Reason: homepage request was blocked by bot protection, access controls, or a forbidden response.";
+  }
+
+  if (homepageFetchStatus === "timeout") {
+    return "Reason: homepage navigation timed out before the scanner could verify a usable page surface.";
+  }
+
+  if (homepageFetchStatus === "not_found") {
+    return homepageFetchHttpStatus
+      ? `Reason: homepage returned HTTP ${homepageFetchHttpStatus} Not Found.`
+      : "Reason: homepage returned a not-found response.";
+  }
+
+  if (homepageFetchStatus === "error") {
+    return "Reason: homepage could not be reached reliably because of a connection, DNS, TLS, or other transport failure.";
+  }
+
+  return "Reason: the scanner could not verify a usable homepage surface.";
+}
+
+export function deriveUnverifiedHomepageReview(
+  snapshot: Record<string, unknown>,
+  scanEvents: ScanEventSummaryRecord[] = []
+): UnverifiedHomepageReview | null {
+  const pagesScanned = typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null;
+  const homepageFetchStatus =
+    typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status.toLowerCase() : null;
+  const robotsAllowed = snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null;
+  const reason = deriveUnverifiedHomepageReason(snapshot, scanEvents);
+  const recommendation = deriveProtectedSiteRecommendation(snapshot, scanEvents);
+
+  if (pagesScanned === 0 && robotsAllowed === false) {
+    return {
+      guidance: recommendation.guidance,
+      reason,
+      recommendationTitle: recommendation.recommendationTitle,
+      title: "No verified findings: robots policy blocked scan access",
+      message:
+        "The scanner stopped after homepage setup because robots policy disallowed access to the target URL, so this run did not produce a trustworthy public-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
+    };
+  }
+
+  if (pagesScanned === 0 && (homepageFetchStatus === "forbidden" || homepageFetchStatus === "blocked")) {
+    return {
+      guidance: recommendation.guidance,
+      reason,
+      recommendationTitle: recommendation.recommendationTitle,
+      title: "No verified findings: homepage blocked",
+      message:
+        "The live bot was blocked before it could verify the homepage, so this run did not produce a trustworthy public-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
+    };
+  }
+
+  if (
+    pagesScanned === 0 &&
+    (homepageFetchStatus === "error" || homepageFetchStatus === "timeout" || homepageFetchStatus === "not_found")
+  ) {
+    return {
+      guidance: recommendation.guidance,
+      reason,
+      recommendationTitle: recommendation.recommendationTitle,
+      title: "No verified findings: homepage unreachable",
+      message:
+        "The scan could not reach a usable homepage, so this run did not produce a reliable live-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
+    };
+  }
+
+  return null;
+}
+
+export function deriveExecutiveSummaryScanCondition(snapshot: Record<string, unknown>) {
+  return deriveUnverifiedHomepageReview(snapshot)?.message ?? null;
+}
+
+function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
+  return (
+    <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+      <div className="space-y-1">
+        <p className="text-base font-semibold text-amber-950">Executive summary</p>
+        <p className="text-sm font-semibold text-amber-950">{input.review.title}</p>
+      </div>
+      <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Why No Results Are Shown</p>
+        <p className="mt-1 text-sm font-medium text-amber-950">{input.review.reason}</p>
+      </div>
+      <p className="text-sm text-amber-900">{input.review.message}</p>
+      <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">What this means</p>
+        <ul className="mt-2 space-y-2 text-sm text-amber-950">
+          <li>• The scanner did not verify a usable homepage surface.</li>
+          <li>• Taxonomy sections and low or empty finding counts should not be interpreted as a clean result.</li>
+          <li>• Use the scan-pass status and diagnostics below to understand the failure mode before drawing compliance conclusions.</li>
+        </ul>
+      </div>
+      <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">{input.review.recommendationTitle}</p>
+        <ul className="mt-2 space-y-2 text-sm text-amber-950">
+          {input.review.guidance.map((item) => (
+            <li key={item}>• {item}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function AgencyAdvisorySummary(input: {
   sectionTiles: Array<{
     className?: string;
@@ -2423,11 +2690,13 @@ function AgencyAdvisorySummary(input: {
   const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
   const lowPriorityCount = input.findings.filter((finding) => finding.severity === "low").length;
+  const scanConditionSummary = deriveExecutiveSummaryScanCondition(input.snapshot);
   const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
   const topThemes = deriveThemeCounts(input.findings);
   const infrastructureItems = deriveInfrastructureContext(input.snapshot);
   const audienceItems = deriveAudienceSensitivityContext(input.snapshot);
   const summaryBullets = [
+    scanConditionSummary,
     highPriorityCount > 0
       ? mediumPriorityCount > 0
         ? `This scan surfaced ${highPriorityCount} high and ${mediumPriorityCount} medium-priority finding${highPriorityCount + mediumPriorityCount === 1 ? "" : "s"} that should be reviewed.`
@@ -3658,6 +3927,7 @@ export function SharedScanDetailView({
   scanRecord
 }: SharedScanDetailViewProps) {
   const snapshot = scanRecord.snapshot;
+  const unverifiedHomepageReview = snapshot ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events) : null;
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
@@ -3820,6 +4090,8 @@ export function SharedScanDetailView({
               title="Review sections unavailable"
               message={`The live scan loaded, but the structured review sections could not be prepared for this scan. ${reviewSectionError}`}
             />
+          ) : unverifiedHomepageReview ? (
+            <LimitedSurfaceReview review={unverifiedHomepageReview} />
           ) : (
             renderCanonicalTaxonomyReviewSafely({
               accessibilityIssueRows,

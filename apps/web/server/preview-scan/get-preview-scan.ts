@@ -13,6 +13,27 @@ import {
   serializePreviewScan
 } from "./preview-scan-repository";
 
+function deriveObservedFinalUrl(events: Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>) {
+  for (const event of events) {
+    const metadata = event.metadata_json ?? null;
+    if (!metadata) {
+      continue;
+    }
+    if (event.event_type === "runtime.browser_pass_diagnostic") {
+      const currentUrl = typeof metadata.currentUrl === "string" ? metadata.currentUrl : null;
+      if (currentUrl && !/^about:blank|^chrome-error:\/\//i.test(currentUrl)) {
+        return currentUrl;
+      }
+      const finalUrl = typeof metadata.finalUrl === "string" ? metadata.finalUrl : null;
+      if (finalUrl && !/^about:blank|^chrome-error:\/\//i.test(finalUrl)) {
+        return finalUrl;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function getPreviewScan(scanId: string) {
   const record = await getPreviewScanRecord(scanId);
 
@@ -39,6 +60,17 @@ export async function getPreviewScan(scanId: string) {
     return response;
   }
 
+  const derivedFinalUrl = deriveObservedFinalUrl(events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>);
+  const snapshotWithDerivedRuntime = {
+    ...(snapshot as unknown as Record<string, unknown>),
+    homepage_fetch_status: snapshot.homepageFetchStatus,
+    pages_scanned: snapshot.pagesScanned,
+    partial_scan: snapshot.partialScan,
+    registered_domain: snapshot.registeredDomain,
+    final_url: derivedFinalUrl ?? (snapshot as unknown as Record<string, unknown>).finalUrl ?? null,
+    finalUrl: derivedFinalUrl ?? (snapshot as unknown as Record<string, unknown>).finalUrl ?? null
+  };
+
   const supabase = createAdminClient();
   const { data: policyEnrichment } = await supabase
     .from("policy_enrichment")
@@ -51,7 +83,7 @@ export async function getPreviewScan(scanId: string) {
     null;
   const regulatoryRisk = buildRegulatoryRiskAssessment({
     source: buildRegulatoryRiskSource({
-      snapshot: snapshot as unknown as Record<string, unknown>,
+      snapshot: snapshotWithDerivedRuntime,
       primaryPolicyEnrichment
     })
   });
@@ -59,11 +91,14 @@ export async function getPreviewScan(scanId: string) {
   return {
     ...response,
     regulatoryRisk,
-    agencyMappings: buildAgencyMappings(buildAgencyMappingSource(snapshot as unknown as Record<string, unknown>), regulatoryRisk),
+    agencyMappings: buildAgencyMappings(buildAgencyMappingSource(snapshotWithDerivedRuntime), regulatoryRisk),
     previewPayload: buildPreviewPayloadFromSnapshot({
       hostname: response.hostname,
       normalizedUrl: response.normalizedUrl,
-      snapshot
+      snapshot: {
+        ...snapshot,
+        finalUrl: derivedFinalUrl ?? snapshot.finalUrl
+      }
     })
   };
 }

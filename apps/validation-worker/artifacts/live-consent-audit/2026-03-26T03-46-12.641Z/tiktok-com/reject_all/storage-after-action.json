@@ -1,0 +1,424 @@
+{
+  "cookies": [
+    {
+      "domain": ".tiktok.com",
+      "expires": -1,
+      "httpOnly": true,
+      "name": "tt_csrf_token",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "uNZM0Ork-SUhBypOBEfItCgdmZIP-u01IBww",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1790048884.211891,
+      "httpOnly": true,
+      "name": "tt_chain_token",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "lwHqArBxI1Q9E9wdRN0RFg==",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800416884,
+      "httpOnly": false,
+      "name": "tiktok_webapp_theme_source",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "auto",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800416884,
+      "httpOnly": false,
+      "name": "tiktok_webapp_theme",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "dark",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1806032885.341416,
+      "httpOnly": true,
+      "name": "ttwid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1%7CvsEMprImeexmQy9uk7tT0xd4S62yIRJPB3v3ijerETg%7C1774496885%7C6c3de5c3d776c0820...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1775101698,
+      "httpOnly": false,
+      "name": "perf_feed_cache",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "{%22expireTimestamp%22:1774666800000%2C%22itemIds%22:[%227590893843973704973%22]...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".www.tiktok.com",
+      "expires": 1800416899,
+      "httpOnly": false,
+      "name": "delay_guest_mode_vid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "5",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktok.com",
+      "expires": 1775360900.130516,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "lZEvRhLzC5PHWRyjhNAhvM_RMl_GPeejXUxPCNbEjFv00zGdrt7icrV0OqI-KLqru6vcE4n4RMF4g4ku...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.tiktok.com",
+      "expires": 1790048902,
+      "httpOnly": false,
+      "name": "g_state",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "{\"i_l\":0,\"i_ll\":1774496902368,\"i_b\":\"Klv9icfWZWBBh/TGq0GzbSSWlYTxKWd5tBH4LODYDCY...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".tiktokw.us",
+      "expires": 1775360902.536706,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "EbNSPpbLlfwxA4bQIGc3_tNNIp5pWiC1Z7ny2ytH_o5CFG6orE6-sRsNjCRZROPg8WK06LZKPBgbHPey...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.tiktok.com",
+      "expires": 1782272902,
+      "httpOnly": false,
+      "name": "msToken",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "EbNSPpbLlfwxA4bQIGc3_tNNIp5pWiC1Z7ny2ytH_o5CFG6orE6-sRsNjCRZROPg8WK06LZKPBgbHPey...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [
+    "live-recs-db",
+    "sync-sdk-db"
+  ],
+  "localStorage": [
+    {
+      "key": "SLARDARtiktok_webapp_vmok",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMmZlZjg5NTZmLTc2YmUtNDFjOC05YjMwLTIxOGJjOGVkM2VhNyUyMiwlMjJkZXZpY2VJZCUyMjolMjJhZDhlOTViMS0wMTc4LTQ2MGQtOWFlOS0xZDRiMjcyOTI3MTAlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjcyOTAxNzU0JTdE",
+      "size": 196
+    },
+    {
+      "key": "SLARDARwebmssdk",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMmYwNTI0YTViLTQ4YmQtNDdiMy1iY2I3LTM3MjI2YjRlYzI4NCUyMiwlMjJkZXZpY2VJZCUyMjolMjI5ZjQ0NjExMi02Y2JhLTQ5MzMtYmZiMi1jOWUwNmY2NzI5NjYlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjcyODg1NjAzJTdE",
+      "size": 196
+    },
+    {
+      "key": "text.5dc26cf008d511e9b571e1bc0c9e23b5.WebApp_Login.en",
+      "preview": "{\"2-step_verification_TikTok\":\"2-step verification | TikTok\",\"2_step_verification_alt_method1\":\"Send code via SMS\",\"2_step_verification_alt_method2\":\"Send code via email\",\"2_step_verification_alt_method3\":\"Use authenticator app\",\"2_step_ver",
+      "size": 124297
+    },
+    {
+      "key": "__tea_cache_tokens_548444",
+      "preview": "{\"web_id\":\"7621406058679354894\",\"user_unique_id\":\"7621406058679354894\",\"timestamp\":1774496887199,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "ARGUS_XSS_V3",
+      "preview": "{\"Wk$kc2Nt%khPWEpNTTJSc1dXaz$NR0Z-ZERCa%1u%m1XbTFXWm1KSE9XNWhWelZtWkcwe*RtRXlSbmxhTTFaNg___2.0.0.134\":{\"time\":1774496901361}}",
+      "size": 125
+    },
+    {
+      "key": "ppf_eligibility_v2",
+      "preview": "[{\"decision_code\":\"0\",\"id_value\":\"account_control\",\"is_eligible\":true}]",
+      "size": 71
+    },
+    {
+      "key": "version.2e1fcc60aeaa11e99ef535aeebd27c9b.account_server.en",
+      "preview": "\"1773735039251267000\"",
+      "size": 21
+    },
+    {
+      "key": "LOCAL_IS_EFFECTIVE",
+      "preview": "0",
+      "size": 1
+    },
+    {
+      "key": "g_exp",
+      "preview": "1774496891913",
+      "size": 13
+    },
+    {
+      "key": "STM_TAB_ID_KEY",
+      "preview": "{\"tabID\":\"724ad690\",\"time\":1774496902004}",
+      "size": 41
+    },
+    {
+      "key": "fyp-feed-cache",
+      "preview": "{\"itemList\":[{\"AIGCDescription\":\"\",\"BAInfo\":\"\",\"CategoryType\":102,\"IsHDBitrate\":false,\"adLabelVersion\":2,\"anchors\":[{\"description\":\"CapCut · Video Editor\",\"extraInfo\":{\"subtype\":\"\"},\"icon\":{\"urlList\":[\"https://p19-common-sign.tiktokcdn-us.c",
+      "size": 39381
+    },
+    {
+      "key": "hevc_support_key_time",
+      "preview": "1774496884910",
+      "size": 13
+    },
+    {
+      "key": "xmsi",
+      "preview": "2",
+      "size": 1
+    },
+    {
+      "key": "SLARDARpns_communication_service",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjU4MjBjOWRiLTlhM2MtNGFmYi05ZjllLTUwZWYwZmNkY2U4YiUyMiwlMjJkZXZpY2VJZCUyMjolMjJhNzhmNzRjMC05YTEyLTQzNjEtYjIyZi01MmZhZjg1ZjU1OTUlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjcyODg1NjE3JTdE",
+      "size": 196
+    },
+    {
+      "key": "f_s_1",
+      "preview": "{\"3/25/2026\":{\"7621406058679354894\":{\"session_last_update_time\":1774496905173,\"stay_duration\":0.33,\"session_cnt\":1,\"os\":\"mac\",\"browser_brand\":\"chrome\",\"screen_resolution\":3168000,\"screen_orientation\":0,\"cpu_core_number\":8,\"network_downlink\"",
+      "size": 1591
+    },
+    {
+      "key": "pc_app_auto_tip",
+      "preview": "{\"date\":1774496902337,\"count\":1}",
+      "size": 32
+    },
+    {
+      "key": "PUMBAA_FREQ",
+      "preview": "{\"AbsoluteOrientationSensor\":2,\"Accelerometer\":2,\"addEventListener('devicemotion')\":0.01,\"addEventListener('deviceorientation')\":0.01,\"addEventListener('deviceorientationabsolute')\":0.1,\"addEventListener('MozOrientation')\":2,\"document.addEv",
+      "size": 1588
+    },
+    {
+      "key": "__tea_cache_first_548444",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "__tea_cache_first_345918",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "msToken",
+      "preview": "EbNSPpbLlfwxA4bQIGc3_tNNIp5pWiC1Z7ny2ytH_o5CFG6orE6-sRsNjCRZROPg8WK06LZKPBgbHPeyWA8RZah_pnou25y-7TMrmgHTJ1weaFZp2ifgAAUo9_XtG874RlTavcAMzPw5HpT0rVoB3T7ukLA=",
+      "size": 156
+    },
+    {
+      "key": "__PRE_CACHE__KEYS",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "SLARDARtiktok_webapp",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjc2MjE0MDYwNTg2NzkzNTQ4OTQlMjIsJTIyZGV2aWNlSWQlMjI6JTIyNmViNjZlMjUtOGQ3MC00MmZjLWI1NjAtZjFiYmI1ZmQ1MmU1JTIyLCUyMmV4cGlyZXMlMjI6MTc4MjI3Mjg4NTYwMiU3RA==",
+      "size": 176
+    },
+    {
+      "key": "g_ven",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "__tea_cache_first_1988",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "xg-decodeimg-scores-map",
+      "preview": "{\"https://lf16-tiktok-web.tiktokcdn-us.com/obj/tiktok-web-tx/tiktok/webapp/main/assets/perf_images/performance.jpeg\":[7.54]}",
+      "size": 124
+    },
+    {
+      "key": "p_f_s_g_s",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "text.2e1fcc60aeaa11e99ef535aeebd27c9b.account_server.en",
+      "preview": "{\"AI_Agent_IAB_half_screen_answers_Popular_items\":\"Popular items\",\"AI_Agent_IAB_half_screen_answers_brand_info\":\"Info\",\"AI_Agent_IAB_half_screen_answers_coupon\":\"Eligible promotions\",\"AI_Agent_IAB_half_screen_answers_coupon_copy\":\"Eligible ",
+      "size": 16241
+    },
+    {
+      "key": "SLARDARpns_cookie_banner_slardar",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMjNjMjA5YTQ2LTA5MjQtNGYwOS1hNTVjLWRmOTQ5MTFmNTg3YyUyMiwlMjJkZXZpY2VJZCUyMjolMjI2NWQ3OWYzMi0yZDM0LTRiM2QtYmRiYy0zMzY4OTJkMzUzNzIlMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjcyOTAxMTYzJTdE",
+      "size": 196
+    },
+    {
+      "key": "xmst",
+      "preview": "EbNSPpbLlfwxA4bQIGc3_tNNIp5pWiC1Z7ny2ytH_o5CFG6orE6-sRsNjCRZROPg8WK06LZKPBgbHPeyWA8RZah_pnou25y-7TMrmgHTJ1weaFZp2ifgAAUo9_XtG874RlTavcAMzPw5HpT0rVoB3T7ukLA=",
+      "size": 156
+    },
+    {
+      "key": "shopNotificationWID",
+      "preview": "7621406058679354894",
+      "size": 19
+    },
+    {
+      "key": "__tea_sdk_ab_version_1988",
+      "preview": "{\"data\":{\"can_show_podcast_page\":{\"val\":false,\"vid\":\"121374463\"},\"cr_blocking_popup\":{\"val\":true,\"vid\":\"121468990\"},\"creation_use_zti\":{\"val\":true,\"vid\":\"121439635\"},\"csi_tabs_fe_fallback\":{\"val\":{\"events\":{\"E_COMMERCE\":{\"SINGLE_TAB\":{\"forY",
+      "size": 5607
+    },
+    {
+      "key": "HYBRID_SLARDAR_WEBtiktok_pns_web_runtime",
+      "preview": "{\"userId\":\"613da14a-0cc7-49fc-9b53-f7f976ab3c3a\",\"deviceId\":\"844e9185-cb2b-4b6d-8df4-782a8749fd00\"}",
+      "size": 99
+    },
+    {
+      "key": "__tea_cache_tokens_1988",
+      "preview": "{\"web_id\":\"7621406066517493262\",\"user_unique_id\":\"7621406066517493262\",\"timestamp\":1774496900834,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "__tea_cache_tokens_345918",
+      "preview": "{\"web_id\":\"7621406130480317965\",\"user_unique_id\":\"7621406130480317965\",\"timestamp\":1774496900803,\"_type_\":\"default\"}",
+      "size": 116
+    },
+    {
+      "key": "__tea_cache_refer_1988",
+      "preview": "{\"refer_key\":\"\",\"refer_title\":\"TikTok - Make Your Day\",\"refer_manual_key\":\"\",\"routeChange\":false}",
+      "size": 97
+    },
+    {
+      "key": "ENABLED_FYP_DUMMY_REQUEST",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "version.5dc26cf008d511e9b571e1bc0c9e23b5.WebApp_Login.en",
+      "preview": "\"1773905899560302000\"",
+      "size": 21
+    },
+    {
+      "key": "ttwid",
+      "preview": "7621406058679354894",
+      "size": 19
+    },
+    {
+      "key": "tiktok-studio-guide-record_guest",
+      "preview": "\"2026-03-26T03:48:19.185Z\"",
+      "size": 26
+    },
+    {
+      "key": "hevc_support_key_v4",
+      "preview": "0",
+      "size": 1
+    },
+    {
+      "key": "one_click_blocked_until",
+      "preview": "0",
+      "size": 1
+    },
+    {
+      "key": "SLARDARpns_consent_system",
+      "preview": "JTdCJTIydXNlcklkJTIyOiUyMmRiNjk5NmQ4LTU0NDktNDg2ZS04Y2ViLTQyNTM2Y2YyY2U0OCUyMiwlMjJkZXZpY2VJZCUyMjolMjIwMDc3ZDE3NS0wMTMxLTQzYWQtYWY1My1kZGZmNzQxZDRjOTglMjIsJTIyZXhwaXJlcyUyMjoxNzgyMjcyOTAxMTU2JTdE",
+      "size": 196
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "__tea_session_id_345918",
+      "preview": "{\"sessionId\":\"9aa64a6b-8321-445c-8e22-512f445accb8\",\"timestamp\":1774496900820}",
+      "size": 78
+    },
+    {
+      "key": "webapp-session-referer",
+      "preview": "",
+      "size": 0
+    },
+    {
+      "key": "webapp_fyp_feeder_landing",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "__tea_session_id_548444",
+      "preview": "{\"sessionId\":\"777210ca-c6d7-42b6-87f8-153cc490254c\",\"timestamp\":1774496901751}",
+      "size": 78
+    },
+    {
+      "key": "__tea_session_id_1988",
+      "preview": "{\"sessionId\":\"dbc43976-4b57-4a1e-9819-b1b81ec874d7\",\"timestamp\":1774496905173}",
+      "size": 78
+    },
+    {
+      "key": "webapp_extra_data",
+      "preview": "{}",
+      "size": 2
+    },
+    {
+      "key": "webapp_tiktok_privious",
+      "preview": "{\"href\":\"https://www.tiktok.com/\",\"pageName\":\"homepage_hot\"}",
+      "size": 60
+    },
+    {
+      "key": "webapp_tiktok_open",
+      "preview": "homepage_hot",
+      "size": 12
+    },
+    {
+      "key": "STM_TAB_ID_KEY",
+      "preview": "724ad690",
+      "size": 8
+    },
+    {
+      "key": "webapp_launch_mode",
+      "preview": "direct",
+      "size": 6
+    },
+    {
+      "key": "webapp_session_id",
+      "preview": "76214060586793548941774496884743",
+      "size": 32
+    },
+    {
+      "key": "user_session",
+      "preview": "{\"uid\":\"0\",\"lastUpdated\":\"1774496884794\"}",
+      "size": 41
+    },
+    {
+      "key": "webapp_original_traffic_type",
+      "preview": "no_referrer",
+      "size": 11
+    },
+    {
+      "key": "msToken",
+      "preview": "EbNSPpbLlfwxA4bQIGc3_tNNIp5pWiC1Z7ny2ytH_o5CFG6orE6-sRsNjCRZROPg8WK06LZKPBgbHPeyWA8RZah_pnou25y-7TMrmgHTJ1weaFZp2ifgAAUo9_XtG874RlTavcAMzPw5HpT0rVoB3T7ukLA=",
+      "size": 156
+    }
+  ]
+}

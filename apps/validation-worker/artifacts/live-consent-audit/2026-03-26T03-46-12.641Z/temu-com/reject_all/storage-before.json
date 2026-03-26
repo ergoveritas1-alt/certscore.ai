@@ -1,0 +1,188 @@
+{
+  "cookies": [
+    {
+      "domain": ".temu.com",
+      "expires": 1806032774.291455,
+      "httpOnly": false,
+      "name": "api_uid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "CiX0qWnErAaof24Fc/Y6Ag==",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1790048774.776013,
+      "httpOnly": false,
+      "name": "region",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "211",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1790048774.776119,
+      "httpOnly": false,
+      "name": "language",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "en",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1790048774.776233,
+      "httpOnly": false,
+      "name": "currency",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "USD",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1806032775,
+      "httpOnly": false,
+      "name": "_nano_fp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "GWiVbWR2zaRcbWRVzjRzK#XbOQ2zfFinsHl1Z1F8ogK",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1806032776.647552,
+      "httpOnly": false,
+      "name": "timezone",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "America%2FLos_Angeles",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.temu.com",
+      "expires": 1777088776.682981,
+      "httpOnly": false,
+      "name": "img_sup",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "avif%2Cwebp",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".temu.com",
+      "expires": 1806032781.404767,
+      "httpOnly": false,
+      "name": "_bee",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "fErRfuo7txB5b1z5JASl6kR0GNFhyapi",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".temu.com",
+      "expires": 1806032781.404852,
+      "httpOnly": true,
+      "name": "njrpl",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "fErRfuo7txB5b1z5JASl6kR0GNFhyapi",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".temu.com",
+      "expires": 1806032781.404868,
+      "httpOnly": true,
+      "name": "dilx",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "-V_4Obs5DNXUyInWrthT8",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".temu.com",
+      "expires": 1806032781.404883,
+      "httpOnly": true,
+      "name": "hfsc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "L3yNfI057zn/25fPfQ==",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [
+    "page-info"
+  ],
+  "localStorage": [
+    {
+      "key": "i18nextLng",
+      "preview": "en",
+      "size": 2
+    },
+    {
+      "key": "h_wjrpl",
+      "preview": "fErRfuo7txB5b1z5JASl6kR0GNFhyapi",
+      "size": 32
+    },
+    {
+      "key": "layout_tab",
+      "preview": "[{\"page_sn\":10013,\"time\":1774496776702},null]",
+      "size": 45
+    },
+    {
+      "key": "h_dkrjl",
+      "preview": "-V_4Obs5DNXUyInWrthT8",
+      "size": 21
+    },
+    {
+      "key": "_nano_fp",
+      "preview": "GWiVbWR2zaRcbWRVzjRzK#XbOQ2zfFinsHl1Z1F8ogK",
+      "size": 43
+    },
+    {
+      "key": "temu_monitor_build_version",
+      "preview": "{\"/w/login.html\":1129330706}",
+      "size": 28
+    },
+    {
+      "key": "becDeviceInfoRecorded",
+      "preview": "1",
+      "size": 1
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "fallback_staticconfig",
+      "preview": "{\"r\":{\"homeLink\":{\"href\":\"/\"},\"userMenu\":[{\"text\":\"Temu Circle\",\"href\":\"/ano_home.html?_bg_fs=1&_ex_sid=personal_main\",\"sn\":\"229128\",\"icon\":\"https://aimg.kwcdn.com/upload_aimg/dawn/ed6ece2d-dd1b-49f8-b649-d9544b374e25.png.slim.png\",\"abTest\"",
+      "size": 25241
+    },
+    {
+      "key": "x-session-id",
+      "preview": "6e1wfyr99s",
+      "size": 10
+    }
+  ]
+}

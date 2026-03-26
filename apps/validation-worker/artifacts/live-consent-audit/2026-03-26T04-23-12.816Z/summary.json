@@ -1,0 +1,16 @@
+[
+  {
+    "finalClassification": "reject path may not suppress non-essential tracking",
+    "hostname": "amazon.com",
+    "likelyVendorsObserved": [
+      "Amazon Ads",
+      "AppNexus / Xandr",
+      "DoubleClick",
+      "Google Analytics",
+      "Meta / Facebook"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 111,
+    "rejectResidualRequestCount": 46
+  }
+]

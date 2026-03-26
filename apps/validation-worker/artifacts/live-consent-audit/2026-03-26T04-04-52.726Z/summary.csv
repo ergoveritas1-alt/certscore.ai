@@ -1,0 +1,5 @@
+hostname,finalClassification,manualReviewRecommended,preConsentRequestCount,rejectResidualRequestCount,likelyVendorsObserved
+ebay.com,reject path may not suppress non-essential tracking,true,255,0,"Criteo|DoubleClick|Google Tag Manager|Meta / Facebook|Pinterest|Snap"
+aliexpress.com,reject path may not suppress non-essential tracking,true,63,0,"AppNexus / Xandr|Criteo|DoubleClick|Google Analytics|Google Tag Manager|Meta / Facebook|Pinterest"
+etsy.com,possible pre-consent tracking,true,1,0,"DoubleClick"
+tripadvisor.com,reject path may not suppress non-essential tracking,true,0,0,""

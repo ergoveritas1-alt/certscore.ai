@@ -1,0 +1,18 @@
+{
+  "consentSignalsAdded": [],
+  "cookiesAdded": [
+    "id_pk@www.amazon.com",
+    "id_pkel@www.amazon.com"
+  ],
+  "cookiesRemoved": [],
+  "localStorageAdded": [
+    "csa-ctoken-3VCEBA65R3X9QS082NY5"
+  ],
+  "localStorageRemoved": [],
+  "sessionStorageAdded": [
+    "3VCEBA65R3X9QS082NY5",
+    "amzn:fwcim:events",
+    "eeldata"
+  ],
+  "sessionStorageRemoved": []
+}

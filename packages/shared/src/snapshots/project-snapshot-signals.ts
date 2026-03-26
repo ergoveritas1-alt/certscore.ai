@@ -507,6 +507,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
 
   pushNumber("commerce", "commerce.form_count_total", "Forms detected", snapshot.formCountTotal);
   pushBoolean("commerce", "commerce.checkout_or_payment_form_present", "Checkout flow detected", snapshot.checkoutOrPaymentFormPresent);
+  pushBoolean("commerce", "commerce.payment_card_input_present", "Payment card input detected", snapshot.paymentCardInputPresent);
   pushBoolean("commerce", "commerce.free_trial_detected", "Free trial detected", snapshot.freeTrialDetected);
   pushBoolean("commerce", "commerce.discount_claim_present", "Discount claim detected", snapshot.discountClaimPresent);
   pushBoolean(

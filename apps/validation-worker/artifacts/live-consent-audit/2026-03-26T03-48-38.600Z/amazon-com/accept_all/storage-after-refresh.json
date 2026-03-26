@@ -1,0 +1,961 @@
+{
+  "cookies": [
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033247.144052,
+      "httpOnly": false,
+      "name": "session-id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "144-7303785-8771557",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033247.144695,
+      "httpOnly": false,
+      "name": "session-id-time",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "2082787201l",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033247.144734,
+      "httpOnly": false,
+      "name": "i18n-prefs",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "USD",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033247.144768,
+      "httpOnly": false,
+      "name": "lc-main",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "en_US",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": -1,
+      "httpOnly": false,
+      "name": "skin",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "noskin",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033248.069726,
+      "httpOnly": false,
+      "name": "ubid-main",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "133-9145110-6240153",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon.com",
+      "expires": 1806033251.5576,
+      "httpOnly": false,
+      "name": "session-token",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "TDs2AiydFBFtYS8buHQicnoBFU5/8alyBwtN1gvh2OYYz/I7oJfuC6EeTOR/aAxnXRzCsCpYDKvZ2mZG...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".amazon-adsystem.com",
+      "expires": 1790826862.119351,
+      "httpOnly": true,
+      "name": "ad-id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AytdDSqSW0Jxn6y8oqPThoU",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Amazon Ads"
+    },
+    {
+      "domain": ".amazon-adsystem.com",
+      "expires": 1809057262.119465,
+      "httpOnly": true,
+      "name": "ad-privacy",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Amazon Ads"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273253.454544,
+      "httpOnly": false,
+      "name": "XANDR_PANID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ROySjL-RI4TAd1hUUD2ABnEQSrZe9Sgcd67S3vTbSom2nmWZTuaTEWyc5Zg0yO-AbGEyvq1JE7SKpm5k...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273253.454625,
+      "httpOnly": true,
+      "name": "uuid2",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "6243077498601985588",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".adnxs.com",
+      "expires": 1782273252.046268,
+      "httpOnly": true,
+      "name": "anj",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "dTM7k!M4/YF7/.XF']wIg2E>2vuMP?!]tbPl1M]o$IyEVU[WbA>j9.TL$__@b<?dbAN5V$XQ(Mbcr!R>...",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "AppNexus / Xandr"
+    },
+    {
+      "domain": ".agkn.com",
+      "expires": 1806033252.046632,
+      "httpOnly": false,
+      "name": "ab",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0001%3A9htD9g6kMc1KPF0Wev5fYaQy4y3ECCdU",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806033252.079121,
+      "httpOnly": false,
+      "name": "visitor",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "d73997e5-71d2-4339-89bb-5f3d15c0b4eb",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".postrelease.com",
+      "expires": 1806033252.07916,
+      "httpOnly": false,
+      "name": "status",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".connatix.com",
+      "expires": 1777089252.084676,
+      "httpOnly": false,
+      "name": "cnx_userId",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2-988da33b1ad943a6bc51fb3d5469e446",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1806033252.145124,
+      "httpOnly": false,
+      "name": "CMID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "acSt5NHM4o8AEQA8A0udxwAA",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1782273252.097905,
+      "httpOnly": false,
+      "name": "CMPS",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5882",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".casalemedia.com",
+      "expires": 1782273252.145154,
+      "httpOnly": false,
+      "name": "CMPRO",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5882",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pbs.yahoo.com",
+      "expires": 1790222052.112683,
+      "httpOnly": true,
+      "name": "uids",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJ0ZW1wVUlEcyI6eyJhbWF6b24iOnsidWlkIjoiTHpGTTJ0eUFTMVN3c1ZyNUhZd29fQSIsImV4cGly...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".yahoo.com",
+      "expires": 1790222052.112781,
+      "httpOnly": true,
+      "name": "cids",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "eyJ0ZW1wVUlEcyI6eyJhbWF6b24iOnsidWlkIjoiTHpGTTJ0eUFTMVN3c1ZyNUhZd29fQSIsImV4cGly...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033252.187963,
+      "httpOnly": false,
+      "name": "tuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "9b73b734-2514-4ad0-8eac-0454ee1bdfd5",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033252.114409,
+      "httpOnly": false,
+      "name": "c",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bidswitch.net",
+      "expires": 1806033252.188052,
+      "httpOnly": false,
+      "name": "tuuid_lu",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1782273253.141706,
+      "httpOnly": false,
+      "name": "pid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5388626022356970086",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1808452453.141774,
+      "httpOnly": false,
+      "name": "TestIfCookieP",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "ok",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".smartadserver.com",
+      "expires": 1777089253.141792,
+      "httpOnly": false,
+      "name": "csync",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "144:J2SRCPddSe6KVy_CEhrGnA",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782273252.196158,
+      "httpOnly": true,
+      "name": "tuuid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "5db90628-8fd6-4883-b41b-c1c365e8062b",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782273252.196282,
+      "httpOnly": true,
+      "name": "tuuid_lu",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782273252.292674,
+      "httpOnly": true,
+      "name": "um",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "!416,4c4.f8luZ9bZcfV.CJjfVLYPI-mmJ6EH.yfS2mzdhsT3RLMVfCcWP5EyCVLv8xW.pOI6jw,1782...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".360yield.com",
+      "expires": 1782273252.292724,
+      "httpOnly": true,
+      "name": "umeh",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "!416,0,1836705252,-1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".fwmrm.net",
+      "expires": 1790049252.406317,
+      "httpOnly": false,
+      "name": "_uid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "umw9d3e_7622040988623670657",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".zeotap.com",
+      "expires": 1806033252.642418,
+      "httpOnly": false,
+      "name": "zc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "e0e0a3c5-d0b6-416e-5891-b8be36e6c11f",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".thisisdax.com",
+      "expires": 1805601252.395405,
+      "httpOnly": false,
+      "name": "dax_listenerid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "4E039C477DBFA05874A6B589CEA38823",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".user-sync.fwmrm.net",
+      "expires": 1779681252.406267,
+      "httpOnly": false,
+      "name": "dsp_56",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "_Nz01g",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033252.518771,
+      "httpOnly": false,
+      "name": "audit_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|YTGbow7X/QeulkE/POdyX4gnYPOi7XPj4PSdxz1aWc+ThxEeUAnuQRwV+WUc1/kpE8ceth85wObyUh...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033252.518818,
+      "httpOnly": false,
+      "name": "khaos",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XUJ0V-P-GAYV",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033252.518842,
+      "httpOnly": false,
+      "name": "khaos_p",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MN6XUJ0V-P-GAYV",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".rubiconproject.com",
+      "expires": 1806033252.518862,
+      "httpOnly": false,
+      "name": "audit",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|YTGbow7X/QeulkE/POdyX4gnYPOi7XPj4PSdxz1aWc+ThxEeUAnuQRwV+WUc1/kpE8ceth85wObyUh...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".demdex.net",
+      "expires": 1790049252.646556,
+      "httpOnly": false,
+      "name": "demdex",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "48126256976408255262771223346523938222",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".presage.io",
+      "expires": 1790308452.607388,
+      "httpOnly": true,
+      "name": "presage-ssp",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "%7B%22uuid%22%3A%22de902924-491c-463d-baea-55be892dc88c%22%7D",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".scorecardresearch.com",
+      "expires": 1808193252.614584,
+      "httpOnly": false,
+      "name": "UID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "104d8aadf8debc52d645e8d1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".scorecardresearch.com",
+      "expires": 1808193252.615796,
+      "httpOnly": false,
+      "name": "XID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "104d8aadf8debc52d645e8d1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mookie1.com",
+      "expires": 1808625252.618528,
+      "httpOnly": false,
+      "name": "id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "10597884730329495764",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mookie1.com",
+      "expires": 1808625252.618584,
+      "httpOnly": false,
+      "name": "mdata",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1|10597884730329495764|1774497252628",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mookie1.com",
+      "expires": 1808625252.61861,
+      "httpOnly": false,
+      "name": "ov",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "fe1dce1b2a21138d3e1939b2e61e45ed",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".dpm.demdex.net",
+      "expires": 1790049252.646583,
+      "httpOnly": false,
+      "name": "dpm",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "48126256976408255262771223346523938222",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".openx.net",
+      "expires": 1806033258.362679,
+      "httpOnly": false,
+      "name": "i",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "019dbd81-589f-4dd6-aa11-2d060c530ef7|1774497252",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".doubleclick.net",
+      "expires": 1809057252.819834,
+      "httpOnly": true,
+      "name": "IDE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AHWqTUlApeS6vRkudpzfxQbXQFtmy8y2rR940zSTnkUYJr3NAJx0zwtyvnXypUBEEV8",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "domain": ".semasio.net",
+      "expires": 1806033252.904704,
+      "httpOnly": true,
+      "name": "SEUNCY",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "8626AD32270CA47C",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".3lift.com",
+      "expires": 1782273253.002078,
+      "httpOnly": false,
+      "name": "tluidp",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1267680631702212316408",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".3lift.com",
+      "expires": 1782273253.002149,
+      "httpOnly": false,
+      "name": "tluid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1267680631702212316408",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".gumgum.com",
+      "expires": 1806033252.936354,
+      "httpOnly": false,
+      "name": "vst",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "u_3d2a689c-9ba5-47a6-aaf6-b1a342b18e8b",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ninthdecimal.com",
+      "expires": 1806033252.952694,
+      "httpOnly": false,
+      "name": "ndat",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CppDEWnEreQxjAAVkpcvAg==",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1782273252.979351,
+      "httpOnly": false,
+      "name": "KRTBCOOKIE_290",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "23219-eSL0cp_uTQqzqphwa70_RQ&KRTB&23261-eSL0cp_uTQqzqphwa70_RQ&KRTB&23612-eSL0cp...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1777089252.979435,
+      "httpOnly": false,
+      "name": "PugT",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497253",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".ispot.tv",
+      "expires": 1809057253.001688,
+      "httpOnly": false,
+      "name": "pt",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "v2:e103c95241bf6128a6558e75578b2b4198345463b66038903ebfa1b462c437ee|06a55e069ce4...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".csync.loopme.me",
+      "expires": 1782273253.109911,
+      "httpOnly": true,
+      "name": "viewer_token",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2613ae46-9adb-465b-92f7-a12d5f5c269f",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediarithmics.com",
+      "expires": 1806033253.637219,
+      "httpOnly": true,
+      "name": "mics_vid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "161817102864",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediarithmics.com",
+      "expires": 1806033253.637288,
+      "httpOnly": true,
+      "name": "mics_uaid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "web:1:b74b4fe6-73d3-4ebb-8b99-437e77f5b00d",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".mediarithmics.com",
+      "expires": 1806033253.637311,
+      "httpOnly": true,
+      "name": "mics_lts",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497253598",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".richaudience.com",
+      "expires": 1782273253.695167,
+      "httpOnly": true,
+      "name": "avcid-amz-uid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CY1_egVTRMaxiHxtTGpDSQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".taboola.com",
+      "expires": 1806033253.695558,
+      "httpOnly": false,
+      "name": "t_gid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2e6a10cd-44e0-42d4-a72d-2a7aef0ea2b7-tuct10be3365",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".taboola.com",
+      "expires": 1806033253.695613,
+      "httpOnly": false,
+      "name": "t_pt_gid",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "2e6a10cd-44e0-42d4-a72d-2a7aef0ea2b7-tuct10be3365",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1806033253.709713,
+      "httpOnly": false,
+      "name": "KADUSERCOOKIE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "8775823B-1C74-4C04-A1C4-FE9433A321A2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".pubmatic.com",
+      "expires": 1777089253.709838,
+      "httpOnly": false,
+      "name": "SPugT",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "1774497253",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".yieldmo.com",
+      "expires": 1806033253.719942,
+      "httpOnly": false,
+      "name": "yieldmo_id",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "wqwNfSSSenSFKe14DVhf%7C1774483200000%7C0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".exelator.com",
+      "expires": 1784865253.847647,
+      "httpOnly": false,
+      "name": "EE",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"7988e6e99c9804261eff7bcdf4225a2d\"",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".exelator.com",
+      "expires": 1784865253.847739,
+      "httpOnly": false,
+      "name": "ud",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"eJxrXxzq6XKLQcHc0sIi1SzV0jLZ0sLAxMjMMDUtzTwpOSXNxMjINNEoZXFZatGCpaXFqSlJh5ZU5JT...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.amazon.com",
+      "expires": 1804737261,
+      "httpOnly": false,
+      "name": "csm-hit",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "tb:s-1R1H1452B0PTTXZVFTKV|1774497261041&t:1774497261431&adb:adblk_no",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "www.amazon.com",
+      "expires": 1774583662.736609,
+      "httpOnly": false,
+      "name": "rxc",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "AFexl2ex6loudgTWzQQ",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [
+    {
+      "key": "csm-bf",
+      "preview": "[\"1R1H1452B0PTTXZVFTKV\",\"GDQGH0E3185Q32SZC59A\",\"BXSH8K13J0NN2S125PA5\"]",
+      "size": 70
+    },
+    {
+      "key": "csa-ctoken-BXSH8K13J0NN2S125PA5",
+      "preview": "1774500847661",
+      "size": 13
+    },
+    {
+      "key": "a-font-class",
+      "preview": "a-ember-1-0-0 a-ember-modern-display-1-0-0 a-ember-modern-text-1-0-0",
+      "size": 68
+    },
+    {
+      "key": "amznfbgid",
+      "preview": "X69-6222804-4398443:1774497254",
+      "size": 30
+    },
+    {
+      "key": "csm:adb",
+      "preview": "adblk_no",
+      "size": 8
+    },
+    {
+      "key": "puff:suppression",
+      "preview": "{\"144-7303785-8771557\":{\"disabled\":false,\"suppressUntil\":\"2026-03-26T04:54:11.554Z\",\"suppressionMessage\":\"Customer is unrecognized\"}}",
+      "size": 133
+    },
+    {
+      "key": "rx",
+      "preview": "AFexl2ckZfshFD+tokH6qhYKtcyjI8OyEvuCcfVjQ8C3AQcnoT6tsxd38pz6COLdZrhgeV42C8mVxJqkWlI9eAKmZsxVNK8BVXf81tSggGa7I7K2ThPL3JVPpB+U53bOAsrx6WpmYeH1ib4dAUUZSJb6nAJhddM8ZnZwA5ePxxAEhWmCU+6oqNFtdR6w4a7IKn8cTgQkCkCPNG78dQ0aqch1q6BRuaEj+nEUDgLHEwp1rOBY",
+      "size": 438
+    },
+    {
+      "key": "csa-ctoken-1R1H1452B0PTTXZVFTKV",
+      "preview": "1774500861441",
+      "size": 13
+    },
+    {
+      "key": "csa-tabbed-browsing",
+      "preview": "{\"lastActive\":{\"visible\":true,\"pid\":\"ljm86z-t69kig-m2v1de-7n2qyt\",\"tid\":\"zbgf3j-c4jwg7-dqzmt4-ojl8wn\",\"ent\":{\"rid\":\"1R1H1452B0PTTXZVFTKV\",\"ety\":\"Gateway\",\"esty\":\"desktop\"}},\"lastInteraction\":{\"id\":\"jn94cf-gysbc5-mmbd5o-kbnjnx\",\"sid\":\"Naviga",
+      "size": 314
+    },
+    {
+      "key": "csa-ctoken-GDQGH0E3185Q32SZC59A",
+      "preview": "1774500857280",
+      "size": 13
+    },
+    {
+      "key": "csm-hit",
+      "preview": "tb:s-1R1H1452B0PTTXZVFTKV|1774497261041&t:1774497261431&adb:adblk_no",
+      "size": 68
+    },
+    {
+      "key": "rx-pnt",
+      "preview": "1774497260|3",
+      "size": 12
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "CSM_previousURL",
+      "preview": "https://www.amazon.com/",
+      "size": 23
+    },
+    {
+      "key": "1R1H1452B0PTTXZVFTKV",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "csa-tabbed-browsing",
+      "preview": "{\"pid\":\"ljm86z-t69kig-m2v1de-7n2qyt\",\"tid\":\"zbgf3j-c4jwg7-dqzmt4-ojl8wn\",\"ent\":{\"rid\":\"1R1H1452B0PTTXZVFTKV\",\"ety\":\"Gateway\",\"esty\":\"desktop\"},\"lastInteraction\":{\"id\":\"jn94cf-gysbc5-mmbd5o-kbnjnx\",\"sid\":\"Navigation-desktop-navbar\",\"used\":tr",
+      "size": 263
+    },
+    {
+      "key": "eeldata",
+      "preview": "{\"dct\":{\"#0\":\"domains\",\"#1\":\"www.amazon.com\",\"#2\":\"m.media-amazon.com\",\"#3\":\"images-na.ssl-images-amazon.com\",\"#4\":\"api.stores.us-east-1.prod.paets.advertising.amazon.dev\",\"#5\":\"aes.us-east.ono.axp.amazon-adsystem.com\",\"#6\":\"unagi.amazon.co",
+      "size": 866
+    },
+    {
+      "key": "eelsts",
+      "preview": "scs",
+      "size": 3
+    },
+    {
+      "key": "csmtid",
+      "preview": "BXSH8K13J0NN2S125PA5",
+      "size": 20
+    },
+    {
+      "key": "GDQGH0E3185Q32SZC59A",
+      "preview": "1",
+      "size": 1
+    },
+    {
+      "key": "BXSH8K13J0NN2S125PA5",
+      "preview": "1",
+      "size": 1
+    }
+  ]
+}

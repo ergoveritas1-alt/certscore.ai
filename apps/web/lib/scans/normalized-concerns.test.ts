@@ -212,6 +212,27 @@ test("bounded key-page discovery unresolved is blocked when stable linked legal 
   assert.equal(concern.externalSurfacingEligibility, "suppress");
 });
 
+test("privacy policy missing surface stays audit-only when only the negative snapshot flag is retained", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "The snapshot marked the privacy policy surface as missing.",
+    fallbackEvidence: {
+      privacyPolicyPresent: false,
+      signalKey: "disclosure.privacy_policy_surface_missing"
+    },
+    observedValue: "Privacy policy missing",
+    severity: "high",
+    signalKey: "disclosure.privacy_policy_surface_missing",
+    signalLabel: "Privacy policy missing",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Privacy policy missing"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "privacy_policy_missing_surface");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+});
+
 test("dsar concerns with parser-incomplete extraction are blocked before unified finding generation", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

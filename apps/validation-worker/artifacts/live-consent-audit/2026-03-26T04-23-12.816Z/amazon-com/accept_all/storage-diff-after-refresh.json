@@ -1,0 +1,17 @@
+{
+  "consentSignalsAdded": [],
+  "cookiesAdded": [],
+  "cookiesRemoved": [],
+  "localStorageAdded": [
+    "csa-ctoken-K8NV6W2MD1RT19PBJ1ND",
+    "csa.cajun.cdgxu8-uc127x-eofaah-717n3h"
+  ],
+  "localStorageRemoved": [],
+  "sessionStorageAdded": [
+    "K8NV6W2MD1RT19PBJ1ND",
+    "eeldata"
+  ],
+  "sessionStorageRemoved": [
+    "amzn:fwcim:events"
+  ]
+}

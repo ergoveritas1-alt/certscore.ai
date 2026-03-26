@@ -1,0 +1,1743 @@
+{
+  "actionSummary": {
+    "acceptPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    },
+    "rejectPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    }
+  },
+  "banner": {
+    "bannerHtmlPath": null,
+    "bannerPresent": false,
+    "bannerText": null,
+    "frameUrl": null,
+    "screenshots": {
+      "banner": null,
+      "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T04-04-52.726Z/aliexpress-com/custom_preferences/first-load.png",
+      "preferencesCenter": null
+    }
+  },
+  "cmpSignals": [],
+  "errors": [],
+  "network": [
+    {
+      "documentUrl": "about:blank",
+      "hostname": "aliexpress.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:07:52.163Z",
+      "url": "https://aliexpress.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com/",
+      "hostname": "aliexpress.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:07:53.366Z",
+      "url": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/mtb/lib-flexible/0.3.2/flexible.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/sd/punish/0.0.1/qrcode.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/mtb/??lib-promise/3.1.3/polyfillB.js,lib-mtop/2.6.3/mtop.js,lib-windvane/3.0.6/windvane.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/AWSC/CAPTCHA/0.0.1/awsc.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/htmltocanvas.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "stylesheet",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "stylesheet",
+      "timestamp": "2026-03-26T04:07:53.958Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/main.css",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aeis.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.100Z",
+      "url": "https://aeis.alicdn.com/AWSC/et/1.83.8/et_f.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.131Z",
+      "url": "https://g.alicdn.com/alilog/mlog/aplus_v2.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:54.177Z",
+      "url": "https://g.alicdn.com/alilog/??s/8.15.25/plugin/aplus_client.js,aplus_cplugin/0.7.12/toolkit.js,aplus_cplugin/0.7.12/monitor.js,s/8.15.25/aplus_std.js,s/8.15.25/plugin/aplus_spmact.js?v=20260108171550",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "log.mmstat.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.217Z",
+      "url": "https://log.mmstat.com/eg.js?t=1774498074214",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.445Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/punishpage.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.445Z",
+      "url": "https://g.alicdn.com/trace/trace/1.3.22/??sdk.js,resourceError-plugin.js,perf-plugin.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:54.919Z",
+      "url": "https://g.alicdn.com/secdev/entry/x/362f987b88325959.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:54.919Z",
+      "url": "https://g.alicdn.com/sd/punish/0.0.4/program.wasm",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:54.942Z",
+      "url": "https://aliexpress.com/_____tmd_____/punishTextFetch?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&language=en&action=captcha&v=043583571094184403",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:54.943Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadPageSuccess&msg=PunishPage%20load%20success%3Bsizes%3D1440*2200&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=047593466142459817",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "img.alicdn.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:07:54.943Z",
+      "url": "https://img.alicdn.com/imgextra/i3/O1CN01oSZaoy1rcfT5pA6JR_!!6000000005652-2-tps-498-120.png",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "img.alicdn.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:07:54.943Z",
+      "url": "https://img.alicdn.com/imgextra/i3/O1CN01uX800r1KcmF5qDeNd_!!6000000001185-2-tps-276-284.png",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "s-gm.mmstat.com",
+      "initiator": "ping",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "ping",
+      "timestamp": "2026-03-26T04:07:54.950Z",
+      "url": "https://s-gm.mmstat.com/arms.1.2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "log.mmstat.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:07:54.953Z",
+      "url": "https://log.mmstat.com/v.gif?logtype=1&title=Captcha%20Interception&pre=https%3A%2F%2Faliexpress.com%2F&scr=1440x2200&_p_url=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish%3Fx5secdata%3DxfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%252f%26x5step%3D1&cna=Gp9LIk2JEDECAUIbQPiyPSXX&spm-cnt=0.0.0.0.3e1a5b6eCgqOJp&category=&uidaplus=&aplus&yunid=&&trid=213bd97f17744980735673606e2c7e&asid=AQAAAAAZscRpaUgiSQAAAADSKMpvNqXqyQ==&p=1&o=mac&b=chrome123&s=1440x2200&w=webkit&ism=mac&cache=99fb5af&lver=8.15.25&jsver=aplus_std&pver=0.7.12&tag=0&stag=2&lstag=0&_slog=0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "o.alicdn.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:54.958Z",
+      "url": "https://o.alicdn.com/secdev/storage-br/secaptcha/362f987b88325959.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.448Z",
+      "url": "blob:https://aliexpress.com/ec95979c-12cb-4b84-92ca-cf4e41468fbe",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:55.454Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessRand&uuid=a3680fdf0c0f734ed4e01ed85d862890&_rand=AAAAbo_O6kovAI6DsdCf6NWMJsO014shdL11cMwC9isDcI18uboVaU_9mdIdYnwRAKda6dZCwQh-t2dLn-sCkGbQU4jS7hIhkIvD1EXgLviVQewv",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:55.522Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessAWSC&msg=AWSC.js_load_success&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=09970211629215883",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:55.530Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessEt&msg=et.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=09112923341813334",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.530Z",
+      "url": "https://g.alicdn.com/AWSC/fireyejs/1.234.20/fireyejs.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aeis.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.530Z",
+      "url": "https://aeis.alicdn.com/AWSC/nc/1.97.0/nc.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "8odyz2.tdum.alibaba.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.755Z",
+      "url": "https://8odyz2.tdum.alibaba.com/dss.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:55.760Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "ynuf.aliapp.org",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.761Z",
+      "url": "https://ynuf.aliapp.org/w/wu.json",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:07:55.778Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessNC&msg=nc.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=02083284083156789",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "cf.aliyun.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:07:55.778Z",
+      "url": "https://cf.aliyun.com/nocaptcha/initialize.jsonp?a=X82Y__8484d0b676165cbd583e1efce82edaa2&t=a3680fdf0c0f734ed4e01ed85d862890&scene=register&lang=en&v=v1.3.21&href=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish&comm={}&callback=initializeJsonp_020242706614943418",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "fourier.taobao.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:55.890Z",
+      "url": "https://fourier.taobao.com/ts?ext=63",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:07:56.096Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg6aa8e9a75baaf890kaa3680fdf0c0f734ed4e01ed85d8628901774498073a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com:443&type=initSuccess&msg=class%3Dnc_1_nocaptcha%3Dnc_1_nocaptcha%3Dnc_1_wrapperclass%3Dnc_wrapper%3Dnc_1_n1tclass%3Dnc_scale%3Dnc_1__bgclass%3Dnc_bgstyle%3Dwth%3A0px%3Bspan%3Dnc_1_n1zclass%3Dnc_confontbtn_sleara-label%3D%E6%BB%91%E5%9D%97tabnex%3D0role%3Dbuttonstyle%3Dleft%3A0px%3B%EE%98%81span%3Dnc_1__scale_textclass%3Dscale_textsletounlockspanclass%3Dnc-lang-cntata-nc-lang%3DSLIDEPleasesletoerfyspan%3B&uuid=a3680fdf0c0f734ed4e01ed85d862890",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "at.alicdn.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-03-26T04:07:56.096Z",
+      "url": "https://at.alicdn.com/t/font_1465353706_4784257.woff",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:56.249Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:07:56.345Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "document",
+      "timestamp": "2026-03-26T04:07:59.782Z",
+      "url": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "ping",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "ping",
+      "timestamp": "2026-03-26T04:07:59.782Z",
+      "url": "https://umdc-global.aliexpress.com/repWd.json?e=2072&sv=181&pv=234&pn=aliexpress.com&biz=4&bx-umidtoken=T2gAeXCpYlEqf7qQX9dvw2Vuqbbk9M_ykxhk15c16zvIjPdxIcwx3tYj5tvbJOARGmg=&tid=default&tk=qybiHrlmdUYgUujJ!8DVtivK9rxDgsPUdD8+XtA==&x-pipu2=%7Bnbugmw%7Bohfh%60pw)73695%3Ab%25%2564)o%266%3C%24z%3Eajs%7Bo%7Boqrwijs%7Bo%7Boqrwi&bx-ua=234!kzNeKFPteeP4UZhvP+jWFcLItRRzqIvLlMR3NNdTZDF2xgbvQrDjENqvRH3ic3hFETE7C/LeBi9Sf/PzbDT7yvKT9/n/XoMiUTHQS2xjerEOZ3oHQQVNC24uVk+H9iHjePn9YkuQc4btZZodQQymhsWZn3TH9iJXPkE7g3s/cGv7Z3oHQQxO2JaBZ3Td9iJTCvkZQpknc247ZZodQCyNhsfAZ3wTdiyKCPsZQkkic2471loPQCyDlsfWepDH9idHCVa+QppvcsUeZ3oHQQdoCr5+Ak+S9Ay7hnoZQppQGse7n3oHKlW0+U2Zn3UH9AdThn0+4wId85P7nKWdQCymdsTZn3wH9i3tPLoZQkp/cs5TZ3odQQyNhsg2SrWAKjbRvDOpQppvc257nZodQCyNhBP+4HDNGP4+dQ4vgddvyJWiU1NqkPuw8OtaEwV+k+Nxmq5BtV+BAqXW+GvQ+eOq77/9gF/OfEa/4zcDEd5siEhS/TJjkbmsS3l168mrwhaD5952HdHUePNpdiPDsUH2XTnfgIWAfxmTE/vVaVyuOwIaDFuYG1vB8s/SgwJr4WGuJFcbKUE+O/kiJjdVkT2cg3vkEi48sYLw49lXzHjeiPxIeq13ukic+Qye8po1mBerS8/T5x7sjTRANr7kjX36I0wkH6hrvFK7DGhuTzzWSfmnnkXOCE+eoVNfPyAd71+M++POpxigcgpPnGVbEuwvLejxJwOgqzldBbPUDlWgdrgv3F61QqZe+lcO62CGr5C5Wv6lt14hGXvuVW7tMgOx0iUxezqH1kuwUDqrtIfAinuM2QVoDYK7gu6XpBqw9mBGptR3tElYOXeY4ihRIYPcc5zpPdS237Womma/6OmkLFNHzuzop2YgQwnJrsaIx+OtZMYGGsMB9ez/CcgVa78EI11Tie7jzlB0NK7iRRa8G+DQz3r9wfZBNT/GQ/62NgerMx7ervGzQc1B1ybZVcyfsD3TupCqviiMKcNICK+0j30ddKAR5yZ7vRc8HPXPkLoxkvZtaBnwWsRQYV82u0aRYGvHdeDdxyjAz6oKJmD6jegWfkburIRB0DT+payCjmCWRksQu3mzQps82Kz9IDoxKEX8HD1eYioCSdB5lzLk+gPkt78JCxpmR881LxrJPQhMEntkY6kwXWNrxjRddMzH99M47S09ho9rwpDM0tHLHbmntifVdlfy3K90uSXDyPGoL5gwQt8UW6Dlt4tXUkDtBVFc799UbvjyuyAJnRvJnGIBe/iJ5hKlxWgvzN6v2SD0Q1gskwx8Z4auJFbA0SmR+GcINMZkfULqn7dmv0uTpiCbvNRlNZxKfpsTWJ4yEsOqMaPYLdWM1YDfEyBsz8K3+QC4EQZL0h0te4ZuIExyI8bwBpm6SH6o/aOOXg6wVQFimLQVcgtdopNACEQ9mScnhPdEQTP72SzhSryf7diimrKvO4MVJsD04HaiYrR1IyFRZ9dTUq0+xgabqgv3i9wT7oPfqV==",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.019Z",
+      "url": "https://g.alicdn.com/mtb/lib-flexible/0.3.2/flexible.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.019Z",
+      "url": "https://g.alicdn.com/sd/punish/0.0.1/qrcode.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.020Z",
+      "url": "https://g.alicdn.com/mtb/??lib-promise/3.1.3/polyfillB.js,lib-mtop/2.6.3/mtop.js,lib-windvane/3.0.6/windvane.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.020Z",
+      "url": "https://g.alicdn.com/AWSC/CAPTCHA/0.0.1/awsc.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.020Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/htmltocanvas.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "stylesheet",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "stylesheet",
+      "timestamp": "2026-03-26T04:08:00.020Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/main.css",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aeis.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.025Z",
+      "url": "https://aeis.alicdn.com/AWSC/et/1.83.8/et_f.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.025Z",
+      "url": "https://g.alicdn.com/alilog/mlog/aplus_v2.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "log.mmstat.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:08:00.048Z",
+      "url": "https://log.mmstat.com/v.gif?logtype=1&title=&pre=https%3A%2F%2Faliexpress.com%2F&scr=1440x2200&_p_url=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish%3Fx5secdata%3DxfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%252f%26x5step%3D1&cna=Gp9LIk2JEDECAUIbQPiyPSXX&spm-cnt=0.0.0.0.3e1atybrtybrhv&category=&uidaplus=&aplus&yunid=&&trid=213bd97f17744980799913647e2c7e&asid=AQAAAAAfscRpF82/QwAAAACMYwz554lbhQ==&p=1&o=mac&b=chrome123&s=1440x2200&w=webkit&ism=mac&cache=f04121f&lver=8.15.25&jsver=aplus_std&pver=0.7.12&tag=1&stag=-1&lstag=-1&_slog=0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.892Z",
+      "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/punishpage.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.893Z",
+      "url": "https://g.alicdn.com/trace/trace/1.3.22/??sdk.js,resourceError-plugin.js,perf-plugin.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:00.925Z",
+      "url": "https://g.alicdn.com/secdev/entry/x/362f987b88325959.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:00.926Z",
+      "url": "https://g.alicdn.com/sd/punish/0.0.4/program.wasm",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "img.alicdn.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:08:00.926Z",
+      "url": "https://img.alicdn.com/imgextra/i3/O1CN01oSZaoy1rcfT5pA6JR_!!6000000005652-2-tps-498-120.png",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "img.alicdn.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:08:00.926Z",
+      "url": "https://img.alicdn.com/imgextra/i3/O1CN01uX800r1KcmF5qDeNd_!!6000000001185-2-tps-276-284.png",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:00.946Z",
+      "url": "https://aliexpress.com/_____tmd_____/punishTextFetch?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&language=en&action=captcha&v=015824379143265743",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:00.948Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadPageSuccess&msg=PunishPage%20load%20success%3Bsizes%3D1440*2200&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=006295577538840202",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "o.alicdn.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:00.952Z",
+      "url": "https://o.alicdn.com/secdev/storage-br/secaptcha/362f987b88325959.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "s-gm.mmstat.com",
+      "initiator": "ping",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "ping",
+      "timestamp": "2026-03-26T04:08:00.953Z",
+      "url": "https://s-gm.mmstat.com/arms.1.2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:01.050Z",
+      "url": "blob:https://aliexpress.com/b8a82cf5-0d54-428b-af44-fdb90ff32f72",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:01.054Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessRand&uuid=a3680fdf0c0f734ed4e01ed85d862890&_rand=AAAAd31zHiwxAF1a88p-fJe7xoALTA7u4mIBy-a6G4gT4kEc-pG9m9S_ZlMh0PIM1R6PhnnUEB7hc_O3yUDF6OWtPihbZlddcjfAj0Mz8EBz_E1M",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:01.364Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessAWSC&msg=AWSC.js_load_success&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=07132691197530534",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:01.370Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessEt&msg=et.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=0862214597874255",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "g.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:01.371Z",
+      "url": "https://g.alicdn.com/AWSC/fireyejs/1.234.20/fireyejs.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aeis.alicdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:01.371Z",
+      "url": "https://aeis.alicdn.com/AWSC/nc/1.97.0/nc.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "8bplbb.tdum.alibaba.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:01.412Z",
+      "url": "https://8bplbb.tdum.alibaba.com/dss.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:01.417Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "xhr",
+      "timestamp": "2026-03-26T04:08:01.438Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessNC&msg=nc.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=040022748340635284",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "cf.aliyun.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "script",
+      "timestamp": "2026-03-26T04:08:01.438Z",
+      "url": "https://cf.aliyun.com/nocaptcha/initialize.jsonp?a=X82Y__8484d0b676165cbd583e1efce82edaa2&t=a3680fdf0c0f734ed4e01ed85d862890&scene=register&lang=en&v=v1.3.21&href=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish&comm={}&callback=initializeJsonp_07908840458396301",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "at.alicdn.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "font",
+      "timestamp": "2026-03-26T04:08:01.440Z",
+      "url": "https://at.alicdn.com/t/font_1465353706_4784257.woff",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "fourier.taobao.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:01.493Z",
+      "url": "https://fourier.taobao.com/ts?ext=63",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:01.514Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "umdc-global.aliexpress.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "after_refresh",
+      "resourceType": "fetch",
+      "timestamp": "2026-03-26T04:08:01.603Z",
+      "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+      "hostname": "aliexpress.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "after_refresh",
+      "resourceType": "image",
+      "timestamp": "2026-03-26T04:08:02.342Z",
+      "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com:443&type=initSuccess&msg=class%3Dnc_1_nocaptcha%3Dnc_1_nocaptcha%3Dnc_1_wrapperclass%3Dnc_wrapper%3Dnc_1_n1tclass%3Dnc_scale%3Dnc_1__bgclass%3Dnc_bgstyle%3Dwth%3A0px%3Bspan%3Dnc_1_n1zclass%3Dnc_confontbtn_sleara-label%3D%E6%BB%91%E5%9D%97tabnex%3D0role%3Dbuttonstyle%3Dleft%3A0px%3B%EE%98%81span%3Dnc_1__scale_textclass%3Dscale_textsletounlockspanclass%3Dnc-lang-cntata-nc-lang%3DSLIDEPleasesletoerfyspan%3B&uuid=a3680fdf0c0f734ed4e01ed85d862890",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    }
+  ],
+  "notes": [
+    "No consent surface detected with current heuristics on the tested first load.",
+    "No manage action detected."
+  ],
+  "preferences": null,
+  "refresh": {
+    "cookies": [
+      {
+        "domain": "aliexpress.com",
+        "expires": 1790050074.948408,
+        "httpOnly": false,
+        "name": "arms_uid",
+        "path": "///_____tmd_____",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "280d99fd-956a-4ffd-9567-492fe47d0c3d",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".mmstat.com",
+        "expires": 1806034080.209503,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1809058074.887464,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".ynuf.aliapp.org",
+        "expires": 1806034076.58579,
+        "httpOnly": false,
+        "name": "cbc",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "T2gAtj2nDgCKHNz9zrHXQNPPV_mUyA7eGEdVsjiPUjIUoV_rI6HdDU6pEaN1D344K1g=",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1790050080,
+        "httpOnly": false,
+        "name": "tfstk",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "govSFmgwLep4rrXLA_m4cpQ4N_WyVmkw2kspjHezvTBRdDTy5y7FT0bdJZThz_WReET2MI0orw-PAERv...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      }
+    ],
+    "localStorage": [
+      {
+        "key": "APLUS_LS_KEY",
+        "preview": "[\"APLUS_S_CORE_1.0.20_20260108171550_4acefc95\"]",
+        "size": 47
+      },
+      {
+        "key": "APLUS_S_CORE_1.0.20_20260108171550_4acefc95",
+        "preview": "/*! 2026-01-08 15:03:35 v8.15.25 */\n!function(e){function i(n){if(o[n])return o[n].exports;var r=o[n]={exports:{},id:n,loaded:!1};return e[n].call(r.exports,r,r.exports,i),r.loaded=!0,r.exports}var o={};return i.m=e,i.c=o,i.p=\"\",i(0)}([func",
+        "size": 118323
+      },
+      {
+        "key": "tfstk__",
+        "preview": "gtOtF0Go02UONQRO-FkHiypb2PLvBvYw9h87iijghHKpmHTMISfchSLXutOGsFxpvM9EbclZ_ZOv4poZbflwvETkxFVMiIpUMU82sV5m718NgsioqbAv7F5q4OI2BDYIlZ5A5_aY10YNgsi3E2O55F-gNwg9hsgdOZQ8css1h2BCrMN1l5_bA2IFA5wfCGTQdN7z5s1XcegduM_1GOtXRNrKMae1qSpB2h4CJ-IYGSOdWOhJ",
+        "size": 349
+      },
+      {
+        "key": "auyst",
+        "preview": "1774498074",
+        "size": 10
+      },
+      {
+        "key": "APLUS_CNA",
+        "preview": "20260325_Gp9LIk2JEDECAUIbQPiyPSXX",
+        "size": 33
+      },
+      {
+        "key": "__bx_storage__",
+        "preview": "1",
+        "size": 1
+      },
+      {
+        "key": "syfhs",
+        "preview": "3315416270",
+        "size": 10
+      },
+      {
+        "key": "lswucn",
+        "preview": "T2gAeXCpYlEqf7qQX9dvw2Vuqbbk9M_ykxhk15c16zvIjPdxIcwx3tYj5tvbJOARGmg=@@1774498076",
+        "size": 80
+      },
+      {
+        "key": "ETLCD",
+        "preview": "false",
+        "size": 5
+      }
+    ],
+    "network": [
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "document",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "document",
+        "timestamp": "2026-03-26T04:07:59.782Z",
+        "url": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "umdc-global.aliexpress.com",
+        "initiator": "ping",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "ping",
+        "timestamp": "2026-03-26T04:07:59.782Z",
+        "url": "https://umdc-global.aliexpress.com/repWd.json?e=2072&sv=181&pv=234&pn=aliexpress.com&biz=4&bx-umidtoken=T2gAeXCpYlEqf7qQX9dvw2Vuqbbk9M_ykxhk15c16zvIjPdxIcwx3tYj5tvbJOARGmg=&tid=default&tk=qybiHrlmdUYgUujJ!8DVtivK9rxDgsPUdD8+XtA==&x-pipu2=%7Bnbugmw%7Bohfh%60pw)73695%3Ab%25%2564)o%266%3C%24z%3Eajs%7Bo%7Boqrwijs%7Bo%7Boqrwi&bx-ua=234!kzNeKFPteeP4UZhvP+jWFcLItRRzqIvLlMR3NNdTZDF2xgbvQrDjENqvRH3ic3hFETE7C/LeBi9Sf/PzbDT7yvKT9/n/XoMiUTHQS2xjerEOZ3oHQQVNC24uVk+H9iHjePn9YkuQc4btZZodQQymhsWZn3TH9iJXPkE7g3s/cGv7Z3oHQQxO2JaBZ3Td9iJTCvkZQpknc247ZZodQCyNhsfAZ3wTdiyKCPsZQkkic2471loPQCyDlsfWepDH9idHCVa+QppvcsUeZ3oHQQdoCr5+Ak+S9Ay7hnoZQppQGse7n3oHKlW0+U2Zn3UH9AdThn0+4wId85P7nKWdQCymdsTZn3wH9i3tPLoZQkp/cs5TZ3odQQyNhsg2SrWAKjbRvDOpQppvc257nZodQCyNhBP+4HDNGP4+dQ4vgddvyJWiU1NqkPuw8OtaEwV+k+Nxmq5BtV+BAqXW+GvQ+eOq77/9gF/OfEa/4zcDEd5siEhS/TJjkbmsS3l168mrwhaD5952HdHUePNpdiPDsUH2XTnfgIWAfxmTE/vVaVyuOwIaDFuYG1vB8s/SgwJr4WGuJFcbKUE+O/kiJjdVkT2cg3vkEi48sYLw49lXzHjeiPxIeq13ukic+Qye8po1mBerS8/T5x7sjTRANr7kjX36I0wkH6hrvFK7DGhuTzzWSfmnnkXOCE+eoVNfPyAd71+M++POpxigcgpPnGVbEuwvLejxJwOgqzldBbPUDlWgdrgv3F61QqZe+lcO62CGr5C5Wv6lt14hGXvuVW7tMgOx0iUxezqH1kuwUDqrtIfAinuM2QVoDYK7gu6XpBqw9mBGptR3tElYOXeY4ihRIYPcc5zpPdS237Womma/6OmkLFNHzuzop2YgQwnJrsaIx+OtZMYGGsMB9ez/CcgVa78EI11Tie7jzlB0NK7iRRa8G+DQz3r9wfZBNT/GQ/62NgerMx7ervGzQc1B1ybZVcyfsD3TupCqviiMKcNICK+0j30ddKAR5yZ7vRc8HPXPkLoxkvZtaBnwWsRQYV82u0aRYGvHdeDdxyjAz6oKJmD6jegWfkburIRB0DT+payCjmCWRksQu3mzQps82Kz9IDoxKEX8HD1eYioCSdB5lzLk+gPkt78JCxpmR881LxrJPQhMEntkY6kwXWNrxjRddMzH99M47S09ho9rwpDM0tHLHbmntifVdlfy3K90uSXDyPGoL5gwQt8UW6Dlt4tXUkDtBVFc799UbvjyuyAJnRvJnGIBe/iJ5hKlxWgvzN6v2SD0Q1gskwx8Z4auJFbA0SmR+GcINMZkfULqn7dmv0uTpiCbvNRlNZxKfpsTWJ4yEsOqMaPYLdWM1YDfEyBsz8K3+QC4EQZL0h0te4ZuIExyI8bwBpm6SH6o/aOOXg6wVQFimLQVcgtdopNACEQ9mScnhPdEQTP72SzhSryf7diimrKvO4MVJsD04HaiYrR1IyFRZ9dTUq0+xgabqgv3i9wT7oPfqV==",
+        "vendorCategory": "advertising_marketing",
+        "vendorName": "Meta / Facebook"
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.019Z",
+        "url": "https://g.alicdn.com/mtb/lib-flexible/0.3.2/flexible.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.019Z",
+        "url": "https://g.alicdn.com/sd/punish/0.0.1/qrcode.min.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.020Z",
+        "url": "https://g.alicdn.com/mtb/??lib-promise/3.1.3/polyfillB.js,lib-mtop/2.6.3/mtop.js,lib-windvane/3.0.6/windvane.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.020Z",
+        "url": "https://g.alicdn.com/AWSC/CAPTCHA/0.0.1/awsc.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.020Z",
+        "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/htmltocanvas.min.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "stylesheet",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "stylesheet",
+        "timestamp": "2026-03-26T04:08:00.020Z",
+        "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/main.css",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aeis.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.025Z",
+        "url": "https://aeis.alicdn.com/AWSC/et/1.83.8/et_f.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.025Z",
+        "url": "https://g.alicdn.com/alilog/mlog/aplus_v2.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "log.mmstat.com",
+        "initiator": "image",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "image",
+        "timestamp": "2026-03-26T04:08:00.048Z",
+        "url": "https://log.mmstat.com/v.gif?logtype=1&title=&pre=https%3A%2F%2Faliexpress.com%2F&scr=1440x2200&_p_url=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish%3Fx5secdata%3DxfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%252f%26x5step%3D1&cna=Gp9LIk2JEDECAUIbQPiyPSXX&spm-cnt=0.0.0.0.3e1atybrtybrhv&category=&uidaplus=&aplus&yunid=&&trid=213bd97f17744980799913647e2c7e&asid=AQAAAAAfscRpF82/QwAAAACMYwz554lbhQ==&p=1&o=mac&b=chrome123&s=1440x2200&w=webkit&ism=mac&cache=f04121f&lver=8.15.25&jsver=aplus_std&pver=0.7.12&tag=1&stag=-1&lstag=-1&_slog=0",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.892Z",
+        "url": "https://g.alicdn.com/bsop-static/sufei-punish/0.1.121/build/punishpage.min.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.893Z",
+        "url": "https://g.alicdn.com/trace/trace/1.3.22/??sdk.js,resourceError-plugin.js,perf-plugin.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:00.925Z",
+        "url": "https://g.alicdn.com/secdev/entry/x/362f987b88325959.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "fetch",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:00.926Z",
+        "url": "https://g.alicdn.com/sd/punish/0.0.4/program.wasm",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "img.alicdn.com",
+        "initiator": "image",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "image",
+        "timestamp": "2026-03-26T04:08:00.926Z",
+        "url": "https://img.alicdn.com/imgextra/i3/O1CN01oSZaoy1rcfT5pA6JR_!!6000000005652-2-tps-498-120.png",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "img.alicdn.com",
+        "initiator": "image",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "image",
+        "timestamp": "2026-03-26T04:08:00.926Z",
+        "url": "https://img.alicdn.com/imgextra/i3/O1CN01uX800r1KcmF5qDeNd_!!6000000001185-2-tps-276-284.png",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:00.946Z",
+        "url": "https://aliexpress.com/_____tmd_____/punishTextFetch?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&language=en&action=captcha&v=015824379143265743",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:00.948Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadPageSuccess&msg=PunishPage%20load%20success%3Bsizes%3D1440*2200&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=006295577538840202",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "o.alicdn.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:00.952Z",
+        "url": "https://o.alicdn.com/secdev/storage-br/secaptcha/362f987b88325959.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "s-gm.mmstat.com",
+        "initiator": "ping",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "ping",
+        "timestamp": "2026-03-26T04:08:00.953Z",
+        "url": "https://s-gm.mmstat.com/arms.1.2",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:01.050Z",
+        "url": "blob:https://aliexpress.com/b8a82cf5-0d54-428b-af44-fdb90ff32f72",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "fetch",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:01.054Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessRand&uuid=a3680fdf0c0f734ed4e01ed85d862890&_rand=AAAAd31zHiwxAF1a88p-fJe7xoALTA7u4mIBy-a6G4gT4kEc-pG9m9S_ZlMh0PIM1R6PhnnUEB7hc_O3yUDF6OWtPihbZlddcjfAj0Mz8EBz_E1M",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:01.364Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessAWSC&msg=AWSC.js_load_success&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=07132691197530534",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:01.370Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessEt&msg=et.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=0862214597874255",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "g.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:01.371Z",
+        "url": "https://g.alicdn.com/AWSC/fireyejs/1.234.20/fireyejs.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aeis.alicdn.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:01.371Z",
+        "url": "https://aeis.alicdn.com/AWSC/nc/1.97.0/nc.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "8bplbb.tdum.alibaba.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:01.412Z",
+        "url": "https://8bplbb.tdum.alibaba.com/dss.js",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "umdc-global.aliexpress.com",
+        "initiator": "fetch",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:01.417Z",
+        "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "xhr",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "xhr",
+        "timestamp": "2026-03-26T04:08:01.438Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com%3A443&type=loadSuccessNC&msg=nc.js_load_loaded&uuid=a3680fdf0c0f734ed4e01ed85d862890&v=040022748340635284",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "cf.aliyun.com",
+        "initiator": "script",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "script",
+        "timestamp": "2026-03-26T04:08:01.438Z",
+        "url": "https://cf.aliyun.com/nocaptcha/initialize.jsonp?a=X82Y__8484d0b676165cbd583e1efce82edaa2&t=a3680fdf0c0f734ed4e01ed85d862890&scene=register&lang=en&v=v1.3.21&href=https%3A%2F%2Faliexpress.com%2F%2F%2F_____tmd_____%2Fpunish&comm={}&callback=initializeJsonp_07908840458396301",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "at.alicdn.com",
+        "initiator": "font",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "font",
+        "timestamp": "2026-03-26T04:08:01.440Z",
+        "url": "https://at.alicdn.com/t/font_1465353706_4784257.woff",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "fourier.taobao.com",
+        "initiator": "fetch",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:01.493Z",
+        "url": "https://fourier.taobao.com/ts?ext=63",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "umdc-global.aliexpress.com",
+        "initiator": "fetch",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:01.514Z",
+        "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "umdc-global.aliexpress.com",
+        "initiator": "fetch",
+        "method": "POST",
+        "phase": "after_refresh",
+        "resourceType": "fetch",
+        "timestamp": "2026-03-26T04:08:01.603Z",
+        "url": "https://umdc-global.aliexpress.com/repTw.json?e=2075&sv=181&pv=234&pn=aliexpress.com&biz=4",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "documentUrl": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1",
+        "hostname": "aliexpress.com",
+        "initiator": "image",
+        "method": "GET",
+        "phase": "after_refresh",
+        "resourceType": "image",
+        "timestamp": "2026-03-26T04:08:02.342Z",
+        "url": "https://aliexpress.com/_____tmd_____/report?x5secdata=xg0c3b07b48bb0287dkaa3680fdf0c0f734ed4e01ed85d8628901774498079a-1168960602a2101436897abaac3aaa33ba1c278ef39ee42a5390fa1babf6b6fa9__bx__aliexpress.com:443&type=initSuccess&msg=class%3Dnc_1_nocaptcha%3Dnc_1_nocaptcha%3Dnc_1_wrapperclass%3Dnc_wrapper%3Dnc_1_n1tclass%3Dnc_scale%3Dnc_1__bgclass%3Dnc_bgstyle%3Dwth%3A0px%3Bspan%3Dnc_1_n1zclass%3Dnc_confontbtn_sleara-label%3D%E6%BB%91%E5%9D%97tabnex%3D0role%3Dbuttonstyle%3Dleft%3A0px%3B%EE%98%81span%3Dnc_1__scale_textclass%3Dscale_textsletounlockspanclass%3Dnc-lang-cntata-nc-lang%3DSLIDEPleasesletoerfyspan%3B&uuid=a3680fdf0c0f734ed4e01ed85d862890",
+        "vendorCategory": "advertising_marketing",
+        "vendorName": "DoubleClick"
+      }
+    ],
+    "sessionStorage": [
+      {
+        "key": "__bx_storage__",
+        "preview": "999618554",
+        "size": 9
+      },
+      {
+        "key": "x5referer",
+        "preview": "https://aliexpress.com/",
+        "size": 23
+      }
+    ]
+  },
+  "storageAfterAction": {
+    "cookies": [
+      {
+        "domain": "aliexpress.com",
+        "expires": 1790050074.948408,
+        "httpOnly": false,
+        "name": "arms_uid",
+        "path": "///_____tmd_____",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "280d99fd-956a-4ffd-9567-492fe47d0c3d",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".mmstat.com",
+        "expires": 1806034075.110674,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1809058074.887464,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1790050074,
+        "httpOnly": false,
+        "name": "tfstk",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "gjPSesjaTkF2qncpRYb2lWn4IQhzPZ5ayegLSydyJbh-OwZzfHoELamKvmZn4Yl-woZ4H-jlqDzrRoyY...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".ynuf.aliapp.org",
+        "expires": 1806034076.58579,
+        "httpOnly": false,
+        "name": "cbc",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "T2gAtj2nDgCKHNz9zrHXQNPPV_mUyA7eGEdVsjiPUjIUoV_rI6HdDU6pEaN1D344K1g=",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      }
+    ],
+    "indexedDbNames": [],
+    "localStorage": [
+      {
+        "key": "APLUS_LS_KEY",
+        "preview": "[\"APLUS_S_CORE_1.0.20_20260108171550_4acefc95\"]",
+        "size": 47
+      },
+      {
+        "key": "APLUS_S_CORE_1.0.20_20260108171550_4acefc95",
+        "preview": "/*! 2026-01-08 15:03:35 v8.15.25 */\n!function(e){function i(n){if(o[n])return o[n].exports;var r=o[n]={exports:{},id:n,loaded:!1};return e[n].call(r.exports,r,r.exports,i),r.loaded=!0,r.exports}var o={};return i.m=e,i.c=o,i.p=\"\",i(0)}([func",
+        "size": 118323
+      },
+      {
+        "key": "tfstk__",
+        "preview": "gCgneYcQZR6jKv9TXVaBXJ7QcAikRya7IYQ8ezeybRy6OznpO_lrZxbdJbJIE42aCJJBReMtBjMiypTBRAHTQbSL2DedZ6ginaQpdHGPrzUyHKLvkX1QPzJxK50ryJNS_8RTYxodQMzyHKLTMZ1cazlKllWkIfy_Z7SFzYzw7RN7TzyU4OSagRzzzu7y7FP8N67UYJRi_RNzz8kzYC4aC77NFTPZUvgw37cXMteaFVV3x-le",
+        "size": 349
+      },
+      {
+        "key": "auyst",
+        "preview": "1774498074",
+        "size": 10
+      },
+      {
+        "key": "APLUS_CNA",
+        "preview": "20260325_Gp9LIk2JEDECAUIbQPiyPSXX",
+        "size": 33
+      },
+      {
+        "key": "__bx_storage__",
+        "preview": "1",
+        "size": 1
+      },
+      {
+        "key": "syfhs",
+        "preview": "3315416270",
+        "size": 10
+      },
+      {
+        "key": "lswucn",
+        "preview": "T2gAeXCpYlEqf7qQX9dvw2Vuqbbk9M_ykxhk15c16zvIjPdxIcwx3tYj5tvbJOARGmg=@@1774498076",
+        "size": 80
+      },
+      {
+        "key": "ETLCD",
+        "preview": "false",
+        "size": 5
+      }
+    ],
+    "sessionStorage": [
+      {
+        "key": "__bx_storage__",
+        "preview": "999618554",
+        "size": 9
+      },
+      {
+        "key": "x5referer",
+        "preview": "https://aliexpress.com/",
+        "size": 23
+      }
+    ]
+  },
+  "storageBeforeInteraction": {
+    "cookies": [
+      {
+        "domain": "aliexpress.com",
+        "expires": 1790050074.948408,
+        "httpOnly": false,
+        "name": "arms_uid",
+        "path": "///_____tmd_____",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "280d99fd-956a-4ffd-9567-492fe47d0c3d",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".mmstat.com",
+        "expires": 1806034075.110674,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1809058074.887464,
+        "httpOnly": false,
+        "name": "cna",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "Gp9LIk2JEDECAUIbQPiyPSXX",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".aliexpress.com",
+        "expires": 1790050074,
+        "httpOnly": false,
+        "name": "tfstk",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "gjPSesjaTkF2qncpRYb2lWn4IQhzPZ5ayegLSydyJbh-OwZzfHoELamKvmZn4Yl-woZ4H-jlqDzrRoyY...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".ynuf.aliapp.org",
+        "expires": 1806034076.58579,
+        "httpOnly": false,
+        "name": "cbc",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "T2gAtj2nDgCKHNz9zrHXQNPPV_mUyA7eGEdVsjiPUjIUoV_rI6HdDU6pEaN1D344K1g=",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      }
+    ],
+    "indexedDbNames": [],
+    "localStorage": [
+      {
+        "key": "APLUS_LS_KEY",
+        "preview": "[\"APLUS_S_CORE_1.0.20_20260108171550_4acefc95\"]",
+        "size": 47
+      },
+      {
+        "key": "APLUS_S_CORE_1.0.20_20260108171550_4acefc95",
+        "preview": "/*! 2026-01-08 15:03:35 v8.15.25 */\n!function(e){function i(n){if(o[n])return o[n].exports;var r=o[n]={exports:{},id:n,loaded:!1};return e[n].call(r.exports,r,r.exports,i),r.loaded=!0,r.exports}var o={};return i.m=e,i.c=o,i.p=\"\",i(0)}([func",
+        "size": 118323
+      },
+      {
+        "key": "tfstk__",
+        "preview": "gCgneYcQZR6jKv9TXVaBXJ7QcAikRya7IYQ8ezeybRy6OznpO_lrZxbdJbJIE42aCJJBReMtBjMiypTBRAHTQbSL2DedZ6ginaQpdHGPrzUyHKLvkX1QPzJxK50ryJNS_8RTYxodQMzyHKLTMZ1cazlKllWkIfy_Z7SFzYzw7RN7TzyU4OSagRzzzu7y7FP8N67UYJRi_RNzz8kzYC4aC77NFTPZUvgw37cXMteaFVV3x-le",
+        "size": 349
+      },
+      {
+        "key": "auyst",
+        "preview": "1774498074",
+        "size": 10
+      },
+      {
+        "key": "APLUS_CNA",
+        "preview": "20260325_Gp9LIk2JEDECAUIbQPiyPSXX",
+        "size": 33
+      },
+      {
+        "key": "__bx_storage__",
+        "preview": "1",
+        "size": 1
+      },
+      {
+        "key": "syfhs",
+        "preview": "3315416270",
+        "size": 10
+      },
+      {
+        "key": "lswucn",
+        "preview": "T2gAeXCpYlEqf7qQX9dvw2Vuqbbk9M_ykxhk15c16zvIjPdxIcwx3tYj5tvbJOARGmg=@@1774498076",
+        "size": 80
+      },
+      {
+        "key": "ETLCD",
+        "preview": "false",
+        "size": 5
+      }
+    ],
+    "sessionStorage": [
+      {
+        "key": "__bx_storage__",
+        "preview": "999618554",
+        "size": 9
+      },
+      {
+        "key": "x5referer",
+        "preview": "https://aliexpress.com/",
+        "size": 23
+      }
+    ]
+  },
+  "timestamp": "2026-03-26T04:08:05.898Z",
+  "url": "https://aliexpress.com///_____tmd_____/punish?x5secdata=xfEggRtPBU8alaBk07ApbY5VdbChIb6Z-5VMYcTwZBvdxZnWWmMMyQ7nqii_51BBo_72x_f5w_euE1Fa4nWGE-HI5vXMFCF8632T2avYlj8E3Z2wul_3l8KaZzCY-Q-Imyl2jDzvcqwDx0mq1xK8XCrYopBvcQ22o3ZJ8brCksVP2jSrgt1q9TMoxPWMrTkDhJiPLJeYJgjDVJp7IX58yIorCqoNFB54fpRMVu6sIJKWEa_mkf3nhJsxDqEkGvXT5hzVJ3e3ORkN9ArViBwxBIGNmngaOLpQ7oeo5gZHyUi8538BEyU3-W26kCtsYsXxFaAV5KwXOeidlXzv1lDd0A6LsZP4WKgn3C30RvkUjnU-lpIseyQlvebuw1jfq-Cg8HGCxv4U_YzIqH_94Pu7Ege-iJqur-ZmKaFjW4KlS62I3tzeeT4N6eBTiPWaVdJCEeo5OibmrhBm1-zu_4mVKMQ7rO2TQTExTc-53Lgc1XZjk0NtEreBMQSI7KF4UFXugRoTTsKHG6x2D_DPdoAIk6ZW7iEfXinncY4m4m7o5CQvSawLaZIJIl2XnJ93K80jmREhn6KjyPC9zgPGaTZMV3-wbt1OP77_yiHZ4PIIYg8iIA4iGLqUigr_NmapGXqqf52l6odEpWG0VQ0UNXwf9VNrY5nWIs3U-KmTDUaiyN6R3sxyEvr6tOrBLXFp5gSuKOUxUogUiACsat_PQ4IVFVP91zyzzMBZIx0elZHKcjPR0__bx__aliexpress.com%2f&x5step=1"
+}

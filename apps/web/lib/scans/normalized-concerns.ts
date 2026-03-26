@@ -53,7 +53,8 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "policy_target_parsing_incomplete"
   | "missing_behavior_side_evidence"
   | "missing_policy_side_evidence"
-  | "missing_contradiction_mapping";
+  | "missing_contradiction_mapping"
+  | "missing_explicit_contradiction_basis";
 
 export type NormalizedConcernEvidenceBundle = {
   counts: Record<string, number>;

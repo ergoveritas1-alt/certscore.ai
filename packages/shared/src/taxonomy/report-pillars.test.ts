@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 111);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 118);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -477,6 +477,26 @@ test("maps signals and validation rules into unified findings", () => {
     getReportUnifiedFindingForSignal("snapshot_signal", "financial.testimonial_or_review_block_near_financial_claim_present")?.id,
     "testimonial_endorsement_financial_promotion_risk"
   );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.guaranteed_return_language_present")?.id,
+    "guaranteed_or_high_return_claims_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "entity.regulatory_or_license_claim_text_present")?.id,
+    "regulatory_compliance_claim_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "commerce.payment_card_input_present")?.id,
+    "investment_purchase_by_credit_card_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingByAlias("Investment urgency or countdown present")?.id,
+    "investment_urgency_countdown_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingByAlias("Regulator-operated mock scam example")?.id,
+    "regulator_operated_mock_investment_example"
+  );
 });
 
 test("registers financial sections, categories, and signals additively", () => {
@@ -507,6 +527,18 @@ test("registers financial sections, categories, and signals additively", () => {
       primaryEvidenceCategoryId: "consumer_financial_marketing_claims",
       secondaryEvidenceCategoryIds: ["performance_claim_context_and_risk_disclosure"],
       overlayEvidenceCategoryIds: ["disclosures_claim_substantiation"]
+    }
+  );
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "commerce.payment_card_input_present"),
+    {
+      id: "snapshot_signal:commerce.payment_card_input_present",
+      source: "snapshot_signal",
+      key: "commerce.payment_card_input_present",
+      label: "Payment card input detected",
+      primaryEvidenceCategoryId: "checkout_payment_disclosures",
+      secondaryEvidenceCategoryIds: ["collection_surface_entry_points", "identity_financial_data_collection"],
+      overlayEvidenceCategoryIds: ["subscription_billing_cancellation_fairness"]
     }
   );
 });

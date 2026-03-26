@@ -58,10 +58,19 @@ type StorageSnapshot = {
 
 type ActionCandidate = {
   ariaLabel: string | null;
+  dataNav: string | null;
   frameUrl: string;
+  inputValue: string | null;
+  role: string | null;
   selector: string;
   tagName: string;
   text: string;
+};
+
+type SurfaceActionPresence = {
+  accept: boolean;
+  manage: boolean;
+  reject: boolean;
 };
 
 type SurfaceActionSet = {
@@ -75,6 +84,7 @@ type SurfaceActionSet = {
   manage: ActionCandidate | null;
   reject: ActionCandidate | null;
   surfaceDetected: boolean;
+  visibleActions: SurfaceActionPresence;
 };
 
 type PreferencesSummary = {
@@ -112,6 +122,7 @@ type ScenarioResult = {
       firstLoad: string | null;
       preferencesCenter: string | null;
     };
+    visibleActions: SurfaceActionPresence;
   };
   cmpSignals: Array<{
     key: string;
@@ -352,6 +363,23 @@ function truncate(value: string, size = 160) {
   return value.length <= size ? value : `${value.slice(0, size)}...`;
 }
 
+function normalizeActionLabel(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function textImpliesAction(text: string | null | undefined, patterns: RegExp[]) {
+  const normalized = normalizeActionLabel(text);
+  return normalized.length > 0 && patterns.some((pattern) => pattern.test(normalized));
+}
+
+function inferVisibleActionsFromText(text: string | null | undefined): SurfaceActionPresence {
+  return {
+    accept: textImpliesAction(text, ACCEPT_PATTERNS),
+    manage: textImpliesAction(text, MANAGE_PATTERNS),
+    reject: textImpliesAction(text, REJECT_PATTERNS)
+  };
+}
+
 function classifyArtifact(input: string): { category: VendorCategory; vendorName: string | null } {
   const haystack = input.toLowerCase();
   if (SECURITY_INTERSTITIAL_PATTERNS.some((pattern) => haystack.includes(pattern))) {
@@ -535,6 +563,11 @@ function scenarioErrorResult(url: string, scenarioName: ScenarioName, error: unk
         banner: null,
         firstLoad: null,
         preferencesCenter: null
+      },
+      visibleActions: {
+        accept: false,
+        manage: false,
+        reject: false
       }
     },
     cmpSignals: [],
@@ -604,6 +637,9 @@ async function extractActionCandidate(locator: Locator, frame: Frame): Promise<A
     }
     return {
       ariaLabel: element.getAttribute("aria-label"),
+      dataNav: element.getAttribute("data-nav"),
+      inputValue: element instanceof HTMLInputElement ? element.value : null,
+      role: element.getAttribute("role"),
       selector,
       tagName: element.tagName.toLowerCase(),
       text: (element.textContent ?? "").replace(/\s+/g, " ").trim()
@@ -615,17 +651,96 @@ async function extractActionCandidate(locator: Locator, frame: Frame): Promise<A
 }
 
 async function findAction(frame: Frame, patterns: RegExp[]) {
-  const textLocators = [
-    ...patterns.map((pattern) => `button:text-matches("${pattern.source}", "i")`),
-    ...patterns.map((pattern) => `[role="button"]:text-matches("${pattern.source}", "i")`),
-    ...patterns.map((pattern) => `a:text-matches("${pattern.source}", "i")`),
-    ...patterns.map((pattern) => `text="${pattern.source}"`),
-    ...patterns.map((pattern) => `input[type="button"][value]`),
-    ...patterns.map((pattern) => `input[type="submit"][value]`)
-  ];
+  const candidate = await frame
+    .locator("button, [role='button'], a, input[type='button'], input[type='submit']")
+    .evaluateAll((elements, serializedPatterns) => {
+      const compiledPatterns = (serializedPatterns as string[]).map((source) => new RegExp(source, "i"));
+      let bestMatch: null | {
+        ariaLabel: string | null;
+        dataNav: string | null;
+        inputValue: string | null;
+        role: string | null;
+        score: number;
+        selector: string;
+        tagName: string;
+        text: string;
+      } = null;
 
-  const locator = await firstVisibleLocator(frame, textLocators);
-  return locator ? extractActionCandidate(locator, frame) : null;
+      for (const element of elements) {
+        if (!(element instanceof HTMLElement)) {
+          continue;
+        }
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        if (style.visibility === "hidden" || style.display === "none" || rect.width <= 0 || rect.height <= 0) {
+          continue;
+        }
+
+        const text = (element.getAttribute("aria-label") ?? (element instanceof HTMLInputElement ? element.value : null) ?? element.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!text || !compiledPatterns.some((pattern) => pattern.test(text))) {
+          continue;
+        }
+
+        const id = element.getAttribute("id");
+        const testId = element.getAttribute("data-testid");
+        const dataNav = element.getAttribute("data-nav");
+        const ariaLabel = element.getAttribute("aria-label");
+        const selector =
+          id ? `#${id}` :
+          testId ? `[data-testid="${testId.replace(/"/g, '\\"')}"]` :
+          dataNav ? `[data-nav="${dataNav.replace(/"/g, '\\"')}"]` :
+          ariaLabel ? `${element.tagName.toLowerCase()}[aria-label="${ariaLabel.replace(/"/g, '\\"')}"]` :
+          element.tagName.toLowerCase();
+
+        let score = 0;
+        if (element.tagName.toLowerCase() === "button") {
+          score += 4;
+        }
+        if (element.getAttribute("role") === "button") {
+          score += 2;
+        }
+        if (id) {
+          score += 3;
+        }
+        if (ariaLabel) {
+          score += 2;
+        }
+        if (compiledPatterns.some((pattern) => pattern.test(text) && new RegExp(`^${pattern.source}$`, "i").test(text))) {
+          score += 6;
+        }
+
+        const current = {
+          ariaLabel,
+          dataNav,
+          inputValue: element instanceof HTMLInputElement ? element.value : null,
+          role: element.getAttribute("role"),
+          score,
+          selector,
+          tagName: element.tagName.toLowerCase(),
+          text
+        };
+        if (!bestMatch || current.score > bestMatch.score) {
+          bestMatch = current;
+        }
+      }
+
+      return bestMatch;
+    }, patterns.map((pattern) => pattern.source));
+
+  return candidate
+    ? {
+        ariaLabel: candidate.ariaLabel,
+        dataNav: candidate.dataNav,
+        frameUrl: frame.url(),
+        inputValue: candidate.inputValue,
+        role: candidate.role,
+        selector: candidate.selector,
+        tagName: candidate.tagName,
+        text: candidate.text
+      }
+    : null;
 }
 
 async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
@@ -714,6 +829,7 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
     const accept = await findAction(frame, ACCEPT_PATTERNS);
     const reject = await findAction(frame, REJECT_PATTERNS);
     const manage = (await findAction(frame, MANAGE_PATTERNS)) ?? (await findAction(frame, SAVE_PATTERNS));
+    const impliedActions = inferVisibleActionsFromText(surface?.text);
 
     if (surface || accept || reject || manage || cmpRootCandidate) {
       return {
@@ -726,7 +842,12 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
         frameUrl: frame.url(),
         manage,
         reject,
-        surfaceDetected: true
+        surfaceDetected: true,
+        visibleActions: {
+          accept: Boolean(accept) || impliedActions.accept,
+          manage: Boolean(manage) || impliedActions.manage,
+          reject: Boolean(reject) || impliedActions.reject
+        }
       };
     }
   }
@@ -741,25 +862,45 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
     frameUrl: null,
     manage: null,
     reject: null,
-    surfaceDetected: false
+    surfaceDetected: false,
+    visibleActions: {
+      accept: false,
+      manage: false,
+      reject: false
+    }
   };
 }
 
 async function clickAction(page: Page, candidate: ActionCandidate): Promise<boolean> {
   const frame = page.frames().find((item) => item.url() === candidate.frameUrl) ?? page.mainFrame();
+  const escapedText = candidate.text.replace(/"/g, '\\"');
+  const escapedAria = candidate.ariaLabel?.replace(/"/g, '\\"') ?? null;
+  const escapedValue = candidate.inputValue?.replace(/"/g, '\\"') ?? null;
+  const escapedDataNav = candidate.dataNav?.replace(/"/g, '\\"') ?? null;
   const options = [
-    `${candidate.tagName}${candidate.ariaLabel ? `[aria-label="${candidate.ariaLabel}"]` : ""}`,
     candidate.selector,
-    `text=${candidate.text}`
-  ];
+    escapedDataNav ? `[data-nav="${escapedDataNav}"]` : null,
+    escapedAria ? `${candidate.tagName}[aria-label="${escapedAria}"]` : null,
+    escapedValue ? `input[value="${escapedValue}"]` : null,
+    escapedText ? `button:has-text("${escapedText}")` : null,
+    escapedText ? `[role="button"]:has-text("${escapedText}")` : null,
+    escapedText ? `a:has-text("${escapedText}")` : null,
+    escapedText ? `text="${escapedText}"` : null
+  ].filter((value): value is string => Boolean(value));
 
   for (const selector of options) {
     const locator = frame.locator(selector).first();
-    if (await locator.count().catch(() => 0)) {
-      if (await locator.isVisible().catch(() => false)) {
-        await locator.click({ timeout: 10_000 }).catch(() => undefined);
-        return true;
-      }
+    if (!(await locator.count().catch(() => 0))) {
+      continue;
+    }
+    if (!(await locator.isVisible().catch(() => false))) {
+      continue;
+    }
+    try {
+      await locator.click({ timeout: 10_000 });
+      return true;
+    } catch {
+      continue;
     }
   }
 
@@ -807,7 +948,7 @@ async function summarizePreferences(page: Page) {
     if (toggleStates.length > 0) {
       optionalCategoriesPreselected = false;
       for (const item of toggleStates) {
-        if (!/necessary|essential|required|strictly necessary/i.test(item.label) && item.label.length > 0 && item.checked) {
+        if (!/necessary|essential|required|strictly necessary|always active|always on|active at all times/i.test(item.label) && item.label.length > 0 && item.checked) {
           optionalCategoriesPreselected = true;
           break;
         }
@@ -1144,15 +1285,16 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
         actionSummary,
         banner: {
           bannerHtmlPath: surface.bannerHtml ? path.join(scenarioDir, "banner.html") : null,
-          bannerPresent: surface.surfaceDetected,
-          bannerText: surface.bannerText,
-          frameUrl: surface.frameUrl,
-          screenshots: {
-            banner: bannerCapture.path,
-            firstLoad: firstLoadPath,
-            preferencesCenter: preferencesCenterPath
-          }
+        bannerPresent: surface.surfaceDetected,
+        bannerText: surface.bannerText,
+        frameUrl: surface.frameUrl,
+        screenshots: {
+          banner: bannerCapture.path,
+          firstLoad: firstLoadPath,
+          preferencesCenter: preferencesCenterPath
         },
+        visibleActions: surface.visibleActions
+      },
         cmpSignals: [],
         errors,
         network: logger.entries,
@@ -1225,7 +1367,7 @@ function buildFindings(report: SiteReport): FindingRecord[] {
     });
   }
 
-  if (reject.actionSummary.rejectPath.attempted) {
+  if (typeof reject.actionSummary.rejectPath.clicks === "number" && reject.actionSummary.rejectPath.clicks > 0) {
     const residual = postRejectResidualEvidence(reject);
     if (
       residual.postRejectRequests.length > 0 ||
@@ -1327,7 +1469,20 @@ function classifyFinal(report: SiteReport): SiteReport["finalClassification"] {
   return "no obvious issue observed";
 }
 
-function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport {
+function classifyOverallTestingStatus(fresh: ScenarioResult, freshSecurityInterstitial: boolean) {
+  if (fresh.errors.some((error) => /ERR_NAME_NOT_RESOLVED|net::ERR_NAME_NOT_RESOLVED/i.test(error))) {
+    return "blocked by domain resolution failure during scenario startup";
+  }
+  if (fresh.errors.length > 0) {
+    return "partially completed with blocking or anti-automation issues on some scenarios";
+  }
+  if (freshSecurityInterstitial) {
+    return "completed, but security or anti-bot interstitial behavior affected at least one scenario";
+  }
+  return "completed for the configured scenarios";
+}
+
+export function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport {
   const hostname = safeHostname(url);
   const fresh = scenarios.fresh_visit;
   const reject = scenarios.reject_all;
@@ -1337,10 +1492,12 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
   const preConsentStorage = nonEssentialStorage(fresh.storageBeforeInteraction);
   const freshSecurityInterstitial = securityInterstitialObserved(fresh);
   const rejectResidual = postRejectResidualEvidence(reject);
+  const firstLayerRejectDetected = fresh.banner.visibleActions.reject;
+  const firstLayerAcceptDetected = fresh.banner.visibleActions.accept;
   const equalProminenceAssessment =
-    fresh.banner.bannerPresent && !fresh.actionSummary.rejectPath.attempted && fresh.actionSummary.acceptPath.attempted
+    fresh.banner.bannerPresent && !firstLayerRejectDetected && firstLayerAcceptDetected
       ? "accept appears more prominent than reject based on detected first-layer controls"
-      : fresh.banner.bannerPresent && fresh.actionSummary.rejectPath.attempted
+      : fresh.banner.bannerPresent && firstLayerRejectDetected && firstLayerAcceptDetected
         ? "accept and reject controls were both detected, but visual prominence was not programmatically confirmed"
         : "inconclusive";
 
@@ -1352,28 +1509,18 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
           : "inconclusive",
       bannerPresent: fresh.banner.bannerPresent ? "yes" : fresh.errors.length > 0 ? "inconclusive" : "no",
       darkPatternIndicatorsObserved: [
-        ...(fresh.banner.bannerPresent && !fresh.actionSummary.rejectPath.attempted ? ["reject not detected on first layer"] : []),
+        ...(fresh.banner.bannerPresent && !firstLayerRejectDetected ? ["reject not detected on first layer"] : []),
         ...(equalProminenceAssessment.includes("more prominent") ? ["accept control appears more prominent than reject"] : []),
         ...(scenarios.custom_preferences.preferences?.optionalCategoriesPreselected ? ["optional categories appear pre-enabled"] : []),
         ...(freshSecurityInterstitial ? ["security or anti-bot interstitial observed during testing"] : [])
       ],
       equalProminenceAssessment,
-      rejectAllFirstLayer:
-        fresh.banner.bannerPresent && fresh.actionSummary.rejectPath.attempted && (fresh.actionSummary.rejectPath.clicks ?? 0) <= 1
-          ? "yes"
-          : fresh.banner.bannerPresent
-            ? "no"
-            : "inconclusive"
+      rejectAllFirstLayer: fresh.banner.bannerPresent ? (firstLayerRejectDetected ? "yes" : "no") : "inconclusive"
     },
     executiveSummary: {
       confidenceLevel: fresh.errors.length > 0 ? "low" : preConsentRequests.length > 0 || (reject.refresh?.network.length ?? 0) > 0 ? "medium" : "low",
       manualReviewRecommended: true,
-      overallTestingStatus:
-        fresh.errors.length > 0
-          ? "partially completed with blocking or anti-automation issues on some scenarios"
-          : freshSecurityInterstitial
-            ? "completed, but security or anti-bot interstitial behavior affected at least one scenario"
-            : "completed for the configured scenarios",
+      overallTestingStatus: classifyOverallTestingStatus(fresh, freshSecurityInterstitial),
       strongestObservedRisks: []
     },
     finalClassification: "inconclusive / needs manual review",
@@ -1474,7 +1621,7 @@ function renderMarkdown(report: SiteReport) {
   return `${lines.join("\n")}\n`;
 }
 
-async function main() {
+export async function main() {
   await ensureDir(OUTPUT_ROOT);
   const configuredTargets =
     process.env.CONSENT_AUDIT_TARGETS?.split(",")
@@ -1563,7 +1710,13 @@ async function main() {
   console.info(`Live consent audit artifacts written to ${OUTPUT_ROOT}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+const invokedAsScript =
+  typeof process.argv[1] === "string" &&
+  (process.argv[1].endsWith("/live-consent-audit.ts") || process.argv[1].endsWith("/live-consent-audit.js"));
+
+if (invokedAsScript) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

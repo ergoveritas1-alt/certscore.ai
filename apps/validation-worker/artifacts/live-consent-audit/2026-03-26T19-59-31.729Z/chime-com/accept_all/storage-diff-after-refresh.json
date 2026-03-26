@@ -1,0 +1,22 @@
+{
+  "consentSignalsAdded": [],
+  "cookiesAdded": [
+    "TDCPM@.adsrvr.org",
+    "TDID@.adsrvr.org",
+    "XANDR_PANID@.adnxs.com",
+    "_li_ss@i.liadm.com",
+    "demdex@.demdex.net",
+    "dpm@.dpm.demdex.net",
+    "lidid@.liadm.com",
+    "ljt_reader@.lijit.com",
+    "rdrlst@.media6degrees.com",
+    "uid@.turn.com",
+    "uuid2@.adnxs.com",
+    "ver@.postrelease.com"
+  ],
+  "cookiesRemoved": [],
+  "localStorageAdded": [],
+  "localStorageRemoved": [],
+  "sessionStorageAdded": [],
+  "sessionStorageRemoved": []
+}

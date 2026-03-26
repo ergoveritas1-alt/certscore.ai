@@ -1,0 +1,16 @@
+{
+  "consentSignalsAdded": [],
+  "cookiesAdded": [],
+  "cookiesRemoved": [],
+  "localStorageAdded": [
+    "csa-ctoken-F18MYK8NE5J9W1HFW4M0"
+  ],
+  "localStorageRemoved": [],
+  "sessionStorageAdded": [
+    "F18MYK8NE5J9W1HFW4M0",
+    "eeldata"
+  ],
+  "sessionStorageRemoved": [
+    "amzn:fwcim:events"
+  ]
+}
