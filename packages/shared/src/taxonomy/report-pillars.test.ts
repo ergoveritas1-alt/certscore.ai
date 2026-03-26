@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 100);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 111);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -217,6 +217,77 @@ test("maps new accessibility and consumer MVP signals into stable evidence categ
       overlayEvidenceCategoryIds: []
     }
   );
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "financial.past_performance_disclaimer_text_present"),
+    {
+      id: "snapshot_signal:financial.past_performance_disclaimer_text_present",
+      source: "snapshot_signal",
+      key: "financial.past_performance_disclaimer_text_present",
+      label: "Past-performance disclaimer text present",
+      primaryEvidenceCategoryId: "performance_claim_context_and_risk_disclosure",
+      secondaryEvidenceCategoryIds: ["consumer_financial_marketing_claims"],
+      overlayEvidenceCategoryIds: ["disclosures_claim_substantiation"]
+    }
+  );
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "commercial.explicit_fee_disclosure_text_present"),
+    {
+      id: "snapshot_signal:commercial.explicit_fee_disclosure_text_present",
+      source: "snapshot_signal",
+      key: "commercial.explicit_fee_disclosure_text_present",
+      label: "Explicit fee disclosure text present",
+      primaryEvidenceCategoryId: "fee_disclosure_clarity",
+      secondaryEvidenceCategoryIds: ["consumer_choice_and_cost_transparency"],
+      overlayEvidenceCategoryIds: ["disclosures_claim_substantiation"]
+    }
+  );
+  assert.deepEqual(
+    getReportSignalBySourceAndKey("snapshot_signal", "financial.apr_or_interest_rate_disclosure_text_present"),
+    {
+      id: "snapshot_signal:financial.apr_or_interest_rate_disclosure_text_present",
+      source: "snapshot_signal",
+      key: "financial.apr_or_interest_rate_disclosure_text_present",
+      label: "APR or interest-rate disclosure text present",
+      primaryEvidenceCategoryId: "fee_disclosure_clarity",
+      secondaryEvidenceCategoryIds: [
+        "consumer_choice_and_cost_transparency",
+        "performance_claim_context_and_risk_disclosure"
+      ],
+      overlayEvidenceCategoryIds: ["disclosures_claim_substantiation"]
+    }
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "commercial.explicit_fee_disclosure_text_present")?.id,
+    "fee_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.past_performance_disclaimer_text_present")?.id,
+    "past_performance_disclaimer_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.apr_or_interest_rate_disclosure_text_present")?.id,
+    "apr_or_interest_rate_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "disclosure.privacy_policy_present")?.id,
+    "privacy_policy_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "disclosure.terms_of_service_present")?.id,
+    "terms_of_service_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "disclosure.cookie_policy_present")?.id,
+    "cookie_policy_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "disclosure.contact_page_present")?.id,
+    "contact_support_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "privacy.do_not_sell_link_present")?.id,
+    "targeted_advertising_choices_present"
+  );
 });
 
 test("returns signals attached to an evidence category by relation", () => {
@@ -345,6 +416,54 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "accessibility.accessibility_contact_method_present")?.id,
     "accessibility_support_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "entity.legal_entity_name_text_present")?.id,
+    "legal_entity_name_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "entity.contact_email_present")?.id,
+    "operator_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "entity.contact_phone_present")?.id,
+    "operator_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "entity.contact_form_present")?.id,
+    "operator_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.risk_disclosure_text_present")?.id,
+    "investment_risk_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("snapshot_signal", "financial.loss_risk_disclosure_text_present")?.id,
+    "investment_risk_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.legal_entity_name_present")?.id,
+    "legal_entity_name_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.operator_contact_path_present")?.id,
+    "operator_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.investment_risk_disclosure_present")?.id,
+    "investment_risk_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.fee_disclosure_present")?.id,
+    "fee_disclosure_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.past_performance_disclaimer_present")?.id,
+    "past_performance_disclaimer_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("financial_review.apr_or_interest_rate_disclosure_present")?.id,
+    "apr_or_interest_rate_disclosure_present"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.children_privacy_context_without_supporting_disclosure")?.id,

@@ -42,6 +42,13 @@ import {
   isMeaningfulPolicyText,
   normalizePolicySnippet
 } from "./policy-snippet-normalization";
+import {
+  evaluateFinancialJudgeInput,
+  getFinancialValidationSpec,
+  getFinancialValidationEvidenceBundle,
+  isFinancialValidationFindingId
+} from "./financial-validation-contract";
+import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
 
 export type UnifiedFindingDetails =
   | {
@@ -164,6 +171,33 @@ export type UnifiedFindingCandidate = {
   signalLabel?: string;
   signalSource?: ReportSignalSource;
   title: string;
+};
+
+type UnifiedFindingScanEvent = {
+  eventType: string;
+  metadataJson?: unknown;
+};
+
+type FamilyPacketTargetRecord = {
+  canonicalUrl?: unknown;
+  snippet?: unknown;
+  sourceSurfaceTypes?: unknown;
+  supportedSurfaceTypes?: unknown;
+  supportingRefs?: unknown;
+  title?: unknown;
+};
+
+type FamilyPacketFindingRecord = {
+  evidenceUrls?: unknown;
+  findingId?: unknown;
+  reason?: unknown;
+  sourceSurfaceTypes?: unknown;
+};
+
+type FindingFamilyPacketRecord = {
+  canonicalTargets?: unknown;
+  familyId?: unknown;
+  supportedUnifiedFindings?: unknown;
 };
 
 export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
@@ -656,6 +690,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
 
   const flags = uniqueStrings([
+    typeof fallbackEvidence.familyPacketFamilyId === "string" ? "family_packet_backed" : null,
+    typeof fallbackEvidence.familyPacketFamilyId === "string"
+      ? `family_packet:${fallbackEvidence.familyPacketFamilyId}`
+      : null,
+    typeof fallbackEvidence.familyPacketFindingId === "string"
+      ? `family_packet_finding:${fallbackEvidence.familyPacketFindingId}`
+      : null,
     fallbackEvidence.keyPageGuessedOnly === true ? "guessed_only" : null,
     fallbackEvidence.consentRedirectOrAuthRequired === true ? "redirect_or_auth_required" : null,
     fallbackEvidence.gpcVerification &&
@@ -884,6 +925,10 @@ function isAccessibilitySpecificUrl(value: string | null | undefined) {
   }
 }
 
+function hasConcreteHumanFacingUrl(urls: Array<string | null | undefined>) {
+  return urls.some((value) => typeof value === "string" && /^https?:\/\//i.test(value) && !isMachineReadablePolicyEndpoint(value));
+}
+
 function isLikelyHomepageTitle(value: string | null | undefined) {
   if (!value) {
     return false;
@@ -981,8 +1026,12 @@ function sanitizeEvidenceForFinding(
   if (
     findingId === "affiliate_disclosure_present" ||
     findingId === "bounded_key_page_discovery_unresolved" ||
+    findingId === "behavioral_analytics_disclosure_present" ||
+    findingId === "gpc_disclosure_present" ||
     findingId === "privacy_policy_present" ||
+    findingId === "privacy_rights_path_present" ||
     findingId === "terms_of_service_present" ||
+    findingId === "third_party_advertising_disclosure_present" ||
     findingId === "contact_support_path_present" ||
     findingId === "targeted_advertising_choices_present"
   ) {
@@ -1047,6 +1096,20 @@ function sanitizeEvidenceForFinding(
     }
   }
 
+  if (findingId === "privacy_rights_path_present") {
+    const preferredPageUrls = next.pageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url));
+    if (preferredPageUrls.length > 0) {
+      next.pageUrls = preferMoreSpecificSameHostUrls(preferredPageUrls);
+    }
+
+    const preferredSourceUrls = next.sourceUrls.filter(
+      (url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)
+    );
+    if (preferredSourceUrls.length > 0) {
+      next.sourceUrls = preferMoreSpecificSameHostUrls(preferredSourceUrls);
+    }
+  }
+
   if (findingId === "terms_of_service_present") {
     const nonLocalePageUrls = next.pageUrls.filter((url) => !isLikelyLocaleSubdomainUrl(url));
     if (nonLocalePageUrls.length > 0) {
@@ -1076,6 +1139,30 @@ function sanitizeEvidenceForFinding(
     const accessibilitySpecificSourceUrls = next.sourceUrls.filter((url) => isAccessibilitySpecificUrl(url));
     if (accessibilitySpecificSourceUrls.length > 0) {
       next.sourceUrls = accessibilitySpecificSourceUrls;
+    }
+  }
+
+  if (findingId === "third_party_advertising_disclosure_present") {
+    const preferredPageUrls = next.pageUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+    if (preferredPageUrls.length > 0) {
+      next.pageUrls = preferMoreSpecificSameHostUrls(preferredPageUrls);
+    }
+
+    const preferredSourceUrls = next.sourceUrls.filter((url) => !isMachineReadablePolicyEndpoint(url));
+    if (preferredSourceUrls.length > 0) {
+      next.sourceUrls = preferMoreSpecificSameHostUrls(preferredSourceUrls);
+    }
+  }
+
+  if (isPacketBackedEvidence(evidence, findingId)) {
+    const preferredPageUrls = preferMoreSpecificSameHostUrls(next.pageUrls);
+    if (preferredPageUrls.length > 0) {
+      next.pageUrls = preferredPageUrls;
+    }
+
+    const preferredSourceUrls = preferMoreSpecificSameHostUrls(next.sourceUrls);
+    if (preferredSourceUrls.length > 0) {
+      next.sourceUrls = preferredSourceUrls;
     }
   }
 
@@ -1208,6 +1295,9 @@ function deriveConfidenceInputs(input: {
   const hasDirectRuntimeEvidence =
     input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
     normalizedConcernStrengthFlags.includes("direct_runtime") ||
+    input.fallbackEvidenceRows.some(
+      (row) => Boolean(row?.gpcVerification) && typeof row.gpcVerification === "object"
+    ) ||
     input.fallbackEvidenceRows.some((row) => (getContradictionEvidenceBundle(row)?.runtimeEvidenceArtifacts.length ?? 0) > 0) ||
     validationEvidenceRows.some((row) =>
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
@@ -1313,6 +1403,779 @@ function deriveConfidenceBand(
   return "low";
 }
 
+function hasFamilyPacketFlag(flags: string[] | undefined, findingId?: string) {
+  const normalizedFlags = flags ?? [];
+  if (!normalizedFlags.includes("family_packet_backed")) {
+    return false;
+  }
+
+  return findingId ? normalizedFlags.includes(`family_packet_finding:${findingId}`) : true;
+}
+
+function hasFamilyPacketFindingSource(packet: UnifiedFindingPacket, findingId?: string) {
+  return hasFamilyPacketFlag(packet.evidence?.flags, findingId);
+}
+
+function isPacketBackedEvidence(evidence: UnifiedFindingPacket["evidence"] | undefined, findingId?: string) {
+  return hasFamilyPacketFlag(evidence?.flags, findingId);
+}
+
+type PacketizedFindingSupportRule = {
+  findingId: string;
+  policyPageType:
+    | "privacy_policy"
+    | "cookie_policy"
+    | "terms_of_service"
+    | "accessibility_statement"
+    | "contact_page"
+    | "affiliate_disclosure"
+    | null;
+  rationale: string;
+  matchesLegacySource: (packet: UnifiedFindingPacket) => boolean;
+};
+
+type PolicyEnrichmentFindingSupportRule = {
+  findingId:
+    | "privacy_contact_path_present"
+    | "gpc_disclosure_present"
+    | "tracking_technologies_disclosure_present"
+    | "targeted_advertising_disclosure_present"
+    | "behavioral_analytics_disclosure_present"
+    | "children_privacy_disclosure_present"
+    | "arbitration_clause_present";
+  rationale: string;
+};
+
+type DomainFlagFindingSupportRule = {
+  findingId:
+    | "consent_surface_missing"
+    | "accessibility_support_path_missing"
+    | "sale_sharing_controls_missing";
+  evidenceFlag: string;
+  rationale: string;
+};
+
+const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
+  {
+    findingId: "privacy_policy_present",
+    policyPageType: "privacy_policy",
+    rationale: "Surfaced because the scan retained a reachable privacy-policy surface.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "disclosure.privacy_policy_present"
+      )
+  },
+  {
+    findingId: "terms_of_service_present",
+    policyPageType: "terms_of_service",
+    rationale: "Surfaced because the scan retained a reachable terms surface.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "disclosure.terms_of_service_present"
+      )
+  },
+  {
+    findingId: "cookie_policy_present",
+    policyPageType: "cookie_policy",
+    rationale: "Surfaced because the scan retained a reachable cookie-policy or cookie-settings surface.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "disclosure.cookie_policy_present"
+      )
+  },
+  {
+    findingId: "contact_support_path_present",
+    policyPageType: "contact_page",
+    rationale: "Surfaced because the scan retained a reachable contact or feedback path.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "disclosure.contact_page_present"
+      )
+  },
+  {
+    findingId: "targeted_advertising_choices_present",
+    policyPageType: "privacy_policy",
+    rationale: "Surfaced because the scan retained a targeted-advertising or do-not-sell/share choice path.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "privacy.do_not_sell_link_present"
+      )
+  },
+  {
+    findingId: "gpc_signal_not_honored",
+    policyPageType: null,
+    rationale: "Surfaced because runtime privacy verification retained evidence that the browser-level GPC signal was ignored.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "runtime_artifact_signal" &&
+          sourceRef.key === "privacy.gpc_signal_not_honored"
+      )
+  },
+  {
+    findingId: "privacy_rights_path_present",
+    policyPageType: "privacy_policy",
+    rationale: "Surfaced because structured policy evidence retained a concrete privacy-rights path.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "policy_enrichment_signal" &&
+          getPolicyPositiveSignalKeysForFinding("privacy_rights_path_present").includes(sourceRef.key)
+      )
+  },
+  {
+    findingId: "children_privacy_disclosure_present",
+    policyPageType: "privacy_policy",
+    rationale: "Surfaced because structured policy evidence retained an explicit children's or under-13 privacy disclosure.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "policy_enrichment_signal" &&
+          getPolicyPositiveSignalKeysForFinding("children_privacy_disclosure_present").includes(sourceRef.key)
+      )
+  },
+  {
+    findingId: "accessibility_support_path_present",
+    policyPageType: "accessibility_statement",
+    rationale: "Surfaced because the scan retained a clear domain-level accessibility support path.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "accessibility.accessibility_contact_method_present"
+      )
+  },
+  {
+    findingId: "affiliate_disclosure_present",
+    policyPageType: "affiliate_disclosure",
+    rationale: "Surfaced because the scan retained a clear domain-level affiliate disclosure signal.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "snapshot_signal" &&
+          sourceRef.key === "commerce.affiliate_disclosure_present"
+      )
+  },
+  {
+    findingId: "third_party_advertising_disclosure_present",
+    policyPageType: "affiliate_disclosure",
+    rationale:
+      "Surfaced because structured policy evidence retained a disclosure about third-party advertising partners or related ad technologies.",
+    matchesLegacySource: (packet) =>
+      packet.sourceRefs.some(
+        (sourceRef) =>
+          sourceRef.kind === "signal" &&
+          sourceRef.source === "policy_enrichment_signal" &&
+          getPolicyPositiveSignalKeysForFinding("third_party_advertising_disclosure_present").includes(sourceRef.key)
+      )
+  }
+];
+
+const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRule[] = [
+  {
+    findingId: "privacy_contact_path_present",
+    rationale: "Surfaced because structured policy evidence retained a clear privacy contact path."
+  },
+  {
+    findingId: "gpc_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a clear disclosure about GPC handling."
+  },
+  {
+    findingId: "tracking_technologies_disclosure_present",
+    rationale:
+      "Surfaced because structured policy evidence retained a disclosure about cookies, pixels, tags, beacons, scripts, or similar technologies."
+  },
+  {
+    findingId: "targeted_advertising_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a targeted-advertising or sale/sharing disclosure."
+  },
+  {
+    findingId: "behavioral_analytics_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a disclosure about behavioral analytics or replay-style monitoring."
+  },
+  {
+    findingId: "children_privacy_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a children's or youth-related privacy disclosure."
+  },
+  {
+    findingId: "arbitration_clause_present",
+    rationale: "Surfaced because structured policy evidence retained an arbitration or dispute-resolution clause."
+  }
+];
+
+const DOMAIN_FLAG_FINDING_SUPPORT_RULES: DomainFlagFindingSupportRule[] = [
+  {
+    findingId: "consent_surface_missing",
+    evidenceFlag: "privacy.consent_surface_missing",
+    rationale: "Surfaced because the scan retained a clear domain-level signal that no user-facing consent surface was detected."
+  },
+  {
+    findingId: "accessibility_support_path_missing",
+    evidenceFlag: "accessibility.accessibility_support_path_missing",
+    rationale: "Surfaced because the scan retained a clear domain-level signal that no accessibility support path was detected."
+  },
+  {
+    findingId: "sale_sharing_controls_missing",
+    evidenceFlag: "privacy.sale_sharing_controls_missing",
+    rationale:
+      "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior."
+  }
+];
+
+function getPacketizedFindingSupportRule(findingId: string) {
+  return PACKETIZED_FINDING_SUPPORT_RULES.find((rule) => rule.findingId === findingId) ?? null;
+}
+
+function getPacketizedPolicyPageType(findingId: string) {
+  return getPacketizedFindingSupportRule(findingId)?.policyPageType ?? null;
+}
+
+function getPolicyEnrichmentFindingSupportRule(findingId: string) {
+  return POLICY_ENRICHMENT_FINDING_SUPPORT_RULES.find((rule) => rule.findingId === findingId) ?? null;
+}
+
+function getDomainFlagFindingSupportRule(findingId: string) {
+  return DOMAIN_FLAG_FINDING_SUPPORT_RULES.find((rule) => rule.findingId === findingId) ?? null;
+}
+
+function hasNoRetainedReviewerEvidence(packet: UnifiedFindingPacket) {
+  return (
+    (packet.evidence?.pageUrls?.length ?? 0) === 0 &&
+    (packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
+    (packet.evidence?.snippets?.length ?? 0) === 0
+  );
+}
+
+function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (packet.unifiedFindingId === "cookie_policy_present" && hasNoRetainedReviewerEvidence(packet)) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Suppressed because the scan did not retain a concrete cookie-policy or cookie-settings page after weak placeholder cleanup.",
+      status: "suppress"
+    };
+  }
+
+  if (packet.unifiedFindingId === "terms_of_service_present" && hasNoRetainedReviewerEvidence(packet)) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale:
+        "Suppressed because the retained terms surface was only a locale-specific alternate and the scan did not retain a canonical terms page for the root-domain experience.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    (
+      packet.unifiedFindingId === "affiliate_disclosure_present" ||
+      packet.unifiedFindingId === "behavioral_analytics_disclosure_present" ||
+      packet.unifiedFindingId === "gpc_disclosure_present" ||
+      packet.unifiedFindingId === "third_party_advertising_disclosure_present"
+    ) &&
+    (
+      (packet.evidence?.snippets?.length ?? 0) === 0 ||
+      !hasConcreteHumanFacingUrl([...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])])
+    )
+  ) {
+    const rationaleByFindingId: Partial<Record<UnifiedFindingId, string>> = {
+      affiliate_disclosure_present:
+        "Kept audit-only because affiliate disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
+      behavioral_analytics_disclosure_present:
+        "Kept audit-only because behavioral-analytics disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
+      gpc_disclosure_present:
+        "Kept audit-only because GPC disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
+      third_party_advertising_disclosure_present:
+        "Kept audit-only because third-party advertising disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL."
+    };
+
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: rationaleByFindingId[packet.unifiedFindingId] ?? "Kept audit-only because the retained evidence is too thin to surface buyer-facing.",
+      status: "audit_only"
+    };
+  }
+
+  return null;
+}
+
+function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (!isFinancialValidationFindingId(packet.unifiedFindingId)) {
+    return null;
+  }
+
+  const inferredFinancialPageClassification =
+    packet.unifiedFindingId === "legal_entity_name_present" || packet.unifiedFindingId === "operator_contact_path_present"
+      ? "identity_or_contact"
+      : packet.unifiedFindingId === "fee_disclosure_present"
+        ? "pricing_or_fees"
+        : packet.unifiedFindingId === "investment_risk_disclosure_present" ||
+            packet.unifiedFindingId === "past_performance_disclaimer_present"
+          ? "disclosure_or_legal"
+          : "financial_offer";
+  const validationSpec = getFinancialValidationSpec(packet.unifiedFindingId);
+
+  const evidence = getFinancialValidationEvidenceBundle({
+    pageClassification: inferredFinancialPageClassification,
+    pageUrls: packet.evidence?.pageUrls ?? [],
+    snippets: packet.evidence?.snippets ?? [],
+    sourceUrls: packet.evidence?.sourceUrls ?? [],
+    supportingSignals: validationSpec?.requiredSignalKeys ?? [],
+    pageType: packet.primaryPageUrl ? "product" : "unknown"
+  });
+
+  if (!evidence) {
+    return null;
+  }
+
+  const storedJudge = getStoredFinancialJudgeOutput({
+    financialJudgeVerdict: packet.details && "financialJudgeVerdict" in packet.details ? null : null,
+    ...((packet.sourceRefs.find((ref) => ref.kind === "signal")?.fallbackEvidence as Record<string, unknown> | undefined) ?? {})
+  });
+  const judge =
+    storedJudge ??
+    evaluateFinancialJudgeInput({
+      candidateFindingId: packet.unifiedFindingId,
+      evidence,
+      negativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
+      scanContext: {
+        domain: packet.primaryPageUrl,
+        pageType: "unknown"
+      }
+    });
+
+  if (judge.verdict === "confirm") {
+    return null;
+  }
+
+  const rationaleByFindingId: Record<string, string> = {
+    apr_or_interest_rate_disclosure_present:
+      "Kept audit-only because APR or interest-rate disclosures should surface buyer-facing only when the scan retains both readable rate text and a concrete user-facing disclosure URL.",
+    fee_disclosure_present:
+      "Kept audit-only because fee disclosures should surface buyer-facing only when the scan retains both readable fee text and a concrete user-facing disclosure URL.",
+    investment_risk_disclosure_present:
+      "Kept audit-only because investment-risk disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
+    legal_entity_name_present:
+      "Kept audit-only because legal-entity identity findings should surface buyer-facing only when the scan retains both readable operator text and a concrete user-facing disclosure URL.",
+    operator_contact_path_present:
+      "Kept audit-only because operator-contact findings should surface buyer-facing only when the scan retains both readable contact text and a concrete user-facing disclosure URL.",
+    past_performance_disclaimer_present:
+      "Kept audit-only because past-performance disclaimers should surface buyer-facing only when the scan retains both readable disclaimer text and a concrete user-facing disclosure URL."
+  };
+
+  if (judge.verdict === "suppress") {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Suppressed because the retained evidence did not stay in an explicit financial context after conservative financial validation.",
+      status: "suppress"
+    };
+  }
+
+  return {
+    confidenceRationale: buildConfidenceRationale(packet),
+    rationale: rationaleByFindingId[packet.unifiedFindingId] ?? "Kept audit-only because the retained evidence is too thin to surface buyer-facing.",
+    status: "audit_only"
+  };
+}
+
+function getCoverageSiblingSuppressionDecision(input: {
+  packet: UnifiedFindingPacket;
+  siblingRows: UnifiedFindingPacket[];
+}): UnifiedFindingPresentationDecision | null {
+  if (
+    input.packet.unifiedFindingId === "cookie_policy_structurally_obstructed" &&
+    hasNoRetainedReviewerEvidence(input.packet) &&
+    input.siblingRows.some((row) => row.unifiedFindingId === "cookie_policy_present")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because the scan already retained a cookie-policy or cookie-settings surface, and the obstruction evidence here is only a weak discovery artifact.",
+      status: "suppress"
+    };
+  }
+
+  if (
+    input.packet.unifiedFindingId === "contact_page_missing_surface" &&
+    input.siblingRows.some(
+      (row) =>
+        row.unifiedFindingId === "accessibility_support_path_present" ||
+        row.unifiedFindingId === "privacy_contact_path_present" ||
+        row.unifiedFindingId === "contact_support_path_present"
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because another retained support or contact path already gives users a visible way to reach help on this scan.",
+      status: "suppress"
+    };
+  }
+
+  return null;
+}
+
+function getUnavailableCoverageDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (
+    (packet.unifiedFindingId === "cookie_policy_unavailable" ||
+      packet.unifiedFindingId === "accessibility_statement_unavailable") &&
+    (packet.evidence?.flags?.includes("guessed_only") ||
+      !hasConfirmedLinkedDiscoverySource(
+        packet.details?.family === "coverage_gap" ? packet.details.bestDiscoverySource : null
+      ))
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Suppressed because the unavailable page was not tied to a strong confirmed linked target from the scanned site.",
+      status: "suppress"
+    };
+  }
+
+  return null;
+}
+
+function getSpecificAuditOnlyEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (
+    packet.unifiedFindingId === "weak_cookie_security_attributes" &&
+    ![
+      ...(packet.evidence?.entities?.missingSecureCookieNames ?? []),
+      ...(packet.evidence?.entities?.missingHttpOnlyCookieNames ?? []),
+      ...(packet.evidence?.entities?.weakSameSiteCookieNames ?? []),
+      ...(packet.evidence?.entities?.thirdPartyWeakAttributeCookieNames ?? [])
+    ].some((value) => typeof value === "string" && value.trim().length > 0)
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Kept for audit only because the current evidence does not retain concrete cookie examples for the weak attribute claim.",
+      status: "audit_only"
+    };
+  }
+
+  if (packet.unifiedFindingId === "accessibility_risk_score") {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale:
+        "Kept for audit only because automated accessibility risk scores are still best treated as reviewer triage, even when representative examples are retained.",
+      status: "audit_only"
+    };
+  }
+
+  return null;
+}
+
+function getContradictionDecision(input: {
+  packet: UnifiedFindingPacket;
+  siblingRows: UnifiedFindingPacket[];
+}): UnifiedFindingPresentationDecision | null {
+  if (
+    input.packet.unifiedFindingId === "policy_behavior_conflict" &&
+    input.siblingRows.some((row) => SPECIFIC_CONTRADICTION_FINDING_IDS.has(row.unifiedFindingId))
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Suppressed because a more specific contradiction finding already explains this concern.",
+      status: "suppress"
+    };
+  }
+
+  if (input.packet.unifiedFindingId === "consent_gated_tracking_claim_conflict") {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because consent-gated contradiction findings need tighter paired policy and runtime evidence before buyer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  if (
+    input.packet.details?.family === "contradiction" &&
+    (!input.packet.confidenceInputs.hasPolicyTextEvidence ||
+      (!input.packet.confidenceInputs.hasDirectRuntimeEvidence && !input.packet.confidenceInputs.hasConcretePayloadEvidence))
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale: "Kept for audit only because contradiction findings need both concrete policy text and concrete runtime evidence before buyer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  return null;
+}
+
+function getPreconsentTrackingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (packet.unifiedFindingId !== "preconsent_tracking") {
+    return null;
+  }
+
+  const detailVendors = packet.details?.family === "consent_tracking" ? packet.details.vendors ?? [] : [];
+  const detailRequestUrls = packet.details?.family === "consent_tracking" ? packet.details.requestUrls ?? [] : [];
+  const runtimeVendors = packet.evidence?.entities?.runtimeVendors ?? [];
+  const relatedVendors = packet.evidence?.entities?.relatedVendors ?? [];
+  const evidenceUrls = packet.evidence?.pageUrls ?? [];
+  const hasConcreteRuntimeVendorEvidence = [...detailVendors, ...runtimeVendors, ...relatedVendors].some(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  const hasConcreteRuntimeUrlEvidence = [...detailRequestUrls, ...evidenceUrls].some(
+    (value) => typeof value === "string" && /^https?:\/\//i.test(value)
+  );
+  const hasValidationBacking = packet.confidenceInputs.validationCount > 0;
+
+  if (hasValidationBacking && hasConcreteRuntimeVendorEvidence && hasConcreteRuntimeUrlEvidence) {
+    return null;
+  }
+
+  return {
+    confidenceRationale: buildConfidenceRationale(packet),
+    rationale:
+      "Kept for audit only because pre-consent tracking should surface buyer-facing only when validation-backed runtime evidence retains both concrete vendors and concrete request URLs.",
+    status: "audit_only"
+  };
+}
+
+function getMinorsContextDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  const isDomainLevelSensitiveContext = isDomainLevelSensitiveContextFinding(packet.unifiedFindingId);
+  const isDomainLevelChildrenDisclosureContext = isDomainLevelChildrenDisclosureFinding(packet.unifiedFindingId);
+  const minorsContextEvidenceCount = [
+    "age_gate_present",
+    "children_audience_likely",
+    "kid_directed_content_detected",
+    "parental_consent_reference_present",
+    "mentions_coppa",
+    "mentions_under_13",
+    "mentions_under_16",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].filter((flag) => packet.evidence?.flags?.includes(flag)).length;
+  const strongMinorsContextEvidenceCount = [
+    "age_gate_present",
+    "kid_directed_content_detected",
+    "parental_consent_reference_present",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].filter((flag) => packet.evidence?.flags?.includes(flag)).length;
+  const explicitMinorsCollectionFlagPresent = [
+    "age_gate_present",
+    "parental_consent_reference_present",
+    "form_collects_birthdate",
+    "date_of_birth_input_present"
+  ].some((flag) => packet.evidence?.flags?.includes(flag));
+  const childrenPrivacyRiskScore =
+    typeof packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
+      ? packet.evidence.counts.childrenPrivacyRiskScore
+      : null;
+  const hasConcreteMinorsContextAttribution =
+    packet.confidenceInputs.hasPageAttribution ||
+    (packet.evidence?.pageUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
+    (packet.evidence?.sourceUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
+    (packet.evidence?.snippets?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false);
+
+  if (
+    isDomainLevelSensitiveContext &&
+    (
+      explicitMinorsCollectionFlagPresent ||
+      (hasConcreteMinorsContextAttribution &&
+        strongMinorsContextEvidenceCount >= 1 &&
+        (minorsContextEvidenceCount >= 2 || (childrenPrivacyRiskScore !== null && childrenPrivacyRiskScore >= 60)))
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Surfaced because multiple youth-directed or age-related context cues make this domain-level privacy context worth reviewer attention.",
+      status: "surface"
+    };
+  }
+
+  if (
+    isDomainLevelChildrenDisclosureContext &&
+    packet.evidence?.flags?.includes("privacy.children_privacy_context_without_supporting_disclosure")
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Surfaced because youth-directed or age-related context was retained alongside missing privacy-supporting disclosure signals.",
+      status: "surface"
+    };
+  }
+
+  return null;
+}
+
+function getGenericAuditOnlyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  const needsPageAttribution = packetNeedsPageAttribution({
+    family: packet.details?.family,
+    unifiedFindingId: packet.unifiedFindingId
+  });
+
+  if (
+    needsPageAttribution &&
+    !packet.confidenceInputs.hasPageAttribution &&
+    !packet.confidenceInputs.hasKeyPageDiscoveryEvidence &&
+    !packet.confidenceInputs.hasDirectRuntimeEvidence
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Kept for audit only because the current evidence does not yet identify concrete affected pages clearly enough for customer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  if (packet.confidenceBand === "low" && packet.confidenceInputs.isFallbackOnly) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Kept for audit only because the packet is fallback-only and the benefit of surfacing it broadly is limited right now.",
+      status: "audit_only"
+    };
+  }
+
+  if (
+    packet.confidenceBand === "low" &&
+    packet.confidenceInputs.sourceCount <= 1 &&
+    !packet.confidenceInputs.hasDirectRuntimeEvidence &&
+    !packet.confidenceInputs.hasStructuredValidationEvidence &&
+    !packet.confidenceInputs.hasConcretePayloadEvidence
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Kept for audit only because evidence is still too thin for confident report surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  return null;
+}
+
+function getConcernGatingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  const concernExternalSurfacingEligibilities = packet.concernContext?.externalSurfacingEligibilities ?? [];
+  const concernPromotionEligibilities = packet.concernContext?.promotionEligibilities ?? [];
+  const hasConcernExternalEligibility = concernExternalSurfacingEligibilities.includes("eligible");
+  const hasConcernAuditOnlyEligibility = concernExternalSurfacingEligibilities.includes("audit_only");
+  const allConcernEligibilitiesAreSuppressed =
+    concernExternalSurfacingEligibilities.length > 0 &&
+    concernExternalSurfacingEligibilities.every((eligibility) => eligibility === "suppress");
+  const allConcernPromotionsBlocked =
+    concernPromotionEligibilities.length > 0 &&
+    concernPromotionEligibilities.every((eligibility) => eligibility === "blocked");
+
+  if (allConcernPromotionsBlocked || allConcernEligibilitiesAreSuppressed) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Suppressed because normalized concern gating marked this concern as ineligible for external surfacing.",
+      status: "suppress"
+    };
+  }
+
+  if (!hasConcernExternalEligibility && hasConcernAuditOnlyEligibility) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: "Kept for audit only because normalized concern gating retained it for internal review but not customer-facing surfacing.",
+      status: "audit_only"
+    };
+  }
+
+  return null;
+}
+
+function getArbitrationLocaleSuppressionDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  if (packet.unifiedFindingId !== "arbitration_clause_present") {
+    return null;
+  }
+
+  const allUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
+  const hasOnlyLocaleUrls = allUrls.length > 0 && allUrls.every((url) => isLikelyLocaleSubdomainUrl(url));
+
+  if (!hasOnlyLocaleUrls) {
+    return null;
+  }
+
+  return {
+    confidenceRationale: buildConfidenceRationale(packet),
+    rationale:
+      "Suppressed because the retained arbitration evidence only points to a locale-specific alternate terms page and the scan did not retain canonical root-domain terms attribution for this clause.",
+    status: "suppress"
+  };
+}
+
+function getSpecializedPresentationDecision(input: {
+  packet: UnifiedFindingPacket;
+  siblingRows: UnifiedFindingPacket[];
+}): UnifiedFindingPresentationDecision | null {
+  return (
+    getConcernGatingDecision(input.packet) ??
+    getContradictionDecision(input) ??
+    getPreconsentTrackingDecision(input.packet) ??
+    getMinorsContextDecision(input.packet) ??
+    getThinFinancialTransparencyDecision(input.packet) ??
+    getCoverageSiblingSuppressionDecision(input) ??
+    getPacketizedFindingEvidenceDecision(input.packet) ??
+    getArbitrationLocaleSuppressionDecision(input.packet)
+  );
+}
+
+function getSharedSupportSurfacingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  const packetizedFindingSupportRule = getPacketizedFindingSupportRule(packet.unifiedFindingId);
+  if (
+    packetizedFindingSupportRule &&
+    (packetizedFindingSupportRule.matchesLegacySource(packet) ||
+      hasFamilyPacketFindingSource(packet, packet.unifiedFindingId))
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: packetizedFindingSupportRule.rationale,
+      status: "surface"
+    };
+  }
+
+  const policyEnrichmentFindingSupportRule = getPolicyEnrichmentFindingSupportRule(packet.unifiedFindingId);
+  if (
+    policyEnrichmentFindingSupportRule &&
+    packet.sourceRefs.some(
+      (sourceRef) =>
+        sourceRef.kind === "signal" &&
+        sourceRef.source === "policy_enrichment_signal" &&
+        getPolicyPositiveSignalKeysForFinding(policyEnrichmentFindingSupportRule.findingId).includes(sourceRef.key)
+    )
+  ) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: policyEnrichmentFindingSupportRule.rationale,
+      status: "surface"
+    };
+  }
+
+  const domainFlagFindingSupportRule = getDomainFlagFindingSupportRule(packet.unifiedFindingId);
+  if (domainFlagFindingSupportRule && packet.evidence?.flags?.includes(domainFlagFindingSupportRule.evidenceFlag)) {
+    return {
+      confidenceRationale: buildConfidenceRationale(packet),
+      rationale: domainFlagFindingSupportRule.rationale,
+      status: "surface"
+    };
+  }
+
+  return null;
+}
+
+function getLateFallbackPresentationDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+  return (
+    getUnavailableCoverageDecision(packet) ??
+    getSpecificAuditOnlyEvidenceDecision(packet) ??
+    getGenericAuditOnlyDecision(packet)
+  );
+}
+
 function formatCoveragePageLabel(pageType: string | undefined) {
   switch (pageType) {
     case "privacy_policy":
@@ -1371,6 +2234,164 @@ function buildConfidenceRationale(packet: UnifiedFindingPacket) {
   return "Low confidence because the current evidence is limited or only weakly corroborated.";
 }
 
+const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
+  string,
+  Pick<CanonicalReviewFindingPresentation, "suggestedFix" | "whyThisMatters">
+> = {
+  preconsent_tracking: {
+    suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
+    whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
+  },
+  consent_mechanism_absent: {
+    suggestedFix: "Add a clear consent control surface before non-essential tracking starts, and make sure users can reject or manage that tracking without extra friction.",
+    whyThisMatters: "If no consent controls are presented, users may not get a meaningful chance to manage non-essential tracking before it begins."
+  },
+  consent_surface_missing: {
+    suggestedFix: "Add a visible consent banner, modal, or equivalent control surface before non-essential tracking starts, and make sure it lets users reject or manage tracking without extra friction.",
+    whyThisMatters: "If there is no visible consent surface at all, users may never get a clear chance to understand or control non-essential tracking."
+  },
+  reject_did_not_reduce_tracking: {
+    suggestedFix: "Review consent enforcement so a reject action actually suppresses the non-essential tracking vendors seen after rejection.",
+    whyThisMatters: "If reject does not materially reduce tracking, the consent experience may not be honoring the choice it presents."
+  },
+  reject_did_not_reduce_third_party_cookies: {
+    suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
+    whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
+  },
+  gpc_signal_not_honored: {
+    suggestedFix: "Honor browser-level opt-out preference signals by suppressing the non-essential tracking or cookie activity that still fired under GPC.",
+    whyThisMatters: "If the site ignores a browser-level privacy preference signal, users may not get the choice outcome they expected."
+  },
+  weak_cookie_security_attributes: {
+    suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",
+    whyThisMatters: "Weak cookie attributes can make it easier for cookies to be handled in less protective ways than expected."
+  },
+  session_replay_undisclosed: {
+    suggestedFix: "Review replay tooling deployment and either disclose it clearly in privacy/cookie materials or disable it until disclosures are accurate.",
+    whyThisMatters: "Undisclosed session replay can materially change how users understand monitoring on the site."
+  },
+  cookie_disclosure_gap: {
+    suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
+    whyThisMatters: "When runtime cookie activity outpaces the disclosure, users cannot easily understand what is actually being set and why."
+  },
+  privacy_contact_channel_missing: {
+    suggestedFix: "Add a clearly labeled privacy contact path or request channel so people can reliably reach the site owner about privacy and rights-related questions.",
+    whyThisMatters: "If there is no clear privacy contact path, people may struggle to ask questions or exercise privacy-related rights."
+  },
+  privacy_rights_path_present: {
+    suggestedFix: "Keep the disclosed rights-request path current and easy to reach anywhere people look for privacy controls.",
+    whyThisMatters: "A clear privacy-rights path makes it easier for people to understand how to request access, deletion, export, correction, or related privacy controls."
+  },
+  privacy_contact_path_present: {
+    suggestedFix: "Keep the privacy contact path easy to find and make sure the listed email, form, or portal stays current.",
+    whyThisMatters: "A clear privacy contact path makes it easier for people to ask privacy questions or reach the site owner about data-handling concerns."
+  },
+  privacy_policy_present: {
+    suggestedFix: "Keep the privacy policy linked from stable footer, legal, or help surfaces and make sure the destination remains crawlable.",
+    whyThisMatters: "A visible privacy policy surface helps users and reviewers find the site's core notice and data-handling disclosures."
+  },
+  terms_of_service_present: {
+    suggestedFix: "Keep the terms surface stable and easy to reach from footer, legal, or help navigation.",
+    whyThisMatters: "A visible terms surface helps users and reviewers locate the site's core legal and dispute-resolution terms."
+  },
+  cookie_policy_present: {
+    suggestedFix: "Keep the cookie policy or cookie-settings surface easy to reach and make sure the linked destination remains crawlable.",
+    whyThisMatters: "A visible cookie policy or settings surface helps users find tracking disclosures and related controls more reliably."
+  },
+  contact_support_path_present: {
+    suggestedFix: "Keep the contact or feedback path easy to find and make sure the linked help channel remains current.",
+    whyThisMatters: "A visible contact or feedback path gives people a clearer way to reach the operator when they need help or have questions."
+  },
+  targeted_advertising_choices_present: {
+    suggestedFix: "Keep the targeted-advertising choice path easy to reach anywhere users would expect privacy or ad-preference controls.",
+    whyThisMatters: "A visible targeted-advertising choice path helps users find sale, sharing, or ad-preference controls more reliably."
+  },
+  sale_sharing_controls_missing: {
+    suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
+    whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
+  },
+  retargeting_pixel_observed: {
+    suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",
+    whyThisMatters: "A retargeting-related signal can indicate advertising or remarketing infrastructure, but detector-only evidence should be confirmed against retained runtime artifacts before treating it as a confirmed pixel deployment."
+  },
+  gpc_disclosure_present: {
+    suggestedFix: "Keep the GPC disclosure aligned with actual enforcement behavior and any related sale, sharing, or targeted-advertising controls.",
+    whyThisMatters: "A public GPC disclosure gives users and reviewers a clearer picture of how browser-level privacy preference signals are expected to be handled."
+  },
+  tracking_technologies_disclosure_present: {
+    suggestedFix: "Keep the tracking-technologies disclosure specific about the cookies, pixels, tags, beacons, scripts, or similar technologies the site says it uses.",
+    whyThisMatters: "Clear tracking-technologies disclosure helps people understand what kinds of tracking tools may be active and where to look for more detailed controls or explanations."
+  },
+  targeted_advertising_disclosure_present: {
+    suggestedFix: "Keep the targeted-advertising disclosure specific about the technologies, purposes, and control paths users can rely on.",
+    whyThisMatters: "Clear targeted-advertising disclosure helps users understand when sale, sharing, or ad-personalization practices may apply and where to find related controls."
+  },
+  third_party_advertising_disclosure_present: {
+    suggestedFix: "Keep the third-party advertising disclosure specific about the ad partners, technologies, and where users can learn more about those practices.",
+    whyThisMatters: "A clear third-party advertising disclosure helps users understand when outside ad partners or related technologies may be involved."
+  },
+  behavioral_analytics_disclosure_present: {
+    suggestedFix: "Keep the behavioral-analytics disclosure aligned with the actual tooling, pages, and monitoring practices the site uses.",
+    whyThisMatters: "A public disclosure about behavioral analytics or replay-style tooling helps users and reviewers understand when more detailed interaction monitoring may occur."
+  },
+  children_privacy_disclosure_present: {
+    suggestedFix: "Keep the children's privacy disclosure easy to find and aligned with the site's current age-related practices and contact paths.",
+    whyThisMatters: "A visible children's privacy disclosure helps users and reviewers understand how the site says it handles child- or youth-related privacy expectations."
+  },
+  accessibility_support_path_missing: {
+    suggestedFix: "Add a clearly labeled accessibility support or accommodation contact path so people know how to request help or report access barriers.",
+    whyThisMatters: "If there is no visible accessibility support path, people may not know how to ask for help when they hit an access barrier."
+  },
+  accessibility_support_path_present: {
+    suggestedFix: "Keep the accessibility support path easy to find and make sure the linked contact or help channel remains current.",
+    whyThisMatters: "A visible accessibility support path gives people a clearer way to request help, accommodations, or barrier remediation support."
+  },
+  arbitration_clause_present: {
+    suggestedFix: "Keep arbitration and dispute-resolution terms easy to find and aligned with the latest legal text on the live terms page.",
+    whyThisMatters: "A visible arbitration clause can materially affect how users understand dispute resolution and consumer remedies."
+  },
+  affiliate_disclosure_present: {
+    suggestedFix: "Keep the affiliate disclosure easy to reach anywhere endorsements, recommendations, or affiliate-linked product references appear.",
+    whyThisMatters: "A visible affiliate disclosure helps users understand when recommendations or links may carry a financial relationship."
+  },
+  legal_entity_name_present: {
+    suggestedFix: "Keep the operating legal entity easy to identify on public-facing legal, about, or contact surfaces and make sure the retained text matches the live operator identity.",
+    whyThisMatters: "A visible legal entity name helps users and reviewers understand who operates the site and who is accountable for the offer."
+  },
+  operator_contact_path_present: {
+    suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",
+    whyThisMatters: "A visible operator contact path helps users and reviewers understand how to reach the business behind the offer."
+  },
+  investment_risk_disclosure_present: {
+    suggestedFix: "Keep investment-risk disclosures easy to find anywhere yield, return, or high-risk product claims appear, and make sure the language matches the live offer.",
+    whyThisMatters: "A visible investment-risk disclosure helps users and reviewers understand when returns or financial-product claims are accompanied by meaningful cautionary context."
+  },
+  fee_disclosure_present: {
+    suggestedFix: "Keep fee disclosures easy to find anywhere account, pricing, trading, lending, or managed-service costs are described, and make sure the retained text matches the live offer.",
+    whyThisMatters: "A visible fee disclosure helps users and reviewers understand whether core costs are described alongside the financial or quasi-financial offer."
+  },
+  past_performance_disclaimer_present: {
+    suggestedFix: "Keep past-performance disclaimers easy to find wherever historical returns, yield, or strategy results are shown, and make sure the language stays aligned with the live offer.",
+    whyThisMatters: "A visible past-performance disclaimer helps users and reviewers understand that historical results may not predict future outcomes."
+  },
+  apr_or_interest_rate_disclosure_present: {
+    suggestedFix: "Keep APR or interest-rate disclosures easy to find anywhere lending, savings, financing, or credit terms are promoted, and make sure the retained rate language matches the live offer.",
+    whyThisMatters: "A visible APR or interest-rate disclosure helps users and reviewers understand when a financial offer includes concrete rate terms."
+  },
+  children_privacy_context_without_supporting_disclosure: {
+    suggestedFix: "Add clear child- or youth-related privacy disclosure and a supporting privacy contact path wherever the site presents youth-directed cues or age-related collection context.",
+    whyThisMatters: "If the site looks child-directed or collects age-related information without supporting privacy disclosure, users and reviewers may not be able to understand how those expectations are handled."
+  },
+  minors_or_age_gated_collection_context: {
+    suggestedFix: "Review whether the site is collecting age-related or youth-directed data cues, and make sure any age-gate, parental-consent, or children’s privacy disclosures match the live experience.",
+    whyThisMatters: "If the site looks youth-directed or collects age-related data, privacy expectations and regulatory scrutiny can rise quickly."
+  },
+  low_confidence_policy_extraction: {
+    suggestedFix: "Simplify the policy surface or markup so core disclosures can be extracted and reviewed more reliably.",
+    whyThisMatters: "Low-confidence extraction makes it harder to trust that important policy commitments were captured accurately."
+  }
+};
+
 function buildPresentationCopy(
   packet: UnifiedFindingPacket,
   base: CanonicalReviewFindingPresentation
@@ -1399,809 +2420,27 @@ function buildPresentationCopy(
       whyThisMatters: `If key-page discovery stays unresolved, the scan cannot confidently confirm whether the ${pageLabel} is actually reachable.`
     };
   }
-
-  switch (packet.unifiedFindingId) {
-    case "preconsent_tracking":
-      return {
-        ...base,
-        suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
-        whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
-      };
-    case "consent_mechanism_absent":
-      return {
-        ...base,
-        suggestedFix: "Add a clear consent control surface before non-essential tracking starts, and make sure users can reject or manage that tracking without extra friction.",
-        whyThisMatters: "If no consent controls are presented, users may not get a meaningful chance to manage non-essential tracking before it begins."
-      };
-    case "consent_surface_missing":
-      return {
-        ...base,
-        suggestedFix: "Add a visible consent banner, modal, or equivalent control surface before non-essential tracking starts, and make sure it lets users reject or manage tracking without extra friction.",
-        whyThisMatters: "If there is no visible consent surface at all, users may never get a clear chance to understand or control non-essential tracking."
-      };
-    case "reject_did_not_reduce_tracking":
-      return {
-        ...base,
-        suggestedFix: "Review consent enforcement so a reject action actually suppresses the non-essential tracking vendors seen after rejection.",
-        whyThisMatters: "If reject does not materially reduce tracking, the consent experience may not be honoring the choice it presents."
-      };
-    case "reject_did_not_reduce_third_party_cookies":
-      return {
-        ...base,
-        suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
-        whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
-      };
-    case "gpc_signal_not_honored":
-      return {
-        ...base,
-        suggestedFix: "Honor browser-level opt-out preference signals by suppressing the non-essential tracking or cookie activity that still fired under GPC.",
-        whyThisMatters: "If the site ignores a browser-level privacy preference signal, users may not get the choice outcome they expected."
-      };
-    case "weak_cookie_security_attributes":
-      return {
-        ...base,
-        suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",
-        whyThisMatters: "Weak cookie attributes can make it easier for cookies to be handled in less protective ways than expected."
-      };
-    case "session_replay_undisclosed":
-      return {
-        ...base,
-        suggestedFix: "Review replay tooling deployment and either disclose it clearly in privacy/cookie materials or disable it until disclosures are accurate.",
-        whyThisMatters: "Undisclosed session replay can materially change how users understand monitoring on the site."
-      };
-    case "cookie_disclosure_gap":
-      return {
-        ...base,
-        suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
-        whyThisMatters: "When runtime cookie activity outpaces the disclosure, users cannot easily understand what is actually being set and why."
-      };
-    case "privacy_contact_channel_missing":
-      return {
-        ...base,
-        suggestedFix: "Add a clearly labeled privacy contact path or request channel so people can reliably reach the site owner about privacy and rights-related questions.",
-        whyThisMatters: "If there is no clear privacy contact path, people may struggle to ask questions or exercise privacy-related rights."
-      };
-    case "privacy_rights_path_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the disclosed rights-request path current and easy to reach anywhere people look for privacy controls.",
-        whyThisMatters: "A clear privacy-rights path makes it easier for people to understand how to request access, deletion, export, correction, or related privacy controls."
-      };
-    case "privacy_contact_path_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the privacy contact path easy to find and make sure the listed email, form, or portal stays current.",
-        whyThisMatters: "A clear privacy contact path makes it easier for people to ask privacy questions or reach the site owner about data-handling concerns."
-      };
-    case "privacy_policy_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the privacy policy linked from stable footer, legal, or help surfaces and make sure the destination remains crawlable.",
-        whyThisMatters: "A visible privacy policy surface helps users and reviewers find the site's core notice and data-handling disclosures."
-      };
-    case "terms_of_service_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the terms surface stable and easy to reach from footer, legal, or help navigation.",
-        whyThisMatters: "A visible terms surface helps users and reviewers locate the site's core legal and dispute-resolution terms."
-      };
-    case "cookie_policy_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the cookie policy or cookie-settings surface easy to reach and make sure the linked destination remains crawlable.",
-        whyThisMatters: "A visible cookie policy or settings surface helps users find tracking disclosures and related controls more reliably."
-      };
-    case "contact_support_path_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the contact or feedback path easy to find and make sure the linked help channel remains current.",
-        whyThisMatters: "A visible contact or feedback path gives people a clearer way to reach the operator when they need help or have questions."
-      };
-    case "targeted_advertising_choices_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the targeted-advertising choice path easy to reach anywhere users would expect privacy or ad-preference controls.",
-        whyThisMatters: "A visible targeted-advertising choice path helps users find sale, sharing, or ad-preference controls more reliably."
-      };
-    case "sale_sharing_controls_missing":
-      return {
-        ...base,
-        suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
-        whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
-      };
-    case "retargeting_pixel_observed":
-      return {
-        ...base,
-        suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",
-        whyThisMatters: "A retargeting-related signal can indicate advertising or remarketing infrastructure, but detector-only evidence should be confirmed against retained runtime artifacts before treating it as a confirmed pixel deployment."
-      };
-    case "gpc_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the GPC disclosure aligned with actual enforcement behavior and any related sale, sharing, or targeted-advertising controls.",
-        whyThisMatters: "A public GPC disclosure gives users and reviewers a clearer picture of how browser-level privacy preference signals are expected to be handled."
-      };
-    case "tracking_technologies_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the tracking-technologies disclosure specific about the cookies, pixels, tags, beacons, scripts, or similar technologies the site says it uses.",
-        whyThisMatters: "Clear tracking-technologies disclosure helps people understand what kinds of tracking tools may be active and where to look for more detailed controls or explanations."
-      };
-    case "targeted_advertising_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the targeted-advertising disclosure specific about the technologies, purposes, and control paths users can rely on.",
-        whyThisMatters: "Clear targeted-advertising disclosure helps users understand when sale, sharing, or ad-personalization practices may apply and where to find related controls."
-      };
-    case "third_party_advertising_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the third-party advertising disclosure specific about the ad partners, technologies, and where users can learn more about those practices.",
-        whyThisMatters: "A clear third-party advertising disclosure helps users understand when outside ad partners or related technologies may be involved."
-      };
-    case "behavioral_analytics_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the behavioral-analytics disclosure aligned with the actual tooling, pages, and monitoring practices the site uses.",
-        whyThisMatters: "A public disclosure about behavioral analytics or replay-style tooling helps users and reviewers understand when more detailed interaction monitoring may occur."
-      };
-    case "children_privacy_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the children's privacy disclosure easy to find and aligned with the site's current age-related practices and contact paths.",
-        whyThisMatters: "A visible children's privacy disclosure helps users and reviewers understand how the site says it handles child- or youth-related privacy expectations."
-      };
-    case "accessibility_support_path_missing":
-      return {
-        ...base,
-        suggestedFix: "Add a clearly labeled accessibility support or accommodation contact path so people know how to request help or report access barriers.",
-        whyThisMatters: "If there is no visible accessibility support path, people may not know how to ask for help when they hit an access barrier."
-      };
-    case "accessibility_support_path_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the accessibility support path easy to find and make sure the linked contact or help channel remains current.",
-        whyThisMatters: "A visible accessibility support path gives people a clearer way to request help, accommodations, or barrier remediation support."
-      };
-    case "arbitration_clause_present":
-      return {
-        ...base,
-        suggestedFix: "Keep arbitration and dispute-resolution terms easy to find and aligned with the latest legal text on the live terms page.",
-        whyThisMatters: "A visible arbitration clause can materially affect how users understand dispute resolution and consumer remedies."
-      };
-    case "affiliate_disclosure_present":
-      return {
-        ...base,
-        suggestedFix: "Keep the affiliate disclosure easy to reach anywhere endorsements, recommendations, or affiliate-linked product references appear.",
-        whyThisMatters: "A visible affiliate disclosure helps users understand when recommendations or links may carry a financial relationship."
-      };
-    case "children_privacy_context_without_supporting_disclosure":
-      return {
-        ...base,
-        suggestedFix: "Add clear child- or youth-related privacy disclosure and a supporting privacy contact path wherever the site presents youth-directed cues or age-related collection context.",
-        whyThisMatters: "If the site looks child-directed or collects age-related information without supporting privacy disclosure, users and reviewers may not be able to understand how those expectations are handled."
-      };
-    case "minors_or_age_gated_collection_context":
-      return {
-        ...base,
-        suggestedFix: "Review whether the site is collecting age-related or youth-directed data cues, and make sure any age-gate, parental-consent, or children’s privacy disclosures match the live experience.",
-        whyThisMatters: "If the site looks youth-directed or collects age-related data, privacy expectations and regulatory scrutiny can rise quickly."
-      };
-    case "low_confidence_policy_extraction":
-      return {
-        ...base,
-        suggestedFix: "Simplify the policy surface or markup so core disclosures can be extracted and reviewed more reliably.",
-        whyThisMatters: "Low-confidence extraction makes it harder to trust that important policy commitments were captured accurately."
-      };
-    default:
-      return base;
-  }
+  const override = UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES[packet.unifiedFindingId];
+  return override ? { ...base, ...override } : base;
 }
 
 function buildPresentationDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
 }): UnifiedFindingPresentationDecision {
-  const concernExternalSurfacingEligibilities = input.packet.concernContext?.externalSurfacingEligibilities ?? [];
-  const concernPromotionEligibilities = input.packet.concernContext?.promotionEligibilities ?? [];
-  const hasConcernExternalEligibility = concernExternalSurfacingEligibilities.includes("eligible");
-  const hasConcernAuditOnlyEligibility = concernExternalSurfacingEligibilities.includes("audit_only");
-  const allConcernEligibilitiesAreSuppressed =
-    concernExternalSurfacingEligibilities.length > 0 &&
-    concernExternalSurfacingEligibilities.every((eligibility) => eligibility === "suppress");
-  const allConcernPromotionsBlocked =
-    concernPromotionEligibilities.length > 0 &&
-    concernPromotionEligibilities.every((eligibility) => eligibility === "blocked");
-
-  if (allConcernPromotionsBlocked || allConcernEligibilitiesAreSuppressed) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because normalized concern gating marked this concern as ineligible for external surfacing.",
-      status: "suppress"
-    };
+  const specializedDecision = getSpecializedPresentationDecision(input);
+  if (specializedDecision) {
+    return specializedDecision;
   }
 
-  if (!hasConcernExternalEligibility && hasConcernAuditOnlyEligibility) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because normalized concern gating retained it for internal review but not customer-facing surfacing.",
-      status: "audit_only"
-    };
+  const sharedSupportSurfacingDecision = getSharedSupportSurfacingDecision(input.packet);
+  if (sharedSupportSurfacingDecision) {
+    return sharedSupportSurfacingDecision;
   }
 
-  const isDomainLevelSensitiveContext = isDomainLevelSensitiveContextFinding(input.packet.unifiedFindingId);
-  const isDomainLevelChildrenDisclosureContext =
-    isDomainLevelChildrenDisclosureFinding(input.packet.unifiedFindingId);
-  const minorsContextEvidenceCount = [
-    "age_gate_present",
-    "children_audience_likely",
-    "kid_directed_content_detected",
-    "parental_consent_reference_present",
-    "mentions_coppa",
-    "mentions_under_13",
-    "mentions_under_16",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
-  const strongMinorsContextEvidenceCount = [
-    "age_gate_present",
-    "kid_directed_content_detected",
-    "parental_consent_reference_present",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].filter((flag) => input.packet.evidence?.flags?.includes(flag)).length;
-  const explicitMinorsCollectionFlagPresent = [
-    "age_gate_present",
-    "parental_consent_reference_present",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].some((flag) => input.packet.evidence?.flags?.includes(flag));
-  const childrenPrivacyRiskScore =
-    typeof input.packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
-      ? input.packet.evidence.counts.childrenPrivacyRiskScore
-      : null;
-  const hasConcreteMinorsContextAttribution =
-    input.packet.confidenceInputs.hasPageAttribution ||
-    (input.packet.evidence?.pageUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
-    (input.packet.evidence?.sourceUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
-    (input.packet.evidence?.snippets?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false);
-  const needsPageAttribution = packetNeedsPageAttribution({
-    family: input.packet.details?.family,
-    unifiedFindingId: input.packet.unifiedFindingId
-  });
-
-  if (
-    input.packet.unifiedFindingId === "policy_behavior_conflict" &&
-    input.siblingRows.some(
-      (row) => SPECIFIC_CONTRADICTION_FINDING_IDS.has(row.unifiedFindingId)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because a more specific contradiction finding already explains this concern.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "consent_gated_tracking_claim_conflict"
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because consent-gated contradiction findings need tighter paired policy and runtime evidence before buyer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (input.packet.unifiedFindingId === "preconsent_tracking") {
-    const detailVendors = input.packet.details?.family === "consent_tracking" ? input.packet.details.vendors ?? [] : [];
-    const detailRequestUrls =
-      input.packet.details?.family === "consent_tracking" ? input.packet.details.requestUrls ?? [] : [];
-    const runtimeVendors = input.packet.evidence?.entities?.runtimeVendors ?? [];
-    const relatedVendors = input.packet.evidence?.entities?.relatedVendors ?? [];
-    const evidenceUrls = input.packet.evidence?.pageUrls ?? [];
-    const hasConcreteRuntimeVendorEvidence =
-      [...detailVendors, ...runtimeVendors, ...relatedVendors].some((value) => typeof value === "string" && value.trim().length > 0);
-    const hasConcreteRuntimeUrlEvidence = [...detailRequestUrls, ...evidenceUrls].some(
-      (value) => typeof value === "string" && /^https?:\/\//i.test(value)
-    );
-    const hasValidationBacking = input.packet.confidenceInputs.validationCount > 0;
-
-    if (!(hasValidationBacking && hasConcreteRuntimeVendorEvidence && hasConcreteRuntimeUrlEvidence)) {
-      return {
-        confidenceRationale: buildConfidenceRationale(input.packet),
-        rationale:
-          "Kept for audit only because pre-consent tracking should surface buyer-facing only when validation-backed runtime evidence retains both concrete vendors and concrete request URLs.",
-        status: "audit_only"
-      };
-    }
-  }
-
-  if (
-    input.packet.details?.family === "contradiction" &&
-    (!input.packet.confidenceInputs.hasPolicyTextEvidence ||
-      (!input.packet.confidenceInputs.hasDirectRuntimeEvidence && !input.packet.confidenceInputs.hasConcretePayloadEvidence))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because contradiction findings need both concrete policy text and concrete runtime evidence before buyer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    isDomainLevelSensitiveContext &&
-    (
-      explicitMinorsCollectionFlagPresent ||
-      (hasConcreteMinorsContextAttribution &&
-        strongMinorsContextEvidenceCount >= 1 &&
-        (minorsContextEvidenceCount >= 2 || (childrenPrivacyRiskScore !== null && childrenPrivacyRiskScore >= 60)))
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because multiple youth-directed or age-related context cues make this domain-level privacy context worth reviewer attention.",
-      status: "surface"
-    };
-  }
-
-  if (
-    isDomainLevelChildrenDisclosureContext &&
-    input.packet.evidence?.flags?.includes("privacy.children_privacy_context_without_supporting_disclosure")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because youth-directed or age-related context was retained alongside missing privacy-supporting disclosure signals.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "cookie_policy_structurally_obstructed" &&
-    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.snippets?.length ?? 0) === 0 &&
-    input.siblingRows.some((row) => row.unifiedFindingId === "cookie_policy_present")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the scan already retained a cookie-policy or cookie-settings surface, and the obstruction evidence here is only a weak discovery artifact.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "cookie_policy_present" &&
-    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.snippets?.length ?? 0) === 0
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the scan did not retain a concrete cookie-policy or cookie-settings page after weak placeholder cleanup.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "terms_of_service_present" &&
-    (input.packet.evidence?.pageUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
-    (input.packet.evidence?.snippets?.length ?? 0) === 0
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the retained terms surface was only a locale-specific alternate and the scan did not retain a canonical terms page for the root-domain experience.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "affiliate_disclosure_present" &&
-    (input.packet.evidence?.snippets?.length ?? 0) === 0
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept audit-only because the scan retained an affiliate-page path but did not retain visible page text from that page on this run.",
-      status: "audit_only"
-    };
-  }
-
-  if (input.packet.unifiedFindingId === "arbitration_clause_present") {
-    const allUrls = [...(input.packet.evidence?.pageUrls ?? []), ...(input.packet.evidence?.sourceUrls ?? [])];
-    const hasOnlyLocaleUrls = allUrls.length > 0 && allUrls.every((url) => isLikelyLocaleSubdomainUrl(url));
-
-    if (hasOnlyLocaleUrls) {
-      return {
-        confidenceRationale: buildConfidenceRationale(input.packet),
-        rationale:
-          "Suppressed because the retained arbitration evidence only points to a locale-specific alternate terms page and the scan did not retain canonical root-domain terms attribution for this clause.",
-        status: "suppress"
-      };
-    }
-  }
-
-  if (
-    input.packet.unifiedFindingId === "contact_page_missing_surface" &&
-    input.siblingRows.some(
-      (row) =>
-        row.unifiedFindingId === "accessibility_support_path_present" ||
-        row.unifiedFindingId === "privacy_contact_path_present" ||
-        row.unifiedFindingId === "contact_support_path_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because another retained support or contact path already gives users a visible way to reach help on this scan.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "privacy_policy_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "disclosure.privacy_policy_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a reachable privacy-policy surface.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "terms_of_service_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "disclosure.terms_of_service_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a reachable terms surface.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "cookie_policy_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "disclosure.cookie_policy_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a reachable cookie-policy or cookie-settings surface.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "contact_support_path_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "disclosure.contact_page_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a reachable contact or feedback path.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "targeted_advertising_choices_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "privacy.do_not_sell_link_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a targeted-advertising or do-not-sell/share choice path.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "privacy_rights_path_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("privacy_rights_path_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a concrete privacy-rights path.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "privacy_contact_path_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("privacy_contact_path_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a clear privacy contact path.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "consent_surface_missing" &&
-    input.packet.evidence?.flags?.includes("privacy.consent_surface_missing")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a clear domain-level signal that no user-facing consent surface was detected.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "gpc_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("gpc_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a clear disclosure about GPC handling.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "tracking_technologies_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("tracking_technologies_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a disclosure about cookies, pixels, tags, beacons, scripts, or similar technologies.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "accessibility_support_path_missing" &&
-    input.packet.evidence?.flags?.includes("accessibility.accessibility_support_path_missing")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a clear domain-level signal that no accessibility support path was detected.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "accessibility_support_path_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "accessibility.accessibility_contact_method_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a clear domain-level accessibility support path.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "sale_sharing_controls_missing" &&
-    input.packet.evidence?.flags?.includes("privacy.sale_sharing_controls_missing")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "affiliate_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "snapshot_signal" &&
-        sourceRef.key === "commerce.affiliate_disclosure_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because the scan retained a clear domain-level affiliate disclosure signal.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "targeted_advertising_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("targeted_advertising_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a targeted-advertising or sale/sharing disclosure.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "third_party_advertising_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("third_party_advertising_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a disclosure about third-party advertising partners or related ad technologies.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "behavioral_analytics_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("behavioral_analytics_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a disclosure about behavioral analytics or replay-style monitoring.",
-      status: "surface"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "children_privacy_disclosure_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("children_privacy_disclosure_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained a children's or youth-related privacy disclosure.",
-      status: "surface"
-    };
-  }
-
-  if (
-    (input.packet.unifiedFindingId === "cookie_policy_unavailable" ||
-      input.packet.unifiedFindingId === "accessibility_statement_unavailable") &&
-    (input.packet.evidence?.flags?.includes("guessed_only") ||
-      !hasConfirmedLinkedDiscoverySource(
-        input.packet.details?.family === "coverage_gap" ? input.packet.details.bestDiscoverySource : null
-      ))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the unavailable page was not tied to a strong confirmed linked target from the scanned site.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "weak_cookie_security_attributes" &&
-    ![
-      ...(input.packet.evidence?.entities?.missingSecureCookieNames ?? []),
-      ...(input.packet.evidence?.entities?.missingHttpOnlyCookieNames ?? []),
-      ...(input.packet.evidence?.entities?.weakSameSiteCookieNames ?? []),
-      ...(input.packet.evidence?.entities?.thirdPartyWeakAttributeCookieNames ?? [])
-    ].some((value) => typeof value === "string" && value.trim().length > 0)
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because the current evidence does not retain concrete cookie examples for the weak attribute claim.",
-      status: "audit_only"
-    };
-  }
-
-  if (input.packet.unifiedFindingId === "accessibility_risk_score") {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale:
-        "Kept for audit only because automated accessibility risk scores are still best treated as reviewer triage, even when representative examples are retained.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "arbitration_clause_present" &&
-    input.packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding("arbitration_clause_present").includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Surfaced because structured policy evidence retained an arbitration or dispute-resolution clause.",
-      status: "surface"
-    };
-  }
-
-  if (
-    needsPageAttribution &&
-    !input.packet.confidenceInputs.hasPageAttribution &&
-    !input.packet.confidenceInputs.hasKeyPageDiscoveryEvidence &&
-    !input.packet.confidenceInputs.hasDirectRuntimeEvidence
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because the current evidence does not yet identify concrete affected pages clearly enough for customer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    input.packet.confidenceBand === "low" &&
-    input.packet.confidenceInputs.isFallbackOnly
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because the packet is fallback-only and the benefit of surfacing it broadly is limited right now.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    input.packet.confidenceBand === "low" &&
-    input.packet.confidenceInputs.sourceCount <= 1 &&
-    !input.packet.confidenceInputs.hasDirectRuntimeEvidence &&
-    !input.packet.confidenceInputs.hasStructuredValidationEvidence &&
-    !input.packet.confidenceInputs.hasConcretePayloadEvidence
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because evidence is still too thin for confident report surfacing.",
-      status: "audit_only"
-    };
+  const lateFallbackDecision = getLateFallbackPresentationDecision(input.packet);
+  if (lateFallbackDecision) {
+    return lateFallbackDecision;
   }
 
   return {
@@ -2248,6 +2487,57 @@ function selectPrimaryValidationFinding(findings: ScanValidationFinding[]) {
   );
 }
 
+function resolveLinkedValidationFindingForPacket(
+  packet: UnifiedFindingPacket,
+  validationFindingLookup: Map<string, ScanValidationFinding>
+) {
+  return selectPrimaryValidationFinding(
+    packet.sourceRefs
+      .filter((sourceRef): sourceRef is Extract<typeof sourceRef, { kind: "validation" }> => sourceRef.kind === "validation")
+      .flatMap((sourceRef) => {
+        const matched = findValidationFindingForKeys(validationFindingLookup, [sourceRef.ruleKey]);
+        return matched ? [matched] : [];
+      })
+  );
+}
+
+function buildCanonicalPresentationInput(
+  packet: UnifiedFindingPacket,
+  linkedValidationFinding: ScanValidationFinding | null
+) {
+  return {
+    evidence: packet.evidence?.pageUrls ?? [],
+    fallbackEvidence: {
+      ...(packet.evidence ?? {}),
+      normalizedConcernAssertionLevels: packet.concernContext?.assertionLevels ?? [],
+      normalizedConcernMaxAssertionLevel:
+        packet.concernContext?.assertionLevels?.includes("weak")
+          ? "weak"
+          : packet.concernContext?.assertionLevels?.includes("moderate")
+            ? "moderate"
+            : "strong",
+      normalizedConcernNegativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
+      summary: packet.summary,
+      unifiedFindingId: packet.unifiedFindingId
+    },
+    linkedValidationFinding,
+    observedValue: getBestObservedValue([packet.evidence?.snippets?.[0] ?? null, packet.summary]),
+    severity: packet.severity,
+    title: packet.title
+  };
+}
+
+function buildCanonicalPresentationSiblingInput(packet: UnifiedFindingPacket) {
+  return {
+    evidence: packet.evidence?.pageUrls ?? [],
+    fallbackEvidence: packet.evidence ?? null,
+    linkedValidationFinding: null,
+    observedValue: packet.summary,
+    severity: packet.severity,
+    title: packet.title
+  };
+}
+
 function appendUniqueSourceRef(
   sourceRefs: UnifiedFindingPacket["sourceRefs"],
   nextSourceRef: UnifiedFindingPacket["sourceRefs"][number]
@@ -2284,12 +2574,363 @@ function appendUniqueValidationFinding(
     : [...findings, nextFinding];
 }
 
-export function buildUnifiedFindingPackets(input: {
-  reviewFindingCandidates: UnifiedFindingCandidate[];
+function getStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function getFindingFamilyPacketEvents(scanEvents?: UnifiedFindingScanEvent[]) {
+  if (!Array.isArray(scanEvents) || scanEvents.length === 0) {
+    return [] as Array<{ packets: FindingFamilyPacketRecord[] }>;
+  }
+
+  return scanEvents.flatMap((event) => {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      return [];
+    }
+
+    const metadata = event.metadataJson as { phase?: unknown; packets?: unknown };
+    if (metadata.phase !== "finding_family_packets") {
+      return [];
+    }
+
+    return [
+      {
+        packets: Array.isArray(metadata.packets) ? (metadata.packets as FindingFamilyPacketRecord[]) : []
+      }
+    ];
+  });
+}
+
+function getCanonicalTargetsForFamilyPacket(packet: FindingFamilyPacketRecord) {
+  return Array.isArray(packet.canonicalTargets) ? (packet.canonicalTargets as FamilyPacketTargetRecord[]) : [];
+}
+
+function getSupportedUnifiedFindingsForFamilyPacket(packet: FindingFamilyPacketRecord) {
+  return Array.isArray(packet.supportedUnifiedFindings)
+    ? (packet.supportedUnifiedFindings as FamilyPacketFindingRecord[])
+    : [];
+}
+
+function getMatchingFamilyPacketTargets(
+  canonicalTargets: FamilyPacketTargetRecord[],
+  sourceSurfaceTypes: string[]
+) {
+  return canonicalTargets.filter((target) => {
+    const targetSurfaceTypes = getStringArray(target.supportedSurfaceTypes ?? target.sourceSurfaceTypes);
+    return sourceSurfaceTypes.length === 0 || targetSurfaceTypes.some((surfaceType) => sourceSurfaceTypes.includes(surfaceType));
+  });
+}
+
+function getFamilyPacketSourceUrls(targets: FamilyPacketTargetRecord[]) {
+  return uniqueStrings(
+    targets.flatMap((target) => {
+      const refs = Array.isArray(target.supportingRefs) ? (target.supportingRefs as Array<Record<string, unknown>>) : [];
+      return refs
+        .map((ref) => (typeof ref.url === "string" ? ref.url : null))
+        .filter((value): value is string => Boolean(value));
+    })
+  );
+}
+
+function getFamilyPacketPolicySnippets(targets: FamilyPacketTargetRecord[]) {
+  return uniqueStrings([
+    ...targets.flatMap((target) => [
+      typeof target.title === "string" ? target.title : null,
+      typeof target.snippet === "string" ? target.snippet : null
+    ])
+  ])
+    .map((snippet) => normalizePolicySnippet(snippet))
+    .filter((snippet): snippet is string => Boolean(snippet));
+}
+
+function buildFamilyPacketFallbackEvidence(input: {
+  familyId: string;
+  findingRecord: FamilyPacketFindingRecord;
+  findingId: string;
+  firstPageUrl: string | null;
+  firstSnippet: string | null;
+  pageUrls: string[];
+  policyPageType: string | null;
+  policySnippets: string[];
+  sourceSurfaceTypes: string[];
+  sourceUrls: string[];
+  supportedUnifiedFindings: FamilyPacketFindingRecord[];
+}) {
+  const evidencePayload =
+    input.findingRecord.evidencePayload && typeof input.findingRecord.evidencePayload === "object"
+      ? (input.findingRecord.evidencePayload as Record<string, unknown>)
+      : {};
+
+  return {
+    ...evidencePayload,
+    familyPacketCanonicalUrl: input.firstPageUrl,
+    familyPacketFamilyId: input.familyId,
+    familyPacketFindingId: input.findingId,
+    familyPacketSourceSurfaceTypes: input.sourceSurfaceTypes,
+    familyPacketSourceUrls: input.sourceUrls,
+    familyPacketSupportedFindings: input.supportedUnifiedFindings
+      .map((entry) => (typeof entry.findingId === "string" ? entry.findingId : null))
+      .filter((value): value is string => Boolean(value)),
+    familyPacketVerified: true,
+    pageUrl: input.firstPageUrl,
+    pageUrls: input.pageUrls,
+    policyIsPrimarySource: true,
+    policyPageType: input.policyPageType,
+    policySnippets: input.policySnippets,
+    policySummaryShort: input.firstSnippet,
+    sourceUrl: input.sourceUrls[0] ?? input.firstPageUrl,
+    sourceUrls: input.sourceUrls
+  };
+}
+
+function createInitialUnifiedFindingPacket(
+  definition: ReturnType<typeof getReportUnifiedFinding>,
+  candidate: ConcernBackedUnifiedFindingCandidate
+): UnifiedFindingPacket {
+  return {
+    unifiedFindingId: definition.id,
+    title: definition.label,
+    severity: candidate.severity,
+    summary: candidate.description,
+    confidenceBand: "low",
+    primaryPageUrl: null,
+    affectedPageCount: 0,
+    confidenceInputs: {
+      evidenceQualityFlags: [],
+      hasConcretePayloadEvidence: false,
+      hasDirectRuntimeEvidence: false,
+      hasKeyPageDiscoveryEvidence: false,
+      hasPageAttribution: false,
+      hasPolicyTextEvidence: false,
+      hasStructuredValidationEvidence: false,
+      isFallbackOnly: false,
+      issueCount: 0,
+      signalCount: 0,
+      sourceCount: 0,
+      sourceKinds: [],
+      validationCount: 0
+    },
+    categoryAlignments: definition.categoryAlignments,
+    sourceRefs: [],
+    evidence: undefined,
+    details: undefined,
+    concernContext: {
+      assertionLevels: [],
+      evidenceStrengthFlags: [],
+      externalSurfacingEligibilities: [],
+      negativeEvidenceFlags: [],
+      originTypes: [],
+      promotionEligibilities: []
+    }
+  };
+}
+
+function appendCandidateSourceRef(
+  packet: UnifiedFindingPacket,
+  candidate: ConcernBackedUnifiedFindingCandidate
+) {
+  if (candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey) {
+    return appendUniqueSourceRef(packet.sourceRefs, {
+      kind: "signal",
+      key: candidate.signalKey,
+      label: candidate.signalLabel,
+      source: candidate.signalSource
+    });
+  }
+
+  return appendUniqueSourceRef(packet.sourceRefs, { kind: "issue", title: candidate.title });
+}
+
+function mergeConcernContext(
+  existing: UnifiedFindingPacket["concernContext"] | undefined,
+  candidate: ConcernBackedUnifiedFindingCandidate
+): UnifiedFindingPacket["concernContext"] {
+  return {
+    assertionLevels: uniqueConcernFlags([
+      ...(existing?.assertionLevels ?? []),
+      ...(candidate.normalizedConcern ? [candidate.normalizedConcern.allowedNarrativeTier] : [])
+    ]),
+    evidenceStrengthFlags: uniqueConcernFlags([
+      ...(existing?.evidenceStrengthFlags ?? []),
+      ...(candidate.normalizedConcern?.evidenceStrengthFlags ?? [])
+    ]),
+    externalSurfacingEligibilities: uniqueConcernFlags([
+      ...(existing?.externalSurfacingEligibilities ?? []),
+      ...(candidate.normalizedConcern ? [candidate.normalizedConcern.externalSurfacingEligibility] : [])
+    ]),
+    negativeEvidenceFlags: uniqueConcernFlags([
+      ...(existing?.negativeEvidenceFlags ?? []),
+      ...(candidate.normalizedConcern?.negativeEvidenceFlags ?? [])
+    ]),
+    originTypes: uniqueConcernFlags([
+      ...(existing?.originTypes ?? []),
+      ...(candidate.normalizedConcern ? [candidate.normalizedConcern.originType] : [])
+    ]),
+    promotionEligibilities: uniqueConcernFlags([
+      ...(existing?.promotionEligibilities ?? []),
+      ...(candidate.normalizedConcern ? [candidate.normalizedConcern.promotionEligibility] : [])
+    ])
+  };
+}
+
+function finalizeUnifiedFindingPacket(input: {
+  candidate: ConcernBackedUnifiedFindingCandidate;
+  fallbackEvidence: ReturnType<typeof extractEvidenceFromFallback>;
+  fallbackEvidenceRows: Array<Record<string, unknown> | null | undefined>;
+  findingId: string;
+  linkedValidationFinding?: ScanValidationFinding | null;
+  packet: UnifiedFindingPacket;
   validationFindings: ScanValidationFinding[];
 }) {
+  input.packet.evidence = mergeEvidence(
+    input.packet.evidence,
+    input.fallbackEvidence,
+    input.candidate.evidence,
+    input.linkedValidationFinding
+  );
+  input.packet.evidence = sanitizeEvidenceForFinding(input.findingId, input.packet.evidence);
+
+  const attributedUrls = uniqueStrings([
+    ...(input.packet.evidence?.pageUrls ?? []),
+    ...(input.packet.evidence?.sourceUrls ?? []),
+    input.linkedValidationFinding?.pageUrl ?? null
+  ]);
+
+  input.packet.primaryPageUrl = attributedUrls[0] ?? null;
+  input.packet.affectedPageCount = attributedUrls.length;
+  input.packet.details = buildUnifiedFindingDetails({
+    fallbackEvidence: input.candidate.fallbackEvidence ?? null,
+    findingId: input.findingId,
+    linkedValidationFinding: input.linkedValidationFinding,
+    observedValue: input.candidate.observedValue,
+    summary: input.candidate.description
+  });
+  input.packet.confidenceInputs = deriveConfidenceInputs({
+    fallbackEvidenceRows: input.fallbackEvidenceRows,
+    packet: input.packet,
+    validationFindings: input.validationFindings
+  });
+  input.packet.confidenceBand = deriveConfidenceBand(input.packet.confidenceInputs, input.packet.severity);
+}
+
+function getFamilyPacketReviewFindingCandidates(scanEvents?: UnifiedFindingScanEvent[]) {
+  const packetEvents = getFindingFamilyPacketEvents(scanEvents);
+  if (packetEvents.length === 0) {
+    return [] as UnifiedFindingCandidate[];
+  }
+
+  const candidates: UnifiedFindingCandidate[] = [];
+
+  for (const event of packetEvents) {
+    const packets = event.packets;
+
+    for (const packet of packets) {
+      const familyId = typeof packet.familyId === "string" ? packet.familyId : null;
+      if (!familyId) {
+        continue;
+      }
+
+      const canonicalTargets = getCanonicalTargetsForFamilyPacket(packet);
+      const supportedUnifiedFindings = getSupportedUnifiedFindingsForFamilyPacket(packet);
+
+      for (const finding of supportedUnifiedFindings) {
+        const findingId = typeof finding.findingId === "string" ? finding.findingId : null;
+        const definition = findingId ? getReportUnifiedFinding(findingId) : null;
+        const packetizedSupportRule = findingId ? getPacketizedFindingSupportRule(findingId) : null;
+        if (!definition || !packetizedSupportRule) {
+          continue;
+        }
+
+        const sourceSurfaceTypes = getStringArray(finding.sourceSurfaceTypes);
+        const matchingTargets = getMatchingFamilyPacketTargets(canonicalTargets, sourceSurfaceTypes);
+
+        const pageUrls = uniqueStrings([
+          ...getStringArray(finding.evidenceUrls),
+          ...matchingTargets.flatMap((target) => (typeof target.canonicalUrl === "string" ? [target.canonicalUrl] : []))
+        ]);
+        const sourceUrls = getFamilyPacketSourceUrls(matchingTargets);
+        const policySnippets = getFamilyPacketPolicySnippets(matchingTargets);
+
+        const firstPageUrl = pageUrls[0] ?? null;
+        const firstSnippet = policySnippets[0] ?? null;
+        const policyPageType = getPacketizedPolicyPageType(findingId);
+
+        candidates.push({
+          categoryId: undefined,
+          description:
+            typeof finding.reason === "string" && finding.reason.trim().length > 0 ? finding.reason : definition.label,
+          evidence: uniqueStrings([...pageUrls, ...sourceUrls]),
+          fallbackEvidence: buildFamilyPacketFallbackEvidence({
+            familyId,
+            findingRecord: finding,
+            findingId,
+            firstPageUrl,
+            firstSnippet,
+            pageUrls,
+            policyPageType,
+            policySnippets,
+            sourceSurfaceTypes,
+            sourceUrls,
+            supportedUnifiedFindings
+          }),
+          linkedValidationFinding: null,
+          observedValue: firstSnippet,
+          severity: "medium",
+          sourceType: "issue",
+          title: definition.label
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function resolveUnifiedFindingIdForCandidate(candidate: UnifiedFindingCandidate) {
+  const familyPacketFindingId =
+    typeof candidate.fallbackEvidence?.familyPacketFindingId === "string"
+      ? getReportUnifiedFinding(candidate.fallbackEvidence.familyPacketFindingId)
+      : null;
+  if (familyPacketFindingId) {
+    return familyPacketFindingId.id;
+  }
+
+  return candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
+    ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey)?.id ??
+        getReportUnifiedFindingByAlias(candidate.title)?.id ??
+        null
+    : getReportUnifiedFindingByAlias(candidate.title)?.id ??
+        (candidate.linkedValidationFinding
+          ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)?.id ?? null
+          : null);
+}
+
+function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate) {
+  const findingId =
+    candidate.normalizedConcern?.suggestedUnifiedFindingId ?? resolveUnifiedFindingIdForCandidate(candidate);
+
+  return findingId ? getReportUnifiedFinding(findingId) : null;
+}
+
+export function buildUnifiedFindingPackets(input: {
+  reviewFindingCandidates: UnifiedFindingCandidate[];
+  scanEvents?: UnifiedFindingScanEvent[];
+  validationFindings: ScanValidationFinding[];
+}) {
+  const familyPacketCandidates = getFamilyPacketReviewFindingCandidates(input.scanEvents);
+  const packetBackedFindingIds = new Set(
+    familyPacketCandidates
+      .map((candidate) => resolveUnifiedFindingIdForCandidate(candidate))
+      .filter((value): value is string => Boolean(value))
+  );
+  const reviewFindingCandidates = input.reviewFindingCandidates.filter((candidate) => {
+    const findingId = resolveUnifiedFindingIdForCandidate(candidate);
+    return !findingId || !packetBackedFindingIds.has(findingId);
+  });
   const normalizedConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: input.reviewFindingCandidates,
+    reviewFindingCandidates: [...reviewFindingCandidates, ...familyPacketCandidates],
     validationFindings: input.validationFindings
   });
   const normalizedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);
@@ -2309,58 +2950,14 @@ export function buildUnifiedFindingPackets(input: {
 
     const existing = packets.get(findingId);
     const fallbackEvidence = extractEvidenceFromFallback(candidate.fallbackEvidence ?? null);
-    const nextPacket: UnifiedFindingPacket = existing ?? {
-      unifiedFindingId: definition.id,
-      title: definition.label,
-      severity: candidate.severity,
-      summary: candidate.description,
-      confidenceBand: "low",
-      primaryPageUrl: null,
-      affectedPageCount: 0,
-      confidenceInputs: {
-        evidenceQualityFlags: [],
-        hasConcretePayloadEvidence: false,
-        hasDirectRuntimeEvidence: false,
-        hasKeyPageDiscoveryEvidence: false,
-        hasPageAttribution: false,
-        hasPolicyTextEvidence: false,
-        hasStructuredValidationEvidence: false,
-        isFallbackOnly: false,
-        issueCount: 0,
-        signalCount: 0,
-        sourceCount: 0,
-        sourceKinds: [],
-        validationCount: 0
-      },
-      categoryAlignments: definition.categoryAlignments,
-      sourceRefs: [],
-      evidence: undefined,
-      details: undefined,
-      concernContext: {
-        assertionLevels: [],
-        evidenceStrengthFlags: [],
-        externalSurfacingEligibilities: [],
-        negativeEvidenceFlags: [],
-        originTypes: [],
-        promotionEligibilities: []
-      }
-    };
+    const nextPacket: UnifiedFindingPacket = existing ?? createInitialUnifiedFindingPacket(definition, candidate);
 
     nextPacket.severity = maxSeverity(nextPacket.severity, candidate.severity);
     if (!existing || nextPacket.summary.trim().length === 0) {
       nextPacket.summary = candidate.description;
     }
 
-    if (candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey) {
-      nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, {
-        kind: "signal",
-        key: candidate.signalKey,
-        label: candidate.signalLabel,
-        source: candidate.signalSource
-      });
-    } else {
-      nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, { kind: "issue", title: candidate.title });
-    }
+    nextPacket.sourceRefs = appendCandidateSourceRef(nextPacket, candidate);
 
     if (linkedValidationFinding) {
       nextPacket.sourceRefs = appendUniqueSourceRef(nextPacket.sourceRefs, {
@@ -2378,70 +2975,21 @@ export function buildUnifiedFindingPackets(input: {
       ...(fallbackEvidenceByPacket.get(findingId) ?? []),
       candidate.fallbackEvidence
     ]);
-    nextPacket.concernContext = {
-      assertionLevels: uniqueConcernFlags([
-        ...(existing?.concernContext?.assertionLevels ?? []),
-        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.allowedNarrativeTier] : [])
-      ]),
-      evidenceStrengthFlags: uniqueConcernFlags([
-        ...(existing?.concernContext?.evidenceStrengthFlags ?? []),
-        ...(candidate.normalizedConcern?.evidenceStrengthFlags ?? [])
-      ]),
-      externalSurfacingEligibilities: uniqueConcernFlags([
-        ...(existing?.concernContext?.externalSurfacingEligibilities ?? []),
-        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.externalSurfacingEligibility] : [])
-      ]),
-      negativeEvidenceFlags: uniqueConcernFlags([
-        ...(existing?.concernContext?.negativeEvidenceFlags ?? []),
-        ...(candidate.normalizedConcern?.negativeEvidenceFlags ?? [])
-      ]),
-      originTypes: uniqueConcernFlags([
-        ...(existing?.concernContext?.originTypes ?? []),
-        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.originType] : [])
-      ]),
-      promotionEligibilities: uniqueConcernFlags([
-        ...(existing?.concernContext?.promotionEligibilities ?? []),
-        ...(candidate.normalizedConcern ? [candidate.normalizedConcern.promotionEligibility] : [])
-      ])
-    };
-
-    nextPacket.evidence = mergeEvidence(nextPacket.evidence, fallbackEvidence, candidate.evidence, linkedValidationFinding);
-    nextPacket.evidence = sanitizeEvidenceForFinding(findingId, nextPacket.evidence);
-    const attributedUrls = uniqueStrings([
-      ...(nextPacket.evidence?.pageUrls ?? []),
-      ...(nextPacket.evidence?.sourceUrls ?? []),
-      linkedValidationFinding?.pageUrl ?? null
-    ]);
-    nextPacket.primaryPageUrl = attributedUrls[0] ?? null;
-    nextPacket.affectedPageCount = attributedUrls.length;
-    nextPacket.details = buildUnifiedFindingDetails({
-      fallbackEvidence: candidate.fallbackEvidence ?? null,
+    nextPacket.concernContext = mergeConcernContext(existing?.concernContext, candidate);
+    finalizeUnifiedFindingPacket({
+      candidate,
+      fallbackEvidence,
+      fallbackEvidenceRows: fallbackEvidenceByPacket.get(findingId) ?? [],
       findingId,
       linkedValidationFinding,
-      observedValue: candidate.observedValue,
-      summary: candidate.description
-    });
-    nextPacket.confidenceInputs = deriveConfidenceInputs({
-      fallbackEvidenceRows: fallbackEvidenceByPacket.get(findingId) ?? [],
       packet: nextPacket,
       validationFindings: validationByPacket.get(findingId) ?? []
     });
-    nextPacket.confidenceBand = deriveConfidenceBand(nextPacket.confidenceInputs, nextPacket.severity);
     packets.set(findingId, nextPacket);
   };
 
   for (const candidate of normalizedCandidates) {
-    const mappedFinding =
-      (candidate.normalizedConcern?.suggestedUnifiedFindingId
-        ? getReportUnifiedFinding(candidate.normalizedConcern.suggestedUnifiedFindingId)
-        : null) ??
-      (candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
-        ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey) ??
-          getReportUnifiedFindingByAlias(candidate.title)
-        : getReportUnifiedFindingByAlias(candidate.title) ??
-          (candidate.linkedValidationFinding
-            ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)
-            : null));
+    const mappedFinding = resolveUnifiedFindingForCandidate(candidate);
 
     if (!mappedFinding) {
       continue;
@@ -2458,54 +3006,23 @@ export function buildUnifiedFindingPackets(input: {
 
 export function buildUnifiedFindingDisplayPackets(input: {
   reviewFindingCandidates: UnifiedFindingCandidate[];
+  scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
   validationFindingLookup: Map<string, ScanValidationFinding>;
 }) {
   const packets = buildUnifiedFindingPackets({
     reviewFindingCandidates: input.reviewFindingCandidates,
+    scanEvents: input.scanEvents,
     validationFindings: input.validationFindings
   });
 
   return packets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
-    const linkedValidationFinding = selectPrimaryValidationFinding(
-      packet.sourceRefs
-        .filter((sourceRef): sourceRef is Extract<typeof sourceRef, { kind: "validation" }> => sourceRef.kind === "validation")
-        .flatMap((sourceRef) => {
-          const matched = findValidationFindingForKeys(input.validationFindingLookup, [sourceRef.ruleKey]);
-          return matched ? [matched] : [];
-        })
-    );
+    const linkedValidationFinding = resolveLinkedValidationFindingForPacket(packet, input.validationFindingLookup);
 
     const siblingRows = rows.filter((row) => row.unifiedFindingId !== packet.unifiedFindingId);
     const presentation = buildCanonicalReviewFindingPresentation(
-      {
-        evidence: packet.evidence?.pageUrls ?? [],
-        fallbackEvidence: {
-          ...(packet.evidence ?? {}),
-          normalizedConcernAssertionLevels: packet.concernContext?.assertionLevels ?? [],
-          normalizedConcernMaxAssertionLevel:
-            packet.concernContext?.assertionLevels?.includes("weak")
-              ? "weak"
-              : packet.concernContext?.assertionLevels?.includes("moderate")
-                ? "moderate"
-                : "strong",
-          normalizedConcernNegativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
-          summary: packet.summary,
-          unifiedFindingId: packet.unifiedFindingId
-        },
-        linkedValidationFinding,
-        observedValue: getBestObservedValue([packet.evidence?.snippets?.[0] ?? null, packet.summary]),
-        severity: packet.severity,
-        title: packet.title
-      },
-      siblingRows.map((row) => ({
-        evidence: row.evidence?.pageUrls ?? [],
-        fallbackEvidence: row.evidence ?? null,
-        linkedValidationFinding: null,
-        observedValue: row.summary,
-        severity: row.severity,
-        title: row.title
-      }))
+      buildCanonicalPresentationInput(packet, linkedValidationFinding),
+      siblingRows.map((row) => buildCanonicalPresentationSiblingInput(row))
     );
     const presentationDecision = buildPresentationDecision({
       packet,

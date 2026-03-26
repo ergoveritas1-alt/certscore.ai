@@ -660,6 +660,26 @@ export type KeyPageDiscoveryPageSummary = {
     | "repeated_failures";
 };
 
+export type FinancialValidationEvidence = {
+  pageEvidence: Array<{
+    evidenceId: string;
+    matchedText: string | null;
+    metadata: Record<string, unknown> | null;
+    pageRole: string;
+    pageType: string;
+    pageUrl: string;
+  }>;
+  signalHits: Array<{
+    evidenceRefs: string[];
+    id: string;
+    pageRole: string;
+    pageType: string;
+    pageUrl: string;
+    payload: Record<string, unknown>;
+    signalKey: string;
+  }>;
+};
+
 export type KeyPageDiscoverySummary = {
   localeHints: string[];
   sitemapUrls: string[];
@@ -676,6 +696,7 @@ export type KeyPageDiscoverySummary = {
     maxSameBrandCandidatesPerType: number;
   };
   candidates: KeyPageDiscoveryCandidate[];
+  financialValidationEvidence?: FinancialValidationEvidence | null;
   pageSummaries: KeyPageDiscoveryPageSummary[];
   sameBrandSubdomainHostsInspected: string[];
 };

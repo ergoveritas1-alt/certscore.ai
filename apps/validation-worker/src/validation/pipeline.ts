@@ -24,7 +24,7 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
-import { validateFindingWithLlm } from "./llm-client";
+import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
 import { createValidationCollectQueue, createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
@@ -234,6 +234,169 @@ function buildPolicyRuntimeFinding(input: {
     subtype: "policy_runtime_review" as const,
     title: input.title
   };
+}
+
+function classifyFinancialValidationPage(pageType: string | null) {
+  const raw = (pageType ?? "").toLowerCase();
+
+  if (/pricing|fee/.test(raw)) {
+    return "pricing_or_fees" as const;
+  }
+  if (/privacy|terms|disclosure|legal|policy/.test(raw)) {
+    return "disclosure_or_legal" as const;
+  }
+  if (/contact|about|support/.test(raw)) {
+    return "identity_or_contact" as const;
+  }
+  if (/product|offer|account|card|loan|trading|invest|savings|apy|apr/.test(raw)) {
+    return "financial_offer" as const;
+  }
+  if (/checkout|bnpl|installment|finance/.test(raw)) {
+    return "quasi_financial_offer" as const;
+  }
+
+  return "unknown" as const;
+}
+
+function getStringArray(record: Record<string, unknown> | null | undefined, key: string) {
+  return Array.isArray(record?.[key])
+    ? (record?.[key] as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+}
+
+function getStringValue(record: Record<string, unknown> | null | undefined, key: string) {
+  return typeof record?.[key] === "string" && String(record[key]).trim().length > 0 ? String(record[key]).trim() : null;
+}
+
+function getFinancialValidationDefinition(signalKey: string) {
+  switch (signalKey) {
+    case "commercial.explicit_fee_disclosure_text_present":
+      return {
+        description: "The scan retained explicit fee disclosure text on a public-facing pricing or offer page.",
+        ruleKey: "financial_review.fee_disclosure_present",
+        severity: "medium" as const,
+        title: "Fee disclosure present",
+        unifiedFindingId: "fee_disclosure_present" as const
+      };
+    case "financial.apr_or_interest_rate_disclosure_text_present":
+      return {
+        description: "The scan retained explicit APR or interest-rate disclosure text on a public-facing financial offer page.",
+        ruleKey: "financial_review.apr_or_interest_rate_disclosure_present",
+        severity: "medium" as const,
+        title: "APR or interest-rate disclosure present",
+        unifiedFindingId: "apr_or_interest_rate_disclosure_present" as const
+      };
+    case "financial.past_performance_disclaimer_text_present":
+      return {
+        description: "The scan retained an explicit past-performance disclaimer on a public-facing strategy, offer, or disclosure page.",
+        ruleKey: "financial_review.past_performance_disclaimer_present",
+        severity: "low" as const,
+        title: "Past-performance disclaimer present",
+        unifiedFindingId: "past_performance_disclaimer_present" as const
+      };
+    default:
+      return null;
+  }
+}
+
+function deriveFinancialValidationFindings(input: Awaited<ReturnType<typeof loadCompletedScanArtifacts>>) {
+  const evidenceById = new Map(
+    input.pageEvidence.map((row) => [String(row.evidence_id ?? ""), row])
+  );
+
+  const findings: Array<{
+    category: "scan_report_review";
+    description: string;
+    evidence: Record<string, unknown>;
+    findingFamily: string;
+    findingScope: string;
+    findingSource: string;
+    findingSubject: string;
+    pageUrl: string | null;
+    rank: number;
+    ruleKey: string;
+    severity: "high" | "medium" | "low";
+    subtype: string | null;
+    title: string;
+  }> = [];
+
+  for (const hit of input.signalHits) {
+    const signalKey = typeof hit.signal_key === "string" ? hit.signal_key : null;
+    const definition = signalKey ? getFinancialValidationDefinition(signalKey) : null;
+    if (!definition) {
+      continue;
+    }
+
+    const payload = hit.payload && typeof hit.payload === "object" ? (hit.payload as Record<string, unknown>) : null;
+    const evidenceRows = getStringArray(hit, "evidence_refs")
+      .map((evidenceId) => evidenceById.get(evidenceId) ?? null)
+      .filter((row): row is Record<string, unknown> => Boolean(row));
+    const matchedTexts = [...new Set(
+      evidenceRows
+        .map((row) => getStringValue(row, "matched_text"))
+        .filter((value): value is string => Boolean(value))
+    )];
+    const supportingHeadings = [...new Set(
+      evidenceRows
+        .map((row) => {
+          const metadata = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : null;
+          return getStringValue(metadata, "surroundingHeading") ?? getStringValue(metadata, "surrounding_heading");
+        })
+        .filter((value): value is string => Boolean(value))
+    )];
+    const matchedTerm =
+      getStringValue(payload, "matchedTerm") ??
+      getStringValue(payload, "matched_term") ??
+      getStringValue(payload, "matchedPhrase") ??
+      getStringValue(payload, "matched_phrase") ??
+      getStringValue(payload, "matchedRateTerm") ??
+      getStringValue(payload, "matched_rate_term") ??
+      matchedTexts[0] ??
+      null;
+    const pageType =
+      getStringValue(hit, "page_type") ??
+      evidenceRows.map((row) => getStringValue(row, "page_type")).find((value): value is string => Boolean(value)) ??
+      null;
+    const pageUrl =
+      getStringValue(hit, "page_url") ??
+      evidenceRows.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
+      null;
+    const taxonomy = deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: definition.ruleKey,
+      subtype: "financial_review"
+    });
+
+    findings.push({
+      category: "scan_report_review",
+      description: definition.description,
+      evidence: {
+        matchedPhrase: matchedTerm,
+        matchedSnippet: matchedTexts[0] ?? null,
+        pageClassification: classifyFinancialValidationPage(pageType),
+        pageType,
+        pageUrl,
+        policySnippets: matchedTexts,
+        signalKey,
+        sourceUrls: pageUrl ? [pageUrl] : [],
+        supportingHeadings,
+        supportingSignals: [signalKey],
+        unifiedFindingId: definition.unifiedFindingId
+      },
+      findingFamily: taxonomy.familyId,
+      findingScope: "page",
+      findingSource: "supplemental_validation",
+      findingSubject: "disclosure",
+      pageUrl,
+      rank: 0,
+      ruleKey: definition.ruleKey,
+      severity: definition.severity,
+      subtype: "financial_review",
+      title: definition.title
+    });
+  }
+
+  return findings;
 }
 
 type CookieDisclosureRow = {
@@ -964,6 +1127,7 @@ export function deriveValidationFindings(input: Awaited<ReturnType<typeof loadCo
   }
 
   findings.push(
+    ...deriveFinancialValidationFindings(input),
     ...deriveCookieRuntimeFindings({
       policyEnrichments: input.policyEnrichments,
       runtimeArtifacts: input.runtimeArtifacts
@@ -1136,26 +1300,79 @@ export async function processValidationVerdictJob(validationRunId: string) {
     const scanArtifacts = await loadCompletedScanArtifacts(run.scan_id);
 
     for (const finding of findings) {
-      const verdict = await validateFindingWithLlm({
-        domain: run.hostname,
-        finding: {
-          category: finding.category,
-          description: finding.description,
-          evidence: finding.evidence_json ?? {},
-          pageUrl: finding.page_url ?? null,
-          ruleKey: finding.rule_key,
-          severity: finding.severity,
-          title: finding.title
-        },
-        scanEvidence: {
-          pages: scanArtifacts.pages,
-          policyEnrichments: scanArtifacts.policyEnrichments,
-          preconsentViolations: scanArtifacts.preconsentViolations,
-          runtimeArtifacts: scanArtifacts.runtimeArtifacts,
-          snapshot: scanArtifacts.snapshot,
-          trackerVendors: scanArtifacts.trackerVendors
-        }
-      });
+      const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
+      const ruleKey = typeof finding.rule_key === "string" ? finding.rule_key : "";
+      const verdict =
+        ruleKey.startsWith("financial_review.") && typeof rawEvidence.unifiedFindingId === "string"
+          ? await validateFinancialFindingWithLlm({
+              candidateFindingId: rawEvidence.unifiedFindingId as
+                | "fee_disclosure_present"
+                | "apr_or_interest_rate_disclosure_present"
+                | "past_performance_disclaimer_present",
+              evidence: {
+                exactMatchTerm: typeof rawEvidence.matchedPhrase === "string" ? rawEvidence.matchedPhrase : null,
+                matchedPhrases:
+                  Array.isArray(rawEvidence.matchedPhrases)
+                    ? (rawEvidence.matchedPhrases as unknown[]).filter((value): value is string => typeof value === "string")
+                    : typeof rawEvidence.matchedPhrase === "string"
+                      ? [rawEvidence.matchedPhrase]
+                      : [],
+                pageClassification:
+                  rawEvidence.pageClassification === "financial_offer" ||
+                  rawEvidence.pageClassification === "quasi_financial_offer" ||
+                  rawEvidence.pageClassification === "pricing_or_fees" ||
+                  rawEvidence.pageClassification === "disclosure_or_legal" ||
+                  rawEvidence.pageClassification === "identity_or_contact"
+                    ? rawEvidence.pageClassification
+                    : "unknown",
+                pageUrl: typeof rawEvidence.pageUrl === "string" ? rawEvidence.pageUrl : null,
+                signalKeys: Array.isArray(rawEvidence.supportingSignals)
+                  ? (rawEvidence.supportingSignals as unknown[]).filter((value): value is string => typeof value === "string")
+                  : typeof rawEvidence.signalKey === "string"
+                    ? [rawEvidence.signalKey]
+                    : [],
+                snippets: Array.isArray(rawEvidence.policySnippets)
+                  ? (rawEvidence.policySnippets as unknown[]).filter((value): value is string => typeof value === "string")
+                  : typeof rawEvidence.matchedSnippet === "string"
+                    ? [rawEvidence.matchedSnippet]
+                    : [],
+                sourceUrls: Array.isArray(rawEvidence.sourceUrls)
+                  ? (rawEvidence.sourceUrls as unknown[]).filter((value): value is string => typeof value === "string")
+                  : typeof rawEvidence.pageUrl === "string"
+                    ? [rawEvidence.pageUrl]
+                    : [],
+                supportingHeadings: Array.isArray(rawEvidence.supportingHeadings)
+                  ? (rawEvidence.supportingHeadings as unknown[]).filter((value): value is string => typeof value === "string")
+                  : []
+              },
+              negativeEvidenceFlags: Array.isArray(rawEvidence.negativeEvidenceFlags)
+                ? (rawEvidence.negativeEvidenceFlags as unknown[]).filter((value): value is string => typeof value === "string")
+                : [],
+              scanContext: {
+                domain: run.hostname,
+                pageType: typeof rawEvidence.pageType === "string" ? rawEvidence.pageType : null
+              }
+            })
+          : await validateFindingWithLlm({
+              domain: run.hostname,
+              finding: {
+                category: finding.category,
+                description: finding.description,
+                evidence: rawEvidence,
+                pageUrl: finding.page_url ?? null,
+                ruleKey,
+                severity: finding.severity,
+                title: finding.title
+              },
+              scanEvidence: {
+                pages: scanArtifacts.pages,
+                policyEnrichments: scanArtifacts.policyEnrichments,
+                preconsentViolations: scanArtifacts.preconsentViolations,
+                runtimeArtifacts: scanArtifacts.runtimeArtifacts,
+                snapshot: scanArtifacts.snapshot,
+                trackerVendors: scanArtifacts.trackerVendors
+              }
+            });
 
       await upsertValidationVerdict({
         agreementScore: verdict.agreementScore,

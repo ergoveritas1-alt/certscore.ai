@@ -154,6 +154,29 @@ test("uses calibrated generic copy for pre-consent tracking detected", () => {
   assert.equal(presentation.confidenceScore, "0.7");
 });
 
+test("uses positive surface copy for privacy policy present", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "positive-privacy",
+        ruleKey: "disclosure.privacy_policy_present",
+        title: "Privacy policy surface present",
+        evidence: {
+          pageUrls: ["https://www.example.com/privacy"]
+        }
+      }),
+      observedValue: "Privacy Policy | Example",
+      severity: "low",
+      title: "Privacy policy surface present"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /visible privacy policy surface/i);
+  assert.match(presentation.suggestedFix, /Keep the privacy policy linked/i);
+  assert.equal(presentation.confidenceScore, "0.45");
+});
+
 test("uses max-confidence evidence-url copy for pre-consent tracker evidence URLs", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
@@ -223,6 +246,13 @@ test("uses max-confidence vendor copy for pre-consent tracker vendors", () => {
   );
   assert.equal(presentation.suggestedBestPractice?.label, "ICO");
   assert.equal(presentation.confidenceScore, "1.0");
+});
+
+test("normalizes live-audit consent titles into canonical names", () => {
+  assert.equal(normalizeFindingName("Possible pre-consent tracking signals on first load"), "Trackers observed before consent");
+  assert.equal(normalizeFindingName("Reject path may not fully suppress non-essential activity"), "Trackers persisted after reject");
+  assert.equal(normalizeFindingName("Reject path appears less direct than accept path"), "Reject-all control missing");
+  assert.equal(normalizeFindingName("Browser-level privacy signal effect not evident"), "GPC signal not honored");
 });
 
 test("uses count-based copy for pre-consent tracker violations", () => {
@@ -840,7 +870,7 @@ test("uses strong systemic accessibility copy for negative accessibility risk sc
   assert.ok(Number(presentation.confidenceScore) >= 0.7);
 });
 
-test("uses max-strength accessibility risk copy for critical negative outliers", () => {
+test("keeps critical negative accessibility risk scores in cautious reviewer-triage language", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
       linkedValidationFinding: makeLinkedFinding({
@@ -864,17 +894,17 @@ test("uses max-strength accessibility risk copy for critical negative outliers",
   assert.equal(presentation.findingName, "Accessibility risk score");
   assert.match(
     presentation.whyThisMatters,
-    /accessibility risk score of -10|critical outlier|insurmountable barriers|max(imum)? legal exposure/i
+    /merits prompt manual review|risk score of -10|does not by itself establish conformance status|without representative examples/i
   );
   assert.match(
     presentation.suggestedFix,
-    /immediate technical remediation|eliminate all keyboard traps|complete ARIA landmark structure|machine-readable tab order/i
+    /representative automated WCAG findings first|manually verify|retain concrete examples/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.equal(presentation.confidenceScore, "1.0");
+  assert.equal(presentation.confidenceScore, "0.8");
 });
 
-test("uses max-strength accessibility risk copy for score 100", () => {
+test("keeps score-100 accessibility risk copy in cautious reviewer-triage language", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {
       linkedValidationFinding: makeLinkedFinding({
@@ -898,14 +928,14 @@ test("uses max-strength accessibility risk copy for score 100", () => {
   assert.equal(presentation.findingName, "Accessibility risk score");
   assert.match(
     presentation.whyThisMatters,
-    /accessibility risk score of 100|structural omissions|missing ARIA landmarks|assistive technologies/i
+    /merits prompt manual review|risk score of 100|does not by itself establish conformance status|without representative examples/i
   );
   assert.match(
     presentation.suggestedFix,
-    /global site templates|ARIA landmark structures|unique, machine-readable labels|logical tab order/i
+    /representative automated WCAG findings first|manually verify|retain concrete examples/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.equal(presentation.confidenceScore, "1.0");
+  assert.equal(presentation.confidenceScore, "0.8");
 });
 
 test("uses aria-specific accessibility copy", () => {

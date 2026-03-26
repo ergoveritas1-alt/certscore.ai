@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { deriveValidationFindings, determineValidationCollectAction } from "./pipeline";
 
 function buildArtifacts(overrides?: {
+  pageEvidence?: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
   runtimeArtifacts?: Record<string, unknown> | null;
+  signalHits?: Array<Record<string, unknown>>;
   snapshot?: Record<string, unknown>;
 }) {
   return {
+    pageEvidence: overrides?.pageEvidence ?? [],
     pages: [{ page_type: "privacy_policy", page_url: "https://www.example.com/privacy", fetch_status: "ok" }],
     policyEnrichments: overrides?.policyEnrichments ?? [
       {
@@ -38,6 +41,7 @@ function buildArtifacts(overrides?: {
     preconsentViolations: [],
     runtimeArtifacts: overrides?.runtimeArtifacts ?? null,
     scan: { id: "scan_123" },
+    signalHits: overrides?.signalHits ?? [],
     snapshot: overrides?.snapshot ?? {
       california_exposure_likely: true,
       eu_exposure_likely: true,
@@ -63,6 +67,48 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("deriveValidationFindings emits pilot financial review rows from retained signal evidence", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-1",
+          matched_text: "A monthly fee of $25 applies to premium managed accounts.",
+          metadata: {
+            surroundingHeading: "Pricing"
+          },
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/pricing"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-1",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/pricing",
+          payload: {
+            matchedTerm: "monthly fee"
+          },
+          signal_key: "commercial.explicit_fee_disclosure_text_present"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "financial_review.fee_disclosure_present");
+  assert.ok(finding);
+  assert.equal(finding?.title, "Fee disclosure present");
+  assert.equal(finding?.pageUrl, "https://www.example.com/pricing");
+  assert.equal(finding?.evidence.pageClassification, "pricing_or_fees");
+  assert.equal(finding?.evidence.matchedPhrase, "monthly fee");
+  assert.deepEqual(finding?.evidence.policySnippets, ["A monthly fee of $25 applies to premium managed accounts."]);
+  assert.deepEqual(finding?.evidence.supportingSignals, ["commercial.explicit_fee_disclosure_text_present"]);
+  assert.equal(finding?.evidence.unifiedFindingId, "fee_disclosure_present");
 });
 
 test("validation collect hands off queued and running scans to WS01 execution", () => {

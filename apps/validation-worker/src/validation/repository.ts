@@ -12,7 +12,8 @@ import {
   getCrawlerPublicUrl,
   getCrawlerUserAgent,
   getPlanDefinition,
-  normalizeUrl
+  normalizeUrl,
+  type FinancialValidationEvidence
 } from "@website-signal-risk-scanner/shared";
 import { getWorkerEnv } from "../env";
 
@@ -65,6 +66,56 @@ type ValidationRunRow = {
 
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+
+function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
+export function extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const summary = runtimeArtifacts?.key_page_discovery_summary;
+  if (!summary || typeof summary !== "object") {
+    return {
+      pageEvidence: [] as Array<Record<string, unknown>>,
+      signalHits: [] as Array<Record<string, unknown>>
+    };
+  }
+
+  const financialValidationEvidence = (summary as { financialValidationEvidence?: FinancialValidationEvidence | null })
+    .financialValidationEvidence;
+
+  if (!financialValidationEvidence) {
+    return {
+      pageEvidence: [] as Array<Record<string, unknown>>,
+      signalHits: [] as Array<Record<string, unknown>>
+    };
+  }
+
+  return {
+    pageEvidence: financialValidationEvidence.pageEvidence.map((evidence) => ({
+      evidence_id: evidence.evidenceId,
+      matched_text: evidence.matchedText,
+      metadata: evidence.metadata,
+      page_role: evidence.pageRole,
+      page_type: evidence.pageType,
+      page_url: evidence.pageUrl
+    })) as Array<Record<string, unknown>>,
+    signalHits: financialValidationEvidence.signalHits.map((hit) => ({
+      evidence_refs: hit.evidenceRefs,
+      id: hit.id,
+      page_role: hit.pageRole,
+      page_type: hit.pageType,
+      page_url: hit.pageUrl,
+      payload: hit.payload,
+      signal_key: hit.signalKey
+    })) as Array<Record<string, unknown>>
+  };
+}
+
+function isMissingColumnError(error: { code?: string | null; message?: string | null } | null | undefined, column: string) {
+  const message = error?.message ?? "";
+  return message.includes(`Could not find the '${column}' column`) || message.includes(`column "${column}"`);
+}
 
 function rankBandForRank(rank: number | null) {
   if (!rank) {
@@ -585,7 +636,9 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     { data: pages, error: pagesError },
     { data: policyEnrichments, error: policyEnrichmentError },
     { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: preconsentViolations, error: preconsentError }
+    { data: preconsentViolations, error: preconsentError },
+    { data: signalHits, error: signalHitsError },
+    { data: pageEvidence, error: pageEvidenceError }
   ] = await Promise.all([
     supabase
       .from("scans")
@@ -616,6 +669,19 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     supabase
       .from("scan_preconsent_violations")
       .select("vendor_name, evidence_urls, collection_endpoint_type")
+      .eq("scan_id", scanId),
+    supabase
+      .from("scan_signal_hits")
+      .select("id, signal_key, page_url, page_type, page_role, evidence_refs, payload")
+      .eq("scan_id", scanId)
+      .in("signal_key", [
+        "commercial.explicit_fee_disclosure_text_present",
+        "financial.apr_or_interest_rate_disclosure_text_present",
+        "financial.past_performance_disclaimer_text_present"
+      ]),
+    supabase
+      .from("scan_page_evidence")
+      .select("evidence_id, page_url, page_type, page_role, matched_text, metadata")
       .eq("scan_id", scanId)
   ]);
 
@@ -643,14 +709,27 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   if (preconsentError) {
     throw new Error(`Failed to load pre-consent violations ${scanId}: ${preconsentError.message}`);
   }
+  if (signalHitsError && !isMissingOptionalTableError(signalHitsError)) {
+    throw new Error(`Failed to load signal hits ${scanId}: ${signalHitsError.message}`);
+  }
+  if (pageEvidenceError && !isMissingOptionalTableError(pageEvidenceError)) {
+    throw new Error(`Failed to load page evidence ${scanId}: ${pageEvidenceError.message}`);
+  }
+
+  const runtimeArtifactsRecord = (runtimeArtifacts as Record<string, unknown> | null) ?? null;
+  const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
+  const loadedPageEvidence = (pageEvidenceError ? [] : pageEvidence ?? []) as Array<Record<string, unknown>>;
+  const loadedSignalHits = (signalHitsError ? [] : signalHits ?? []) as Array<Record<string, unknown>>;
 
   return {
+    pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    runtimeArtifacts: runtimeArtifactsRecord,
     scan: (scan as Record<string, unknown> | null) ?? null,
+    signalHits: loadedSignalHits.length > 0 ? loadedSignalHits : fallbackFinancialEvidence.signalHits,
     snapshot: (snapshot as Record<string, unknown> | null) ?? null,
     trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>
   };
@@ -689,37 +768,44 @@ export async function replaceValidationRunFindings(
     return [];
   }
 
-  const { data, error } = await supabase
+  const baseRows = findings.map((finding) => ({
+    validation_run_id: runId,
+    category: finding.category,
+    subtype: finding.subtype,
+    finding_family: finding.findingFamily,
+    finding_source: finding.findingSource,
+    finding_scope: finding.findingScope,
+    finding_subject: finding.findingSubject,
+    rule_key: finding.ruleKey,
+    title: finding.title,
+    description: finding.description,
+    severity: finding.severity,
+    page_url: finding.pageUrl,
+    finding_rank: finding.rank,
+    evidence_json: finding.evidence
+  }));
+
+  let insertResult = await supabase
     .from("validation_run_findings")
-    .insert(
-      findings.map((finding) => ({
-        validation_run_id: runId,
-        category: finding.category,
-        subtype: finding.subtype,
-        finding_family: finding.findingFamily,
-        finding_source: finding.findingSource,
-        finding_scope: finding.findingScope,
-        finding_subject: finding.findingSubject,
-        rule_key: finding.ruleKey,
-        title: finding.title,
-        description: finding.description,
-        severity: finding.severity,
-        page_url: finding.pageUrl,
-        finding_rank: finding.rank,
-        evidence_json: finding.evidence
-      }))
-    )
+    .insert(baseRows.map((row) => ({ ...row, rank: row.finding_rank })))
     .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
 
-  if (error) {
-    throw new Error(`Failed to insert validation findings for run ${runId}: ${error.message}`);
+  if (insertResult.error && isMissingColumnError(insertResult.error, "rank")) {
+    insertResult = await supabase
+      .from("validation_run_findings")
+      .insert(baseRows)
+      .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
+  }
+
+  if (insertResult.error) {
+    throw new Error(`Failed to insert validation findings for run ${runId}: ${insertResult.error.message}`);
   }
 
   await updateValidationRun(runId, {
     finding_count: findings.length
   });
 
-  return (data ?? []) as Array<Record<string, unknown>>;
+  return (insertResult.data ?? []) as Array<Record<string, unknown>>;
 }
 
 export async function loadValidationRunFindings(runId: string) {
@@ -806,6 +892,7 @@ export async function finalizeValidationRun(runId: string) {
   await updateValidationRun(runId, {
     average_agreement_score: averageAgreementScore,
     completed_at: completedAt.toISOString(),
+    error_message: null,
     reviewed_finding_count: scores.length,
     status: "completed"
   });

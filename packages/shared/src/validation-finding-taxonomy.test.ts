@@ -87,6 +87,23 @@ test("maps cookie runtime findings to explicit cookie runtime metadata", () => {
   );
 });
 
+test("maps financial review findings to explicit financial validation metadata", () => {
+  assert.deepEqual(
+    deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: "financial_review.fee_disclosure_present",
+      subtype: "financial_review"
+    }),
+    {
+      familyId: "financial_review",
+      familyLabel: "Financial Review",
+      scope: "page",
+      source: "financial_signal",
+      subject: "disclosure"
+    }
+  );
+});
+
 test("prefers explicit finding_family when rendering a label", () => {
   assert.deepEqual(
     getValidationFindingFamily({

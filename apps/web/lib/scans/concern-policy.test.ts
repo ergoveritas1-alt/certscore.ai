@@ -176,6 +176,45 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "financial fee disclosure with retained snippet and url stays eligible but conservative",
+      concern: makeConcern({
+        originKey: "commercial.explicit_fee_disclosure_text_present",
+        suggestedUnifiedFindingId: "fee_disclosure_present",
+        title: "Fee disclosure present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed"] as const,
+      rawEvidence: {
+        matchedSnippet: "A monthly fee of $25 applies to premium managed accounts.",
+        pageUrl: "https://example.com/pricing",
+        signalKey: "commercial.explicit_fee_disclosure_text_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "financial fee disclosure without a retained user-facing url stays audit-only",
+      concern: makeConcern({
+        originKey: "commercial.explicit_fee_disclosure_text_present",
+        suggestedUnifiedFindingId: "fee_disclosure_present",
+        title: "Fee disclosure present"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        matchedSnippet: "A monthly fee of $25 applies to premium managed accounts.",
+        signalKey: "commercial.explicit_fee_disclosure_text_present"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "bounded key-page discovery unresolved is blocked when stable linked discovery already retained privacy, terms, and contact coverage",
       concern: makeConcern({
         originKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
@@ -186,6 +225,28 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         contactPagePresent: true,
         keyPageAttemptCount: 4,
+        keyPageDiscoverySource: "footer_link",
+        privacyPolicyPresent: true,
+        termsOfServicePresent: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "bounded key-page discovery unresolved is blocked when stable linked discovery already retained privacy, terms, and affiliate coverage",
+      concern: makeConcern({
+        originKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        suggestedUnifiedFindingId: "bounded_key_page_discovery_unresolved",
+        title: "Bounded key-page discovery unresolved"
+      }),
+      evidenceStrengthFlags: ["key_page_discovery", "page_attributed"] as const,
+      rawEvidence: {
+        affiliateDisclosurePresent: true,
+        keyPageAttemptCount: 3,
         keyPageDiscoverySource: "footer_link",
         privacyPolicyPresent: true,
         termsOfServicePresent: true

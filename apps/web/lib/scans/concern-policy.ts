@@ -8,6 +8,12 @@ import type {
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
 import { getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
+import {
+  evaluateFinancialJudgeInput,
+  getFinancialValidationEvidenceBundle,
+  isFinancialValidationFindingId
+} from "./financial-validation-contract";
+import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -44,6 +50,19 @@ function getBooleanEvidence(
     }
     if (evidence?.[key] === false) {
       return false;
+    }
+  }
+
+  return null;
+}
+
+function getFirstString(evidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof evidence?.[key] === "string") {
+      const value = String(evidence[key]).trim();
+      if (value.length > 0) {
+        return value;
+      }
     }
   }
 
@@ -279,6 +298,11 @@ function isPositiveInfrastructureConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return [
+    "privacy_policy_present",
+    "terms_of_service_present",
+    "cookie_policy_present",
+    "contact_support_path_present",
+    "targeted_advertising_choices_present",
     "privacy_rights_path_present",
     "privacy_contact_path_present",
     "gpc_disclosure_present",
@@ -485,7 +509,8 @@ function hasExpectedLegalPageCoverage(rawEvidence: Record<string, unknown> | nul
   const pageCoverageCount = [
     getBooleanEvidence(rawEvidence, ["privacyPolicyPresent", "privacy_policy_present"]),
     getBooleanEvidence(rawEvidence, ["termsOfServicePresent", "terms_of_service_present"]),
-    getBooleanEvidence(rawEvidence, ["contactPagePresent", "contact_page_present"])
+    getBooleanEvidence(rawEvidence, ["contactPagePresent", "contact_page_present"]),
+    getBooleanEvidence(rawEvidence, ["affiliateDisclosurePresent", "affiliate_disclosure_present"])
   ].filter((value) => value === true).length;
 
   return pageCoverageCount >= 3;
@@ -838,6 +863,69 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "suppress",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "blocked"
+    };
+  }
+
+  if (isFinancialValidationFindingId(input.concern.suggestedUnifiedFindingId)) {
+    const inferredFinancialPageClassification =
+      input.concern.suggestedUnifiedFindingId === "legal_entity_name_present" ||
+      input.concern.suggestedUnifiedFindingId === "operator_contact_path_present"
+        ? "identity_or_contact"
+        : input.concern.suggestedUnifiedFindingId === "fee_disclosure_present"
+          ? "pricing_or_fees"
+          : input.concern.suggestedUnifiedFindingId === "investment_risk_disclosure_present" ||
+              input.concern.suggestedUnifiedFindingId === "past_performance_disclaimer_present"
+            ? "disclosure_or_legal"
+            : "financial_offer";
+    const evidence = getFinancialValidationEvidenceBundle({
+      ...(input.rawEvidence ?? {}),
+      pageClassification: inferredFinancialPageClassification
+    });
+
+    if (!evidence) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    const judge =
+      getStoredFinancialJudgeOutput(input.rawEvidence) ??
+      evaluateFinancialJudgeInput({
+        candidateFindingId: input.concern.suggestedUnifiedFindingId,
+        evidence,
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        scanContext: {
+          domain: getFirstString(input.rawEvidence, ["domain", "hostname", "host"]),
+          pageType: getFirstString(input.rawEvidence, ["pageType", "page_type"])
+        }
+      });
+
+    if (judge.verdict === "suppress") {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "blocked"
+      };
+    }
+
+    if (judge.verdict === "keep_audit_only") {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
     };
   }
 

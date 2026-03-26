@@ -1,4 +1,5 @@
 import {
+  getReportUnifiedFinding,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForSignal,
   getReportUnifiedFindingForValidationRule,
@@ -474,11 +475,25 @@ function deriveOriginTypeFromCandidate(candidate: ReviewFindingCandidateInput): 
 function resolveSuggestedUnifiedFindingId(input: {
   originType: NormalizedConcernOriginType;
   originKey: string;
+  rawEvidence?: Record<string, unknown> | null;
   signalKey?: string;
   signalSource?: ReportSignalSource;
   title: string;
   linkedValidationFinding?: ScanValidationFinding | null;
 }) {
+  const explicitFindingId =
+    typeof input.rawEvidence?.familyPacketFindingId === "string"
+      ? input.rawEvidence.familyPacketFindingId
+      : typeof input.rawEvidence?.unifiedFindingId === "string"
+        ? input.rawEvidence.unifiedFindingId
+        : null;
+  if (explicitFindingId) {
+    const explicitFinding = getReportUnifiedFinding(explicitFindingId);
+    if (explicitFinding) {
+      return explicitFinding.id;
+    }
+  }
+
   if (input.signalKey && input.signalSource) {
     const signalMatch = getReportUnifiedFindingForSignal(input.signalSource, input.signalKey);
     if (signalMatch) {
@@ -581,6 +596,7 @@ function buildConcernFromSharedInput(input: {
     linkedValidationFinding: input.linkedValidationFinding,
     originKey: input.originKey,
     originType: input.originType,
+    rawEvidence: input.rawEvidence ?? null,
     signalKey: input.signalKey,
     signalSource: input.signalSource,
     title: input.title

@@ -1,4 +1,11 @@
-import { VALIDATION_PROMPT_VERSION, type ValidationAgreementScore } from "@website-signal-risk-scanner/validation-shared";
+import {
+  VALIDATION_PROMPT_VERSION,
+  buildFinancialJudgePrompt,
+  financialJudgeInputSchema,
+  financialJudgeOutputSchema,
+  type FinancialJudgeInput,
+  type ValidationAgreementScore
+} from "@website-signal-risk-scanner/validation-shared";
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -113,6 +120,108 @@ export async function validateFindingWithLlm(input: {
     model: payload.model ?? env.VALIDATION_OPENAI_MODEL,
     promptVersion: VALIDATION_PROMPT_VERSION,
     rationale: parsed.rationale ?? "No rationale returned.",
+    verdict
+  };
+}
+
+function validationVerdictForFinancialJudge(verdict: "confirm" | "keep_audit_only" | "suppress") {
+  if (verdict === "confirm") {
+    return "supported" as const;
+  }
+  if (verdict === "keep_audit_only") {
+    return "inconclusive" as const;
+  }
+  return "not_supported" as const;
+}
+
+function buildFallbackFinancialJudgeVerdict(note: string) {
+  const fallbackVerdict = {
+    buyerFacingEligible: false,
+    confidence: 0.2,
+    evidenceStrength: "thin" as const,
+    rationaleCode: "thin_single_source_evidence" as const,
+    retained: true,
+    verdict: "keep_audit_only" as const
+  };
+
+  return {
+    agreementScore: agreementScoreForVerdict(validationVerdictForFinancialJudge(fallbackVerdict.verdict)),
+    confidence: fallbackVerdict.confidence,
+    evidence: {
+      financialJudgeVerdict: fallbackVerdict,
+      note
+    },
+    model: getWorkerEnv().VALIDATION_OPENAI_MODEL,
+    promptVersion: VALIDATION_PROMPT_VERSION,
+    rationale: note,
+    verdict: validationVerdictForFinancialJudge(fallbackVerdict.verdict)
+  };
+}
+
+export async function validateFinancialFindingWithLlm(input: FinancialJudgeInput) {
+  const env = getWorkerEnv();
+  const parsedInput = financialJudgeInputSchema.parse(input);
+
+  if (!env.OPENAI_API_KEY) {
+    return buildFallbackFinancialJudgeVerdict(
+      "The financial judge could not call the model because OPENAI_API_KEY is not configured."
+    );
+  }
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: env.VALIDATION_OPENAI_MODEL,
+      temperature: 0,
+      response_format: {
+        type: "json_object"
+      },
+      messages: [
+        {
+          role: "user",
+          content: buildFinancialJudgePrompt(parsedInput)
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`OpenAI financial judge call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+    model?: string;
+  };
+
+  const rawContent = payload.choices?.[0]?.message?.content ?? "";
+  let judge;
+  try {
+    judge = financialJudgeOutputSchema.parse(JSON.parse(extractJson(rawContent)));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Financial judge output could not be parsed.";
+    return buildFallbackFinancialJudgeVerdict(`The financial judge returned malformed JSON and was downgraded to audit-only. ${reason}`);
+  }
+  const verdict = validationVerdictForFinancialJudge(judge.verdict);
+
+  return {
+    agreementScore: agreementScoreForVerdict(verdict),
+    confidence: judge.confidence,
+    evidence: {
+      financialJudgeVerdict: judge
+    },
+    model: payload.model ?? env.VALIDATION_OPENAI_MODEL,
+    promptVersion: VALIDATION_PROMPT_VERSION,
+    rationale: `Financial judge ${judge.verdict.replaceAll("_", " ")} (${judge.rationaleCode}).`,
     verdict
   };
 }

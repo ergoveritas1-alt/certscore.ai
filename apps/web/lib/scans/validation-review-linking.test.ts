@@ -91,4 +91,16 @@ test("getValidationMatchKeysForTitle maps current scan-signal and snapshot findi
   assert.deepEqual(getValidationMatchKeysForTitle("Accessibility risk score"), [
     "scan_snapshot.accessibility.accessibility_risk_score"
   ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Possible pre-consent tracking signals on first load"), [
+    "privacy.trackers_before_consent_detected"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Reject path may not fully suppress non-essential activity"), [
+    "privacy.trackers_persist_after_reject_detected"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Reject path appears less direct than accept path"), [
+    "privacy.reject_control_missing_detected"
+  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Browser-level privacy signal effect not evident"), [
+    "privacy.gpc_signal_not_honored"
+  ]);
 });

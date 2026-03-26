@@ -9,6 +9,7 @@ function formatLabelSegment(value: string) {
 export type ValidationFindingFamilyId =
   | "accessibility_review"
   | "cookie_runtime_review"
+  | "financial_review"
   | "policy_runtime_review"
   | "policy_review_queue"
   | "section_review"
@@ -16,6 +17,7 @@ export type ValidationFindingFamilyId =
 
 export type ValidationFindingSource =
   | "cookie_runtime"
+  | "financial_signal"
   | "policy_runtime"
   | "policy_enrichment"
   | "policy_review_queue"
@@ -78,6 +80,16 @@ export function deriveValidationFindingTaxonomy(input: {
       familyLabel: "Cookie Runtime Review",
       scope: "page",
       source: "cookie_runtime",
+      subject: "disclosure"
+    };
+  }
+
+  if (rulePrefix === "financial_review") {
+    return {
+      familyId: "financial_review",
+      familyLabel: "Financial Review",
+      scope: "page",
+      source: "financial_signal",
       subject: "disclosure"
     };
   }

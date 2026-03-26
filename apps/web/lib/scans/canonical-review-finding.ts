@@ -41,9 +41,22 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
     /^(trackers observed before consent|pre-consent tracking detected|pre-consent tracking activity|pre-consent tracker evidence urls|pre-consent tracker vendors|pre-consent tracker violations)$/i.test(
       normalized
     ) ||
+    /^possible pre-consent tracking signals on first load$/i.test(normalized) ||
     /^privacy\.preconsent_/i.test(normalized)
   ) {
     return "Trackers observed before consent";
+  }
+
+  if (/^(trackers persisted after reject|reject path may not fully suppress non-essential activity)$/i.test(normalized)) {
+    return "Trackers persisted after reject";
+  }
+
+  if (/^(reject-all control missing|reject path appears less direct than accept path)$/i.test(normalized)) {
+    return "Reject-all control missing";
+  }
+
+  if (/^(gpc signal ignored|global privacy control signal not honored|browser-level privacy signal effect not evident)$/i.test(normalized)) {
+    return "GPC signal not honored";
   }
 
   if (/^bounded key-page discovery unresolved$/i.test(normalized)) {

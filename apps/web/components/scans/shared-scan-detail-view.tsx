@@ -29,6 +29,8 @@ import {
   shouldSurfacePrimarySignalFinding
 } from "../../lib/scans/finding-evidence-gates";
 import {
+  buildAccessibilitySupportFallbackEvidence,
+  buildCookiePolicyFallbackEvidence,
   buildSnapshotDisclosureFallbackEvidence,
   buildChildContextFallbackEvidence,
   isChildContextSignalKey
@@ -1238,7 +1240,12 @@ function isConcerningSignal(key: string, value: unknown) {
     return true;
   }
 
-  if (isPolicyPositiveSignalKey(key) || /accessibility_contact_method_present|affiliate_disclosure_present/i.test(key)) {
+  if (
+    isPolicyPositiveSignalKey(key) ||
+    /accessibility_contact_method_present|affiliate_disclosure_present|disclosure\.privacy_policy_present|disclosure\.terms_of_service_present|disclosure\.cookie_policy_present|disclosure\.contact_page_present|privacy\.do_not_sell_link_present/i.test(
+      key
+    )
+  ) {
     return true;
   }
 
@@ -1291,6 +1298,10 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "The scanner exhausted its bounded key-page discovery budget without confirming one or more expected legal or support pages.";
   }
 
+  if (/cookie_policy_structurally_obstructed/i.test(key)) {
+    return "The cookie policy did not expose enough structured disclosure metadata to reconcile runtime cookies with confidence.";
+  }
+
   if (/conflict|mismatch/i.test(key)) {
     return "Signals a contradiction or mismatch that merits direct review.";
   }
@@ -1301,6 +1312,26 @@ function getSignalConcernReason(key: string, value: unknown) {
 
   if (/affiliate_disclosure_present/i.test(key)) {
     return "The scan retained a clear affiliate disclosure path that signals when recommendations or links may involve a financial relationship.";
+  }
+
+  if (/disclosure\.privacy_policy_present/i.test(key)) {
+    return "The scan retained a reachable privacy-policy surface that users and reviewers can use to find core notice disclosures.";
+  }
+
+  if (/disclosure\.terms_of_service_present/i.test(key)) {
+    return "The scan retained a reachable terms surface that users and reviewers can use to find the site's core legal terms.";
+  }
+
+  if (/disclosure\.cookie_policy_present/i.test(key)) {
+    return "The scan retained a reachable cookie-policy or cookie-settings surface that users can use to find tracking disclosures and related controls.";
+  }
+
+  if (/disclosure\.contact_page_present/i.test(key)) {
+    return "The scan retained a reachable contact or feedback path that users can use when they need help or want to reach the operator.";
+  }
+
+  if (/privacy\.do_not_sell_link_present/i.test(key)) {
+    return "The scan retained a reachable targeted-advertising or do-not-sell/share choice path that users can use to manage related privacy controls.";
   }
 
   const policyPositiveSpec = getPolicyPositiveSignalSpec(key);
@@ -1647,6 +1678,7 @@ function getKeyPageDiscoveryPageSummary(
 }
 
 function buildReviewFindings(input: {
+  allSignals?: Array<{ key: string; value: unknown }>;
   categoryId?: string;
   issues: CanonicalReviewIssue[];
   policyEnrichment?: Array<Record<string, unknown>>;
@@ -1755,17 +1787,37 @@ function buildReviewFindings(input: {
                   signalLabel: item.label,
                   signalValue: item.value
                 }
-            : isChildContextSignalKey(item.key)
+          : isChildContextSignalKey(item.key)
               ? buildChildContextFallbackEvidence({
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value,
                   snapshot: input.snapshot
                 })
-            : /commerce\.affiliate_disclosure_present|disclosure\.key_page_discovery_unresolved_after_bounded_search/i.test(item.key)
+            : /accessibility\.accessibility_contact_method_present/i.test(item.key)
+              ? buildAccessibilitySupportFallbackEvidence({
+                  keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value,
+                  snapshot: input.snapshot
+                })
+            : /disclosure\.cookie_policy_structurally_obstructed/i.test(item.key)
+              ? buildCookiePolicyFallbackEvidence({
+                  keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
+                  policyEnrichment: input.policyEnrichment ?? [],
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value
+                })
+            : /commerce\.affiliate_disclosure_present|disclosure\.key_page_discovery_unresolved_after_bounded_search|disclosure\.privacy_policy_present|disclosure\.terms_of_service_present|disclosure\.cookie_policy_present|disclosure\.contact_page_present|privacy\.do_not_sell_link_present/i.test(item.key)
               ? buildSnapshotDisclosureFallbackEvidence({
                   keyPageDiscoverySummary: input.runtimeArtifacts?.key_page_discovery_summary ?? null,
                   policyEnrichment: input.policyEnrichment ?? [],
+                  relatedSignals: (input.allSignals ?? input.sectionItems).map((signalLike) => ({
+                    key: signalLike.key,
+                    value: signalLike.value
+                  })),
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value,
@@ -3137,6 +3189,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
             });
 
           const reviewFindings = buildReviewFindings({
+            allSignals: scanRecord.signals,
             categoryId: category.id,
             issues: [],
             policyEnrichment: scanRecord.policyEnrichment,
@@ -3165,6 +3218,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
           snapshot
         });
         const issueFindings = buildReviewFindings({
+          allSignals: scanRecord.signals,
           issues,
           policyEnrichment: scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows,
@@ -3193,6 +3247,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
     );
     const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
       reviewFindingCandidates: allReviewFindingCandidates,
+      scanEvents: scanRecord.events,
       validationFindings: scanRecord.validationFindings,
       validationFindingLookup
     }).filter((finding) => finding.presentationDecision.status !== "suppress");
@@ -3258,6 +3313,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
           });
 
         const reviewFindings = buildReviewFindings({
+          allSignals: input.scanRecord.signals,
           categoryId: category.id,
           issues: [],
           policyEnrichment: input.scanRecord.policyEnrichment,
@@ -3287,6 +3343,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         snapshot: input.snapshot
       });
       const issueFindings = buildReviewFindings({
+        allSignals: input.scanRecord.signals,
         issues,
         policyEnrichment: input.scanRecord.policyEnrichment,
         prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
@@ -3316,6 +3373,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   );
   const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: allReviewFindingCandidates,
+    scanEvents: input.scanRecord.events,
     validationFindings: input.scanRecord.validationFindings,
     validationFindingLookup
   }).filter((finding) => finding.presentationDecision.status !== "suppress");

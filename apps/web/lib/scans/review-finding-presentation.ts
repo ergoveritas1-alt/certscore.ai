@@ -38,6 +38,56 @@ const DEFAULT_REVIEW_FINDING_PRESENTATION: ReviewFindingPresentation = {
 const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
   {
     base: {
+      suggestedFix:
+        "Keep the privacy policy linked from stable footer, legal, or help surfaces and make sure the destination remains crawlable.",
+      whyThisMatters:
+        "A visible privacy policy surface helps users and reviewers find the site's core notice and data-handling disclosures.",
+      confidenceScore: "0.55"
+    },
+    matches: [/privacy policy surface present|privacy_policy_present/i]
+  },
+  {
+    base: {
+      suggestedFix:
+        "Keep the terms surface stable and easy to reach from footer, legal, or help navigation.",
+      whyThisMatters:
+        "A visible terms surface helps users and reviewers locate the site's core legal and dispute-resolution terms.",
+      confidenceScore: "0.55"
+    },
+    matches: [/terms surface present|terms_of_service_present/i]
+  },
+  {
+    base: {
+      suggestedFix:
+        "Keep the cookie policy or cookie-settings surface easy to reach and make sure the linked destination remains crawlable.",
+      whyThisMatters:
+        "A visible cookie policy or settings surface helps users find tracking disclosures and related controls more reliably.",
+      confidenceScore: "0.55"
+    },
+    matches: [/cookie settings or policy surface present|cookie_policy_present/i]
+  },
+  {
+    base: {
+      suggestedFix:
+        "Keep the contact or feedback path easy to find and make sure the linked help channel remains current.",
+      whyThisMatters:
+        "A visible contact or feedback path gives people a clearer way to reach the operator when they need help or have questions.",
+      confidenceScore: "0.55"
+    },
+    matches: [/contact or feedback path present|contact_support_path_present/i]
+  },
+  {
+    base: {
+      suggestedFix:
+        "Keep the targeted-advertising choice path easy to reach anywhere users would expect privacy or ad-preference controls.",
+      whyThisMatters:
+        "A visible targeted-advertising choice path helps users find sale, sharing, or ad-preference controls more reliably.",
+      confidenceScore: "0.55"
+    },
+    matches: [/targeted advertising choices present|targeted_advertising_choices_present|do-not-sell link present/i]
+  },
+  {
+    base: {
       bestPracticeLink: {
         label: "ICO",
         title: "Guidance on cookies and similar technologies",
@@ -1795,17 +1845,18 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (signalValue !== null && signalValue >= 100) {
       presentation.whyThisMatters =
-        "The automated scan confirmed an accessibility risk score of 100, identifying structural omissions in the site's DOM architecture. This score indicates a high density of non-compliant elements, such as missing ARIA landmarks and inconsistent keyboard focus management. These defects prevent assistive technologies from reliably parsing the page layout and navigating interactive components.";
+        "This automated accessibility indicator suggests the page merits prompt manual review. A retained accessibility risk score of 100 can help prioritize investigation, but it does not by itself establish conformance status, severity, or the exact user impact without representative examples.";
       presentation.suggestedFix =
-        "Remediate global site templates to establish baseline WCAG compliance. Prioritize the implementation of standard ARIA landmark structures (main, nav, header) and ensure all interactive elements have unique, machine-readable labels. Refactor focus-management logic to ensure a logical tab order across all dynamic page components.";
-      presentation.confidenceScore = "1.0";
+        "Review the representative automated WCAG findings first, then manually verify whether the affected templates or components create real task-level barriers before prioritizing remediation. Retain concrete examples from the highest-risk pages where possible.";
+      presentation.confidenceScore = "0.8";
     }
 
     if (signalValue !== null && signalValue <= -10) {
       presentation.whyThisMatters =
-        "The accessibility risk score of -10 represents a critical outlier, signaling a severe density of structural WCAG violations. In technical auditing, a score of this magnitude typically confirms systemic failures in the DOM, such as pervasive keyboard traps, non-semantic navigation, or entirely missing ARIA metadata, which present insurmountable barriers for users with disabilities and create maximum legal exposure.";
+        "This automated accessibility indicator suggests the page merits prompt manual review. A retained accessibility risk score of -10 can help prioritize investigation, but it does not by itself establish conformance status, severity, or the exact user impact without representative examples.";
       presentation.suggestedFix =
-        "Perform an immediate technical remediation of the site's global templates. Address the core architectural failures: (1) eliminate all keyboard traps in navigation modals, (2) implement a complete ARIA landmark structure (main, nav, header), and (3) refactor dynamic components to ensure focus-management logic follows a logical, machine-readable tab order.";
+        "Review the representative automated WCAG findings first, then manually verify whether the affected templates or components create real task-level barriers before prioritizing remediation. Retain concrete examples from the highest-risk pages where possible.";
+      presentation.confidenceScore = "0.8";
     }
   }
 

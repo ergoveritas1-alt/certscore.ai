@@ -54,6 +54,14 @@ function clearBrowserSupabaseAuthState() {
       window.localStorage.removeItem(key);
     }
   }
+
+  for (const cookie of document.cookie.split(";")) {
+    const [rawName] = cookie.split("=");
+    const name = rawName?.trim();
+    if (name && name.startsWith("sb-") && name.includes("auth-token")) {
+      document.cookie = `${name}=; expires=${new Date(0).toUTCString()}; path=/`;
+    }
+  }
 }
 
 function getAuthCallbackUrl(nextPath: string) {
@@ -108,6 +116,10 @@ export function LoginForm(input?: {
   const fieldErrors = actionState.mode === mode ? actionState.fieldErrors : {};
   const actionError = actionState.mode === mode ? actionState.error : null;
   const accountRecovery = actionState.mode === mode ? actionState.accountRecovery : null;
+
+  useEffect(() => {
+    clearBrowserSupabaseAuthState();
+  }, []);
 
   useEffect(() => {
     if (!allowCreateAccount && mode === "create_account") {

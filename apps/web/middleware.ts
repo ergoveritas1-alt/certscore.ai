@@ -17,6 +17,25 @@ function isSupabaseNetworkError(error: unknown) {
   return code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "EAI_AGAIN";
 }
 
+function isSupabaseInvalidRefreshTokenError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /Invalid Refresh Token|Refresh Token Not Found/i.test(error.message);
+}
+
+function clearSupabaseAuthCookies(response: NextResponse, request: NextRequest) {
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+      response.cookies.set(cookie.name, "", {
+        expires: new Date(0),
+        path: "/"
+      });
+    }
+  }
+}
+
 export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname === "/" &&
@@ -72,6 +91,15 @@ export async function middleware(request: NextRequest) {
     const result = await supabase.auth.getUser();
     user = result.data.user;
   } catch (error) {
+    if (isSupabaseInvalidRefreshTokenError(error)) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+      const loginResponse = NextResponse.redirect(loginUrl);
+      clearSupabaseAuthCookies(loginResponse, request);
+      return loginResponse;
+    }
+
     if (isSupabaseNetworkError(error)) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";

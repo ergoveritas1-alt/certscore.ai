@@ -46,4 +46,20 @@ export SUPABASE_STORAGE_BUCKET_ARTIFACTS="${SUPABASE_STORAGE_BUCKET_ARTIFACTS:-s
 echo "[run-ws01-scanner-dev] starting WS01 scanner against ${NEXT_PUBLIC_SUPABASE_URL}"
 
 cd "$WS01_SCANNER_DIR"
-exec npx -y node@22 --enable-source-maps --import tsx --watch ./src/index.ts
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR_VERSION="$(node -p 'process.versions.node.split(".")[0]')"
+else
+  NODE_MAJOR_VERSION=""
+fi
+
+if [[ -n "$NODE_MAJOR_VERSION" && "$NODE_MAJOR_VERSION" -ge 22 ]]; then
+  exec node --enable-source-maps --import tsx \
+    --watch-path=./src \
+    --watch-path=../../packages/scan-core/src \
+    ./src/index.ts
+fi
+
+exec npx -y node@22 --enable-source-maps --import tsx \
+  --watch-path=./src \
+  --watch-path=../../packages/scan-core/src \
+  ./src/index.ts

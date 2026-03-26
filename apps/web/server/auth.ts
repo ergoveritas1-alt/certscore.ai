@@ -21,6 +21,14 @@ function isSupabaseNetworkError(error: unknown) {
   return code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "EAI_AGAIN";
 }
 
+function isSupabaseInvalidRefreshTokenError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /Invalid Refresh Token|Refresh Token Not Found/i.test(error.message);
+}
+
 function redirectToLoginWithNetworkError(nextPath = "/app"): never {
   redirect(`/login?error=auth_service_unavailable&next=${encodeURIComponent(nextPath)}`);
 }
@@ -78,6 +86,10 @@ export const getCurrentUser = cache(async (): Promise<AuthenticatedAppUser | nul
       return null;
     }
 
+    if (isSupabaseInvalidRefreshTokenError(error)) {
+      return null;
+    }
+
     throw error;
   }
 
@@ -118,6 +130,10 @@ export const getDashboardContext = cache(async (): Promise<BootstrapResult> => {
   } catch (error) {
     if (isSupabaseNetworkError(error)) {
       redirectToLoginWithNetworkError();
+    }
+
+    if (isSupabaseInvalidRefreshTokenError(error)) {
+      redirect("/login");
     }
 
     throw error;
