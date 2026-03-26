@@ -69,6 +69,8 @@ type SurfaceActionSet = {
   bannerHtml: string | null;
   bannerSelector: string | null;
   bannerText: string | null;
+  cmpSelector: string | null;
+  cmpType: string | null;
   frameUrl: string | null;
   manage: ActionCandidate | null;
   reject: ActionCandidate | null;
@@ -126,6 +128,26 @@ type ScenarioResult = {
     network: NetworkEntry[];
     sessionStorage: StorageEntry[];
   } | null;
+  storageDiffs: {
+    acceptPhase: {
+      consentSignalsAdded: string[];
+      cookiesAdded: string[];
+      cookiesRemoved: string[];
+      localStorageAdded: string[];
+      localStorageRemoved: string[];
+      sessionStorageAdded: string[];
+      sessionStorageRemoved: string[];
+    } | null;
+    refreshPhase: {
+      consentSignalsAdded: string[];
+      cookiesAdded: string[];
+      cookiesRemoved: string[];
+      localStorageAdded: string[];
+      localStorageRemoved: string[];
+      sessionStorageAdded: string[];
+      sessionStorageRemoved: string[];
+    } | null;
+  };
   storageAfterAction: StorageSnapshot | null;
   storageBeforeInteraction: StorageSnapshot;
   timestamp: string;
@@ -195,6 +217,7 @@ type SiteReport = {
     storageEntriesCreatedBeforeInteraction: string[];
   };
   rejectPathEffectivenessSummary: {
+    consentSignalsChangedAfterReject: string[];
     refreshPreservedRejectOutcome: string;
     stillFiredAfterReject: string[];
     whatChangedAfterReject: string[];
@@ -227,15 +250,27 @@ const ACTION_WAIT_MS = 4_000;
 const SCENARIO_TIMEOUT_MS = 120_000;
 
 const ACCEPT_PATTERNS = [/^accept(?:\s+all)?$/i, /^allow(?:\s+all)?$/i, /^agree$/i, /^i agree$/i, /^ok(?:ay)?$/i, /^got it$/i];
-const REJECT_PATTERNS = [/^reject(?:\s+all)?$/i, /^decline(?:\s+all)?$/i, /^deny(?:\s+all)?$/i, /^essential(?:\s+only)?$/i, /^only necessary$/i];
+const REJECT_PATTERNS = [
+  /^reject(?:\s+all)?$/i,
+  /^decline(?:\s+all)?$/i,
+  /^deny(?:\s+all)?$/i,
+  /^essential(?:\s+only)?$/i,
+  /^only necessary$/i,
+  /^use necessary only$/i,
+  /^continue without accepting$/i,
+  /^reject optional$/i,
+  /^do not accept$/i
+];
 const MANAGE_PATTERNS = [
   /manage/i,
   /preference/i,
   /setting/i,
   /customi[sz]e/i,
   /choice/i,
-  /privacy options/i
+  /privacy options/i,
+  /select(?:ion)?/i
 ];
+const SAVE_PATTERNS = [/^save(?:\s+(?:choices|preferences|settings|selection))?$/i, /^confirm(?:\s+(?:my\s+)??choices)?$/i];
 
 const CONSENT_KEYWORDS = [
   "cookie",
@@ -256,7 +291,28 @@ const CMP_HINTS = [
   "quantcast",
   "cookiebot",
   "sourcepoint",
-  "termly"
+  "termly",
+  "gpp",
+  "usp",
+  "usprivacy",
+  "euconsent",
+  "tcf"
+];
+
+const CMP_ROOT_SELECTORS = [
+  "#onetrust-banner-sdk",
+  "#onetrust-consent-sdk",
+  "#didomi-host",
+  "#CybotCookiebotDialog",
+  "#usercentrics-root",
+  "#qc-cmp2-ui",
+  "#truste-consent-track",
+  "[id*='sp_message_container']",
+  "iframe[id*='sp_message_iframe']",
+  "iframe[title*='consent' i]",
+  "iframe[src*='consent' i]",
+  "[data-testid*='cookie' i]",
+  "[id*='cookie' i][role='dialog']"
 ];
 
 const VENDOR_RULES: Array<{ category: VendorCategory; name: string; patterns: string[] }> = [
@@ -487,6 +543,10 @@ function scenarioErrorResult(url: string, scenarioName: ScenarioName, error: unk
     notes: [],
     preferences: null,
     refresh: null,
+    storageDiffs: {
+      acceptPhase: null,
+      refreshPhase: null
+    },
     storageAfterAction: null,
     storageBeforeInteraction: {
       cookies: [],
@@ -514,6 +574,11 @@ async function firstVisibleLocator(frame: Frame, candidates: string[]) {
   }
 
   return null;
+}
+
+async function findVisibleCmpRoot(frame: Frame) {
+  const locator = await firstVisibleLocator(frame, CMP_ROOT_SELECTORS);
+  return locator;
 }
 
 async function extractActionCandidate(locator: Locator, frame: Frame): Promise<ActionCandidate | null> {
@@ -550,15 +615,11 @@ async function extractActionCandidate(locator: Locator, frame: Frame): Promise<A
 }
 
 async function findAction(frame: Frame, patterns: RegExp[]) {
-  const selectors: string[] = [];
-  for (const pattern of patterns) {
-    selectors.push(`button:has-text("${pattern.source.replaceAll("\\", "")}")`);
-  }
-
   const textLocators = [
     ...patterns.map((pattern) => `button:text-matches("${pattern.source}", "i")`),
     ...patterns.map((pattern) => `[role="button"]:text-matches("${pattern.source}", "i")`),
     ...patterns.map((pattern) => `a:text-matches("${pattern.source}", "i")`),
+    ...patterns.map((pattern) => `text="${pattern.source}"`),
     ...patterns.map((pattern) => `input[type="button"][value]`),
     ...patterns.map((pattern) => `input[type="submit"][value]`)
   ];
@@ -569,6 +630,16 @@ async function findAction(frame: Frame, patterns: RegExp[]) {
 
 async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
   for (const frame of await getAllFrames(page)) {
+    const cmpRoot = await findVisibleCmpRoot(frame);
+    const cmpRootCandidate = cmpRoot ? await extractActionCandidate(cmpRoot, frame).catch(() => null) : null;
+    const cmpType =
+      cmpRootCandidate?.selector.includes("onetrust") ? "onetrust" :
+      cmpRootCandidate?.selector.includes("didomi") ? "didomi" :
+      cmpRootCandidate?.selector.toLowerCase().includes("cybot") ? "cookiebot" :
+      cmpRootCandidate?.selector.toLowerCase().includes("usercentrics") ? "usercentrics" :
+      cmpRootCandidate?.selector.toLowerCase().includes("sp_message") ? "sourcepoint" :
+      cmpRootCandidate ? "detected_cmp_root" : null;
+
     const surface = await frame.evaluate(function (keywords) {
       const elements = [...document.querySelectorAll("dialog, [role='dialog'], [aria-modal='true'], aside, section, div, form, iframe")];
       let bestMatch: { html: string; score: number; selector: string; text: string } | null = null;
@@ -642,14 +713,16 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
 
     const accept = await findAction(frame, ACCEPT_PATTERNS);
     const reject = await findAction(frame, REJECT_PATTERNS);
-    const manage = await findAction(frame, MANAGE_PATTERNS);
+    const manage = (await findAction(frame, MANAGE_PATTERNS)) ?? (await findAction(frame, SAVE_PATTERNS));
 
-    if (surface || accept || reject || manage) {
+    if (surface || accept || reject || manage || cmpRootCandidate) {
       return {
         accept,
         bannerHtml: surface?.html ?? null,
         bannerSelector: surface?.selector ?? null,
         bannerText: surface?.text ?? null,
+        cmpSelector: cmpRootCandidate?.selector ?? null,
+        cmpType,
         frameUrl: frame.url(),
         manage,
         reject,
@@ -663,6 +736,8 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
     bannerHtml: null,
     bannerSelector: null,
     bannerText: null,
+    cmpSelector: null,
+    cmpType: null,
     frameUrl: null,
     manage: null,
     reject: null,
@@ -800,6 +875,52 @@ function collectLikelyVendors(entries: Array<{ vendorName: string | null }>) {
   return [...new Set(entries.map((entry) => entry.vendorName).filter((value): value is string => Boolean(value)))].sort();
 }
 
+function sortedUnique(values: string[]) {
+  return [...new Set(values)].sort();
+}
+
+function snapshotCookieKeys(snapshot: StorageSnapshot) {
+  return snapshot.cookies.map((cookie) => `${cookie.name}@${cookie.domain}`);
+}
+
+function snapshotStorageKeys(entries: StorageEntry[]) {
+  return entries.map((entry) => entry.key);
+}
+
+function extractConsentSignals(snapshot: StorageSnapshot) {
+  return sortedUnique([
+    ...snapshot.cookies.filter((cookie) => CMP_HINTS.some((hint) => `${cookie.name} ${cookie.domain}`.toLowerCase().includes(hint))).map((cookie) => `${cookie.name}@${cookie.domain}`),
+    ...snapshot.localStorage.filter((entry) => CMP_HINTS.some((hint) => `${entry.key} ${entry.preview}`.toLowerCase().includes(hint))).map((entry) => `localStorage:${entry.key}`),
+    ...snapshot.sessionStorage.filter((entry) => CMP_HINTS.some((hint) => `${entry.key} ${entry.preview}`.toLowerCase().includes(hint))).map((entry) => `sessionStorage:${entry.key}`)
+  ]);
+}
+
+function diffSets(before: string[], after: string[]) {
+  const beforeSet = new Set(before);
+  const afterSet = new Set(after);
+  return {
+    added: [...afterSet].filter((item) => !beforeSet.has(item)).sort(),
+    removed: [...beforeSet].filter((item) => !afterSet.has(item)).sort()
+  };
+}
+
+function buildStorageDiff(before: StorageSnapshot, after: StorageSnapshot) {
+  const cookies = diffSets(snapshotCookieKeys(before), snapshotCookieKeys(after));
+  const localStorage = diffSets(snapshotStorageKeys(before.localStorage), snapshotStorageKeys(after.localStorage));
+  const sessionStorage = diffSets(snapshotStorageKeys(before.sessionStorage), snapshotStorageKeys(after.sessionStorage));
+  const consentSignals = diffSets(extractConsentSignals(before), extractConsentSignals(after));
+
+  return {
+    consentSignalsAdded: consentSignals.added,
+    cookiesAdded: cookies.added,
+    cookiesRemoved: cookies.removed,
+    localStorageAdded: localStorage.added,
+    localStorageRemoved: localStorage.removed,
+    sessionStorageAdded: sessionStorage.added,
+    sessionStorageRemoved: sessionStorage.removed
+  };
+}
+
 function securityInterstitialRequests(entries: NetworkEntry[]) {
   return entries.filter((entry) => entry.vendorName === "Security / anti-bot");
 }
@@ -916,6 +1037,10 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
       let preferencesCenterPath: string | null = null;
       let storageAfterAction: StorageSnapshot | null = null;
       let refresh: ScenarioResult["refresh"] = null;
+      let storageDiffs: ScenarioResult["storageDiffs"] = {
+        acceptPhase: null,
+        refreshPhase: null
+      };
 
       const act = async (choice: ChoiceAction) => {
         const actionStart = Date.now();
@@ -947,7 +1072,10 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
         }
 
         const retrySurface = await detectConsentSurface(page);
-        const targetCandidate = choice === "accept" ? retrySurface.accept : retrySurface.reject;
+        const targetCandidate =
+          choice === "accept"
+            ? retrySurface.accept
+            : retrySurface.reject ?? (await findAction(page.frames().find((item) => item.url() === retrySurface.frameUrl) ?? page.mainFrame(), SAVE_PATTERNS));
         if (!targetCandidate) {
           notes.push(`After opening preferences, no ${choice} control was detected.`);
           return false;
@@ -985,7 +1113,9 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
       if (scenarioName === "accept_all" || scenarioName === "reject_all" || scenarioName === "custom_preferences") {
         storageAfterAction = await collectStorageSnapshot(context, page).catch(() => null);
         if (storageAfterAction) {
+          storageDiffs.acceptPhase = buildStorageDiff(storageBeforeInteraction, storageAfterAction);
           await writeJson(path.join(scenarioDir, "storage-after-action.json"), storageAfterAction);
+          await writeJson(path.join(scenarioDir, "storage-diff-after-action.json"), storageDiffs.acceptPhase);
         }
 
         logger.setPhase("after_refresh");
@@ -996,6 +1126,10 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
 
         const refreshSnapshot = await collectStorageSnapshot(context, page).catch(() => null);
         if (refreshSnapshot) {
+          if (storageAfterAction) {
+            storageDiffs.refreshPhase = buildStorageDiff(storageAfterAction, refreshSnapshot);
+            await writeJson(path.join(scenarioDir, "storage-diff-after-refresh.json"), storageDiffs.refreshPhase);
+          }
           refresh = {
             cookies: refreshSnapshot.cookies,
             localStorage: refreshSnapshot.localStorage,
@@ -1025,6 +1159,7 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
         notes,
         preferences,
         refresh,
+        storageDiffs,
         storageAfterAction,
         storageBeforeInteraction,
         timestamp: new Date().toISOString(),
@@ -1257,6 +1392,10 @@ function buildSiteReport(url: string, scenarios: ScenarioReportMap): SiteReport 
       storageEntriesCreatedBeforeInteraction: preConsentStorage.map((entry) => `${entry.key}=${truncate(entry.preview, 60)}`)
     },
     rejectPathEffectivenessSummary: {
+      consentSignalsChangedAfterReject: [
+        ...(reject.storageDiffs.acceptPhase?.consentSignalsAdded ?? []),
+        ...(reject.storageDiffs.refreshPhase?.consentSignalsAdded ?? [])
+      ],
       refreshPreservedRejectOutcome:
         reject.refresh && rejectResidual.postRefreshRequests.length === 0 ? "no obvious reintroduction observed on refresh" : "tracking-like activity still appeared or refresh evidence was inconclusive",
       stillFiredAfterReject: rejectResidual.postRejectRequests.map((entry) => entry.url),
