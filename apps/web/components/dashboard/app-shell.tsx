@@ -193,7 +193,7 @@ export function AppShell({
   isPlatformAdmin = false,
   isValidationAdmin = false
 }: AppShellProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
   const displayPlan = plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "ULTRA";

@@ -80,11 +80,11 @@ export function LoginForm(input?: {
   title?: string;
 }) {
   const searchParams = useSearchParams();
-  const nextPath = getSafeRedirectPath(searchParams.get("next"));
+  const nextPath = getSafeRedirectPath(searchParams?.get("next") ?? null);
   const googleEnabled = (input?.allowGoogle ?? true) && process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
   const allowCreateAccount = input?.allowCreateAccount ?? true;
-  const initialMessage = searchParams.get("message");
-  const initialError = searchParams.get("error");
+  const initialMessage = searchParams?.get("message") ?? null;
+  const initialError = searchParams?.get("error") ?? null;
   const [mode, setMode] = useState<AuthMode>("sign_in");
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState("");

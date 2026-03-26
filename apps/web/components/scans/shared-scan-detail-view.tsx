@@ -1411,6 +1411,7 @@ function buildSectionReviewIssues(input: {
           contradictionEvidence: {
             claim: row.claim,
             contradictionBasis: row.status,
+            explicitPolicySnippet: row.policySnippet ?? null,
             policySnippet: row.policySnippet ?? row.claim,
             policySourceUrl: row.policyPageUrl,
             policySummaryShort: row.policySummary,
