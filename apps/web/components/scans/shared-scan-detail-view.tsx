@@ -3190,6 +3190,24 @@ export function deriveFindingEvidenceQualitySummary(findings: UnifiedFindingDisp
   };
 }
 
+type FindingEvidenceDiagnosticRow = {
+  fetchQuality: string | null;
+  findingName: string;
+  negativeEvidenceFlags: string[];
+  status: UnifiedFindingDisplayPacket["presentationDecision"]["status"];
+  verificationLabel: string;
+};
+
+export function deriveFindingEvidenceDiagnosticRows(findings: UnifiedFindingDisplayPacket[]): FindingEvidenceDiagnosticRow[] {
+  return findings.map((finding) => ({
+    fetchQuality: finding.evidence?.fetchQuality ?? null,
+    findingName: finding.presentation.findingName,
+    negativeEvidenceFlags: finding.concernContext?.negativeEvidenceFlags ?? [],
+    status: finding.presentationDecision.status,
+    verificationLabel: finding.presentationDecision.verificationLabel
+  }));
+}
+
 function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const sortedFindings = [...input.findings].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
@@ -3286,6 +3304,73 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
         </div>
       </details>
     </div>
+  );
+}
+
+function FindingEvidenceDiagnostics(input: { findings: UnifiedFindingDisplayPacket[] }) {
+  const summary = deriveFindingEvidenceQualitySummary(input.findings);
+  const rows = deriveFindingEvidenceDiagnosticRows(input.findings);
+
+  if (rows.length === 0) {
+    return (
+      <CollapsibleSectionCard
+        title={
+          <span className="flex items-center gap-1.5">
+            <span>Finding evidence diagnostics</span>
+            <InfoTip text="Verification quality, fetch quality, and downgrade flags for surfaced findings." />
+          </span>
+        }
+      >
+        <p className="text-sm text-slate-600">No surfaced findings were available for evidence diagnostics on this scan.</p>
+      </CollapsibleSectionCard>
+    );
+  }
+
+  return (
+    <CollapsibleSectionCard
+      title={
+        <span className="flex items-center gap-1.5">
+          <span>Finding evidence diagnostics</span>
+          <InfoTip text="Verification quality, fetch quality, and downgrade flags for surfaced findings." />
+        </span>
+      }
+      contentClassName="space-y-4"
+    >
+      <div className={METRIC_GRID_CLASS}>
+        <SummaryMetricTile label="Verified" value={summary.verifiedCount} />
+        <SummaryMetricTile label="Discovered only" value={summary.discoveredCount} />
+        <SummaryMetricTile label="Blocked" value={summary.blockedCount} />
+        <SummaryMetricTile label="Runtime-backed" value={summary.runtimeCount} />
+        <SummaryMetricTile label="Audit only" value={summary.auditOnlyCount} />
+        <SummaryMetricTile label="Triage" value={summary.triageCount} />
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.findingName} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-slate-900">{row.findingName}</p>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
+                {row.status === "surface" ? "Surface" : row.status === "audit_only" ? "Audit only" : "Suppressed"}
+              </span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
+                {row.verificationLabel}
+              </span>
+              {row.fetchQuality ? (
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
+                  fetch: {row.fetchQuality}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs text-slate-600">
+              {row.negativeEvidenceFlags.length > 0
+                ? row.negativeEvidenceFlags.join(", ")
+                : "No negative evidence flags retained."}
+            </p>
+          </div>
+        ))}
+      </div>
+    </CollapsibleSectionCard>
   );
 }
 
@@ -4259,6 +4344,7 @@ export function SharedScanDetailView({
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
+  const findingEvidenceDiagnostics = snapshot && !reviewSectionError ? buildScanReportUnifiedFindings(scanRecord) : [];
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -4519,6 +4605,8 @@ export function SharedScanDetailView({
               ]}
             />
           ) : null}
+
+          <FindingEvidenceDiagnostics findings={findingEvidenceDiagnostics} />
 
         <CollapsibleSectionCard
           title={

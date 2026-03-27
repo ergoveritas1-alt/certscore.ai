@@ -94,6 +94,47 @@ async function loadFindingEvidenceQualitySummary() {
   }).deriveFindingEvidenceQualitySummary;
 }
 
+async function loadFindingEvidenceDiagnosticRows() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveFindingEvidenceDiagnosticRows?: unknown })
+      .deriveFindingEvidenceDiagnosticRows
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveFindingEvidenceDiagnosticRows: (
+      findings: Array<{
+        concernContext?: { negativeEvidenceFlags?: string[] };
+        evidence?: { fetchQuality?: string | null };
+        presentation: { findingName: string };
+        presentationDecision: {
+          status: string;
+          verificationLabel: string;
+        };
+      }>
+    ) => Array<{
+      fetchQuality: string | null;
+      findingName: string;
+      negativeEvidenceFlags: string[];
+      status: string;
+      verificationLabel: string;
+    }>;
+  }).deriveFindingEvidenceDiagnosticRows;
+}
+
 async function loadUnverifiedHomepageReview() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -329,6 +370,38 @@ test("deriveFindingEvidenceQualitySummary counts verification states and audit-o
     triageCount: 1,
     verifiedCount: 1
   });
+});
+
+test("deriveFindingEvidenceDiagnosticRows keeps fetch quality and downgrade flags", async () => {
+  const deriveFindingEvidenceDiagnosticRows = await loadFindingEvidenceDiagnosticRows();
+
+  const rows = deriveFindingEvidenceDiagnosticRows([
+    {
+      concernContext: {
+        negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed", "positive_surface_content_unverified"]
+      },
+      evidence: {
+        fetchQuality: "blocked_interstitial"
+      },
+      presentation: {
+        findingName: "Contact or feedback path present"
+      },
+      presentationDecision: {
+        status: "audit_only",
+        verificationLabel: "Blocked or interstitial"
+      }
+    }
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      fetchQuality: "blocked_interstitial",
+      findingName: "Contact or feedback path present",
+      negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed", "positive_surface_content_unverified"],
+      status: "audit_only",
+      verificationLabel: "Blocked or interstitial"
+    }
+  ]);
 });
 
 test("deriveExecutiveSummaryScanCondition flags blocked homepage scans", async () => {
