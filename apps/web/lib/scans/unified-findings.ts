@@ -48,6 +48,7 @@ import {
   getFinancialValidationEvidenceBundle,
   isFinancialValidationFindingId
 } from "./financial-validation-contract";
+import type { FetchQuality } from "./signal-fallback-evidence";
 
 export type UnifiedFindingDetails =
   | {
@@ -145,6 +146,7 @@ export type UnifiedFindingPacket = {
   evidence?: {
     counts?: Record<string, number>;
     entities?: Record<string, string[]>;
+    fetchQuality?: FetchQuality | null;
     flags?: string[];
     pageUrls?: string[];
     snippets?: string[];
@@ -163,8 +165,11 @@ export type UnifiedFindingPacket = {
 
 export type UnifiedFindingPresentationDecision = {
   confidenceRationale: string;
+  downgradeReasons: string[];
   rationale: string;
   status: "surface" | "audit_only" | "suppress";
+  verificationLabel: string;
+  verificationState: "verified" | "discovered" | "blocked" | "runtime" | "triage";
 };
 
 export type UnifiedFindingCandidate = {
@@ -189,6 +194,7 @@ type UnifiedFindingScanEvent = {
 
 type FamilyPacketTargetRecord = {
   canonicalUrl?: unknown;
+  fetchQuality?: unknown;
   snippet?: unknown;
   sourceSurfaceTypes?: unknown;
   supportedSurfaceTypes?: unknown;
@@ -209,6 +215,10 @@ type FindingFamilyPacketRecord = {
   familyId?: unknown;
   supportedUnifiedFindings?: unknown;
 };
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
 
 export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
   linkedValidationFinding: ScanValidationFinding | null;
@@ -361,12 +371,148 @@ const SPECIFIC_CONTRADICTION_FINDING_IDS = new Set([
   "missing_technical_disclosure"
 ]);
 
-function uniqueStrings(values: Array<string | null | undefined>) {
-  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
-}
+const POSITIVE_SURFACE_FINDING_IDS = new Set([
+  "privacy_policy_present",
+  "terms_of_service_present",
+  "cookie_policy_present",
+  "contact_support_path_present",
+  "targeted_advertising_choices_present",
+  "privacy_rights_path_present",
+  "privacy_contact_path_present",
+  "gpc_disclosure_present",
+  "tracking_technologies_disclosure_present",
+  "third_party_advertising_disclosure_present",
+  "targeted_advertising_disclosure_present",
+  "behavioral_analytics_disclosure_present",
+  "children_privacy_disclosure_present",
+  "accessibility_support_path_present",
+  "arbitration_clause_present"
+]);
+
+const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
+  /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
 
 function uniqueConcernFlags<T extends string>(values: T[]) {
   return [...new Set(values)];
+}
+
+function isDiscoveredButUnverifiedDisclosurePacket(packet: UnifiedFindingPacket) {
+  const pathOnlyPositiveFinding =
+    POSITIVE_SURFACE_FINDING_IDS.has(packet.unifiedFindingId) || packet.unifiedFindingId === "affiliate_disclosure_present";
+  const hasAnyUrl = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])].some(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  const hasReadableSnippet = (packet.evidence?.snippets ?? []).some(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+
+  return pathOnlyPositiveFinding && hasAnyUrl && !hasReadableSnippet;
+}
+
+function deriveVerificationState(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision["verificationState"] {
+  const negativeEvidenceFlags = packet.concernContext?.negativeEvidenceFlags ?? [];
+  const fetchQuality = packet.evidence?.fetchQuality ?? null;
+
+  if (negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed") || fetchQuality === "blocked_interstitial") {
+    return "blocked";
+  }
+
+  if (
+    packet.confidenceInputs.hasDirectRuntimeEvidence ||
+    packet.confidenceInputs.hasConcretePayloadEvidence ||
+    packet.confidenceInputs.hasStructuredValidationEvidence
+  ) {
+    return "runtime";
+  }
+
+  if (
+    negativeEvidenceFlags.includes("positive_surface_content_unverified") ||
+    fetchQuality === "thin_content" ||
+    isDiscoveredButUnverifiedDisclosurePacket(packet)
+  ) {
+    return "discovered";
+  }
+
+  if (fetchQuality === "verified_content" || (packet.confidenceInputs.hasPolicyTextEvidence && packet.confidenceInputs.hasPageAttribution)) {
+    return "verified";
+  }
+
+  return "triage";
+}
+
+function getVerificationLabel(state: UnifiedFindingPresentationDecision["verificationState"]) {
+  switch (state) {
+    case "verified":
+      return "Verified content";
+    case "discovered":
+      return "Discovered, not verified";
+    case "blocked":
+      return "Blocked or interstitial";
+    case "runtime":
+      return "Runtime evidence";
+    default:
+      return "Triage signal";
+  }
+}
+
+function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
+  const negativeEvidenceFlags = packet.concernContext?.negativeEvidenceFlags ?? [];
+
+  return uniqueStrings([
+    negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
+      ? "Retained page evidence looked like an authorization wall, challenge page, or other interstitial."
+      : null,
+    negativeEvidenceFlags.includes("positive_surface_content_unverified")
+      ? "A likely disclosure URL was discovered, but readable user-facing page content was not verified."
+      : null,
+    !negativeEvidenceFlags.includes("positive_surface_content_unverified") && isDiscoveredButUnverifiedDisclosurePacket(packet)
+      ? "A likely disclosure URL was discovered, but readable user-facing page content was not verified."
+      : null,
+    negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact")
+      ? "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim."
+      : null,
+    negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence")
+      ? "The retained evidence does not yet prove the request sequence happened before a clear consent choice."
+      : null,
+    negativeEvidenceFlags.includes("missing_explicit_contradiction_basis")
+      ? "The contradiction candidate does not retain an explicit contradiction basis yet."
+      : null,
+    negativeEvidenceFlags.includes("missing_behavior_side_evidence")
+      ? "Behavior-side runtime evidence is still incomplete for this contradiction candidate."
+      : null,
+    negativeEvidenceFlags.includes("missing_policy_side_evidence")
+      ? "Policy-side text evidence is still incomplete for this contradiction candidate."
+      : null,
+    negativeEvidenceFlags.includes("missing_contradiction_mapping")
+      ? "The retained evidence does not yet map the policy claim to the observed behavior clearly enough."
+      : null,
+    negativeEvidenceFlags.includes("no_direct_runtime_replay_artifact_observed")
+      ? "No concrete runtime replay artifact was retained yet."
+      : null,
+    negativeEvidenceFlags.includes("no_direct_runtime_retargeting_artifact_observed")
+      ? "No concrete runtime retargeting artifact was retained yet."
+      : null,
+    negativeEvidenceFlags.includes("policy_target_parsing_incomplete")
+      ? "The policy target was reachable, but automated parsing coverage was incomplete."
+      : null,
+    negativeEvidenceFlags.includes("policy_target_retrievable")
+      ? "The policy target appears retrievable, so this likely needs manual content review rather than a simple absence judgment."
+      : null
+  ]);
+}
+
+function finalizePresentationDecision(
+  packet: UnifiedFindingPacket,
+  decision: Omit<UnifiedFindingPresentationDecision, "verificationLabel" | "verificationState" | "downgradeReasons">
+): UnifiedFindingPresentationDecision {
+  const verificationState = deriveVerificationState(packet);
+
+  return {
+    ...decision,
+    downgradeReasons: getDowngradeReasons(packet),
+    verificationLabel: getVerificationLabel(verificationState),
+    verificationState
+  };
 }
 
 function isDistinctExplicitPolicySnippet(
@@ -443,6 +589,50 @@ function isReviewerFacingSnippet(value: string) {
   }
 
   return !isRawMarkerToken(trimmed);
+}
+
+function isBlockedOrInterstitialSnippet(value: string | null | undefined) {
+  return typeof value === "string" && BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN.test(value);
+}
+
+function deriveFetchQualityValue(input: {
+  attemptedUrls?: string[];
+  explicit?: unknown;
+  pageUrls?: string[];
+  snippets?: string[];
+  stopReason?: unknown;
+}): FetchQuality | null {
+  if (
+    input.explicit === "verified_content" ||
+    input.explicit === "thin_content" ||
+    input.explicit === "blocked_interstitial" ||
+    input.explicit === "unreachable"
+  ) {
+    return input.explicit;
+  }
+
+  const attemptedUrls = input.attemptedUrls ?? [];
+  const pageUrls = input.pageUrls ?? [];
+  const snippets = input.snippets ?? [];
+  const stopReason = typeof input.stopReason === "string" ? input.stopReason : null;
+
+  if (
+    snippets.some((snippet) => isBlockedOrInterstitialSnippet(snippet)) ||
+    (stopReason && /blocked|challenge|captcha|forbidden|auth/i.test(stopReason))
+  ) {
+    return "blocked_interstitial";
+  }
+  if (pageUrls.length > 0 && snippets.length > 0) {
+    return "verified_content";
+  }
+  if (pageUrls.length > 0 || snippets.length > 0) {
+    return "thin_content";
+  }
+  if (attemptedUrls.length > 0 || stopReason) {
+    return "unreachable";
+  }
+
+  return null;
 }
 
 function getSeverityWeight(severity: ReviewFindingSeverity | null | undefined) {
@@ -692,6 +882,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     return {
       counts: {} as Record<string, number>,
       entities: {} as Record<string, string[]>,
+      fetchQuality: null as FetchQuality | null,
       flags: [] as string[],
       pageUrls: [] as string[],
       snippets: [] as string[],
@@ -868,7 +1059,23 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
   ]);
 
-  return { counts, entities, flags, pageUrls, snippets, sourceUrls };
+  return {
+    counts,
+    entities,
+    fetchQuality: deriveFetchQualityValue({
+      attemptedUrls: Array.isArray(fallbackEvidence.keyPageAttemptedUrls)
+        ? fallbackEvidence.keyPageAttemptedUrls.filter((value): value is string => typeof value === "string")
+        : [],
+      explicit: fallbackEvidence.fetchQuality ?? fallbackEvidence.fetch_quality ?? fallbackEvidence.normalizedConcernFetchQuality,
+      pageUrls,
+      snippets,
+      stopReason: fallbackEvidence.keyPageStopReason
+    }),
+    flags,
+    pageUrls,
+    snippets,
+    sourceUrls
+  };
 }
 
 function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | null) {
@@ -876,6 +1083,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     return {
       counts: {} as Record<string, number>,
       entities: {} as Record<string, string[]>,
+      fetchQuality: null as FetchQuality | null,
       flags: [] as string[],
       pageUrls: [] as string[],
       snippets: [] as string[],
@@ -976,6 +1184,11 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
   return {
     counts,
     entities,
+    fetchQuality: deriveFetchQualityValue({
+      explicit: evidence.fetchQuality ?? evidence.fetch_quality ?? evidence.normalizedConcernFetchQuality,
+      pageUrls: [...pageUrls],
+      snippets: [...snippets]
+    }),
     flags: [
       ...flags,
       ...(hasExplicitPolicySnippet ? ["explicit_policy_snippet_retained"] : []),
@@ -1027,6 +1240,7 @@ function mergeEvidence(
       ...(next.entities ?? {}),
       ...(validationEvidence.entities ?? {})
     },
+    fetchQuality: current?.fetchQuality ?? next.fetchQuality ?? validationEvidence.fetchQuality ?? null,
     flags,
     pageUrls,
     snippets,
@@ -1192,6 +1406,7 @@ function sanitizeEvidenceForFinding(
   const next = {
     counts: { ...(evidence.counts ?? {}) },
     entities: { ...(evidence.entities ?? {}) },
+    fetchQuality: evidence.fetchQuality ?? null,
     flags: [...(evidence.flags ?? [])],
     pageUrls: [...(evidence.pageUrls ?? [])],
     snippets: [...(evidence.snippets ?? [])]
@@ -1200,6 +1415,10 @@ function sanitizeEvidenceForFinding(
       .filter((snippet): snippet is string => Boolean(snippet)),
     sourceUrls: [...(evidence.sourceUrls ?? [])]
   };
+
+  if (POSITIVE_SURFACE_FINDING_IDS.has(findingId)) {
+    next.snippets = next.snippets.filter((snippet) => !isBlockedOrInterstitialSnippet(snippet));
+  }
 
   if (
     findingId === "affiliate_disclosure_present" ||
@@ -1461,6 +1680,7 @@ function deriveConfidenceInputs(input: {
   const allEvidenceRows = [...validationEvidenceRows, ...input.fallbackEvidenceRows.filter(Boolean) as Record<string, unknown>[]];
   const normalizedConcernStrengthFlags = getNormalizedConcernStrengthFlags(input.fallbackEvidenceRows);
   const evidenceQualityFlags = uniqueStrings([
+    ...(input.packet.evidence?.fetchQuality ? [`fetch_quality:${input.packet.evidence.fetchQuality}`] : []),
     ...(input.packet.evidence?.flags ?? []),
     ...normalizedConcernStrengthFlags,
     ...allEvidenceRows.flatMap((row) =>
@@ -2356,13 +2576,13 @@ function getSpecializedPresentationDecision(input: {
   return (
     getCoverageSiblingSuppressionDecision(input) ??
     getMockInvestmentContextDecision(input) ??
-    getConcernGatingDecision(input.packet) ??
     getContradictionDecision(input) ??
     getPreconsentTrackingDecision(input.packet) ??
     getMinorsContextDecision(input.packet) ??
     getThinFinancialTransparencyDecision(input.packet) ??
     getPacketizedFindingEvidenceDecision(input.packet) ??
-    getArbitrationLocaleSuppressionDecision(input.packet)
+    getArbitrationLocaleSuppressionDecision(input.packet) ??
+    getConcernGatingDecision(input.packet)
   );
 }
 
@@ -2699,24 +2919,24 @@ function buildPresentationDecision(input: {
 }): UnifiedFindingPresentationDecision {
   const specializedDecision = getSpecializedPresentationDecision(input);
   if (specializedDecision) {
-    return specializedDecision;
+    return finalizePresentationDecision(input.packet, specializedDecision);
   }
 
   const sharedSupportSurfacingDecision = getSharedSupportSurfacingDecision(input.packet);
   if (sharedSupportSurfacingDecision) {
-    return sharedSupportSurfacingDecision;
+    return finalizePresentationDecision(input.packet, sharedSupportSurfacingDecision);
   }
 
   const lateFallbackDecision = getLateFallbackPresentationDecision(input.packet);
   if (lateFallbackDecision) {
-    return lateFallbackDecision;
+    return finalizePresentationDecision(input.packet, lateFallbackDecision);
   }
 
-  return {
+  return finalizePresentationDecision(input.packet, {
     confidenceRationale: buildConfidenceRationale(input.packet),
     rationale: "Surfaced because the evidence is specific enough to be useful in the main report.",
     status: "surface"
-  };
+  });
 }
 
 function getSourceLabel(packet: UnifiedFindingPacket) {
@@ -2966,8 +3186,44 @@ function getFamilyPacketPolicySnippets(targets: FamilyPacketTargetRecord[]) {
     .filter((snippet): snippet is string => Boolean(snippet));
 }
 
+function getFamilyPacketFetchQuality(targets: FamilyPacketTargetRecord[], snippets: string[]) {
+  const explicitQualities = targets.flatMap((target) => {
+    const value = typeof target.fetchQuality === "string" ? target.fetchQuality : null;
+    return value === "verified_content" ||
+      value === "thin_content" ||
+      value === "blocked_interstitial" ||
+      value === "unreachable"
+      ? [value]
+      : [];
+  });
+
+  if (explicitQualities.includes("blocked_interstitial")) {
+    return "blocked_interstitial" as const;
+  }
+  if (explicitQualities.includes("verified_content")) {
+    return "verified_content" as const;
+  }
+  if (explicitQualities.includes("thin_content")) {
+    return "thin_content" as const;
+  }
+  if (explicitQualities.includes("unreachable")) {
+    return "unreachable" as const;
+  }
+  if (snippets.some((snippet) => isBlockedOrInterstitialSnippet(snippet))) {
+    return "blocked_interstitial" as const;
+  }
+  if (targets.length > 0 && snippets.length > 0) {
+    return "verified_content" as const;
+  }
+  if (targets.length > 0) {
+    return "thin_content" as const;
+  }
+  return null;
+}
+
 function buildFamilyPacketFallbackEvidence(input: {
   familyId: string;
+  familyTargets: FamilyPacketTargetRecord[];
   findingRecord: FamilyPacketFindingRecord;
   findingId: string;
   firstPageUrl: string | null;
@@ -2986,6 +3242,11 @@ function buildFamilyPacketFallbackEvidence(input: {
 
   return {
     ...evidencePayload,
+    fetchQuality:
+      (typeof evidencePayload.fetchQuality === "string" &&
+      ["verified_content", "thin_content", "blocked_interstitial", "unreachable"].includes(evidencePayload.fetchQuality)
+        ? (evidencePayload.fetchQuality as FetchQuality)
+        : getFamilyPacketFetchQuality(input.familyTargets, input.policySnippets)),
     familyPacketCanonicalUrl: input.firstPageUrl,
     familyPacketFamilyId: input.familyId,
     familyPacketFindingId: input.findingId,
@@ -3185,6 +3446,7 @@ function getFamilyPacketReviewFindingCandidates(scanEvents?: UnifiedFindingScanE
           evidence: uniqueStrings([...pageUrls, ...sourceUrls]),
           fallbackEvidence: buildFamilyPacketFallbackEvidence({
             familyId,
+            familyTargets: matchingTargets,
             findingRecord: finding,
             findingId,
             firstPageUrl,

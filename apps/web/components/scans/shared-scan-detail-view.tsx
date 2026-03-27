@@ -1655,6 +1655,7 @@ function getKeyPageDiscoveryPageSummary(
   attemptCount: number | null;
   attemptedUrls: string[];
   bestDiscoverySource: string | null;
+  fetchQuality: string | null;
   guessedOnly: boolean;
   stopReason: string | null;
 } | null {
@@ -1682,6 +1683,7 @@ function getKeyPageDiscoveryPageSummary(
       ? match.attemptedUrls.filter((value): value is string => typeof value === "string")
       : [],
     bestDiscoverySource: typeof match.bestDiscoverySource === "string" ? match.bestDiscoverySource : null,
+    fetchQuality: typeof match.fetchQuality === "string" ? match.fetchQuality : null,
     guessedOnly: match.guessedOnly === true
     ,
     stopReason: typeof match.stopReason === "string" ? match.stopReason : null
@@ -1836,6 +1838,7 @@ function buildReviewFindings(input: {
                 })
             : keyPageType
               ? {
+                  fetchQuality: keyPageSummary?.fetchQuality ?? null,
                   keyPageAttemptCount: keyPageSummary?.attemptCount ?? null,
                   keyPageDiscoverySource: keyPageSummary?.bestDiscoverySource ?? null,
                   keyPageGuessedOnly: keyPageSummary?.guessedOnly ?? null,
@@ -2093,6 +2096,32 @@ function getConfidenceBadgeClasses(band: UnifiedFindingDisplayPacket["confidence
   }
 }
 
+function getPresentationStatusBadgeClasses(status: UnifiedFindingDisplayPacket["presentationDecision"]["status"]) {
+  switch (status) {
+    case "surface":
+      return "bg-emerald-100 text-emerald-900";
+    case "audit_only":
+      return "bg-amber-100 text-amber-900";
+    default:
+      return "bg-slate-200 text-slate-700";
+  }
+}
+
+function getVerificationBadgeClasses(state: UnifiedFindingDisplayPacket["presentationDecision"]["verificationState"]) {
+  switch (state) {
+    case "verified":
+      return "bg-emerald-100 text-emerald-900";
+    case "runtime":
+      return "bg-sky-100 text-sky-900";
+    case "discovered":
+      return "bg-amber-100 text-amber-900";
+    case "blocked":
+      return "bg-rose-100 text-rose-900";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
 function getCollapsedFindingSummary(finding: UnifiedFindingDisplayPacket) {
   const source = (finding.observedValue ?? "").trim();
   if (!source) {
@@ -2137,6 +2166,16 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
           {input.finding.presentation.findingName}
         </p>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getPresentationStatusBadgeClasses(input.finding.presentationDecision.status)}`}>
+          {input.finding.presentationDecision.status === "surface"
+            ? "Surface"
+            : input.finding.presentationDecision.status === "audit_only"
+              ? "Audit only"
+              : "Suppressed"}
+        </span>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getVerificationBadgeClasses(input.finding.presentationDecision.verificationState)}`}>
+          {input.finding.presentationDecision.verificationLabel}
+        </span>
         {collapsedSummary ? (
           <p className="min-w-0 truncate text-xs font-mono text-slate-500">
             <span aria-hidden="true" className="mr-2 text-slate-300">
@@ -2191,6 +2230,16 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <div className="mt-2 space-y-2 text-xs text-slate-500">
           <p>{evidenceSummary}</p>
           <p>{confidenceRationale}</p>
+          {input.finding.presentationDecision.downgradeReasons.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why It Was Limited</p>
+              <ul className="space-y-1 text-xs text-slate-600">
+                {input.finding.presentationDecision.downgradeReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <details className="group/json">
             <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
               <span
@@ -3130,6 +3179,17 @@ function deriveAudienceSensitivityContext(snapshot: Record<string, unknown>) {
   return items.slice(0, 6);
 }
 
+export function deriveFindingEvidenceQualitySummary(findings: UnifiedFindingDisplayPacket[]) {
+  return {
+    auditOnlyCount: findings.filter((finding) => finding.presentationDecision.status === "audit_only").length,
+    blockedCount: findings.filter((finding) => finding.presentationDecision.verificationState === "blocked").length,
+    discoveredCount: findings.filter((finding) => finding.presentationDecision.verificationState === "discovered").length,
+    runtimeCount: findings.filter((finding) => finding.presentationDecision.verificationState === "runtime").length,
+    triageCount: findings.filter((finding) => finding.presentationDecision.verificationState === "triage").length,
+    verifiedCount: findings.filter((finding) => finding.presentationDecision.verificationState === "verified").length
+  };
+}
+
 function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const sortedFindings = [...input.findings].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
@@ -3148,6 +3208,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const highPriorityCount = sortedFindings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = sortedFindings.filter((finding) => finding.severity === "medium").length;
   const lowPriorityCount = sortedFindings.filter((finding) => finding.severity === "low").length;
+  const evidenceQualitySummary = deriveFindingEvidenceQualitySummary(sortedFindings);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -3181,6 +3242,38 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
         <div className="mt-4">
           {sortedFindings.length > 0 ? (
             <div className="space-y-4">
+              <div className={METRIC_GRID_CLASS}>
+                <SummaryMetricTile
+                  label="Verified content"
+                  tooltip="Findings backed by readable user-facing page content or equivalent verified policy/disclosure evidence."
+                  value={evidenceQualitySummary.verifiedCount}
+                />
+                <SummaryMetricTile
+                  label="Discovered only"
+                  tooltip="Findings where a likely disclosure path was retained, but readable user-facing content was not verified."
+                  value={evidenceQualitySummary.discoveredCount}
+                />
+                <SummaryMetricTile
+                  label="Blocked"
+                  tooltip="Findings held back because retained evidence pointed to an auth wall, challenge page, or other interstitial."
+                  value={evidenceQualitySummary.blockedCount}
+                />
+                <SummaryMetricTile
+                  label="Runtime-backed"
+                  tooltip="Findings supported by runtime or structured validation evidence rather than page-surface verification."
+                  value={evidenceQualitySummary.runtimeCount}
+                />
+                <SummaryMetricTile
+                  label="Audit only"
+                  tooltip="Surfaced findings retained for reviewer follow-up but intentionally not promoted as strong customer-facing claims."
+                  value={evidenceQualitySummary.auditOnlyCount}
+                />
+                <SummaryMetricTile
+                  label="Triage"
+                  tooltip="Signals that still function mainly as prioritization or review aids rather than verified findings."
+                  value={evidenceQualitySummary.triageCount}
+                />
+              </div>
               {sortedFindings.map((finding) => (
                 <ReviewFindingCard key={`priority-${finding.unifiedFindingId}`} finding={finding} />
               ))}

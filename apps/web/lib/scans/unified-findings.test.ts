@@ -481,6 +481,7 @@ test("surfaces support-access unified findings from finding-family packets", () 
               canonicalTargets: [
                 {
                   canonicalUrl: "https://www.example.com/help",
+                  fetchQuality: "verified_content",
                   snippet: "Help Center and Accessibility Support",
                   supportedSurfaceTypes: ["contact_support", "accessibility_support"],
                   title: "Help Center"
@@ -518,6 +519,7 @@ test("surfaces support-access unified findings from finding-family packets", () 
   assert.equal(accessibilityPacket?.primaryPageUrl, "https://www.example.com/help");
   assert.equal(contactPacket?.presentationDecision.status, "surface");
   assert.equal(accessibilityPacket?.presentationDecision.status, "surface");
+  assert.equal(contactPacket?.evidence?.fetchQuality, "verified_content");
   assert.ok(contactPacket?.evidence?.snippets?.includes("Help Center and Accessibility Support"));
   assert.ok(accessibilityPacket?.evidence?.snippets?.includes("Help Center and Accessibility Support"));
 });
@@ -864,7 +866,7 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
   const genericPacket = packets.find((packet) => packet.unifiedFindingId === "policy_behavior_conflict");
   const specificPacket = packets.find((packet) => packet.unifiedFindingId === "session_replay_undisclosed");
 
-  assert.equal(genericPacket?.presentationDecision.status, "audit_only");
+  assert.equal(genericPacket?.presentationDecision.status, "suppress");
   assert.equal(specificPacket?.presentationDecision.status, "surface");
 });
 
@@ -1094,6 +1096,88 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
 
   assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
   assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.verificationState, "triage");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Triage signal");
+  assert.ok(
+    packet?.presentationDecision.downgradeReasons.includes(
+      "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim."
+    )
+  );
+  assert.equal(packet?.presentation.confidenceScore, "0.45");
+});
+
+test("keeps blocked contact-path evidence audit-only and strips interstitial snippets", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a reachable contact surface.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/contact"],
+          policySnippets: [
+            "We’re sorry, but we were unable to authorize your request. Please call us at 800-555-1212."
+          ],
+          signalKey: "disclosure.contact_page_present",
+          signalLabel: "Contact page fetched",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/contact"]
+        },
+        observedValue: "Contact page fetched",
+        severity: "medium",
+        signalKey: "disclosure.contact_page_present",
+        signalLabel: "Contact page fetched",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Contact page fetched"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "contact_support_path_present");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.verificationState, "blocked");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Blocked or interstitial");
+  assert.ok(
+    packet?.presentationDecision.downgradeReasons.includes(
+      "Retained page evidence looked like an authorization wall, challenge page, or other interstitial."
+    )
+  );
+  assert.deepEqual(packet?.evidence?.snippets, []);
+});
+
+test("keeps blocked cookie-policy evidence audit-only and strips interstitial snippets", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a reachable cookie-policy surface.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/cookies"],
+          policySnippets: [
+            "We’re sorry, but we were unable to authorize your request. Please call us at 800-555-1212."
+          ],
+          signalKey: "disclosure.cookie_policy_present",
+          signalLabel: "Cookie policy fetched",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/cookies"]
+        },
+        observedValue: "Cookie policy fetched",
+        severity: "medium",
+        signalKey: "disclosure.cookie_policy_present",
+        signalLabel: "Cookie policy fetched",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Cookie policy fetched"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.evidence?.fetchQuality, "blocked_interstitial");
+  assert.deepEqual(packet?.evidence?.snippets, []);
 });
 
 test("keeps page-specific findings in audit only when page attribution is still missing", () => {
@@ -1116,7 +1200,7 @@ test("keeps page-specific findings in audit only when page attribution is still 
 
   assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /internal review/i);
+  assert.match(packet?.presentationDecision.rationale ?? "", /policy text and concrete runtime evidence|internal review/i);
 });
 
 test("surfaces GPC failures as runtime-backed unified findings", () => {
@@ -1421,6 +1505,7 @@ test("keeps accessibility risk score audit-only even when representative example
 
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentation.confidenceScore, "0.65");
 });
 
 test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {
@@ -1546,6 +1631,9 @@ test("surfaces privacy policy present from snapshot disclosure evidence", () => 
 
   assert.equal(packet?.unifiedFindingId, "privacy_policy_present");
   assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.verificationState, "verified");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Verified content");
+  assert.deepEqual(packet?.presentationDecision.downgradeReasons, []);
   assert.equal(packet?.evidence?.pageUrls?.[0], "https://www.example.com/privacy");
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible privacy policy surface/i);
 });
@@ -1956,6 +2044,13 @@ test("keeps affiliate disclosure audit-only when only the path was retained with
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
   assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.verificationState, "discovered");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Discovered, not verified");
+  assert.ok(
+    packet?.presentationDecision.downgradeReasons.includes(
+      "A likely disclosure URL was discovered, but readable user-facing page content was not verified."
+    )
+  );
 });
 
 test("suppresses weak cookie obstruction when a cookie policy surface is already retained", () => {

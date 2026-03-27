@@ -55,6 +55,45 @@ async function loadExecutiveSummaryScanCondition() {
   }).deriveExecutiveSummaryScanCondition;
 }
 
+async function loadFindingEvidenceQualitySummary() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveFindingEvidenceQualitySummary?: unknown })
+      .deriveFindingEvidenceQualitySummary
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveFindingEvidenceQualitySummary: (
+      findings: Array<{
+        presentationDecision: {
+          status: string;
+          verificationState: string;
+        };
+      }>
+    ) => {
+      auditOnlyCount: number;
+      blockedCount: number;
+      discoveredCount: number;
+      runtimeCount: number;
+      triageCount: number;
+      verifiedCount: number;
+    };
+  }).deriveFindingEvidenceQualitySummary;
+}
+
 async function loadUnverifiedHomepageReview() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -265,12 +304,31 @@ test("buildScanReportUnifiedFindings promotes snapshot-backed positive surfaces 
   const choicesFinding = findings.find((finding) => finding.unifiedFindingId === "targeted_advertising_choices_present");
   const affiliateFinding = findings.find((finding) => finding.unifiedFindingId === "affiliate_disclosure_present");
 
-  assert.ok(termsFinding);
-  assert.equal((termsFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "surface");
-  assert.ok(choicesFinding);
-  assert.equal((choicesFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "surface");
+  assert.equal(termsFinding, undefined);
+  assert.equal(choicesFinding, undefined);
   assert.ok(affiliateFinding);
   assert.equal((affiliateFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "audit_only");
+});
+
+test("deriveFindingEvidenceQualitySummary counts verification states and audit-only findings", async () => {
+  const deriveFindingEvidenceQualitySummary = await loadFindingEvidenceQualitySummary();
+
+  const summary = deriveFindingEvidenceQualitySummary([
+    { presentationDecision: { status: "surface", verificationState: "verified" } },
+    { presentationDecision: { status: "audit_only", verificationState: "discovered" } },
+    { presentationDecision: { status: "audit_only", verificationState: "blocked" } },
+    { presentationDecision: { status: "surface", verificationState: "runtime" } },
+    { presentationDecision: { status: "audit_only", verificationState: "triage" } }
+  ]);
+
+  assert.deepEqual(summary, {
+    auditOnlyCount: 3,
+    blockedCount: 1,
+    discoveredCount: 1,
+    runtimeCount: 1,
+    triageCount: 1,
+    verifiedCount: 1
+  });
 });
 
 test("deriveExecutiveSummaryScanCondition flags blocked homepage scans", async () => {
