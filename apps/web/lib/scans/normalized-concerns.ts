@@ -319,6 +319,15 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
   return extractEvidenceFromRaw(finding?.evidence ?? null);
 }
 
+function normalizeFetchQuality(value: unknown): FetchQuality | null {
+  return value === "verified_content" ||
+    value === "thin_content" ||
+    value === "blocked_interstitial" ||
+    value === "unreachable"
+    ? value
+    : null;
+}
+
 function mergeConcernEvidenceBundles(
   left: ReturnType<typeof extractEvidenceFromRaw>,
   right: ReturnType<typeof extractEvidenceFromValidationFinding>,
@@ -327,7 +336,7 @@ function mergeConcernEvidenceBundles(
   return {
     counts: { ...left.counts, ...right.counts },
     entities: { ...left.entities, ...right.entities },
-    fetchQuality: left.fetchQuality ?? right.fetchQuality,
+    fetchQuality: normalizeFetchQuality(left.fetchQuality ?? right.fetchQuality),
     flags: uniqueStrings([...left.flags, ...right.flags]),
     pageUrls: uniqueStrings([
       ...left.pageUrls,

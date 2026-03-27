@@ -172,6 +172,11 @@ export type UnifiedFindingPresentationDecision = {
   verificationState: "verified" | "discovered" | "blocked" | "runtime" | "triage";
 };
 
+type UnifiedFindingPresentationDecisionDraft = Omit<
+  UnifiedFindingPresentationDecision,
+  "verificationLabel" | "verificationState" | "downgradeReasons"
+>;
+
 export type UnifiedFindingCandidate = {
   categoryId?: string;
   description: string;
@@ -503,7 +508,7 @@ function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
 
 function finalizePresentationDecision(
   packet: UnifiedFindingPacket,
-  decision: Omit<UnifiedFindingPresentationDecision, "verificationLabel" | "verificationState" | "downgradeReasons">
+  decision: UnifiedFindingPresentationDecisionDraft
 ): UnifiedFindingPresentationDecision {
   const verificationState = deriveVerificationState(packet);
 
@@ -2062,7 +2067,7 @@ function hasNoRetainedReviewerEvidence(packet: UnifiedFindingPacket) {
   );
 }
 
-function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (packet.unifiedFindingId === "cookie_policy_present" && hasNoRetainedReviewerEvidence(packet)) {
     return {
       confidenceRationale: buildConfidenceRationale(packet),
@@ -2113,7 +2118,7 @@ function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): Uni
   return null;
 }
 
-function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (!isFinancialValidationFindingId(packet.unifiedFindingId)) {
     return null;
   }
@@ -2189,7 +2194,7 @@ function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): Uni
 function getCoverageSiblingSuppressionDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecision | null {
+}): UnifiedFindingPresentationDecisionDraft | null {
   if (
     input.packet.unifiedFindingId === "cookie_policy_structurally_obstructed" &&
     hasNoRetainedReviewerEvidence(input.packet) &&
@@ -2224,7 +2229,7 @@ function getCoverageSiblingSuppressionDecision(input: {
 function getMockInvestmentContextDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecision | null {
+}): UnifiedFindingPresentationDecisionDraft | null {
   const regulatorMockContextPresent = input.siblingRows.some(
     (row) => row.unifiedFindingId === "regulator_operated_mock_investment_example"
   );
@@ -2245,7 +2250,7 @@ function getMockInvestmentContextDecision(input: {
   return null;
 }
 
-function getUnavailableCoverageDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getUnavailableCoverageDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (
     (packet.unifiedFindingId === "cookie_policy_unavailable" ||
       packet.unifiedFindingId === "accessibility_statement_unavailable") &&
@@ -2264,7 +2269,7 @@ function getUnavailableCoverageDecision(packet: UnifiedFindingPacket): UnifiedFi
   return null;
 }
 
-function getSpecificAuditOnlyEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getSpecificAuditOnlyEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (
     packet.unifiedFindingId === "weak_cookie_security_attributes" &&
     ![
@@ -2296,7 +2301,7 @@ function getSpecificAuditOnlyEvidenceDecision(packet: UnifiedFindingPacket): Uni
 function getContradictionDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecision | null {
+}): UnifiedFindingPresentationDecisionDraft | null {
   if (
     input.packet.unifiedFindingId === "policy_behavior_conflict" &&
     input.siblingRows.some((row) => SPECIFIC_CONTRADICTION_FINDING_IDS.has(row.unifiedFindingId))
@@ -2377,7 +2382,7 @@ function getContradictionDecision(input: {
   return null;
 }
 
-function getPreconsentTrackingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getPreconsentTrackingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (packet.unifiedFindingId !== "preconsent_tracking") {
     return null;
   }
@@ -2407,7 +2412,7 @@ function getPreconsentTrackingDecision(packet: UnifiedFindingPacket): UnifiedFin
   };
 }
 
-function getMinorsContextDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getMinorsContextDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   const isDomainLevelSensitiveContext = isDomainLevelSensitiveContextFinding(packet.unifiedFindingId);
   const isDomainLevelChildrenDisclosureContext = isDomainLevelChildrenDisclosureFinding(packet.unifiedFindingId);
   const minorsContextEvidenceCount = [
@@ -2474,7 +2479,7 @@ function getMinorsContextDecision(packet: UnifiedFindingPacket): UnifiedFindingP
   return null;
 }
 
-function getGenericAuditOnlyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getGenericAuditOnlyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   const needsPageAttribution = packetNeedsPageAttribution({
     family: packet.details?.family,
     unifiedFindingId: packet.unifiedFindingId
@@ -2518,7 +2523,7 @@ function getGenericAuditOnlyDecision(packet: UnifiedFindingPacket): UnifiedFindi
   return null;
 }
 
-function getConcernGatingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getConcernGatingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   const concernExternalSurfacingEligibilities = packet.concernContext?.externalSurfacingEligibilities ?? [];
   const concernPromotionEligibilities = packet.concernContext?.promotionEligibilities ?? [];
   const hasConcernExternalEligibility = concernExternalSurfacingEligibilities.includes("eligible");
@@ -2549,7 +2554,7 @@ function getConcernGatingDecision(packet: UnifiedFindingPacket): UnifiedFindingP
   return null;
 }
 
-function getArbitrationLocaleSuppressionDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getArbitrationLocaleSuppressionDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   if (packet.unifiedFindingId !== "arbitration_clause_present") {
     return null;
   }
@@ -2572,7 +2577,7 @@ function getArbitrationLocaleSuppressionDecision(packet: UnifiedFindingPacket): 
 function getSpecializedPresentationDecision(input: {
   packet: UnifiedFindingPacket;
   siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecision | null {
+}): UnifiedFindingPresentationDecisionDraft | null {
   return (
     getCoverageSiblingSuppressionDecision(input) ??
     getMockInvestmentContextDecision(input) ??
@@ -2586,7 +2591,7 @@ function getSpecializedPresentationDecision(input: {
   );
 }
 
-function getSharedSupportSurfacingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getSharedSupportSurfacingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   const packetizedFindingSupportRule = getPacketizedFindingSupportRule(packet.unifiedFindingId);
   if (
     packetizedFindingSupportRule &&
@@ -2629,7 +2634,7 @@ function getSharedSupportSurfacingDecision(packet: UnifiedFindingPacket): Unifie
   return null;
 }
 
-function getLateFallbackPresentationDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision | null {
+function getLateFallbackPresentationDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
   return (
     getUnavailableCoverageDecision(packet) ??
     getSpecificAuditOnlyEvidenceDecision(packet) ??
