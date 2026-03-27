@@ -88,51 +88,41 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
   const totalSignals = scans.reduce((sum, scan) => sum + (scan.totalSignals ?? 0), 0);
 
   return (
-    <div className="space-y-8 pb-6">
+    <div className="space-y-6 pb-6">
       <ScanHistoryLiveRefresh enabled={hasActiveScans} />
-      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(103,199,240,0.24),_transparent_36%),linear-gradient(135deg,#ffffff_0%,#f3fbff_56%,#eef9f2_100%)] shadow-panel">
-        <div className="grid gap-6 px-6 py-7 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)] lg:px-8 lg:py-8">
-          <div className="space-y-4">
-            <Badge className="bg-white/80 text-sky-800 ring-1 ring-sky-100">Workspace scan activity</Badge>
-            <div className="space-y-3">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Scan History</h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                Review queued, running, and completed scans across your workspace with a faster read on what changed and what needs attention next.
-              </p>
+      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-panel sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">Scan History</h1>
+              <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">Workspace</Badge>
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-              <div className="rounded-full bg-white/85 px-4 py-2 ring-1 ring-slate-200">
-                <span className="font-semibold text-slate-900">{scans.length}</span> total scans
-              </div>
-              <div className="rounded-full bg-white/85 px-4 py-2 ring-1 ring-slate-200">
-                <span className="font-semibold text-slate-900">{totalSignals}</span> signals captured
-              </div>
-              {hasActiveScans ? (
-                <div className="rounded-full bg-emerald-50 px-4 py-2 text-emerald-800 ring-1 ring-emerald-100">
-                  Live updates every 3 seconds while work is in progress
-                </div>
-              ) : (
-                <div className="rounded-full bg-white/85 px-4 py-2 ring-1 ring-slate-200">No active scans right now</div>
-              )}
-            </div>
+            <p className="text-sm text-slate-600">
+              Review recent scans and jump straight into anything running or ready for review.
+            </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.06)] backdrop-blur">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Completed</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{completedCount}</p>
-              <p className="mt-1 text-sm text-slate-500">Scans ready for review</p>
+          <div className="flex flex-wrap gap-2 text-sm text-slate-600 lg:justify-end">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="font-semibold text-slate-900">{scans.length}</span> scans
             </div>
-            <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.06)] backdrop-blur">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Running</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{runningCount}</p>
-              <p className="mt-1 text-sm text-slate-500">Actively processing now</p>
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="font-semibold text-slate-900">{totalSignals}</span> signals
             </div>
-            <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_14px_36px_rgba(15,23,42,0.06)] backdrop-blur">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Queued</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{queuedCount}</p>
-              <p className="mt-1 text-sm text-slate-500">Waiting to start</p>
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="font-semibold text-slate-900">{completedCount}</span> completed
             </div>
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="font-semibold text-slate-900">{runningCount}</span> running
+            </div>
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="font-semibold text-slate-900">{queuedCount}</span> queued
+            </div>
+            {hasActiveScans ? (
+              <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-100">
+                Live refresh on
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
