@@ -159,14 +159,20 @@ export default async function DashboardPage() {
       </Card>
 
       <Card className="border-slate-200 bg-white">
-        <CardHeader className="pb-1.5">
-          <CardTitle>Recent scan history</CardTitle>
+        <CardHeader className="pb-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle>Recent scan history</CardTitle>
+              <p className="text-sm text-slate-500">Newest domain activity first.</p>
+            </div>
+            <p className="text-sm text-slate-500">{recentScansByDomain.length} domains with recent scans</p>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="pt-0">
           {recentScans.length === 0 ? (
             <p className="text-sm text-slate-600">No scans yet. Add a website to start building scan history.</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-slate-50/40">
               {recentScansByDomain.map((group) => {
                 const latestScan = group.scans[0];
                 if (!latestScan) {
@@ -191,13 +197,24 @@ export default async function DashboardPage() {
                 const earlierScans = group.scans.slice(1, 11);
 
                 return (
-                  <div key={group.key} className="rounded-2xl border border-slate-200 px-3 py-1.5">
-                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-medium text-slate-900">{group.hostname ?? "Unknown website"}</p>
-                        <p className="text-xs text-slate-500">
-                          Latest scan · {latestScan.scanType} · {latestScan.status} · {formatDateTime(latestScan.createdAt)}
-                        </p>
+                  <div key={group.key} className="px-4 py-3 first:rounded-t-2xl last:rounded-b-2xl">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div>
+                          <p className="truncate font-medium text-slate-900">{group.hostname ?? "Unknown website"}</p>
+                          <p className="text-xs text-slate-500">
+                            {group.scans.length} scan{group.scans.length === 1 ? "" : "s"} · newest {formatDateTime(latestScan.createdAt)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                          <span>
+                            <span className="font-medium text-slate-900">{latestScan.scanType}</span> · {latestScan.status}
+                          </span>
+                          <span>Signals {latestScan.totalSignals ?? 0}</span>
+                          {latestScan.certscoreOverall !== null ? <span>Overall {latestScan.certscoreOverall}</span> : null}
+                          {latestScan.cmpVendorName ? <span>CMP {latestScan.cmpVendorName}</span> : null}
+                          {latestScan.cookieBannerPresent === false ? <span>Banner not visible</span> : null}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-start gap-2 self-start sm:pt-0.5">
                         <DomainRowActionButton tooltip="View latest scan">
