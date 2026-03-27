@@ -1,13 +1,12 @@
-import Link from "next/link";
-import { type PlanCode } from "@website-signal-risk-scanner/shared";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
-import { PendingButtonLink } from "../../components/ui/pending-link";
 import { RescanDomainForm } from "../../components/scans/rescan-domain-form";
+import { PendingButtonLink } from "../../components/ui/pending-link";
+import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../server/auth";
 import { listOrganizationChanges } from "../../server/changes/list-organization-changes";
 import { getOrganizationDomains } from "../../server/domains/get-organization-domains";
-import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { getPlanLimits } from "../../server/plans/get-plan-limits";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
 import { getOrganizationSignalOverview } from "../../server/signals/get-organization-signal-overview";
@@ -28,56 +27,54 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
-  if (!value) {
-    return "This domain cannot be re-scanned yet.";
+function formatRescanCooldownMessage(nextAllowedAt: string | null, planCode: PlanCode) {
+  if (!nextAllowedAt) {
+    return "This website was scanned recently. Please try again later.";
   }
 
-  return `Next re-scan available ${formatDateTime(value)} for this ${
-    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
-  } plan domain.`;
+  const formattedTime = formatDateTime(nextAllowedAt);
+  return planCode === "free"
+    ? `Free plans can re-scan once every 30 days. Try again after ${formattedTime}.`
+    : `This website was scanned recently. Try again after ${formattedTime}.`;
 }
 
-function formatMetric(value: number | null) {
-  return value ?? "—";
+function ViewScanIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
 }
 
-function formatBooleanBadge(value: boolean | null) {
-  if (value === null) {
-    return "—";
-  }
-
-  return value ? "Yes" : "No";
+function ScanHistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 
-function getConsentSummary(scan: Awaited<ReturnType<typeof getOrganizationScans>>[number]) {
-  if (scan.consentAuditCompleted) {
-    if (scan.consentRejectInteractionSucceeded && scan.consentRejectReducedTracking === false) {
-      return "Consent audit: reject did not reduce tracking";
-    }
-
-    if (scan.consentRejectInteractionSucceeded && scan.consentRejectReducedThirdPartyCookies === false) {
-      return "Consent audit: reject did not reduce third-party cookies";
-    }
-
-    if (scan.consentRejectInteractionSucceeded) {
-      return "Consent audit: reject interaction succeeded";
-    }
-  }
-
-  if (scan.cookieBannerPresent === true && scan.cmpVendorName) {
-    return `Consent surface visible · ${scan.cmpVendorName}`;
-  }
-
-  if (scan.cookieBannerPresent === true) {
-    return "Consent surface visible";
-  }
-
-  if (scan.cmpVendorName) {
-    return `CMP detected · ${scan.cmpVendorName}`;
-  }
-
-  return "No consent evidence surfaced";
+function DomainRowActionButton({
+  children,
+  tooltip
+}: {
+  children: React.ReactNode;
+  tooltip: string;
+}) {
+  return (
+    <div className="group relative inline-flex">
+      {children}
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block">
+        {tooltip}
+      </div>
+    </div>
+  );
 }
 
 export default async function DashboardPage() {
@@ -90,14 +87,6 @@ export default async function DashboardPage() {
     getOrganizationSignalOverview(organization.id)
   ]);
 
-  const latestCompletedSignalSet = signalOverview.find((item) => item.latestCompletedAt);
-  const shouldShowUpgradePlanCta = organization.plan !== "team" && domains.length >= planLimits.maxDomains;
-  const scanCtaHref = shouldShowUpgradePlanCta
-    ? "/app/modify-plan"
-    : domains[0]
-      ? `/app/domains/${domains[0].id}`
-      : "/app/domains";
-  const scanCtaLabel = shouldShowUpgradePlanCta ? "Upgrade plan" : "Run a scan";
   const recentScansByDomain = recentScans.reduce<
     Array<{
       key: string;
@@ -125,15 +114,15 @@ export default async function DashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-3">
       <h1 className="text-3xl font-semibold tracking-tight">Overview</h1>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         <Card className="border-slate-200 bg-white">
-          <CardHeader>
+          <CardHeader className="pb-1.5">
             <CardTitle>Domains</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
+          <CardContent className="space-y-0.5 pb-4 text-sm text-slate-600">
             <p className="text-2xl font-semibold text-slate-900">
               {domains.length}/{planLimits.maxDomains}
             </p>
@@ -141,126 +130,139 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle>Recent scans</CardTitle>
+          <CardHeader className="pb-1.5">
+            <CardTitle>Scans</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
+          <CardContent className="space-y-0.5 pb-4 text-sm text-slate-600">
             <p className="text-2xl font-semibold text-slate-900">{recentScans.length}</p>
             <p>Queued, running, or completed scans.</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
-          <CardHeader>
+          <CardHeader className="pb-1.5">
             <CardTitle>Recent changes</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
+          <CardContent className="space-y-0.5 pb-4 text-sm text-slate-600">
             <p className="text-2xl font-semibold text-slate-900">{recentChanges.length}</p>
-            <p>Signal changes recorded from recent completed scans.</p>
+            <p>Signal changes.</p>
           </CardContent>
         </Card>
       </div>
 
       <Card className="border-slate-200 bg-white">
-        <CardHeader>
+        <CardHeader className="pb-1.5">
           <CardTitle>Add domain(s) to scan</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-2 pt-0">
           <AddDomainForm maxDomains={planLimits.maxDomains} planCode={organization.plan} />
         </CardContent>
       </Card>
 
       <Card className="border-slate-200 bg-white">
-        <CardHeader>
+        <CardHeader className="pb-1.5">
           <CardTitle>Recent scan history</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {recentScans.length === 0 ? (
             <p className="text-sm text-slate-600">No scans yet. Add a website to start building scan history.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1.5">
               {recentScansByDomain.map((group) => {
                 const latestScan = group.scans[0];
                 if (!latestScan) {
                   return null;
                 }
 
-                const availability = getRescanAvailability({
-                  activeScanExists: latestScan.domainActiveScanExists,
-                  lastScannedAt: latestScan.domainLastScannedAt,
-                  planCode: organization.plan
-                });
-                const cooldownMessage = availability.reason
-                  ? availability.reason
-                  : !availability.allowed
-                    ? formatRescanCooldownMessage(availability.nextAllowedAt, organization.plan)
+                const rescanAvailability =
+                  group.domainId
+                    ? getRescanAvailability({
+                        activeScanExists: latestScan.domainActiveScanExists,
+                        lastScannedAt: latestScan.domainLastScannedAt,
+                        planCode: organization.plan
+                      })
                     : null;
 
+                const cooldownMessage = rescanAvailability
+                  ? rescanAvailability.reason ??
+                    (!rescanAvailability.allowed
+                      ? formatRescanCooldownMessage(rescanAvailability.nextAllowedAt, organization.plan)
+                      : null)
+                  : null;
+                const earlierScans = group.scans.slice(1, 11);
+
                 return (
-                  <div key={group.key} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={group.key} className="rounded-2xl border border-slate-200 px-3 py-1.5">
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="font-medium text-slate-900">{group.hostname ?? "Unknown website"}</p>
-                        <p className="text-sm text-slate-500">
-                          {group.scans.length} {group.scans.length === 1 ? "scan" : "scans"} · newest {formatDateTime(latestScan.createdAt)}
+                        <p className="text-xs text-slate-500">
+                          Latest scan · {latestScan.scanType} · {latestScan.status} · {formatDateTime(latestScan.createdAt)}
                         </p>
                       </div>
-                      {group.domainId ? (
-                        <RescanDomainForm
-                          cooldownMessage={cooldownMessage}
-                          disabled={!availability.allowed}
-                          domainId={group.domainId}
-                        />
-                      ) : null}
-                    </div>
-
-                    <div
-                      className={
-                        group.scans.length > 1
-                          ? "max-h-[176px] space-y-2 overflow-y-auto pt-3 pr-1"
-                          : "space-y-2 pt-3"
-                      }
-                    >
-                      {group.scans.map((scan) => (
-                        <div
-                          key={scan.id}
-                          className="flex flex-col gap-3 rounded-2xl bg-slate-50 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
-                        >
-                          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                            <div className="space-y-1">
-                              <p className="text-[13px] font-medium text-slate-900">
-                                {scan.scanType} scan · {scan.status} · {formatDateTime(scan.createdAt)}
-                              </p>
-                              <p className="text-[13px] text-slate-500">
-                                Signals {scan.totalSignals ?? 0}
-                              </p>
-                              <p className="text-[13px] text-slate-600">Overall rating score: {formatMetric(scan.certscoreOverall)}</p>
-                              <p className="text-[13px] text-slate-600">{getConsentSummary(scan)}</p>
-                            </div>
-                            <div className="text-[13px] text-slate-600 sm:min-w-[160px]">
-                              <p>Regulatory overlay risk: {formatMetric(scan.regulatoryScore)}</p>
-                              <p>Privacy score: {formatMetric(scan.privacyScore)}</p>
-                              <p>Consent score: {formatMetric(scan.consentScore)}</p>
-                              <p>Accessibility score: {formatMetric(scan.accessibilityScore)}</p>
-                              <p>Banner visible: {formatBooleanBadge(scan.cookieBannerPresent)}</p>
-                            </div>
-                          </div>
-                          <div className="self-start sm:self-start">
-                            <Button
-                              asChild
-                              className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
-                              size="sm"
-                              variant="secondary"
+                      <div className="flex flex-wrap items-start gap-2 self-start sm:pt-0.5">
+                        <DomainRowActionButton tooltip="View latest scan">
+                          <PendingButtonLink
+                            href={`/app/scans/${latestScan.id}`}
+                            ariaLabel="View latest scan"
+                            idleContent={<ViewScanIcon />}
+                            pendingContent="Opening..."
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0 text-slate-700 shadow-sm hover:border-slate-400 hover:text-slate-950"
+                            title="View latest scan"
+                          />
+                        </DomainRowActionButton>
+                        <DomainRowActionButton tooltip="List earlier scans">
+                          <details className="relative">
+                            <summary
+                              className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 [&::-webkit-details-marker]:hidden"
+                              aria-label="List earlier scans"
+                              title="List earlier scans"
                             >
-                              <Link aria-label={`View scan for ${scan.scanType} on ${scan.domainHostname ?? "domain"}`} href={`/app/scans/${scan.id}`}>
-                                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 19V5" />
-                                  <path d="m5 12 7-7 7 7" />
-                                </svg>
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                              <ScanHistoryIcon />
+                            </summary>
+                            <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                              <div className="border-b border-slate-100 px-3 py-2">
+                                <p className="text-sm font-medium text-slate-900">Earlier scans</p>
+                                <p className="text-xs text-slate-500">
+                                  {earlierScans.length > 0
+                                    ? `Showing up to ${earlierScans.length} earlier scans for ${group.hostname ?? "this domain"}.`
+                                    : `No earlier scans available for ${group.hostname ?? "this domain"}.`}
+                                </p>
+                              </div>
+                              {earlierScans.length > 0 ? (
+                                <div className="max-h-80 overflow-y-auto py-1">
+                                  {earlierScans.map((scan) => (
+                                    <a
+                                      key={scan.id}
+                                      href={`/app/scans/${scan.id}`}
+                                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                                    >
+                                      <span className="block font-medium text-slate-900">
+                                        {scan.scanType} · {scan.status}
+                                      </span>
+                                      <span className="block text-xs text-slate-500">{formatDateTime(scan.createdAt)}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="px-3 py-3 text-sm text-slate-500">No earlier scans yet.</p>
+                              )}
+                            </div>
+                          </details>
+                        </DomainRowActionButton>
+                        {group.domainId && rescanAvailability ? (
+                          <DomainRowActionButton tooltip={rescanAvailability.allowed ? "Re-scan domain" : cooldownMessage ?? "Re-scan unavailable"}>
+                            <RescanDomainForm
+                              compact
+                              cooldownMessage={cooldownMessage}
+                              disabled={!rescanAvailability.allowed}
+                              domainId={group.domainId}
+                              showLabel
+                            />
+                          </DomainRowActionButton>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 );

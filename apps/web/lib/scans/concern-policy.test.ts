@@ -254,6 +254,51 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "contact support path with blocked interstitial evidence stays audit-only",
+      concern: makeConcern({
+        originKey: "disclosure.contact_page_present",
+        suggestedUnifiedFindingId: "contact_support_path_present",
+        title: "Contact page fetched"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://www.example.com/contact",
+        policySnippets: [
+          "We’re sorry, but we were unable to authorize your request. Please call us at 800-555-1212."
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [
+          "blocked_or_interstitial_evidence_observed",
+          "positive_surface_content_unverified"
+        ]
+      }
+    },
+    {
+      name: "pre-consent tracking without concrete artifacts stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.preconsent_tracking_detected",
+        suggestedUnifiedFindingId: "preconsent_tracking",
+        title: "Pre-consent tracking detected"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [
+          "missing_concrete_preconsent_artifact",
+          "missing_preconsent_sequence_evidence"
+        ]
+      }
+    },
+    {
       name: "bounded key-page discovery unresolved is blocked when stable linked discovery already retained privacy, terms, and contact coverage",
       concern: makeConcern({
         originKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",

@@ -81,6 +81,7 @@ test("builds snapshot disclosure fallback evidence with retained legal coverage 
   assert.equal(evidence.termsOfServicePresent, true);
   assert.equal(evidence.contactPagePresent, true);
   assert.equal(evidence.affiliateDisclosurePresent, true);
+  assert.equal(evidence.fetchQuality, "thin_content");
   assert.equal(evidence.keyPageDiscoverySource, "footer_link");
   assert.deepEqual(evidence.pageUrls, [
     "https://www.example.com/privacy",
@@ -152,6 +153,7 @@ test("drops weak root placeholder evidence for cookie policy present", () => {
   assert.deepEqual(evidence.pageUrls, []);
   assert.deepEqual(evidence.sourceUrls, []);
   assert.deepEqual(evidence.policySnippets, []);
+  assert.equal(evidence.fetchQuality, "unreachable");
 });
 
 test("uses linked best-candidate urls for terms surfaces when no fetch succeeded", () => {
@@ -179,6 +181,32 @@ test("uses linked best-candidate urls for terms surfaces when no fetch succeeded
 
   assert.deepEqual(evidence.pageUrls, ["https://www.cnn.com/terms"]);
   assert.deepEqual(evidence.policySnippets, ["Terms of Use"]);
+});
+
+test("prefers explicit fetch quality from key-page summaries when provided upstream", () => {
+  const evidence = buildSnapshotDisclosureFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/contact"],
+          bestDiscoverySource: "footer_link",
+          fetchQuality: "blocked_interstitial",
+          pageType: "contact",
+          stopReason: "resolved",
+          successfulPageTitle: "Contact Us | Example",
+          successfulUrl: "https://www.example.com/contact"
+        }
+      ]
+    },
+    signalKey: "disclosure.contact_page_present",
+    signalLabel: "Contact page fetched",
+    signalValue: true,
+    snapshot: {
+      contact_page_present: true
+    }
+  });
+
+  assert.equal(evidence.fetchQuality, "blocked_interstitial");
 });
 
 test("keeps canonical root-domain terms urls from companion signals when retained policy evidence is locale-only", () => {
@@ -528,6 +556,7 @@ test("builds accessibility support fallback evidence from retained support page 
   });
 
   assert.equal(evidence.accessibilityContactMethodPresent, true);
+  assert.equal(evidence.fetchQuality, "verified_content");
   assert.equal(evidence.keyPageAttemptCount, 2);
   assert.deepEqual(evidence.pageUrls, ["https://www.example.com/accessibility"]);
   assert.deepEqual(evidence.policySnippets, ["Accessibility Help | Example"]);
@@ -561,6 +590,7 @@ test("builds cookie policy obstruction fallback evidence from cookie-policy enri
   });
 
   assert.equal(evidence.keyPageAttemptCount, 1);
+  assert.equal(evidence.fetchQuality, "verified_content");
   assert.deepEqual(evidence.pageUrls, ["https://www.example.com/cookies"]);
   assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/cookies"]);
   assert.deepEqual(evidence.policySnippets, [
@@ -624,4 +654,5 @@ test("drops weak homepage cookie placeholders when no better cookie policy row i
   assert.deepEqual(evidence.sourceUrls, []);
   assert.deepEqual(evidence.policySnippets, []);
   assert.equal(evidence.keyPageAttemptCount, 1);
+  assert.equal(evidence.fetchQuality, "unreachable");
 });

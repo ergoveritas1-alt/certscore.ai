@@ -44,6 +44,9 @@ const COVERAGE_GAP_SURFACE_MISSING_IDS = new Set([
   "contact_page_missing_surface"
 ]);
 
+const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
+  /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
+
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
@@ -75,6 +78,195 @@ function getFirstString(evidence: Record<string, unknown> | null | undefined, ke
   }
 
   return null;
+}
+
+function getStringArrayValues(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[]
+) {
+  const values: string[] = [];
+
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      values.push(value.trim());
+      continue;
+    }
+
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    for (const entry of value) {
+      if (typeof entry === "string" && entry.trim().length > 0) {
+        values.push(entry.trim());
+      }
+    }
+  }
+
+  return [...new Set(values)];
+}
+
+function getFetchQuality(rawEvidence: Record<string, unknown> | null | undefined) {
+  const value =
+    typeof rawEvidence?.normalizedConcernFetchQuality === "string"
+      ? rawEvidence.normalizedConcernFetchQuality
+      : typeof rawEvidence?.fetchQuality === "string"
+        ? rawEvidence.fetchQuality
+        : typeof rawEvidence?.fetch_quality === "string"
+          ? rawEvidence.fetch_quality
+          : null;
+
+  return value === "verified_content" ||
+    value === "thin_content" ||
+    value === "blocked_interstitial" ||
+    value === "unreachable"
+    ? value
+    : null;
+}
+
+function getEvidenceTextCandidates(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(rawEvidence, [
+    "claim",
+    "description",
+    "matchedSnippet",
+    "observedBehavior",
+    "policySnippet",
+    "policySnippets",
+    "policySummary",
+    "policySummaryShort",
+    "policy_summary",
+    "policy_summary_short",
+    "runtimeSummary",
+    "snippet",
+    "snippets",
+    "sourceEvidence",
+    "sourceTitle",
+    "supportingSignals",
+    "summary",
+    "title"
+  ]);
+}
+
+function getEvidenceUrlCandidates(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(rawEvidence, [
+    "attemptedUrls",
+    "evidenceUrls",
+    "pageUrl",
+    "pageUrls",
+    "preconsent_tracker_evidence_urls",
+    "requestUrls",
+    "runtimeEvidenceUrls",
+    "sourceUrl",
+    "sourceUrls"
+  ]).filter((value) => /^https?:\/\//i.test(value));
+}
+
+function hasBlockedOrInterstitialEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getFetchQuality(rawEvidence) === "blocked_interstitial" ||
+    getEvidenceTextCandidates(rawEvidence).some((value) => BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN.test(value))
+  );
+}
+
+function hasVerifiedPositiveInfrastructureEvidence(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  const fetchQuality = getFetchQuality(rawEvidence);
+  if (!rawEvidence || fetchQuality === "blocked_interstitial" || fetchQuality === "unreachable" || hasBlockedOrInterstitialEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const urls = getEvidenceUrlCandidates(rawEvidence);
+  const snippets = getEvidenceTextCandidates(rawEvidence);
+  if (concern.suggestedUnifiedFindingId === "accessibility_support_path_present") {
+    const accessibilityHaystack = `${urls.join(" ")} ${snippets.join(" ")}`.toLowerCase();
+    return (
+      rawEvidence.accessibilityContactMethodPresent === true ||
+      (fetchQuality !== "thin_content" && urls.length > 0 && snippets.length > 0 && /accessibility|accommodation|caption|assistive/i.test(accessibilityHaystack))
+    );
+  }
+
+  if (fetchQuality === "thin_content" || urls.length === 0 || snippets.length === 0) {
+    return false;
+  }
+
+  const haystack = `${urls.join(" ")} ${snippets.join(" ")}`.toLowerCase();
+
+  switch (concern.suggestedUnifiedFindingId) {
+    case "contact_support_path_present":
+    case "operator_contact_path_present":
+      return /contact|help|support|feedback|chat|branch|call/i.test(haystack);
+    case "cookie_policy_present":
+      return /cookie|privacy choices|privacy settings|manage cookies/i.test(haystack);
+    case "privacy_policy_present":
+      return /privacy/i.test(haystack);
+    case "terms_of_service_present":
+      return /terms|conditions|tos/i.test(haystack);
+    case "accessibility_support_path_present":
+      return /accessibility|accommodation|caption|assistive/i.test(haystack);
+    case "targeted_advertising_choices_present":
+      return /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(haystack);
+    case "privacy_rights_path_present":
+      return (
+        Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0
+      ) || /privacy rights|rights center|delete request|access request|request access|access to|deletion|data request/i.test(haystack);
+    default:
+      return snippets.some((value) => value.trim().length >= 8);
+  }
+}
+
+function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const vendors = getStringArrayValues(rawEvidence, [
+    "preconsent_tracker_vendors",
+    "relatedVendors",
+    "runtimeVendors",
+    "runtime_vendors"
+  ]);
+  const urls = getStringArrayValues(rawEvidence, [
+    "preconsent_tracker_evidence_urls",
+    "requestUrls",
+    "runtimeEvidenceUrls"
+  ]).filter((value) => /^https?:\/\//i.test(value));
+
+  return vendors.length > 0 || urls.length > 0;
+}
+
+function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const hasExplicitTimingSignal =
+    rawEvidence.preconsentTrackingDetected === true ||
+    rawEvidence.preconsent_tracking_detected === true ||
+    rawEvidence.trackingBeforeConsentDetected === true ||
+    rawEvidence.tracking_before_consent_detected === true;
+  const hasConsentTimingContext =
+    getBooleanEvidence(rawEvidence, [
+      "consentSurfaceObserved",
+      "consent_surface_observed",
+      "consentBannerPresent",
+      "cookieBannerPresent"
+    ]) === true &&
+    getBooleanEvidence(rawEvidence, [
+      "consentActionableChoiceObserved",
+      "consent_actionable_choice_observed",
+      "consentRejectInteractionSucceeded",
+      "consentAcceptInteractionSucceeded"
+    ]) === true;
+  const supportingSignals = getStringArrayValues(rawEvidence, ["supportingSignals"]);
+
+  return (
+    hasExplicitTimingSignal ||
+    hasConsentTimingContext ||
+    supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value))
+  );
 }
 
 export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
@@ -1075,8 +1267,26 @@ export function deriveConcernPolicy(input: {
 
   if (isPositiveInfrastructureConcern(input.concern)) {
     const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);
+    const blockedOrInterstitialEvidence = hasBlockedOrInterstitialEvidence(input.rawEvidence);
+    const hasVerifiedContentEvidence = hasVerifiedPositiveInfrastructureEvidence(input.concern, input.rawEvidence);
 
     if (input.concern.originType === "policy_enrichment" && policyPageType === "non_policy") {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    if (blockedOrInterstitialEvidence) {
+      negativeEvidenceFlags.add("blocked_or_interstitial_evidence_observed");
+    }
+    if (!hasVerifiedContentEvidence) {
+      negativeEvidenceFlags.add("positive_surface_content_unverified");
+    }
+
+    if (blockedOrInterstitialEvidence || !hasVerifiedContentEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -1094,6 +1304,27 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isPreconsentConcern(input.concern)) {
+    if (input.concern.originType !== "validation_rule") {
+      if (!hasConcretePreconsentArtifact(input.rawEvidence)) {
+        negativeEvidenceFlags.add("missing_concrete_preconsent_artifact");
+      }
+      if (!hasPreconsentSequenceEvidence(input.rawEvidence)) {
+        negativeEvidenceFlags.add("missing_preconsent_sequence_evidence");
+      }
+
+      if (
+        negativeEvidenceFlags.has("missing_concrete_preconsent_artifact") ||
+        negativeEvidenceFlags.has("missing_preconsent_sequence_evidence")
+      ) {
+        return {
+          allowedNarrativeTier: "weak",
+          externalSurfacingEligibility: "audit_only",
+          negativeEvidenceFlags: [...negativeEvidenceFlags],
+          promotionEligibility: "internal_only"
+        };
+      }
+    }
+
     const hasStrongConsentTimingEvidence = consentSurfaceObserved === true && consentActionableChoiceObserved === true;
 
     return {

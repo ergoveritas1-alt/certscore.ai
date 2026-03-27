@@ -24,7 +24,7 @@ export function RescanDomainForm({ cooldownMessage = null, compact = false, disa
   const tooltipMessage = disabled ? cooldownMessage : null;
 
   return (
-    <form action={action} className="space-y-2">
+    <form action={action} className={compact ? "space-y-0" : "space-y-2"}>
       <input name="domainId" type="hidden" value={domainId} />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       <div className="group relative inline-flex">

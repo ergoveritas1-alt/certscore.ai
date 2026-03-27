@@ -996,6 +996,7 @@ function getSnippetEvidence(evidence: Record<string, unknown> | null | undefined
 }
 
 function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const negativeEvidenceFlags = getNegativeEvidenceFlags(evidence);
   const flags = getStringArrayEvidence(evidence, ["flags"]);
   const snippets = getSnippetEvidence(evidence);
   const pageUrls = getStringArrayEvidence(evidence, ["pageUrls"]);
@@ -1009,7 +1010,13 @@ function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | nul
     flags.includes("family_packet:support_access") &&
     flags.includes("family_packet_finding:contact_support_path_present");
 
-  return hasStrongUrl && hasSupportLanguage && hasFamilyPacketBacking;
+  return (
+    !negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") &&
+    !negativeEvidenceFlags.has("positive_surface_content_unverified") &&
+    hasStrongUrl &&
+    hasSupportLanguage &&
+    hasFamilyPacketBacking
+  );
 }
 
 function getSensitivePayloadViolations(evidence: Record<string, unknown> | null | undefined) {
@@ -1518,7 +1525,20 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       preconsentEvidence.consentSurfaceObserved === true && preconsentEvidence.consentActionableChoiceObserved === true;
     const canCallThirdParty = preconsentEvidence.operatorRelationship === "third_party";
     const activityLabel = canCallThirdParty ? "third-party" : "tracking or measurement-related";
-    if (
+    const hasConcreteArtifactEvidence =
+      preconsentEvidence.evidenceUrls.length > 0 || preconsentEvidence.vendors.length > 0;
+    const hasWeakPreconsentEvidence =
+      negativeEvidenceFlags.has("missing_concrete_preconsent_artifact") ||
+      negativeEvidenceFlags.has("missing_preconsent_sequence_evidence") ||
+      (!hasObservedConsentChoice && !hasConcreteArtifactEvidence);
+
+    if (hasWeakPreconsentEvidence) {
+      presentation.whyThisMatters =
+        "The automated scan retained a detector-backed signal that may indicate initial-load tracking, but the retained evidence does not yet preserve both a concrete runtime artifact and a clear before-consent sequence. This is useful for audit triage, not for treating the behavior as a confirmed consent violation.";
+      presentation.suggestedFix =
+        "Replay the consent flow with network capture enabled, retain the concrete request or vendor artifact that fired, and confirm whether it occurred before a meaningful user choice was available.";
+      presentation.confidenceScore = "0.45";
+    } else if (
       maxAssertionLevel === "strong" &&
       hasObservedConsentChoice &&
       typeof preconsentEvidence.violationCount === "number" &&
@@ -1590,8 +1610,26 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
   }
 
   if (/contact or feedback path present|contact_support_path_present/i.test(input.haystack)) {
-    if (hasStrongContactSurfaceEvidence(input.evidence)) {
+    const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
+    if (
+      negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ||
+      negativeEvidenceFlags.has("positive_surface_content_unverified")
+    ) {
+      presentation.confidenceScore =
+        negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ? "0.3" : "0.35";
+    } else if (hasStrongContactSurfaceEvidence(input.evidence)) {
       presentation.confidenceScore = "0.85";
+    }
+  }
+
+  if (/cookie settings or policy surface present|cookie_policy_present/i.test(input.haystack)) {
+    const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
+    if (
+      negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ||
+      negativeEvidenceFlags.has("positive_surface_content_unverified")
+    ) {
+      presentation.confidenceScore =
+        negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ? "0.3" : "0.35";
     }
   }
 
@@ -1869,13 +1907,14 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         : typeof input.evidence?.value === "number"
           ? input.evidence.value
           : null;
+    const representativeExamples = getAccessibilityRepresentativeExamples(input.evidence);
 
     if (signalValue !== null && signalValue >= 100) {
       presentation.whyThisMatters =
         "This automated accessibility indicator suggests the page merits prompt manual review. A retained accessibility risk score of 100 can help prioritize investigation, but it does not by itself establish conformance status, severity, or the exact user impact without representative examples.";
       presentation.suggestedFix =
         "Review the representative automated WCAG findings first, then manually verify whether the affected templates or components create real task-level barriers before prioritizing remediation. Retain concrete examples from the highest-risk pages where possible.";
-      presentation.confidenceScore = "0.8";
+      presentation.confidenceScore = representativeExamples.length > 0 ? "0.75" : "0.65";
     }
 
     if (signalValue !== null && signalValue <= -10) {
@@ -1883,7 +1922,11 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         "This automated accessibility indicator suggests the page merits prompt manual review. A retained accessibility risk score of -10 can help prioritize investigation, but it does not by itself establish conformance status, severity, or the exact user impact without representative examples.";
       presentation.suggestedFix =
         "Review the representative automated WCAG findings first, then manually verify whether the affected templates or components create real task-level barriers before prioritizing remediation. Retain concrete examples from the highest-risk pages where possible.";
-      presentation.confidenceScore = "0.8";
+      presentation.confidenceScore = representativeExamples.length > 0 ? "0.75" : "0.65";
+    }
+
+    if (signalValue === null) {
+      presentation.confidenceScore = representativeExamples.length > 0 ? "0.75" : "0.65";
     }
   }
 

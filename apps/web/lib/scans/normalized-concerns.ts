@@ -8,6 +8,7 @@ import {
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
+import type { FetchQuality } from "./signal-fallback-evidence";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 export type NormalizedConcernOriginType =
@@ -48,17 +49,22 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "no_consent_actionable_choice_observed"
   | "no_direct_runtime_replay_artifact_observed"
   | "no_direct_runtime_retargeting_artifact_observed"
+  | "blocked_or_interstitial_evidence_observed"
+  | "positive_surface_content_unverified"
   | "policy_rights_language_observed"
   | "policy_target_retrievable"
   | "policy_target_parsing_incomplete"
   | "missing_behavior_side_evidence"
   | "missing_policy_side_evidence"
   | "missing_contradiction_mapping"
-  | "missing_explicit_contradiction_basis";
+  | "missing_explicit_contradiction_basis"
+  | "missing_concrete_preconsent_artifact"
+  | "missing_preconsent_sequence_evidence";
 
 export type NormalizedConcernEvidenceBundle = {
   counts: Record<string, number>;
   entities: Record<string, string[]>;
+  fetchQuality: FetchQuality | null;
   flags: string[];
   pageUrls: string[];
   policyIsPrimarySource: boolean | null;
@@ -182,6 +188,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     return {
       counts: {} as Record<string, number>,
       entities: {} as Record<string, string[]>,
+      fetchQuality: null as FetchQuality | null,
       flags: [] as string[],
       pageUrls: [] as string[],
       policyIsPrimarySource: null,
@@ -282,6 +289,18 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   return {
     counts,
     entities,
+    fetchQuality:
+      rawEvidence.fetchQuality === "verified_content" ||
+      rawEvidence.fetchQuality === "thin_content" ||
+      rawEvidence.fetchQuality === "blocked_interstitial" ||
+      rawEvidence.fetchQuality === "unreachable"
+        ? rawEvidence.fetchQuality
+        : rawEvidence.fetch_quality === "verified_content" ||
+            rawEvidence.fetch_quality === "thin_content" ||
+            rawEvidence.fetch_quality === "blocked_interstitial" ||
+            rawEvidence.fetch_quality === "unreachable"
+          ? rawEvidence.fetch_quality
+          : null,
     flags: [...flags],
     pageUrls: [...pageUrls],
     policyIsPrimarySource: derivePolicyPrimarySource(rawEvidence),
@@ -308,6 +327,7 @@ function mergeConcernEvidenceBundles(
   return {
     counts: { ...left.counts, ...right.counts },
     entities: { ...left.entities, ...right.entities },
+    fetchQuality: left.fetchQuality ?? right.fetchQuality,
     flags: uniqueStrings([...left.flags, ...right.flags]),
     pageUrls: uniqueStrings([
       ...left.pageUrls,
@@ -748,6 +768,7 @@ export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedCo
         normalizedConcernPromotionEligibility: concern.promotionEligibility,
         normalizedConcernExternalSurfacingEligibility: concern.externalSurfacingEligibility,
         normalizedConcernEvidenceStrengthFlags: concern.evidenceStrengthFlags,
+        normalizedConcernFetchQuality: concern.evidenceBundle.fetchQuality,
         normalizedConcernNegativeEvidenceFlags: concern.negativeEvidenceFlags,
         runtimeEvidenceArtifacts: concern.evidenceBundle.runtimeArtifacts,
         policySnippets: concern.evidenceBundle.policySnippets,

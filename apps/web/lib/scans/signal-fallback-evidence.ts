@@ -1,11 +1,53 @@
+import type { KeyPageFetchQuality } from "@website-signal-risk-scanner/shared";
 import {
   isMeaningfulPolicyText,
   normalizePolicySnippet,
   normalizePolicySnippetList
 } from "./policy-snippet-normalization";
 
+export type FetchQuality = KeyPageFetchQuality;
+
+function isFetchQuality(value: unknown): value is FetchQuality {
+  return (
+    value === "verified_content" ||
+    value === "thin_content" ||
+    value === "blocked_interstitial" ||
+    value === "unreachable"
+  );
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
+  /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
+
+function getFetchQualityFromEvidence(input: {
+  attemptedUrls?: string[];
+  pageUrls?: string[];
+  snippets?: string[];
+  stopReason?: string | null;
+}): FetchQuality {
+  const attemptedUrls = input.attemptedUrls ?? [];
+  const pageUrls = input.pageUrls ?? [];
+  const snippets = input.snippets ?? [];
+  const stopReason = input.stopReason ?? null;
+
+  if (snippets.some((snippet) => BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN.test(snippet)) || (stopReason && /blocked|challenge|captcha|forbidden|auth/i.test(stopReason))) {
+    return "blocked_interstitial";
+  }
+  if (pageUrls.length > 0 && snippets.length > 0) {
+    return "verified_content";
+  }
+  if (pageUrls.length > 0 || snippets.length > 0) {
+    return "thin_content";
+  }
+  if (attemptedUrls.length > 0 || stopReason) {
+    return "unreachable";
+  }
+
+  return "thin_content";
 }
 
 export function buildChildContextFallbackEvidence(input: {
@@ -51,6 +93,25 @@ function getKeyPageDiscoverySummaryRows(summary: unknown) {
   }
 
   return pageSummaries.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+}
+
+function getExplicitFetchQuality(rows: Array<Record<string, unknown>>): FetchQuality | null {
+  const values = rows.flatMap((row) => (isFetchQuality(row.fetchQuality) ? [row.fetchQuality] : []));
+
+  if (values.includes("blocked_interstitial")) {
+    return "blocked_interstitial";
+  }
+  if (values.includes("verified_content")) {
+    return "verified_content";
+  }
+  if (values.includes("thin_content")) {
+    return "thin_content";
+  }
+  if (values.includes("unreachable")) {
+    return "unreachable";
+  }
+
+  return null;
 }
 
 function getBestDiscoverySource(summaryRows: Array<Record<string, unknown>>) {
@@ -538,10 +599,19 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
         )
       )
     : [];
+  const explicitFetchQuality = getExplicitFetchQuality(relevantRows);
 
   return {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
     contactPagePresent: input.snapshot?.contact_page_present === true,
+    fetchQuality:
+      explicitFetchQuality ??
+      getFetchQualityFromEvidence({
+        attemptedUrls,
+        pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : genericPageUrls,
+        snippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
+        stopReason: stopReasons[0] ?? null
+      }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: [...new Set(attemptedUrls)],
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
@@ -578,9 +648,18 @@ export function buildAccessibilitySupportFallbackEvidence(input: {
   const attemptedUrls = uniqueStrings(getAttemptedKeyPageUrls(relevantRows));
   const titleSnippets = normalizePolicySnippetList(getSuccessfulKeyPageTitles(preferredRows));
   const stopReasons = getStopReasons(relevantRows);
+  const explicitFetchQuality = getExplicitFetchQuality(preferredRows);
 
   return {
     accessibilityContactMethodPresent: input.snapshot?.accessibility_contact_method_present === true,
+    fetchQuality:
+      explicitFetchQuality ??
+      getFetchQualityFromEvidence({
+        attemptedUrls,
+        pageUrls: successfulUrls,
+        snippets: titleSnippets,
+        stopReason: stopReasons[0] ?? null
+      }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: attemptedUrls,
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
@@ -628,8 +707,17 @@ export function buildCookiePolicyFallbackEvidence(input: {
           "tracking_technologies",
           "targeted_advertising"
         ]);
+  const explicitFetchQuality = getExplicitFetchQuality(cookiePolicyRows);
 
   return {
+    fetchQuality:
+      explicitFetchQuality ??
+      getFetchQualityFromEvidence({
+        attemptedUrls,
+        pageUrls: retainedPageUrls,
+        snippets: policySnippets,
+        stopReason: stopReasons[0] ?? null
+      }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: attemptedUrls,
     keyPageDiscoverySource: getBestDiscoverySource(cookiePolicyRows),

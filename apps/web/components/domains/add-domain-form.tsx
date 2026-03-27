@@ -15,7 +15,6 @@ type AddDomainFormProps = {
 
 export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
-  const planLabel = planCode === "free" ? "free" : planCode === "pro" ? "pro" : "ultra";
 
   return (
     <form action={action} className="space-y-5">
@@ -41,14 +40,6 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
           </Button>
         </div>
       </div>
-
-      <p className="text-sm text-slate-600">
-        Your {planLabel} plan currently supports up to {maxDomains} connected domain{maxDomains === 1 ? "" : "s"}.
-      </p>
-
-      <p className="text-xs text-slate-500">
-        You can paste multiple domains at once. Separate them with spaces, commas, or semicolons.
-      </p>
 
       {planCode === "free" ? (
         <p className="text-xs text-slate-500">

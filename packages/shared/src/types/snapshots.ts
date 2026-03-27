@@ -613,6 +613,8 @@ export type KeyPageSurfaceState =
 
 export type KeyPageExtractionOutcome = "not_attempted" | "sufficient" | "limited";
 
+export type KeyPageFetchQuality = "verified_content" | "thin_content" | "blocked_interstitial" | "unreachable";
+
 export type KeyPageDiscoveryCandidate = {
   pageType: Extract<
     PageType,
@@ -628,6 +630,7 @@ export type KeyPageDiscoveryCandidate = {
   pageTypeConfidence: number;
   fetchAttempted: boolean;
   fetchOutcome: FetchStatus | null;
+  fetchQuality?: KeyPageFetchQuality | null;
 };
 
 export type KeyPageDiscoveryPageSummary = {
@@ -643,6 +646,7 @@ export type KeyPageDiscoveryPageSummary = {
   bestCandidateSourceUrl: string | null;
   bestCandidateHostRelation: KeyPageDiscoveryHostRelation | null;
   bestFetchOutcome: FetchStatus | null;
+  fetchQuality?: KeyPageFetchQuality | null;
   successfulUrl: string | null;
   successfulPageTitle: string | null;
   successfulHostRelation: KeyPageDiscoveryHostRelation | null;

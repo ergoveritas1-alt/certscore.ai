@@ -61,10 +61,14 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
 
   assert.equal(concerns.length, 1);
   assert.equal(concerns[0]?.originType, "snapshot_signal");
-  assert.equal(concerns[0]?.promotionEligibility, "eligible");
-  assert.equal(concerns[0]?.externalSurfacingEligibility, "eligible");
-  assert.equal(concerns[0]?.allowedNarrativeTier, "moderate");
-  assert.deepEqual(concerns[0]?.negativeEvidenceFlags, ["no_consent_surface_observed"]);
+  assert.equal(concerns[0]?.promotionEligibility, "internal_only");
+  assert.equal(concerns[0]?.externalSurfacingEligibility, "audit_only");
+  assert.equal(concerns[0]?.allowedNarrativeTier, "weak");
+  assert.deepEqual(concerns[0]?.negativeEvidenceFlags, [
+    "no_consent_surface_observed",
+    "missing_concrete_preconsent_artifact",
+    "missing_preconsent_sequence_evidence"
+  ]);
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
 });
 
@@ -119,6 +123,28 @@ test("page-specific concerns without attribution are kept internal at the concer
 
   assert.equal(concern.promotionEligibility, "internal_only");
   assert.equal(concern.externalSurfacingEligibility, "audit_only");
+});
+
+test("normalization preserves typed fetch quality from fallback evidence", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "The scan retained a reachable cookie-policy surface.",
+    fallbackEvidence: {
+      fetchQuality: "blocked_interstitial",
+      pageUrl: "https://www.example.com/cookies",
+      policySnippets: ["We’re sorry, but we were unable to authorize your request."],
+      signalKey: "disclosure.cookie_policy_present"
+    },
+    observedValue: "Cookie policy fetched",
+    severity: "medium",
+    signalKey: "disclosure.cookie_policy_present",
+    signalLabel: "Cookie policy fetched",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Cookie policy fetched"
+  });
+
+  assert.equal(concern.evidenceBundle.fetchQuality, "blocked_interstitial");
+  assert.ok(concern.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed"));
 });
 
 test("low-confidence policy extraction on a non-policy page is blocked at normalization time", () => {
