@@ -5,11 +5,16 @@ import { buildPreviewPayloadFromSnapshot } from "./build-preview-payload";
 function buildSnapshot(overrides: Partial<Parameters<typeof buildPreviewPayloadFromSnapshot>[0]["snapshot"]> = {}) {
   return {
     accessibilityScore: 82,
+    authWallDetected: false,
+    blockedFlag: false,
     certscoreOverall: 79,
+    captchaFlag: false,
     contactPagePresent: false,
+    cookiePolicyPresent: false,
     cookieBannerPresent: false,
     finalUrl: "https://example.com",
     granularPreferencesPresent: false,
+    homepageFetchHttpStatus: 200,
     homepageFetchStatus: "ok" as const,
     pagesScanned: 2,
     partialScan: true,
@@ -19,6 +24,9 @@ function buildSnapshot(overrides: Partial<Parameters<typeof buildPreviewPayloadF
     rejectAllPresent: false,
     redirectCount: 0,
     registeredDomain: "example.com",
+    robotsAllowed: true,
+    robotsFetchHttpStatus: 200,
+    robotsFetchStatus: "ok" as const,
     termsOfServicePresent: false,
     thirdPartyCookieSetBeforeConsent: false,
     totalSignals: 12,
@@ -78,6 +86,7 @@ test("blocked or unreachable previews withhold scores and surface access blocker
     normalizedUrl: "https://chime.com",
     snapshot: buildSnapshot({
       finalUrl: "https://chime.com",
+      homepageFetchHttpStatus: 403,
       homepageFetchStatus: "forbidden",
       pagesScanned: 0,
       partialScan: true,
@@ -88,7 +97,118 @@ test("blocked or unreachable previews withhold scores and surface access blocker
   assert.equal(payload.scores, undefined);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage blocked during live scan"), true);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
-  assert.equal(payload.summaryBullets.includes("Preview scores are withheld because the live pass did not verify a usable homepage surface."), true);
+  assert.equal(
+    payload.summaryBullets.includes("Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface."),
+    true
+  );
+  assert.equal(payload.summaryBullets.includes("Reason: homepage request was blocked with HTTP 403."), true);
+});
+
+test("blocked previews can still surface verified privacy and terms disclosures", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "coinbase.com",
+    normalizedUrl: "https://coinbase.com",
+    snapshot: buildSnapshot({
+      homepageFetchHttpStatus: 403,
+      homepageFetchStatus: "forbidden",
+      pagesScanned: 0,
+      privacyPolicyPresent: true,
+      termsOfServicePresent: true
+    })
+  });
+
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Verified public disclosure surfaces detected"),
+    true
+  );
+  assert.equal(
+    payload.summaryBullets.includes("Verified public surfaces detected: privacy policy, terms of service."),
+    true
+  );
+});
+
+test("blocked previews can still surface verified cookie policy and contact disclosures", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "coinbase.com",
+    normalizedUrl: "https://coinbase.com",
+    snapshot: buildSnapshot({
+      contactPagePresent: true,
+      cookiePolicyPresent: true,
+      homepageFetchHttpStatus: 403,
+      homepageFetchStatus: "forbidden",
+      pagesScanned: 0,
+      privacyPolicyPresent: false
+    })
+  });
+
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Verified public disclosure surfaces detected"),
+    true
+  );
+  assert.equal(
+    payload.summaryBullets.includes("Verified public surfaces detected: cookie policy, contact page."),
+    true
+  );
+});
+
+test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "coinbase.com",
+    normalizedUrl: "https://coinbase.com",
+    snapshot: buildSnapshot({
+      homepageFetchHttpStatus: 429,
+      homepageFetchStatus: "ok",
+      pagesScanned: 0
+    })
+  });
+
+  assert.equal(payload.scores, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage blocked during live scan"), true);
+  assert.equal(
+    payload.summaryBullets.includes(
+      "Reason: homepage request was rate-limited with HTTP 429 before the scanner could verify a usable page surface."
+    ),
+    true
+  );
+});
+
+test("auth-wall previews stop normal interpretation and surface the exact reason", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "chime.com",
+    normalizedUrl: "https://chime.com",
+    snapshot: buildSnapshot({
+      authWallDetected: true,
+      pagesScanned: 0
+    })
+  });
+
+  assert.equal(payload.scores, undefined);
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Authentication wall blocked homepage verification"),
+    true
+  );
+  assert.equal(
+    payload.summaryBullets.includes(
+      "Reason: the homepage presented an authentication wall before the scanner could verify a usable public page surface."
+    ),
+    true
+  );
+});
+
+test("not-found previews classify the domain as inactive or unstable", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "example.org",
+    normalizedUrl: "https://example.org",
+    snapshot: buildSnapshot({
+      homepageFetchHttpStatus: 404,
+      homepageFetchStatus: "not_found",
+      pagesScanned: 0
+    })
+  });
+
+  assert.equal(payload.scores, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage may be inactive or unstable"), true);
+  assert.equal(payload.summaryBullets.includes("Reason: homepage returned HTTP 404 Not Found."), true);
 });
 
 test("off-domain redirects surface an explicit redirect finding", () => {

@@ -1,12 +1,18 @@
 import type { PreviewIssueCounts, PreviewSampleFinding, PreviewScanPayload, ScanSnapshot } from "@website-signal-risk-scanner/shared";
+import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 
 type PreviewSnapshotSource = {
   accessibilityScore: ScanSnapshot["accessibilityScore"];
+  authWallDetected?: ScanSnapshot["authWallDetected"] | null;
+  blockedFlag?: ScanSnapshot["blockedFlag"] | null;
   certscoreOverall: ScanSnapshot["certscoreOverall"];
+  captchaFlag?: ScanSnapshot["captchaFlag"] | null;
   contactPagePresent: ScanSnapshot["contactPagePresent"];
+  cookiePolicyPresent?: ScanSnapshot["cookiePolicyPresent"] | null;
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
   finalUrl: ScanSnapshot["finalUrl"];
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
+  homepageFetchHttpStatus?: ScanSnapshot["homepageFetchHttpStatus"] | null;
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
   pagesScanned: ScanSnapshot["pagesScanned"];
   partialScan: ScanSnapshot["partialScan"];
@@ -16,6 +22,9 @@ type PreviewSnapshotSource = {
   rejectAllPresent: ScanSnapshot["rejectAllPresent"];
   redirectCount: ScanSnapshot["redirectCount"];
   registeredDomain: ScanSnapshot["registeredDomain"];
+  robotsAllowed?: ScanSnapshot["robotsAllowed"] | null;
+  robotsFetchHttpStatus?: ScanSnapshot["robotsFetchHttpStatus"] | null;
+  robotsFetchStatus?: ScanSnapshot["robotsFetchStatus"] | null;
   termsOfServicePresent: ScanSnapshot["termsOfServicePresent"];
   thirdPartyCookieSetBeforeConsent: ScanSnapshot["thirdPartyCookieSetBeforeConsent"];
   totalSignals: ScanSnapshot["totalSignals"];
@@ -62,19 +71,47 @@ function hostnameFromUrl(value: string | null) {
   }
 }
 
+function deriveVerifiedPublicSurfaces(snapshot: PreviewSnapshotSource) {
+  const surfaces: string[] = [];
+
+  if (snapshot.privacyPolicyPresent) {
+    surfaces.push("privacy policy");
+  }
+
+  if (snapshot.termsOfServicePresent) {
+    surfaces.push("terms of service");
+  }
+
+  if (snapshot.cookiePolicyPresent) {
+    surfaces.push("cookie policy");
+  }
+
+  if (snapshot.contactPagePresent) {
+    surfaces.push("contact page");
+  }
+
+  return surfaces;
+}
+
 export function buildPreviewPayloadFromSnapshot(input: {
   hostname: string;
   normalizedUrl: string;
   snapshot: PreviewSnapshotSource;
 }): PreviewScanPayload {
   const findings: PreviewSampleFinding[] = [];
-  const siteSurfaceUnverified =
-    input.snapshot.pagesScanned === 0 ||
-    input.snapshot.homepageFetchStatus === "error" ||
-    input.snapshot.homepageFetchStatus === "forbidden" ||
-    input.snapshot.homepageFetchStatus === "blocked" ||
-    input.snapshot.homepageFetchStatus === "timeout" ||
-    input.snapshot.homepageFetchStatus === "not_found";
+  const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
+  const scanStopReason = deriveScanStopReason({
+    authWallDetected: input.snapshot.authWallDetected,
+    blockedFlag: input.snapshot.blockedFlag,
+    captchaFlag: input.snapshot.captchaFlag,
+    homepageFetchHttpStatus: input.snapshot.homepageFetchHttpStatus,
+    homepageFetchStatus: input.snapshot.homepageFetchStatus,
+    pagesScanned: input.snapshot.pagesScanned,
+    robotsAllowed: input.snapshot.robotsAllowed,
+    robotsFetchHttpStatus: input.snapshot.robotsFetchHttpStatus,
+    robotsFetchStatus: input.snapshot.robotsFetchStatus
+  });
+  const siteSurfaceUnverified = scanStopReason !== null;
   const secondarySurfaceCoverageLimited = input.snapshot.partialScan || input.snapshot.pagesScanned < 3;
   const requestedHostname = input.hostname.toLowerCase().replace(/^www\./, "");
   const finalHostname = hostnameFromUrl(input.snapshot.finalUrl);
@@ -84,34 +121,56 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    input.snapshot.pagesScanned === 0 &&
-      (input.snapshot.homepageFetchStatus === "forbidden" || input.snapshot.homepageFetchStatus === "blocked")
+    scanStopReason &&
+      ["homepage_blocked", "robots_blocked", "captcha", "auth_wall"].includes(scanStopReason.kind)
       ? {
           affectedPage: "Homepage",
           category: "legal",
           severity: "medium",
-          title: "Homepage blocked during live scan",
-          description:
-            "The live preview hit a bot-protection, security, or access-control barrier before it could verify the public site surface."
+          title: scanStopReason.previewFindingTitle,
+          description: scanStopReason.reason.replace(/^Reason:\s*/i, "")
         }
       : null
   );
 
   pushFinding(
     findings,
-    input.snapshot.pagesScanned === 0 &&
-      (input.snapshot.homepageFetchStatus === "error" ||
-        input.snapshot.homepageFetchStatus === "timeout" ||
-        input.snapshot.homepageFetchStatus === "not_found")
+    scanStopReason && ["homepage_unreachable", "no_pages_scanned"].includes(scanStopReason.kind)
+      ? {
+          affectedPage: "Homepage",
+          category: "legal",
+          severity: scanStopReason.kind === "homepage_unreachable" ? "high" : "medium",
+          title: scanStopReason.previewFindingTitle,
+          description: scanStopReason.reason.replace(/^Reason:\s*/i, "")
+        }
+      : null
+  );
+
+  pushFinding(
+    findings,
+    scanStopReason?.kind === "inactive_or_unstable"
       ? {
           affectedPage: "Homepage",
           category: "legal",
           severity: "high",
-          title: "Homepage could not be reached reliably",
-          description:
-            "The live preview could not complete a usable homepage fetch, so downstream legal, privacy, and accessibility checks remained largely unverified."
+          title: scanStopReason.previewFindingTitle,
+          description: scanStopReason.reason.replace(/^Reason:\s*/i, "")
         }
       : null
+  );
+
+  pushFinding(
+    findings,
+    siteSurfaceUnverified && verifiedSurfaces.length > 0
+      ? {
+          affectedPage: "Public disclosures",
+          category: "legal",
+          severity: "low",
+          title: "Verified public disclosure surfaces detected",
+          description: `Despite the blocked primary scan path, the preview still verified: ${verifiedSurfaces.join(", ")}.`
+        }
+      : null,
+    5
   );
 
   pushFinding(
@@ -231,8 +290,8 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   const issueCounts = deriveIssueCounts(findings);
   const pagesScannedDescriptor =
-    input.snapshot.pagesScanned === 0
-      ? "This preview could not verify a usable homepage fetch during the live pass."
+    siteSurfaceUnverified
+      ? scanStopReason?.reason.replace(/^Reason:\s*/i, "") ?? "This preview could not verify a usable homepage fetch during the live pass."
       : input.snapshot.pagesScanned === 1
         ? "This preview focused on the homepage."
         : `This preview scanned ${input.snapshot.pagesScanned} pages in a lightweight pass.`;
@@ -240,6 +299,10 @@ export function buildPreviewPayloadFromSnapshot(input: {
     ? "Some legal and disclosure checks could not be verified because the scanned site surface was only partially reachable during the live preview."
     : secondarySurfaceCoverageLimited
       ? "This lightweight preview may not verify every secondary legal or contact route unless those pages are directly fetched during the live pass."
+      : null;
+  const verifiedSurfaceDescriptor =
+    siteSurfaceUnverified && verifiedSurfaces.length > 0
+      ? `Verified public surfaces detected: ${verifiedSurfaces.join(", ")}.`
       : null;
   const redirectDescriptor =
     offDomainRedirect && finalHostname
@@ -261,10 +324,14 @@ export function buildPreviewPayloadFromSnapshot(input: {
     summaryBullets: [
       `${input.snapshot.totalSignals} structured signals were observed in this live preview.`,
       ...(siteSurfaceUnverified
-        ? ["Preview scores are withheld because the live pass did not verify a usable homepage surface."]
+        ? [
+            "Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface.",
+            scanStopReason?.reason ?? "Reason: the scanner could not verify a usable homepage surface."
+          ]
         : [`Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`]),
       pagesScannedDescriptor,
       ...(redirectDescriptor ? [redirectDescriptor] : []),
+      ...(verifiedSurfaceDescriptor ? [verifiedSurfaceDescriptor] : []),
       ...(confidenceDescriptor ? [confidenceDescriptor] : [])
     ],
     sampleFindings: findings,

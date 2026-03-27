@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
-import { createDomainRequestSchema, getPlanDefinition } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema, getPlanDefinition, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
@@ -10,10 +10,12 @@ import { queueFullScanForDomain } from "../scans/create-full-scan";
 
 export type CreateDomainActionState = {
   error: string | null;
+  queuedCount?: number | null;
 };
 
 const initialState: CreateDomainActionState = {
-  error: null
+  error: null,
+  queuedCount: null
 };
 
 export async function createOrQueueDomainScan(input: {
@@ -159,15 +161,34 @@ export async function createDomainAction(
   _previousState: CreateDomainActionState = initialState,
   formData: FormData
 ): Promise<CreateDomainActionState> {
-  const queueResult = await createOrQueueDomainScan({
-    domain: String(formData.get("domain") ?? "")
-  });
+  const domainInput = String(formData.get("domain") ?? "");
+  const parsedBatch = parseDomainBatchInput(domainInput);
 
-  if (queueResult.error || !queueResult.scanId) {
+  if (parsedBatch.valid.length === 0) {
     return {
-      error: queueResult.error ?? "Website added, but the first scan could not be queued."
+      error:
+        parsedBatch.invalid[0]
+          ? `Could not parse any valid domains from: ${parsedBatch.invalid[0]}`
+          : "Enter at least one valid website domain."
     };
   }
 
-  redirect(`/app/scans/${queueResult.scanId}`);
+  const results = await Promise.all(
+    parsedBatch.valid.map((item) =>
+      createOrQueueDomainScan({
+        domain: item.domain,
+        allowExistingDomainRescan: true
+      })
+    )
+  );
+
+  const queuedResults = results.filter((result) => !result.error && result.scanId);
+
+  if (queuedResults.length === 0) {
+    return {
+      error: results.find((result) => result.error)?.error ?? "No scans could be queued."
+    };
+  }
+
+  redirect("/app/scans");
 }

@@ -78,8 +78,28 @@ async function loadUnverifiedHomepageReview() {
   return (sharedScanDetailViewModule as unknown as {
     deriveUnverifiedHomepageReview: (
       snapshot: Record<string, unknown>,
-      scanEvents?: Array<{ eventType: string; message: string; metadataJson: unknown }>
-    ) => { title: string; message: string; reason: string; recommendationTitle: string; guidance: string[] } | null;
+      scanEvents?: Array<{ eventType: string; message: string; metadataJson: unknown }>,
+      policyEnrichments?: Array<Record<string, unknown>>
+    ) =>
+      | {
+          coverageLabel: string;
+          guidance: string[];
+          message: string;
+          outcomeTitle: string;
+          recommendationTitle: string;
+          reason: string;
+          title: string;
+          verifiedPolicyInsights: Array<{
+            flags: string[];
+            pageLabel: string;
+            pageUrl: string | null;
+            summary: string | null;
+            topics: string[];
+          }>;
+          verifiedSurfaces: string[];
+          whatThisMeans: string[];
+        }
+      | null;
   }).deriveUnverifiedHomepageReview;
 }
 
@@ -261,7 +281,8 @@ test("deriveExecutiveSummaryScanCondition flags blocked homepage scans", async (
     pages_scanned: 0
   });
 
-  assert.match(summary ?? "", /blocked before it could verify the homepage/i);
+  assert.match(summary ?? "", /homepage fetch was blocked/i);
+  assert.match(summary ?? "", /Reason:/i);
 });
 
 test("deriveExecutiveSummaryScanCondition flags unreachable homepage scans", async () => {
@@ -272,7 +293,19 @@ test("deriveExecutiveSummaryScanCondition flags unreachable homepage scans", asy
     pages_scanned: 0
   });
 
-  assert.match(summary ?? "", /could not reach a usable homepage/i);
+  assert.match(summary ?? "", /could not be reached reliably over the network/i);
+  assert.match(summary ?? "", /Reason:/i);
+});
+
+test("deriveExecutiveSummaryScanCondition flags auth-wall scans", async () => {
+  const deriveExecutiveSummaryScanCondition = await loadExecutiveSummaryScanCondition();
+
+  const summary = deriveExecutiveSummaryScanCondition({
+    auth_wall_detected: true,
+    pages_scanned: 0
+  });
+
+  assert.match(summary ?? "", /authentication wall/i);
 });
 
 test("deriveUnverifiedHomepageReview returns a one-off blocked-homepage explanation", async () => {
@@ -284,11 +317,14 @@ test("deriveUnverifiedHomepageReview returns a one-off blocked-homepage explanat
     pages_scanned: 0
   });
 
-  assert.equal(review?.title, "No verified findings: homepage blocked");
+  assert.equal(review?.title, "Reachability blocked");
+  assert.equal(review?.coverageLabel, "No public verification available");
+  assert.equal(review?.outcomeTitle, "Reachability blocked");
   assert.equal(review?.reason, "Reason: homepage request was blocked with HTTP 403.");
   assert.equal(review?.recommendationTitle, "Protected-Site Workflow Recommended");
+  assert.deepEqual(review?.verifiedSurfaces ?? [], []);
   assert.ok(review?.guidance.some((item) => /protected-domain result/i.test(item)));
-  assert.match(review?.message ?? "", /did not produce a trustworthy public-site review/i);
+  assert.match(review?.message ?? "", /anti-automation or access-control behavior/i);
 });
 
 test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", async () => {
@@ -300,9 +336,96 @@ test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", a
     robots_allowed: false
   });
 
-  assert.equal(review?.title, "No verified findings: robots policy blocked scan access");
+  assert.equal(review?.title, "Reachability blocked");
   assert.match(review?.reason ?? "", /robots/i);
-  assert.match(review?.message ?? "", /robots policy disallowed access/i);
+  assert.match(review?.message ?? "", /blocked for this scan path by crawler policy/i);
+});
+
+test("deriveUnverifiedHomepageReview carries verified privacy and terms surfaces on blocked runs", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_http_status: 403,
+    homepage_fetch_status: "forbidden",
+    pages_scanned: 0,
+    privacy_policy_present: true,
+    terms_of_service_present: true
+  });
+
+  assert.deepEqual(review?.verifiedSurfaces ?? [], ["Privacy policy", "Terms of service"]);
+  assert.equal(review?.coverageLabel, "Partial public verification available");
+  assert.match(review?.message ?? "", /Verified public surfaces detected: Privacy policy, Terms of service\./i);
+});
+
+test("deriveUnverifiedHomepageReview carries verified cookie policy and contact surfaces on blocked runs", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    contact_page_present: true,
+    cookie_policy_present: true,
+    homepage_fetch_http_status: 403,
+    homepage_fetch_status: "forbidden",
+    pages_scanned: 0
+  });
+
+  assert.deepEqual(review?.verifiedSurfaces ?? [], ["Cookie policy", "Contact page"]);
+  assert.equal(review?.coverageLabel, "Partial public verification available");
+  assert.match(review?.message ?? "", /Verified public surfaces detected: Cookie policy, Contact page\./i);
+});
+
+test("deriveUnverifiedHomepageReview carries verified policy insights on blocked runs", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview(
+    {
+      homepage_fetch_http_status: 403,
+      homepage_fetch_status: "forbidden",
+      pages_scanned: 0,
+      privacy_policy_present: true
+    },
+    [],
+    [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.coinbase.com/legal/privacy",
+        policy_summary_short: "Coinbase explains how it uses personal data and advertising-related disclosures.",
+        policy_mentions: [{ topic: "data_retention" }, { topic: "cross_border_transfer" }],
+        policy_actionable_flags: ["blocked_homepage_direct_policy_page", "vague_policy_language"]
+      }
+    ]
+  );
+
+  assert.equal(review?.verifiedPolicyInsights.length, 1);
+  assert.equal(review?.verifiedPolicyInsights[0]?.pageLabel, "Privacy policy");
+  assert.deepEqual(review?.verifiedPolicyInsights[0]?.topics, ["Data Retention", "Cross Border Transfer"]);
+  assert.deepEqual(review?.verifiedPolicyInsights[0]?.flags, ["Vague Policy Language"]);
+});
+
+test("deriveUnverifiedHomepageReview returns an explicit rate-limited explanation", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_http_status: 429,
+    homepage_fetch_status: "ok",
+    pages_scanned: 0
+  });
+
+  assert.equal(review?.title, "Reachability blocked");
+  assert.equal(
+    review?.reason,
+    "Reason: homepage request was rate-limited with HTTP 429 before the scanner could verify a usable page surface."
+  );
+});
+
+test("deriveUnverifiedHomepageReview returns a generic zero-pages explanation when no stronger blocker is retained", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    pages_scanned: 0
+  });
+
+  assert.equal(review?.title, "Verification incomplete");
+  assert.equal(review?.reason, "Reason: the scanner did not capture any verified public pages during the live pass.");
 });
 
 test("deriveUnverifiedHomepageReview returns an explicit unreachable-homepage reason", async () => {
@@ -313,8 +436,22 @@ test("deriveUnverifiedHomepageReview returns an explicit unreachable-homepage re
     pages_scanned: 0
   });
 
-  assert.equal(review?.title, "No verified findings: homepage unreachable");
+  assert.equal(review?.title, "Transport failure");
   assert.match(review?.reason ?? "", /connection, DNS, TLS, or other transport failure/i);
+});
+
+test("deriveUnverifiedHomepageReview classifies not-found homepages as inactive or unstable", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    homepage_fetch_http_status: 404,
+    homepage_fetch_status: "not_found",
+    pages_scanned: 0
+  });
+
+  assert.equal(review?.title, "Domain inactive or unstable");
+  assert.equal(review?.outcomeTitle, "Domain inactive or unstable");
+  assert.equal(review?.reason, "Reason: homepage returned HTTP 404 Not Found.");
 });
 
 test("deriveUnverifiedHomepageReview prefers logged DNS failure reason when available", async () => {
@@ -336,7 +473,7 @@ test("deriveUnverifiedHomepageReview prefers logged DNS failure reason when avai
     ]
   );
 
-  assert.equal(review?.title, "No verified findings: homepage unreachable");
+  assert.equal(review?.title, "Transport failure");
   assert.equal(review?.reason, "Reason: homepage could not be reached because the domain failed DNS resolution.");
 });
 

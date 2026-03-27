@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 
@@ -17,26 +17,36 @@ export async function POST(request: Request) {
     }
 
     const payload = await request.json();
-    const result = createDomainRequestSchema.safeParse(payload);
+    const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
+    const parsedBatch = parseDomainBatchInput(rawDomain);
 
-    if (!result.success) {
+    if (parsedBatch.valid.length === 0) {
+      const singleResult = createDomainRequestSchema.safeParse(payload);
       return NextResponse.json(
         {
-          error: result.error.issues[0]?.message ?? "Invalid full scan request."
+          error:
+            singleResult.success
+              ? "Invalid full scan request."
+              : singleResult.error.issues[0]?.message ?? "Invalid full scan request."
         },
         { status: 400 }
       );
     }
 
-    const scan = await createOrQueueDomainScan({
-      allowExistingDomainRescan: true,
-      domain: result.data.domain
-    });
+    const scans = await Promise.all(
+      parsedBatch.valid.map((item) =>
+        createOrQueueDomainScan({
+          allowExistingDomainRescan: true,
+          domain: item.domain
+        })
+      )
+    );
+    const queuedScans = scans.filter((scan) => !scan.error && scan.scanId);
 
-    if (scan.error || !scan.scanId) {
+    if (queuedScans.length === 0) {
       return NextResponse.json(
         {
-          error: scan.error ?? "The full scan could not be started."
+          error: scans.find((scan) => scan.error)?.error ?? "The full scan could not be started."
         },
         { status: 400 }
       );
@@ -44,8 +54,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        scanId: scan.scanId,
-        scanUrl: `/app/scans/${scan.scanId}`
+        queuedCount: queuedScans.length,
+        scanId: queuedScans[0]?.scanId ?? null,
+        scanUrl: queuedScans.length === 1 ? `/app/scans/${queuedScans[0]?.scanId}` : "/app/scans"
       },
       {
         headers: {

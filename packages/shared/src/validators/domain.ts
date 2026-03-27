@@ -49,3 +49,38 @@ export const createDomainRequestSchema = z
       hostname: extractHostname(normalizedUrl)
     };
   });
+
+export function parseDomainBatchInput(input: string) {
+  const parts = input
+    .split(/[\s,;]+/g)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  const valid: Array<{
+    domain: string;
+    hostname: string;
+    normalizedUrl: string;
+  }> = [];
+  const invalid: string[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts) {
+    const parsed = createDomainRequestSchema.safeParse({ domain: part });
+    if (!parsed.success) {
+      invalid.push(part);
+      continue;
+    }
+
+    if (seen.has(parsed.data.normalizedUrl)) {
+      continue;
+    }
+
+    seen.add(parsed.data.normalizedUrl);
+    valid.push(parsed.data);
+  }
+
+  return {
+    invalid,
+    valid
+  };
+}

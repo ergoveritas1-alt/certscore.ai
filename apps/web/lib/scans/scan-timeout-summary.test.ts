@@ -123,6 +123,51 @@ test("reports failed scans as errors", () => {
   assert(summary.details.some((detail) => detail.includes("Navigation failed")));
 });
 
+test("logs the exact stop reason when homepage access is forbidden", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [],
+    homepageFetchHttpStatus: 403,
+    homepageFetchStatus: "forbidden",
+    pagesScanned: 0,
+    status: "completed"
+  });
+
+  assert.equal(summary.title, "Scan outcome: Reachability blocked");
+  assert.equal(summary.tone, "warning");
+  assert(summary.details.some((detail) => detail.includes("Scan interpretation stopped. homepage request was blocked with HTTP 403.")));
+});
+
+test("recognizes persisted access limitation events under the current event name", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [
+      {
+        eventType: "access.limitations_detected",
+        message: "Access limitations detected: homepage returned forbidden; auth wall detected; scan coverage is partial."
+      }
+    ],
+    authWallDetected: true,
+    pagesScanned: 0,
+    status: "completed"
+  });
+
+  assert.equal(summary.title, "Scan outcome: Reachability blocked");
+  assert(summary.details.some((detail) => detail.includes("Access limitations detected: homepage returned forbidden; auth wall detected; scan coverage is partial.")));
+  assert(summary.details.some((detail) => detail.includes("Scan interpretation stopped. the homepage presented an authentication wall")));
+});
+
+test("uses inactive-or-unstable outcome title for not-found homepages", () => {
+  const summary = deriveScanExecutionSummary({
+    events: [],
+    homepageFetchHttpStatus: 404,
+    homepageFetchStatus: "not_found",
+    pagesScanned: 0,
+    status: "completed"
+  });
+
+  assert.equal(summary.title, "Scan outcome: Domain inactive or unstable");
+  assert(summary.details.some((detail) => detail.includes("Scan interpretation stopped. homepage returned HTTP 404 Not Found.")));
+});
+
 test("reports partial scans with missing target page details", () => {
   const summary = deriveScanExecutionSummary({
     events: [

@@ -48,6 +48,13 @@ export type ScanRow = {
 type ScanConfig = {
   hostname?: string;
   normalizedUrl?: string;
+  post403Policy?: {
+    maxHomepageRetriesAfter403?: number;
+    maxPassiveVerificationFetchesAfter403?: number;
+    passiveOnlyAfter403?: boolean;
+    stopOnHomepage403?: boolean;
+    verifiedSurfaceTargetsAfter403?: string[];
+  };
   previewPayload?: PreviewScanPayload;
   processor?: string;
 };
@@ -352,6 +359,13 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
   const initialConfig: ScanConfig = {
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
+    post403Policy: {
+      maxHomepageRetriesAfter403: 0,
+      maxPassiveVerificationFetchesAfter403: 4,
+      passiveOnlyAfter403: true,
+      stopOnHomepage403: true,
+      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
+    },
     processor: "live-preview-v1"
   };
 

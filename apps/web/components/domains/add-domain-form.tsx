@@ -27,7 +27,7 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
             defaultValue=""
             id="domain"
             name="domain"
-            placeholder="example.com"
+            placeholder="example.com, yoursite.com"
             required
             type="text"
           />
@@ -44,6 +44,10 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
 
       <p className="text-sm text-slate-600">
         Your {planLabel} plan currently supports up to {maxDomains} connected domain{maxDomains === 1 ? "" : "s"}.
+      </p>
+
+      <p className="text-xs text-slate-500">
+        You can paste multiple domains at once. Separate them with spaces, commas, or semicolons.
       </p>
 
       {planCode === "free" ? (

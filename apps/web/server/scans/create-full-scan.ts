@@ -184,6 +184,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
   const scanConfig = {
+    post403Policy: {
+      maxHomepageRetriesAfter403: 0,
+      maxPassiveVerificationFetchesAfter403: 4,
+      passiveOnlyAfter403: true,
+      stopOnHomepage403: true,
+      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
+    },
     processor: "queued-full-scan-v1",
     profile: planLimits.scanProfile,
     maxPages: pagesRequested,

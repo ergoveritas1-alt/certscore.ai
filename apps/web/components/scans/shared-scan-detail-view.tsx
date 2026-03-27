@@ -67,6 +67,7 @@ import {
   PRIMARY_SCAN_CATEGORY_META
 } from "../../lib/scans/signal-taxonomy";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
+import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -2410,11 +2411,22 @@ function formatSectionScore(value: number) {
 }
 
 type UnverifiedHomepageReview = {
+  coverageLabel: string;
   guidance: string[];
   message: string;
+  outcomeTitle: string;
+  verifiedPolicyInsights: Array<{
+    flags: string[];
+    pageLabel: string;
+    pageUrl: string | null;
+    summary: string | null;
+    topics: string[];
+  }>;
+  verifiedSurfaces: string[];
   recommendationTitle: string;
   reason: string;
   title: string;
+  whatThisMeans: string[];
 };
 
 type ScanEventSummaryRecord = {
@@ -2476,6 +2488,93 @@ function deriveProtectedSiteRecommendation(snapshot: Record<string, unknown>, sc
       "If this domain matters operationally, request allowlisting or a supported review path from the site owner before treating automation as authoritative."
     ]
   };
+}
+
+function deriveVerifiedPublicSurfaces(snapshot: Record<string, unknown>) {
+  const surfaces: string[] = [];
+
+  if (snapshot.privacy_policy_present === true) {
+    surfaces.push("Privacy policy");
+  }
+
+  if (snapshot.terms_of_service_present === true) {
+    surfaces.push("Terms of service");
+  }
+
+  if (snapshot.cookie_policy_present === true) {
+    surfaces.push("Cookie policy");
+  }
+
+  if (snapshot.contact_page_present === true) {
+    surfaces.push("Contact page");
+  }
+
+  return surfaces;
+}
+
+function humanizePolicyTopic(topic: string) {
+  return topic
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function humanizePolicyFlag(flag: string) {
+  return flag
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, unknown>>) {
+  return policyEnrichments
+    .filter((row) => {
+      const pageType = String(row.pageType ?? row.page_type ?? "");
+      return pageType === "privacy_policy" || pageType === "terms_of_service" || pageType === "cookie_policy";
+    })
+    .map((row) => {
+      const pageType = String(row.pageType ?? row.page_type ?? "");
+      const rawPolicyMentions = row.policyMentions ?? row.policy_mentions;
+      const rawPolicyFlags = row.policyActionableFlags ?? row.policy_actionable_flags;
+      const pageUrl =
+        typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+      const summary =
+        isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
+          ? String(row.policySummaryShort ?? row.policy_summary_short)
+          : null;
+      const topics = Array.isArray(rawPolicyMentions)
+        ? rawPolicyMentions
+            .map((item) =>
+              item && typeof item === "object" && typeof (item as Record<string, unknown>).topic === "string"
+                ? humanizePolicyTopic(String((item as Record<string, unknown>).topic))
+                : null
+            )
+            .filter((value): value is string => Boolean(value))
+            .slice(0, 4)
+        : [];
+      const flags = Array.isArray(rawPolicyFlags)
+        ? rawPolicyFlags
+            .filter((value): value is string => typeof value === "string" && value !== "blocked_homepage_direct_policy_page")
+            .map((value) => humanizePolicyFlag(value))
+            .slice(0, 3)
+        : [];
+
+      return {
+        flags,
+        pageLabel:
+          pageType === "privacy_policy"
+            ? "Privacy policy"
+            : pageType === "terms_of_service"
+              ? "Terms of service"
+              : "Cookie policy",
+        pageUrl,
+        summary,
+        topics
+      };
+    })
+    .filter((item) => item.summary || item.topics.length > 0 || item.flags.length > 0);
 }
 
 function deriveLoggedNoResultsReason(scanEvents: ScanEventSummaryRecord[]) {
@@ -2544,95 +2643,71 @@ function deriveUnverifiedHomepageReason(snapshot: Record<string, unknown>, scanE
     return loggedReason;
   }
 
-  const homepageFetchStatus =
-    typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status.toLowerCase() : null;
-  const homepageFetchHttpStatus =
-    typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null;
-  const robotsAllowed = snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null;
-  const robotsFetchStatus =
-    typeof snapshot.robots_fetch_status === "string" ? snapshot.robots_fetch_status.toLowerCase() : null;
-
-  if (robotsAllowed === false) {
-    return robotsFetchStatus === "ok"
-      ? "Reason: robots.txt disallowed scanner access to the homepage."
-      : "Reason: crawler access was disallowed by robots policy before homepage verification.";
-  }
-
-  if (homepageFetchStatus === "forbidden" || homepageFetchStatus === "blocked") {
-    return homepageFetchHttpStatus
-      ? `Reason: homepage request was blocked with HTTP ${homepageFetchHttpStatus}.`
-      : "Reason: homepage request was blocked by bot protection, access controls, or a forbidden response.";
-  }
-
-  if (homepageFetchStatus === "timeout") {
-    return "Reason: homepage navigation timed out before the scanner could verify a usable page surface.";
-  }
-
-  if (homepageFetchStatus === "not_found") {
-    return homepageFetchHttpStatus
-      ? `Reason: homepage returned HTTP ${homepageFetchHttpStatus} Not Found.`
-      : "Reason: homepage returned a not-found response.";
-  }
-
-  if (homepageFetchStatus === "error") {
-    return "Reason: homepage could not be reached reliably because of a connection, DNS, TLS, or other transport failure.";
-  }
-
-  return "Reason: the scanner could not verify a usable homepage surface.";
+  return (
+    deriveScanStopReason({
+      authWallDetected: snapshot.auth_wall_detected === true,
+      blockedFlag: snapshot.blocked_flag === true,
+      captchaFlag: snapshot.captcha_flag === true,
+      homepageFetchHttpStatus:
+        typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null,
+      homepageFetchStatus: typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status : null,
+      pagesScanned: typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null,
+      robotsAllowed: snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null,
+      robotsFetchHttpStatus: typeof snapshot.robots_fetch_http_status === "number" ? snapshot.robots_fetch_http_status : null,
+      robotsFetchStatus: typeof snapshot.robots_fetch_status === "string" ? snapshot.robots_fetch_status : null
+    })?.reason ?? "Reason: the scanner could not verify a usable homepage surface."
+  );
 }
 
 export function deriveUnverifiedHomepageReview(
   snapshot: Record<string, unknown>,
-  scanEvents: ScanEventSummaryRecord[] = []
+  scanEvents: ScanEventSummaryRecord[] = [],
+  policyEnrichments: Array<Record<string, unknown>> = []
 ): UnverifiedHomepageReview | null {
-  const pagesScanned = typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null;
-  const homepageFetchStatus =
-    typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status.toLowerCase() : null;
-  const robotsAllowed = snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null;
   const reason = deriveUnverifiedHomepageReason(snapshot, scanEvents);
   const recommendation = deriveProtectedSiteRecommendation(snapshot, scanEvents);
+  const verifiedSurfaces = deriveVerifiedPublicSurfaces(snapshot);
+  const verifiedPolicyInsights = deriveVerifiedPolicyInsights(policyEnrichments);
+  const stopReason = deriveScanStopReason({
+    authWallDetected: snapshot.auth_wall_detected === true,
+    blockedFlag: snapshot.blocked_flag === true,
+    captchaFlag: snapshot.captcha_flag === true,
+    homepageFetchHttpStatus: typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null,
+    homepageFetchStatus: typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status : null,
+    pagesScanned: typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null,
+    robotsAllowed: snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null,
+    robotsFetchHttpStatus: typeof snapshot.robots_fetch_http_status === "number" ? snapshot.robots_fetch_http_status : null,
+    robotsFetchStatus: typeof snapshot.robots_fetch_status === "string" ? snapshot.robots_fetch_status : null
+  });
 
-  if (pagesScanned === 0 && robotsAllowed === false) {
-    return {
-      guidance: recommendation.guidance,
-      reason,
-      recommendationTitle: recommendation.recommendationTitle,
-      title: "No verified findings: robots policy blocked scan access",
-      message:
-        "The scanner stopped after homepage setup because robots policy disallowed access to the target URL, so this run did not produce a trustworthy public-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
-    };
+  if (!stopReason) {
+    return null;
   }
 
-  if (pagesScanned === 0 && (homepageFetchStatus === "forbidden" || homepageFetchStatus === "blocked")) {
-    return {
-      guidance: recommendation.guidance,
-      reason,
-      recommendationTitle: recommendation.recommendationTitle,
-      title: "No verified findings: homepage blocked",
-      message:
-        "The live bot was blocked before it could verify the homepage, so this run did not produce a trustworthy public-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
-    };
-  }
-
-  if (
-    pagesScanned === 0 &&
-    (homepageFetchStatus === "error" || homepageFetchStatus === "timeout" || homepageFetchStatus === "not_found")
-  ) {
-    return {
-      guidance: recommendation.guidance,
-      reason,
-      recommendationTitle: recommendation.recommendationTitle,
-      title: "No verified findings: homepage unreachable",
-      message:
-        "The scan could not reach a usable homepage, so this run did not produce a reliable live-site review. Empty or low-finding sections in this report should be read as unverified, not as evidence that the site passed those areas."
-    };
-  }
-
-  return null;
+  return {
+    coverageLabel: verifiedSurfaces.length > 0 ? "Partial public verification available" : "No public verification available",
+    guidance: recommendation.guidance,
+    reason,
+    outcomeTitle: stopReason.outcomeTitle,
+    verifiedPolicyInsights,
+    verifiedSurfaces,
+    recommendationTitle: recommendation.recommendationTitle,
+    title: stopReason.reviewTitle,
+    message:
+      verifiedSurfaces.length > 0
+        ? `${stopReason.reviewMessage} Verified public surfaces detected: ${verifiedSurfaces.join(", ")}.`
+        : stopReason.reviewMessage,
+    whatThisMeans: stopReason.whatThisMeans
+  };
 }
 
 export function deriveExecutiveSummaryScanCondition(snapshot: Record<string, unknown>) {
-  return deriveUnverifiedHomepageReview(snapshot)?.message ?? null;
+  const review = deriveUnverifiedHomepageReview(snapshot);
+  if (!review) {
+    return null;
+  }
+
+  return `${review.message} ${review.reason}`;
 }
 
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
@@ -2643,16 +2718,57 @@ function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
         <p className="text-sm font-semibold text-amber-950">{input.review.title}</p>
       </div>
       <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Why No Results Are Shown</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Scan Outcome</p>
+        <p className="mt-1 text-sm font-medium text-amber-950">{input.review.outcomeTitle}</p>
+      </div>
+      <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Coverage</p>
+        <p className="mt-1 text-sm font-medium text-amber-950">{input.review.coverageLabel}</p>
+      </div>
+      <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Exact Stop Reason</p>
         <p className="mt-1 text-sm font-medium text-amber-950">{input.review.reason}</p>
       </div>
       <p className="text-sm text-amber-900">{input.review.message}</p>
+      {input.review.verifiedSurfaces.length > 0 ? (
+        <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800">Verified Public Surfaces</p>
+          <ul className="mt-2 space-y-2 text-sm text-emerald-950">
+            {input.review.verifiedSurfaces.map((item) => (
+              <li key={item}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {input.review.verifiedPolicyInsights.length > 0 ? (
+        <div className="rounded-xl border border-sky-200/80 bg-sky-50/70 px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Verified Policy Insights</p>
+          <div className="mt-3 space-y-3">
+            {input.review.verifiedPolicyInsights.map((item) => (
+              <div key={`${item.pageLabel}:${item.pageUrl ?? item.summary ?? "policy"}`} className="space-y-1 text-sm text-sky-950">
+                <p className="font-medium">
+                  {item.pageUrl ? (
+                    <Link href={item.pageUrl} className="underline underline-offset-2">
+                      {item.pageLabel}
+                    </Link>
+                  ) : (
+                    item.pageLabel
+                  )}
+                </p>
+                {item.summary ? <p>{item.summary}</p> : null}
+                {item.topics.length > 0 ? <p>Topics: {item.topics.join(", ")}</p> : null}
+                {item.flags.length > 0 ? <p>Flags: {item.flags.join(", ")}</p> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-4">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">What this means</p>
         <ul className="mt-2 space-y-2 text-sm text-amber-950">
-          <li>• The scanner did not verify a usable homepage surface.</li>
-          <li>• Taxonomy sections and low or empty finding counts should not be interpreted as a clean result.</li>
-          <li>• Use the scan-pass status and diagnostics below to understand the failure mode before drawing compliance conclusions.</li>
+          {input.review.whatThisMeans.map((item) => (
+            <li key={item}>• {item}</li>
+          ))}
         </ul>
       </div>
       <div className="rounded-xl border border-amber-200/80 bg-white/60 px-4 py-4">
@@ -3928,7 +4044,9 @@ export function SharedScanDetailView({
   scanRecord
 }: SharedScanDetailViewProps) {
   const snapshot = scanRecord.snapshot;
-  const unverifiedHomepageReview = snapshot ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events) : null;
+  const unverifiedHomepageReview = snapshot
+    ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
+    : null;
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
@@ -4050,16 +4168,24 @@ export function SharedScanDetailView({
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
+    authWallDetected: snapshot?.auth_wall_detected === true,
+    blockedFlag: snapshot?.blocked_flag === true,
+    captchaFlag: snapshot?.captcha_flag === true,
     consentAuditCompleted,
     consentPreconsentViolationCount,
     errorMessage: scanRecord.scan.errorMessage,
     events: scanRecord.events,
+    homepageFetchHttpStatus: typeof snapshot?.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null,
+    homepageFetchStatus: typeof snapshot?.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status : null,
     keyPageDiscoverySummary:
       runtimeArtifacts && typeof runtimeArtifacts === "object" ? (runtimeArtifacts.key_page_discovery_summary ?? null) : null,
     pagesRequested: scanRecord.scan.pagesRequested,
     pagesScanned: scanRecord.scan.pagesScanned,
     preconsentTrackingDetected: snapshot?.preconsent_tracking_detected === true,
     renderModeUsed: typeof snapshot?.render_mode_used === "string" ? snapshot.render_mode_used : null,
+    robotsAllowed: snapshot?.robots_allowed === true ? true : snapshot?.robots_allowed === false ? false : null,
+    robotsFetchHttpStatus: typeof snapshot?.robots_fetch_http_status === "number" ? snapshot.robots_fetch_http_status : null,
+    robotsFetchStatus: typeof snapshot?.robots_fetch_status === "string" ? snapshot.robots_fetch_status : null,
     status: scanRecord.scan.status,
     timeoutFlag: snapshot?.timeout_flag === true,
     trackingBeforeConsentDetected: snapshot?.tracking_before_consent_detected === true,

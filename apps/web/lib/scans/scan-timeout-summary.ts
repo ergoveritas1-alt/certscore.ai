@@ -1,5 +1,10 @@
+import { deriveScanStopReason } from "./scan-stop-reason";
+
 type ScanTimeoutSummaryInput = {
   accessibilityRuleCountTotal?: number | null;
+  authWallDetected?: boolean | null;
+  blockedFlag?: boolean | null;
+  captchaFlag?: boolean | null;
   consentAuditCompleted?: boolean | null;
   consentPreconsentViolationCount?: number | null;
   errorMessage?: string | null;
@@ -11,8 +16,13 @@ type ScanTimeoutSummaryInput = {
   pagesRequested?: number | null;
   pagesScanned?: number | null;
   keyPageDiscoverySummary?: unknown | null;
+  homepageFetchHttpStatus?: number | null;
+  homepageFetchStatus?: string | null;
   preconsentTrackingDetected?: boolean | null;
   renderModeUsed?: string | null;
+  robotsAllowed?: boolean | null;
+  robotsFetchHttpStatus?: number | null;
+  robotsFetchStatus?: string | null;
   status?: string | null;
   timeoutFlag?: boolean | null;
   trackingBeforeConsentDetected?: boolean | null;
@@ -261,6 +271,17 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   const timeoutSummary = deriveScanTimeoutSummary(input);
   const details = new Set<string>(timeoutSummary?.details ?? []);
   const events = input.events ?? [];
+  const stopReason = deriveScanStopReason({
+    authWallDetected: input.authWallDetected,
+    blockedFlag: input.blockedFlag,
+    captchaFlag: input.captchaFlag,
+    homepageFetchHttpStatus: input.homepageFetchHttpStatus,
+    homepageFetchStatus: input.homepageFetchStatus,
+    pagesScanned: input.pagesScanned,
+    robotsAllowed: input.robotsAllowed,
+    robotsFetchHttpStatus: input.robotsFetchHttpStatus,
+    robotsFetchStatus: input.robotsFetchStatus
+  });
   const recoveredBrowserStages = getRecoveredBrowserStages(events);
   const missingTargetPages: Array<{ label: string; pageType: string | null }> = [];
   const keyPageSummaries = getKeyPageDiscoverySummaries(input.keyPageDiscoverySummary);
@@ -278,7 +299,7 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   };
 
   for (const event of events) {
-    if (event.eventType === "crawl.access_limitations_detected") {
+    if (event.eventType === "crawl.access_limitations_detected" || event.eventType === "access.limitations_detected") {
       details.add(event.message);
       continue;
     }
@@ -347,6 +368,10 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
 
   if (input.errorMessage) {
     details.add(`The scan recorded a terminal error: ${input.errorMessage}`);
+  }
+
+  if (stopReason) {
+    details.add(`Scan interpretation stopped. ${stopReason.reason.replace(/^Reason:\s*/i, "")}`);
   }
 
   if (partialScanDetected) {
@@ -436,7 +461,9 @@ export function deriveScanExecutionSummary(input: ScanTimeoutSummaryInput): Scan
   return {
     details: [...details],
     title:
-      tone === "danger"
+      stopReason && tone !== "danger"
+        ? `Scan outcome: ${stopReason.outcomeTitle}`
+        : tone === "danger"
         ? "Scan pass encountered errors"
         : input.status === "completed"
           ? "Scan pass completed with warnings"
