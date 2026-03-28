@@ -1,5 +1,5 @@
-const DEFAULT_CRAWLER_NAME = "SignalScannerBot";
-const DEFAULT_CRAWLER_PUBLIC_URL = "https://scanner.example";
+const DEFAULT_CRAWLER_NAME = "ConsentCheckBot";
+const DEFAULT_CRAWLER_PUBLIC_URL = "https://consentcheck.site/crawler";
 
 function getConfiguredCrawler() {
   const publicUrl = process.env.SCANNER_CRAWLER_PUBLIC_URL?.trim() || null;
