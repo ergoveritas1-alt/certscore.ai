@@ -22,7 +22,7 @@ async function main() {
   try {
     await lookup(supabaseHost);
   } catch {
-    fail("supabase runtime", `Unable to resolve ${supabaseHost}. Check NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local.`);
+    fail("supabase runtime", `Unable to resolve ${supabaseHost}. Check NEXT_PUBLIC_SUPABASE_URL in the active environment.`);
     process.exitCode = 1;
     return;
   }

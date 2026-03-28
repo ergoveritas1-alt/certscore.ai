@@ -116,7 +116,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
         : null;
     const actionableError =
       causeCode === "ENOTFOUND" && causeHostname
-        ? `Unable to resolve ${causeHostname}. Check NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local.`
+        ? `Unable to resolve ${causeHostname}. Check NEXT_PUBLIC_SUPABASE_URL in the active environment.`
         : errorMessage;
     const missingTables = REQUIRED_AUTH_TABLES.filter((tableName) => errorMessage.includes(tableName));
 
