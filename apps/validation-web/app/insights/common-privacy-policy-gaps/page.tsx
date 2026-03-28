@@ -5,7 +5,7 @@ import { createPageMetadata } from "../../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Common Privacy Policy Gaps",
   description:
-    "Educational insights page covering typical privacy policy gaps found on public websites and how scanners detect policy-related signals.",
+    "Educational insights page covering typical privacy policy gaps found on public websites and how scanners surface policy-related signals.",
   path: "/insights/common-privacy-policy-gaps"
 });
 

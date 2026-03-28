@@ -55,6 +55,71 @@ async function loadExecutiveSummaryScanCondition() {
   }).deriveExecutiveSummaryScanCondition;
 }
 
+async function loadExecutiveSummaryBadgeCounts() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveExecutiveSummaryBadgeCounts?: unknown })
+      .deriveExecutiveSummaryBadgeCounts
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveExecutiveSummaryBadgeCounts: (
+      findings: Array<{
+        details?: { family?: string };
+        presentationDecision: { status: string };
+        surfacingDecision?: { decisionState?: string; reportLane?: string };
+        unifiedFindingId: string;
+      }>
+    ) => {
+      contradictionCount: number;
+      preconsentConflictCount: number;
+    };
+  }).deriveExecutiveSummaryBadgeCounts;
+}
+
+async function loadExecutiveSummaryThemeHelpers() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (
+      sharedScanDetailViewImport as unknown as {
+        deriveAgencyAdvisoryThemes?: unknown;
+        deriveExecutiveSummaryThemeNarrative?: unknown;
+      }
+    ).deriveAgencyAdvisoryThemes
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return sharedScanDetailViewModule as unknown as {
+    deriveAgencyAdvisoryThemes: (findings: Array<{ details?: { family?: string } }>) => string[];
+    deriveExecutiveSummaryThemeNarrative: (themes: string[]) => string;
+  };
+}
+
 async function loadFindingEvidenceQualitySummary() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -183,7 +248,7 @@ async function loadUnverifiedHomepageReview() {
   }).deriveUnverifiedHomepageReview;
 }
 
-test("buildScanReportUnifiedFindings keeps privacy-rights path when an earlier policy row has an empty rights array", async () => {
+test("buildScanReportUnifiedFindings suppresses standalone privacy-rights paths when they do not support a stronger finding", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 
   const findings = buildScanReportUnifiedFindings({
@@ -231,11 +296,10 @@ test("buildScanReportUnifiedFindings keeps privacy-rights path when an earlier p
 
   const rightsFinding = findings.find((finding) => finding.unifiedFindingId === "privacy_rights_path_present");
 
-  assert.ok(rightsFinding);
-  assert.equal((rightsFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "surface");
+  assert.equal(rightsFinding, undefined);
 });
 
-test("buildScanReportUnifiedFindings promotes snapshot-backed positive surfaces and keeps thin affiliate evidence audit-only", async () => {
+test("buildScanReportUnifiedFindings suppresses standalone positive surfaces and thin affiliate evidence", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 
   const findings = buildScanReportUnifiedFindings({
@@ -347,8 +411,64 @@ test("buildScanReportUnifiedFindings promotes snapshot-backed positive surfaces 
 
   assert.equal(termsFinding, undefined);
   assert.equal(choicesFinding, undefined);
-  assert.ok(affiliateFinding);
-  assert.equal((affiliateFinding as { presentationDecision?: { status?: string } }).presentationDecision?.status, "audit_only");
+  assert.equal(affiliateFinding, undefined);
+});
+
+test("deriveExecutiveSummaryBadgeCounts only counts surfaced contradiction and pre-consent findings", async () => {
+  const deriveExecutiveSummaryBadgeCounts = await loadExecutiveSummaryBadgeCounts();
+
+  const counts = deriveExecutiveSummaryBadgeCounts([
+    {
+      details: { family: "contradiction" },
+      presentationDecision: { status: "audit_only" },
+      surfacingDecision: { decisionState: "review", reportLane: "confidence_and_coverage" },
+      unifiedFindingId: "policy_behavior_conflict"
+    },
+    {
+      details: { family: "consent_tracking" },
+      presentationDecision: { status: "audit_only" },
+      surfacingDecision: { decisionState: "review", reportLane: "confidence_and_coverage" },
+      unifiedFindingId: "preconsent_tracking"
+    },
+    {
+      details: { family: "contradiction" },
+      presentationDecision: { status: "surface" },
+      surfacingDecision: { decisionState: "confirmed", reportLane: "main" },
+      unifiedFindingId: "policy_behavior_conflict"
+    },
+    {
+      details: { family: "contradiction" },
+      presentationDecision: { status: "surface" },
+      surfacingDecision: { decisionState: "review", reportLane: "confidence_and_coverage" },
+      unifiedFindingId: "privacy_policy_missing_surface"
+    },
+    {
+      details: { family: "consent_tracking" },
+      presentationDecision: { status: "surface" },
+      surfacingDecision: { decisionState: "confirmed", reportLane: "main" },
+      unifiedFindingId: "preconsent_tracking"
+    }
+  ]);
+
+  assert.deepEqual(counts, {
+    contradictionCount: 1,
+    preconsentConflictCount: 1
+  });
+});
+
+test("executive summary themes recognize financial-promotion findings", async () => {
+  const { deriveAgencyAdvisoryThemes, deriveExecutiveSummaryThemeNarrative } = await loadExecutiveSummaryThemeHelpers();
+
+  const themes = deriveAgencyAdvisoryThemes([
+    { details: { family: "financial_promotion" } },
+    { details: { family: "sensitive_data" } }
+  ]);
+
+  assert.deepEqual(themes, ["financial promotions and disclosure risk", "sensitive-data handling"]);
+  assert.equal(
+    deriveExecutiveSummaryThemeNarrative(themes),
+    "The strongest patterns in this scan involve financial promotions and disclosure risk and sensitive-data handling."
+  );
 });
 
 test("deriveFindingEvidenceQualitySummary counts verification states and audit-only findings", async () => {
@@ -448,14 +568,14 @@ test("deriveUnverifiedHomepageReview returns a one-off blocked-homepage explanat
     pages_scanned: 0
   });
 
-  assert.equal(review?.title, "Reachability blocked");
+  assert.equal(review?.title, "Access limited by site protections");
   assert.equal(review?.coverageLabel, "No public verification available");
-  assert.equal(review?.outcomeTitle, "Reachability blocked");
+  assert.equal(review?.outcomeTitle, "Access limited by site protections");
   assert.equal(review?.reason, "Reason: homepage request was blocked with HTTP 403.");
   assert.equal(review?.recommendationTitle, "Protected-Site Workflow Recommended");
   assert.deepEqual(review?.verifiedSurfaces ?? [], []);
   assert.ok(review?.guidance.some((item) => /protected-domain result/i.test(item)));
-  assert.match(review?.message ?? "", /anti-automation or access-control behavior/i);
+  assert.match(review?.message ?? "", /site limited automated access from the scan environment/i);
 });
 
 test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", async () => {
@@ -467,7 +587,7 @@ test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", a
     robots_allowed: false
   });
 
-  assert.equal(review?.title, "Reachability blocked");
+  assert.equal(review?.title, "Access limited by site protections");
   assert.match(review?.reason ?? "", /robots/i);
   assert.match(review?.message ?? "", /blocked for this scan path by crawler policy/i);
 });
@@ -541,7 +661,7 @@ test("deriveUnverifiedHomepageReview returns an explicit rate-limited explanatio
     pages_scanned: 0
   });
 
-  assert.equal(review?.title, "Reachability blocked");
+  assert.equal(review?.title, "Access limited by site protections");
   assert.equal(
     review?.reason,
     "Reason: homepage request was rate-limited with HTTP 429 before the scanner could verify a usable page surface."
@@ -555,8 +675,8 @@ test("deriveUnverifiedHomepageReview returns a generic zero-pages explanation wh
     pages_scanned: 0
   });
 
-  assert.equal(review?.title, "Verification incomplete");
-  assert.equal(review?.reason, "Reason: the scanner did not capture any verified public pages during the live pass.");
+  assert.equal(review?.title, "Access limited by site protections");
+  assert.equal(review?.reason, "Reason: no specific reachability blocker was retained for this run.");
 });
 
 test("deriveUnverifiedHomepageReview returns an explicit unreachable-homepage reason", async () => {

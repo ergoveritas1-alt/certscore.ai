@@ -8,6 +8,7 @@ import {
   normalizeConcernFromPolicyReviewQueue,
   normalizeConcernFromValidationFinding
 } from "./normalized-concerns";
+import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 import { buildUnifiedFindingPackets, type UnifiedFindingCandidate } from "./unified-findings";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
@@ -106,6 +107,187 @@ test("replay validation concerns with runtime artifacts are eligible for externa
   assert.equal(concern.promotionEligibility, "eligible");
   assert.equal(concern.externalSurfacingEligibility, "eligible");
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
+});
+
+test("high-sensitivity candidates with replay artifacts specialize into sensitive replay findings", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input appears to coexist with replay tooling.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "financial_information",
+          evidenceStrength: "suspected",
+          requestUrl: "https://collector.example.com/submit"
+        }
+      ],
+      sessionReplayVendorArtifactPresent: true,
+      session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
+test("high-sensitivity candidates with third-party tracking specialize into sensitive tracking findings", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input appears to coexist with third-party tracking.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "health_information",
+          evidenceStrength: "suspected",
+          requestUrl: "https://tracker.example.net/collect"
+        }
+      ],
+      retargetingPixelArtifactPresent: true,
+      runtimeEvidenceArtifacts: ["request:https://tracker.example.net/collect"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
+test("keyboard and form accessibility signals can specialize into workflow-level barriers", () => {
+  const keyboardConcern = normalizeConcernFromReviewFindingCandidate({
+    description: "Keyboard issues were detected on the tested flow.",
+    fallbackEvidence: {
+      pageUrl: "https://example.com/checkout",
+      wcagKeyboardNavigationIssueCount: 3
+    },
+    observedValue: "3",
+    severity: "high",
+    signalKey: "accessibility.wcag_keyboard_navigation_issue_count",
+    signalLabel: "Keyboard navigation issues",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Keyboard navigation issues"
+  });
+  const formConcern = normalizeConcernFromReviewFindingCandidate({
+    description: "Form label issues were detected on the tested flow.",
+    fallbackEvidence: {
+      pageUrl: "https://example.com/checkout",
+      wcagFormLabelErrorCount: 4
+    },
+    observedValue: "4",
+    severity: "high",
+    signalKey: "accessibility.wcag_form_label_error_count",
+    signalLabel: "Form label issues",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Form label issues"
+  });
+
+  assert.equal(keyboardConcern.suggestedUnifiedFindingId, "keyboard_only_task_completion_blocked");
+  assert.equal(formConcern.suggestedUnifiedFindingId, "critical_form_completion_barrier");
+});
+
+test("structured policy enrichment can infer missing data categories disclosure", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Primary policy extraction retained no data-category disclosure.",
+    fallbackEvidence: {
+      pageType: "privacy_policy",
+      policyCoverageRatio: 0.72,
+      policyDataCategories: [],
+      policyExtractionStatus: "fetched",
+      policyFieldCoverage: {
+        data_categories: { confidence: 0.88, found: false, snippetHash: null }
+      },
+      policySemanticConfidence: 0.84
+    },
+    observedValue: null,
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Policy semantic confidence"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "data_categories_disclosure_missing");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
+test("structured policy enrichment can infer missing third-party recipient disclosure", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Primary policy extraction retained no recipient or subprocessor disclosure.",
+    fallbackEvidence: {
+      pageType: "privacy_policy",
+      policyCoverageRatio: 0.69,
+      policyExtractionStatus: "fetched",
+      policySemanticConfidence: 0.82,
+      policySubprocessorsListed: false
+    },
+    observedValue: null,
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Policy semantic confidence"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "third_party_recipient_disclosure_missing");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
+test("structured policy enrichment can infer missing purpose-of-use disclosure", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Primary policy extraction retained no clear purpose-of-use disclosure.",
+    fallbackEvidence: {
+      pageType: "privacy_policy",
+      policyCoverageRatio: 0.71,
+      policyExtractionStatus: "fetched",
+      policyFieldCoverage: {
+        processing_purposes: { confidence: 0.83, found: false, snippetHash: null }
+      },
+      policySemanticConfidence: 0.8
+    },
+    observedValue: null,
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Policy semantic confidence"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "purpose_of_use_disclosure_missing");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
+test("account-exit gaps can specialize into missing cancellation-method disclosure", () => {
+  const concern = normalizeConcernFromValidationFinding(
+    makeValidationFinding({
+      id: "cancel-1",
+      ruleKey: "section_review.account_exit_terms_missing",
+      severity: "medium",
+      title: "Account-exit terms missing",
+      evidence: {
+        policyCancellationOrRefundPresent: false,
+        subscriptionCancellationPolicyPresent: false,
+        cancellationTermsPresent: false
+      }
+    })
+  );
+
+  assert.equal(concern.suggestedUnifiedFindingId, "cancellation_method_disclosure_missing");
+  assert.equal(concern.promotionEligibility, "eligible");
 });
 
 test("page-specific concerns without attribution are kept internal at the concern stage", () => {
@@ -280,6 +462,28 @@ test("dsar concerns with parser-incomplete extraction are blocked before unified
 
   assert.equal(concerns[0]?.promotionEligibility, "blocked");
   assert.equal(concerns[0]?.externalSurfacingEligibility, "suppress");
+  assert.equal(candidates.length, 0);
+});
+
+test("non-eligible policy behavior conflicts do not assemble into unified finding candidates", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [
+      {
+        description: "Observed runtime behavior appears to conflict with policy representations.",
+        fallbackEvidence: POLICY_BEHAVIOR_CONFLICT_FIXTURES.negativeSchwabLike,
+        observedValue: "Possible mismatch",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(concerns[0]?.suggestedUnifiedFindingId, "policy_behavior_conflict");
+  assert.equal(concerns[0]?.promotionEligibility, "internal_only");
+
+  const candidates = buildUnifiedFindingCandidatesFromConcerns(concerns);
   assert.equal(candidates.length, 0);
 });
 

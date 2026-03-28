@@ -7,7 +7,7 @@ import { createPageMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Contact Sales",
-  description: "Request a quick assessment from CertScore.ai about websites, monitoring needs, pricing, and onboarding.",
+  description: "Talk with CertScore.ai about website scanning, monitoring needs, pricing, and onboarding.",
   path: "/contact-sales"
 });
 
@@ -25,7 +25,7 @@ export default function ContactSalesPage() {
               <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Contact us</h1>
             </div>
             <p className="max-w-2xl text-lg text-slate-600">
-              Request a quick assessment with just your email and website. Add more context if you want us to tailor the follow-up.
+              Share a website and a bit of context if you want. We can help you evaluate fit, monitoring needs, pricing, and rollout options.
             </p>
           </div>
 
@@ -33,7 +33,7 @@ export default function ContactSalesPage() {
             <Card className="relative overflow-hidden border border-slate-200 bg-white shadow-none">
               <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
               <CardHeader>
-                <CardTitle>Request a quick assessment</CardTitle>
+                <CardTitle>Start the conversation</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <ContactSalesForm />

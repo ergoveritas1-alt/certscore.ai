@@ -12,7 +12,7 @@ export function ContactSalesForm() {
 
   return (
     <form action={action} className="space-y-5">
-      <input name="requestType" type="hidden" value="quick-assessment" />
+      <input name="requestType" type="hidden" value="sales-contact" />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
@@ -55,7 +55,7 @@ export function ContactSalesForm() {
           rows={6}
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
-        <p className="text-xs text-slate-500">For a quick assessment, work email plus website is enough.</p>
+        <p className="text-xs text-slate-500">Work email plus website is enough for a follow-up.</p>
       </div>
 
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}

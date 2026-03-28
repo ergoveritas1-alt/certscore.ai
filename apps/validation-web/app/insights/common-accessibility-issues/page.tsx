@@ -5,7 +5,7 @@ import { createPageMetadata } from "../../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Common Accessibility Issues",
   description:
-    "Educational insights page covering typical accessibility issues on public websites and how automated scanners detect related signals.",
+    "Educational insights page covering typical accessibility issues on public websites and how automated scanners surface related signals.",
   path: "/insights/common-accessibility-issues"
 });
 
@@ -22,7 +22,7 @@ export default function CommonAccessibilityIssuesInsightPage() {
       ]}
       scannerSignals={[
         "Automated scanners can evaluate markup, labels, contrast rules, and structural semantics across selected public pages.",
-        "They can also group recurring rule violations into structured findings so repeated issues do not get lost in raw output.",
+        "They can also group recurring rule failures into structured findings so repeated issues do not get lost in raw output.",
         "This makes accessibility scanning useful for both first-pass review and repeat monitoring."
       ]}
       examples={[

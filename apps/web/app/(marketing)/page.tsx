@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
@@ -10,28 +10,28 @@ import { createPageMetadata, SITE_URL } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Website Signal Scanner",
   description:
-    "Detect policy-to-behavior contradictions, pre-consent tracking, consent failures, third-party collection, and accessibility issues across your domain.",
+    "Surface observable website signals across privacy, consent, accessibility, disclosures, and policy-to-behavior contradictions.",
   path: "/"
 });
 
 const featureCards = [
   {
     icon: "🛡",
-    metric: "94",
-    title: "Privacy Protection",
-    description: "Comprehensive analysis of tracking technology and user data collection practices across your digital properties."
+    metric: "Signals",
+    title: "Privacy & Tracking",
+    description: "Detect tracking technologies, third-party requests, and data-collection signals visible from a public website scan."
   },
   {
     icon: "©",
-    metric: "88",
+    metric: "Choice",
     title: "Consent Health",
-    description: "Evaluating the integrity of consent flows and the timing of your controls relative to explicit user preference signals."
+    description: "Evaluate whether consent controls appear when expected and whether observable tracking behavior appears to align with user choice."
   },
   {
     icon: "⚖",
-    metric: "76",
-    title: "Regulatory Alignment",
-    description: "Surface signals tied to specific framework requirements including GDPR, CCPA, and broader public disclosures."
+    metric: "Review",
+    title: "Disclosures & Regulatory Signals",
+    description: "Surface public signals tied to privacy notices, contact paths, policy surfaces, accessibility posture, and framework-relevant disclosures."
   }
 ];
 
@@ -39,22 +39,22 @@ const personas = [
   {
     title: "Compliance consultants and web agencies",
     detail:
-      "You audit client websites for privacy and consent-related risks on a recurring basis. You need structured scan evidence you can review with clients, not another manual checklist. CertScore gives you reproducible output across the domains you monitor."
+      "You review client websites for privacy, consent, disclosure, and accessibility risks on a recurring basis. CertScore gives you structured findings and reproducible evidence you can review with clients without relying on manual checklists alone."
   },
   {
     title: "In-house privacy and compliance teams",
     detail:
-      "You need ongoing visibility into your compliance posture, not a one-time audit. CertScore tracks whether consent flows are working, whether vendors are collecting data before consent, and whether anything has drifted since the last review."
+      "You need ongoing visibility into public website signals, not a one-time audit. CertScore helps track whether consent flows are working, whether vendors are collecting data before consent, and what has changed since the last review."
   },
   {
     title: "Due diligence and risk analysts",
     detail:
-      "When evaluating a company or counterparty, public-facing privacy posture can be an early signal. CertScore gives you a fast, structured read on observable website signals relevant to FTC, CPPA, GDPR, COPPA, ADA, CFTC, and SEC frameworks for deeper review."
+      "When evaluating a company or counterparty, public-facing website behavior and disclosures can be useful diligence signals. CertScore provides a structured read on observable privacy, disclosure, accessibility, and trust-related signals for deeper review."
   },
   {
     title: "Developers responsible for compliance implementation",
     detail:
-      "You own the implementation but may not see what's firing in production. CertScore scans the live site like a browser, catching trackers that load before consent and flows that don't behave as configured."
+      "You own the implementation but may not always see what is happening on the live site. CertScore scans public pages in a browser context to surface trackers that load before consent and flows that may not behave as intended."
   }
 ];
 
@@ -210,17 +210,35 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              Scan websites for privacy, consent, accessibility, and regulatory{" "}
+              Surface website evidence across privacy, consent, accessibility, and{" "}
               <span
                 className="bg-clip-text text-transparent"
                 style={{ backgroundImage: "linear-gradient(180deg, #2f63ea 0%, #5b83ee 52%, #8ea5f2 100%)" }}
               >
-                compliance
+                disclosures
               </span>{" "}
-              signals.
+              .
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Automated telemetry for pre-consent tracking, consent flow failures, third-party data collection, and policy-to-behavior contradictions. Built for teams that need scan evidence, not checklists.
+              Automated scanning for pre-consent tracking, consent flow failures, third-party data collection, disclosure gaps, accessibility signals, and policy-to-behavior contradictions. Built for teams that need reviewable evidence, not checklists.
+            </p>
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row">
+              <PendingButtonLink
+                className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.18)] hover:brightness-[1.04] sm:w-auto"
+                href="/preview"
+                idleContent="Scan a website"
+                pendingContent="Opening..."
+              />
+              <PendingButtonLink
+                className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
+                href="/preview"
+                idleContent="See sample findings"
+                pendingContent="Opening..."
+                variant="secondary"
+              />
+            </div>
+            <p className="max-w-2xl text-sm leading-6 text-slate-500">
+              No legal advice. No certification. Findings reflect automated analysis of public website signals and should be reviewed in context.
             </p>
           </div>
 
@@ -231,8 +249,8 @@ export default async function MarketingHomePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <DomainScanForm
-                  buttonLabel="Start homepage scan"
-                  helperText="The preview is lightweight and shows sample findings for the homepage before signup."
+                  buttonLabel="Scan a website"
+                  helperText="Start with a lightweight homepage scan that previews the kinds of findings and observable signals CertScore can surface before signup."
                   inputLabel="Website domain"
                   mode="preview"
                 />
@@ -243,16 +261,26 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
+      <section className="border-b border-slate-200 bg-white/70">
+        <div className="mx-auto max-w-6xl px-6 py-4">
+          <p className="text-sm font-medium tracking-wide text-slate-600 sm:text-[15px]">
+            Pre-consent tracking • disclosure gaps • accessibility signals • contradictions • change tracking
+          </p>
+        </div>
+      </section>
+
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl space-y-4">
             <div className="inline-flex rounded-full bg-[linear-gradient(180deg,rgba(241,245,249,0.98)_0%,rgba(226,232,240,0.98)_100%)] px-5 py-2.5 text-[12px] font-medium text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
-              What you can catch
+              What CertScore surfaces
             </div>
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Authoritative insights into digital governance.</h2>
+            <h2 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+              Observable website signals across privacy, consent, accessibility, and disclosures
+            </h2>
           </div>
           <Link href="/preview" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
-            View Sample Scan →
+            See sample findings →
           </Link>
         </div>
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
@@ -262,21 +290,21 @@ export default async function MarketingHomePage() {
                 key={item.title}
                 className={
                   index === 0
-                    ? "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
+                    ? "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
                     : index === 1
-                      ? "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
-                      : "relative overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
+                      ? "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
+                      : "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
                 }
               >
                 <CardHeader className="space-y-5 p-6 pb-0">
                   <div className="text-[1.7rem] leading-none text-slate-500">{item.icon}</div>
                   <div className="space-y-3">
                     <p className="text-6xl font-light leading-none tracking-[-0.06em] text-slate-950">{item.metric}</p>
-                    <CardTitle className="text-[1.7rem] leading-none tracking-tight text-slate-950">{item.title}</CardTitle>
+                    <CardTitle className="min-h-[3.75rem] text-[1.7rem] leading-none tracking-tight text-slate-950">{item.title}</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-6 pt-5">
-                  <p className="min-h-[112px] text-lg leading-9 text-slate-500">{item.description}</p>
+                  <p className="min-h-[12rem] text-lg leading-9 text-slate-500">{item.description}</p>
                   <div className="mt-8 h-1 rounded-full bg-[linear-gradient(90deg,#4f6edb_0%,#7ea2ff_100%)]" />
                 </CardContent>
               </Card>
@@ -289,9 +317,9 @@ export default async function MarketingHomePage() {
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="max-w-2xl space-y-3">
             <Badge tone="neutral">Personas</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who will benefit from CertScore.ai?</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore is built for</h2>
             <p className="text-sm text-slate-600">
-              CertScore.ai is most useful for teams that need repeatable, observable scan evidence instead of one-off manual review.
+              CertScore is most useful for teams that need repeatable, observable website evidence instead of one-off manual review.
             </p>
           </div>
 
@@ -326,21 +354,23 @@ export default async function MarketingHomePage() {
         <div className="mx-auto max-w-6xl px-6 py-10">
           <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
             <div className="max-w-4xl space-y-6">
-              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">Get a live read on website compliance risk.</h2>
+              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+                Get a clearer read on public-facing website signals.
+              </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Join privacy-forward teams using CertScore to automate scanning, surface evidence, and rebuild trust around digital governance.
+                Use CertScore to automate scanning, surface reviewable evidence, and monitor changes across privacy, consent, accessibility, disclosure, and contradiction signals.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
                   className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
                   href="/preview"
-                  idleContent="Start Free Scan"
+                  idleContent="Scan a website"
                   pendingContent="Opening..."
                 />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
-                  href="/contact-sales"
-                  idleContent="Schedule Demo"
+                  href="/preview"
+                  idleContent="See sample findings"
                   pendingContent="Opening..."
                   variant="secondary"
                 />

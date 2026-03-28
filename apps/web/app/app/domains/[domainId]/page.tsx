@@ -33,6 +33,30 @@ function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function getQualityTone(level: "high" | "moderate" | "low"): "neutral" | "warning" | "success" {
+  if (level === "high") {
+    return "success";
+  }
+
+  if (level === "moderate") {
+    return "neutral";
+  }
+
+  return "warning";
+}
+
+function getPrimaryBadgeTone(scan: NonNullable<Awaited<ReturnType<typeof getDomainScanHistory>>[number]>): "neutral" | "warning" | "success" {
+  if (scan.interruptionLabel) {
+    return "warning";
+  }
+
+  return getQualityTone(scan.scanQualityLevel);
+}
+
+function getPrimaryBadgeLabel(scan: NonNullable<Awaited<ReturnType<typeof getDomainScanHistory>>[number]>) {
+  return scan.interruptionLabel ?? scan.scanQualityLabel;
+}
+
 function formatScheduledAt(value: string | null, dueNow: boolean) {
   if (dueNow) {
     return "Due now";
@@ -111,9 +135,12 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
             <p>Status: {latestScan ? formatStatus(latestScan.status) : "Not started"}</p>
+            {latestScan ? <p>Scan state: <Badge tone={getPrimaryBadgeTone(latestScan)}>{getPrimaryBadgeLabel(latestScan)}</Badge></p> : null}
             <p>Queued at: {formatDateTime(latestScan?.createdAt ?? null)}</p>
             <p>Completed at: {formatDateTime(latestScan?.completedAt ?? null)}</p>
             <p>Signals: {latestScan?.totalSignals ?? 0}</p>
+            <p>Findings: {latestScan?.findingCount ?? 0}</p>
+            {latestScan?.scanQualityWarning && latestScan.scanQualityWarning !== latestScan.interruptionReason ? <p>{latestScan.scanQualityWarning}</p> : null}
           </CardContent>
         </Card>
         <Card className="border border-slate-200 bg-white">
@@ -200,7 +227,9 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                   <tr className="text-left text-slate-500">
                     <th className="pb-3 pr-4 font-medium">Scan</th>
                     <th className="pb-3 pr-4 font-medium">Status</th>
+                    <th className="pb-3 pr-4 font-medium">Scan state</th>
                     <th className="pb-3 pr-4 font-medium">Signals</th>
+                    <th className="pb-3 pr-4 font-medium">Findings</th>
                     <th className="pb-3 pr-4 font-medium">Changes</th>
                     <th className="pb-3 pr-4 font-medium">Created</th>
                     <th className="pb-3 font-medium">Action</th>
@@ -211,7 +240,14 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                     <tr key={scan.id}>
                       <td className="py-4 pr-4 text-slate-900">{scan.scanType}</td>
                       <td className="py-4 pr-4 text-slate-600">{formatStatus(scan.status)}</td>
+                      <td className="py-4 pr-4 text-slate-600">
+                        <div className="space-y-1">
+                          <Badge tone={getPrimaryBadgeTone(scan)}>{getPrimaryBadgeLabel(scan)}</Badge>
+                          {scan.interruptionReason ? <p className="text-xs text-amber-700">{scan.interruptionReason}</p> : null}
+                        </div>
+                      </td>
                       <td className="py-4 pr-4 text-slate-600">{scan.totalSignals ?? 0}</td>
+                      <td className="py-4 pr-4 text-slate-600">{scan.findingCount}</td>
                       <td className="py-4 pr-4 text-slate-600">
                         +{scan.addedCount} / -{scan.removedCount} / ~{scan.changedCount}
                       </td>

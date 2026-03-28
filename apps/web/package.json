@@ -16,12 +16,14 @@
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/ui": "workspace:*",
+    "@website-signal-risk-scanner/validation-shared": "workspace:*",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.43.0",
     "next": "^15.2.0",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {

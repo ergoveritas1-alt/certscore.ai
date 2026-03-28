@@ -7,6 +7,8 @@ import {
   getUnifiedFindingOwnerCategoryId,
   type UnifiedFindingCandidate
 } from "./unified-findings";
+import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
+import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 function makeValidationFinding(
@@ -90,6 +92,39 @@ test("collapses signal, issue, and validation sources into one unified finding p
     ["compatibility_signal", "snapshot_signal", "validation_rule"]
   );
   assert.ok(packets[0]?.concernContext?.assertionLevels.includes("moderate"));
+});
+
+test("hash-only sanitized network evidence does not create direct runtime uplift", () => {
+  const [packet] = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed before a clear user choice was made.",
+        fallbackEvidence: {
+          sanitizedNetworkEvidence: buildSanitizedNetworkEvidenceAuditRecord({
+            entries: [],
+            summary: {
+              preconsent: {
+                requestCount: 0
+              }
+            }
+          }),
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, false);
+  assert.ok(packet?.evidence?.flags?.includes("sanitized_network_evidence_hashed"));
 });
 
 test("resolves validation-backed unified findings without a direct signal candidate", () => {
@@ -684,7 +719,7 @@ test("keeps key-page discovery context on coverage-gap packets", () => {
   ]);
   assert.equal(packets[0]?.confidenceInputs.hasKeyPageDiscoveryEvidence, true);
   assert.equal(packets[0]?.confidenceInputs.isFallbackOnly, true);
-  assert.equal(packets[0]?.confidenceBand, "low");
+  assert.equal(packets[0]?.confidenceBand, "moderate");
 });
 
 test("marks fallback-only low-confidence packets as audit-only and refines coverage copy", () => {
@@ -803,6 +838,201 @@ test("treats concrete payload evidence as a confidence booster for sensitive-dat
   assert.equal(packet?.confidenceBand, "high");
 });
 
+test("specializes high-sensitivity replay evidence into a sensitive replay packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Sensitive input and replay tooling were retained together.",
+        fallbackEvidence: {
+          sensitivePayloadViolations: [
+            {
+              detectedType: "financial_information",
+              evidenceStrength: "suspected",
+              requestUrl: "https://collector.example.com/submit"
+            }
+          ],
+          sessionReplayVendorArtifactPresent: true,
+          session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"],
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+});
+
+test("specializes high-sensitivity third-party tracking evidence into a sensitive tracking packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Sensitive input and third-party tracking were retained together.",
+        fallbackEvidence: {
+          sensitivePayloadViolations: [
+            {
+              detectedType: "health_information",
+              evidenceStrength: "suspected",
+              requestUrl: "https://tracker.example.net/collect"
+            }
+          ],
+          retargetingPixelArtifactPresent: true,
+          runtimeEvidenceArtifacts: ["request:https://tracker.example.net/collect"],
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+});
+
+test("structured policy enrichment can surface missing data-category disclosure as a unified packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Primary policy extraction retained no data-category disclosure.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          policyCoverageRatio: 0.72,
+          policyDataCategories: [],
+          policyExtractionStatus: "fetched",
+          policyFieldCoverage: {
+            data_categories: { confidence: 0.88, found: false, snippetHash: null }
+          },
+          policySemanticConfidence: 0.84,
+          signalKey: "policySemanticConfidence",
+          signalValue: 0.84
+        },
+        observedValue: null,
+        severity: "medium",
+        signalKey: "policySemanticConfidence",
+        signalLabel: "Policy semantic confidence",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Policy semantic confidence"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "data_categories_disclosure_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("structured policy enrichment can surface missing third-party recipient disclosure as a unified packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Primary policy extraction retained no recipient or subprocessor disclosure.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          policyCoverageRatio: 0.69,
+          policyExtractionStatus: "fetched",
+          policySemanticConfidence: 0.82,
+          policySubprocessorsListed: false,
+          signalKey: "policySemanticConfidence",
+          signalValue: 0.82
+        },
+        observedValue: null,
+        severity: "medium",
+        signalKey: "policySemanticConfidence",
+        signalLabel: "Policy semantic confidence",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Policy semantic confidence"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "third_party_recipient_disclosure_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("structured policy enrichment can surface missing purpose-of-use disclosure as a unified packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Primary policy extraction retained no clear purpose-of-use disclosure.",
+        fallbackEvidence: {
+          pageType: "privacy_policy",
+          policyCoverageRatio: 0.71,
+          policyExtractionStatus: "fetched",
+          policyFieldCoverage: {
+            processing_purposes: { confidence: 0.83, found: false, snippetHash: null }
+          },
+          policySemanticConfidence: 0.8,
+          signalKey: "policySemanticConfidence",
+          signalValue: 0.8
+        },
+        observedValue: null,
+        severity: "medium",
+        signalKey: "policySemanticConfidence",
+        signalLabel: "Policy semantic confidence",
+        signalSource: "policy_enrichment_signal",
+        sourceType: "signal",
+        title: "Policy semantic confidence"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "purpose_of_use_disclosure_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("account-exit validation gaps can specialize into missing cancellation-method disclosure packets", () => {
+  const validationFinding = makeValidationFinding({
+    id: "cancel-2",
+    description: "The retained evidence did not explain how a user would actually cancel or exit.",
+    evidence: {
+      policyCancellationOrRefundPresent: false,
+      subscriptionCancellationPolicyPresent: false,
+      cancellationTermsPresent: false
+    },
+    ruleKey: "section_review.account_exit_terms_missing",
+    severity: "medium",
+    title: "Account-exit terms missing"
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cancellation_method_disclosure_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("keeps the unified finding name canonical even when validation titles add judgment language", () => {
   const validationFinding = makeValidationFinding({
     id: "val-5",
@@ -866,12 +1096,12 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
   const genericPacket = packets.find((packet) => packet.unifiedFindingId === "policy_behavior_conflict");
   const specificPacket = packets.find((packet) => packet.unifiedFindingId === "session_replay_undisclosed");
 
-  assert.equal(genericPacket?.presentationDecision.status, "suppress");
+  assert.equal(genericPacket, undefined);
   assert.equal(specificPacket?.presentationDecision.status, "surface");
 });
 
-test("keeps contradiction issue findings audit-only while retaining policy-side and runtime-side evidence", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("drops weak generic contradiction issues from the report payload when they lack contradiction-grade support", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed adtech vendors include Google Ads.",
@@ -897,25 +1127,11 @@ test("keeps contradiction issue findings audit-only while retaining policy-side 
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.details?.family, "contradiction");
-  assert.equal(packet?.details?.claim, "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.");
-  assert.equal(packet?.details?.contradictionBasis, "undisclosed_vendor");
-  assert.equal(packet?.details?.policySourceUrl, "https://www.example.com/privacy");
-  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, [
-    "Google Ads tag requested before any disclosed vendor list appeared.",
-    "Google Ads",
-    "Meta Pixel"
-  ]);
-  assert.deepEqual(packet?.evidence?.entities?.relatedVendors, ["Google Ads", "Meta Pixel"]);
-  assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.example.com/privacy"]);
-  assert.match((packet?.evidence?.snippets ?? []).join(" "), /privacy policy/i);
-  assert.match((packet?.evidence?.snippets ?? []).join(" "), /do not share browsing data/i);
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
 });
 
-test("keeps generic policy-behavior conflicts audit-only when no explicit contradiction basis is retained", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("drops generic policy-behavior conflicts when no explicit contradiction basis is retained", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed adtech vendors include Google Ads.",
@@ -938,14 +1154,11 @@ test("keeps generic policy-behavior conflicts audit-only when no explicit contra
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.details?.family, "contradiction");
-  assert.equal(packet?.details?.contradictionBasis ?? null, null);
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
 });
 
-test("keeps generic policy-behavior conflicts audit-only when contradiction basis is present but policy snippet is not retained", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("drops generic policy-behavior conflicts when contradiction basis is present but policy snippet is not retained", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed adtech vendors include Google Ads.",
@@ -969,12 +1182,11 @@ test("keeps generic policy-behavior conflicts audit-only when contradiction basi
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
 });
 
-test("does not retain an explicit policy snippet flag when the only snippet is the generic contradiction claim", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("does not assemble a generic contradiction packet when the only snippet is the generic contradiction claim", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed adtech vendors include Google Ads.",
@@ -996,13 +1208,55 @@ test("does not retain an explicit policy snippet flag when the only snippet is t
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.evidence?.flags?.includes("explicit_policy_snippet_retained"), false);
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
 });
 
-test("prefers structured contradiction evidence bundles over loose fallback fields", () => {
+test("surfaces policy behavior conflicts only when the contradiction bundle is complete", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "GPC-enabled session retained tracking behavior.",
+        fallbackEvidence: POLICY_BEHAVIOR_CONFLICT_FIXTURES.positiveGpcNotHonored,
+        observedValue: "Tracking persisted with GPC enabled",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.details?.family, "contradiction");
+  assert.equal(packet?.details?.policyClaimType, "gpc_honored");
+  assert.equal(packet?.details?.runtimeObservationType, "gpc_signal_not_honored");
+  assert.equal(packet?.details?.conflictType, "declared_opt_out_honored_but_tracking_persisted_under_opt_out");
+  assert.equal(packet?.details?.contradictionReviewStatus, "complete");
+});
+
+test("drops Schwab-like policy behavior conflicts from the report payload when no contradiction-grade pair is retained", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed runtime behavior appears to conflict with policy representations.",
+        fallbackEvidence: POLICY_BEHAVIOR_CONFLICT_FIXTURES.negativeSchwabLike,
+        observedValue: "Possible mismatch",
+        severity: "high",
+        sourceType: "issue",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
+});
+
+test("does not preserve loose structured contradiction bundles as generic policy-behavior packets without contradiction-grade support", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed replay tooling during the homepage session.",
@@ -1032,12 +1286,7 @@ test("prefers structured contradiction evidence bundles over loose fallback fiel
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.details?.family, "contradiction");
-  assert.equal(packet?.details?.claim, "Policy does not clearly disclose replay tooling.");
-  assert.deepEqual(packet?.details?.vendors, ["Microsoft Clarity"]);
-  assert.deepEqual(packet?.details?.runtimeEvidenceArtifacts, ["Replay script observed during homepage load"]);
-  assert.deepEqual(packet?.evidence?.entities?.runtimeVendors, ["Microsoft Clarity"]);
-  assert.ok((packet?.evidence?.snippets ?? []).includes("Replay script observed during homepage load"));
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "policy_behavior_conflict"), false);
 });
 
 test("keeps strong corroborated findings surfaced with a confidence rationale", () => {
@@ -1146,6 +1395,105 @@ test("keeps blocked contact-path evidence audit-only and strips interstitial sni
   assert.deepEqual(packet?.evidence?.snippets, []);
 });
 
+test("uses derived support-surface snippets for packet-backed contact surfaces with multiple first-party urls", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "support_access",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/contact-us",
+                  fetchQuality: "blocked_interstitial",
+                  snippet: "Example Corp",
+                  supportedSurfaceTypes: ["contact_support"],
+                  supportingRefs: [{ url: "https://www.example.com/contact" }],
+                  title: "Example Corp"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((item) => item.unifiedFindingId === "contact_support_path_present");
+  assert.equal(packet?.confidenceBand, "moderate");
+  assert.equal(packet?.observedValue, "Detected dedicated contact or support surfaces on first-party URLs.");
+  assert.equal(packet?.evidence?.fetchQuality, "thin_content");
+  assert.deepEqual(packet?.evidence?.snippets, ["Contact Us"]);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("promotes corroborated contact surfaces to verified evidence and higher confidence when readable support text is retained", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "support_access",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/contact-us",
+                  fetchQuality: "blocked_interstitial",
+                  snippet: "Example Corp",
+                  supportedSurfaceTypes: ["contact_support"],
+                  supportingRefs: [{ url: "https://www.example.com/contact" }],
+                  title: "Example Corp"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidencePayload: {
+                    pageUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"],
+                    policySnippets: [
+                      "Reach out to Example customer service by phone, chat, or visit your local branch."
+                    ],
+                    sourceUrls: ["https://www.example.com/contact", "https://www.example.com/contact-us"]
+                  },
+                  evidenceUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((item) => item.unifiedFindingId === "contact_support_path_present");
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.equal(packet?.observedValue, "Reach out to Example customer service by phone, chat, or visit your local branch.");
+  assert.equal(packet?.confidenceBand, "high");
+  assert.equal(packet?.presentationDecision.verificationState, "verified");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("keeps blocked cookie-policy evidence audit-only and strips interstitial snippets", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -1178,6 +1526,253 @@ test("keeps blocked cookie-policy evidence audit-only and strips interstitial sn
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.evidence?.fetchQuality, "blocked_interstitial");
   assert.deepEqual(packet?.evidence?.snippets, []);
+});
+
+test("uses a cookie-specific generic observation when the url is stronger than the retained snippet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a reachable cookie-policy surface.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/legal/cookies"],
+          policySnippets: ["Example Corp"],
+          signalKey: "disclosure.cookie_policy_present",
+          signalLabel: "Cookie policy fetched",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/legal/cookies"]
+        },
+        observedValue: "Cookie policy fetched",
+        severity: "medium",
+        signalKey: "disclosure.cookie_policy_present",
+        signalLabel: "Cookie policy fetched",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Cookie policy fetched"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.observedValue, "Detected first-party cookie-policy or privacy-controls surface.");
+});
+
+test("reanchors cookie-policy presence to retained privacy-notice cookie text and raises confidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/legal/cookies",
+                  fetchQuality: "blocked_interstitial",
+                  snippet: "Example Corp",
+                  supportedSurfaceTypes: ["cookie_policy"],
+                  supportingRefs: [{ url: "https://www.example.com/privacy-notice" }],
+                  title: "Example Corp"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidencePayload: {
+                    pageUrls: ["https://www.example.com/legal/cookies", "https://www.example.com/privacy-notice"],
+                    policySnippets: [
+                      "We use cookies and other tracking technologies, including analytical cookies and marketing cookies. You can review Your Privacy Choices at any time."
+                    ],
+                    sourceUrls: ["https://www.example.com/privacy-notice", "https://www.example.com/legal/cookies"]
+                  },
+                  evidenceUrls: ["https://www.example.com/legal/cookies", "https://www.example.com/privacy-notice"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie and tracking disclosures.",
+                  sourceSurfaceTypes: ["cookie_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.equal(
+    packet?.observedValue,
+    "We use cookies and other tracking technologies, including analytical cookies and marketing cookies. You can review Your Privacy Choices at any time."
+  );
+  assert.equal(packet?.confidenceBand, "high");
+  assert.equal(packet?.presentationDecision.verificationState, "verified");
+});
+
+test("borrows corroborating privacy-controls anchors for cookie-policy packets from the same family packet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/legal/cookies",
+                  fetchQuality: "blocked_interstitial",
+                  snippet: "Example Corp",
+                  supportedSurfaceTypes: ["cookie_policy_or_settings"],
+                  title: "Example Corp"
+                },
+                {
+                  canonicalUrl: "https://www.example.com/privacy-notice",
+                  fetchQuality: "verified_content",
+                  snippet:
+                    "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC.",
+                  supportedSurfaceTypes: ["privacy_choices"],
+                  title: "Privacy Notice"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/legal/cookies"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy or settings language.",
+                  sourceSurfaceTypes: ["cookie_policy_or_settings"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentation.confidenceScore, "0.85");
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.equal(packet?.primaryPageUrl, "https://www.example.com/privacy-notice");
+  assert.ok(packet?.evidence?.pageUrls?.includes("https://www.example.com/privacy-notice"));
+  assert.ok(
+    packet?.evidence?.snippets?.includes(
+      "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+    )
+  );
+});
+
+test("repairs weak cookie-policy packets from policy enrichment during display assembly", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.schwab.com/legal/privacy/us-residents",
+        policy_summary_short:
+          "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+      }
+    ],
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.schwab.com/cookies",
+                  fetchQuality: "blocked_interstitial",
+                  snippet: "Charles Schwab",
+                  supportedSurfaceTypes: ["cookie_policy"],
+                  title: "Charles Schwab"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.schwab.com/cookies"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy or settings language.",
+                  sourceSurfaceTypes: ["cookie_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentation.confidenceScore, "0.85");
+  assert.equal(packet?.primaryPageUrl, "https://www.schwab.com/legal/privacy/us-residents");
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.ok(packet?.evidence?.pageUrls?.includes("https://www.schwab.com/legal/privacy/us-residents"));
+  assert.ok(
+    packet?.evidence?.snippets?.includes(
+      "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+    )
+  );
+});
+
+test("does not treat insufficient-policy placeholder text as a surfaced cookie-policy snippet", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.schwab.com/cookies",
+                  fetchQuality: "verified_content",
+                  snippet: "Insufficient policy content fetched for semantic review.",
+                  supportedSurfaceTypes: ["cookie_policy"],
+                  title: "Cookie Policy"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidencePayload: {
+                    fetchQuality: "verified_content",
+                    pageUrls: ["https://www.schwab.com/cookies"],
+                    policySnippets: ["Insufficient policy content fetched for semantic review."],
+                    sourceUrls: ["https://www.schwab.com/cookies"]
+                  },
+                  evidenceUrls: ["https://www.schwab.com/cookies"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy or settings language.",
+                  sourceSurfaceTypes: ["cookie_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.deepEqual(packet?.evidence?.snippets ?? [], []);
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("keeps page-specific findings in audit only when page attribution is still missing", () => {
@@ -1506,6 +2101,8 @@ test("keeps accessibility risk score audit-only even when representative example
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.presentation.confidenceScore, "0.65");
+  assert.equal(packet?.evidence?.flags?.includes("contradiction_runtime_artifact_retained"), false);
+  assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
 });
 
 test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {
@@ -2444,7 +3041,7 @@ test("surfaces accessibility support path present from snapshot evidence", () =>
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 

@@ -235,6 +235,94 @@ function getPolicySnippetCandidates(row: Record<string, unknown> | null, snippet
   ]);
 }
 
+function getCookiePolicySnippetCandidates(row: Record<string, unknown> | null) {
+  return getPolicySnippetCandidates(row, [
+    "cookie_table",
+    "cookie_notice",
+    "cookies",
+    "tracking_technologies",
+    "targeted_advertising",
+    "privacy_choices",
+    "do_not_sell"
+  ]);
+}
+
+function hasCookieLikeEvidenceText(value: string | null | undefined) {
+  if (!isMeaningfulPolicyText(value)) {
+    return false;
+  }
+
+  return /cookie|tracking technolog|analytical cookies|marketing cookies|privacy choices|your privacy choices|gpc|global privacy control|opt-out preference/i.test(
+    value
+  );
+}
+
+function isGenericCookiePathUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return /\/(?:legal\/)?cookies\/?$/i.test(parsed.pathname);
+  } catch {
+    return /\/(?:legal\/)?cookies\/?$/i.test(value);
+  }
+}
+
+function getCookiePolicyFallbackRow(policyEnrichment: Array<Record<string, unknown>>) {
+  const scoredRows = policyEnrichment
+    .map((row) => {
+      const pageType = String(row.pageType ?? row.page_type ?? "");
+      const pageUrl = getPolicyPageUrl(row);
+      const policySummaryShort = getPolicySummaryShort(row);
+      const snippets = getCookiePolicySnippetCandidates(row);
+      const combinedText = [...snippets, ...(policySummaryShort ? [policySummaryShort] : [])];
+      const hasCookieEvidence = combinedText.some((entry) => hasCookieLikeEvidenceText(entry));
+
+      if (!hasCookieEvidence && pageType !== "cookie_policy") {
+        return null;
+      }
+
+      let score = 0;
+      if (pageType === "cookie_policy") {
+        score += 5;
+      }
+      if (pageType === "privacy_policy") {
+        score += 3;
+      }
+      if (pageUrl && !isMachineReadablePolicyEndpoint(pageUrl)) {
+        score += 2;
+      }
+      if (pageUrl && !isWeakRootLikeUrl(pageUrl)) {
+        score += 2;
+      }
+      if (snippets.some((entry) => hasCookieLikeEvidenceText(entry))) {
+        score += 3;
+      }
+      if (combinedText.some((entry) => /your privacy choices|privacy choices/i.test(entry))) {
+        score += 1;
+      }
+      if (combinedText.some((entry) => /gpc|global privacy control|opt-out preference/i.test(entry))) {
+        score += 1;
+      }
+      if (pageUrl && /\/legal\/privacy\/us-residents\/?$/i.test(pageUrl)) {
+        score += 3;
+      } else if (pageUrl && /us-residents|privacy-notice|privacy-notice/i.test(pageUrl)) {
+        score += 2;
+      }
+
+      return {
+        row,
+        score
+      };
+    })
+    .filter((entry): entry is { row: Record<string, unknown>; score: number } => Boolean(entry))
+    .sort((left, right) => right.score - left.score);
+
+  return scoredRows[0]?.row ?? null;
+}
+
 function isWeakRootLikeUrl(value: string | null) {
   if (!value) {
     return false;
@@ -457,14 +545,14 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
       ? ["privacy_policy"]
       : isTermsSurfaceSignal
         ? ["terms_of_service"]
-        : isCookieSurfaceSignal
-          ? ["cookie_policy"]
-          : isContactSurfaceSignal
-            ? ["contact", "contact_page"]
-            : isDoNotSellSignal
-              ? ["privacy_policy", "cookie_policy"]
+        : isContactSurfaceSignal
+          ? ["contact", "contact_page"]
+          : isDoNotSellSignal
+            ? ["privacy_policy", "cookie_policy"]
             : []
   );
+  const cookiePolicyRow = isCookieSurfaceSignal ? getCookiePolicyFallbackRow(input.policyEnrichment ?? []) : null;
+  const effectiveGenericPolicyRow = cookiePolicyRow ?? genericPolicyRow;
   const affiliatePolicyRow =
     isAffiliateSignal
       ? getAffiliatePolicyFallbackRow(input.policyEnrichment ?? [])
@@ -486,7 +574,7 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
   const nonWeakSuccessfulUrls = nonMachineSuccessfulUrls.filter((url) => !isWeakRootLikeUrl(url));
   const nonWeakAttemptedUrls = nonMachineAttemptedUrls.filter((url) => !isWeakRootLikeUrl(url));
   const nonWeakBestCandidateUrls = nonMachineBestCandidateUrls.filter((url) => !isWeakRootLikeUrl(url));
-  const genericPolicyPageUrl = getPolicyPageUrl(genericPolicyRow);
+  const genericPolicyPageUrl = getPolicyPageUrl(effectiveGenericPolicyRow);
   const genericHumanPolicyPageUrl =
     genericPolicyPageUrl && !isMachineReadablePolicyEndpoint(genericPolicyPageUrl) ? genericPolicyPageUrl : null;
   const shouldUseGenericPolicySnippetCandidates = !(
@@ -571,7 +659,7 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
       : normalizePolicySnippetList([
           ...genericTitleSnippets,
           ...(((genericTitleSnippets.length === 0 || isDoNotSellSignal) && shouldUseGenericPolicySnippetCandidates)
-            ? getPolicySnippetCandidates(genericPolicyRow, [
+            ? getPolicySnippetCandidates(effectiveGenericPolicyRow, [
                 "privacy_notice",
                 "terms_summary",
                 "cookie_notice",
@@ -585,6 +673,18 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
             : []),
           ...((genericTitleSnippets.length === 0 || isDoNotSellSignal) ? bestCandidateAnchorTexts : [])
         ]);
+  const reanchoredCookieSignalToPolicyEvidence =
+    isCookieSurfaceSignal &&
+    Boolean(genericHumanPolicyPageUrl) &&
+    !nonWeakSuccessfulUrls.includes(genericHumanPolicyPageUrl ?? "");
+  const effectiveGenericPageUrls =
+    reanchoredCookieSignalToPolicyEvidence && genericHumanPolicyPageUrl
+      ? [genericHumanPolicyPageUrl]
+      : genericPageUrls;
+  const effectiveGenericSourceUrls =
+    reanchoredCookieSignalToPolicyEvidence && genericHumanPolicyPageUrl
+      ? [genericHumanPolicyPageUrl]
+      : genericSourceUrls;
 
   const preferredDoNotSellPageUrls = isDoNotSellSignal
     ? uniqueStrings(genericPageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)))
@@ -605,28 +705,28 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
     contactPagePresent: input.snapshot?.contact_page_present === true,
     fetchQuality:
-      explicitFetchQuality ??
+      (!reanchoredCookieSignalToPolicyEvidence ? explicitFetchQuality : null) ??
       getFetchQualityFromEvidence({
         attemptedUrls,
-        pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : genericPageUrls,
+        pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : effectiveGenericPageUrls,
         snippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
-        stopReason: stopReasons[0] ?? null
+        stopReason: !reanchoredCookieSignalToPolicyEvidence ? stopReasons[0] ?? null : null
       }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: [...new Set(attemptedUrls)],
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
     keyPageStopReason: stopReasons[0] ?? null,
-    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : genericPageUrls,
+    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : effectiveGenericPageUrls,
     policySnippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
     doNotSellLinkPresent: input.snapshot?.do_not_sell_link_present === true,
     privacyPolicyPresent: input.snapshot?.privacy_policy_present === true,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
-    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : genericSourceUrls,
+    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : effectiveGenericSourceUrls,
     termsOfServicePresent: input.snapshot?.terms_of_service_present === true,
     policySummaryShort:
-      genericPolicySnippets.length === 0 && genericPolicyRow ? getPolicySummaryShort(genericPolicyRow) : null
+      genericPolicySnippets.length === 0 && effectiveGenericPolicyRow ? getPolicySummaryShort(effectiveGenericPolicyRow) : null
   };
 }
 
@@ -685,10 +785,24 @@ export function buildCookiePolicyFallbackEvidence(input: {
   const attemptedUrls = uniqueStrings(getAttemptedKeyPageUrls(cookiePolicyRows));
   const titleSnippets = normalizePolicySnippetList(getSuccessfulKeyPageTitles(cookiePolicyRows));
   const stopReasons = getStopReasons(cookiePolicyRows);
-  const policyRow = getPolicyRowByPageTypes(input.policyEnrichment ?? [], ["cookie_policy"]);
+  const policyRow = getCookiePolicyFallbackRow(input.policyEnrichment ?? []);
   const primarySuccessfulUrl = successfulUrls[0] ?? null;
   const policyPageUrl = getPolicyPageUrl(policyRow);
-  const shouldPreferPolicyRow = isWeakRootLikeUrl(primarySuccessfulUrl) && !isWeakRootLikeUrl(policyPageUrl);
+  const shouldPreferPolicyRow =
+    (!policyPageUrl
+      ? false
+      : (isWeakRootLikeUrl(primarySuccessfulUrl) && !isWeakRootLikeUrl(policyPageUrl)) ||
+        (isGenericCookiePathUrl(primarySuccessfulUrl) &&
+          titleSnippets.length === 0 &&
+          getCookiePolicySnippetCandidates(policyRow).length > 0 &&
+          policyPageUrl !== primarySuccessfulUrl) ||
+        Boolean(
+          cookiePolicyRows.some(
+            (row) =>
+              row.fetchQuality === "blocked_interstitial" ||
+              (typeof row.stopReason === "string" && /blocked|challenge|captcha|forbidden|auth/i.test(row.stopReason))
+          )
+        ));
   const shouldDropWeakRootFallback =
     isWeakRootLikeUrl(primarySuccessfulUrl) &&
     !policyPageUrl;
@@ -696,27 +810,25 @@ export function buildCookiePolicyFallbackEvidence(input: {
     ? uniqueStrings([policyPageUrl])
     : shouldDropWeakRootFallback
       ? []
-    : uniqueStrings([...successfulUrls, ...(policyPageUrl && successfulUrls.length === 0 ? [policyPageUrl] : [])]);
+      : uniqueStrings([...successfulUrls, ...(policyPageUrl && successfulUrls.length === 0 ? [policyPageUrl] : [])]);
   const policySnippets =
     titleSnippets.length > 0 && !shouldPreferPolicyRow && !shouldDropWeakRootFallback
       ? titleSnippets
-      : getPolicySnippetCandidates(policyRow, [
-          "cookie_table",
-          "cookie_notice",
-          "cookies",
-          "tracking_technologies",
-          "targeted_advertising"
-        ]);
+      : getCookiePolicySnippetCandidates(policyRow);
   const explicitFetchQuality = getExplicitFetchQuality(cookiePolicyRows);
+  const reanchoredToPolicyEvidence =
+    shouldPreferPolicyRow &&
+    Boolean(policyPageUrl) &&
+    !successfulUrls.includes(policyPageUrl ?? "");
 
   return {
     fetchQuality:
-      explicitFetchQuality ??
+      (!reanchoredToPolicyEvidence ? explicitFetchQuality : null) ??
       getFetchQualityFromEvidence({
-        attemptedUrls,
+        attemptedUrls: !reanchoredToPolicyEvidence ? attemptedUrls : [],
         pageUrls: retainedPageUrls,
         snippets: policySnippets,
-        stopReason: stopReasons[0] ?? null
+        stopReason: !reanchoredToPolicyEvidence ? stopReasons[0] ?? null : null
       }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: attemptedUrls,

@@ -15,22 +15,22 @@ const sections = [
   {
     title: "1. Overview",
     body:
-      "This Privacy Policy describes how CertScore.ai collects, uses, and stores information when you use certscore.ai and the CertScore.ai service."
+      "This Privacy Policy describes how CertScore.ai collects, uses, stores, and retains information when you use certscore.ai and the CertScore.ai service."
   },
   {
-    title: "2. Information You Provide",
+    title: "2. Account And Submitted Information",
     body:
       "We may collect information you provide directly, such as your email address, name, authentication details, submitted domains, and scan settings."
   },
   {
-    title: "3. Information Collected Automatically",
+    title: "3. Usage And Operational Data",
     body:
       "We may collect technical information needed to operate the service, such as authentication events, usage logs, scan status events, browser metadata, and product interaction data."
   },
   {
     title: "4. Website Scan Data",
     body:
-      "CertScore.ai analyzes publicly accessible website content using automated systems and rule-based checks. We store derived scan signals, counts, booleans, timestamps, usage records, change events, evidence URLs, and limited policy or disclosure excerpts when needed to support analysis, review, and evidence context. We do not position the service as an archive of entire pages or complete policy text bodies."
+      "CertScore.ai analyzes publicly accessible website content using automated systems and rule-based checks. We may retain scan metadata, derived signals, counts, booleans, timestamps, evidence URLs, change history, and limited policy or disclosure excerpts when needed to support analysis, review, remediation, and evidence context. We do not describe the service as an archive of full websites or complete policy text bodies."
   },
   {
     title: "5. Third-Party Services",
@@ -40,7 +40,7 @@ const sections = [
   {
     title: "6. Data Retention",
     body:
-      "We retain account data and derived scan metadata for as long as needed to operate the service, subject to plan limits and operational needs."
+      "We retain account data, scan metadata, and related operational records for as long as needed to operate the service, subject to plan limits, retention settings, and operational needs."
   },
   {
     title: "7. Your Privacy Rights",
@@ -75,7 +75,7 @@ export default function PrivacyPage() {
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-16">
         <div className="space-y-4">
-          <Badge tone="neutral">Derived signals and limited excerpts</Badge>
+          <Badge tone="neutral">Public scan data, account data, and retained evidence context</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Privacy Policy</h1>
           <p className="text-lg text-slate-600">
             This page explains how CertScore.ai handles account information, public website scan data,

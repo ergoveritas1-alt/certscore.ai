@@ -13,9 +13,6 @@ import {
   type ReviewFindingSeverity
 } from "./canonical-review-finding";
 import {
-  isDomainLevelChildrenDisclosureFinding,
-  isDomainLevelSensitiveContextFinding,
-  packetNeedsPageAttribution
 } from "./concern-policy";
 import {
   buildNormalizedConcerns,
@@ -43,12 +40,18 @@ import {
   normalizePolicySnippet
 } from "./policy-snippet-normalization";
 import {
-  evaluateFinancialJudgeInput,
-  getFinancialValidationSpec,
-  getFinancialValidationEvidenceBundle,
-  isFinancialValidationFindingId
+  hasConcreteSanitizedNetworkEvidence,
+  hasSanitizedNetworkEvidenceHash
+} from "./sanitized-network-evidence";
+import {
 } from "./financial-validation-contract";
-import type { FetchQuality } from "./signal-fallback-evidence";
+import {
+  evaluateUnifiedFindingSurfacing,
+  getSurfacingDecisionSortPriority,
+  mapSurfacingDecisionToLegacyStatus,
+  type UnifiedFindingSurfacingDecision
+} from "./report-surfacing-policy";
+import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-fallback-evidence";
 
 export type UnifiedFindingDetails =
   | {
@@ -79,6 +82,11 @@ export type UnifiedFindingDetails =
       kind: string;
       claim?: string | null;
       contradictionBasis?: string | null;
+      policyClaimType?: string | null;
+      runtimeObservationType?: string | null;
+      runtimePhase?: string | null;
+      conflictType?: string | null;
+      contradictionReviewStatus?: string | null;
       policySnippet?: string | null;
       observedBehavior?: string | null;
       policySourceUrl?: string | null;
@@ -125,9 +133,13 @@ export type UnifiedFindingPacket = {
   confidenceInputs: {
     evidenceQualityFlags: string[];
     hasConcretePayloadEvidence: boolean;
+    hasCorroboratedPositiveSurfaceEvidence: boolean;
     hasDirectRuntimeEvidence: boolean;
     hasKeyPageDiscoveryEvidence: boolean;
+    hasReadableSurfaceSnippetEvidence: boolean;
+    hasMultipleHumanFacingUrls: boolean;
     hasPageAttribution: boolean;
+    hasPacketBackedEvidence: boolean;
     hasPolicyTextEvidence: boolean;
     hasStructuredValidationEvidence: boolean;
     isFallbackOnly: boolean;
@@ -234,6 +246,7 @@ export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
   referenceUrl?: string;
   sourceLabel?: string;
   sourceUrl?: string;
+  surfacingDecision: UnifiedFindingSurfacingDecision;
 };
 
 const COVERAGE_FINDING_IDS = new Set([
@@ -267,7 +280,10 @@ const RIGHTS_GAP_FINDING_IDS = new Set([
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
   "missing_retention_disclosure",
-  "missing_transfer_disclosure"
+  "missing_transfer_disclosure",
+  "data_categories_disclosure_missing",
+  "third_party_recipient_disclosure_missing",
+  "purpose_of_use_disclosure_missing"
 ]);
 
 const CONTRADICTION_FINDING_IDS = new Set([
@@ -302,6 +318,8 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
 
 const SENSITIVE_DATA_FINDING_IDS = new Set([
   "high_sensitivity_data_collection",
+  "session_replay_on_sensitive_input_surface",
+  "sensitive_data_collection_with_third_party_tracking_present",
   "health_information_collection",
   "geolocation_collection",
   "ssn_collection",
@@ -316,7 +334,8 @@ const COMMERCIAL_FINDING_IDS = new Set([
   "original_price_comparison_present",
   "limited_time_pressure",
   "store_credit_only_remedy",
-  "restrictive_termination_or_suspension_terms"
+  "restrictive_termination_or_suspension_terms",
+  "cancellation_method_disclosure_missing"
 ]);
 
 const CONTEXT_FINDING_IDS = new Set([
@@ -417,8 +436,12 @@ function isDiscoveredButUnverifiedDisclosurePacket(packet: UnifiedFindingPacket)
 function deriveVerificationState(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecision["verificationState"] {
   const negativeEvidenceFlags = packet.concernContext?.negativeEvidenceFlags ?? [];
   const fetchQuality = packet.evidence?.fetchQuality ?? null;
+  const positiveSurfaceCorroboration = hasCorroboratedPositiveSurfaceEvidence(packet);
 
-  if (negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed") || fetchQuality === "blocked_interstitial") {
+  if (
+    !positiveSurfaceCorroboration &&
+    (negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed") || fetchQuality === "blocked_interstitial")
+  ) {
     return "blocked";
   }
 
@@ -428,6 +451,10 @@ function deriveVerificationState(packet: UnifiedFindingPacket): UnifiedFindingPr
     packet.confidenceInputs.hasStructuredValidationEvidence
   ) {
     return "runtime";
+  }
+
+  if (positiveSurfaceCorroboration) {
+    return "verified";
   }
 
   if (
@@ -479,8 +506,20 @@ function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
     negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence")
       ? "The retained evidence does not yet prove the request sequence happened before a clear consent choice."
       : null,
+    negativeEvidenceFlags.includes("missing_concrete_sensitive_payload")
+      ? "The retained evidence does not yet confirm that sensitive input or payload data was actually involved."
+      : null,
+    negativeEvidenceFlags.includes("missing_third_party_tracking_artifact")
+      ? "Concrete third-party tracking or replay artifacts were not retained for this sensitive-data claim."
+      : null,
     negativeEvidenceFlags.includes("missing_explicit_contradiction_basis")
       ? "The contradiction candidate does not retain an explicit contradiction basis yet."
+      : null,
+    negativeEvidenceFlags.includes("missing_specific_policy_anchor")
+      ? "A specific fetched policy anchor was not retained for this finding."
+      : null,
+    negativeEvidenceFlags.includes("missing_specific_runtime_anchor")
+      ? "A specific runtime anchor with concrete artifacts was not retained for this finding."
       : null,
     negativeEvidenceFlags.includes("missing_behavior_side_evidence")
       ? "Behavior-side runtime evidence is still incomplete for this contradiction candidate."
@@ -490,6 +529,24 @@ function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
       : null,
     negativeEvidenceFlags.includes("missing_contradiction_mapping")
       ? "The retained evidence does not yet map the policy claim to the observed behavior clearly enough."
+      : null,
+    negativeEvidenceFlags.includes("unsupported_contradiction_mapping")
+      ? "The retained policy claim and runtime observation do not form an approved contradiction mapping."
+      : null,
+    negativeEvidenceFlags.includes("policy_semantic_review_incomplete")
+      ? "Policy content was not confirmed as fetched and semantically parsed for contradiction review."
+      : null,
+    negativeEvidenceFlags.includes("runtime_tracking_review_incomplete")
+      ? "Concrete runtime tracking evidence is still incomplete for this finding."
+      : null,
+    negativeEvidenceFlags.includes("possible_policy_runtime_mismatch")
+      ? "The retained evidence suggests a possible mismatch, but not a contradiction-grade finding."
+      : null,
+    negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict")
+      ? "The retained evidence is insufficient to promote a policy/behavior contradiction."
+      : null,
+    negativeEvidenceFlags.includes("model_suspicion_without_structured_support")
+      ? "The retained contradiction narrative appears to rely on suspicion language without structured support."
       : null,
     negativeEvidenceFlags.includes("no_direct_runtime_replay_artifact_observed")
       ? "No concrete runtime replay artifact was retained yet."
@@ -582,6 +639,14 @@ function isRawMarkerToken(value: string) {
 function isReviewerFacingSnippet(value: string) {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
+    return false;
+  }
+
+  if (
+    /insufficient policy content fetched|insufficient policy content|semantic review incomplete|semantic review unavailable|possible mismatch only|model suspicion/i.test(
+      trimmed
+    )
+  ) {
     return false;
   }
 
@@ -708,10 +773,6 @@ function getCoveragePageType(id: string) {
   return "unknown";
 }
 
-function hasConfirmedLinkedDiscoverySource(source: string | null | undefined) {
-  return ["footer_link", "header_link", "body_link", "legal_hub"].includes(source ?? "");
-}
-
 function buildUnifiedFindingDetails(input: {
   fallbackEvidence?: Record<string, unknown> | null;
   findingId: string;
@@ -796,10 +857,16 @@ function buildUnifiedFindingDetails(input: {
       family,
       kind: input.findingId,
       claim:
+        contradictionEvidence?.policyAnchor.normalizedClaim ??
         contradictionEvidence?.claim ??
         contradictionEvidence?.contradictionBasis ??
         null,
       contradictionBasis: contradictionEvidence?.contradictionBasis ?? null,
+      policyClaimType: contradictionEvidence?.policyAnchor.claimType ?? null,
+      runtimeObservationType: contradictionEvidence?.runtimeAnchor.observationType ?? null,
+      runtimePhase: contradictionEvidence?.runtimeAnchor.phase ?? null,
+      conflictType: contradictionEvidence?.conflictBridge.conflictType ?? null,
+      contradictionReviewStatus: contradictionEvidence?.evidenceSufficiency.reviewStatus ?? null,
       policySnippet: explicitPolicySnippet,
       observedBehavior: contradictionEvidence?.runtimeSummary ?? input.summary,
       policySourceUrl: contradictionEvidence?.policySourceUrl ?? null,
@@ -917,7 +984,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     (Array.isArray(fallbackEvidence.runtimeEvidence) &&
       fallbackEvidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
     (Array.isArray(fallbackEvidence.runtime_evidence) &&
-      fallbackEvidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)));
+      fallbackEvidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
+    ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
+    ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
   const pageUrls = uniqueStrings([
     ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
@@ -936,8 +1006,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     isMeaningfulPolicyText(fallbackEvidence.consentBlockerTextSnippet) ? fallbackEvidence.consentBlockerTextSnippet : null,
     isMeaningfulPolicyText(fallbackEvidence.policyChildrenReference) ? fallbackEvidence.policyChildrenReference : null,
     contradictionEvidence?.claim,
+    contradictionEvidence?.policyAnchor.snippet,
     contradictionEvidence?.policySnippet,
     contradictionEvidence?.runtimeSummary,
+    contradictionEvidence?.conflictBridge.reasoning,
     ...(contradictionEvidence?.runtimeEvidenceArtifacts ?? []),
     Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
       ? null
@@ -1060,6 +1132,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
+    hasSanitizedNetworkEvidenceHash(fallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
     typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
   ]);
@@ -1118,7 +1191,10 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     (Array.isArray(evidence.runtimeEvidence) &&
       evidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
     (Array.isArray(evidence.runtime_evidence) &&
-      evidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)));
+      evidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+    ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
+    ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
+    ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
   const pageUrls = new Set<string>();
   const sourceUrls = new Set<string>();
   const snippets = new Set<string>();
@@ -1197,7 +1273,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     flags: [
       ...flags,
       ...(hasExplicitPolicySnippet ? ["explicit_policy_snippet_retained"] : []),
-      ...(hasExplicitRuntimeArtifact ? ["contradiction_runtime_artifact_retained"] : [])
+      ...(hasExplicitRuntimeArtifact ? ["contradiction_runtime_artifact_retained"] : []),
+      ...(hasSanitizedNetworkEvidenceHash(evidence) ? ["sanitized_network_evidence_hashed"] : [])
     ],
     pageUrls: [...pageUrls],
     snippets: [...snippets],
@@ -1326,6 +1403,19 @@ function hasConcreteHumanFacingUrl(urls: Array<string | null | undefined>) {
   return urls.some((value) => typeof value === "string" && /^https?:\/\//i.test(value) && !isMachineReadablePolicyEndpoint(value));
 }
 
+function isContactLikeUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return /contact|help|support|feedback|chat|customer-service/i.test(parsed.pathname);
+  } catch {
+    return /contact|help|support|feedback|chat|customer-service/i.test(value);
+  }
+}
+
 function isLikelyHomepageTitle(value: string | null | undefined) {
   if (!value) {
     return false;
@@ -1338,6 +1428,68 @@ function isLikelyHomepageTitle(value: string | null | undefined) {
     normalized === "home" ||
     normalized.endsWith("| home")
   );
+}
+
+function isLowSignalBrandSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 40) {
+    return false;
+  }
+
+  const wordCount = trimmed.split(/\s+/).length;
+  return wordCount <= 4 && /^[A-Z][A-Za-z&'.-]*(?:\s+[A-Z][A-Za-z&'.-]*)*$/.test(trimmed);
+}
+
+function isReadableSurfaceSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = normalizePolicySnippet(value);
+  return Boolean(
+    normalized &&
+      isReviewerFacingSnippet(normalized) &&
+      !isBlockedOrInterstitialSnippet(normalized) &&
+      !isLikelyHomepageTitle(normalized) &&
+      !isLowSignalBrandSnippet(normalized)
+  );
+}
+
+function hasFindingSpecificSurfaceSnippet(findingId: string, snippets: string[] | undefined) {
+  const readableSnippets = (snippets ?? []).filter(isReadableSurfaceSnippet);
+  if (readableSnippets.length === 0) {
+    return false;
+  }
+
+  if (findingId === "contact_support_path_present") {
+    return readableSnippets.some((snippet) => /(contact|support|help|feedback|phone|chat|branch|advisor|service)/i.test(snippet));
+  }
+
+  if (findingId === "cookie_policy_present") {
+    return readableSnippets.some(
+      (snippet) => /(cookie|tracking|privacy choices|privacy settings|manage cookies|analytical cookies|marketing cookies)/i.test(snippet)
+    );
+  }
+
+  return readableSnippets.length > 0;
+}
+
+function hasCorroboratedPositiveSurfaceEvidence(packet: UnifiedFindingPacket) {
+  if (
+    packet.unifiedFindingId !== "contact_support_path_present" &&
+    packet.unifiedFindingId !== "cookie_policy_present"
+  ) {
+    return false;
+  }
+
+  const urls = uniqueStrings([...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])]).filter((url) =>
+    hasConcreteHumanFacingUrl([url])
+  );
+  return hasFindingSpecificSurfaceSnippet(packet.unifiedFindingId, packet.evidence?.snippets) && urls.length >= 2;
 }
 
 function isLikelyPrivacyChoiceSnippet(value: string | null | undefined) {
@@ -1400,6 +1552,57 @@ function preferMoreSpecificSameHostUrls(urls: string[]) {
   });
 }
 
+function getFetchQualityRank(fetchQuality: FetchQuality | null | undefined) {
+  switch (fetchQuality) {
+    case "verified_content":
+      return 4;
+    case "thin_content":
+      return 3;
+    case "blocked_interstitial":
+      return 1;
+    case "unreachable":
+      return 0;
+    default:
+      return 2;
+  }
+}
+
+function rankUrlSpecificity(value: string) {
+  try {
+    const parsed = new URL(value);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    const segmentCount = path.split("/").filter(Boolean).length;
+    return segmentCount * 100 + path.length;
+  } catch {
+    return value.length;
+  }
+}
+
+function sortUrlsByTargetStrength(urls: string[], targets: FamilyPacketTargetRecord[]) {
+  const qualityByUrl = new Map<string, FetchQuality | null>();
+  for (const target of targets) {
+    if (typeof target.canonicalUrl !== "string") {
+      continue;
+    }
+
+    const quality =
+      typeof target.fetchQuality === "string" &&
+      ["verified_content", "thin_content", "blocked_interstitial", "unreachable"].includes(target.fetchQuality)
+        ? (target.fetchQuality as FetchQuality)
+        : null;
+    qualityByUrl.set(target.canonicalUrl, quality);
+  }
+
+  return [...urls].sort((left, right) => {
+    const qualityDelta = getFetchQualityRank(qualityByUrl.get(right) ?? null) - getFetchQualityRank(qualityByUrl.get(left) ?? null);
+    if (qualityDelta !== 0) {
+      return qualityDelta;
+    }
+
+    return rankUrlSpecificity(right) - rankUrlSpecificity(left);
+  });
+}
+
 function sanitizeEvidenceForFinding(
   findingId: string,
   evidence: UnifiedFindingPacket["evidence"] | undefined
@@ -1423,6 +1626,10 @@ function sanitizeEvidenceForFinding(
 
   if (POSITIVE_SURFACE_FINDING_IDS.has(findingId)) {
     next.snippets = next.snippets.filter((snippet) => !isBlockedOrInterstitialSnippet(snippet));
+  }
+
+  if (findingId === "contact_support_path_present" || findingId === "cookie_policy_present") {
+    next.snippets = next.snippets.filter((snippet) => !isLowSignalBrandSnippet(snippet));
   }
 
   if (
@@ -1461,6 +1668,14 @@ function sanitizeEvidenceForFinding(
     const preferredSourceUrls = preferMoreSpecificSameHostUrls(next.sourceUrls);
     if (preferredSourceUrls.length > 0) {
       next.sourceUrls = preferredSourceUrls;
+    }
+
+    if (next.snippets.length === 0) {
+      next.snippets = getDerivedSupportAccessEvidenceSnippets({
+        findingId,
+        pageUrls: next.pageUrls,
+        sourceUrls: next.sourceUrls
+      });
     }
   }
 
@@ -1542,6 +1757,14 @@ function sanitizeEvidenceForFinding(
     if (accessibilitySpecificSourceUrls.length > 0) {
       next.sourceUrls = accessibilitySpecificSourceUrls;
     }
+
+    if (next.snippets.length === 0) {
+      next.snippets = getDerivedSupportAccessEvidenceSnippets({
+        findingId,
+        pageUrls: next.pageUrls,
+        sourceUrls: next.sourceUrls
+      });
+    }
   }
 
   if (findingId === "third_party_advertising_disclosure_present") {
@@ -1576,6 +1799,30 @@ function sanitizeEvidenceForFinding(
     }
   }
 
+  if (findingId === "accessibility_risk_score") {
+    next.flags = next.flags.filter((flag) => flag !== "contradiction_runtime_artifact_retained");
+    if (next.snippets.length > 0) {
+      next.flags = uniqueStrings([...next.flags, "representative_accessibility_examples_retained"]);
+    }
+  }
+
+  if (
+    (findingId === "contact_support_path_present" || findingId === "cookie_policy_present") &&
+    next.fetchQuality === "blocked_interstitial" &&
+    hasFindingSpecificSurfaceSnippet(findingId, next.snippets) &&
+    uniqueStrings([...next.pageUrls, ...next.sourceUrls]).filter((url) => hasConcreteHumanFacingUrl([url])).length >= 2
+  ) {
+    next.fetchQuality = "verified_content";
+  }
+
+  if (
+    findingId === "contact_support_path_present" &&
+    next.fetchQuality === "blocked_interstitial" &&
+    uniqueStrings([...next.pageUrls, ...next.sourceUrls]).filter((url) => isContactLikeUrl(url)).length >= 2
+  ) {
+    next.fetchQuality = "thin_content";
+  }
+
   if (findingId === "cookie_policy_structurally_obstructed") {
     const allUrls = [...next.pageUrls, ...next.sourceUrls];
     const hasOnlyWeakRootUrls = allUrls.length > 0 && allUrls.every((url) => isWeakRootLikeUrl(url));
@@ -1591,6 +1838,116 @@ function sanitizeEvidenceForFinding(
 
 function getSourceUrl(packet: UnifiedFindingPacket) {
   return packet.primaryPageUrl ?? packet.evidence?.pageUrls?.[0] ?? packet.evidence?.sourceUrls?.[0];
+}
+
+function maybeRepairCookiePolicyPacketFromPolicyEnrichment(input: {
+  packet: UnifiedFindingPacket;
+  policyEnrichment?: Array<Record<string, unknown>>;
+}) {
+  if (input.packet.unifiedFindingId !== "cookie_policy_present") {
+    return input.packet;
+  }
+
+  const policyEnrichment = Array.isArray(input.policyEnrichment) ? input.policyEnrichment : [];
+  if (policyEnrichment.length === 0) {
+    return input.packet;
+  }
+
+  const existingEvidence = input.packet.evidence ?? {};
+  const existingSnippets = uniqueStrings(existingEvidence.snippets ?? []);
+  const existingUrls = uniqueStrings([...(existingEvidence.pageUrls ?? []), ...(existingEvidence.sourceUrls ?? [])]);
+  const alreadyStrong =
+    hasFindingSpecificSurfaceSnippet("cookie_policy_present", existingSnippets) &&
+    existingUrls.some((url) => hasConcreteHumanFacingUrl([url]));
+
+  if (alreadyStrong) {
+    return input.packet;
+  }
+
+  const fallbackEvidence = buildCookiePolicyFallbackEvidence({
+    policyEnrichment,
+    signalKey: "disclosure.cookie_policy_present",
+    signalLabel: "Cookie settings or policy surface present",
+    signalValue: true
+  });
+
+  const repairedSnippets = uniqueStrings([...(fallbackEvidence.policySnippets ?? []), ...existingSnippets]).filter((snippet) =>
+    isReadableSurfaceSnippet(snippet)
+  );
+  const repairedPageUrls = preferMoreSpecificSameHostUrls(
+    uniqueStrings([fallbackEvidence.pageUrl, ...(fallbackEvidence.pageUrls ?? []), ...(existingEvidence.pageUrls ?? [])]).filter((url) =>
+      hasConcreteHumanFacingUrl([url])
+    )
+  );
+  const repairedSourceUrls = preferMoreSpecificSameHostUrls(
+    uniqueStrings([...(fallbackEvidence.sourceUrls ?? []), ...(existingEvidence.sourceUrls ?? []), ...repairedPageUrls]).filter((url) =>
+      hasConcreteHumanFacingUrl([url])
+    )
+  );
+
+  if (
+    repairedSnippets.length === 0 ||
+    (repairedPageUrls.length === 0 && repairedSourceUrls.length === 0)
+  ) {
+    return input.packet;
+  }
+
+  const nextEvidence = sanitizeEvidenceForFinding("cookie_policy_present", {
+    ...existingEvidence,
+    fetchQuality:
+      fallbackEvidence.fetchQuality === "verified_content" ||
+      existingEvidence.fetchQuality !== "verified_content"
+        ? fallbackEvidence.fetchQuality
+        : existingEvidence.fetchQuality,
+    flags: uniqueStrings([
+      ...(existingEvidence.flags ?? []),
+      "family_packet_backed",
+      "family_packet:privacy_controls",
+      "family_packet_finding:cookie_policy_present"
+    ]),
+    pageUrls: repairedPageUrls,
+    snippets: repairedSnippets,
+    sourceUrls: repairedSourceUrls
+  });
+  return {
+    ...input.packet,
+    primaryPageUrl: repairedPageUrls[0] ?? repairedSourceUrls[0] ?? input.packet.primaryPageUrl,
+    evidence: nextEvidence,
+    confidenceInputs: {
+      ...input.packet.confidenceInputs,
+      hasCorroboratedPositiveSurfaceEvidence:
+        input.packet.confidenceInputs.hasCorroboratedPositiveSurfaceEvidence ||
+        hasCorroboratedPositiveSurfaceEvidence({
+          ...input.packet,
+          evidence: nextEvidence
+        }),
+      hasMultipleHumanFacingUrls:
+        input.packet.confidenceInputs.hasMultipleHumanFacingUrls ||
+        uniqueStrings([...repairedPageUrls, ...repairedSourceUrls]).length >= 2,
+      hasPageAttribution:
+        input.packet.confidenceInputs.hasPageAttribution ||
+        repairedPageUrls.length > 0 ||
+        repairedSourceUrls.length > 0,
+      hasPolicyTextEvidence: input.packet.confidenceInputs.hasPolicyTextEvidence || repairedSnippets.length > 0,
+      hasReadableSurfaceSnippetEvidence:
+        input.packet.confidenceInputs.hasReadableSurfaceSnippetEvidence ||
+        hasFindingSpecificSurfaceSnippet("cookie_policy_present", repairedSnippets)
+    },
+    concernContext: input.packet.concernContext
+      ? {
+          ...input.packet.concernContext,
+          negativeEvidenceFlags: input.packet.concernContext.negativeEvidenceFlags.filter(
+            (flag) =>
+              flag !== "blocked_or_interstitial_evidence_observed" &&
+              flag !== "positive_surface_content_unverified"
+          )
+        }
+      : input.packet.concernContext,
+    confidenceBand:
+      hasFindingSpecificSurfaceSnippet("cookie_policy_present", repairedSnippets)
+        ? "high"
+        : input.packet.confidenceBand
+  };
 }
 
 function isGenericObservationText(value: string | null | undefined) {
@@ -1625,9 +1982,46 @@ function looksSynthesizedPolicySummary(value: string | null | undefined) {
 function selectObservedValue(packet: UnifiedFindingPacket) {
   const snippet = packet.evidence?.snippets?.[0] ?? null;
   const summary = packet.summary;
+  const allUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
 
   if (packet.unifiedFindingId === "retargeting_pixel_observed") {
     return "The scan retained a detector-backed retargeting or remarketing signal that merits manual confirmation.";
+  }
+
+  if (packet.unifiedFindingId === "contact_support_path_present") {
+    const descriptiveSnippet = (packet.evidence?.snippets ?? []).find(
+      (value) =>
+        typeof value === "string" &&
+        !isLikelyHomepageTitle(value) &&
+        !isLowSignalBrandSnippet(value) &&
+        /(contact|support|help|feedback|phone|chat|branch|advisor|service)/i.test(value)
+    );
+    if (descriptiveSnippet) {
+      return descriptiveSnippet;
+    }
+
+    if (allUrls.some((url) => /contact|help|support|feedback/i.test(url))) {
+      return packet.confidenceInputs.hasMultipleHumanFacingUrls
+        ? "Detected dedicated contact or support surfaces on first-party URLs."
+        : "Detected dedicated contact or support surface on a first-party URL.";
+    }
+  }
+
+  if (packet.unifiedFindingId === "cookie_policy_present") {
+    const descriptiveSnippet = (packet.evidence?.snippets ?? []).find(
+      (value) =>
+        typeof value === "string" &&
+        !isLikelyHomepageTitle(value) &&
+        !isLowSignalBrandSnippet(value) &&
+        /(cookie|tracking|privacy choices|privacy settings|manage cookies)/i.test(value)
+    );
+    if (descriptiveSnippet) {
+      return descriptiveSnippet;
+    }
+
+    if (allUrls.some((url) => /cookie|privacy|legal/i.test(url))) {
+      return "Detected first-party cookie-policy or privacy-controls surface.";
+    }
   }
 
   if (packet.unifiedFindingId === "arbitration_clause_present") {
@@ -1700,6 +2094,7 @@ function deriveConfidenceInputs(input: {
     normalizedConcernStrengthFlags.includes("direct_runtime") ||
     input.fallbackEvidenceRows.some((row) => Boolean(row?.gpcVerification) && typeof row?.gpcVerification === "object") ||
     input.fallbackEvidenceRows.some((row) => (getContradictionEvidenceBundle(row)?.runtimeEvidenceArtifacts.length ?? 0) > 0) ||
+    input.fallbackEvidenceRows.some((row) => hasConcreteSanitizedNetworkEvidence(row)) ||
     validationEvidenceRows.some((row) =>
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
     );
@@ -1731,13 +2126,32 @@ function deriveConfidenceInputs(input: {
     normalizedConcernStrengthFlags.includes("page_attributed") ||
     (input.packet.affectedPageCount ?? 0) > 0 ||
     (input.packet.evidence?.sourceUrls?.length ?? 0) > 0;
+  const humanFacingUrls = uniqueStrings([
+    ...(input.packet.evidence?.pageUrls ?? []),
+    ...(input.packet.evidence?.sourceUrls ?? [])
+  ]).filter((url) => hasConcreteHumanFacingUrl([url]));
+  const hasPacketBackedEvidence = hasFamilyPacketFlag(input.packet.evidence?.flags);
+  const hasMultipleHumanFacingUrls = humanFacingUrls.length >= 2;
+  const hasReadableSurfaceSnippetEvidence = hasFindingSpecificSurfaceSnippet(
+    input.packet.unifiedFindingId,
+    input.packet.evidence?.snippets
+  );
+  const hasCorroboratedPositiveSurfaceEvidence =
+    (input.packet.unifiedFindingId === "contact_support_path_present" ||
+      input.packet.unifiedFindingId === "cookie_policy_present") &&
+    hasReadableSurfaceSnippetEvidence &&
+    hasMultipleHumanFacingUrls;
 
   return {
     evidenceQualityFlags,
     hasConcretePayloadEvidence: concretePayloadEvidence,
+    hasCorroboratedPositiveSurfaceEvidence,
     hasDirectRuntimeEvidence,
     hasKeyPageDiscoveryEvidence,
+    hasReadableSurfaceSnippetEvidence,
+    hasMultipleHumanFacingUrls,
     hasPageAttribution,
+    hasPacketBackedEvidence,
     hasPolicyTextEvidence,
     hasStructuredValidationEvidence,
     isFallbackOnly,
@@ -1780,6 +2194,18 @@ function deriveConfidenceBand(
     score += 1;
   }
   if (inputs.hasConcretePayloadEvidence) {
+    score += 2;
+  }
+  if (inputs.hasPacketBackedEvidence) {
+    score += 1;
+  }
+  if (inputs.hasMultipleHumanFacingUrls) {
+    score += 1;
+  }
+  if (inputs.hasReadableSurfaceSnippetEvidence) {
+    score += 1;
+  }
+  if (inputs.hasCorroboratedPositiveSurfaceEvidence) {
     score += 2;
   }
   if (inputs.hasKeyPageDiscoveryEvidence || inputs.hasConcretePayloadEvidence) {
@@ -2051,597 +2477,6 @@ function getPacketizedPolicyPageType(findingId: string) {
   return getPacketizedFindingSupportRule(findingId)?.policyPageType ?? null;
 }
 
-function getPolicyEnrichmentFindingSupportRule(findingId: string) {
-  return POLICY_ENRICHMENT_FINDING_SUPPORT_RULES.find((rule) => rule.findingId === findingId) ?? null;
-}
-
-function getDomainFlagFindingSupportRule(findingId: string) {
-  return DOMAIN_FLAG_FINDING_SUPPORT_RULES.find((rule) => rule.findingId === findingId) ?? null;
-}
-
-function hasNoRetainedReviewerEvidence(packet: UnifiedFindingPacket) {
-  return (
-    (packet.evidence?.pageUrls?.length ?? 0) === 0 &&
-    (packet.evidence?.sourceUrls?.length ?? 0) === 0 &&
-    (packet.evidence?.snippets?.length ?? 0) === 0
-  );
-}
-
-function getPacketizedFindingEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (packet.unifiedFindingId === "cookie_policy_present" && hasNoRetainedReviewerEvidence(packet)) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Suppressed because the scan did not retain a concrete cookie-policy or cookie-settings page after weak placeholder cleanup.",
-      status: "suppress"
-    };
-  }
-
-  if (packet.unifiedFindingId === "terms_of_service_present" && hasNoRetainedReviewerEvidence(packet)) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale:
-        "Suppressed because the retained terms surface was only a locale-specific alternate and the scan did not retain a canonical terms page for the root-domain experience.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    (
-      packet.unifiedFindingId === "affiliate_disclosure_present" ||
-      packet.unifiedFindingId === "behavioral_analytics_disclosure_present" ||
-      packet.unifiedFindingId === "gpc_disclosure_present" ||
-      packet.unifiedFindingId === "third_party_advertising_disclosure_present"
-    ) &&
-    (
-      (packet.evidence?.snippets?.length ?? 0) === 0 ||
-      !hasConcreteHumanFacingUrl([...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])])
-    )
-  ) {
-    const rationaleByFindingId: Partial<Record<string, string>> = {
-      affiliate_disclosure_present:
-        "Kept audit-only because affiliate disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
-      behavioral_analytics_disclosure_present:
-        "Kept audit-only because behavioral-analytics disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
-      gpc_disclosure_present:
-        "Kept audit-only because GPC disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
-      third_party_advertising_disclosure_present:
-        "Kept audit-only because third-party advertising disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL."
-    };
-
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: rationaleByFindingId[packet.unifiedFindingId] ?? "Kept audit-only because the retained evidence is too thin to surface buyer-facing.",
-      status: "audit_only"
-    };
-  }
-
-  return null;
-}
-
-function getThinFinancialTransparencyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (!isFinancialValidationFindingId(packet.unifiedFindingId)) {
-    return null;
-  }
-
-  const inferredFinancialPageClassification =
-    packet.unifiedFindingId === "legal_entity_name_present" || packet.unifiedFindingId === "operator_contact_path_present"
-      ? "identity_or_contact"
-      : packet.unifiedFindingId === "fee_disclosure_present"
-        ? "pricing_or_fees"
-        : packet.unifiedFindingId === "investment_risk_disclosure_present" ||
-            packet.unifiedFindingId === "past_performance_disclaimer_present"
-          ? "disclosure_or_legal"
-          : "financial_offer";
-  const validationSpec = getFinancialValidationSpec(packet.unifiedFindingId);
-
-  const evidence = getFinancialValidationEvidenceBundle({
-    pageClassification: inferredFinancialPageClassification,
-    pageUrls: packet.evidence?.pageUrls ?? [],
-    snippets: packet.evidence?.snippets ?? [],
-    sourceUrls: packet.evidence?.sourceUrls ?? [],
-    supportingSignals: validationSpec?.requiredSignalKeys ?? [],
-    pageType: packet.primaryPageUrl ? "product" : "unknown"
-  });
-
-  if (!evidence) {
-    return null;
-  }
-
-  const judge = evaluateFinancialJudgeInput({
-    candidateFindingId: packet.unifiedFindingId,
-    evidence,
-    negativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
-    scanContext: {
-      domain: packet.primaryPageUrl,
-      pageType: "unknown"
-    }
-  });
-
-  if (judge.verdict === "confirm") {
-    return null;
-  }
-
-  const rationaleByFindingId: Record<string, string> = {
-    apr_or_interest_rate_disclosure_present:
-      "Kept audit-only because APR or interest-rate disclosures should surface buyer-facing only when the scan retains both readable rate text and a concrete user-facing disclosure URL.",
-    fee_disclosure_present:
-      "Kept audit-only because fee disclosures should surface buyer-facing only when the scan retains both readable fee text and a concrete user-facing disclosure URL.",
-    investment_risk_disclosure_present:
-      "Kept audit-only because investment-risk disclosures should surface buyer-facing only when the scan retains both readable disclosure text and a concrete user-facing disclosure URL.",
-    legal_entity_name_present:
-      "Kept audit-only because legal-entity identity findings should surface buyer-facing only when the scan retains both readable operator text and a concrete user-facing disclosure URL.",
-    operator_contact_path_present:
-      "Kept audit-only because operator-contact findings should surface buyer-facing only when the scan retains both readable contact text and a concrete user-facing disclosure URL.",
-    past_performance_disclaimer_present:
-      "Kept audit-only because past-performance disclaimers should surface buyer-facing only when the scan retains both readable disclaimer text and a concrete user-facing disclosure URL."
-  };
-
-  if (judge.verdict === "suppress") {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Suppressed because the retained evidence did not stay in an explicit financial context after conservative financial validation.",
-      status: "suppress"
-    };
-  }
-
-  return {
-    confidenceRationale: buildConfidenceRationale(packet),
-    rationale: rationaleByFindingId[packet.unifiedFindingId] ?? "Kept audit-only because the retained evidence is too thin to surface buyer-facing.",
-    status: "audit_only"
-  };
-}
-
-function getCoverageSiblingSuppressionDecision(input: {
-  packet: UnifiedFindingPacket;
-  siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecisionDraft | null {
-  if (
-    input.packet.unifiedFindingId === "cookie_policy_structurally_obstructed" &&
-    hasNoRetainedReviewerEvidence(input.packet) &&
-    input.siblingRows.some((row) => row.unifiedFindingId === "cookie_policy_present")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because the scan already retained a cookie-policy or cookie-settings surface, and the obstruction evidence here is only a weak discovery artifact.",
-      status: "suppress"
-    };
-  }
-
-  if (
-    input.packet.unifiedFindingId === "contact_page_missing_surface" &&
-    input.siblingRows.some(
-      (row) =>
-        row.unifiedFindingId === "accessibility_support_path_present" ||
-        row.unifiedFindingId === "privacy_contact_path_present" ||
-        row.unifiedFindingId === "contact_support_path_present"
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because another retained support or contact path already gives users a visible way to reach help on this scan.",
-      status: "suppress"
-    };
-  }
-
-  return null;
-}
-
-function getMockInvestmentContextDecision(input: {
-  packet: UnifiedFindingPacket;
-  siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecisionDraft | null {
-  const regulatorMockContextPresent = input.siblingRows.some(
-    (row) => row.unifiedFindingId === "regulator_operated_mock_investment_example"
-  );
-
-  if (!regulatorMockContextPresent) {
-    return null;
-  }
-
-  if (COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId) || input.packet.unifiedFindingId === "accessibility_risk_score") {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale:
-        "Kept for audit only because this site also appears to be a regulator-operated mock investment example, so generic support-page and triage findings are less important than the financial-promotion context.",
-      status: "audit_only"
-    };
-  }
-
-  return null;
-}
-
-function getUnavailableCoverageDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (
-    (packet.unifiedFindingId === "cookie_policy_unavailable" ||
-      packet.unifiedFindingId === "accessibility_statement_unavailable") &&
-    (packet.evidence?.flags?.includes("guessed_only") ||
-      !hasConfirmedLinkedDiscoverySource(
-        packet.details?.family === "coverage_gap" ? packet.details.bestDiscoverySource : null
-      ))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Suppressed because the unavailable page was not tied to a strong confirmed linked target from the scanned site.",
-      status: "suppress"
-    };
-  }
-
-  return null;
-}
-
-function getSpecificAuditOnlyEvidenceDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (
-    packet.unifiedFindingId === "weak_cookie_security_attributes" &&
-    ![
-      ...(packet.evidence?.entities?.missingSecureCookieNames ?? []),
-      ...(packet.evidence?.entities?.missingHttpOnlyCookieNames ?? []),
-      ...(packet.evidence?.entities?.weakSameSiteCookieNames ?? []),
-      ...(packet.evidence?.entities?.thirdPartyWeakAttributeCookieNames ?? [])
-    ].some((value) => typeof value === "string" && value.trim().length > 0)
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Kept for audit only because the current evidence does not retain concrete cookie examples for the weak attribute claim.",
-      status: "audit_only"
-    };
-  }
-
-  if (packet.unifiedFindingId === "accessibility_risk_score") {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale:
-        "Kept for audit only because automated accessibility risk scores are still best treated as reviewer triage, even when representative examples are retained.",
-      status: "audit_only"
-    };
-  }
-
-  return null;
-}
-
-function getContradictionDecision(input: {
-  packet: UnifiedFindingPacket;
-  siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecisionDraft | null {
-  if (
-    input.packet.unifiedFindingId === "policy_behavior_conflict" &&
-    input.siblingRows.some((row) => SPECIFIC_CONTRADICTION_FINDING_IDS.has(row.unifiedFindingId))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Suppressed because a more specific contradiction finding already explains this concern.",
-      status: "suppress"
-    };
-  }
-
-  if (input.packet.unifiedFindingId === "consent_gated_tracking_claim_conflict") {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because consent-gated contradiction findings need tighter paired policy and runtime evidence before buyer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    input.packet.details?.family === "contradiction" &&
-    (!input.packet.confidenceInputs.hasPolicyTextEvidence ||
-      (!input.packet.confidenceInputs.hasDirectRuntimeEvidence && !input.packet.confidenceInputs.hasConcretePayloadEvidence))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(input.packet),
-      rationale: "Kept for audit only because contradiction findings need both concrete policy text and concrete runtime evidence before buyer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (input.packet.unifiedFindingId === "policy_behavior_conflict") {
-    const hasExplicitBasis =
-      (input.packet.details?.family === "contradiction" && Boolean(input.packet.details.contradictionBasis)) ||
-      input.siblingRows.some(
-        (row) => row.unifiedFindingId === "policy_behavior_conflict" && row.details?.family === "contradiction" && Boolean(row.details.contradictionBasis)
-      );
-    const contradictionClaim =
-      input.packet.details?.family === "contradiction" && typeof input.packet.details.claim === "string"
-        ? input.packet.details.claim.trim()
-        : null;
-    const hasPolicySnippet =
-      (input.packet.evidence?.flags?.includes("explicit_policy_snippet_retained") ?? false) &&
-      (input.packet.evidence?.snippets?.some((snippet) => {
-        if (typeof snippet !== "string") {
-          return false;
-        }
-        const normalized = snippet.trim();
-        if (!normalized || normalized === contradictionClaim) {
-          return false;
-        }
-
-        return /(do not|does not|only|except|without|never|unless|will not|won't|not share|not sell|not use|not disclose)/i.test(normalized);
-      }) ?? false);
-    const hasRetainedRuntimeEvidence =
-      (input.packet.evidence?.flags?.includes("contradiction_runtime_artifact_retained") ?? false) ||
-      (input.packet.evidence?.entities?.runtimeVendors?.some((vendor) => typeof vendor === "string" && vendor.trim().length > 0) ?? false);
-
-    if (!hasExplicitBasis) {
-      return {
-        confidenceRationale: buildConfidenceRationale(input.packet),
-        rationale:
-          "Kept for audit only because generic policy-behavior conflicts need an explicit retained contradiction basis, not just policy text plus observed adtech or vendor evidence.",
-        status: "audit_only"
-      };
-    }
-
-    if (!hasPolicySnippet || !hasRetainedRuntimeEvidence) {
-      return {
-        confidenceRationale: buildConfidenceRationale(input.packet),
-        rationale:
-          "Kept for audit only because generic policy-behavior conflicts should retain a concrete policy snippet and runtime evidence artifact before buyer-facing surfacing.",
-        status: "audit_only"
-      };
-    }
-  }
-
-  return null;
-}
-
-function getPreconsentTrackingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (packet.unifiedFindingId !== "preconsent_tracking") {
-    return null;
-  }
-
-  const detailVendors = packet.details?.family === "consent_tracking" ? packet.details.vendors ?? [] : [];
-  const detailRequestUrls = packet.details?.family === "consent_tracking" ? packet.details.requestUrls ?? [] : [];
-  const runtimeVendors = packet.evidence?.entities?.runtimeVendors ?? [];
-  const relatedVendors = packet.evidence?.entities?.relatedVendors ?? [];
-  const evidenceUrls = packet.evidence?.pageUrls ?? [];
-  const hasConcreteRuntimeVendorEvidence = [...detailVendors, ...runtimeVendors, ...relatedVendors].some(
-    (value) => typeof value === "string" && value.trim().length > 0
-  );
-  const hasConcreteRuntimeUrlEvidence = [...detailRequestUrls, ...evidenceUrls].some(
-    (value) => typeof value === "string" && /^https?:\/\//i.test(value)
-  );
-  const hasValidationBacking = packet.confidenceInputs.validationCount > 0;
-
-  if (hasValidationBacking && hasConcreteRuntimeVendorEvidence && hasConcreteRuntimeUrlEvidence) {
-    return null;
-  }
-
-  return {
-    confidenceRationale: buildConfidenceRationale(packet),
-    rationale:
-      "Kept for audit only because pre-consent tracking should surface buyer-facing only when validation-backed runtime evidence retains both concrete vendors and concrete request URLs.",
-    status: "audit_only"
-  };
-}
-
-function getMinorsContextDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  const isDomainLevelSensitiveContext = isDomainLevelSensitiveContextFinding(packet.unifiedFindingId);
-  const isDomainLevelChildrenDisclosureContext = isDomainLevelChildrenDisclosureFinding(packet.unifiedFindingId);
-  const minorsContextEvidenceCount = [
-    "age_gate_present",
-    "children_audience_likely",
-    "kid_directed_content_detected",
-    "parental_consent_reference_present",
-    "mentions_coppa",
-    "mentions_under_13",
-    "mentions_under_16",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].filter((flag) => packet.evidence?.flags?.includes(flag)).length;
-  const strongMinorsContextEvidenceCount = [
-    "age_gate_present",
-    "kid_directed_content_detected",
-    "parental_consent_reference_present",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].filter((flag) => packet.evidence?.flags?.includes(flag)).length;
-  const explicitMinorsCollectionFlagPresent = [
-    "age_gate_present",
-    "parental_consent_reference_present",
-    "form_collects_birthdate",
-    "date_of_birth_input_present"
-  ].some((flag) => packet.evidence?.flags?.includes(flag));
-  const childrenPrivacyRiskScore =
-    typeof packet.evidence?.counts?.childrenPrivacyRiskScore === "number"
-      ? packet.evidence.counts.childrenPrivacyRiskScore
-      : null;
-  const hasConcreteMinorsContextAttribution =
-    packet.confidenceInputs.hasPageAttribution ||
-    (packet.evidence?.pageUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
-    (packet.evidence?.sourceUrls?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false) ||
-    (packet.evidence?.snippets?.some((value) => typeof value === "string" && value.trim().length > 0) ?? false);
-
-  if (
-    isDomainLevelSensitiveContext &&
-    (
-      explicitMinorsCollectionFlagPresent ||
-      (hasConcreteMinorsContextAttribution &&
-        strongMinorsContextEvidenceCount >= 1 &&
-        (minorsContextEvidenceCount >= 2 || (childrenPrivacyRiskScore !== null && childrenPrivacyRiskScore >= 60)))
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Surfaced because multiple youth-directed or age-related context cues make this domain-level privacy context worth reviewer attention.",
-      status: "surface"
-    };
-  }
-
-  if (
-    isDomainLevelChildrenDisclosureContext &&
-    packet.evidence?.flags?.includes("privacy.children_privacy_context_without_supporting_disclosure")
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Surfaced because youth-directed or age-related context was retained alongside missing privacy-supporting disclosure signals.",
-      status: "surface"
-    };
-  }
-
-  return null;
-}
-
-function getGenericAuditOnlyDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  const needsPageAttribution = packetNeedsPageAttribution({
-    family: packet.details?.family,
-    unifiedFindingId: packet.unifiedFindingId
-  });
-
-  if (
-    needsPageAttribution &&
-    !packet.confidenceInputs.hasPageAttribution &&
-    !packet.confidenceInputs.hasKeyPageDiscoveryEvidence &&
-    !packet.confidenceInputs.hasDirectRuntimeEvidence
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Kept for audit only because the current evidence does not yet identify concrete affected pages clearly enough for customer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  if (packet.confidenceBand === "low" && packet.confidenceInputs.isFallbackOnly) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Kept for audit only because the packet is fallback-only and the benefit of surfacing it broadly is limited right now.",
-      status: "audit_only"
-    };
-  }
-
-  if (
-    packet.confidenceBand === "low" &&
-    packet.confidenceInputs.sourceCount <= 1 &&
-    !packet.confidenceInputs.hasDirectRuntimeEvidence &&
-    !packet.confidenceInputs.hasStructuredValidationEvidence &&
-    !packet.confidenceInputs.hasConcretePayloadEvidence
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Kept for audit only because evidence is still too thin for confident report surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  return null;
-}
-
-function getConcernGatingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  const concernExternalSurfacingEligibilities = packet.concernContext?.externalSurfacingEligibilities ?? [];
-  const concernPromotionEligibilities = packet.concernContext?.promotionEligibilities ?? [];
-  const hasConcernExternalEligibility = concernExternalSurfacingEligibilities.includes("eligible");
-  const hasConcernAuditOnlyEligibility = concernExternalSurfacingEligibilities.includes("audit_only");
-  const allConcernEligibilitiesAreSuppressed =
-    concernExternalSurfacingEligibilities.length > 0 &&
-    concernExternalSurfacingEligibilities.every((eligibility) => eligibility === "suppress");
-  const allConcernPromotionsBlocked =
-    concernPromotionEligibilities.length > 0 &&
-    concernPromotionEligibilities.every((eligibility) => eligibility === "blocked");
-
-  if (allConcernPromotionsBlocked || allConcernEligibilitiesAreSuppressed) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Suppressed because normalized concern gating marked this concern as ineligible for external surfacing.",
-      status: "suppress"
-    };
-  }
-
-  if (!hasConcernExternalEligibility && hasConcernAuditOnlyEligibility) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: "Kept for audit only because normalized concern gating retained it for internal review but not customer-facing surfacing.",
-      status: "audit_only"
-    };
-  }
-
-  return null;
-}
-
-function getArbitrationLocaleSuppressionDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  if (packet.unifiedFindingId !== "arbitration_clause_present") {
-    return null;
-  }
-
-  const allUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
-  const hasOnlyLocaleUrls = allUrls.length > 0 && allUrls.every((url) => isLikelyLocaleSubdomainUrl(url));
-
-  if (!hasOnlyLocaleUrls) {
-    return null;
-  }
-
-  return {
-    confidenceRationale: buildConfidenceRationale(packet),
-    rationale:
-      "Suppressed because the retained arbitration evidence only points to a locale-specific alternate terms page and the scan did not retain canonical root-domain terms attribution for this clause.",
-    status: "suppress"
-  };
-}
-
-function getSpecializedPresentationDecision(input: {
-  packet: UnifiedFindingPacket;
-  siblingRows: UnifiedFindingPacket[];
-}): UnifiedFindingPresentationDecisionDraft | null {
-  return (
-    getCoverageSiblingSuppressionDecision(input) ??
-    getMockInvestmentContextDecision(input) ??
-    getContradictionDecision(input) ??
-    getPreconsentTrackingDecision(input.packet) ??
-    getMinorsContextDecision(input.packet) ??
-    getThinFinancialTransparencyDecision(input.packet) ??
-    getPacketizedFindingEvidenceDecision(input.packet) ??
-    getArbitrationLocaleSuppressionDecision(input.packet) ??
-    getConcernGatingDecision(input.packet)
-  );
-}
-
-function getSharedSupportSurfacingDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  const packetizedFindingSupportRule = getPacketizedFindingSupportRule(packet.unifiedFindingId);
-  if (
-    packetizedFindingSupportRule &&
-    (packetizedFindingSupportRule.matchesLegacySource(packet) ||
-      hasFamilyPacketFindingSource(packet, packet.unifiedFindingId))
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: packetizedFindingSupportRule.rationale,
-      status: "surface"
-    };
-  }
-
-  const policyEnrichmentFindingSupportRule = getPolicyEnrichmentFindingSupportRule(packet.unifiedFindingId);
-  if (
-    policyEnrichmentFindingSupportRule &&
-    packet.sourceRefs.some(
-      (sourceRef) =>
-        sourceRef.kind === "signal" &&
-        sourceRef.source === "policy_enrichment_signal" &&
-        getPolicyPositiveSignalKeysForFinding(policyEnrichmentFindingSupportRule.findingId).includes(sourceRef.key)
-    )
-  ) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: policyEnrichmentFindingSupportRule.rationale,
-      status: "surface"
-    };
-  }
-
-  const domainFlagFindingSupportRule = getDomainFlagFindingSupportRule(packet.unifiedFindingId);
-  if (domainFlagFindingSupportRule && packet.evidence?.flags?.includes(domainFlagFindingSupportRule.evidenceFlag)) {
-    return {
-      confidenceRationale: buildConfidenceRationale(packet),
-      rationale: domainFlagFindingSupportRule.rationale,
-      status: "surface"
-    };
-  }
-
-  return null;
-}
-
-function getLateFallbackPresentationDecision(packet: UnifiedFindingPacket): UnifiedFindingPresentationDecisionDraft | null {
-  return (
-    getUnavailableCoverageDecision(packet) ??
-    getSpecificAuditOnlyEvidenceDecision(packet) ??
-    getGenericAuditOnlyDecision(packet)
-  );
-}
-
 function formatCoveragePageLabel(pageType: string | undefined) {
   switch (pageType) {
     case "privacy_policy":
@@ -2665,6 +2500,9 @@ function buildConfidenceRationale(packet: UnifiedFindingPacket) {
   if (packet.confidenceInputs.hasDirectRuntimeEvidence) {
     positives.push("direct runtime evidence was captured");
   }
+  if (packet.confidenceInputs.hasPacketBackedEvidence) {
+    positives.push("packet-backed first-party surface evidence was retained");
+  }
   if (packet.confidenceInputs.hasPolicyTextEvidence) {
     positives.push("policy or disclosure text contributed supporting context");
   }
@@ -2676,6 +2514,15 @@ function buildConfidenceRationale(packet: UnifiedFindingPacket) {
   }
   if (packet.confidenceInputs.hasConcretePayloadEvidence) {
     positives.push("concrete payload evidence strengthened the signal");
+  }
+  if (packet.confidenceInputs.hasMultipleHumanFacingUrls) {
+    positives.push("multiple human-facing URLs corroborated the surface");
+  }
+  if (packet.confidenceInputs.hasReadableSurfaceSnippetEvidence) {
+    positives.push("readable first-party surface text was retained");
+  }
+  if (packet.confidenceInputs.hasCorroboratedPositiveSurfaceEvidence) {
+    positives.push("corroborating first-party surface evidence lined up across URLs and snippets");
   }
   if (packet.confidenceInputs.sourceKinds.length > 1) {
     positives.push(`multiple source types (${packet.confidenceInputs.sourceKinds.join(", ")}) agreed`);
@@ -2735,6 +2582,42 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   session_replay_undisclosed: {
     suggestedFix: "Review replay tooling deployment and either disclose it clearly in privacy/cookie materials or disable it until disclosures are accurate.",
     whyThisMatters: "Undisclosed session replay can materially change how users understand monitoring on the site."
+  },
+  session_replay_on_sensitive_input_surface: {
+    suggestedFix: "Remove replay tooling from sensitive-input flows or add tighter field masking and monitoring controls before allowing replay to run there.",
+    whyThisMatters: "Replay tooling on sensitive-input surfaces can increase exposure if typed or submitted data is captured more broadly than users expect."
+  },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    suggestedFix: "Review the page or form where sensitive data is collected and suppress third-party advertising, replay, or analytics tooling unless it is clearly necessary and tightly controlled.",
+    whyThisMatters: "Collecting sensitive data on pages that also load third-party tracking can materially increase privacy and data-handling risk."
+  },
+  data_categories_disclosure_missing: {
+    suggestedFix: "Add a clear explanation of the main categories of personal or sensitive data the site collects, especially on the primary privacy notice.",
+    whyThisMatters: "Without a concrete description of what categories of data are collected, users cannot easily understand the real scope of the site's data practices."
+  },
+  third_party_recipient_disclosure_missing: {
+    suggestedFix: "Add clearer disclosure about the main outside service providers, vendors, or recipient categories involved in handling user data.",
+    whyThisMatters: "Users and reviewers need a practical picture of which outside parties may receive or process site data."
+  },
+  purpose_of_use_disclosure_missing: {
+    suggestedFix: "Clarify the main purposes for which the site uses collected data so the notice explains more than just collection itself.",
+    whyThisMatters: "A notice that describes collection without explaining use leaves users with an incomplete understanding of the site's data practices."
+  },
+  keyboard_only_task_completion_blocked: {
+    suggestedFix:
+      "Review the affected flow using keyboard-only navigation and fix focus order, trapping, and interaction logic that may be impeding task completion.",
+    whyThisMatters:
+      "A concentration of keyboard-navigation issues can indicate that some users may have trouble completing key site workflows without a mouse."
+  },
+  critical_form_completion_barrier: {
+    suggestedFix:
+      "Review the affected form flow and improve field labels, structure, and assistive-technology support where the retained evidence suggests completion may be at risk.",
+    whyThisMatters:
+      "A concentration of serious form-label or structure issues can indicate that sign-up, checkout, or support tasks may be difficult to complete reliably."
+  },
+  cancellation_method_disclosure_missing: {
+    suggestedFix: "Add a clear, user-facing explanation of how cancellation or account closure actually works, including the path, method, or request channel people must use.",
+    whyThisMatters: "If a service discusses cancellation or exit rights without clearly explaining how to cancel, users may struggle to leave the service in practice."
   },
   cookie_disclosure_gap: {
     suggestedFix: "Reconcile runtime cookie behavior with the cookie policy so the observed cookies, providers, and purposes are covered accurately.",
@@ -2918,29 +2801,16 @@ function buildPresentationCopy(
   return override ? { ...base, ...override } : base;
 }
 
-function buildPresentationDecision(input: {
+function buildLegacyPresentationDecisionFromSurfacing(input: {
   packet: UnifiedFindingPacket;
-  siblingRows: UnifiedFindingPacket[];
+  surfacingDecision: UnifiedFindingSurfacingDecision;
 }): UnifiedFindingPresentationDecision {
-  const specializedDecision = getSpecializedPresentationDecision(input);
-  if (specializedDecision) {
-    return finalizePresentationDecision(input.packet, specializedDecision);
-  }
-
-  const sharedSupportSurfacingDecision = getSharedSupportSurfacingDecision(input.packet);
-  if (sharedSupportSurfacingDecision) {
-    return finalizePresentationDecision(input.packet, sharedSupportSurfacingDecision);
-  }
-
-  const lateFallbackDecision = getLateFallbackPresentationDecision(input.packet);
-  if (lateFallbackDecision) {
-    return finalizePresentationDecision(input.packet, lateFallbackDecision);
-  }
-
   return finalizePresentationDecision(input.packet, {
     confidenceRationale: buildConfidenceRationale(input.packet),
-    rationale: "Surfaced because the evidence is specific enough to be useful in the main report.",
-    status: "surface"
+    rationale:
+      input.surfacingDecision.decisionReasons[0] ??
+      "Surfacing policy retained this finding for report review.",
+    status: mapSurfacingDecisionToLegacyStatus(input.surfacingDecision)
   });
 }
 
@@ -3103,7 +2973,9 @@ function getDisplayPacketSortPriority(input: {
   hasRegulatorMockContext: boolean;
   packet: UnifiedFindingDisplayPacket;
 }) {
-  let priority = getUnifiedFindingBaseSortPriority(input.packet.unifiedFindingId);
+  let priority =
+    getUnifiedFindingBaseSortPriority(input.packet.unifiedFindingId) +
+    getSurfacingDecisionSortPriority(input.packet.surfacingDecision);
 
   if (input.hasRegulatorMockContext && (COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId) || input.packet.unifiedFindingId === "accessibility_risk_score")) {
     priority -= 100;
@@ -3169,6 +3041,70 @@ function getMatchingFamilyPacketTargets(
   });
 }
 
+function getTargetSurfaceTypes(target: FamilyPacketTargetRecord) {
+  return getStringArray(target.supportedSurfaceTypes ?? target.sourceSurfaceTypes);
+}
+
+function isPrivacyControlsAuxiliaryTargetForFinding(
+  findingId: string,
+  target: FamilyPacketTargetRecord
+) {
+  const surfaceTypes = getTargetSurfaceTypes(target);
+  const text = [typeof target.title === "string" ? target.title : null, typeof target.snippet === "string" ? target.snippet : null]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+  const canonicalUrl = typeof target.canonicalUrl === "string" ? target.canonicalUrl.toLowerCase() : "";
+
+  if (findingId === "cookie_policy_present") {
+    return (
+      surfaceTypes.includes("privacy_choices") ||
+      /cookie|tracking|privacy choices|your privacy choices|gpc|global privacy control|opt-out preference/i.test(text) ||
+      /cookie|privacy|choices/.test(canonicalUrl)
+    );
+  }
+
+  if (findingId === "targeted_advertising_choices_present") {
+    return (
+      surfaceTypes.includes("cookie_policy_or_settings") ||
+      /privacy choices|your privacy choices|opt out|do not sell|do not share|gpc|global privacy control/i.test(text) ||
+      /privacy|choices|opt-out|do-not-sell/.test(canonicalUrl)
+    );
+  }
+
+  if (findingId === "privacy_rights_path_present") {
+    return (
+      surfaceTypes.includes("privacy_choices") ||
+      /privacy rights|access request|delete request|correction|your privacy choices/i.test(text) ||
+      /privacy|rights|choices/.test(canonicalUrl)
+    );
+  }
+
+  return false;
+}
+
+function getEffectiveFamilyPacketTargets(input: {
+  canonicalTargets: FamilyPacketTargetRecord[];
+  familyId: string;
+  findingId: string;
+  sourceSurfaceTypes: string[];
+}) {
+  const matchingTargets = getMatchingFamilyPacketTargets(input.canonicalTargets, input.sourceSurfaceTypes);
+  if (input.familyId !== "privacy_controls") {
+    return matchingTargets;
+  }
+
+  const auxiliaryTargets = input.canonicalTargets.filter((target) => {
+    if (matchingTargets.includes(target)) {
+      return false;
+    }
+
+    return isPrivacyControlsAuxiliaryTargetForFinding(input.findingId, target);
+  });
+
+  return [...matchingTargets, ...auxiliaryTargets];
+}
+
 function getFamilyPacketSourceUrls(targets: FamilyPacketTargetRecord[]) {
   return uniqueStrings(
     targets.flatMap((target) => {
@@ -3180,12 +3116,111 @@ function getFamilyPacketSourceUrls(targets: FamilyPacketTargetRecord[]) {
   );
 }
 
-function getFamilyPacketPolicySnippets(targets: FamilyPacketTargetRecord[]) {
+function getFamilyPacketSupportingRefSnippets(targets: FamilyPacketTargetRecord[]) {
+  return uniqueStrings(
+    targets.flatMap((target) => {
+      const refs = Array.isArray(target.supportingRefs) ? (target.supportingRefs as Array<Record<string, unknown>>) : [];
+      return refs.flatMap((ref) => [
+        typeof ref.text === "string" ? ref.text : null,
+        typeof ref.title === "string" ? ref.title : null,
+        typeof ref.label === "string" ? ref.label : null
+      ]);
+    })
+  );
+}
+
+function deriveSupportAccessUrlSnippet(url: string | null | undefined, findingId: string) {
+  if (!url) {
+    return null;
+  }
+
+  const normalizedUrl = url.toLowerCase();
+  if (findingId === "contact_support_path_present") {
+    if (/\/contact-us(?:\/|$)|\/contact(?:\/|$)/.test(normalizedUrl)) {
+      return "Contact Us";
+    }
+    if (/\/help(?:\/|$)|\/help-center(?:\/|$)|\/support(?:\/|$)/.test(normalizedUrl)) {
+      return "Help Center";
+    }
+    if (/\/feedback(?:\/|$)/.test(normalizedUrl)) {
+      return "Feedback";
+    }
+    if (/\/chat(?:\/|$)/.test(normalizedUrl)) {
+      return "Chat";
+    }
+  }
+
+  if (findingId === "accessibility_support_path_present") {
+    if (/\/accessibility(?:\/|$)|\/accessibility-support(?:\/|$)/.test(normalizedUrl)) {
+      return "Accessibility Support";
+    }
+  }
+
+  return null;
+}
+
+function getDerivedSupportAccessEvidenceSnippets(input: {
+  findingId: string;
+  pageUrls: string[];
+  sourceUrls: string[];
+}) {
+  if (
+    input.findingId !== "contact_support_path_present" &&
+    input.findingId !== "accessibility_support_path_present"
+  ) {
+    return [] as string[];
+  }
+
+  return uniqueStrings(
+    [...input.pageUrls, ...input.sourceUrls].map((url) => deriveSupportAccessUrlSnippet(url, input.findingId))
+  );
+}
+
+function getDerivedFamilyPacketSurfaceSnippets(input: {
+  familyId: string;
+  findingId: string;
+  targets: FamilyPacketTargetRecord[];
+  supportingRefSnippets: string[];
+}) {
+  if (input.supportingRefSnippets.some((snippet) => isReadableSurfaceSnippet(snippet))) {
+    return [] as string[];
+  }
+
+  if (input.familyId !== "support_access") {
+    return [] as string[];
+  }
+
+  return uniqueStrings(
+    input.targets.flatMap((target) => {
+      const refs = Array.isArray(target.supportingRefs) ? (target.supportingRefs as Array<Record<string, unknown>>) : [];
+      return [
+        deriveSupportAccessUrlSnippet(typeof target.canonicalUrl === "string" ? target.canonicalUrl : null, input.findingId),
+        ...refs.map((ref) => deriveSupportAccessUrlSnippet(typeof ref.url === "string" ? ref.url : null, input.findingId))
+      ];
+    })
+  );
+}
+
+function getFamilyPacketPolicySnippets(input: {
+  familyId: string;
+  findingId: string;
+  targets: FamilyPacketTargetRecord[];
+}) {
+  const supportingRefSnippets = getFamilyPacketSupportingRefSnippets(input.targets);
+  const derivedSurfaceSnippets = getDerivedFamilyPacketSurfaceSnippets({
+    familyId: input.familyId,
+    findingId: input.findingId,
+    targets: input.targets,
+    supportingRefSnippets
+  });
+
   return uniqueStrings([
-    ...targets.flatMap((target) => [
+    ...input.targets.flatMap((target) => [
       typeof target.title === "string" ? target.title : null,
       typeof target.snippet === "string" ? target.snippet : null
-    ])
+    ]),
+    ...supportingRefSnippets,
+    ...derivedSurfaceSnippets
   ])
     .map((snippet) => normalizePolicySnippet(snippet))
     .filter((snippet): snippet is string => Boolean(snippet));
@@ -3201,15 +3236,23 @@ function getFamilyPacketFetchQuality(targets: FamilyPacketTargetRecord[], snippe
       ? [value]
       : [];
   });
+  const hasReadableSnippet = snippets.some((snippet) => isReadableSurfaceSnippet(snippet));
+  const targetUrls = targets
+    .map((target) => (typeof target.canonicalUrl === "string" ? target.canonicalUrl : null))
+    .filter((value): value is string => Boolean(value));
+  const hasMultipleHumanFacingUrls = uniqueStrings(targetUrls).filter((url) => hasConcreteHumanFacingUrl([url])).length >= 2;
 
-  if (explicitQualities.includes("blocked_interstitial")) {
-    return "blocked_interstitial" as const;
-  }
   if (explicitQualities.includes("verified_content")) {
     return "verified_content" as const;
   }
+  if (explicitQualities.includes("blocked_interstitial") && !(hasReadableSnippet && hasMultipleHumanFacingUrls)) {
+    return "blocked_interstitial" as const;
+  }
   if (explicitQualities.includes("thin_content")) {
     return "thin_content" as const;
+  }
+  if (explicitQualities.includes("blocked_interstitial") && hasReadableSnippet) {
+    return "verified_content" as const;
   }
   if (explicitQualities.includes("unreachable")) {
     return "unreachable" as const;
@@ -3244,6 +3287,32 @@ function buildFamilyPacketFallbackEvidence(input: {
     input.findingRecord.evidencePayload && typeof input.findingRecord.evidencePayload === "object"
       ? (input.findingRecord.evidencePayload as Record<string, unknown>)
       : {};
+  const payloadPageUrls = uniqueStrings([
+    ...(Array.isArray(evidencePayload.pageUrls) ? (evidencePayload.pageUrls as string[]) : []),
+    ...(Array.isArray(evidencePayload.evidenceUrls) ? (evidencePayload.evidenceUrls as string[]) : []),
+    typeof evidencePayload.pageUrl === "string" ? evidencePayload.pageUrl : null
+  ]);
+  const payloadSourceUrls = uniqueStrings([
+    ...(Array.isArray(evidencePayload.sourceUrls) ? (evidencePayload.sourceUrls as string[]) : []),
+    typeof evidencePayload.sourceUrl === "string" ? evidencePayload.sourceUrl : null
+  ]);
+  const payloadSnippets = uniqueStrings([
+    ...(Array.isArray(evidencePayload.policySnippets) ? (evidencePayload.policySnippets as string[]) : []),
+    ...(Array.isArray(evidencePayload.snippets) ? (evidencePayload.snippets as string[]) : []),
+    ...(Array.isArray(evidencePayload.supportingSignals) ? (evidencePayload.supportingSignals as string[]) : []),
+    typeof evidencePayload.policySummaryShort === "string" ? evidencePayload.policySummaryShort : null,
+    typeof evidencePayload.observation === "string" ? evidencePayload.observation : null
+  ])
+    .map((snippet) => normalizePolicySnippet(snippet))
+    .filter((snippet): snippet is string => Boolean(snippet));
+  const mergedPageUrls = sortUrlsByTargetStrength(uniqueStrings([...input.pageUrls, ...payloadPageUrls]), input.familyTargets);
+  const mergedSourceUrls = sortUrlsByTargetStrength(uniqueStrings([...input.sourceUrls, ...payloadSourceUrls]), input.familyTargets);
+  const mergedPolicySnippets = uniqueStrings([...input.policySnippets, ...payloadSnippets]);
+  const bestSnippet =
+    mergedPolicySnippets.find((snippet) => hasFindingSpecificSurfaceSnippet(input.findingId, [snippet])) ??
+    mergedPolicySnippets.find((snippet) => isReadableSurfaceSnippet(snippet)) ??
+    input.firstSnippet;
+  const preferredPageUrl = mergedPageUrls[0] ?? input.firstPageUrl;
 
   return {
     ...evidencePayload,
@@ -3251,8 +3320,8 @@ function buildFamilyPacketFallbackEvidence(input: {
       (typeof evidencePayload.fetchQuality === "string" &&
       ["verified_content", "thin_content", "blocked_interstitial", "unreachable"].includes(evidencePayload.fetchQuality)
         ? (evidencePayload.fetchQuality as FetchQuality)
-        : getFamilyPacketFetchQuality(input.familyTargets, input.policySnippets)),
-    familyPacketCanonicalUrl: input.firstPageUrl,
+        : getFamilyPacketFetchQuality(input.familyTargets, mergedPolicySnippets)),
+    familyPacketCanonicalUrl: preferredPageUrl,
     familyPacketFamilyId: input.familyId,
     familyPacketFindingId: input.findingId,
     familyPacketSourceSurfaceTypes: input.sourceSurfaceTypes,
@@ -3261,14 +3330,14 @@ function buildFamilyPacketFallbackEvidence(input: {
       .map((entry) => (typeof entry.findingId === "string" ? entry.findingId : null))
       .filter((value): value is string => Boolean(value)),
     familyPacketVerified: true,
-    pageUrl: input.firstPageUrl,
-    pageUrls: input.pageUrls,
+    pageUrl: preferredPageUrl,
+    pageUrls: mergedPageUrls,
     policyIsPrimarySource: true,
     policyPageType: input.policyPageType,
-    policySnippets: input.policySnippets,
-    policySummaryShort: input.firstSnippet,
-    sourceUrl: input.sourceUrls[0] ?? input.firstPageUrl ?? null,
-    sourceUrls: input.sourceUrls
+    policySnippets: mergedPolicySnippets,
+    policySummaryShort: bestSnippet,
+    sourceUrl: mergedSourceUrls[0] ?? preferredPageUrl ?? null,
+    sourceUrls: mergedSourceUrls
   };
 }
 
@@ -3287,9 +3356,13 @@ function createInitialUnifiedFindingPacket(
     confidenceInputs: {
       evidenceQualityFlags: [],
       hasConcretePayloadEvidence: false,
+      hasCorroboratedPositiveSurfaceEvidence: false,
       hasDirectRuntimeEvidence: false,
       hasKeyPageDiscoveryEvidence: false,
+      hasReadableSurfaceSnippetEvidence: false,
+      hasMultipleHumanFacingUrls: false,
       hasPageAttribution: false,
+      hasPacketBackedEvidence: false,
       hasPolicyTextEvidence: false,
       hasStructuredValidationEvidence: false,
       isFallbackOnly: false,
@@ -3431,14 +3504,23 @@ function getFamilyPacketReviewFindingCandidates(scanEvents?: UnifiedFindingScanE
         }
 
         const sourceSurfaceTypes = getStringArray(finding.sourceSurfaceTypes);
-        const matchingTargets = getMatchingFamilyPacketTargets(canonicalTargets, sourceSurfaceTypes);
+        const matchingTargets = getEffectiveFamilyPacketTargets({
+          canonicalTargets,
+          familyId,
+          findingId,
+          sourceSurfaceTypes
+        });
 
         const pageUrls = uniqueStrings([
           ...getStringArray(finding.evidenceUrls),
           ...matchingTargets.flatMap((target) => (typeof target.canonicalUrl === "string" ? [target.canonicalUrl] : []))
         ]);
         const sourceUrls = getFamilyPacketSourceUrls(matchingTargets);
-        const policySnippets = getFamilyPacketPolicySnippets(matchingTargets);
+        const policySnippets = getFamilyPacketPolicySnippets({
+          familyId,
+          findingId,
+          targets: matchingTargets
+        });
 
         const firstPageUrl = pageUrls[0] ?? null;
         const firstSnippet = policySnippets[0] ?? null;
@@ -3591,6 +3673,7 @@ export function buildUnifiedFindingPackets(input: {
 }
 
 export function buildUnifiedFindingDisplayPackets(input: {
+  policyEnrichment?: Array<Record<string, unknown>>;
   reviewFindingCandidates: UnifiedFindingCandidate[];
   scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
@@ -3602,17 +3685,46 @@ export function buildUnifiedFindingDisplayPackets(input: {
     validationFindings: input.validationFindings
   });
 
-  const displayPackets = packets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
+  const repairedPackets = packets.map((packet) =>
+    maybeRepairCookiePolicyPacketFromPolicyEnrichment({
+      packet,
+      policyEnrichment: input.policyEnrichment
+    })
+  );
+  const surfacingEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: repairedPackets
+  });
+  const surfacingDecisionById = new Map(
+    surfacingEvaluation.debugDecisions.map((decision) => [decision.unifiedFindingId, decision] as const)
+  );
+
+  const displayPackets = repairedPackets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
     const linkedValidationFinding = resolveLinkedValidationFindingForPacket(packet, input.validationFindingLookup);
+    const surfacingDecision =
+      surfacingDecisionById.get(packet.unifiedFindingId) ??
+      ({
+        appliedRules: ["unknown.conservative_fallback"],
+        decisionReasons: ["No surfacing decision was available for this finding, so it was conservatively suppressed."],
+        decisionState: "suppressed",
+        family: "unknown",
+        policyVersion: "v1",
+        reportLane: "suppressed",
+        reportable: false,
+        surfaceTier: "support",
+        supports: [],
+        unifiedFindingId: packet.unifiedFindingId,
+        usedFamilyDefault: false,
+        usedFindingOverride: false
+      } satisfies UnifiedFindingSurfacingDecision);
 
     const siblingRows = rows.filter((row) => row.unifiedFindingId !== packet.unifiedFindingId);
     const presentation = buildCanonicalReviewFindingPresentation(
       buildCanonicalPresentationInput(packet, linkedValidationFinding),
       siblingRows.map((row) => buildCanonicalPresentationSiblingInput(row))
     );
-    const presentationDecision = buildPresentationDecision({
+    const presentationDecision = buildLegacyPresentationDecisionFromSurfacing({
       packet,
-      siblingRows: siblingRows
+      surfacingDecision
     });
     const resolvedPresentation = buildPresentationCopy(packet, presentation);
     const observedValue = selectObservedValue(packet);
@@ -3629,7 +3741,8 @@ export function buildUnifiedFindingDisplayPackets(input: {
       referenceLabel: resolvedPresentation.suggestedBestPractice?.label,
       referenceUrl: resolvedPresentation.suggestedBestPractice?.url,
       sourceLabel: getSourceLabel(packet),
-      sourceUrl: getSourceUrl(packet)
+      sourceUrl: getSourceUrl(packet),
+      surfacingDecision
     };
   });
 

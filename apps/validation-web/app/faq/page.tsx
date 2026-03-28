@@ -16,12 +16,12 @@ const faqs = [
   {
     question: "What does CertScore.ai scan?",
     answer:
-      "CertScore.ai scans public website pages for accessibility issues, privacy and cookie-consent signals, tracker behavior, policy-page presence, and basic disclosure-related signals."
+      "CertScore.ai scans public website pages for accessibility signals, privacy and cookie-consent behavior, tracker activity, policy-page presence, disclosure gaps, and policy-to-behavior contradictions that can be supported by retained evidence."
   },
   {
     question: "How accurate are the results?",
     answer:
-      "Results are based on observed technical and content signals from public pages. They are designed for review and monitoring, not as a legal or formal accessibility determination."
+      "Findings reflect automated analysis of public website signals under the tested scan context. They are designed for review and monitoring, not as a legal or formal accessibility determination."
   },
   {
     question: "Does CertScore.ai scan private or logged-in pages?",
@@ -46,12 +46,12 @@ const faqs = [
   {
     question: "What do I get after the preview scan?",
     answer:
-      "After signup, you can save websites, run larger scans, review signals and changes in the app, and track scan history over time."
+      "After signup, you can save websites, run broader scans, review structured findings and retained evidence in the app, and track changes over time."
   },
   {
     question: "Does CertScore.ai fix issues automatically?",
     answer:
-      "No. CertScore.ai identifies observed issues and changes. Review and remediation still need to be handled by your team."
+      "No. CertScore.ai surfaces observable signals and supported findings. Review and remediation still need to be handled by your team."
   },
   {
     question: "How often can my site be rescanned?",
@@ -66,7 +66,7 @@ const faqs = [
   {
     question: "Is CertScore.ai legal advice?",
     answer:
-      "No. CertScore.ai scans public pages for observable website signals and change history. It does not provide legal advice or certify compliance."
+      "No. CertScore.ai scans public pages for observable website signals and change history. It does not provide legal advice or certification."
   }
 ];
 
@@ -103,7 +103,7 @@ export default function FaqPage() {
               asChild
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
             >
-              <Link href="/">Start free scan</Link>
+              <Link href="/">Scan a website</Link>
             </Button>
           </div>
         </div>
@@ -124,14 +124,14 @@ export default function FaqPage() {
           <div className="max-w-3xl space-y-3">
             <h2 className="text-2xl font-semibold tracking-tight text-slate-900">What to do next</h2>
             <p className="text-sm text-slate-600">
-              Start with a free homepage preview, then create an account to save domains, run larger scans, and track signal changes over time.
+              Start with a homepage preview, then create an account to save domains, run broader scans, and track signal changes over time.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link href="/">Start free scan</Link>
+                <Link href="/">Scan a website</Link>
               </Button>
               <Button
                 asChild

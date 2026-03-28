@@ -41,6 +41,25 @@ type ChangeSummaryRow = {
   scan_id_current: string;
 };
 
+type SupabaseQueryError = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+} | null;
+
+const CHANGE_EVENT_BATCH_SIZE = 50;
+
+function chunkValues<T>(values: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 export async function getDomainScanHistory(input: { domainId: string; organizationId: string }): Promise<DomainHistoryItem[]> {
   const supabase = createAdminClient();
   const { data: scans, error } = await supabase
@@ -61,15 +80,33 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     return [];
   }
 
-  const [{ data: snapshots }, { data: changeEvents, error: changeEventsError }] = await Promise.all([
+  const [{ data: snapshots }, changeEventsResult] = await Promise.all([
     supabase.from("scan_snapshots").select("scan_id, total_signals").in("scan_id", scanIds),
-    supabase
-      .from("compliance_change_events")
-      .select("scan_id_current, event_type")
-      .eq("organization_id", input.organizationId)
-      .eq("domain_id", input.domainId)
-      .in("scan_id_current", scanIds)
+    (async () => {
+      const rows: ChangeSummaryRow[] = [];
+      let queryError: SupabaseQueryError = null;
+
+      for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+        const { data, error: batchError } = await supabase
+          .from("compliance_change_events")
+          .select("scan_id_current, event_type")
+          .eq("organization_id", input.organizationId)
+          .eq("domain_id", input.domainId)
+          .in("scan_id_current", scanIdBatch);
+
+        if (batchError) {
+          queryError = batchError;
+          break;
+        }
+
+        rows.push(...((data ?? []) as ChangeSummaryRow[]));
+      }
+
+      return { data: rows, error: queryError };
+    })()
   ]);
+  const changeEvents = changeEventsResult.data;
+  const changeEventsError = changeEventsResult.error;
 
   const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((row) => [row.scan_id, row]));
   const changeMap = new Map<string, { addedCount: number; removedCount: number; changedCount: number }>();
@@ -79,20 +116,32 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       throw new Error(`Failed to load domain scan history: ${changeEventsError.message}`);
     }
 
-    const { data: legacyEvents, error: legacyEventsError } = await supabase
-      .from("scan_events")
-      .select("id, scan_id, event_type, message, metadata_json, created_at")
-      .eq("organization_id", input.organizationId)
-      .eq("domain_id", input.domainId)
-      .in("scan_id", scanIds)
-      .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-      .order("created_at", { ascending: false });
+    const legacyEvents: LegacyScanEventRow[] = [];
+    let legacyEventsError: SupabaseQueryError = null;
+
+    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error: batchError } = await supabase
+        .from("scan_events")
+        .select("id, scan_id, event_type, message, metadata_json, created_at")
+        .eq("organization_id", input.organizationId)
+        .eq("domain_id", input.domainId)
+        .in("scan_id", scanIdBatch)
+        .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
+        .order("created_at", { ascending: false });
+
+      if (batchError) {
+        legacyEventsError = batchError;
+        break;
+      }
+
+      legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
+    }
 
     if (legacyEventsError) {
       throw new Error(`Failed to load domain scan history: ${legacyEventsError.message}`);
     }
 
-    for (const [scanId, summary] of summarizeLegacyChangeEvents((legacyEvents ?? []) as LegacyScanEventRow[])) {
+    for (const [scanId, summary] of summarizeLegacyChangeEvents(legacyEvents)) {
       changeMap.set(scanId, {
         addedCount: summary.addedCount,
         removedCount: summary.removedCount,
@@ -100,7 +149,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       });
     }
   } else {
-    for (const event of (changeEvents ?? []) as ChangeSummaryRow[]) {
+    for (const event of changeEvents) {
       const bucket = changeMap.get(event.scan_id_current) ?? {
         addedCount: 0,
         removedCount: 0,

@@ -38,8 +38,8 @@ export default function InsightsIndexPage() {
         </h1>
         <p className="text-lg text-slate-600">
           These pages explain the types of accessibility, privacy, and policy issues that automated
-          scanners commonly surface on public websites. They are designed to be readable by both
-          people and AI systems.
+          scanners commonly surface on public websites. They are designed as concise review material
+          for people and AI systems.
         </p>
       </div>
 

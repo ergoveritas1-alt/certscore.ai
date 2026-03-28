@@ -94,8 +94,27 @@ type ChangeSummaryRow = {
   scan_id_current: string;
 };
 
+type SupabaseQueryError = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+} | null;
+
+const CHANGE_EVENT_BATCH_SIZE = 50;
+
 function isMissingLastScannedAtColumn(error: { message?: string } | null) {
   return Boolean(error?.message?.includes("last_scanned_at"));
+}
+
+function chunkValues<T>(values: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 export async function getOrganizationScans(organizationId: string, limit?: number) {
@@ -164,13 +183,25 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
   } else if (domainsError) {
     throw new Error(`Failed to load organization scans: ${domainsError.message}`);
   }
-  const { data: changeSummaries, error: changeSummariesError } = scanIds.length
-    ? await supabase
+  const changeSummaries: ChangeSummaryRow[] = [];
+  let changeSummariesError: SupabaseQueryError = null;
+
+  if (scanIds.length) {
+    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await supabase
         .from("compliance_change_events")
         .select("scan_id_current, event_type")
         .eq("organization_id", organizationId)
-        .in("scan_id_current", scanIds)
-    : { data: [] as ChangeSummaryRow[], error: null };
+        .in("scan_id_current", scanIdBatch);
+
+      if (error) {
+        changeSummariesError = error;
+        break;
+      }
+
+      changeSummaries.push(...((data ?? []) as ChangeSummaryRow[]));
+    }
+  }
 
   const domainRows = (domains ?? []) as DomainRow[];
   const latestDomainScanIds = [...new Set(domainRows.flatMap((domain) => (domain.latest_scan_id ? [domain.latest_scan_id] : [])))];
@@ -227,19 +258,31 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
       throw new Error(`Failed to load organization scans: ${changeSummariesError.message}`);
     }
 
-    const { data: legacyEvents, error: legacyEventsError } = await supabase
-      .from("scan_events")
-      .select("id, scan_id, event_type, message, metadata_json, created_at")
-      .eq("organization_id", organizationId)
-      .in("scan_id", scanIds)
-      .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-      .order("created_at", { ascending: false });
+    const legacyEvents: LegacyScanEventRow[] = [];
+    let legacyEventsError: SupabaseQueryError = null;
+
+    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await supabase
+        .from("scan_events")
+        .select("id, scan_id, event_type, message, metadata_json, created_at")
+        .eq("organization_id", organizationId)
+        .in("scan_id", scanIdBatch)
+        .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        legacyEventsError = error;
+        break;
+      }
+
+      legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
+    }
 
     if (legacyEventsError) {
       throw new Error(`Failed to load organization scans: ${legacyEventsError.message}`);
     }
 
-    for (const [scanId, summary] of summarizeLegacyChangeEvents((legacyEvents ?? []) as LegacyScanEventRow[])) {
+    for (const [scanId, summary] of summarizeLegacyChangeEvents(legacyEvents)) {
       changeMap.set(scanId, {
         addedCount: summary.addedCount,
         removedCount: summary.removedCount,
@@ -248,7 +291,7 @@ export async function getOrganizationScans(organizationId: string, limit?: numbe
       });
     }
   } else {
-    for (const event of (changeSummaries ?? []) as ChangeSummaryRow[]) {
+    for (const event of changeSummaries) {
       const bucket = changeMap.get(event.scan_id_current) ?? {
         addedCount: 0,
         removedCount: 0,

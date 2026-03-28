@@ -5,7 +5,7 @@ import { createPageMetadata } from "../../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "ADA Website Compliance Guide",
   description:
-    "Learn what ADA website compliance usually refers to, which accessibility issues commonly appear on business websites, and how CertScore.ai surfaces related signals.",
+    "Learn what ADA website compliance usually refers to, which accessibility issues commonly appear on business websites, and how CertScore.ai surfaces related accessibility signals.",
   path: "/guides/ada-website-compliance"
 });
 
@@ -14,7 +14,7 @@ export default function AdaWebsiteComplianceGuidePage() {
     <GuideTemplate
       eyebrow="Accessibility guide"
       title="ADA Website Compliance"
-      intro="ADA website compliance usually refers to whether a public website creates accessibility barriers that could expose the site owner to complaints, demand letters, or remediation work. In practice, teams often look at WCAG-oriented issues because they surface many of the technical patterns that make sites harder to use."
+      intro="ADA website compliance usually refers to whether a public website creates accessibility barriers that may require remediation or closer review. In practice, teams often look at WCAG-oriented issues because they surface many of the technical patterns that make sites harder to use."
       questionTitle="What is ADA website compliance?"
       whyItMatters={[
         "Accessibility problems can affect real visitors who rely on screen readers, keyboard navigation, readable contrast, or clear form labeling.",

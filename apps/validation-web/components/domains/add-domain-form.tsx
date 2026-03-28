@@ -18,12 +18,12 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   const planLabel = planCode === "free" ? "free" : planCode === "pro" ? "pro" : "ultra";
 
   return (
-    <form action={action} className="space-y-5">
+    <form action={action} className="space-y-4">
       <div>
         <div className="relative">
           <Input
             autoComplete="url"
-            className="h-16 rounded-[2rem] border-slate-300 pr-44 text-2xl shadow-none placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-200"
+            className="h-14 rounded-[1.75rem] border-slate-300 pr-40 text-xl shadow-none placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-200"
             defaultValue=""
             id="domain"
             name="domain"
@@ -33,7 +33,7 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
           />
           <Button
             aria-label="Start scanning"
-            className="absolute right-3 top-1/2 h-12 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] px-5 text-sm font-medium text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+            className="absolute right-2.5 top-1/2 h-10 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] px-4 text-sm font-medium text-white shadow-[0_10px_24px_rgba(15,139,215,0.16)] hover:brightness-[1.04]"
             disabled={isPending}
             type="submit"
           >

@@ -12,15 +12,16 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
-import { POLICY_POSITIVE_SIGNAL_SPECS } from "../../lib/scans/policy-positive-signal-contract";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
+import { deriveSupplementalCoverageSignals, type SupplementalCoverageSignal } from "../../lib/scans/supplemental-coverage-signals";
+import { deriveSupplementalPolicySignals, type SupplementalPolicySignal } from "../../lib/scans/supplemental-policy-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
 import {
   collectPolicyEvidenceHashes,
-  dereferencePolicyEvidenceSnippets,
-  derivePositivePolicySignalMap
+  dereferencePolicyEvidenceSnippets
 } from "./policy-enrichment-normalization";
+import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 
 export type ScanDetailRecord = {
   id: string;
@@ -171,20 +172,6 @@ type ScanEventRow = {
   metadata_json: unknown;
 };
 
-type SupplementalCoverageSignal = {
-  key: string;
-  label: string;
-  snapshotField: string;
-  value: boolean | number | string | string[];
-};
-
-type SupplementalPolicySignal = {
-  category: string;
-  key: string;
-  label: string;
-  value: boolean | number | string | string[];
-};
-
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
   return rows.find((row) => row.page_type === "privacy_policy" || row.pageType === "privacy_policy") ?? rows[0] ?? null;
 }
@@ -286,119 +273,6 @@ function stripTimestampFields(record: Record<string, unknown>) {
   delete next.created_at;
   delete next.updated_at;
   return next;
-}
-
-function deriveSupplementalCoverageSignals(input: {
-  events: ScanEventRecord[];
-  existingSignals: ScanSignalRecord[];
-}) {
-  const seenKeys = new Set(input.existingSignals.map((signal) => signal.key));
-  const supplementalSignals = new Map<string, SupplementalCoverageSignal>();
-  const snapshotOverrides: Record<string, unknown> = {};
-
-  const coverageMap = new Map<
-    string,
-    {
-      key: string;
-      label: string;
-      snapshotField: string;
-    }
-  >([
-    [
-      "privacy_policy",
-      {
-        key: "disclosure.privacy_policy_fetch_failed",
-        label: "Privacy policy page unavailable",
-        snapshotField: "privacy_policy_present"
-      }
-    ],
-    [
-      "terms_of_service",
-      {
-        key: "disclosure.terms_of_service_fetch_failed",
-        label: "Terms page unavailable",
-        snapshotField: "terms_of_service_present"
-      }
-    ],
-    [
-      "cookie_policy",
-      {
-        key: "disclosure.cookie_policy_fetch_failed",
-        label: "Cookie policy unavailable",
-        snapshotField: "cookie_policy_present"
-      }
-    ],
-    [
-      "accessibility_statement",
-      {
-        key: "disclosure.accessibility_statement_fetch_failed",
-        label: "Accessibility statement unavailable",
-        snapshotField: "accessibility_statement_present"
-      }
-    ],
-    [
-      "contact",
-      {
-        key: "disclosure.contact_page_fetch_failed",
-        label: "Contact page unavailable",
-        snapshotField: "contact_page_present"
-      }
-    ]
-  ]);
-
-  for (const event of input.events) {
-    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
-      continue;
-    }
-
-    const metadata = event.metadataJson as Record<string, unknown>;
-    if (!["prefetch_fetch_target", "expansion_fetch_target", "key_page_coverage_fetch_target"].includes(String(metadata.phase ?? ""))) {
-      continue;
-    }
-
-    const pageType = typeof metadata.pageType === "string" ? metadata.pageType : null;
-    const fetchStatus = typeof metadata.fetchStatus === "string" ? metadata.fetchStatus : null;
-    const targetUrl =
-      typeof metadata.targetUrl === "string"
-        ? metadata.targetUrl
-        : typeof metadata.finalUrl === "string"
-          ? metadata.finalUrl
-          : null;
-    const coverageDefinition = pageType ? coverageMap.get(pageType) : null;
-
-    if (!coverageDefinition || !fetchStatus || ["ok", "redirected"].includes(fetchStatus)) {
-      continue;
-    }
-
-    if (seenKeys.has(coverageDefinition.key)) {
-      snapshotOverrides[coverageDefinition.snapshotField] = false;
-      continue;
-    }
-
-    const existingSupplemental = supplementalSignals.get(coverageDefinition.key);
-    if (existingSupplemental) {
-      if (targetUrl) {
-        const mergedUrls = Array.isArray(existingSupplemental.value)
-          ? [...new Set([...existingSupplemental.value, targetUrl])]
-          : [targetUrl];
-        existingSupplemental.value = mergedUrls;
-      }
-    } else {
-      supplementalSignals.set(coverageDefinition.key, {
-        key: coverageDefinition.key,
-        label: coverageDefinition.label,
-        snapshotField: coverageDefinition.snapshotField,
-        value: targetUrl ? [targetUrl] : true
-      });
-      seenKeys.add(coverageDefinition.key);
-    }
-    snapshotOverrides[coverageDefinition.snapshotField] = false;
-  }
-
-  return {
-    snapshotOverrides,
-    supplementalSignals: [...supplementalSignals.values()]
-  };
 }
 
 function deriveSupplementalSnapshotSignals(input: {
@@ -507,44 +381,8 @@ function deriveSupplementalSnapshotSignals(input: {
   });
 }
 
-function deriveSupplementalPolicySignals(input: {
-  existingSignals: ScanSignalRecord[];
-  policyEnrichment: Array<Record<string, unknown>>;
-  primaryPolicyEnrichment: Record<string, unknown> | null;
-}): ScanSignalRecord[] {
-  const supplementalSignals: SupplementalPolicySignal[] = [];
-  const existingKeys = new Set(input.existingSignals.map((signal) => signal.key));
-  const primaryPolicy = input.primaryPolicyEnrichment;
-
-  if (!primaryPolicy) {
-    return [];
-  }
-
-  const positivePolicySignalMap = derivePositivePolicySignalMap({
-    policyEnrichment: input.policyEnrichment,
-    primaryPolicyEnrichment: primaryPolicy
-  });
-
-  const pushBoolean = (category: string, key: string, label: string, value: boolean) => {
-    if (!value || existingKeys.has(key)) {
-      return;
-    }
-
-    supplementalSignals.push({ category, key, label, value: true });
-  };
-
-  for (const spec of POLICY_POSITIVE_SIGNAL_SPECS) {
-    const value = positivePolicySignalMap.get(spec.canonicalSignalKey) === true;
-
-    pushBoolean(
-      spec.canonicalSignalKey.startsWith("commerce.") ? "commerce" : "privacy",
-      spec.canonicalSignalKey,
-      spec.label,
-      value
-    );
-  }
-
-  return supplementalSignals.map((signal) => {
+function normalizeSupplementalPolicySignals(signals: SupplementalPolicySignal[]): ScanSignalRecord[] {
+  return signals.map((signal) => {
     const taxonomy = mapSignalKeyToTaxonomy({
       category: signal.category,
       key: signal.key,
@@ -886,7 +724,7 @@ async function loadScanDetailRecord(input: {
   const normalizedPolicyReviewQueue = ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(normalizedPolicyEnrichment);
   const previousPrimaryPolicyEnrichment = getPrimaryPolicyEnrichment((previousPolicyRows as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)));
-  const normalizedEvents = ((events ?? []) as ScanEventRow[]).map(
+  const rawNormalizedEvents: ScanEventRecord[] = ((events ?? []) as ScanEventRow[]).map(
     (event) =>
       ({
         id: event.id,
@@ -920,6 +758,10 @@ async function loadScanDetailRecord(input: {
       } satisfies ScanSignalRecord;
     }
   );
+  const normalizedEvents: ScanEventRecord[] = repairFindingFamilyPacketEvents({
+    events: rawNormalizedEvents,
+    policyEnrichment: normalizedPolicyEnrichment
+  });
   const supplementalCoverageSignals = deriveSupplementalCoverageSignals({
     events: normalizedEvents,
     existingSignals: normalizedSignals
@@ -934,11 +776,12 @@ async function loadScanDetailRecord(input: {
     existingSignals: normalizedSignals,
     snapshot: normalizedSnapshot
   });
-  const supplementalPolicySignals = deriveSupplementalPolicySignals({
-    existingSignals: normalizedSignals,
+  const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
+    existingSignalKeys: normalizedSignals.map((signal) => signal.key),
     policyEnrichment: normalizedPolicyEnrichment,
-    primaryPolicyEnrichment
-  });
+    primaryPolicyEnrichment,
+    snapshot: normalizedSnapshot
+  }));
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
   const regulatoryRisk = snapshot
     ? buildRegulatoryRiskAssessment({

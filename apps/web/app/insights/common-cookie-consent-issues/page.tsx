@@ -5,7 +5,7 @@ import { createPageMetadata } from "../../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Common Cookie Consent Issues",
   description:
-    "Educational insights page covering typical cookie banner and tracker timing issues found on public websites and how scanners detect related signals.",
+    "Educational insights page covering typical cookie banner and tracker timing issues found on public websites and how scanners surface related signals.",
   path: "/insights/common-cookie-consent-issues"
 });
 
@@ -23,7 +23,7 @@ export default function CommonCookieConsentIssuesInsightPage() {
       scannerSignals={[
         "Scanners can observe network requests during real page load and map them to common tracker signatures.",
         "They can inspect the DOM for banner, reject, and preference-control signals after the page loads.",
-        "They can combine those observations into conservative privacy findings that point teams to likely problem pages."
+        "They can combine those observations into conservative findings that point teams to likely problem pages."
       ]}
       examples={[
         "Google Tag Manager firing on initial load while the banner is still visible.",

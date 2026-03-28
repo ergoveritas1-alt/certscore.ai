@@ -656,3 +656,113 @@ test("drops weak homepage cookie placeholders when no better cookie policy row i
   assert.equal(evidence.keyPageAttemptCount, 1);
   assert.equal(evidence.fetchQuality, "unreachable");
 });
+
+test("reanchors cookie fallback evidence to a fetchable privacy notice when the cookie url is blocked", () => {
+  const evidence = buildCookiePolicyFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/legal/cookies"],
+          bestDiscoverySource: "footer_link",
+          fetchQuality: "blocked_interstitial",
+          pageType: "cookie_policy",
+          stopReason: "blocked_interstitial",
+          successfulUrl: "https://www.example.com/legal/cookies"
+        }
+      ]
+    },
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/us-privacy-notice",
+        policy_summary_short:
+          "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+      }
+    ],
+    signalKey: "disclosure.cookie_policy_present",
+    signalLabel: "Cookie policy fetched",
+    signalValue: true
+  });
+
+  assert.equal(evidence.fetchQuality, "verified_content");
+  assert.equal(evidence.pageUrl, "https://www.example.com/us-privacy-notice");
+  assert.deepEqual(evidence.pageUrls, ["https://www.example.com/us-privacy-notice"]);
+  assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/us-privacy-notice"]);
+  assert.deepEqual(evidence.policySnippets, [
+    "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+  ]);
+});
+
+test("reanchors snapshot cookie-surface fallback evidence to privacy notice text when available", () => {
+  const evidence = buildSnapshotDisclosureFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/legal/cookies"],
+          bestDiscoverySource: "footer_link",
+          fetchQuality: "blocked_interstitial",
+          pageType: "cookie_policy",
+          stopReason: "blocked_interstitial",
+          successfulUrl: "https://www.example.com/legal/cookies"
+        }
+      ]
+    },
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/us-privacy-notice",
+        policy_summary_short:
+          "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+      }
+    ],
+    signalKey: "disclosure.cookie_policy_present",
+    signalLabel: "Cookie policy fetched",
+    signalValue: true,
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(evidence.fetchQuality, "verified_content");
+  assert.deepEqual(evidence.pageUrls, ["https://www.example.com/us-privacy-notice"]);
+  assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/us-privacy-notice"]);
+  assert.deepEqual(evidence.policySnippets, [
+    "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+  ]);
+});
+
+test("prefers a stronger privacy notice over a generic cookie path when the cookie path has no readable snippet", () => {
+  const evidence = buildCookiePolicyFallbackEvidence({
+    keyPageDiscoverySummary: {
+      pageSummaries: [
+        {
+          attemptedUrls: ["https://www.example.com/cookies"],
+          bestDiscoverySource: "footer_link",
+          fetchQuality: "verified_content",
+          pageType: "cookie_policy",
+          successfulPageTitle: "",
+          successfulUrl: "https://www.example.com/cookies"
+        }
+      ]
+    },
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/legal/privacy/us-residents",
+        policy_summary_short:
+          "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+      }
+    ],
+    signalKey: "disclosure.cookie_policy_present",
+    signalLabel: "Cookie policy fetched",
+    signalValue: true
+  });
+
+  assert.equal(evidence.fetchQuality, "verified_content");
+  assert.equal(evidence.pageUrl, "https://www.example.com/legal/privacy/us-residents");
+  assert.deepEqual(evidence.pageUrls, ["https://www.example.com/legal/privacy/us-residents"]);
+  assert.deepEqual(evidence.sourceUrls, ["https://www.example.com/legal/privacy/us-residents"]);
+  assert.deepEqual(evidence.policySnippets, [
+    "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+  ]);
+});

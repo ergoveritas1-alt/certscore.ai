@@ -1002,7 +1002,9 @@ function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | nul
   const pageUrls = getStringArrayEvidence(evidence, ["pageUrls"]);
   const sourceUrls = getStringArrayEvidence(evidence, ["sourceUrls"]);
   const allText = snippets.join(" ").toLowerCase();
-  const hasStrongUrl = [...pageUrls, ...sourceUrls].some((value) => /^https?:\/\//i.test(value));
+  const urls = [...new Set([...pageUrls, ...sourceUrls])];
+  const hasStrongUrl = urls.some((value) => /^https?:\/\//i.test(value));
+  const contactLikeUrlCount = urls.filter((value) => /^https?:\/\//i.test(value) && /contact|help|support|feedback|chat|customer-service/i.test(value)).length;
   const hasSupportLanguage =
     /give feedback|feedback|contact us|contact|help center|help|support/i.test(allText);
   const hasFamilyPacketBacking =
@@ -1011,11 +1013,39 @@ function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | nul
     flags.includes("family_packet_finding:contact_support_path_present");
 
   return (
-    !negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") &&
     !negativeEvidenceFlags.has("positive_surface_content_unverified") &&
     hasStrongUrl &&
-    hasSupportLanguage &&
+    (hasSupportLanguage || contactLikeUrlCount >= 2) &&
     hasFamilyPacketBacking
+  );
+}
+
+function hasStrongCookieSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const negativeEvidenceFlags = getNegativeEvidenceFlags(evidence);
+  const flags = getStringArrayEvidence(evidence, ["flags"]);
+  const snippets = getSnippetEvidence(evidence);
+  const pageUrls = getStringArrayEvidence(evidence, ["pageUrls"]);
+  const sourceUrls = getStringArrayEvidence(evidence, ["sourceUrls"]);
+  const urls = [...new Set([...pageUrls, ...sourceUrls])];
+  const allText = snippets.join(" ").toLowerCase();
+  const hasStrongUrl = urls.some((value) => /^https?:\/\//i.test(value));
+  const cookieLikeAnchorCount = urls.filter(
+    (value) => /^https?:\/\//i.test(value) && /cookie|privacy|choices|gpc|global-privacy-control/i.test(value)
+  ).length;
+  const hasCookieLanguage =
+    /cookie|tracking technologies|privacy choices|your privacy choices|global privacy control|gpc|analytical cookies|marketing cookies/i.test(
+      allText
+    );
+  const hasFamilyPacketBacking =
+    flags.includes("family_packet_backed") &&
+    flags.includes("family_packet:privacy_controls") &&
+    flags.includes("family_packet_finding:cookie_policy_present");
+
+  return (
+    !negativeEvidenceFlags.has("positive_surface_content_unverified") &&
+    hasStrongUrl &&
+    hasFamilyPacketBacking &&
+    (hasCookieLanguage || cookieLikeAnchorCount >= 2)
   );
 }
 
@@ -1611,20 +1641,22 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
   if (/contact or feedback path present|contact_support_path_present/i.test(input.haystack)) {
     const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
-    if (
+    if (hasStrongContactSurfaceEvidence(input.evidence)) {
+      presentation.confidenceScore = "0.85";
+    } else if (
       negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ||
       negativeEvidenceFlags.has("positive_surface_content_unverified")
     ) {
       presentation.confidenceScore =
         negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ? "0.3" : "0.35";
-    } else if (hasStrongContactSurfaceEvidence(input.evidence)) {
-      presentation.confidenceScore = "0.85";
     }
   }
 
   if (/cookie settings or policy surface present|cookie_policy_present/i.test(input.haystack)) {
     const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
-    if (
+    if (hasStrongCookieSurfaceEvidence(input.evidence)) {
+      presentation.confidenceScore = "0.85";
+    } else if (
       negativeEvidenceFlags.has("blocked_or_interstitial_evidence_observed") ||
       negativeEvidenceFlags.has("positive_surface_content_unverified")
     ) {

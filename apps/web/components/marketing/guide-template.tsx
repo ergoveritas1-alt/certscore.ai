@@ -79,7 +79,7 @@ export function GuideTemplate({
           title={questionTitle}
           paragraphs={[
             intro,
-            "CertScore.ai approaches this topic as a question of observable website signals. It helps teams surface scan findings and track changes over time, but it does not provide legal advice or certify compliance."
+            "CertScore.ai approaches this topic as a question of observable website signals. It helps teams surface structured findings and track change over time, but it does not provide legal advice or certification."
           ]}
         />
 
@@ -90,7 +90,7 @@ export function GuideTemplate({
         <GuideTextSection title="Examples of problems" paragraphs={examples} />
 
         <GuideTextSection
-          title="How automated scanning helps detect signals"
+          title="How automated scanning supports review"
           paragraphs={automatedScanningHelp}
         />
 
@@ -105,10 +105,10 @@ export function GuideTemplate({
             <div className="rounded-2xl border border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] p-4">
               <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Use this guide as a checklist</p>
-                <p className="text-sm text-slate-600">Read the guide, then run a scan to see whether these signals show up on a live site.</p>
+                <p className="text-sm text-slate-600">Read the guide, then run a scan to see whether similar signals appear on a live site.</p>
               </div>
               <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">What CertScore would flag here</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">What the scan may surface here</p>
                 <p className="mt-2 text-sm leading-6 text-slate-700">{certScoreFlagExample}</p>
               </div>
             </div>
@@ -117,7 +117,7 @@ export function GuideTemplate({
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link href="/preview">Use this guide, run a scan</Link>
+                <Link href="/preview">Use this guide, scan a website</Link>
               </Button>
             </div>
           </CardContent>

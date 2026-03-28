@@ -14,7 +14,7 @@ export default function PreviewPage() {
           <Badge tone="neutral">Homepage preview</Badge>
           <h1 className="text-4xl font-semibold tracking-tight">Run a homepage scan before signup</h1>
           <p className="text-lg text-slate-600">
-            Start with a lightweight preview that checks the homepage for sample accessibility, privacy, and disclosure findings before you create an account.
+            Start with a lightweight preview that checks the homepage for sample accessibility, privacy, consent, and disclosure findings before you create an account.
           </p>
         </div>
 
@@ -25,8 +25,8 @@ export default function PreviewPage() {
             </CardHeader>
             <CardContent>
               <DomainScanForm
-                buttonLabel="Start homepage scan"
-                helperText="The preview is lightweight and shows sample findings for the homepage before signup."
+                buttonLabel="Scan a website"
+                helperText="The preview is lightweight and shows the kinds of findings and observable signals CertScore can surface on a homepage before signup."
                 mode="preview"
               />
             </CardContent>
@@ -39,7 +39,7 @@ export default function PreviewPage() {
               <CardTitle>Accessibility</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              The homepage preview highlights visible accessibility signals before you queue a deeper scan.
+              The homepage preview highlights visible accessibility signals before you queue a broader scan.
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white">
@@ -47,7 +47,7 @@ export default function PreviewPage() {
               <CardTitle>Privacy</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Sample findings call out consent, tracker, and disclosure issues visible from the public homepage.
+              Sample findings call out consent, tracker, and disclosure signals visible from the public homepage.
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white">
@@ -55,7 +55,7 @@ export default function PreviewPage() {
               <CardTitle>Continue after signup</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Create an account to unlock deeper scans, saved history, and the full review workflow.
+              Create an account to unlock broader scans, saved history, and the full review workflow.
             </CardContent>
           </Card>
         </div>

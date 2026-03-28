@@ -9,26 +9,30 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "How It Works",
   description:
-    "See how CertScore.ai turns public website behavior, policy pages, tracker activity, consent flows, and accessibility issues into structured findings.",
+    "See how CertScore.ai turns public website behavior and visible website surfaces into structured findings.",
   path: "/how-it-works"
 });
 
 const steps = [
   {
     title: "Start with the homepage, then expand where it matters",
-    description: "Each scan begins with the homepage and then moves into the public pages most likely to drive policy, consent, tracker, and disclosure findings."
+    description:
+      "CertScore begins with the public-facing website and can extend into the pages and surfaces most relevant to consent, disclosures, accessibility, and user trust."
   },
   {
     title: "Collect runtime and disclosure evidence",
-    description: "The scanner checks tracker activity, consent flows, accessibility issues, and public policy/disclosure pages in one pass."
+    description:
+      "The scanner reviews runtime behavior, consent interactions, accessibility signals, and relevant public policy and disclosure surfaces in one pass."
   },
   {
-    title: "Surface contradictions and failures",
-    description: "The reporting layer highlights pre-consent tracking, broken reject flows, tracker inventory, and policy-to-behavior contradictions."
+    title: "Surface supported findings",
+    description:
+      "Observed signals are evaluated and promoted into findings when the retained evidence is strong enough to support review. This includes issues such as pre-consent tracking, broken reject flows, missing public surfaces, and policy-to-behavior contradictions."
   },
   {
     title: "Track what changed between scans",
-    description: "When a prior completed scan exists, CertScore.ai records added, removed, and changed signals so regressions stand out quickly."
+    description:
+      "Repeated scans help teams understand what changed, what improved, what regressed, and what new signals appeared over time."
   }
 ];
 
@@ -51,12 +55,12 @@ export default function HowItWorksPage() {
         <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-3xl space-y-4">
           <Badge tone="neutral">How it works</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">From homepage preview to contradiction and consent evidence.</h1>
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">From homepage scan to reviewable findings</h1>
           <p className="text-lg text-slate-600">
-            CertScore.ai turns public website behavior into structured findings around privacy, consent, trackers, accessibility, and disclosure posture.
+            CertScore turns public website behavior and visible website surfaces into structured findings across privacy, consent, accessibility, disclosures, and observable contradictions.
           </p>
           <div className="max-w-[30rem] pt-2">
-            <DomainScanForm buttonLabel="Run a scan" inputLabel="Website domain" mode="preview" />
+            <DomainScanForm buttonLabel="Scan a website" inputLabel="Website domain" mode="preview" />
           </div>
         </div>
         </div>

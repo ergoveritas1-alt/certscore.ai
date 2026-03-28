@@ -14,10 +14,10 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 const proofPoints = [
-  "Detect pre-consent trackers",
-  "Spot broken reject flows",
-  "Find policy-to-runtime mismatches",
-  "Monitor drift across scans"
+  "Pre-consent tracking",
+  "Reject flow failures",
+  "Policy-to-behavior contradictions",
+  "Change over time"
 ];
 
 const coreCards = [
@@ -106,16 +106,16 @@ export default function HomepageTrialPage() {
               Homepage Trial
             </Badge>
             <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-6xl lg:text-[4.5rem]">
-              Scan your website for consent, privacy, and accessibility risk.
+              Surface public website signals across consent, privacy, accessibility, and disclosures.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              CertScore helps teams catch pre-consent tracking, broken user controls, and policy-to-runtime mismatches with evidence from the live site.
+              CertScore helps teams surface pre-consent tracking, broken user controls, and policy-to-behavior contradictions with reviewable evidence from the live site.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <PendingButtonLink
                 className="border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0ea5e9_54%,#7dd3fc_100%)] px-6 text-white shadow-[0_18px_35px_rgba(37,99,235,0.24)] hover:brightness-[1.04]"
                 href="/preview"
-                idleContent="Run a scan"
+                idleContent="Scan a website"
                 pendingContent="Opening..."
               />
               <PendingButtonLink
@@ -144,7 +144,7 @@ export default function HomepageTrialPage() {
               <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Live website scan</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-950">Start with the homepage, then expand deeper.</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">Start with the homepage, then expand where it matters.</p>
                 </div>
                 <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-100">
                   Preview mode
@@ -153,7 +153,7 @@ export default function HomepageTrialPage() {
 
               <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-white p-4">
                 <DomainScanForm
-                  buttonLabel="Run a scan"
+                  buttonLabel="Scan a website"
                   helperText="Trial concept: faster entry point, less explanation, clearer action."
                   inputLabel="Website domain"
                   inputPlaceholder="Enter yoursite.com"
@@ -171,12 +171,12 @@ export default function HomepageTrialPage() {
                     <div className="rounded-2xl bg-white/8 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Consent</p>
                       <p className="mt-2 text-2xl font-semibold">Reject path failed</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">Tracking activity continued after a reject action.</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">Observed tracking activity continued after a reject action.</p>
                     </div>
                     <div className="rounded-2xl bg-white/8 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Policy</p>
                       <p className="mt-2 text-2xl font-semibold">Mismatch found</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">Runtime behavior did not match public privacy language.</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">Observed runtime behavior did not match retained public privacy language.</p>
                     </div>
                   </div>
                 </div>
@@ -185,7 +185,7 @@ export default function HomepageTrialPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Common findings</p>
                   <div className="mt-4 space-y-3">
                     {[
-                      "Pre-consent analytics request detected",
+                      "Pre-consent analytics request observed",
                       "Cookie banner loaded after trackers",
                       "Accessibility issue on interactive control"
                     ].map((item) => (

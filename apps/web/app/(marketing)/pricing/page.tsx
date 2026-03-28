@@ -9,7 +9,7 @@ import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Pricing",
-  description: "Compare full scans, expanded domain coverage, scan history, and monitoring plans for CertScore.ai.",
+  description: "Compare scans, findings history, monitoring cadence, and domain coverage for CertScore.ai.",
   path: "/pricing"
 });
 
@@ -17,7 +17,7 @@ const API_ACCESS_COMING_SOON_LABEL = "Coming soon";
 
 const comparisonRows = [
   { label: "Domains", values: { individual: "1", pro: "20", team: "100" } },
-  { label: "Coverage", values: { individual: "Expanded domain coverage", pro: "Expanded domain coverage", team: "Expanded domain coverage" } },
+  { label: "Coverage", values: { individual: "Public-site scan coverage", pro: "Public-site scan coverage", team: "Public-site scan coverage" } },
   { label: "Recurring scan cadence", values: { individual: "Up to hourly", pro: "Up to hourly", team: "Up to hourly" } },
   { label: "Manual re-scan cooldown", values: { individual: "Every 1 minute per domain", pro: "Every 1 minute per domain", team: "Every 1 minute per domain" } },
   { label: "Scan history", values: { individual: "Included", pro: "Included", team: "Included" } },
@@ -29,8 +29,8 @@ const marketingPlans = [
     code: "individual",
     label: "Individual",
     priceLabel: "$29/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    description: "Evidence-led monitoring for one domain",
+    coverageLabel: "Public-site scan coverage",
     maxDomains: 1,
     scanFrequency: "hourly",
     scanHistoryEnabled: true,
@@ -40,8 +40,8 @@ const marketingPlans = [
     code: "pro",
     label: "Pro",
     priceLabel: "$129/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    description: "Structured findings across a growing portfolio",
+    coverageLabel: "Public-site scan coverage",
     maxDomains: 20,
     scanFrequency: "hourly",
     scanHistoryEnabled: true,
@@ -51,8 +51,8 @@ const marketingPlans = [
     code: "team",
     label: "Ultra",
     priceLabel: "$289/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    description: "Portfolio-scale scanning and change tracking",
+    coverageLabel: "Public-site scan coverage",
     maxDomains: 100,
     scanFrequency: "hourly",
     scanHistoryEnabled: true,
@@ -72,7 +72,7 @@ const planCardContent = {
     statCardClassName: "bg-white/90 ring-amber-100",
     summaryLabel: "Best for one active domain",
     bullets: [
-      "Expanded domain coverage",
+      "Structured findings and evidence history for one domain",
       "Recurring scans up to hourly",
       "On-demand re-scans every 1 minute per domain",
       "Built for solo operators who only need one monitored domain"
@@ -94,7 +94,7 @@ const planCardContent = {
     statCardClassName: "bg-white/90 ring-sky-100",
     summaryLabel: "Best value for most teams",
     bullets: [
-      "Expanded domain coverage",
+      "Structured findings and evidence history across up to twenty domains",
       "Good fit for in-house teams monitoring up to twenty domains",
       "Recurring scans up to hourly and on-demand re-scans every 1 minute per domain"
     ],
@@ -115,7 +115,7 @@ const planCardContent = {
     statCardClassName: "bg-white/90 ring-emerald-100",
     summaryLabel: "Built for portfolio monitoring",
     bullets: [
-      "Expanded domain coverage at portfolio scale",
+      "Structured findings and evidence history at portfolio scale",
       "Best for agencies and consultants monitoring up to one hundred domains",
       "Recurring scans up to hourly; on-demand re-scans every 1 minute per domain"
     ],
@@ -134,21 +134,21 @@ export default function PricingPage() {
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-2xl space-y-4">
           <Badge tone="neutral">Simple limits, aligned with the product.</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight">Pricing for full scans, expanded domain coverage, and ongoing monitoring.</h1>
+          <h1 className="text-4xl font-semibold tracking-tight">Pricing for scans, evidence review, and ongoing monitoring.</h1>
           <p className="text-lg text-slate-600">
-            Start with a full scan, then move into expanded domain coverage, change tracking, and scan history as your review needs grow.
+            Start with a scan, then add broader domain coverage, change tracking, scan history, and recurring monitoring as your review needs grow.
           </p>
           <div className="flex flex-wrap gap-3">
             <PendingButtonLink
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               href="/preview"
-              idleContent="Run a scan"
+              idleContent="Scan a website"
               pendingContent="Opening..."
             />
             <PendingButtonLink
               className="border-emerald-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(240,253,244,0.98)_100%)] text-slate-900 ring-1 ring-emerald-200 hover:bg-emerald-50"
               href="/#sample-report"
-              idleContent="View sample report"
+              idleContent="See sample findings"
               pendingContent="Opening..."
               variant="secondary"
             />
@@ -267,7 +267,7 @@ export default function PricingPage() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Need a larger rollout or custom terms?</h2>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                  Enterprise Custom is for larger teams that need custom procurement, API access, onboarding help, or a tailored monitoring footprint across many domains.
+                  Enterprise Custom is for larger teams that need custom procurement, API access, onboarding help, or a tailored scanning footprint across many domains.
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">

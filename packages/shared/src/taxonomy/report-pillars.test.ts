@@ -47,7 +47,7 @@ test("keeps each section attached to exactly one pillar", () => {
 });
 
 test("keeps each evidence category attached to exactly one section", () => {
-  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 68);
+  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 70);
   assert.ok(
     REPORT_EVIDENCE_CATEGORIES.every((category) =>
       REPORT_SECTIONS.some(
@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 118);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 124);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -176,7 +176,7 @@ test("maps new accessibility and consumer MVP signals into stable evidence categ
       source: "snapshot_signal",
       key: "commerce.checkout_or_payment_form_present",
       label: "Checkout flow detected",
-      primaryEvidenceCategoryId: "collection_surface_entry_points",
+      primaryEvidenceCategoryId: "collection_surface_entry_points_and_handling_context",
       secondaryEvidenceCategoryIds: ["checkout_payment_disclosures"],
       overlayEvidenceCategoryIds: ["subscription_billing_cancellation_fairness"]
     }
@@ -537,7 +537,7 @@ test("registers financial sections, categories, and signals additively", () => {
       key: "commerce.payment_card_input_present",
       label: "Payment card input detected",
       primaryEvidenceCategoryId: "checkout_payment_disclosures",
-      secondaryEvidenceCategoryIds: ["collection_surface_entry_points", "identity_financial_data_collection"],
+      secondaryEvidenceCategoryIds: ["collection_surface_entry_points_and_handling_context", "identity_financial_data_collection"],
       overlayEvidenceCategoryIds: ["subscription_billing_cancellation_fairness"]
     }
   );

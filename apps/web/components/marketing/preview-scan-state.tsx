@@ -70,7 +70,7 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
           title={`Scan: ${scan.hostname}`}
         />
         <p className="max-w-3xl text-sm text-slate-600">
-          {scan.statusMessage} This homepage scan now uses the same live progress card as the signed-in scan experience.
+          {scan.statusMessage} This homepage scan uses the same live progress card as the signed-in scan experience so you can review progress in context.
         </p>
         <FullScanProgressCard
           buildPhaseSummaries={scan.buildPhaseSummaries}
@@ -90,7 +90,7 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
         status={scan.status}
         title={`Scan: ${scan.hostname}`}
       />
-      <p className="text-sm text-slate-600">Refreshing the final scan report…</p>
+      <p className="text-sm text-slate-600">Refreshing the final scan findings…</p>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
+import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { ScanViewActions } from "../../../../components/scans/scan-view-actions";
 import { getRescanAvailability } from "../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../server/auth";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
+import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -50,6 +52,12 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   if (!scanRecord) {
     notFound();
   }
+
+  const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+  await persistReportFindingCount({
+    count: reportFindingCount,
+    scanId: scanRecord.scan.id
+  });
 
   const canRescan = scanRecord.scan.status === "completed" && Boolean(scanRecord.scan.domainId);
   const rescanAvailability = canRescan

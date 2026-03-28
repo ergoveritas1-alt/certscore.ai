@@ -7,21 +7,36 @@ import type {
   NormalizedConcernPolicyPageType,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
-import { getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 import {
   evaluateFinancialJudgeInput,
   getFinancialValidationEvidenceBundle,
   isFinancialValidationFindingId
 } from "./financial-validation-contract";
 import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
+import {
+  evaluateConcreteRuntimeContract,
+  evaluatePolicyBehaviorConflictContract,
+  evaluateStrongEvidenceContract,
+  hasConcretePreconsentArtifact,
+  hasConcreteReplayArtifact,
+  hasConcreteRetargetingArtifact,
+  hasConcreteSensitivePayloadArtifact,
+  hasPreconsentSequenceEvidence,
+  hasStrongRightsFrictionArtifact
+} from "./promotion-evidence-contracts";
+import {
+  hasConcreteSanitizedNetworkEvidence
+} from "./sanitized-network-evidence";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
   "accessibility_risk_score",
   "contrast_failures",
   "form_label_issues",
+  "critical_form_completion_barrier",
   "link_name_issues",
   "keyboard_navigation_issues",
+  "keyboard_only_task_completion_blocked",
   "focus_indicator_issues",
   "landmark_issues",
   "aria_issues",
@@ -169,217 +184,238 @@ function hasBlockedOrInterstitialEvidence(rawEvidence: Record<string, unknown> |
   );
 }
 
-function hasVerifiedPositiveInfrastructureEvidence(
+function hasHumanFacingUrl(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getEvidenceUrlCandidates(rawEvidence).some((value) => /^https?:\/\//i.test(value));
+}
+
+function isReadablePositiveSurfaceSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length < 8 || BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN.test(trimmed)) {
+    return false;
+  }
+
+  const wordCount = trimmed.split(/\s+/).length;
+  const looksLikeBrandOnly =
+    trimmed.length <= 40 &&
+    wordCount <= 4 &&
+    /^[A-Z][A-Za-z&'.-]*(?:\s+[A-Z][A-Za-z&'.-]*)*$/.test(trimmed) &&
+    !/privacy|terms|conditions|cookie|contact|support|help|rights|choices|accessibility/i.test(trimmed);
+  return !looksLikeBrandOnly;
+}
+
+function hasMeaningfulReviewerSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length < 12 || BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN.test(trimmed)) {
+    return false;
+  }
+
+  return !/^(detected|observed|this signal is worth reviewer attention)\b/i.test(trimmed);
+}
+
+function isContactLikeUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return /contact|help|support|feedback|chat|customer-service/i.test(parsed.pathname);
+  } catch {
+    return /contact|help|support|feedback|chat|customer-service/i.test(value);
+  }
+}
+
+function isCookieLikeUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return /cookie|privacy|legal|your-privacy-choices/i.test(parsed.pathname);
+  } catch {
+    return /cookie|privacy|legal|your-privacy-choices/i.test(value);
+  }
+}
+
+function isTermsLikeUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return /terms|conditions|tos/i.test(parsed.pathname);
+  } catch {
+    return /terms|conditions|tos/i.test(value);
+  }
+}
+
+function hasPacketBackedSurfaceEvidence(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const expectedFindingId = concern.suggestedUnifiedFindingId ?? "";
+  return (
+    rawEvidence.familyPacketVerified === true ||
+    rawEvidence.familyPacketFindingId === expectedFindingId ||
+    rawEvidence.familyPacketFamilyId !== undefined
+  );
+}
+
+function getPositiveInfrastructureEvidenceGrade(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
   const fetchQuality = getFetchQuality(rawEvidence);
-  if (!rawEvidence || fetchQuality === "blocked_interstitial" || fetchQuality === "unreachable" || hasBlockedOrInterstitialEvidence(rawEvidence)) {
-    return false;
+  if (!rawEvidence || fetchQuality === "unreachable") {
+    return "weak" as const;
   }
 
+  const blockedOrInterstitialEvidence = hasBlockedOrInterstitialEvidence(rawEvidence);
   const urls = getEvidenceUrlCandidates(rawEvidence);
-  const snippets = getEvidenceTextCandidates(rawEvidence);
-  if (concern.suggestedUnifiedFindingId === "accessibility_support_path_present") {
-    const accessibilityHaystack = `${urls.join(" ")} ${snippets.join(" ")}`.toLowerCase();
-    return (
-      rawEvidence.accessibilityContactMethodPresent === true ||
-      (fetchQuality !== "thin_content" && urls.length > 0 && snippets.length > 0 && /accessibility|accommodation|caption|assistive/i.test(accessibilityHaystack))
-    );
-  }
-
-  if (fetchQuality === "thin_content" || urls.length === 0 || snippets.length === 0) {
-    return false;
-  }
-
+  const snippets = getEvidenceTextCandidates(rawEvidence).filter(isReadablePositiveSurfaceSnippet);
   const haystack = `${urls.join(" ")} ${snippets.join(" ")}`.toLowerCase();
+  const hasPacketBacking = hasPacketBackedSurfaceEvidence(concern, rawEvidence);
+  const humanFacingUrlCount = urls.filter((value) => /^https?:\/\//i.test(value)).length;
+  const verifiedBySnippet = snippets.length > 0 && humanFacingUrlCount > 0;
+
+  if (concern.suggestedUnifiedFindingId === "accessibility_support_path_present") {
+    if (
+      rawEvidence.accessibilityContactMethodPresent === true ||
+      (hasPacketBacking &&
+        humanFacingUrlCount >= 1 &&
+        snippets.some((value) => /accessibility|accommodation|caption|assistive/i.test(value))) ||
+      (!blockedOrInterstitialEvidence &&
+        fetchQuality !== "thin_content" &&
+        verifiedBySnippet &&
+        /accessibility|accommodation|caption|assistive/i.test(haystack))
+    ) {
+      return "verified" as const;
+    }
+
+    return "weak" as const;
+  }
+
+  if (!blockedOrInterstitialEvidence && fetchQuality !== "thin_content" && verifiedBySnippet) {
+    switch (concern.suggestedUnifiedFindingId) {
+      case "contact_support_path_present":
+      case "operator_contact_path_present":
+        return snippets.some((value) => /contact|help|support|feedback|chat|branch|call/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
+      case "cookie_policy_present":
+        return snippets.some((value) => /cookie|privacy choices|privacy settings|manage cookies/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
+      case "privacy_policy_present":
+        return snippets.some((value) => /privacy|security statement|privacy statement|privacy notice|privacy policy/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
+      case "terms_of_service_present":
+        return snippets.some((value) => /terms|conditions|terms of use|terms of sale|arbitration|tos/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
+      case "targeted_advertising_choices_present":
+        return snippets.some((value) => /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
+      case "privacy_rights_path_present":
+        return (
+          (Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0) ||
+          snippets.some((value) =>
+            /privacy rights|rights center|delete request|access request|request access|access to|deletion|data request/i.test(value)
+          )
+        )
+          ? "verified" as const
+          : "weak" as const;
+      default:
+        return snippets.some((value) => value.trim().length >= 8) ? "verified" as const : "weak" as const;
+    }
+  }
 
   switch (concern.suggestedUnifiedFindingId) {
     case "contact_support_path_present":
-    case "operator_contact_path_present":
-      return /contact|help|support|feedback|chat|branch|call/i.test(haystack);
-    case "cookie_policy_present":
-      return /cookie|privacy choices|privacy settings|manage cookies/i.test(haystack);
+    case "operator_contact_path_present": {
+      const corroboratingContactUrls = urls.filter(isContactLikeUrl).length;
+      return hasPacketBacking && corroboratingContactUrls >= 2 ? "corroborated" as const : "weak" as const;
+    }
     case "privacy_policy_present":
-      return /privacy/i.test(haystack);
+      return hasPacketBacking &&
+        snippets.some((value) => /privacy|security statement|privacy statement|privacy notice|privacy policy/i.test(value)) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
     case "terms_of_service_present":
-      return /terms|conditions|tos/i.test(haystack);
+      return hasPacketBacking &&
+        snippets.some((value) => /terms|conditions|terms of use|terms of sale|arbitration/i.test(value)) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
+    case "cookie_policy_present": {
+      return hasPacketBacking &&
+        snippets.some((value) => /cookie|privacy choices|privacy settings|manage cookies/i.test(value)) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
+    }
     case "accessibility_support_path_present":
-      return /accessibility|accommodation|caption|assistive/i.test(haystack);
-    case "targeted_advertising_choices_present":
-      return /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(haystack);
+      return hasPacketBacking &&
+        humanFacingUrlCount >= 1 &&
+        snippets.some((value) => /accessibility|accommodation|caption|assistive/i.test(value))
+        ? "corroborated" as const
+        : "weak" as const;
     case "privacy_rights_path_present":
-      return (
-        Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0
-      ) || /privacy rights|rights center|delete request|access request|request access|access to|deletion|data request/i.test(haystack);
+      return hasPacketBacking &&
+        ((Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0) ||
+          snippets.some((value) => /privacy rights|rights center|delete request|access request|data request/i.test(value))) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
+    case "targeted_advertising_choices_present":
+      return hasPacketBacking &&
+        snippets.some((value) => /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(value)) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
+    case "privacy_contact_path_present":
+    case "gpc_disclosure_present":
+    case "tracking_technologies_disclosure_present":
+    case "third_party_advertising_disclosure_present":
+    case "targeted_advertising_disclosure_present":
+    case "behavioral_analytics_disclosure_present":
+    case "children_privacy_disclosure_present":
+      return hasPacketBacking &&
+        snippets.some(hasMeaningfulReviewerSnippet) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
     default:
-      return snippets.some((value) => value.trim().length >= 8);
+      return "weak" as const;
   }
 }
 
-function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  const vendors = getStringArrayValues(rawEvidence, [
-    "preconsent_tracker_vendors",
-    "relatedVendors",
-    "runtimeVendors",
-    "runtime_vendors"
-  ]);
-  const urls = getStringArrayValues(rawEvidence, [
-    "preconsent_tracker_evidence_urls",
-    "requestUrls",
-    "runtimeEvidenceUrls"
-  ]).filter((value) => /^https?:\/\//i.test(value));
-
-  return vendors.length > 0 || urls.length > 0;
-}
-
-function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  const hasExplicitTimingSignal =
-    rawEvidence.preconsentTrackingDetected === true ||
-    rawEvidence.preconsent_tracking_detected === true ||
-    rawEvidence.trackingBeforeConsentDetected === true ||
-    rawEvidence.tracking_before_consent_detected === true;
-  const hasConsentTimingContext =
-    getBooleanEvidence(rawEvidence, [
-      "consentSurfaceObserved",
-      "consent_surface_observed",
-      "consentBannerPresent",
-      "cookieBannerPresent"
-    ]) === true &&
-    getBooleanEvidence(rawEvidence, [
-      "consentActionableChoiceObserved",
-      "consent_actionable_choice_observed",
-      "consentRejectInteractionSucceeded",
-      "consentAcceptInteractionSucceeded"
-    ]) === true;
-  const supportingSignals = getStringArrayValues(rawEvidence, ["supportingSignals"]);
-
-  return (
-    hasExplicitTimingSignal ||
-    hasConsentTimingContext ||
-    supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value))
-  );
+function hasVerifiedPositiveInfrastructureEvidence(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  return getPositiveInfrastructureEvidenceGrade(concern, rawEvidence) === "verified";
 }
 
 export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  const optInClicks =
-    typeof evidence.consentOptInClicks === "number"
-      ? evidence.consentOptInClicks
-      : typeof evidence.consent_accept_click_count === "number"
-        ? evidence.consent_accept_click_count
-        : null;
-  const optOutClicks =
-    typeof evidence.consentOptOutClicks === "number"
-      ? evidence.consentOptOutClicks
-      : typeof evidence.consent_reject_click_count === "number"
-        ? evidence.consent_reject_click_count
-        : null;
-  const frictionDelta = typeof evidence.consentFrictionDelta === "number" ? evidence.consentFrictionDelta : null;
-  const blockerType = typeof evidence.consentBlockerType === "string" ? evidence.consentBlockerType : null;
-  const blockerUrl = typeof evidence.consentBlockerUrl === "string" ? evidence.consentBlockerUrl : null;
-  const blockerSnippet =
-    typeof evidence.consentBlockerTextSnippet === "string" ? evidence.consentBlockerTextSnippet.trim() : null;
-  const evidencePassCount =
-    typeof evidence.consentEvidencePassCount === "number" ? evidence.consentEvidencePassCount : null;
-  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
-    ? evidence.policyRightsSignals
-    : Array.isArray(evidence.policy_rights_signals)
-      ? evidence.policy_rights_signals
-      : [];
-
-  const redirectGate = evidence.consentRedirectOrAuthRequired === true;
-  const blockerPresent = blockerType !== null || blockerUrl !== null;
-  const repeatedDeadEnd =
-    typeof frictionDelta === "number" &&
-    frictionDelta >= 2 &&
-    typeof optOutClicks === "number" &&
-    optOutClicks >= 2;
-  const blockerBackedByEvidence =
-    blockerPresent &&
-    typeof evidencePassCount === "number" &&
-    evidencePassCount >= 2 &&
-    blockerSnippet !== null &&
-    blockerSnippet.length >= 40;
-  const redirectBackedByEvidence =
-    redirectGate &&
-    typeof evidencePassCount === "number" &&
-    evidencePassCount >= 2 &&
-    (blockerPresent || (typeof blockerSnippet === "string" && blockerSnippet.length >= 40));
-  const asymmetricClicksWithoutRightsPath =
-    typeof optInClicks === "number" &&
-    typeof optOutClicks === "number" &&
-    optOutClicks > optInClicks &&
-    policyRightsSignals.length === 0;
-
-  return (
-    redirectBackedByEvidence ||
-    blockerBackedByEvidence ||
-    repeatedDeadEnd ||
-    asymmetricClicksWithoutRightsPath
-  );
+  return hasStrongRightsFrictionArtifact(evidence);
 }
 
 export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  const directViolations = Array.isArray(evidence.sensitivePayloadViolations)
-    ? evidence.sensitivePayloadViolations
-    : Array.isArray(evidence.sensitive_payload_violations)
-      ? evidence.sensitive_payload_violations
-      : [];
-
-  return directViolations.some(
-    (entry) =>
-      Boolean(entry) &&
-      typeof entry === "object" &&
-      typeof (entry as { requestUrl?: unknown }).requestUrl === "string" &&
-      ((entry as { requestUrl?: string }).requestUrl?.length ?? 0) > 0
-  );
+  return hasConcreteSensitivePayloadArtifact(evidence);
 }
 
 export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  return (
-    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
-    hasTruthyArrayValue(evidence.session_replay_runtime_artifacts) ||
-    hasTruthyArrayValue(evidence.runtimeEvidence) ||
-    evidence.sessionReplayVendorArtifactPresent === true ||
-    evidence.session_replay_vendor_artifact_present === true
-  );
+  return hasConcreteReplayArtifact(evidence);
 }
 
 export function hasConcreteRetargetingEvidence(evidence: Record<string, unknown> | null | undefined) {
-  if (!evidence) {
-    return false;
-  }
-
-  return (
-    hasTruthyArrayValue(evidence.runtimeEvidence) ||
-    hasTruthyArrayValue(evidence.runtimeEvidenceArtifacts) ||
-    hasTruthyArrayValue(evidence.runtime_evidence_artifacts) ||
-    hasTruthyArrayValue(evidence.retargetingEvidenceUrls) ||
-    hasTruthyArrayValue(evidence.retargeting_evidence_urls) ||
-    hasTruthyArrayValue(evidence.runtimeEvidenceUrls) ||
-    evidence.retargetingPixelArtifactPresent === true ||
-    evidence.retargeting_pixel_artifact_present === true
-  );
+  return hasConcreteRetargetingArtifact(evidence);
 }
 
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
@@ -473,7 +509,21 @@ function isHighSensitivityConcern(
     .join(" ")
     .toLowerCase();
 
-  return /high_sensitivity_data_collection/.test(haystack);
+  return /high_sensitivity_data_collection|session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
+    haystack
+  );
+}
+
+function isSensitiveReplayConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "session_replay_on_sensitive_input_surface";
+}
+
+function isSensitiveThirdPartyTrackingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present";
 }
 
 function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">) {
@@ -494,7 +544,17 @@ function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | 
   return /dsar|privacy-rights|missing_dsar|no dsar mechanism/.test(haystack);
 }
 
-function isPositiveInfrastructureConcern(
+function isStructuredPolicyDisclosureGapConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return [
+    "data_categories_disclosure_missing",
+    "third_party_recipient_disclosure_missing",
+    "purpose_of_use_disclosure_missing"
+  ].includes(concern.suggestedUnifiedFindingId ?? "");
+}
+
+export function isPositiveInfrastructureConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return [
@@ -671,30 +731,69 @@ function hasConcreteConsentSurfaceAbsenceEvidence(rawEvidence: Record<string, un
 }
 
 function hasMeaningfulWeakCookieAttributeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence?.cookieAttributeSummary || typeof rawEvidence.cookieAttributeSummary !== "object") {
+  const summary =
+    rawEvidence?.cookieAttributeSummary && typeof rawEvidence.cookieAttributeSummary === "object"
+      ? (rawEvidence.cookieAttributeSummary as Record<string, unknown>)
+      : rawEvidence ?? null;
+  if (!summary) {
     return false;
   }
 
-  const summary = rawEvidence.cookieAttributeSummary as Record<string, unknown>;
-  const missingSecureCount = typeof summary.missingSecureCount === "number" ? summary.missingSecureCount : 0;
-  const weakSameSiteCount = typeof summary.weakSameSiteCount === "number" ? summary.weakSameSiteCount : 0;
+  const totalCookiesAnalyzed = getNumberEvidence(summary, ["totalCookiesAnalyzed", "total_cookies_analyzed"]) ?? 0;
+  const missingSecureCount = getNumberEvidence(summary, ["missingSecureCount", "missing_secure_count"]) ?? 0;
+  const missingHttpOnlyCount = getNumberEvidence(summary, ["missingHttpOnlyCount", "missing_http_only_count"]) ?? 0;
+  const weakSameSiteCount = getNumberEvidence(summary, ["weakSameSiteCount", "weak_same_site_count"]) ?? 0;
   const thirdPartyWeakCount =
-    typeof summary.thirdPartyWeakAttributeCount === "number" ? summary.thirdPartyWeakAttributeCount : 0;
+    getNumberEvidence(summary, ["thirdPartyWeakAttributeCount", "third_party_weak_attribute_count"]) ?? 0;
 
-  const missingSecureNames = Array.isArray(summary.missingSecureCookieNames) ? summary.missingSecureCookieNames : [];
-  const weakSameSiteNames = Array.isArray(summary.weakSameSiteCookieNames) ? summary.weakSameSiteCookieNames : [];
-  const thirdPartyWeakNames = Array.isArray(summary.thirdPartyWeakAttributeCookieNames)
-    ? summary.thirdPartyWeakAttributeCookieNames
-    : [];
+  const missingSecureNames = getStringArrayValues(summary, ["missingSecureCookieNames", "missing_secure_cookie_names"]);
+  const weakSameSiteNames = getStringArrayValues(summary, ["weakSameSiteCookieNames", "weak_same_site_cookie_names"]);
+  const thirdPartyWeakNames = getStringArrayValues(summary, [
+    "thirdPartyWeakAttributeCookieNames",
+    "third_party_weak_attribute_cookie_names"
+  ]);
 
+  if (thirdPartyWeakCount >= 1 || thirdPartyWeakNames.length >= 1 || weakSameSiteCount >= 1 || weakSameSiteNames.length >= 1) {
+    return true;
+  }
+
+  if (missingSecureCount >= 2 || missingSecureNames.length >= 2) {
+    return true;
+  }
+
+  return totalCookiesAnalyzed >= 3 && (missingSecureCount >= 1 || missingHttpOnlyCount >= 3);
+}
+
+function hasMeaningfulGpcIgnoredEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const trackerCountDelta = getNumberEvidence(rawEvidence, ["trackerCountDelta", "tracker_count_delta"]) ?? 0;
+  const thirdPartyCookieCountDelta =
+    getNumberEvidence(rawEvidence, ["thirdPartyCookieCountDelta", "third_party_cookie_count_delta"]) ?? 0;
+
+  return trackerCountDelta !== 0 || thirdPartyCookieCountDelta !== 0;
+}
+
+function hasSubstantivePageOrSnippetEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   return (
-    missingSecureCount > 0 ||
-    weakSameSiteCount > 0 ||
-    thirdPartyWeakCount > 0 ||
-    missingSecureNames.length > 0 ||
-    weakSameSiteNames.length > 0 ||
-    thirdPartyWeakNames.length > 0
+    getEvidenceUrlCandidates(rawEvidence).length > 0 ||
+    getEvidenceTextCandidates(rawEvidence).some(hasMeaningfulReviewerSnippet)
   );
+}
+
+function isCommercialEvidenceConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return [
+    "discount_claim_present",
+    "original_price_comparison_present",
+    "limited_time_pressure",
+    "restrictive_termination_or_suspension_terms",
+    "store_credit_only_remedy",
+    "cancellation_method_disclosure_missing"
+  ].includes(concern.suggestedUnifiedFindingId ?? "");
 }
 
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -832,61 +931,41 @@ function getPolicyExtractionStatus(rawEvidence: Record<string, unknown> | null |
       : null;
 }
 
+function getPolicySemanticConfidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getNumberEvidence(rawEvidence, ["policySemanticConfidence", "policy_semantic_confidence"]);
+}
+
+function getPolicyCoverageRatio(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getNumberEvidence(rawEvidence, ["policyCoverageRatio", "policy_coverage_ratio"]);
+}
+
+function getPolicySnippetCount(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getNumberEvidence(rawEvidence, ["policySnippetCount", "policy_snippet_count"]);
+}
+
+function hasStrongStructuredPolicyDisclosureGapEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  const extractionStatus = getPolicyExtractionStatus(rawEvidence);
+  const semanticConfidence = getPolicySemanticConfidence(rawEvidence);
+  const coverageRatio = getPolicyCoverageRatio(rawEvidence);
+  const snippetCount = getPolicySnippetCount(rawEvidence);
+
+  return (
+    extractionStatus === "fetched" &&
+    typeof semanticConfidence === "number" &&
+    semanticConfidence >= 0.6 &&
+    ((typeof coverageRatio === "number" && coverageRatio >= 0.35) ||
+      (typeof snippetCount === "number" && snippetCount >= 1))
+  );
+}
+
 function getPolicyRightsSignals(rawEvidence: Record<string, unknown> | null | undefined) {
   return Array.isArray(rawEvidence?.policyRightsSignals)
     ? rawEvidence.policyRightsSignals
     : Array.isArray(rawEvidence?.policy_rights_signals)
       ? rawEvidence.policy_rights_signals
       : [];
-}
-
-function hasBehaviorSideEvidence(
-  evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
-  rawEvidence: Record<string, unknown> | null | undefined
-) {
-  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
-  return (
-    evidenceStrengthFlags.includes("direct_runtime") ||
-    evidenceStrengthFlags.includes("concrete_payload") ||
-    hasTruthyArrayValue(rawEvidence?.runtimeEvidence) ||
-    hasTruthyArrayValue(rawEvidence?.runtimeEvidenceArtifacts) ||
-    hasTruthyArrayValue(rawEvidence?.runtime_evidence_artifacts) ||
-    (contradictionEvidence?.runtimeEvidenceArtifacts.length ?? 0) > 0
-  );
-}
-
-function hasPolicySideEvidence(
-  evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
-  rawEvidence: Record<string, unknown> | null | undefined
-) {
-  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
-  return (
-    evidenceStrengthFlags.includes("policy_text") ||
-    typeof rawEvidence?.claim === "string" ||
-    typeof rawEvidence?.policySummary === "string" ||
-    typeof rawEvidence?.policySummaryShort === "string" ||
-    typeof rawEvidence?.policy_summary_short === "string" ||
-    Boolean(contradictionEvidence?.policySnippet) ||
-    Boolean(contradictionEvidence?.claim)
-  );
-}
-
-function hasContradictionMappingEvidence(
-  evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[],
-  rawEvidence: Record<string, unknown> | null | undefined
-) {
-  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
-  return (
-    evidenceStrengthFlags.includes("structured_validation") ||
-    typeof rawEvidence?.claim === "string" ||
-    hasTruthyArrayValue(rawEvidence?.supportingSignals) ||
-    (contradictionEvidence?.supportingSignals.length ?? 0) > 0
-  );
-}
-
-function hasExplicitContradictionBasisEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
-  return Boolean(contradictionEvidence?.contradictionBasis);
 }
 
 export function concernRequiresPageAttribution(
@@ -980,24 +1059,24 @@ export function deriveConcernPolicy(input: {
   }
 
   if (concernRequiresDirectRuntime(input.concern)) {
-    if (!hasDirectRuntime) {
-      negativeEvidenceFlags.add("no_direct_runtime_replay_artifact_observed");
-    }
+    const contractDecision = evaluateConcreteRuntimeContract({
+      hasConcreteArtifact: hasConcreteSessionReplayEvidence(input.rawEvidence) || hasDirectRuntime,
+      missingFlag: "no_direct_runtime_replay_artifact_observed",
+      originType: input.concern.originType,
+      rawEvidence: input.rawEvidence
+    });
 
-    if (input.concern.originType === "policy_review_queue") {
+    if (
+      input.concern.originType === "policy_review_queue" ||
+      (contractDecision && contractDecision.promotionEligibility !== "eligible")
+    ) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: [...negativeEvidenceFlags],
-        promotionEligibility: "internal_only"
-      };
-    }
-
-    if (!hasDirectRuntime) {
-      return {
-        allowedNarrativeTier: "weak",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        negativeEvidenceFlags: [
+          ...negativeEvidenceFlags,
+          ...(contractDecision?.negativeEvidenceFlags ?? (hasDirectRuntime ? [] : ["no_direct_runtime_replay_artifact_observed"]))
+        ] as NormalizedConcernNegativeEvidenceFlag[],
         promotionEligibility: "internal_only"
       };
     }
@@ -1005,28 +1084,76 @@ export function deriveConcernPolicy(input: {
 
   if (
     isRightsFrictionConcern(input.concern) &&
-    input.concern.originType !== "validation_rule" &&
-    !hasStrongRightsFrictionEvidence(input.rawEvidence)
+    input.concern.originType !== "validation_rule"
   ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "suppress",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "blocked"
-    };
+    const contractDecision = evaluateStrongEvidenceContract({
+      blockedFlag: "possible_policy_runtime_mismatch",
+      meetsThreshold: hasStrongRightsFrictionEvidence(input.rawEvidence),
+      missingFlag: "runtime_tracking_review_incomplete",
+      originType: input.concern.originType
+    });
+
+    if (contractDecision) {
+      return {
+        ...contractDecision,
+        negativeEvidenceFlags: [...negativeEvidenceFlags, ...contractDecision.negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[]
+      };
+    }
   }
 
   if (
     isHighSensitivityConcern(input.concern) &&
-    input.concern.originType !== "validation_rule" &&
-    !hasSensitivePayloadEvidence(input.rawEvidence)
+    input.concern.originType !== "validation_rule"
+  ) {
+    const contractDecision = evaluateStrongEvidenceContract({
+      blockedFlag: "runtime_tracking_review_incomplete",
+      meetsThreshold: hasSensitivePayloadEvidence(input.rawEvidence),
+      missingFlag: "missing_specific_runtime_anchor",
+      originType: input.concern.originType
+    });
+
+    if (contractDecision) {
+      return {
+        ...contractDecision,
+        negativeEvidenceFlags: [...negativeEvidenceFlags, ...contractDecision.negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[]
+      };
+    }
+  }
+
+  if (
+    isSensitiveReplayConcern(input.concern) &&
+    !hasConcreteSensitivePayloadArtifact(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "suppress",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "blocked"
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_concrete_sensitive_payload"],
+      promotionEligibility: "internal_only"
     };
+  }
+
+  if (isSensitiveThirdPartyTrackingConcern(input.concern)) {
+    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_concrete_sensitive_payload"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    if (
+      !hasConcreteRetargetingArtifact(input.rawEvidence) &&
+      !hasConcreteReplayArtifact(input.rawEvidence) &&
+      !hasConcreteSanitizedNetworkEvidence(input.rawEvidence)
+    ) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_third_party_tracking_artifact"],
+        promotionEligibility: "internal_only"
+      };
+    }
   }
 
   if (isDsarConcern(input.concern)) {
@@ -1071,16 +1198,51 @@ export function deriveConcernPolicy(input: {
     }
   }
 
-  if (isRetargetingConcern(input.concern)) {
-    const hasConcreteRetargetingRuntime = hasConcreteRetargetingEvidence(input.rawEvidence);
+  if (isStructuredPolicyDisclosureGapConcern(input.concern)) {
+    const extractionStatus = getPolicyExtractionStatus(input.rawEvidence);
 
-    if (!hasConcreteRetargetingRuntime) {
-      negativeEvidenceFlags.add("no_direct_runtime_retargeting_artifact_observed");
+    if (extractionStatus !== "fetched") {
+      if (extractionStatus !== null) {
+        negativeEvidenceFlags.add("policy_target_parsing_incomplete");
+      }
+
       return {
         allowedNarrativeTier: "weak",
-        externalSurfacingEligibility: "eligible",
+        externalSurfacingEligibility: "suppress",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
-        promotionEligibility: "eligible"
+        promotionEligibility: "blocked"
+      };
+    }
+
+    if (!hasStrongStructuredPolicyDisclosureGapEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isRetargetingConcern(input.concern)) {
+    const contractDecision = evaluateConcreteRuntimeContract({
+      hasConcreteArtifact: hasConcreteRetargetingEvidence(input.rawEvidence),
+      missingFlag: "no_direct_runtime_retargeting_artifact_observed",
+      originType: input.concern.originType,
+      rawEvidence: input.rawEvidence
+    });
+
+    if (contractDecision && contractDecision.promotionEligibility !== "eligible") {
+      return {
+        ...contractDecision,
+        negativeEvidenceFlags: [...negativeEvidenceFlags, ...contractDecision.negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[]
       };
     }
 
@@ -1093,26 +1255,37 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isContradictionConcern(input.concern)) {
-    const hasBehaviorEvidence = hasBehaviorSideEvidence(input.evidenceStrengthFlags, input.rawEvidence);
-    const hasPolicyEvidence = hasPolicySideEvidence(input.evidenceStrengthFlags, input.rawEvidence);
-    const hasMappingEvidence = hasContradictionMappingEvidence(input.evidenceStrengthFlags, input.rawEvidence);
-    const requiresExplicitBasis = input.concern.suggestedUnifiedFindingId === "policy_behavior_conflict";
-    const hasExplicitBasis = !requiresExplicitBasis || hasExplicitContradictionBasisEvidence(input.rawEvidence);
-
-    if (!hasBehaviorEvidence) {
-      negativeEvidenceFlags.add("missing_behavior_side_evidence");
+    if (input.concern.suggestedUnifiedFindingId === "policy_behavior_conflict") {
+      const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
+      if (contractDecision) {
+        return {
+          ...contractDecision,
+          negativeEvidenceFlags: [...negativeEvidenceFlags, ...contractDecision.negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[]
+        };
+      }
     }
+
+    const hasPolicyEvidence =
+      input.evidenceStrengthFlags.includes("policy_text") ||
+      typeof input.rawEvidence?.claim === "string" ||
+      typeof input.rawEvidence?.policySummary === "string" ||
+      typeof input.rawEvidence?.policySummaryShort === "string" ||
+      typeof input.rawEvidence?.policy_summary_short === "string";
+    const hasBehaviorEvidence =
+      input.evidenceStrengthFlags.includes("direct_runtime") ||
+      input.evidenceStrengthFlags.includes("concrete_payload") ||
+      hasTruthyArrayValue(input.rawEvidence?.runtimeEvidence) ||
+      hasTruthyArrayValue(input.rawEvidence?.runtimeEvidenceArtifacts) ||
+      hasTruthyArrayValue(input.rawEvidence?.runtime_evidence_artifacts);
+
     if (!hasPolicyEvidence) {
       negativeEvidenceFlags.add("missing_policy_side_evidence");
     }
-    if (!hasMappingEvidence) {
-      negativeEvidenceFlags.add("missing_contradiction_mapping");
-    }
-    if (!hasExplicitBasis) {
-      negativeEvidenceFlags.add("missing_explicit_contradiction_basis");
+    if (!hasBehaviorEvidence) {
+      negativeEvidenceFlags.add("missing_behavior_side_evidence");
     }
 
-    if (!hasBehaviorEvidence || !hasPolicyEvidence || !hasMappingEvidence || !hasExplicitBasis) {
+    if (!hasBehaviorEvidence || !hasPolicyEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -1134,6 +1307,45 @@ export function deriveConcernPolicy(input: {
   if (
     isWeakCookieSecurityAttributesConcern(input.concern) &&
     !hasMeaningfulWeakCookieAttributeEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    input.concern.suggestedUnifiedFindingId === "gpc_signal_not_honored" &&
+    !hasMeaningfulGpcIgnoredEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isCommercialEvidenceConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasDirectRuntime &&
+    !hasPageAttribution &&
+    !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isDomainLevelSensitiveContextFinding(input.concern.suggestedUnifiedFindingId ?? "") &&
+    !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
@@ -1268,7 +1480,9 @@ export function deriveConcernPolicy(input: {
   if (isPositiveInfrastructureConcern(input.concern)) {
     const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);
     const blockedOrInterstitialEvidence = hasBlockedOrInterstitialEvidence(input.rawEvidence);
-    const hasVerifiedContentEvidence = hasVerifiedPositiveInfrastructureEvidence(input.concern, input.rawEvidence);
+    const positiveInfrastructureEvidenceGrade = getPositiveInfrastructureEvidenceGrade(input.concern, input.rawEvidence);
+    const hasVerifiedContentEvidence = positiveInfrastructureEvidenceGrade === "verified";
+    const hasCorroboratedSurfaceEvidence = positiveInfrastructureEvidenceGrade === "corroborated";
 
     if (input.concern.originType === "policy_enrichment" && policyPageType === "non_policy") {
       return {
@@ -1279,14 +1493,14 @@ export function deriveConcernPolicy(input: {
       };
     }
 
-    if (blockedOrInterstitialEvidence) {
+    if (blockedOrInterstitialEvidence && !hasCorroboratedSurfaceEvidence) {
       negativeEvidenceFlags.add("blocked_or_interstitial_evidence_observed");
     }
-    if (!hasVerifiedContentEvidence) {
+    if (!hasVerifiedContentEvidence && !hasCorroboratedSurfaceEvidence) {
       negativeEvidenceFlags.add("positive_surface_content_unverified");
     }
 
-    if (blockedOrInterstitialEvidence || !hasVerifiedContentEvidence) {
+    if (!hasVerifiedContentEvidence && !hasCorroboratedSurfaceEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -1296,7 +1510,14 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: "moderate",
+      allowedNarrativeTier:
+        hasVerifiedContentEvidence ||
+        (hasCorroboratedSurfaceEvidence &&
+          ["contact_support_path_present", "operator_contact_path_present", "accessibility_support_path_present"].includes(
+            input.concern.suggestedUnifiedFindingId ?? ""
+          ))
+          ? "moderate"
+          : "weak",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

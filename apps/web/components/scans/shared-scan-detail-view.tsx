@@ -41,6 +41,15 @@ import {
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
+  getSurfacingDecisionStateBadgeClasses,
+  getSurfacingDecisionStateLabel,
+  getSurfacingLaneBadgeClasses,
+  getSurfacingLaneLabel,
+  isConfidenceCoverageSurfacing,
+  isMainNarrativeSurfacing,
+  isSupportingContextSurfacing
+} from "../../lib/scans/report-surfacing-presentation";
+import {
   getPolicyPositiveSignalSpec,
   isPolicyPositiveSignalKey,
   isPrivacyRightsSignalKey,
@@ -1412,11 +1421,41 @@ function buildSectionReviewIssues(input: {
           contradictionEvidence: {
             claim: row.claim,
             contradictionBasis: row.status,
+            conflictBridge: {
+              conflictType: null,
+              reasoning: row.runtimeSummary,
+              supportsPromotion: false
+            },
+            evidenceSufficiency: {
+              conflictBridgePresent: false,
+              policyAnchorPresent: Boolean(row.policySnippet && row.policyPageUrl),
+              promotionEligible: false,
+              reviewStatus: "insufficient_evidence_for_policy_behavior_conflict",
+              runtimeAnchorPresent: row.evidence.length > 0
+            },
             explicitPolicySnippet: row.policySnippet ?? null,
+            policyAnchor: {
+              claimType: null,
+              confidence: null,
+              extractionStatus: null,
+              normalizedClaim: row.claim,
+              snippet: row.policySnippet ?? row.claim,
+              sourceUrl: row.policyPageUrl
+            },
             policySnippet: row.policySnippet ?? row.claim,
             policySourceUrl: row.policyPageUrl,
             policySummaryShort: row.policySummary,
             relatedVendors: row.relatedVendors,
+            runtimeAnchor: {
+              confidence: null,
+              cookies: [],
+              observationType: null,
+              phase: "unknown",
+              requests: [],
+              sourceUrl: row.policyPageUrl,
+              storageArtifacts: [],
+              vendors: row.runtimeVendors
+            },
             runtimeEvidenceArtifacts: row.evidence,
             runtimeSummary: row.runtimeSummary,
             runtimeVendors: row.runtimeVendors,
@@ -2052,8 +2091,33 @@ function summarizeObservedIssueEvidence(evidence: string[] | undefined, severity
   return evidence.length === 1 ? "Linked evidence available" : `${evidence.length} linked evidence items`;
 }
 
-function getFindingToneClasses(severity: UnifiedFindingDisplayPacket["severity"]) {
-  switch (severity) {
+function isPositiveSurfaceFinding(finding: UnifiedFindingDisplayPacket) {
+  return new Set([
+    "accessibility_support_path_present",
+    "affiliate_disclosure_present",
+    "arbitration_clause_present",
+    "behavioral_analytics_disclosure_present",
+    "children_privacy_disclosure_present",
+    "contact_support_path_present",
+    "cookie_policy_present",
+    "gpc_disclosure_present",
+    "privacy_contact_path_present",
+    "privacy_policy_present",
+    "privacy_rights_path_present",
+    "targeted_advertising_choices_present",
+    "targeted_advertising_disclosure_present",
+    "terms_of_service_present",
+    "third_party_advertising_disclosure_present",
+    "tracking_technologies_disclosure_present"
+  ]).has(finding.unifiedFindingId);
+}
+
+function getFindingToneClasses(finding: UnifiedFindingDisplayPacket) {
+  if (isPositiveSurfaceFinding(finding)) {
+    return "border-emerald-200 bg-emerald-50";
+  }
+
+  switch (finding.severity) {
     case "high":
       return "border-rose-200 bg-rose-50";
     case "medium":
@@ -2063,8 +2127,12 @@ function getFindingToneClasses(severity: UnifiedFindingDisplayPacket["severity"]
   }
 }
 
-function getFindingBadgeClasses(severity: UnifiedFindingDisplayPacket["severity"]) {
-  switch (severity) {
+function getFindingBadgeClasses(finding: UnifiedFindingDisplayPacket) {
+  if (isPositiveSurfaceFinding(finding)) {
+    return "bg-emerald-100 text-emerald-900";
+  }
+
+  switch (finding.severity) {
     case "high":
       return "bg-rose-100 text-rose-900";
     case "medium":
@@ -2156,9 +2224,10 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const confidenceRationale = input.finding.presentationDecision.confidenceRationale;
   const collapsedSummary = getCollapsedFindingSummary(input.finding);
   const findingJsonPayload = JSON.stringify(input.finding, null, 2);
+  const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
-    <details className={`group/finding rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding.severity)}`}>
+    <details className={`group/finding rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding)}`}>
       <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/finding:rotate-90">
           <DisclosureChevron />
@@ -2166,12 +2235,21 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
           {input.finding.presentation.findingName}
         </p>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
+          {positiveSurfaceFinding ? "Positive surface" : input.finding.severity}
+        </span>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getPresentationStatusBadgeClasses(input.finding.presentationDecision.status)}`}>
           {input.finding.presentationDecision.status === "surface"
             ? "Surface"
             : input.finding.presentationDecision.status === "audit_only"
               ? "Audit only"
               : "Suppressed"}
+        </span>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingLaneBadgeClasses(input.finding.surfacingDecision.reportLane)}`}>
+          {getSurfacingLaneLabel(input.finding.surfacingDecision.reportLane)}
+        </span>
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingDecisionStateBadgeClasses(input.finding.surfacingDecision.decisionState)}`}>
+          {getSurfacingDecisionStateLabel(input.finding.surfacingDecision.decisionState)}
         </span>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getVerificationBadgeClasses(input.finding.presentationDecision.verificationState)}`}>
           {input.finding.presentationDecision.verificationLabel}
@@ -2189,7 +2267,9 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
       <div className="mt-4 grid gap-4 md:grid-cols-[1.1fr_1.5fr_1.8fr]">
         <div className="min-w-0 space-y-2">
           <div>
-            <p className="mt-1 text-sm text-slate-700">{input.finding.observedValue ?? `${input.finding.severity} severity`}</p>
+            <p className="mt-1 text-sm text-slate-700">
+              {input.finding.observedValue ?? (positiveSurfaceFinding ? "Positive surface detected" : `${input.finding.severity} severity`)}
+            </p>
             {pageAttribution ? <p className="mt-1 text-xs text-slate-500">{pageAttribution}</p> : null}
           </div>
           {input.finding.presentation.confidenceScore ? (
@@ -2230,6 +2310,31 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <div className="mt-2 space-y-2 text-xs text-slate-500">
           <p>{evidenceSummary}</p>
           <p>{confidenceRationale}</p>
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Surfacing Decision</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingLaneBadgeClasses(input.finding.surfacingDecision.reportLane)}`}>
+                {getSurfacingLaneLabel(input.finding.surfacingDecision.reportLane)}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingDecisionStateBadgeClasses(input.finding.surfacingDecision.decisionState)}`}>
+                {getSurfacingDecisionStateLabel(input.finding.surfacingDecision.decisionState)}
+              </span>
+              {input.finding.surfacingDecision.supportTargetId ? (
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
+                  supports {input.finding.surfacingDecision.supportTargetId}
+                </span>
+              ) : null}
+              {input.finding.surfacingDecision.supports.length > 0 ? (
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
+                  anchors {input.finding.surfacingDecision.supports.length}
+                </span>
+              ) : null}
+            </div>
+            <p>{input.finding.surfacingDecision.decisionReasons[0] ?? "No surfacing rationale retained."}</p>
+            <p className="font-mono text-[11px] text-slate-500">
+              {input.finding.surfacingDecision.appliedRules.join(", ")}
+            </p>
+          </div>
           {input.finding.presentationDecision.downgradeReasons.length > 0 ? (
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why It Was Limited</p>
@@ -2312,10 +2417,16 @@ function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
         themes.add("accessibility and task completion");
         break;
       case "commercial":
-        themes.add("commercial transparency");
+        themes.add("commercial transparency and pressure tactics");
         break;
       case "sensitive_data":
         themes.add("sensitive-data handling");
+        break;
+      case "financial_promotion":
+        themes.add("financial promotions and disclosure risk");
+        break;
+      case "context":
+        themes.add("high-risk market context");
         break;
       default:
         break;
@@ -2323,6 +2434,22 @@ function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
   }
 
   return [...themes];
+}
+
+export function deriveExecutiveSummaryThemeNarrative(themes: string[]) {
+  if (themes.length === 0) {
+    return "The surfaced findings do not yet point to one dominant risk pattern.";
+  }
+
+  if (themes.length === 1) {
+    return `The strongest pattern in this scan involves ${themes[0]}.`;
+  }
+
+  if (themes.length === 2) {
+    return `The strongest patterns in this scan involve ${themes[0]} and ${themes[1]}.`;
+  }
+
+  return `The strongest patterns in this scan involve ${themes[0]}, ${themes[1]}, and ${themes[2]}.`;
 }
 
 function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
@@ -2351,6 +2478,12 @@ function deriveThemeCounts(findings: UnifiedFindingDisplayPacket[]) {
         break;
       case "sensitive_data":
         theme = "Sensitive-data handling";
+        break;
+      case "financial_promotion":
+        theme = "Financial promotions";
+        break;
+      case "context":
+        theme = "High-risk context";
         break;
       default:
         theme = null;
@@ -2687,6 +2820,14 @@ function deriveLoggedNoResultsReason(scanEvents: ScanEventSummaryRecord[]) {
 }
 
 function deriveUnverifiedHomepageReason(snapshot: Record<string, unknown>, scanEvents: ScanEventSummaryRecord[] = []) {
+  const canonicalStopReasonDetail =
+    typeof snapshot.stop_reason_detail === "string" && snapshot.stop_reason_detail.trim().length > 0
+      ? snapshot.stop_reason_detail.trim()
+      : null;
+  if (canonicalStopReasonDetail) {
+    return `Reason: ${canonicalStopReasonDetail}`;
+  }
+
   const loggedReason = deriveLoggedNoResultsReason(scanEvents);
   if (loggedReason) {
     return loggedReason;
@@ -2853,12 +2994,13 @@ function AgencyAdvisorySummary(input: {
   snapshot: Record<string, unknown>;
   statusCallout: CanonicalTaxonomyReviewProps["executiveSummary"]["statusCallout"];
 }) {
-  const highPriorityCount = input.findings.filter((finding) => finding.severity === "high").length;
-  const mediumPriorityCount = input.findings.filter((finding) => finding.severity === "medium").length;
-  const lowPriorityCount = input.findings.filter((finding) => finding.severity === "low").length;
+  const mainNarrativeFindings = input.findings.filter((finding) => isMainNarrativeFinding(finding));
+  const highPriorityCount = mainNarrativeFindings.filter((finding) => finding.severity === "high").length;
+  const mediumPriorityCount = mainNarrativeFindings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = mainNarrativeFindings.filter((finding) => finding.severity === "low").length;
   const scanConditionSummary = deriveExecutiveSummaryScanCondition(input.snapshot);
-  const themes = deriveAgencyAdvisoryThemes(input.findings).slice(0, 3);
-  const topThemes = deriveThemeCounts(input.findings);
+  const themes = deriveAgencyAdvisoryThemes(mainNarrativeFindings).slice(0, 3);
+  const topThemes = deriveThemeCounts(mainNarrativeFindings);
   const infrastructureItems = deriveInfrastructureContext(input.snapshot);
   const audienceItems = deriveAudienceSensitivityContext(input.snapshot);
   const summaryBullets = [
@@ -2873,9 +3015,7 @@ function AgencyAdvisorySummary(input: {
     lowPriorityCount > 0
       ? `The report also includes ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue in the detailed findings below.`
       : null,
-    themes.length > 0
-      ? "The strongest patterns in this scan involve incomplete policy and disclosure coverage, gaps between stated site practices and observed behavior, and consent or tracking flows that may not give users a clear or balanced choice."
-      : "The surfaced findings do not yet point to one dominant risk pattern.",
+    deriveExecutiveSummaryThemeNarrative(themes),
     "Some of these patterns can increase regulatory, customer-trust, or platform-enforcement risk if they are not supported by accurate disclosures and user controls."
   ].filter((bullet): bullet is string => Boolean(bullet));
 
@@ -3191,21 +3331,37 @@ export function deriveFindingEvidenceQualitySummary(findings: UnifiedFindingDisp
 }
 
 type FindingEvidenceDiagnosticRow = {
+  decisionState: UnifiedFindingDisplayPacket["surfacingDecision"]["decisionState"];
   fetchQuality: string | null;
   findingName: string;
   negativeEvidenceFlags: string[];
+  reportLane: UnifiedFindingDisplayPacket["surfacingDecision"]["reportLane"];
   status: UnifiedFindingDisplayPacket["presentationDecision"]["status"];
   verificationLabel: string;
 };
 
 export function deriveFindingEvidenceDiagnosticRows(findings: UnifiedFindingDisplayPacket[]): FindingEvidenceDiagnosticRow[] {
   return findings.map((finding) => ({
+    decisionState: finding.surfacingDecision.decisionState,
     fetchQuality: finding.evidence?.fetchQuality ?? null,
     findingName: finding.presentation.findingName,
     negativeEvidenceFlags: finding.concernContext?.negativeEvidenceFlags ?? [],
+    reportLane: finding.surfacingDecision.reportLane,
     status: finding.presentationDecision.status,
     verificationLabel: finding.presentationDecision.verificationLabel
   }));
+}
+
+function isMainNarrativeFinding(finding: UnifiedFindingDisplayPacket) {
+  return isMainNarrativeSurfacing(finding.surfacingDecision);
+}
+
+function isConfidenceCoverageFinding(finding: UnifiedFindingDisplayPacket) {
+  return isConfidenceCoverageSurfacing(finding.surfacingDecision);
+}
+
+function isSupportingContextFinding(finding: UnifiedFindingDisplayPacket) {
+  return isSupportingContextSurfacing(finding.surfacingDecision);
 }
 
 function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
@@ -3223,10 +3379,14 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
 
     return left.presentation.findingName.localeCompare(right.presentation.findingName);
   });
-  const highPriorityCount = sortedFindings.filter((finding) => finding.severity === "high").length;
-  const mediumPriorityCount = sortedFindings.filter((finding) => finding.severity === "medium").length;
-  const lowPriorityCount = sortedFindings.filter((finding) => finding.severity === "low").length;
-  const evidenceQualitySummary = deriveFindingEvidenceQualitySummary(sortedFindings);
+  const positiveSurfaceFindings = sortedFindings.filter((finding) => isPositiveSurfaceFinding(finding));
+  const reviewFindings = sortedFindings.filter((finding) => !isPositiveSurfaceFinding(finding));
+  const mainFindings = reviewFindings.filter((finding) => isMainNarrativeFinding(finding));
+  const confidenceCoverageFindings = reviewFindings.filter((finding) => isConfidenceCoverageFinding(finding));
+  const supportingContextFindings = reviewFindings.filter((finding) => isSupportingContextFinding(finding));
+  const highPriorityCount = mainFindings.filter((finding) => finding.severity === "high").length;
+  const mediumPriorityCount = mainFindings.filter((finding) => finding.severity === "medium").length;
+  const lowPriorityCount = mainFindings.filter((finding) => finding.severity === "low").length;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -3238,7 +3398,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
             </span>
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="text-base font-semibold text-slate-900">Noteworthy Findings</span>
+                <span className="text-base font-semibold text-slate-900">Issues To Review</span>
                 <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
                   {highPriorityCount} high
                 </span>
@@ -3258,49 +3418,65 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
         </summary>
 
         <div className="mt-4">
-          {sortedFindings.length > 0 ? (
+          {mainFindings.length > 0 ? (
             <div className="space-y-4">
-              <div className={METRIC_GRID_CLASS}>
-                <SummaryMetricTile
-                  label="Verified content"
-                  tooltip="Findings backed by readable user-facing page content or equivalent verified policy/disclosure evidence."
-                  value={evidenceQualitySummary.verifiedCount}
-                />
-                <SummaryMetricTile
-                  label="Discovered only"
-                  tooltip="Findings where a likely disclosure path was retained, but readable user-facing content was not verified."
-                  value={evidenceQualitySummary.discoveredCount}
-                />
-                <SummaryMetricTile
-                  label="Blocked"
-                  tooltip="Findings held back because retained evidence pointed to an auth wall, challenge page, or other interstitial."
-                  value={evidenceQualitySummary.blockedCount}
-                />
-                <SummaryMetricTile
-                  label="Runtime-backed"
-                  tooltip="Findings supported by runtime or structured validation evidence rather than page-surface verification."
-                  value={evidenceQualitySummary.runtimeCount}
-                />
-                <SummaryMetricTile
-                  label="Audit only"
-                  tooltip="Surfaced findings retained for reviewer follow-up but intentionally not promoted as strong customer-facing claims."
-                  value={evidenceQualitySummary.auditOnlyCount}
-                />
-                <SummaryMetricTile
-                  label="Triage"
-                  tooltip="Signals that still function mainly as prioritization or review aids rather than verified findings."
-                  value={evidenceQualitySummary.triageCount}
-                />
-              </div>
-              {sortedFindings.map((finding) => (
+              {mainFindings.map((finding) => (
                 <ReviewFindingCard key={`priority-${finding.unifiedFindingId}`} finding={finding} />
               ))}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
-              <p className="text-sm text-slate-600">No surfaced unified findings were promoted for this scan.</p>
+              <p className="text-sm text-slate-600">No main risk findings were promoted for this scan.</p>
             </div>
           )}
+
+          {confidenceCoverageFindings.length > 0 ? (
+            <div className="mt-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">Confidence & Coverage</p>
+                <p className="text-sm text-slate-500">
+                  Important uncertainty, discovery, and extraction limitations surfaced by the scan.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {confidenceCoverageFindings.map((finding) => (
+                  <ReviewFindingCard key={`confidence-${finding.unifiedFindingId}`} finding={finding} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {positiveSurfaceFindings.length > 0 ? (
+            <div className="mt-6 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">Detected Disclosures & Support Surfaces</p>
+                <p className="text-sm text-slate-600">
+                  Positive first-party legal, privacy, accessibility, and support surfaces retained by the scan.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {positiveSurfaceFindings.map((finding) => (
+                  <ReviewFindingCard key={`positive-${finding.unifiedFindingId}`} finding={finding} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {supportingContextFindings.length > 0 ? (
+            <div className="mt-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">Supporting Context</p>
+                <p className="text-sm text-slate-500">
+                  Related findings retained as support for stronger lead findings in this report.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {supportingContextFindings.map((finding) => (
+                  <ReviewFindingCard key={`support-${finding.unifiedFindingId}`} finding={finding} />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </details>
     </div>
@@ -3308,7 +3484,6 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
 }
 
 function FindingEvidenceDiagnostics(input: { findings: UnifiedFindingDisplayPacket[] }) {
-  const summary = deriveFindingEvidenceQualitySummary(input.findings);
   const rows = deriveFindingEvidenceDiagnosticRows(input.findings);
 
   if (rows.length === 0) {
@@ -3336,15 +3511,6 @@ function FindingEvidenceDiagnostics(input: { findings: UnifiedFindingDisplayPack
       }
       contentClassName="space-y-4"
     >
-      <div className={METRIC_GRID_CLASS}>
-        <SummaryMetricTile label="Verified" value={summary.verifiedCount} />
-        <SummaryMetricTile label="Discovered only" value={summary.discoveredCount} />
-        <SummaryMetricTile label="Blocked" value={summary.blockedCount} />
-        <SummaryMetricTile label="Runtime-backed" value={summary.runtimeCount} />
-        <SummaryMetricTile label="Audit only" value={summary.auditOnlyCount} />
-        <SummaryMetricTile label="Triage" value={summary.triageCount} />
-      </div>
-
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.findingName} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
@@ -3352,6 +3518,12 @@ function FindingEvidenceDiagnostics(input: { findings: UnifiedFindingDisplayPack
               <p className="text-sm font-medium text-slate-900">{row.findingName}</p>
               <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
                 {row.status === "surface" ? "Surface" : row.status === "audit_only" ? "Audit only" : "Suppressed"}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingLaneBadgeClasses(row.reportLane)}`}>
+                {getSurfacingLaneLabel(row.reportLane)}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getSurfacingDecisionStateBadgeClasses(row.decisionState)}`}>
+                {getSurfacingDecisionStateLabel(row.decisionState)}
               </span>
               <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 ring-1 ring-slate-200">
                 {row.verificationLabel}
@@ -3493,14 +3665,15 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
   const whyItMatters = input.finding.presentation.whyThisMatters;
   const suggestedFix = input.finding.presentation.suggestedFix;
   const findingJsonPayload = JSON.stringify(input.finding, null, 2);
+  const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
     <div className="relative rounded-lg border border-slate-200 bg-white px-3 pt-3 pb-12">
       <div className="flex items-start gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium text-slate-900">{input.finding.presentation.findingName}</p>
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding.severity)}`}>
-            {input.finding.severity}
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
+            {positiveSurfaceFinding ? "positive surface" : input.finding.severity}
           </span>
         </div>
       </div>
@@ -3810,6 +3983,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
       ])
     );
     const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+      policyEnrichment: scanRecord.policyEnrichment,
       reviewFindingCandidates: allReviewFindingCandidates,
       scanEvents: scanRecord.events,
       validationFindings: scanRecord.validationFindings,
@@ -3845,6 +4019,17 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
     console.error("Failed to build scan report unified findings", error);
     return [] as UnifiedFindingDisplayPacket[];
   }
+}
+
+export function deriveExecutiveSummaryBadgeCounts(findings: UnifiedFindingDisplayPacket[]) {
+  const surfacedFindings = findings.filter(
+    (finding) => finding.presentationDecision.status === "surface" && isMainNarrativeFinding(finding)
+  );
+
+  return {
+    contradictionCount: surfacedFindings.filter((finding) => finding.details?.family === "contradiction").length,
+    preconsentConflictCount: surfacedFindings.filter((finding) => finding.unifiedFindingId === "preconsent_tracking").length
+  };
 }
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
@@ -3936,6 +4121,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
     ])
   );
   const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: input.scanRecord.policyEnrichment,
     reviewFindingCandidates: allReviewFindingCandidates,
     scanEvents: input.scanRecord.events,
     validationFindings: input.scanRecord.validationFindings,
@@ -4345,6 +4531,7 @@ export function SharedScanDetailView({
   ]);
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const findingEvidenceDiagnostics = snapshot && !reviewSectionError ? buildScanReportUnifiedFindings(scanRecord) : [];
+  const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -4405,20 +4592,20 @@ export function SharedScanDetailView({
               createAccountHref,
               executiveSummary: {
                 badges: [
-                  ...(policyBehaviorContradictions.length > 0
+                  ...(executiveSummaryBadgeCounts.contradictionCount > 0
                     ? [
                         {
-                          label: `${policyBehaviorContradictions.length} contradiction${policyBehaviorContradictions.length === 1 ? "" : "s"}`,
+                          label: `${executiveSummaryBadgeCounts.contradictionCount} contradiction${executiveSummaryBadgeCounts.contradictionCount === 1 ? "" : "s"}`,
                           tone: "warning" as const,
                           tooltip:
                             "Number of policy-versus-behavior contradictions surfaced from comparing public claims with observed runtime behavior."
                         }
                       ]
                     : []),
-                  ...((consentPreconsentViolationCount ?? 0) > 0
+                  ...(executiveSummaryBadgeCounts.preconsentConflictCount > 0
                     ? [
                         {
-                          label: `${consentPreconsentViolationCount} pre-consent conflict${consentPreconsentViolationCount === 1 ? "" : "s"}`,
+                          label: `${executiveSummaryBadgeCounts.preconsentConflictCount} pre-consent conflict${executiveSummaryBadgeCounts.preconsentConflictCount === 1 ? "" : "s"}`,
                           tone: "warning" as const,
                           tooltip:
                             "Number of tracker vendors with persisted evidence showing they fired before a consent interaction was completed."

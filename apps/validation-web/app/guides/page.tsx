@@ -50,7 +50,7 @@ export default function GuidesPage() {
         <Badge tone="neutral">Guides</Badge>
         <h1 className="text-4xl font-semibold tracking-tight">Guides</h1>
         <p className="text-lg text-slate-600">
-          These guides explain the kinds of publicly observable website signals CertScore.ai looks for.
+          These guides explain the kinds of public website signals CertScore.ai looks for and how they support review over time.
         </p>
       </div>
         <div className="mt-10 grid gap-5 md:grid-cols-2">

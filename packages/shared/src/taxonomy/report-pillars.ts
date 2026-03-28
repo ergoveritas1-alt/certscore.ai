@@ -41,8 +41,9 @@ export type ReportEvidenceCategoryId =
   | "manual_review_triggers"
   | "consumer_financial_marketing_claims"
   | "performance_claim_context_and_risk_disclosure"
-  | "entity_identity_governance_transparency"
-  | "contact_and_operator_disclosure_quality"
+  | "entity_identity_governance_and_operator_accountability"
+  | "contact_durability_operator_disclosure_quality"
+  | "operator_presence_and_jurisdiction_transparency"
   | "registration_status_credibility"
   | "fee_disclosure_clarity"
   | "consumer_choice_and_cost_transparency"
@@ -55,10 +56,11 @@ export type ReportEvidenceCategoryId =
   | "third_party_network_cookie_surface"
   | "adtech_analytics_replay_footprint"
   | "preconsent_tracking_incidents"
-  | "collection_surface_entry_points"
+  | "collection_surface_entry_points_and_handling_context"
   | "identity_financial_data_collection"
   | "health_location_other_sensitive_data_collection"
   | "minor_related_age_gated_collection_context"
+  | "sensitive_data_third_party_exposure_context"
   | "price_fee_transparency"
   | "offer_framing_promotional_mechanics"
   | "urgency_scarcity_pressure_tactics"
@@ -68,8 +70,8 @@ export type ReportEvidenceCategoryId =
   | "cancellation_termination_rights"
   | "refunds_credits_post_purchase_remedies"
   | "perceivability_barriers"
-  | "navigation_interaction_barriers"
-  | "form_task_completion_barriers"
+  | "navigation_interaction_and_task_path_barriers"
+  | "form_task_completion_and_critical_workflow_barriers"
   | "representative_rule_level_evidence"
   | "public_accessibility_commitments"
   | "conformance_vpat_references"
@@ -222,10 +224,11 @@ const FINANCIAL_REPORT_SECTIONS: ReportSectionDefinition[] = [
   {
     id: "entity_identity_registration_transparency",
     pillarId: "policies_rights_disclosures",
-    label: "Entity identity & registration transparency",
+    label: "Entity identity, operator accountability & registration transparency",
     evidenceCategoryIds: [
-      "entity_identity_governance_transparency",
-      "contact_and_operator_disclosure_quality",
+      "entity_identity_governance_and_operator_accountability",
+      "contact_durability_operator_disclosure_quality",
+      "operator_presence_and_jurisdiction_transparency",
       "registration_status_credibility"
     ]
   },
@@ -265,14 +268,19 @@ const FINANCIAL_REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] =
     label: "performance claim context and risk disclosure"
   },
   {
-    id: "entity_identity_governance_transparency",
+    id: "entity_identity_governance_and_operator_accountability",
     sectionId: "entity_identity_registration_transparency",
-    label: "entity identity and governance transparency"
+    label: "entity identity, governance, and operator accountability"
   },
   {
-    id: "contact_and_operator_disclosure_quality",
+    id: "contact_durability_operator_disclosure_quality",
     sectionId: "entity_identity_registration_transparency",
-    label: "contact and operator disclosure quality"
+    label: "contact durability and operator disclosure quality"
+  },
+  {
+    id: "operator_presence_and_jurisdiction_transparency",
+    sectionId: "entity_identity_registration_transparency",
+    label: "operator presence and jurisdiction transparency"
   },
   {
     id: "registration_status_credibility",
@@ -307,17 +315,17 @@ const FINANCIAL_REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal("snapshot_signal", "financial.testimonial_or_review_block_near_financial_claim_present", "Testimonial or review block near financial claim present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
   defineReportSignal("snapshot_signal", "financial.risk_disclosure_text_present", "Financial risk disclosure text present", "performance_claim_context_and_risk_disclosure", ["consumer_financial_marketing_claims"]),
   defineReportSignal("snapshot_signal", "financial.claim_cta_block_present", "Financial claim CTA block present", "consumer_financial_marketing_claims", ["performance_claim_context_and_risk_disclosure"]),
-  defineReportSignal("snapshot_signal", "entity.legal_entity_name_text_present", "Legal entity name text present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
-  defineReportSignal("snapshot_signal", "entity.company_address_text_present", "Company address text present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
-  defineReportSignal("snapshot_signal", "entity.contact_email_present", "Contact email present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
-  defineReportSignal("snapshot_signal", "entity.contact_phone_present", "Contact phone present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
-  defineReportSignal("snapshot_signal", "entity.contact_form_present", "Contact form present", "contact_and_operator_disclosure_quality", ["entity_identity_governance_transparency"]),
-  defineReportSignal("snapshot_signal", "entity.about_page_present", "About page present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
-  defineReportSignal("snapshot_signal", "entity.team_or_leadership_page_present", "Team or leadership page present", "entity_identity_governance_transparency", ["contact_and_operator_disclosure_quality"]),
-  defineReportSignal("snapshot_signal", "entity.jurisdiction_or_operating_entity_text_present", "Jurisdiction or operating entity text present", "entity_identity_governance_transparency", ["registration_status_credibility"]),
-  defineReportSignal("snapshot_signal", "entity.regulatory_or_license_claim_text_present", "Regulatory or license claim text present", "registration_status_credibility", ["entity_identity_governance_transparency", "contact_and_operator_disclosure_quality"]),
-  defineReportSignal("snapshot_signal", "entity.registration_identifier_text_present", "Registration identifier text present", "registration_status_credibility", ["entity_identity_governance_transparency"]),
-  defineReportSignal("snapshot_signal", "entity.multiple_entity_names_detected_on_site", "Multiple entity names detected on site", "entity_identity_governance_transparency"),
+  defineReportSignal("snapshot_signal", "entity.legal_entity_name_text_present", "Legal entity name text present", "entity_identity_governance_and_operator_accountability", ["contact_durability_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.company_address_text_present", "Company address text present", "contact_durability_operator_disclosure_quality", ["entity_identity_governance_and_operator_accountability", "operator_presence_and_jurisdiction_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.contact_email_present", "Contact email present", "contact_durability_operator_disclosure_quality", ["entity_identity_governance_and_operator_accountability"]),
+  defineReportSignal("snapshot_signal", "entity.contact_phone_present", "Contact phone present", "contact_durability_operator_disclosure_quality", ["entity_identity_governance_and_operator_accountability"]),
+  defineReportSignal("snapshot_signal", "entity.contact_form_present", "Contact form present", "contact_durability_operator_disclosure_quality", ["entity_identity_governance_and_operator_accountability"]),
+  defineReportSignal("snapshot_signal", "entity.about_page_present", "About page present", "entity_identity_governance_and_operator_accountability", ["contact_durability_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.team_or_leadership_page_present", "Team or leadership page present", "entity_identity_governance_and_operator_accountability", ["contact_durability_operator_disclosure_quality"]),
+  defineReportSignal("snapshot_signal", "entity.jurisdiction_or_operating_entity_text_present", "Jurisdiction or operating entity text present", "operator_presence_and_jurisdiction_transparency", ["entity_identity_governance_and_operator_accountability", "registration_status_credibility"]),
+  defineReportSignal("snapshot_signal", "entity.regulatory_or_license_claim_text_present", "Regulatory or license claim text present", "registration_status_credibility", ["entity_identity_governance_and_operator_accountability", "contact_durability_operator_disclosure_quality", "operator_presence_and_jurisdiction_transparency"]),
+  defineReportSignal("snapshot_signal", "entity.registration_identifier_text_present", "Registration identifier text present", "registration_status_credibility", ["entity_identity_governance_and_operator_accountability"]),
+  defineReportSignal("snapshot_signal", "entity.multiple_entity_names_detected_on_site", "Multiple entity names detected on site", "entity_identity_governance_and_operator_accountability"),
   defineReportSignal("snapshot_signal", "commercial.pricing_page_present", "Pricing page present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
   defineReportSignal("snapshot_signal", "commercial.fee_related_text_present", "Fee-related text present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"]),
   defineReportSignal("snapshot_signal", "commercial.explicit_fee_disclosure_text_present", "Explicit fee disclosure text present", "fee_disclosure_clarity", ["consumer_choice_and_cost_transparency"], ["disclosures_claim_substantiation"]),
@@ -343,16 +351,16 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
   defineReportUnifiedFinding({
     id: "legal_entity_name_present",
     label: "Legal entity name present",
-    owner: "entity_identity_governance_transparency",
-    mirrors: ["contact_and_operator_disclosure_quality"],
+    owner: "entity_identity_governance_and_operator_accountability",
+    mirrors: ["contact_durability_operator_disclosure_quality"],
     signalMappings: [{ source: "snapshot_signal", key: "entity.legal_entity_name_text_present" }],
     validationRuleKeys: ["financial_review.legal_entity_name_present"]
   }),
   defineReportUnifiedFinding({
     id: "operator_contact_path_present",
     label: "Operator contact path present",
-    owner: "contact_and_operator_disclosure_quality",
-    mirrors: ["entity_identity_governance_transparency"],
+    owner: "contact_durability_operator_disclosure_quality",
+    mirrors: ["entity_identity_governance_and_operator_accountability"],
     signalMappings: [
       { source: "snapshot_signal", key: "entity.contact_email_present" },
       { source: "snapshot_signal", key: "entity.contact_phone_present" },
@@ -449,7 +457,7 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     id: "regulatory_compliance_claim_present",
     label: "Regulatory-compliance claim present",
     owner: "registration_status_credibility",
-    mirrors: ["consumer_financial_marketing_claims", "contact_and_operator_disclosure_quality"],
+    mirrors: ["consumer_financial_marketing_claims", "contact_durability_operator_disclosure_quality"],
     signalMappings: [{ source: "snapshot_signal", key: "entity.regulatory_or_license_claim_text_present" }],
     aliases: [
       "Regulatory-compliance claim present",
@@ -495,33 +503,19 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     id: "registration_identifier_missing",
     label: "Registration identifier missing",
     owner: "registration_status_credibility",
-    mirrors: ["entity_identity_governance_transparency"],
+    mirrors: ["entity_identity_governance_and_operator_accountability"],
     validationRuleKeys: ["section_review.registration_claim_without_identifier"]
   }),
   defineReportUnifiedFinding({
     id: "registration_claim_support_missing",
     label: "Registration claim support missing",
     owner: "registration_status_credibility",
-    mirrors: ["contact_and_operator_disclosure_quality"]
-  }),
-  defineReportUnifiedFinding({
-    id: "entity_contact_governance_transparency_missing",
-    label: "Entity contact and governance transparency missing",
-    owner: "entity_identity_governance_transparency",
-    mirrors: ["contact_and_operator_disclosure_quality"],
-    validationRuleKeys: ["section_review.contact_surface_minimal_for_regulated_claim_context"]
-  }),
-  defineReportUnifiedFinding({
-    id: "operator_identity_surface_sparse",
-    label: "Operator identity surface sparse",
-    owner: "contact_and_operator_disclosure_quality",
-    mirrors: ["entity_identity_governance_transparency"],
-    validationRuleKeys: ["section_review.entity_transparency_surface_sparse"]
+    mirrors: ["contact_durability_operator_disclosure_quality"]
   }),
   defineReportUnifiedFinding({
     id: "entity_naming_consistency_conflict",
     label: "Entity naming consistency conflict",
-    owner: "entity_identity_governance_transparency",
+    owner: "entity_identity_governance_and_operator_accountability",
     validationRuleKeys: ["section_review.inconsistent_entity_naming_pattern_detected"]
   }),
   defineReportUnifiedFinding({
@@ -554,6 +548,13 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
       "section_review.withdrawal_redemption_terms_missing",
       "section_review.account_exit_terms_missing"
     ]
+  }),
+  defineReportUnifiedFinding({
+    id: "cancellation_method_disclosure_missing",
+    label: "Cancellation method disclosure missing",
+    owner: "cancellation_termination_rights",
+    mirrors: ["cancellation_termination_disclosures"],
+    overlays: ["subscription_billing_cancellation_fairness"]
   }),
   defineReportUnifiedFinding({
     id: "leveraged_or_high_risk_product_promotion",
@@ -626,7 +627,7 @@ export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
   },
   {
     id: "accessibility",
-    label: "Accessibility",
+    label: "Accessibility & Task Completion",
     sectionIds: [
       "access_barriers_task_completion",
       "accessibility_commitments_conformance_support"
@@ -705,18 +706,19 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
   {
     id: "sensitive_data_collection",
     pillarId: "consent_tracking_data_collection",
-    label: "Sensitive data collection",
+    label: "Sensitive data collection & handling risk",
     evidenceCategoryIds: [
-      "collection_surface_entry_points",
+      "collection_surface_entry_points_and_handling_context",
       "identity_financial_data_collection",
       "health_location_other_sensitive_data_collection",
-      "minor_related_age_gated_collection_context"
+      "minor_related_age_gated_collection_context",
+      "sensitive_data_third_party_exposure_context"
     ]
   },
   {
     id: "offers_pricing_claims",
     pillarId: "consumer_protection_commercial_practices",
-    label: "Offers, pricing & claims",
+    label: "Offers, pricing, claims & pressure tactics",
     evidenceCategoryIds: [
       "price_fee_transparency",
       "offer_framing_promotional_mechanics",
@@ -727,7 +729,7 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
   {
     id: "billing_cancellation_post_purchase_rights",
     pillarId: "consumer_protection_commercial_practices",
-    label: "Billing, cancellation & post-purchase rights",
+    label: "Billing, cancellation, post-purchase rights & exit friction",
     evidenceCategoryIds: [
       "checkout_payment_disclosures",
       "billing_recurring_charge_mechanics",
@@ -741,8 +743,8 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
     label: "Access barriers & task completion",
     evidenceCategoryIds: [
       "perceivability_barriers",
-      "navigation_interaction_barriers",
-      "form_task_completion_barriers",
+      "navigation_interaction_and_task_path_barriers",
+      "form_task_completion_and_critical_workflow_barriers",
       "representative_rule_level_evidence"
     ]
   },
@@ -917,9 +919,9 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
     label: "pre-consent tracking incidents"
   },
   {
-    id: "collection_surface_entry_points",
+    id: "collection_surface_entry_points_and_handling_context",
     sectionId: "sensitive_data_collection",
-    label: "collection surface and entry points"
+    label: "collection surface entry points and handling context"
   },
   {
     id: "identity_financial_data_collection",
@@ -935,6 +937,11 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
     id: "minor_related_age_gated_collection_context",
     sectionId: "sensitive_data_collection",
     label: "minor-related and age-gated collection context"
+  },
+  {
+    id: "sensitive_data_third_party_exposure_context",
+    sectionId: "sensitive_data_collection",
+    label: "sensitive-data third-party exposure context"
   },
   {
     id: "price_fee_transparency",
@@ -982,14 +989,14 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
     label: "perceivability barriers"
   },
   {
-    id: "navigation_interaction_barriers",
+    id: "navigation_interaction_and_task_path_barriers",
     sectionId: "access_barriers_task_completion",
-    label: "navigation and interaction barriers"
+    label: "navigation, interaction, and task-path barriers"
   },
   {
-    id: "form_task_completion_barriers",
+    id: "form_task_completion_and_critical_workflow_barriers",
     sectionId: "access_barriers_task_completion",
-    label: "form and task-completion barriers"
+    label: "form task completion and critical-workflow barriers"
   },
   {
     id: "representative_rule_level_evidence",
@@ -1525,7 +1532,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "accessibility.wcag_form_label_error_count",
     "Form label issues",
-    "form_task_completion_barriers",
+    "form_task_completion_and_critical_workflow_barriers",
     [],
     ["navigation_interaction_form_barriers"]
   ),
@@ -1541,7 +1548,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "accessibility.wcag_link_name_error_count",
     "Link name issues",
-    "navigation_interaction_barriers",
+    "navigation_interaction_and_task_path_barriers",
     [],
     ["navigation_interaction_form_barriers"]
   ),
@@ -1549,7 +1556,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "accessibility.wcag_keyboard_navigation_issue_count",
     "Keyboard navigation issues",
-    "navigation_interaction_barriers",
+    "navigation_interaction_and_task_path_barriers",
     [],
     ["navigation_interaction_form_barriers"]
   ),
@@ -1557,7 +1564,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "accessibility.wcag_focus_indicator_issue_count",
     "Focus indicator issues",
-    "navigation_interaction_barriers",
+    "navigation_interaction_and_task_path_barriers",
     [],
     ["navigation_interaction_form_barriers"]
   ),
@@ -1565,7 +1572,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "accessibility.wcag_landmark_issue_count",
     "Landmark issues",
-    "navigation_interaction_barriers",
+    "navigation_interaction_and_task_path_barriers",
     [],
     ["navigation_interaction_form_barriers"]
   ),
@@ -1629,13 +1636,13 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "snapshot_signal",
     "commerce.form_count_total",
     "Forms detected",
-    "collection_surface_entry_points"
+    "collection_surface_entry_points_and_handling_context"
   ),
   defineReportSignal(
     "snapshot_signal",
     "commerce.checkout_or_payment_form_present",
     "Checkout flow detected",
-    "collection_surface_entry_points",
+    "collection_surface_entry_points_and_handling_context",
     ["checkout_payment_disclosures"],
     ["subscription_billing_cancellation_fairness"]
   ),
@@ -1644,7 +1651,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     "commerce.payment_card_input_present",
     "Payment card input detected",
     "checkout_payment_disclosures",
-    ["collection_surface_entry_points", "identity_financial_data_collection"],
+    ["collection_surface_entry_points_and_handling_context", "identity_financial_data_collection"],
     ["subscription_billing_cancellation_fairness"]
   ),
   defineReportSignal(
@@ -2294,6 +2301,24 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.terms_of_service_fetch_failed" }]
   }),
   defineReportUnifiedFinding({
+    id: "data_categories_disclosure_missing",
+    label: "Data categories disclosure missing",
+    owner: "data_handling_disclosures",
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  }),
+  defineReportUnifiedFinding({
+    id: "third_party_recipient_disclosure_missing",
+    label: "Third-party recipient disclosure missing",
+    owner: "data_handling_disclosures",
+    overlays: ["governance_accountability_transfers", "notice_rights_baseline"]
+  }),
+  defineReportUnifiedFinding({
+    id: "purpose_of_use_disclosure_missing",
+    label: "Purpose-of-use disclosure missing",
+    owner: "data_handling_disclosures",
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  }),
+  defineReportUnifiedFinding({
     id: "cookie_policy_present",
     label: "Cookie settings or policy surface present",
     owner: "data_handling_disclosures",
@@ -2736,6 +2761,13 @@ export const REPORT_UNIFIED_FINDINGS = [
     ]
   }),
   defineReportUnifiedFinding({
+    id: "session_replay_on_sensitive_input_surface",
+    label: "Session replay on sensitive input surface",
+    owner: "sensitive_data_third_party_exposure_context",
+    mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]
+  }),
+  defineReportUnifiedFinding({
     id: "session_replay_undisclosed",
     label: "Session replay undisclosed",
     owner: "policy_to_behavior_contradictions",
@@ -2764,6 +2796,13 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "health_location_other_sensitive_data_collection",
     overlays: ["tracking_profiling_sensitive_data_risk", "sensitive_data_vulnerable_user_protections"],
     signalMappings: [{ source: "snapshot_signal", key: "commerce.high_sensitivity_data_collection_detected" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "sensitive_data_collection_with_third_party_tracking_present",
+    label: "Sensitive-data collection with third-party tracking present",
+    owner: "sensitive_data_third_party_exposure_context",
+    mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]
   }),
   defineReportUnifiedFinding({
     id: "health_information_collection",
@@ -2951,15 +2990,22 @@ export const REPORT_UNIFIED_FINDINGS = [
   defineReportUnifiedFinding({
     id: "form_label_issues",
     label: "Form label issues",
-    owner: "form_task_completion_barriers",
+    owner: "form_task_completion_and_critical_workflow_barriers",
     overlays: ["navigation_interaction_form_barriers"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_form_label_error_count" }],
     validationRuleKeys: ["accessibility_review.form_label_issues"]
   }),
   defineReportUnifiedFinding({
+    id: "critical_form_completion_barrier",
+    label: "Potential critical form-completion barrier",
+    owner: "form_task_completion_and_critical_workflow_barriers",
+    mirrors: ["representative_rule_level_evidence"],
+    overlays: ["navigation_interaction_form_barriers"]
+  }),
+  defineReportUnifiedFinding({
     id: "link_name_issues",
     label: "Link name issues",
-    owner: "navigation_interaction_barriers",
+    owner: "navigation_interaction_and_task_path_barriers",
     overlays: ["navigation_interaction_form_barriers", "conformance_posture_litigation_indicators"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_link_name_error_count" }],
     aliases: ["Navigation issues"]
@@ -2967,22 +3013,29 @@ export const REPORT_UNIFIED_FINDINGS = [
   defineReportUnifiedFinding({
     id: "keyboard_navigation_issues",
     label: "Keyboard navigation issues",
-    owner: "navigation_interaction_barriers",
+    owner: "navigation_interaction_and_task_path_barriers",
     overlays: ["navigation_interaction_form_barriers"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_keyboard_navigation_issue_count" }],
     validationRuleKeys: ["accessibility_review.navigation_issues"]
   }),
   defineReportUnifiedFinding({
+    id: "keyboard_only_task_completion_blocked",
+    label: "Potential keyboard-only task completion barrier",
+    owner: "navigation_interaction_and_task_path_barriers",
+    mirrors: ["form_task_completion_and_critical_workflow_barriers"],
+    overlays: ["navigation_interaction_form_barriers"]
+  }),
+  defineReportUnifiedFinding({
     id: "focus_indicator_issues",
     label: "Focus indicator issues",
-    owner: "navigation_interaction_barriers",
+    owner: "navigation_interaction_and_task_path_barriers",
     overlays: ["navigation_interaction_form_barriers"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_focus_indicator_issue_count" }]
   }),
   defineReportUnifiedFinding({
     id: "landmark_issues",
     label: "Landmark issues",
-    owner: "navigation_interaction_barriers",
+    owner: "navigation_interaction_and_task_path_barriers",
     overlays: ["navigation_interaction_form_barriers", "conformance_posture_litigation_indicators"],
     signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_landmark_issue_count" }]
   }),
@@ -3064,7 +3117,11 @@ export function getReportSignalBySourceAndKey(source: ReportSignalSource, key: s
 }
 
 export function getReportUnifiedFinding(id: string) {
-  return REPORT_UNIFIED_FINDING_DEFINITIONS[id as ReportUnifiedFindingId] ?? null;
+  return (
+    REPORT_UNIFIED_FINDING_DEFINITIONS[id as ReportUnifiedFindingId] ??
+    REPORT_UNIFIED_FINDING_ALIASES[id.trim().toLowerCase()] ??
+    null
+  );
 }
 
 export function getReportUnifiedFindingByAlias(alias: string) {

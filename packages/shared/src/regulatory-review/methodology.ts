@@ -1,21 +1,21 @@
 export const INLINE_METHODOLOGY_SUMMARY =
-  "CertScore reviews publicly observable website surfaces and browser behavior, retains reproducible evidence, applies deterministic confidence rules, and uses posture-based wording rather than legal conclusions.";
+  "CertScore reviews public website signals and browser behavior, retains reproducible evidence, applies deterministic confidence rules, and surfaces structured findings rather than legal conclusions.";
 
 export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
     heading: "What CertScore reviews",
     body:
-      "CertScore reviews publicly observable website surfaces such as legal pages, privacy-choice interfaces, browser behavior after page load, and automated accessibility results on tested public pages. The system is designed to assess observable posture, not to issue legal conclusions."
+      "CertScore reviews public-facing website surfaces such as disclosure pages, privacy-choice interfaces, browser behavior after page load, and automated accessibility results on tested public pages. The system is designed to assess observable website signals, not to issue legal conclusions."
   },
   {
     heading: "What counts as observable evidence",
     body:
-      "Observable evidence includes screenshots, retained DOM excerpts, timestamped network requests, cookie and storage changes, session interaction logs, and automated accessibility results on tested pages. Findings are expected to cite concrete evidence rather than broad narrative statements."
+      "Observable evidence includes screenshots, retained DOM excerpts, timestamped network requests, cookie and storage changes, session interaction logs, and automated accessibility results on tested pages. Findings are expected to cite concrete, reviewable evidence rather than broad narrative statements."
   },
   {
     heading: "How scans are run",
     body:
-      "Scans use a defined browser profile, test a bounded set of public pages and key flows, record methodology metadata, and retain timestamps for the evidence captured during the session. Repeatability is noted when behavior is rechecked across multiple pages or sessions."
+      "Scans use a defined browser profile, test a bounded set of public pages and key flows, record methodology metadata, and retain timestamps for the evidence captured during the session. Repeatability is noted when behavior is rechecked across multiple pages or sessions, but scanning remains bounded by the tested context."
   },
   {
     heading: "How privacy-choice testing works",
@@ -25,7 +25,7 @@ export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
     heading: "How browser-signal testing works",
     body:
-      "Browser-signal testing compares signal-enabled and control conditions when configured, then looks for observable confirmation, persistence, or behavior changes that would indicate the site reacted to the tested browser-level preference."
+      "Browser-signal testing compares signal-enabled and control conditions when configured, then looks for observable confirmation, persistence, or behavior changes that may indicate the site reacted to the tested browser-level preference."
   },
   {
     heading: "How accessibility testing works",
@@ -35,22 +35,22 @@ export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
     heading: "Confidence and severity methodology",
     body:
-      "Confidence is assigned by deterministic rules based on evidence type count, repeatability, and the presence or absence of contradictory signals. Severity reflects the materiality of the observed gap on tested flows, not a legal penalty estimate."
+      "Confidence is assigned by deterministic rules based on evidence type count, repeatability, and the presence or absence of contradictory signals. Severity reflects the materiality of the observed gap on tested flows, not a legal penalty estimate or official score."
   },
   {
     heading: "What “not detected” means",
     body:
-      "Not detected means the expected public surface or behavior was not evident under the tested conditions. It does not mean the capability is absent in every environment, account state, or jurisdiction."
+      "Not detected means the expected public surface or behavior was not evident under the tested conditions. It does not mean the capability is absent in every environment, account state, jurisdiction, or page state."
   },
   {
     heading: "Important limitations",
     body:
-      "CertScore observes only what can be seen from the tested public conditions. Internal processing, server-side controls, private dashboards, and region-specific behavior can differ. Authenticated or geofenced flows may not be covered in the retained evidence."
+      "CertScore observes only what can be seen from the tested public conditions. Internal processing, server-side controls, private dashboards, and region-specific behavior can differ. Authenticated, personalized, or geofenced flows may not be covered in the retained evidence."
   },
   {
     heading: "Why findings are posture-based and not legal conclusions",
     body:
-      "Findings intentionally use conservative posture language because CertScore is not a legal conclusion engine. The product is built to support skeptical review with reproducible evidence, clear methodology, and limits on what automated scanning can defensibly determine."
+      "Findings intentionally use conservative posture language because CertScore is not a legal conclusion engine. The product is built to support skeptical review with reproducible evidence, clear methodology, and explicit limits on what automated scanning can defensibly determine."
   }
 ];
 
@@ -63,7 +63,7 @@ export const REVIEWER_METHODOLOGY_SECTIONS = [
   {
     heading: "Evidence and contradiction handling",
     body:
-      "Claim-vs-behavior gaps are surfaced only when exact public claim text is retained, the claim is materially relevant, and concrete timestamped behavior evidence is also retained. Low-confidence findings are marked reviewer-only by default."
+      "Claim-vs-behavior gaps are surfaced only when exact public claim text is retained, the claim is materially relevant, and concrete timestamped behavior evidence is also retained. Low-confidence items are held for reviewer attention by default."
   },
   {
     heading: "Safety controls",

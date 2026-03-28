@@ -21,7 +21,7 @@ const SLIDES: CarouselSlide[] = [
     src: "/images/how-it-works/executive-summary-policy-posture.png",
     alt: "Executive summary and privacy disclosure scan report sections.",
     title: "Executive summary and policy posture",
-    highlight: "Surface the section scores, key contradictions, and disclosure coverage in one opening view."
+    highlight: "Surface key findings, contradictions, and disclosure coverage in one opening view."
   },
   {
     src: "/images/how-it-works/cookie-banner-post-choice-audit.png",
@@ -39,7 +39,7 @@ const SLIDES: CarouselSlide[] = [
     src: "/images/how-it-works/regulatory-crosswalk.png",
     alt: "Regulatory crosswalk showing GDPR, FTC, CPPA, and other mappings.",
     title: "Regulatory crosswalk",
-    highlight: "Translate observed scan flags into regulator-oriented groupings for faster legal, compliance, or analyst review."
+    highlight: "Group framework-relevant signals for faster legal, compliance, or analyst review without turning the scan into a legal conclusion."
   },
   {
     src: "/images/how-it-works/tracker-data-collection.png",
@@ -88,7 +88,7 @@ export function HowItWorksCarousel() {
           <div className="max-w-sm space-y-4">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan walkthrough</p>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">See how the report turns raw scan data into reviewable telemetry.</h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">See how the report turns observed signals into reviewable findings.</h2>
             </div>
 
             <div className="flex min-h-[245px] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">

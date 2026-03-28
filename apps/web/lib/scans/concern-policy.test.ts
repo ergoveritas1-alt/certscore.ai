@@ -10,6 +10,7 @@ import {
   packetNeedsPageAttribution
 } from "./concern-policy";
 import type { NormalizedConcern } from "./normalized-concerns";
+import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 
 function makeConcern(
   overrides: Partial<
@@ -81,6 +82,27 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "positive privacy surface on a generic shell page stays internal",
+      concern: makeConcern({
+        originKey: "disclosure.privacy_policy_present",
+        suggestedUnifiedFindingId: "privacy_policy_present",
+        title: "Privacy policy surface present"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed", "fallback_only"] as const,
+      rawEvidence: {
+        familyPacketFindingId: "privacy_policy_present",
+        fetchQuality: "verified_content",
+        pageUrl: "https://www.starz.com/us/en/privacy",
+        policySnippets: ["STARZ - Captivating Original Series. Hit Movies. Bold Storytelling."]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+      }
+    },
+    {
       name: "replay without direct runtime stays internal",
       concern: makeConcern({
         originKey: "privacy.session_replay_runtime_detected",
@@ -117,7 +139,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
-      name: "retargeting without retained runtime artifacts stays surfaceable but weakly worded",
+      name: "retargeting without retained runtime artifacts stays audit-only",
       concern: makeConcern({
         originKey: "scan_snapshot.commerce.retargeting_pixel_detected",
         suggestedUnifiedFindingId: "retargeting_pixel_observed",
@@ -130,8 +152,8 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       },
       expected: {
         allowedNarrativeTier: "weak",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
         negativeEvidenceFlags: ["no_direct_runtime_retargeting_artifact_observed"]
       }
     },
@@ -157,6 +179,27 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "gpc ignored with zero retained delta stays internal",
+      concern: makeConcern({
+        originKey: "privacy.gpc_signal_not_honored",
+        suggestedUnifiedFindingId: "gpc_signal_not_honored",
+        title: "GPC signal not honored"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        baselineThirdPartyCookieCount: 24,
+        gpcThirdPartyCookieCount: 24,
+        thirdPartyCookieCountDelta: 0,
+        trackerCountDelta: 0
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "consent surface missing without concrete absence evidence stays audit-only",
       concern: makeConcern({
         originKey: "privacy.consent_surface_missing",
@@ -167,6 +210,135 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         keyPageAttemptCount: 3,
         keyPageDiscoverySource: "footer_link"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "structured policy disclosure gaps are blocked when extraction was incomplete",
+      concern: makeConcern({
+        originKey: "policySemanticConfidence",
+        originType: "policy_enrichment",
+        policyPageType: "privacy_policy",
+        suggestedUnifiedFindingId: "data_categories_disclosure_missing",
+        title: "Policy semantic confidence"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        pageType: "privacy_policy",
+        policyCoverageRatio: 0.7,
+        policyExtractionStatus: "parser_incomplete",
+        policySemanticConfidence: 0.85
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: ["policy_target_parsing_incomplete"]
+      }
+    },
+    {
+      name: "structured policy disclosure gaps with fetched high-confidence evidence stay eligible",
+      concern: makeConcern({
+        originKey: "policySemanticConfidence",
+        originType: "policy_enrichment",
+        policyPageType: "privacy_policy",
+        suggestedUnifiedFindingId: "third_party_recipient_disclosure_missing",
+        title: "Policy semantic confidence"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        pageType: "privacy_policy",
+        policyCoverageRatio: 0.67,
+        policyExtractionStatus: "fetched",
+        policySemanticConfidence: 0.81
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "structured purpose-of-use gaps with fetched high-confidence evidence stay eligible",
+      concern: makeConcern({
+        originKey: "policySemanticConfidence",
+        originType: "policy_enrichment",
+        policyPageType: "privacy_policy",
+        suggestedUnifiedFindingId: "purpose_of_use_disclosure_missing",
+        title: "Policy semantic confidence"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        pageType: "privacy_policy",
+        policyCoverageRatio: 0.66,
+        policyExtractionStatus: "fetched",
+        policySemanticConfidence: 0.8
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "thin single-cookie attribute evidence stays internal",
+      concern: makeConcern({
+        originKey: "privacy.weak_cookie_security_attributes_detected",
+        suggestedUnifiedFindingId: "weak_cookie_security_attributes",
+        title: "Weak cookie security attributes"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        missingHttpOnlyCount: 1,
+        missingSecureCount: 1,
+        thirdPartyWeakAttributeCount: 0,
+        totalCookiesAnalyzed: 1,
+        weakSameSiteCount: 0
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "commercial finding without retained evidence stays internal",
+      concern: makeConcern({
+        originKey: "commerce.limited_time_offer_language_present",
+        suggestedUnifiedFindingId: "limited_time_pressure",
+        title: "Limited-time pressure"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        signalKey: "commerce.limited_time_offer_language_present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "domain-level minors context without retained page evidence stays internal",
+      concern: makeConcern({
+        originKey: "privacy.minors_or_age_gated_collection_context",
+        suggestedUnifiedFindingId: "minors_or_age_gated_collection_context",
+        title: "Minors or age-gated collection context"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        childrenPrivacyRiskScore: 15,
+        mentionsUnder13: true
       },
       expected: {
         allowedNarrativeTier: "weak",
@@ -228,7 +400,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         signalKey: "commercial.explicit_fee_disclosure_text_present"
       },
       expected: {
-        allowedNarrativeTier: "moderate",
+        allowedNarrativeTier: "weak",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -275,6 +447,102 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
           "blocked_or_interstitial_evidence_observed",
           "positive_surface_content_unverified"
         ]
+      }
+    },
+    {
+      name: "packet-backed corroborated contact surfaces can still surface without a readable snippet",
+      concern: makeConcern({
+        originKey: "disclosure.contact_page_present",
+        suggestedUnifiedFindingId: "contact_support_path_present",
+        title: "Contact page fetched"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed"] as const,
+      rawEvidence: {
+        familyPacketFamilyId: "support_access",
+        familyPacketFindingId: "contact_support_path_present",
+        familyPacketVerified: true,
+        pageUrls: ["https://www.example.com/contact", "https://www.example.com/contact-us"],
+        sourceUrls: ["https://www.example.com/contact", "https://www.example.com/contact-us"],
+        fetchQuality: "blocked_interstitial",
+        policySnippets: ["Example Corp"]
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "packet-backed privacy policy surfaces stay eligible with corroborated page evidence under partial capture",
+      concern: makeConcern({
+        originKey: "disclosure.privacy_policy_present",
+        suggestedUnifiedFindingId: "privacy_policy_present",
+        title: "Privacy policy fetched"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed"] as const,
+      rawEvidence: {
+        familyPacketFamilyId: "policies",
+        familyPacketFindingId: "privacy_policy_present",
+        pageUrls: ["https://www.schwab.com/legal/privacy/us-residents"],
+        sourceUrls: ["https://www.schwab.com/legal/privacy/us-residents"],
+        fetchQuality: "thin_content",
+        policySnippets: ["Privacy Notice for United States Residents"]
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "packet-backed GPC disclosures stay eligible with corroborated policy evidence",
+      concern: makeConcern({
+        originKey: "privacy.gpc_disclosure_present",
+        originType: "policy_enrichment",
+        policyPageType: "privacy_policy",
+        suggestedUnifiedFindingId: "gpc_disclosure_present",
+        title: "GPC handling disclosed"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        familyPacketFamilyId: "policy_notice",
+        familyPacketFindingId: "gpc_disclosure_present",
+        pageUrl: "https://www.schwab.com/legal/privacy/us-residents",
+        sourceUrls: ["https://www.schwab.com/legal/privacy/us-residents"],
+        fetchQuality: "thin_content",
+        policySnippets: ["If your browser communicates an opt-out preference signal, we will honor that signal."]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "packet-backed accessibility support surfaces stay eligible with corroborated domain evidence",
+      concern: makeConcern({
+        originKey: "accessibility.accessibility_contact_method_present",
+        suggestedUnifiedFindingId: "accessibility_support_path_present",
+        title: "Accessibility support path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed"] as const,
+      rawEvidence: {
+        familyPacketFamilyId: "support_access",
+        familyPacketFindingId: "accessibility_support_path_present",
+        pageUrls: ["https://www.schwab.com/legal/accessibility-help"],
+        sourceUrls: ["https://www.schwab.com/legal/accessibility-help"],
+        fetchQuality: "thin_content",
+        policySnippets: ["Accessibility help center"],
+        accessibilityContactMethodPresent: false
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
       }
     },
     {
@@ -376,7 +644,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
         externalSurfacingEligibility: "suppress",
-        negativeEvidenceFlags: []
+        negativeEvidenceFlags: ["runtime_tracking_review_incomplete", "possible_policy_runtime_mismatch"]
       }
     },
     {
@@ -399,7 +667,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
         externalSurfacingEligibility: "suppress",
-        negativeEvidenceFlags: []
+        negativeEvidenceFlags: ["runtime_tracking_review_incomplete", "possible_policy_runtime_mismatch"]
       }
     },
     {
@@ -444,6 +712,71 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "sensitive replay concern without sensitive payload evidence stays audit-only",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        title: "Sensitive replay detected"
+      }),
+      evidenceStrengthFlags: ["direct_runtime"] as const,
+      rawEvidence: {
+        session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_concrete_sensitive_payload"]
+      }
+    },
+    {
+      name: "sensitive replay concern with payload and replay evidence stays eligible",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        title: "Sensitive replay detected"
+      }),
+      evidenceStrengthFlags: ["direct_runtime", "concrete_payload"] as const,
+      rawEvidence: {
+        sensitivePayloadViolations: [
+          {
+            evidenceStrength: "suspected",
+            requestUrl: "https://collector.example.com/submit"
+          }
+        ],
+        session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "sensitive tracking concern without retained tracker artifacts stays audit-only",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present",
+        title: "Sensitive data collection with third-party tracking present"
+      }),
+      evidenceStrengthFlags: ["concrete_payload"] as const,
+      rawEvidence: {
+        sensitivePayloadViolations: [
+          {
+            evidenceStrength: "suspected",
+            requestUrl: "https://collector.example.com/submit"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_third_party_tracking_artifact"]
       }
     },
     {
@@ -538,7 +871,8 @@ test("deriveConcernPolicy weakens contradiction concerns when one side of the mi
       "missing_behavior_side_evidence",
       "missing_policy_side_evidence",
       "missing_contradiction_mapping",
-      "missing_explicit_contradiction_basis"
+      "missing_explicit_contradiction_basis",
+      "insufficient_evidence_for_policy_behavior_conflict"
     ]
   });
 });
@@ -563,6 +897,54 @@ test("deriveConcernPolicy keeps generic policy-behavior conflicts internal when 
     allowedNarrativeTier: "weak",
     promotionEligibility: "internal_only",
     externalSurfacingEligibility: "audit_only",
-    negativeEvidenceFlags: ["missing_explicit_contradiction_basis"]
+    negativeEvidenceFlags: [
+      "policy_semantic_review_incomplete",
+      "missing_policy_side_evidence",
+      "missing_specific_policy_anchor",
+      "missing_behavior_side_evidence",
+      "missing_specific_runtime_anchor",
+      "runtime_tracking_review_incomplete",
+      "missing_contradiction_mapping",
+      "missing_explicit_contradiction_basis",
+      "insufficient_evidence_for_policy_behavior_conflict",
+      "possible_policy_runtime_mismatch"
+    ]
   });
+});
+
+test("deriveConcernPolicy promotes contradiction-grade policy behavior conflicts only with structured anchors and mapping", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "context.policy_behavior_conflict_detected",
+      suggestedUnifiedFindingId: "policy_behavior_conflict",
+      title: "Policy/behavior conflict detected"
+    }),
+    evidenceStrengthFlags: ["policy_text", "direct_runtime", "structured_validation"],
+    rawEvidence: POLICY_BEHAVIOR_CONFLICT_FIXTURES.positiveGpcNotHonored
+  });
+
+  assert.deepEqual(policy, {
+    allowedNarrativeTier: "strong",
+    promotionEligibility: "eligible",
+    externalSurfacingEligibility: "eligible",
+    negativeEvidenceFlags: []
+  });
+});
+
+test("deriveConcernPolicy fails closed for Schwab-like contradiction candidates without a contradiction pair", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "context.policy_behavior_conflict_detected",
+      suggestedUnifiedFindingId: "policy_behavior_conflict",
+      title: "Policy/behavior conflict detected"
+    }),
+    evidenceStrengthFlags: ["policy_text", "direct_runtime"],
+    rawEvidence: POLICY_BEHAVIOR_CONFLICT_FIXTURES.negativeSchwabLike
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict"));
+  assert.ok(policy.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
 });

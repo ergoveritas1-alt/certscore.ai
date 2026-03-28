@@ -20,7 +20,7 @@ const sections = [
   {
     title: "2. Use of the Service",
     body:
-      "CertScore.ai provides automated website scanning for observable accessibility, privacy, and disclosure-related signals on publicly accessible website content. The service is intended for informational and operational use."
+      "CertScore.ai provides automated scanning of public websites for observable accessibility, privacy, consent, disclosure, and contradiction-related signals. Reports and findings are provided for informational, operational, and review purposes."
   },
   {
     title: "3. Public Website Scanning",
@@ -30,12 +30,12 @@ const sections = [
   {
     title: "4. No Legal Advice Disclaimer",
     body:
-      "CertScore.ai provides automated website scanning only. CertScore.ai does not provide legal advice or legal opinions."
+      "CertScore.ai provides automated website scanning only. CertScore.ai does not provide legal advice, legal opinions, or certification."
   },
   {
     title: "5. No Guarantee of Compliance",
     body:
-      "Scan results are informational and should not be relied upon as confirmation of legal compliance. Automated scans can identify observed issues and patterns, but they do not guarantee legal sufficiency."
+      "Scan results are informational and should not be relied upon as confirmation of legal compliance. Automated scans may surface observed issues and patterns, but they do not guarantee that any scan captures every relevant issue, page, behavior, or legal implication."
   },
   {
     title: "6. Acceptable Use",
@@ -70,11 +70,11 @@ export default function TermsPage() {
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-16">
         <div className="space-y-4">
-          <Badge tone="warning">Automated scanning only. Not legal advice.</Badge>
+          <Badge tone="warning">Automated scanning only. No legal advice. No certification.</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Terms of Service</h1>
           <p className="text-lg text-slate-600">
             These terms explain how CertScore.ai may be used and set expectations around lawful use,
-            service limitations, and acceptable use.
+            service limitations, acceptable use, and the review-oriented nature of the product.
           </p>
         </div>
 

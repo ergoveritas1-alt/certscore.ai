@@ -480,7 +480,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "accessibility",
     "accessibility.accessibility_support_path_missing",
     "Accessibility support path missing",
-    snapshot.accessibilityContactMethodPresent === false
+    snapshot.accessibilityStatementPresent === false && snapshot.accessibilityContactMethodPresent === false
   );
   if (snapshot.wcagLevelClaimed && snapshot.wcagLevelClaimed !== "unknown") {
     activeSignals.push(

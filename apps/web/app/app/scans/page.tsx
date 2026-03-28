@@ -6,7 +6,7 @@ import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-l
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
-import { getOrganizationScans } from "../../../server/scans/get-organization-scans";
+import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -60,6 +60,30 @@ function getStatusCopy(status: string) {
   return "Status updated";
 }
 
+function getQualityTone(level: "high" | "moderate" | "low"): "neutral" | "warning" | "success" {
+  if (level === "high") {
+    return "success";
+  }
+
+  if (level === "moderate") {
+    return "neutral";
+  }
+
+  return "warning";
+}
+
+function getPrimaryBadgeTone(scan: Awaited<ReturnType<typeof getOrganizationScansPage>>["items"][number]): "neutral" | "warning" | "success" {
+  if (scan.interruptionLabel) {
+    return "warning";
+  }
+
+  return getQualityTone(scan.scanQualityLevel);
+}
+
+function getPrimaryBadgeLabel(scan: Awaited<ReturnType<typeof getOrganizationScansPage>>["items"][number]) {
+  return scan.interruptionLabel ?? scan.scanQualityLabel;
+}
+
 function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
   if (!value) {
     return "This domain cannot be re-scanned yet.";
@@ -73,19 +97,35 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
 type ScansPageProps = {
   searchParams?: Promise<{
     focusScanId?: string;
+    page?: string;
   }>;
 };
 
 export default async function ScansPage({ searchParams }: ScansPageProps) {
   const { organization } = await getDashboardContext();
-  const scans = await getOrganizationScans(organization.id);
   const resolvedSearchParams = searchParams ? await searchParams : {};
+  const page = Number.parseInt(resolvedSearchParams.page ?? "1", 10);
+  const result = await getOrganizationScansPage(organization.id, {
+    page: Number.isFinite(page) && page > 0 ? page : 1
+  });
+  const scans = result.items;
   const focusScanId = resolvedSearchParams.focusScanId ?? null;
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
   const completedCount = scans.filter((scan) => scan.status === "completed").length;
   const runningCount = scans.filter((scan) => scan.status === "running").length;
   const queuedCount = scans.filter((scan) => scan.status === "queued").length;
   const totalSignals = scans.reduce((sum, scan) => sum + (scan.totalSignals ?? 0), 0);
+  const pageStart = result.totalCount === 0 ? 0 : (result.page - 1) * 25 + 1;
+  const pageEnd = pageStart === 0 ? 0 : pageStart + scans.length - 1;
+  const pageQuery = (targetPage: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(targetPage));
+    if (focusScanId) {
+      params.set("focusScanId", focusScanId);
+    }
+
+    return params.toString();
+  };
 
   return (
     <div className="space-y-6 pb-6">
@@ -104,19 +144,19 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
 
           <div className="flex flex-wrap gap-2 text-sm text-slate-600 lg:justify-end">
             <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
-              <span className="font-semibold text-slate-900">{scans.length}</span> scans
+              <span className="font-semibold text-slate-900">{result.totalCount}</span> scans
             </div>
             <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
-              <span className="font-semibold text-slate-900">{totalSignals}</span> signals
+              <span className="font-semibold text-slate-900">{totalSignals}</span> signals on page
             </div>
             <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
-              <span className="font-semibold text-slate-900">{completedCount}</span> completed
+              <span className="font-semibold text-slate-900">{completedCount}</span> completed on page
             </div>
             <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
-              <span className="font-semibold text-slate-900">{runningCount}</span> running
+              <span className="font-semibold text-slate-900">{runningCount}</span> running on page
             </div>
             <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
-              <span className="font-semibold text-slate-900">{queuedCount}</span> queued
+              <span className="font-semibold text-slate-900">{queuedCount}</span> queued on page
             </div>
             {hasActiveScans ? (
               <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-100">
@@ -152,7 +192,9 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                     <th className="pb-3 pr-4 font-medium">Website</th>
                     <th className="pb-3 pr-4 font-medium">Type</th>
                     <th className="pb-3 pr-4 font-medium">Status</th>
+                    <th className="pb-3 pr-4 font-medium">Scan state</th>
                     <th className="pb-3 pr-4 font-medium">Signals</th>
+                    <th className="pb-3 pr-4 font-medium">Findings</th>
                     <th className="pb-3 pr-4 font-medium">Changes</th>
                     <th className="pb-3 pr-4 font-medium">Created</th>
                     <th className="pb-3 font-medium">Action</th>
@@ -194,7 +236,14 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       <td className="py-4 pr-4 text-slate-600">
                         <Badge tone={getStatusBadgeTone(scan.status)}>{formatStatus(scan.status)}</Badge>
                       </td>
+                      <td className="py-4 pr-4 text-slate-600">
+                        <div className="space-y-1">
+                          <Badge tone={getPrimaryBadgeTone(scan)}>{getPrimaryBadgeLabel(scan)}</Badge>
+                          {scan.interruptionReason ? <p className="text-xs text-amber-700">{scan.interruptionReason}</p> : null}
+                        </div>
+                      </td>
                       <td className="py-4 pr-4 text-slate-600">{scan.totalSignals ?? 0}</td>
+                      <td className="py-4 pr-4 text-slate-600">{scan.findingCount}</td>
                       <td className="py-4 pr-4 text-slate-600">
                         +{scan.addedCount} / -{scan.removedCount} / ~{scan.changedCount}
                       </td>
@@ -261,7 +310,10 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-2">
-                        <Badge tone={getStatusBadgeTone(scan.status)}>{formatStatus(scan.status)}</Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={getStatusBadgeTone(scan.status)}>{formatStatus(scan.status)}</Badge>
+                          <Badge tone={getPrimaryBadgeTone(scan)}>{getPrimaryBadgeLabel(scan)}</Badge>
+                        </div>
                         <div>
                           <h2 className="text-lg font-semibold tracking-tight text-slate-950">
                             {scan.domainHostname ?? "Unknown website"}
@@ -295,6 +347,10 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                         <dd className="mt-1 font-medium text-slate-900">{scan.totalSignals ?? 0}</dd>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <dt className="text-slate-500">Findings</dt>
+                        <dd className="mt-1 font-medium text-slate-900">{scan.findingCount}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <dt className="text-slate-500">Changes</dt>
                         <dd className="mt-1 font-medium text-slate-900">
                           +{scan.addedCount} / -{scan.removedCount} / ~{scan.changedCount}
@@ -305,6 +361,13 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                         <dd className="mt-1 font-medium text-slate-900">{formatDateTime(scan.createdAt)}</dd>
                       </div>
                     </dl>
+
+                    {scan.scanQualityWarning && scan.scanQualityWarning !== scan.interruptionReason ? (
+                      <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {scan.scanQualityWarning}
+                      </p>
+                    ) : null}
+                    {scan.interruptionReason ? <p className="mt-2 text-sm text-amber-700">{scan.interruptionReason}</p> : null}
 
                     {canRescan && scan.domainId && rescanAvailability ? (
                       <div className="mt-4 border-t border-slate-200 pt-4">
@@ -318,6 +381,29 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                   </article>
                 );
               })}
+            </div>
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                Showing {pageStart}-{pageEnd} of {result.totalCount} scans. Page {result.page} of {Math.max(1, result.pageCount)}.
+              </p>
+              <div className="flex gap-3">
+                {result.page > 1 ? (
+                  <Link
+                    className="rounded-full border border-slate-300 px-4 py-2 transition hover:border-slate-400 hover:text-slate-950"
+                    href={`/app/scans?${pageQuery(result.page - 1)}`}
+                  >
+                    Previous
+                  </Link>
+                ) : null}
+                {result.page < result.pageCount ? (
+                  <Link
+                    className="rounded-full border border-slate-300 px-4 py-2 transition hover:border-slate-400 hover:text-slate-950"
+                    href={`/app/scans?${pageQuery(result.page + 1)}`}
+                  >
+                    Next
+                  </Link>
+                ) : null}
+              </div>
             </div>
             </>
           )}

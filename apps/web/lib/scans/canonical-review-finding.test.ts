@@ -112,14 +112,14 @@ test("uses plain-language copy for pre-consent tracking activity", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /initial-load tracking or measurement activity|Additional evidence is needed|confirmed pre-consent violation/i
+    /initial-load tracking|Additional evidence is needed|confirmed pre-consent violation|detector-backed signal/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Review the retained requests|confirmed consent state/i
+    /Review the retained requests|confirmed consent state|Replay the consent flow with network capture enabled/i
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
-  assert.equal(presentation.confidenceScore, "0.8");
+  assert.equal(presentation.confidenceScore, "0.45");
 });
 
 test("uses calibrated generic copy for pre-consent tracking detected", () => {
@@ -144,14 +144,14 @@ test("uses calibrated generic copy for pre-consent tracking detected", () => {
   assert.equal(presentation.findingName, "Trackers observed before consent");
   assert.match(
     presentation.whyThisMatters,
-    /initial-load tracking or measurement activity|Additional evidence is needed|confirmed pre-consent violation/i
+    /initial-load tracking|Additional evidence is needed|confirmed pre-consent violation|detector-backed signal/i
   );
   assert.match(
     presentation.suggestedFix,
-    /Review the retained requests|confirmed consent state/i
+    /Review the retained requests|confirmed consent state|Replay the consent flow with network capture enabled/i
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
-  assert.equal(presentation.confidenceScore, "0.7");
+  assert.equal(presentation.confidenceScore, "0.45");
 });
 
 test("uses positive surface copy for privacy policy present", () => {
@@ -901,7 +901,7 @@ test("keeps critical negative accessibility risk scores in cautious reviewer-tri
     /representative automated WCAG findings first|manually verify|retain concrete examples/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.equal(presentation.confidenceScore, "0.8");
+  assert.equal(presentation.confidenceScore, "0.65");
 });
 
 test("keeps score-100 accessibility risk copy in cautious reviewer-triage language", () => {
@@ -935,7 +935,7 @@ test("keeps score-100 accessibility risk copy in cautious reviewer-triage langua
     /representative automated WCAG findings first|manually verify|retain concrete examples/i
   );
   assert.equal(presentation.suggestedBestPractice?.label, "W3C");
-  assert.equal(presentation.confidenceScore, "0.8");
+  assert.equal(presentation.confidenceScore, "0.65");
 });
 
 test("uses aria-specific accessibility copy", () => {
@@ -2179,6 +2179,56 @@ test("raises contact-path confidence when family-packet support evidence retains
 
   assert.equal(presentation.findingName, "Contact or feedback path present");
   assert.match(presentation.whyThisMatters, /clearer way to reach the operator/i);
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("raises contact-path confidence when packet-backed evidence retains multiple contact-like first-party urls even if one target was blocked", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      evidence: ["https://www.example.com/contact", "https://www.example.com/contact-us"],
+      fallbackEvidence: {
+        flags: [
+          "family_packet_backed",
+          "family_packet:support_access",
+          "family_packet_finding:contact_support_path_present"
+        ],
+        normalizedConcernNegativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed"],
+        pageUrls: ["https://www.example.com/contact", "https://www.example.com/contact-us"],
+        snippets: []
+      },
+      observedValue: "Detected dedicated contact or support surfaces on first-party URLs.",
+      severity: "medium",
+      title: "Contact or feedback path present"
+    },
+    []
+  );
+
+  assert.equal(presentation.confidenceScore, "0.85");
+});
+
+test("raises cookie-surface confidence when packet-backed privacy-controls evidence retains cookie text from a corroborating first-party anchor", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      evidence: ["https://www.example.com/legal/cookies", "https://www.example.com/privacy-notice"],
+      fallbackEvidence: {
+        flags: [
+          "family_packet_backed",
+          "family_packet:privacy_controls",
+          "family_packet_finding:cookie_policy_present"
+        ],
+        pageUrls: ["https://www.example.com/legal/cookies", "https://www.example.com/privacy-notice"],
+        snippets: [
+          "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC."
+        ]
+      },
+      observedValue:
+        "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies. Review Your Privacy Choices or browser-based opt-out preference signals such as GPC.",
+      severity: "medium",
+      title: "Cookie settings or policy surface present"
+    },
+    []
+  );
+
   assert.equal(presentation.confidenceScore, "0.85");
 });
 

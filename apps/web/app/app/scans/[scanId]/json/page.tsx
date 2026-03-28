@@ -8,6 +8,7 @@ import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-stat
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
+import { persistReportFindingCount } from "../../../../../server/scans/persist-report-finding-count";
 import { mapUnifiedPacketsForJsonView } from "./findings";
 
 type ScanJsonPageProps = {
@@ -78,6 +79,10 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
   const allFindings = mapUnifiedPacketsForJsonView({
     domainHostname: scanRecord.scan.domainHostname,
     packets: buildScanReportUnifiedFindings(scanRecord)
+  });
+  await persistReportFindingCount({
+    count: allFindings.length,
+    scanId: scanRecord.scan.id
   });
 
   return (

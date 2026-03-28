@@ -1,6 +1,7 @@
 import {
   hasConcreteDsarEvidence as hasConcreteDsarEvidenceFromConcern,
   hasConcreteSessionReplayEvidence as hasConcreteSessionReplayEvidenceFromConcern,
+  isPositiveInfrastructureConcern,
   hasSensitivePayloadEvidence as hasSensitivePayloadEvidenceFromConcern,
   hasStrongRightsFrictionEvidence as hasStrongRightsFrictionEvidenceFromConcern
 } from "./concern-policy";
@@ -97,6 +98,21 @@ export function shouldSurfacePrimarySignalFinding(input: {
     sourceType: "signal",
     title: input.key
   });
+
+  if (
+    concern.suggestedUnifiedFindingId === "bounded_key_page_discovery_unresolved" &&
+    concern.externalSurfacingEligibility !== "suppress"
+  ) {
+    return true;
+  }
+
+  if (
+    input.signalSource === "policy_enrichment_signal" &&
+    isPositiveInfrastructureConcern(concern) &&
+    concern.externalSurfacingEligibility !== "suppress"
+  ) {
+    return true;
+  }
 
   return (
     concern.promotionEligibility === "eligible" &&

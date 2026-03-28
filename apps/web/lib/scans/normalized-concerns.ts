@@ -5,6 +5,10 @@ import {
   getReportUnifiedFindingForValidationRule,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
+import {
+  hasConcreteReplayArtifact,
+  hasConcreteSensitivePayloadArtifact
+} from "./promotion-evidence-contracts";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -58,8 +62,18 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_policy_side_evidence"
   | "missing_contradiction_mapping"
   | "missing_explicit_contradiction_basis"
+  | "missing_specific_policy_anchor"
+  | "missing_specific_runtime_anchor"
+  | "unsupported_contradiction_mapping"
+  | "policy_semantic_review_incomplete"
+  | "runtime_tracking_review_incomplete"
+  | "possible_policy_runtime_mismatch"
+  | "insufficient_evidence_for_policy_behavior_conflict"
+  | "model_suspicion_without_structured_support"
   | "missing_concrete_preconsent_artifact"
-  | "missing_preconsent_sequence_evidence";
+  | "missing_preconsent_sequence_evidence"
+  | "missing_concrete_sensitive_payload"
+  | "missing_third_party_tracking_artifact";
 
 export type NormalizedConcernEvidenceBundle = {
   counts: Record<string, number>;
@@ -164,6 +178,10 @@ function getBooleanValue(value: unknown) {
   return typeof value === "boolean" ? value : null;
 }
 
+function getNumberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function hasConcretePayloadEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!Array.isArray(rawEvidence?.sensitivePayloadViolations) && !Array.isArray(rawEvidence?.sensitive_payload_violations)) {
     return false;
@@ -181,6 +199,261 @@ function hasConcretePayloadEvidence(rawEvidence: Record<string, unknown> | null 
       typeof row === "object" &&
       (row as { evidenceStrength?: unknown }).evidenceStrength !== "detector_only"
   );
+}
+
+function hasThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const directFlags = [
+    rawEvidence.adNetworkGoogleAds === true,
+    rawEvidence.ad_network_google_ads === true,
+    rawEvidence.adNetworkMetaAds === true,
+    rawEvidence.ad_network_meta_ads === true,
+    rawEvidence.retargetingPixelDetected === true,
+    rawEvidence.retargeting_pixel_detected === true,
+    rawEvidence.retargetingPixelArtifactPresent === true,
+    rawEvidence.retargeting_pixel_artifact_present === true,
+    rawEvidence.sessionReplayToolDetected === true,
+    rawEvidence.session_replay_tool_detected === true,
+    rawEvidence.sessionReplayVendorArtifactPresent === true,
+    rawEvidence.session_replay_vendor_artifact_present === true
+  ];
+
+  if (directFlags.some(Boolean)) {
+    return true;
+  }
+
+  const entities = [
+    ...(Array.isArray(rawEvidence.runtimeVendors) ? rawEvidence.runtimeVendors : []),
+    ...(Array.isArray(rawEvidence.runtime_vendors) ? rawEvidence.runtime_vendors : []),
+    ...(Array.isArray(rawEvidence.relatedVendors) ? rawEvidence.relatedVendors : []),
+    ...(Array.isArray(rawEvidence.preconsent_tracker_vendors) ? rawEvidence.preconsent_tracker_vendors : []),
+    ...(Array.isArray(rawEvidence.persisted_tracker_vendors) ? rawEvidence.persisted_tracker_vendors : [])
+  ];
+
+  return entities.some((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+function getPolicyArrayValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = rawEvidence?.[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getPolicyBooleanValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof rawEvidence?.[key] === "boolean") {
+      return rawEvidence[key] as boolean;
+    }
+  }
+
+  return null;
+}
+
+function getPolicyStringValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof rawEvidence?.[key] === "string" && String(rawEvidence[key]).trim().length > 0) {
+      return String(rawEvidence[key]).trim();
+    }
+  }
+
+  return null;
+}
+
+function getPolicyNumberValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof rawEvidence?.[key] === "number" && Number.isFinite(rawEvidence[key] as number)) {
+      return rawEvidence[key] as number;
+    }
+  }
+
+  return null;
+}
+
+function getPolicyFieldCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
+  const value =
+    rawEvidence?.policyFieldCoverage && typeof rawEvidence.policyFieldCoverage === "object"
+      ? rawEvidence.policyFieldCoverage
+      : rawEvidence?.policy_field_coverage && typeof rawEvidence.policy_field_coverage === "object"
+        ? rawEvidence.policy_field_coverage
+        : null;
+
+  return value as Record<string, { confidence?: unknown; found?: unknown; snippetHash?: unknown }> | null;
+}
+
+function hasStructuredPolicySupport(rawEvidence: Record<string, unknown> | null | undefined) {
+  const extractionStatus = getPolicyStringValue(rawEvidence, [
+    "policyExtractionStatus",
+    "policy_extraction_status"
+  ]);
+  const semanticConfidence = getPolicyNumberValue(rawEvidence, [
+    "policySemanticConfidence",
+    "policy_semantic_confidence"
+  ]);
+  const coverageRatio = getPolicyNumberValue(rawEvidence, [
+    "policyCoverageRatio",
+    "policy_coverage_ratio"
+  ]);
+  const snippetCount = getPolicyNumberValue(rawEvidence, [
+    "policySnippetCount",
+    "policy_snippet_count"
+  ]);
+
+  return (
+    extractionStatus === "fetched" &&
+    typeof semanticConfidence === "number" &&
+    semanticConfidence >= 0.6 &&
+    ((typeof coverageRatio === "number" && coverageRatio >= 0.35) ||
+      (typeof snippetCount === "number" && snippetCount >= 1))
+  );
+}
+
+function getFieldCoverageState(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  pattern: RegExp
+) {
+  const coverage = getPolicyFieldCoverage(rawEvidence);
+  if (!coverage) {
+    return null;
+  }
+
+  const entries = Object.entries(coverage).filter(([key]) => pattern.test(key));
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const foundValues = entries.map(([, value]) => value?.found).filter((value) => typeof value === "boolean") as boolean[];
+  if (foundValues.length === 0) {
+    return null;
+  }
+
+  return foundValues.some(Boolean);
+}
+
+function inferSpecializedUnifiedFindingId(input: {
+  currentSuggestedId?: string;
+  originType: NormalizedConcernOriginType;
+  rawEvidence?: Record<string, unknown> | null;
+  signalKey?: string;
+  title: string;
+}) {
+  const rawEvidence = input.rawEvidence ?? null;
+  const currentId = input.currentSuggestedId ?? null;
+  const title = input.title.toLowerCase();
+
+  const keyboardIssueCount = getNumberValue(
+    rawEvidence?.wcagKeyboardNavigationIssueCount ?? rawEvidence?.wcag_keyboard_navigation_issue_count
+  );
+  if (
+    (currentId === "keyboard_navigation_issues" ||
+      input.signalKey === "accessibility.wcag_keyboard_navigation_issue_count" ||
+      /keyboard/.test(title)) &&
+    typeof keyboardIssueCount === "number" &&
+    keyboardIssueCount >= 2
+  ) {
+    return "keyboard_only_task_completion_blocked";
+  }
+
+  const formLabelIssueCount = getNumberValue(
+    rawEvidence?.wcagFormLabelErrorCount ?? rawEvidence?.wcag_form_label_error_count
+  );
+  if (
+    (currentId === "form_label_issues" ||
+      input.signalKey === "accessibility.wcag_form_label_error_count" ||
+      /form label/.test(title)) &&
+    typeof formLabelIssueCount === "number" &&
+    formLabelIssueCount >= 3
+  ) {
+    return "critical_form_completion_barrier";
+  }
+
+  const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(rawEvidence);
+  if (
+    hasSensitivePayload &&
+    (currentId === "high_sensitivity_data_collection" ||
+      currentId === "health_information_collection" ||
+      currentId === "financial_information_collection" ||
+      currentId === "government_id_collection" ||
+      currentId === "ssn_collection" ||
+      input.signalKey === "commerce.high_sensitivity_data_collection_detected" ||
+      input.signalKey === "commerce.form_collects_health_information" ||
+      input.signalKey === "commerce.form_collects_financial_information" ||
+      input.signalKey === "commerce.form_collects_government_id" ||
+      input.signalKey === "commerce.form_collects_ssn")
+  ) {
+    if (hasConcreteReplayArtifact(rawEvidence)) {
+      return "session_replay_on_sensitive_input_surface";
+    }
+
+    if (hasThirdPartyTrackingEvidence(rawEvidence)) {
+      return "sensitive_data_collection_with_third_party_tracking_present";
+    }
+  }
+
+  if (currentId === "account_exit_terms_missing") {
+    const subscriptionCancellationPolicyPresent = getPolicyBooleanValue(rawEvidence, [
+      "subscriptionCancellationPolicyPresent",
+      "subscription_cancellation_policy_present"
+    ]);
+    const cancellationTermsPresent = getPolicyBooleanValue(rawEvidence, [
+      "cancellationTermsPresent",
+      "cancellation_terms_present"
+    ]);
+    const policyCancellationOrRefundPresent = getPolicyBooleanValue(rawEvidence, [
+      "policyCancellationOrRefundPresent",
+      "policy_cancellation_or_refund_present"
+    ]);
+    const accountClosureTermsPresent = getPolicyBooleanValue(rawEvidence, [
+      "accountClosureTermsPresent",
+      "account_closure_terms_present"
+    ]);
+
+    if (
+      (subscriptionCancellationPolicyPresent === false || policyCancellationOrRefundPresent === false) &&
+      cancellationTermsPresent !== true &&
+      accountClosureTermsPresent !== true
+    ) {
+      return "cancellation_method_disclosure_missing";
+    }
+  }
+
+  if (!currentId && hasStructuredPolicySupport(rawEvidence)) {
+    const policyDataCategories = getPolicyArrayValue(rawEvidence, [
+      "policyDataCategories",
+      "policy_data_categories"
+    ]);
+    const policySubprocessorsListed = getPolicyBooleanValue(rawEvidence, [
+      "policySubprocessorsListed",
+      "policy_subprocessors_listed"
+    ]);
+    const dataCategoriesCoverage = getFieldCoverageState(rawEvidence, /data[_-]?categor|category|categories/i);
+    const purposeCoverage = getFieldCoverageState(rawEvidence, /purpose|processing[_-]?purpose|data[_-]?use|use[_-]?of[_-]?data/i);
+
+    if (
+      Array.isArray(policyDataCategories) &&
+      policyDataCategories.length === 0 &&
+      dataCategoriesCoverage !== true
+    ) {
+      return "data_categories_disclosure_missing";
+    }
+
+    if (policySubprocessorsListed === false) {
+      return "third_party_recipient_disclosure_missing";
+    }
+
+    if (purposeCoverage === false) {
+      return "purpose_of_use_disclosure_missing";
+    }
+  }
+
+  return currentId ?? undefined;
 }
 
 function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -534,7 +807,13 @@ function resolveSuggestedUnifiedFindingId(input: {
   if (input.linkedValidationFinding) {
     const validationMatch = getReportUnifiedFindingForValidationRule(input.linkedValidationFinding.ruleKey);
     if (validationMatch) {
-      return validationMatch.id;
+      return inferSpecializedUnifiedFindingId({
+        currentSuggestedId: validationMatch.id,
+        originType: input.originType,
+        rawEvidence: input.rawEvidence,
+        signalKey: input.signalKey,
+        title: input.title
+      });
     }
   }
 
@@ -543,10 +822,22 @@ function resolveSuggestedUnifiedFindingId(input: {
       ? getReportUnifiedFindingForValidationRule(input.originKey)
       : null;
   if (originValidationMatch) {
-    return originValidationMatch.id;
+    return inferSpecializedUnifiedFindingId({
+      currentSuggestedId: originValidationMatch.id,
+      originType: input.originType,
+      rawEvidence: input.rawEvidence,
+      signalKey: input.signalKey,
+      title: input.title
+    });
   }
 
-  return getReportUnifiedFindingByAlias(input.title)?.id ?? undefined;
+  return inferSpecializedUnifiedFindingId({
+    currentSuggestedId: getReportUnifiedFindingByAlias(input.title)?.id,
+    originType: input.originType,
+    rawEvidence: input.rawEvidence,
+    signalKey: input.signalKey,
+    title: input.title
+  });
 }
 
 function deriveCanonicalConcernKey(input: {
@@ -761,7 +1052,22 @@ export function buildNormalizedConcerns(input: {
 
 export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedConcern[]): ConcernBackedUnifiedFindingCandidate[] {
   return concerns
-    .filter((concern) => concern.promotionEligibility !== "blocked")
+    .filter((concern) => {
+      if (concern.promotionEligibility === "blocked") {
+        return false;
+      }
+
+      // Generic policy/behavior conflicts should never assemble into a unified packet
+      // unless the contradiction-grade concern gate already marked them promotion-eligible.
+      if (
+        concern.suggestedUnifiedFindingId === "policy_behavior_conflict" &&
+        concern.promotionEligibility !== "eligible"
+      ) {
+        return false;
+      }
+
+      return true;
+    })
     .map((concern) => ({
       categoryId: concern.categoryId,
       description: concern.description,

@@ -50,7 +50,7 @@ export function InsightTemplate({
 
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>How scanners detect signals</CardTitle>
+            <CardTitle>How scanners surface reviewable signals</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
             {scannerSignals.map((item) => (
@@ -76,15 +76,15 @@ export function InsightTemplate({
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-600">
             <p>
-              These pages provide compact reference material around the kinds of publicly observable
-              signals CertScore.ai can detect.
+              These pages provide compact reference material around the kinds of public website
+              signals CertScore.ai can surface for review.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link href="/">Start free scan</Link>
+                <Link href="/">Scan a website</Link>
               </Button>
               {relatedLinks.map((link) => (
                 <Button asChild key={link.href} variant="secondary">
