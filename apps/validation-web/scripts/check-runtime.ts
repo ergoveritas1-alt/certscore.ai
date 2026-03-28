@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 import { hasSupabaseAdminEnv, hasSupabasePublicEnv } from "@website-signal-risk-scanner/db";
 import { getSupabaseHealth } from "../server/health/get-supabase-health";
 
+const skipLiveSupabaseProbe = process.env.VALIDATION_WEB_SKIP_RUNTIME_HEALTHCHECK === "1";
+
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
 }
@@ -18,6 +20,11 @@ async function main() {
   }
 
   const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname;
+
+  if (skipLiveSupabaseProbe) {
+    pass("supabase runtime", `Required Supabase env is present. Skipping live runtime probe during build for host ${supabaseHost}.`);
+    return;
+  }
 
   try {
     await lookup(supabaseHost);
