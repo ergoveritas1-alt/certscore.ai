@@ -32,6 +32,9 @@ importers:
       '@website-signal-risk-scanner/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@website-signal-risk-scanner/web-bot-auth':
+        specifier: workspace:*
+        version: link:../../packages/web-bot-auth
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -84,6 +87,9 @@ importers:
       '@website-signal-risk-scanner/validation-shared':
         specifier: workspace:*
         version: link:../../packages/validation-shared
+      '@website-signal-risk-scanner/web-bot-auth':
+        specifier: workspace:*
+        version: link:../../packages/web-bot-auth
       bullmq:
         specifier: ^5.43.0
         version: 5.70.4
@@ -196,6 +202,8 @@ importers:
         version: 19.2.3(@types/react@19.2.14)
 
   packages/validation-shared: {}
+
+  packages/web-bot-auth: {}
 
 packages:
 

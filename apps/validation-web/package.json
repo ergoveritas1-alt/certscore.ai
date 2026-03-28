@@ -15,6 +15,7 @@
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/ui": "workspace:*",
+    "@website-signal-risk-scanner/web-bot-auth": "workspace:*",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.43.0",
     "next": "^15.2.0",

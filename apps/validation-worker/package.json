@@ -18,6 +18,7 @@
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/validation-shared": "workspace:*",
+    "@website-signal-risk-scanner/web-bot-auth": "workspace:*",
     "bullmq": "^5.43.0",
     "ioredis": "^5.4.2",
     "playwright": "^1.51.1",

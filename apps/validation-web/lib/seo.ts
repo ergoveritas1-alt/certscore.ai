@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-export const SITE_URL = "https://certscore.ai";
-export const SITE_NAME = "CertScore.ai";
+export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://consentcheck.site";
+export const SITE_NAME = "ConsentCheck";
 
 type CreatePageMetadataInput = {
   title: string;

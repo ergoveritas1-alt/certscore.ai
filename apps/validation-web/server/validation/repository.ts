@@ -10,6 +10,7 @@ import {
 } from "@website-signal-risk-scanner/validation-shared";
 import { extractHostname, normalizeUrl } from "@website-signal-risk-scanner/shared";
 import { getWebServerEnv } from "../../lib/env";
+import { buildValidationCrawlerRequestHeaders } from "../../lib/web-bot-auth";
 import { requireValidationAdminContext } from "./auth";
 
 type ValidationSettingsRow = {
@@ -76,11 +77,10 @@ function rankBandForRank(rank: number | null) {
 
 async function listTrancoPreviewTargets(limit = 5) {
   const env = getWebServerEnv();
-  const response = await fetch(env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL, {
-    headers: {
-      "User-Agent": "ValidationOpsCrawler/1.0"
-    }
-  });
+  const sourceUrl = env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL;
+  const sourceRequest = buildValidationCrawlerRequestHeaders(sourceUrl);
+  console.info("[validation-web] crawler request", sourceRequest.metadata);
+  const response = await fetch(sourceUrl, { headers: sourceRequest.headers });
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Tranco source: ${response.status}`);
@@ -97,11 +97,9 @@ async function listTrancoPreviewTargets(limit = 5) {
     }
 
     const csvUrl = new URL(match[1], "https://tranco-list.eu").toString();
-    const csvResponse = await fetch(csvUrl, {
-      headers: {
-        "User-Agent": "ValidationOpsCrawler/1.0"
-      }
-    });
+    const csvRequest = buildValidationCrawlerRequestHeaders(csvUrl);
+    console.info("[validation-web] crawler request", csvRequest.metadata);
+    const csvResponse = await fetch(csvUrl, { headers: csvRequest.headers });
 
     if (!csvResponse.ok) {
       throw new Error(`Failed to fetch Tranco CSV: ${csvResponse.status}`);

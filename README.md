@@ -12,6 +12,7 @@ website-signal-risk-scanner/
 │  └─ validation-worker/
 ├─ packages/
 │  ├─ shared/
+│  ├─ web-bot-auth/
 │  ├─ db/
 │  ├─ scan-core/
 │  └─ ui/
@@ -29,6 +30,7 @@ website-signal-risk-scanner/
 - `apps/validation-worker`: active validation runtime owned by `WC01`
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
+- `packages/web-bot-auth`: server-only Web Bot Auth signing and key-directory helpers
 - `packages/db`: Supabase clients and database env helpers
 - `packages/ui`: reusable UI primitives
 
@@ -178,6 +180,26 @@ Use this runtime smoke helper:
 The full runtime QA sequence is documented in [docs/runtime-validation.md](/Users/benmasek/WC01/docs/runtime-validation.md).
 The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](/Users/benmasek/WC01/docs/validation-pipeline-plan.md).
 The validation crawler deployment and VM runbook is documented in [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md).
+Cloudflare Verified Bot setup is documented in [docs/cloudflare-web-bot-auth.md](/Users/benmasek/WC01/docs/cloudflare-web-bot-auth.md).
+
+## Web Bot Auth
+
+ConsentCheck can expose a signed HTTP Message Signatures key directory and sign outbound HTTP crawler requests for Cloudflare Verified Bot workflows.
+
+Required configuration:
+
+- `WEB_BOT_AUTH_ENABLED`
+- `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
+- `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
+- `WEB_BOT_AUTH_EXPIRES_SECONDS`
+- `WEB_BOT_AUTH_INCLUDE_NONCE`
+
+Common commands:
+
+- `pnpm web-bot-auth:generate`
+- `pnpm web-bot-auth:print`
+- `pnpm web-bot-auth:test-request`
+- `pnpm test:web-bot-auth`
 
 ## Production deployment
 

@@ -17,7 +17,12 @@ const webServerEnvSchema = z.object({
   VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_TRANCO_SOURCE_URL: z.string().url().optional(),
   VALIDATION_TRANCO_MIN_RANK: z.coerce.number().int().min(1).optional(),
-  VALIDATION_TRANCO_MAX_RANK: z.coerce.number().int().min(1000).optional()
+  VALIDATION_TRANCO_MAX_RANK: z.coerce.number().int().min(1000).optional(),
+  WEB_BOT_AUTH_ENABLED: z.enum(["0", "1"]).optional(),
+  WEB_BOT_AUTH_PRIVATE_KEY_PEM: z.string().min(1).optional(),
+  WEB_BOT_AUTH_SIGNATURE_AGENT_URL: z.string().url().optional(),
+  WEB_BOT_AUTH_EXPIRES_SECONDS: z.coerce.number().int().min(1).max(3600).optional(),
+  WEB_BOT_AUTH_INCLUDE_NONCE: z.enum(["0", "1"]).optional()
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;

@@ -6,18 +6,18 @@ import { SITE_URL } from "../lib/seo";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Validation Ops",
-    template: `%s | Validation Ops`
+    default: "ConsentCheck",
+    template: `%s | ConsentCheck`
   },
-  description: "Validation pipeline for operator review, run management, and verdict analytics.",
-  applicationName: "Validation Ops",
+  description: "Public crawler identity, scanning policy, and verification details for ConsentCheck.",
+  applicationName: "ConsentCheck",
   icons: {
     icon: "/validation-icon.svg",
     shortcut: "/validation-icon.svg",
     apple: "/validation-icon.svg"
   },
   openGraph: {
-    siteName: "Validation Ops",
+    siteName: "ConsentCheck",
     type: "website"
   },
   twitter: {

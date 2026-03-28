@@ -10,7 +10,6 @@ import {
   extractHostname,
   getCrawlerProductToken,
   getCrawlerPublicUrl,
-  getCrawlerUserAgent,
   getPlanDefinition,
   normalizeUrl,
   type FinancialValidationEvidence
@@ -20,6 +19,7 @@ import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToT
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
+import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
 
 const VALIDATION_SETTINGS_KEY = "default";
 
@@ -325,11 +325,10 @@ export async function syncTrancoTargets(force = false) {
     return { insertedCount: 0, skipped: true as const };
   }
 
-  const response = await fetch(env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL, {
-    headers: {
-      "User-Agent": getCrawlerUserAgent()
-    }
-  });
+  const sourceUrl = env.VALIDATION_TRANCO_SOURCE_URL ?? TRANCO_SOURCE_FALLBACK_URL;
+  const sourceRequest = buildValidationWorkerCrawlerHeaders(sourceUrl);
+  console.info("[validation-worker] crawler request", sourceRequest.metadata);
+  const response = await fetch(sourceUrl, { headers: sourceRequest.headers });
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Tranco source: ${response.status}`);
@@ -346,11 +345,9 @@ export async function syncTrancoTargets(force = false) {
     }
 
     const csvUrl = new URL(match[1], "https://tranco-list.eu").toString();
-    const csvResponse = await fetch(csvUrl, {
-      headers: {
-        "User-Agent": getCrawlerUserAgent()
-      }
-    });
+    const csvRequest = buildValidationWorkerCrawlerHeaders(csvUrl);
+    console.info("[validation-worker] crawler request", csvRequest.metadata);
+    const csvResponse = await fetch(csvUrl, { headers: csvRequest.headers });
 
     if (!csvResponse.ok) {
       throw new Error(`Failed to fetch Tranco CSV: ${csvResponse.status}`);

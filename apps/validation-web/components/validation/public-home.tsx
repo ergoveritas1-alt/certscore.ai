@@ -42,10 +42,13 @@ export async function ValidationPublicHome() {
         <div className="grid gap-6 md:grid-cols-3">
           <Card className="border-slate-200 bg-white/85">
             <CardHeader>
-              <CardTitle>Purpose</CardTitle>
+              <CardTitle>Purpose and scope</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
-              Benchmark scanner precision by comparing automated findings with structured LLM review.
+              <ul className="list-disc space-y-2 pl-5">
+                <li>Benchmark scanner precision by comparing automated findings with structured LLM review.</li>
+                <li>Verify compliance posture for websites across public-web rule families such as GDPR, CCPA/CPRA, CFTC, and SEC.</li>
+              </ul>
             </CardContent>
           </Card>
           <Card className="border-slate-200 bg-white/85">
@@ -58,7 +61,7 @@ export async function ValidationPublicHome() {
           </Card>
           <Card className="border-slate-200 bg-white/85">
             <CardHeader>
-              <CardTitle>Scope</CardTitle>
+              <CardTitle>Current focus</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">
               Validation currently focuses on privacy and legal rule families, not accessibility verdicting.

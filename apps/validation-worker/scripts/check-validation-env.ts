@@ -14,6 +14,11 @@ const validationWorkerCheckSchema = z.object({
   VALIDATION_OPENAI_MODEL: z.string().min(1).optional(),
   VALIDATION_TRANCO_MIN_RANK: z.string().optional(),
   VALIDATION_TRANCO_MAX_RANK: z.string().optional(),
+  WEB_BOT_AUTH_ENABLED: z.enum(["0", "1"]).optional(),
+  WEB_BOT_AUTH_PRIVATE_KEY_PEM: z.string().min(1).optional(),
+  WEB_BOT_AUTH_SIGNATURE_AGENT_URL: z.string().url().optional(),
+  WEB_BOT_AUTH_EXPIRES_SECONDS: z.string().optional(),
+  WEB_BOT_AUTH_INCLUDE_NONCE: z.enum(["0", "1"]).optional(),
   SCANNER_CRAWLER_NAME: z.string().min(1).optional(),
   SCANNER_CRAWLER_PUBLIC_URL: z.string().url().optional(),
   VALIDATION_CRAWLER_PUBLIC_URL: z.string().url().optional()
@@ -58,6 +63,7 @@ function main() {
   info("default run mode", values.VALIDATION_DEFAULT_RUN_MODE ?? "manual");
   info("default interval", values.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES ?? "20");
   info("validation model", values.VALIDATION_OPENAI_MODEL ?? "gpt-5.4");
+  info("web bot auth enabled", values.WEB_BOT_AUTH_ENABLED ?? "0");
 }
 
 main();

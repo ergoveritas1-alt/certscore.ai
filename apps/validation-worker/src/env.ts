@@ -37,6 +37,14 @@ const workerEnvSchema = z.object({
   ),
   VALIDATION_TRANCO_SOURCE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_OPENAI_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4")),
+  WEB_BOT_AUTH_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
+  WEB_BOT_AUTH_PRIVATE_KEY_PEM: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+  WEB_BOT_AUTH_SIGNATURE_AGENT_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  WEB_BOT_AUTH_EXPIRES_SECONDS: z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int().min(1).max(3600).default(300)
+  ),
+  WEB_BOT_AUTH_INCLUDE_NONCE: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
   SCANNER_CRAWLER_NAME: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   SCANNER_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),

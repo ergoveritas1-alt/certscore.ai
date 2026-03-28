@@ -26,6 +26,11 @@ Deploy the same `apps/web` app to Vercel, but with:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `VALIDATION_REDIS_URL`
 - `CERTSCORE_ADMIN_EMAILS`
+- optional `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
+- optional `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
+- optional `WEB_BOT_AUTH_EXPIRES_SECONDS`
+- optional `WEB_BOT_AUTH_INCLUDE_NONCE`
+- optional `WEB_BOT_AUTH_ENABLED=1`
 
 Recommended checks before deploy:
 
@@ -35,6 +40,8 @@ Recommended checks before deploy:
 After deploy:
 
 - `/` should show the crawler identity page
+- `/crawler` should show the public crawler identity and Verified Bot details
+- `/.well-known/http-message-signatures-directory` should return a signed JWKS response when key material is configured
 - `/app` should require login and platform-admin access
 
 ## 3. Validation Worker Image
@@ -68,6 +75,11 @@ Create an env file on the VM such as `/etc/validation-worker.env` with:
 - `VALIDATION_TRANCO_MAX_RANK=100000`
 - optional `VALIDATION_TRANCO_SOURCE_URL`
 - optional `VALIDATION_CRAWLER_PUBLIC_URL`
+- optional `WEB_BOT_AUTH_ENABLED=1`
+- optional `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
+- optional `WEB_BOT_AUTH_SIGNATURE_AGENT_URL=https://consentcheck.site/.well-known/http-message-signatures-directory`
+- optional `WEB_BOT_AUTH_EXPIRES_SECONDS=300`
+- optional `WEB_BOT_AUTH_INCLUDE_NONCE=0`
 - optional `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
 
 If using Docker:
