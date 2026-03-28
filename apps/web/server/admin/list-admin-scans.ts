@@ -28,6 +28,16 @@ export type AdminScanOverviewMetrics = {
   totalScans: number;
 };
 
+export type BlockedRunTelemetry = {
+  blockedCountByAsn: Array<{ asn: string; count: number }>;
+  blockedCountByEgress: Array<{ egress: string; count: number }>;
+  blockedCountByHomepageStatus: Array<{ homepageStatus: string; count: number }>;
+  blockedCountByHour: Array<{ hour: string; count: number }>;
+  blockedCountByVendorGuess: Array<{ vendorGuess: string; count: number }>;
+  repeatedNormalizedBlockPageHashClusters: Array<{ count: number; normalizedBodyHash: string }>;
+  successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
+};
+
 type ScanRow = {
   completed_at: string | null;
   created_at: string;
@@ -50,10 +60,17 @@ type OrganizationRow = {
 };
 
 type SnapshotRow = {
+  asn?: number | null;
+  block_vendor_guess?: string | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   certscore_overall: number;
+  egress_id?: string | null;
+  egress_type?: string | null;
   homepage_fetch_http_status: number | null;
+  normalized_body_hash?: string | null;
+  scan_outcome?: string | null;
+  scan_timestamp?: string | null;
   robots_fetch_http_status: number | null;
   scan_id: string;
   total_signals: number;
@@ -156,5 +173,78 @@ export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMe
     http403Count: http403Count ?? 0,
     http429Count: http429Count ?? 0,
     blockedOrCaptchaCount: blockedOrCaptchaCount ?? 0,
+  };
+}
+
+function incrementCount(map: Map<string, number>, key: string) {
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
+export async function getBlockedRunTelemetry(hours = 72): Promise<BlockedRunTelemetry> {
+  await requirePlatformAdminContext();
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("scan_snapshots")
+    .select(
+      "scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash"
+    )
+    .gte("scan_timestamp", since)
+    .order("scan_timestamp", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load blocked run telemetry: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as SnapshotRow[];
+  const blockedRows = rows.filter((row) => String(row.scan_outcome ?? "").startsWith("reachability_blocked") || row.scan_outcome === "robots_restricted" || row.scan_outcome === "unknown_access_limitation");
+  const blockedByHour = new Map<string, number>();
+  const blockedByEgress = new Map<string, number>();
+  const blockedByAsn = new Map<string, number>();
+  const blockedByVendor = new Map<string, number>();
+  const blockedByHomepageStatus = new Map<string, number>();
+  const blockHashClusters = new Map<string, number>();
+  const egressTotals = new Map<string, { success: number; total: number }>();
+
+  for (const row of rows) {
+    const egress = row.egress_id ?? row.egress_type ?? "unknown";
+    const egressSummary = egressTotals.get(egress) ?? { success: 0, total: 0 };
+    egressSummary.total += 1;
+    if (row.scan_outcome === "completed_successfully" || row.scan_outcome === "completed_partial") {
+      egressSummary.success += 1;
+    }
+    egressTotals.set(egress, egressSummary);
+  }
+
+  for (const row of blockedRows) {
+    const hour = typeof row.scan_timestamp === "string" ? row.scan_timestamp.slice(0, 13) + ":00:00Z" : "unknown";
+    const egress = row.egress_id ?? row.egress_type ?? "unknown";
+    incrementCount(blockedByHour, hour);
+    incrementCount(blockedByEgress, egress);
+    incrementCount(blockedByAsn, row.asn ? String(row.asn) : "unknown");
+    incrementCount(blockedByVendor, row.block_vendor_guess ?? "unknown");
+    incrementCount(blockedByHomepageStatus, row.homepage_fetch_http_status ? String(row.homepage_fetch_http_status) : "unknown");
+    if (typeof row.normalized_body_hash === "string" && row.normalized_body_hash.length > 0) {
+      incrementCount(blockHashClusters, row.normalized_body_hash);
+    }
+  }
+
+  return {
+    blockedCountByHour: [...blockedByHour.entries()].map(([hour, count]) => ({ hour, count })),
+    blockedCountByEgress: [...blockedByEgress.entries()].map(([egress, count]) => ({ egress, count })).sort((a, b) => b.count - a.count),
+    blockedCountByAsn: [...blockedByAsn.entries()].map(([asn, count]) => ({ asn, count })).sort((a, b) => b.count - a.count),
+    blockedCountByVendorGuess: [...blockedByVendor.entries()].map(([vendorGuess, count]) => ({ vendorGuess, count })).sort((a, b) => b.count - a.count),
+    blockedCountByHomepageStatus: [...blockedByHomepageStatus.entries()].map(([homepageStatus, count]) => ({ homepageStatus, count })).sort((a, b) => b.count - a.count),
+    repeatedNormalizedBlockPageHashClusters: [...blockHashClusters.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([normalizedBodyHash, count]) => ({ normalizedBodyHash, count }))
+      .sort((a, b) => b.count - a.count),
+    successRateByEgress: [...egressTotals.entries()]
+      .map(([egress, summary]) => ({
+        egress,
+        successRate: summary.total > 0 ? summary.success / summary.total : 0,
+        total: summary.total
+      }))
+      .sort((a, b) => a.successRate - b.successRate)
   };
 }

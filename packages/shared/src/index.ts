@@ -3,6 +3,8 @@ export * from "./constants/queue";
 export * from "./constants/scan";
 export * from "./constants/usage";
 export * from "./constants/validation";
+export * from "./access-limitations";
+export * from "./access-limitations.fixtures";
 export * from "./types/entities";
 export * from "./types/signals";
 export * from "./types/preview";

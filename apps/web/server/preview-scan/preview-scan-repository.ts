@@ -60,6 +60,8 @@ type ScanConfig = {
 };
 
 type SnapshotRow = {
+  authWallDetected?: ScanSnapshot["authWallDetected"] | null;
+  authWallSuspected?: ScanSnapshot["authWallSuspected"] | null;
   accessibilityClaimMismatchDetected: ScanSnapshot["accessibilityClaimMismatchDetected"];
   accessibilityLitigationRiskScore: ScanSnapshot["accessibilityLitigationRiskScore"];
   accessibilityScore: ScanSnapshot["accessibilityScore"];
@@ -68,10 +70,16 @@ type SnapshotRow = {
   advertisingDisclosurePresent: ScanSnapshot["advertisingDisclosurePresent"];
   advertisingTrackerCount: ScanSnapshot["advertisingTrackerCount"];
   affiliateDisclosurePresent: ScanSnapshot["affiliateDisclosurePresent"];
+  blockPageClassification?: ScanSnapshot["blockPageClassification"] | null;
+  blockVendorGuess?: ScanSnapshot["blockVendorGuess"] | null;
+  blockedFlag?: ScanSnapshot["blockedFlag"] | null;
   certscoreOverall: ScanSnapshot["certscoreOverall"];
   californiaExposureLikely: ScanSnapshot["californiaExposureLikely"];
   cancellationPolicyPresent: ScanSnapshot["cancellationPolicyPresent"];
+  captchaFlag?: ScanSnapshot["captchaFlag"] | null;
+  challengeSuspected?: ScanSnapshot["challengeSuspected"] | null;
   contactPagePresent: ScanSnapshot["contactPagePresent"];
+  coverageLevel?: ScanSnapshot["coverageLevel"] | null;
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
   consentMaturityScore: ScanSnapshot["consentMaturityScore"];
   consumerProtectionScore: ScanSnapshot["consumerProtectionScore"];
@@ -81,12 +89,21 @@ type SnapshotRow = {
   doNotSellLinkPresent: ScanSnapshot["doNotSellLinkPresent"];
   dsarRequestMechanismPresent: ScanSnapshot["dsarRequestMechanismPresent"];
   ecommerceSiteLikely: ScanSnapshot["ecommerceSiteLikely"];
+  fingerprintBlockSuspected?: ScanSnapshot["fingerprintBlockSuspected"] | null;
   freeTrialDetected: ScanSnapshot["freeTrialDetected"];
   finalUrl: ScanSnapshot["finalUrl"];
+  geoBlockSuspected?: ScanSnapshot["geoBlockSuspected"] | null;
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
+  homepageFetchHttpStatus?: ScanSnapshot["homepageFetchHttpStatus"] | null;
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
+  passiveVerificationAttemptCount?: ScanSnapshot["passiveVerificationAttemptCount"] | null;
+  passiveVerificationAttempted?: ScanSnapshot["passiveVerificationAttempted"] | null;
   redirectCount: ScanSnapshot["redirectCount"];
+  rateLimitSuspected?: ScanSnapshot["rateLimitSuspected"] | null;
   registeredDomain: ScanSnapshot["registeredDomain"];
+  robotsAllowed?: ScanSnapshot["robotsAllowed"] | null;
+  robotsFetchHttpStatus?: ScanSnapshot["robotsFetchHttpStatus"] | null;
+  robotsFetchStatus?: ScanSnapshot["robotsFetchStatus"] | null;
   mentionsCcpaOrCpra: ScanSnapshot["mentionsCcpaOrCpra"];
   mentionsCrossBorderTransfer: ScanSnapshot["mentionsCrossBorderTransfer"];
   mentionsDataRetention: ScanSnapshot["mentionsDataRetention"];
@@ -481,10 +498,27 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
         "total_signals",
         "pages_scanned",
         "homepage_fetch_status",
+        "homepage_fetch_http_status",
         "final_url",
         "registered_domain",
         "redirect_count",
         "partial_scan",
+        "robots_allowed",
+        "robots_fetch_http_status",
+        "robots_fetch_status",
+        "auth_wall_detected",
+        "auth_wall_suspected",
+        "blocked_flag",
+        "captcha_flag",
+        "block_page_classification",
+        "block_vendor_guess",
+        "challenge_suspected",
+        "rate_limit_suspected",
+        "geo_block_suspected",
+        "fingerprint_block_suspected",
+        "passive_verification_attempt_count",
+        "passive_verification_attempted",
+        "coverage_level",
         "certscore_overall",
         "privacy_score",
         "accessibility_score",
@@ -555,11 +589,33 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
   return {
     totalSignals: Number(row.total_signals ?? 0),
     pagesScanned: Number(row.pages_scanned ?? 0),
+    authWallDetected: typeof row.auth_wall_detected === "boolean" ? (row.auth_wall_detected as boolean) : null,
+    authWallSuspected: typeof row.auth_wall_suspected === "boolean" ? (row.auth_wall_suspected as boolean) : null,
+    blockPageClassification:
+      typeof row.block_page_classification === "string" ? (row.block_page_classification as ScanSnapshot["blockPageClassification"]) : null,
+    blockVendorGuess: typeof row.block_vendor_guess === "string" ? (row.block_vendor_guess as ScanSnapshot["blockVendorGuess"]) : null,
+    blockedFlag: typeof row.blocked_flag === "boolean" ? (row.blocked_flag as boolean) : null,
+    captchaFlag: typeof row.captcha_flag === "boolean" ? (row.captcha_flag as boolean) : null,
+    challengeSuspected: typeof row.challenge_suspected === "boolean" ? (row.challenge_suspected as boolean) : null,
+    coverageLevel: typeof row.coverage_level === "string" ? (row.coverage_level as string) : null,
+    fingerprintBlockSuspected:
+      typeof row.fingerprint_block_suspected === "boolean" ? (row.fingerprint_block_suspected as boolean) : null,
     homepageFetchStatus: typeof row.homepage_fetch_status === "string" ? (row.homepage_fetch_status as ScanSnapshot["homepageFetchStatus"]) : null,
+    homepageFetchHttpStatus:
+      typeof row.homepage_fetch_http_status === "number" ? (row.homepage_fetch_http_status as number) : null,
     finalUrl: typeof row.final_url === "string" ? (row.final_url as string) : null,
+    geoBlockSuspected: typeof row.geo_block_suspected === "boolean" ? (row.geo_block_suspected as boolean) : null,
     registeredDomain: typeof row.registered_domain === "string" ? (row.registered_domain as string) : null,
+    passiveVerificationAttemptCount:
+      typeof row.passive_verification_attempt_count === "number" ? (row.passive_verification_attempt_count as number) : null,
+    passiveVerificationAttempted:
+      typeof row.passive_verification_attempted === "boolean" ? (row.passive_verification_attempted as boolean) : null,
     redirectCount: Number(row.redirect_count ?? 0),
     partialScan: typeof row.partial_scan === "boolean" ? (row.partial_scan as boolean) : false,
+    rateLimitSuspected: typeof row.rate_limit_suspected === "boolean" ? (row.rate_limit_suspected as boolean) : null,
+    robotsAllowed: typeof row.robots_allowed === "boolean" ? (row.robots_allowed as boolean) : null,
+    robotsFetchHttpStatus: typeof row.robots_fetch_http_status === "number" ? (row.robots_fetch_http_status as number) : null,
+    robotsFetchStatus: typeof row.robots_fetch_status === "string" ? (row.robots_fetch_status as ScanSnapshot["robotsFetchStatus"]) : null,
     certscoreOverall: Number(row.certscore_overall ?? 0),
     privacyScore: Number(row.privacy_score ?? 0),
     accessibilityScore: Number(row.accessibility_score ?? 0),

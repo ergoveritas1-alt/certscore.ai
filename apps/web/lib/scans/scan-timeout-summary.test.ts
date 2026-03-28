@@ -132,7 +132,7 @@ test("logs the exact stop reason when homepage access is forbidden", () => {
     status: "completed"
   });
 
-  assert.equal(summary.title, "Scan outcome: Reachability blocked");
+  assert.equal(summary.title, "Scan outcome: Access limited by site protections");
   assert.equal(summary.tone, "warning");
   assert(summary.details.some((detail) => detail.includes("Scan interpretation stopped. homepage request was blocked with HTTP 403.")));
 });
@@ -150,7 +150,7 @@ test("recognizes persisted access limitation events under the current event name
     status: "completed"
   });
 
-  assert.equal(summary.title, "Scan outcome: Reachability blocked");
+  assert.equal(summary.title, "Scan outcome: Access limited by site protections");
   assert(summary.details.some((detail) => detail.includes("Access limitations detected: homepage returned forbidden; auth wall detected; scan coverage is partial.")));
   assert(summary.details.some((detail) => detail.includes("Scan interpretation stopped. the homepage presented an authentication wall")));
 });

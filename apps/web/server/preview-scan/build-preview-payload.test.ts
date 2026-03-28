@@ -95,12 +95,14 @@ test("blocked or unreachable previews withhold scores and surface access blocker
   });
 
   assert.equal(payload.scores, undefined);
+  assert.equal(payload.resultState?.title, "Access limited by site protections");
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage blocked during live scan"), true);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
   assert.equal(
     payload.summaryBullets.includes("Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface."),
     true
   );
+  assert.equal(payload.summaryBullets.includes("Access limited by site protections."), true);
   assert.equal(payload.summaryBullets.includes("Reason: homepage request was blocked with HTTP 403."), true);
 });
 
@@ -125,6 +127,7 @@ test("blocked previews can still surface verified privacy and terms disclosures"
     payload.summaryBullets.includes("Verified public surfaces detected: privacy policy, terms of service."),
     true
   );
+  assert.equal(payload.evidence?.verifiedPublicSurfacesCount, 2);
 });
 
 test("blocked previews can still surface verified cookie policy and contact disclosures", () => {
@@ -163,7 +166,8 @@ test("rate-limited previews with zero pages stop normal interpretation and surfa
   });
 
   assert.equal(payload.scores, undefined);
-  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage blocked during live scan"), true);
+  assert.equal(payload.resultState?.title, "Access limited by site protections");
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage rate-limited during live scan"), true);
   assert.equal(
     payload.summaryBullets.includes(
       "Reason: homepage request was rate-limited with HTTP 429 before the scanner could verify a usable page surface."
@@ -183,6 +187,7 @@ test("auth-wall previews stop normal interpretation and surface the exact reason
   });
 
   assert.equal(payload.scores, undefined);
+  assert.equal(payload.resultState?.title, "Access limited by site protections");
   assert.equal(
     payload.sampleFindings.some((finding) => finding.title === "Authentication wall blocked homepage verification"),
     true
@@ -207,8 +212,35 @@ test("not-found previews classify the domain as inactive or unstable", () => {
   });
 
   assert.equal(payload.scores, undefined);
+  assert.equal(payload.resultState?.title, "Domain inactive or unstable");
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Homepage may be inactive or unstable"), true);
   assert.equal(payload.summaryBullets.includes("Reason: homepage returned HTTP 404 Not Found."), true);
+});
+
+test("blocked previews expose first-class evidence fields", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "example.com",
+    normalizedUrl: "https://example.com",
+    snapshot: buildSnapshot({
+      blockVendorGuess: "akamai",
+      challengeSuspected: true,
+      homepageFetchHttpStatus: 403,
+      homepageFetchStatus: "forbidden",
+      pagesScanned: 0,
+      passiveVerificationAttemptCount: 2,
+      privacyPolicyPresent: true
+    })
+  });
+
+  assert.equal(payload.resultState?.message.includes("This does not by itself mean expected disclosures are absent."), true);
+  assert.deepEqual(payload.evidence, {
+    coverageLevel: "limited_partial",
+    homepageStatus: 403,
+    passiveVerificationAttempted: true,
+    robotsStatus: 200,
+    verifiedPublicSurfacesCount: 1,
+    protectionVendor: "akamai"
+  });
 });
 
 test("off-domain redirects surface an explicit redirect finding", () => {

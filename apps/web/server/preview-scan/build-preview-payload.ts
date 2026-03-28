@@ -1,24 +1,41 @@
-import type { PreviewIssueCounts, PreviewSampleFinding, PreviewScanPayload, ScanSnapshot } from "@website-signal-risk-scanner/shared";
+import type {
+  BlockPageClassification,
+  BlockVendorGuess,
+  PreviewIssueCounts,
+  PreviewSampleFinding,
+  PreviewScanPayload,
+  ScanSnapshot
+} from "@website-signal-risk-scanner/shared";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 
 type PreviewSnapshotSource = {
   accessibilityScore: ScanSnapshot["accessibilityScore"];
   authWallDetected?: ScanSnapshot["authWallDetected"] | null;
+  authWallSuspected?: ScanSnapshot["authWallSuspected"] | null;
+  blockPageClassification?: ScanSnapshot["blockPageClassification"] | null;
+  blockVendorGuess?: ScanSnapshot["blockVendorGuess"] | null;
   blockedFlag?: ScanSnapshot["blockedFlag"] | null;
   certscoreOverall: ScanSnapshot["certscoreOverall"];
   captchaFlag?: ScanSnapshot["captchaFlag"] | null;
   contactPagePresent: ScanSnapshot["contactPagePresent"];
+  coverageLevel?: ScanSnapshot["coverageLevel"] | null;
   cookiePolicyPresent?: ScanSnapshot["cookiePolicyPresent"] | null;
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
+  challengeSuspected?: ScanSnapshot["challengeSuspected"] | null;
   finalUrl: ScanSnapshot["finalUrl"];
+  fingerprintBlockSuspected?: ScanSnapshot["fingerprintBlockSuspected"] | null;
+  geoBlockSuspected?: ScanSnapshot["geoBlockSuspected"] | null;
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
   homepageFetchHttpStatus?: ScanSnapshot["homepageFetchHttpStatus"] | null;
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
+  passiveVerificationAttemptCount?: ScanSnapshot["passiveVerificationAttemptCount"] | null;
+  passiveVerificationAttempted?: ScanSnapshot["passiveVerificationAttempted"] | null;
   pagesScanned: ScanSnapshot["pagesScanned"];
   partialScan: ScanSnapshot["partialScan"];
   privacyPolicyPresent: ScanSnapshot["privacyPolicyPresent"];
   privacyScore: ScanSnapshot["privacyScore"];
   preconsentTrackingDetected: ScanSnapshot["preconsentTrackingDetected"];
+  rateLimitSuspected?: ScanSnapshot["rateLimitSuspected"] | null;
   rejectAllPresent: ScanSnapshot["rejectAllPresent"];
   redirectCount: ScanSnapshot["redirectCount"];
   registeredDomain: ScanSnapshot["registeredDomain"];
@@ -102,11 +119,18 @@ export function buildPreviewPayloadFromSnapshot(input: {
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
   const scanStopReason = deriveScanStopReason({
     authWallDetected: input.snapshot.authWallDetected,
+    authWallSuspected: input.snapshot.authWallSuspected,
+    blockPageClassification: input.snapshot.blockPageClassification as BlockPageClassification | null | undefined,
+    blockVendorGuess: input.snapshot.blockVendorGuess as BlockVendorGuess | null | undefined,
     blockedFlag: input.snapshot.blockedFlag,
     captchaFlag: input.snapshot.captchaFlag,
+    challengeSuspected: input.snapshot.challengeSuspected,
+    fingerprintBlockSuspected: input.snapshot.fingerprintBlockSuspected,
+    geoBlockSuspected: input.snapshot.geoBlockSuspected,
     homepageFetchHttpStatus: input.snapshot.homepageFetchHttpStatus,
     homepageFetchStatus: input.snapshot.homepageFetchStatus,
     pagesScanned: input.snapshot.pagesScanned,
+    rateLimitSuspected: input.snapshot.rateLimitSuspected,
     robotsAllowed: input.snapshot.robotsAllowed,
     robotsFetchHttpStatus: input.snapshot.robotsFetchHttpStatus,
     robotsFetchStatus: input.snapshot.robotsFetchStatus
@@ -122,7 +146,17 @@ export function buildPreviewPayloadFromSnapshot(input: {
   pushFinding(
     findings,
     scanStopReason &&
-      ["homepage_blocked", "robots_blocked", "captcha", "auth_wall"].includes(scanStopReason.kind)
+      [
+        "reachability_blocked_homepage_403",
+        "reachability_blocked_homepage_401",
+        "reachability_blocked_challenge_suspected",
+        "reachability_blocked_captcha",
+        "reachability_blocked_auth_wall",
+        "reachability_blocked_geo_or_reputation",
+        "robots_restricted",
+        "homepage_rate_limited_429",
+        "unknown_access_limitation"
+      ].includes(scanStopReason.kind)
       ? {
           affectedPage: "Homepage",
           category: "legal",
@@ -135,11 +169,11 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    scanStopReason && ["homepage_unreachable", "no_pages_scanned"].includes(scanStopReason.kind)
+    scanStopReason && ["timeout_navigation", "transport_failure"].includes(scanStopReason.kind)
       ? {
           affectedPage: "Homepage",
           category: "legal",
-          severity: scanStopReason.kind === "homepage_unreachable" ? "high" : "medium",
+          severity: "high",
           title: scanStopReason.previewFindingTitle,
           description: scanStopReason.reason.replace(/^Reason:\s*/i, "")
         }
@@ -308,12 +342,50 @@ export function buildPreviewPayloadFromSnapshot(input: {
     offDomainRedirect && finalHostname
       ? `The requested domain redirected to ${finalHostname} during the live pass, so observed content may belong to a different destination site.`
       : null;
+  const coverageLevel =
+    input.snapshot.coverageLevel ??
+    (siteSurfaceUnverified
+      ? (verifiedSurfaces.length > 0 ? "limited_partial" : "limited_none")
+      : secondarySurfaceCoverageLimited
+        ? "lightweight_partial"
+        : "broad");
+  const passiveVerificationAttempted =
+    input.snapshot.passiveVerificationAttempted === true || (input.snapshot.passiveVerificationAttemptCount ?? 0) > 0;
+  const homepageStatusEvidence = input.snapshot.homepageFetchHttpStatus ?? input.snapshot.homepageFetchStatus ?? null;
+  const robotsStatusEvidence = input.snapshot.robotsFetchHttpStatus ?? input.snapshot.robotsFetchStatus ?? null;
+  const protectionVendor =
+    scanStopReason?.outcomeTitle === "Access limited by site protections" &&
+    typeof input.snapshot.blockVendorGuess === "string" &&
+    input.snapshot.blockVendorGuess !== "unknown"
+      ? input.snapshot.blockVendorGuess
+      : null;
 
   return {
     version: "preview-v1",
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
     issueCounts,
+    resultState: siteSurfaceUnverified
+      ? {
+          code: scanStopReason?.outcome ?? "unknown_access_limitation",
+          coverageLevel,
+          title: scanStopReason?.outcomeTitle ?? "Access limited by site protections",
+          message:
+            scanStopReason?.outcomeTitle === "Access limited by site protections"
+              ? "This run could not fully verify public pages because the site limited automated access from the scan environment. This does not by itself mean expected disclosures are absent."
+              : scanStopReason?.reviewMessage ?? "This run could not fully verify public pages."
+        }
+      : undefined,
+    evidence: siteSurfaceUnverified
+      ? {
+          coverageLevel,
+          homepageStatus: homepageStatusEvidence,
+          passiveVerificationAttempted,
+          robotsStatus: robotsStatusEvidence,
+          verifiedPublicSurfacesCount: verifiedSurfaces.length,
+          protectionVendor
+        }
+      : undefined,
     scores: siteSurfaceUnverified
       ? undefined
       : {
@@ -325,6 +397,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
       `${input.snapshot.totalSignals} structured signals were observed in this live preview.`,
       ...(siteSurfaceUnverified
         ? [
+            "Access limited by site protections.",
             "Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface.",
             scanStopReason?.reason ?? "Reason: the scanner could not verify a usable homepage surface."
           ]

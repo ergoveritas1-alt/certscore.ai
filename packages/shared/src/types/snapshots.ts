@@ -1,5 +1,6 @@
 export type CrawlSource = "manual" | "scheduled" | "preview" | "rescan";
 export type CrawlTier = "quick" | "standard" | "deep";
+export type HeadlessMode = "headless" | "headed" | "unknown";
 export type FetchStatus =
   | "ok"
   | "redirected"
@@ -163,6 +164,49 @@ export type ScanSnapshot = {
   timeoutFlag: boolean;
   blockedFlag: boolean;
   captchaFlag: boolean;
+  scanOutcome?: string | null;
+  stopReasonCode?: string | null;
+  stopReasonLabel?: string | null;
+  stopReasonDetail?: string | null;
+  stopReasonHttpStatus?: number | null;
+  retryRecommended?: boolean | null;
+  cooldownHours?: number | null;
+  egressId?: string | null;
+  egressType?: string | null;
+  publicIpHash?: string | null;
+  asn?: number | null;
+  region?: string | null;
+  userAgentFamily?: string | null;
+  browserEngine?: string | null;
+  headlessMode?: HeadlessMode | null;
+  playwrightVersion?: string | null;
+  chromiumVersion?: string | null;
+  initialRequestMode?: string | null;
+  homepageAttemptCount?: number | null;
+  passiveVerificationAttemptCount?: number | null;
+  staticFetchConcurrency?: number | null;
+  domainRiskProfile?: string | null;
+  homepageHttpStatus?: number | null;
+  robotsHttpStatus?: number | null;
+  serverHeader?: string | null;
+  cfRayPresent?: boolean | null;
+  akamaiMarkerPresent?: boolean | null;
+  captchaMarkerPresent?: boolean | null;
+  interstitialMarkerPresent?: boolean | null;
+  normalizedBodyTitle?: string | null;
+  normalizedBodyHash?: string | null;
+  setCookieNames?: string[] | null;
+  blockVendorGuess?: string | null;
+  blockPageClassification?: string | null;
+  challengeSuspected?: boolean | null;
+  authWallSuspected?: boolean | null;
+  rateLimitSuspected?: boolean | null;
+  geoBlockSuspected?: boolean | null;
+  fingerprintBlockSuspected?: boolean | null;
+  passiveVerificationAttempted?: boolean | null;
+  verifiedPublicSurfacesCount?: number | null;
+  coverageLevel?: string | null;
+  reportFindingCount?: number | null;
   siteLanguagePrimary: string | null;
   countryInferred: string | null;
   regionStateInferred: string | null;

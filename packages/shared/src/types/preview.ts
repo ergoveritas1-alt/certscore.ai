@@ -45,6 +45,20 @@ export type PreviewScanPayload = {
   hostname: string;
   normalizedUrl: string;
   issueCounts: PreviewIssueCounts;
+  resultState?: {
+    code: string;
+    coverageLevel: string;
+    title: string;
+    message: string;
+  };
+  evidence?: {
+    coverageLevel: string;
+    homepageStatus: number | string | null;
+    passiveVerificationAttempted: boolean;
+    robotsStatus: number | string | null;
+    verifiedPublicSurfacesCount: number;
+    protectionVendor?: string | null;
+  };
   scores?: PreviewScoreSummary;
   summaryBullets: string[];
   sampleFindings: PreviewSampleFinding[];

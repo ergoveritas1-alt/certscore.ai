@@ -15,6 +15,10 @@ import {
   normalizeUrl,
   type FinancialValidationEvidence
 } from "@website-signal-risk-scanner/shared";
+import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
+import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
+import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
+import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
 
 const VALIDATION_SETTINGS_KEY = "default";
@@ -62,6 +66,46 @@ type ValidationRunRow = {
   tranco_rank: number | null;
   trigger_mode: ValidationRunMode;
   validation_target_id: string | null;
+};
+
+type ValidationRunFindingWithVerdictRow = {
+  category: string | null;
+  description: string | null;
+  evidence_json: Record<string, unknown> | null;
+  finding_family: string | null;
+  finding_scope: string | null;
+  finding_source: string | null;
+  finding_subject: string | null;
+  id: string;
+  page_url: string | null;
+  rule_key: string;
+  severity: string | null;
+  subtype: string | null;
+  title: string;
+  validation_verdicts:
+    | {
+        agreement_score: number | null;
+        confidence: number | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }
+    | Array<{
+        agreement_score: number | null;
+        confidence: number | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }>
+    | null;
 };
 
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
@@ -897,6 +941,46 @@ export async function finalizeValidationRun(runId: string) {
     status: "completed"
   });
 
+  if (run.scan_id) {
+    try {
+      const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
+      const [{ buildScanReportUnifiedFindings }] = await Promise.all([
+        import(detailViewModulePath) as Promise<{
+          buildScanReportUnifiedFindings: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
+        }>
+      ]);
+      const scanRecord = await loadScanRecordForFindingCount({
+        runId,
+        scanId: run.scan_id,
+        supabase
+      });
+
+      if (scanRecord) {
+        const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+        const { error: snapshotUpdateError } = await supabase
+          .from("scan_snapshots")
+          .update({
+            report_finding_count: reportFindingCount
+          })
+          .eq("scan_id", run.scan_id);
+
+        if (snapshotUpdateError) {
+          console.error("[validation-worker] failed to persist report finding count", {
+            error: snapshotUpdateError.message,
+            runId,
+            scanId: run.scan_id
+          });
+        }
+      }
+    } catch (error) {
+      console.error("[validation-worker] failed to compute report finding count", {
+        error: error instanceof Error ? error.message : String(error),
+        runId,
+        scanId: run.scan_id
+      });
+    }
+  }
+
   if (!run.validation_target_id) {
     return;
   }
@@ -904,7 +988,7 @@ export async function finalizeValidationRun(runId: string) {
   const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
   const { data: snapshot } = await supabase
     .from("scan_snapshots")
-    .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status")
+    .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status, challenge_suspected, rate_limit_suspected, scan_outcome, cooldown_hours")
     .eq("scan_id", run.scan_id)
     .maybeSingle();
 
@@ -914,18 +998,166 @@ export async function finalizeValidationRun(runId: string) {
     snapshot?.homepage_fetch_http_status === 403 ||
     snapshot?.homepage_fetch_http_status === 429 ||
     snapshot?.robots_fetch_http_status === 403 ||
-    snapshot?.robots_fetch_http_status === 429;
+    snapshot?.robots_fetch_http_status === 429 ||
+    snapshot?.scan_outcome === "robots_restricted" ||
+    snapshot?.scan_outcome === "unknown_access_limitation";
+  const retryPolicy = deriveRetryPolicy({
+    homepageHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+    transportFailure: snapshot?.scan_outcome === "transport_failure" || snapshot?.scan_outcome === "timeout_navigation",
+    challengeSuspected: snapshot?.challenge_suspected === true,
+    rateLimitSuspected: snapshot?.rate_limit_suspected === true
+  });
+  const blockedCooldownHours =
+    typeof snapshot?.cooldown_hours === "number" && Number.isFinite(snapshot.cooldown_hours)
+      ? snapshot.cooldown_hours
+      : retryPolicy.cooldownHours;
 
   await supabase
     .from("validation_targets")
     .update({
       backoff_until: blocked ? addDays(completedAt, 90).toISOString() : null,
-      cooldown_until: addDays(completedAt, cooldownDays).toISOString(),
+      cooldown_until: blocked
+        ? new Date(completedAt.getTime() + blockedCooldownHours * 60 * 60 * 1000).toISOString()
+        : addDays(completedAt, cooldownDays).toISOString(),
       last_completed_at: completedAt.toISOString(),
       last_error: null,
       last_status: "completed"
     })
     .eq("id", run.validation_target_id);
+}
+
+async function loadScanRecordForFindingCount(input: {
+  runId: string;
+  scanId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  const [
+    { data: snapshot },
+    { data: runtimeArtifacts },
+    { data: preconsentViolations },
+    { data: trackerVendors },
+    { data: accessibilityRuleCounts },
+    { data: accessibilityRuleExamples },
+    { data: policyEnrichment },
+    { data: policyReviewQueue },
+    { data: signals },
+    { data: events },
+    { data: validationFindingRows }
+  ] = await Promise.all([
+    input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.supabase.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
+    input.supabase.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
+    input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
+    input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
+    input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.supabase.from("scan_signals").select("category, signal_key, signal_label, signal_value_json, value_type").eq("scan_id", input.scanId),
+    input.supabase.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.supabase
+      .from("validation_run_findings")
+      .select(
+        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+      )
+      .eq("validation_run_id", input.runId)
+  ]);
+
+  const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>).map((signal) => {
+    const category = String(signal.category ?? "");
+    const key = String(signal.signal_key ?? "");
+    const label = String(signal.signal_label ?? key);
+    const taxonomy = mapSignalKeyToTaxonomy({
+      category,
+      key,
+      label
+    });
+
+    return {
+      category,
+      key,
+      label,
+      primaryCategory: taxonomy.primaryCategory,
+      primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+      subcategory: taxonomy.subcategory ?? null,
+      value: signal.signal_value_json,
+      valueType: String(signal.value_type ?? "unknown")
+    };
+  });
+
+  const repairedEvents = repairFindingFamilyPacketEvents({
+    events: ((events ?? []) as Array<Record<string, unknown>>).map((event) => ({
+      id: String(event.id ?? ""),
+      eventType: String(event.event_type ?? ""),
+      message: typeof event.message === "string" ? event.message : "",
+      metadataJson: (event.metadata_json as Record<string, unknown> | null) ?? undefined,
+      createdAt: String(event.created_at ?? "")
+    })),
+    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const next = { ...row };
+      delete next.created_at;
+      delete next.updated_at;
+      return next;
+    })
+  });
+
+  const validationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[]).map((row) => {
+    const verdictRows = Array.isArray(row.validation_verdicts)
+      ? row.validation_verdicts
+      : row.validation_verdicts
+        ? [row.validation_verdicts]
+        : [];
+    const verdict = verdictRows[0];
+
+    return {
+      agreementScore: verdict?.agreement_score ?? null,
+      category: row.category,
+      description: row.description,
+      evidence: row.evidence_json ?? null,
+      findingFamily: row.finding_family,
+      findingScope: row.finding_scope,
+      findingSource: row.finding_source,
+      findingSubject: row.finding_subject,
+      id: row.id,
+      model: verdict?.model ?? null,
+      modelConfidence: verdict?.confidence ?? null,
+      pageUrl: row.page_url,
+      promptVersion: verdict?.prompt_version ?? null,
+      rationale: verdict?.rationale ?? null,
+      ruleKey: row.rule_key,
+      severity: row.severity,
+      subtype: row.subtype,
+      systemConfidenceBand: verdict?.system_confidence_band ?? null,
+      systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
+      systemConfidenceScore: verdict?.system_confidence_score ?? null,
+      title: row.title,
+      verdict: verdict?.verdict ?? null
+    };
+  });
+
+  return {
+    accessibilityRuleCounts: (accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>,
+    accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as Array<Record<string, unknown>>,
+    events: repairedEvents,
+    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const next = { ...row };
+      delete next.created_at;
+      delete next.updated_at;
+      return next;
+    }),
+    policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const next = { ...row };
+      delete next.created_at;
+      delete next.updated_at;
+      return next;
+    }),
+    preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    signals: normalizedSignals,
+    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
+    trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>,
+    validationFindings
+  };
 }
 
 export async function failValidationRun(runId: string, message: string) {
