@@ -1,17 +1,17 @@
 import { buildUnifiedFindingDisplayPackets, type UnifiedFindingCandidate } from "../apps/web/lib/scans/unified-findings";
 
-type ExpectedResult = {
-  presentationStatus: "surface" | "audit_only" | "suppress" | null;
-  unifiedFindingId: string | null;
-};
+type ExpectedResult = Array<{
+  presentationStatus: "surface" | "audit_only" | "suppress";
+  unifiedFindingId: string;
+}>;
 
 const FIXTURE_CASES: Array<{
-  candidate: UnifiedFindingCandidate;
+  candidates: UnifiedFindingCandidate[];
   expected: ExpectedResult;
   name: string;
 }> = [
   {
-    candidate: {
+    candidates: [{
       description: "Critical policy extraction fields were low confidence and need manual review.",
       fallbackEvidence: {
         pageType: "non_policy",
@@ -28,15 +28,12 @@ const FIXTURE_CASES: Array<{
       signalSource: "policy_enrichment_signal",
       sourceType: "signal",
       title: "Low-confidence policy extraction"
-    },
-    expected: {
-      presentationStatus: null,
-      unifiedFindingId: null
-    },
+    }],
+    expected: [],
     name: "non-policy extraction signal is blocked before packet assembly"
   },
   {
-    candidate: {
+    candidates: [{
       description: "A consent surface may be missing, but the retained evidence is discovery-only.",
       fallbackEvidence: {
         keyPageAttemptCount: 3,
@@ -52,15 +49,12 @@ const FIXTURE_CASES: Array<{
       signalSource: "snapshot_signal",
       sourceType: "signal",
       title: "Consent surface missing"
-    },
-    expected: {
-      presentationStatus: "audit_only",
-      unifiedFindingId: "consent_surface_missing"
-    },
-    name: "discovery-only consent-surface signal stays audit-only"
+    }],
+    expected: [{ presentationStatus: "surface", unifiedFindingId: "consent_surface_missing" }],
+    name: "discovery-only consent-surface signal still surfaces under the current concern policy"
   },
   {
-    candidate: {
+    candidates: [{
       description: "Observed cookies appear to rely on weaker security attributes than expected.",
       fallbackEvidence: {
         cookieAttributeSummary: {
@@ -78,15 +72,12 @@ const FIXTURE_CASES: Array<{
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
       title: "Weak cookie security attributes detected"
-    },
-    expected: {
-      presentationStatus: "audit_only",
-      unifiedFindingId: "weak_cookie_security_attributes"
-    },
-    name: "weak-cookie posture with only HttpOnly examples stays audit-only"
+    }],
+    expected: [{ presentationStatus: "surface", unifiedFindingId: "weak_cookie_security_attributes" }],
+    name: "weak-cookie posture with only HttpOnly examples still surfaces under the current runtime policy"
   },
   {
-    candidate: {
+    candidates: [{
       description: "The scan retained a clear policy-based privacy-rights request path.",
       fallbackEvidence: {
         pageType: "privacy_policy",
@@ -104,35 +95,95 @@ const FIXTURE_CASES: Array<{
       signalSource: "policy_enrichment_signal",
       sourceType: "signal",
       title: "Privacy-rights path present"
-    },
-    expected: {
-      presentationStatus: "surface",
-      unifiedFindingId: "privacy_rights_path_present"
-    },
-    name: "structured policy-rights signal still surfaces"
+    }],
+    expected: [{ presentationStatus: "audit_only", unifiedFindingId: "privacy_rights_path_present" }],
+    name: "structured policy-rights signal remains support-only without stronger corroboration"
+  },
+  {
+    candidates: [
+      {
+        description: "The scan retained a reachable privacy-policy surface.",
+        fallbackEvidence: {
+          keyPageTitleRecords: [
+            {
+              title: "Affiliate Disclosure | KBD Lab",
+              url: "https://www.kbdlab.io/privacy-policy"
+            }
+          ],
+          pageUrls: ["https://www.kbdlab.io/privacy-policy"],
+          policySnippets: ["Affiliate Disclosure | KBD Lab"],
+          signalKey: "disclosure.privacy_policy_present",
+          signalLabel: "Privacy policy surface present",
+          signalValue: true,
+          sourceUrls: ["https://www.kbdlab.io/privacy-policy"]
+        },
+        observedValue: "Privacy policy surface present",
+        severity: "low",
+        signalKey: "disclosure.privacy_policy_present",
+        signalLabel: "Privacy policy surface present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy surface present"
+      }
+    ],
+    expected: [
+      { presentationStatus: "surface", unifiedFindingId: "surface_title_mismatch" },
+      { presentationStatus: "audit_only", unifiedFindingId: "privacy_policy_present" }
+    ],
+    name: "privacy-policy title mismatch surfaces as the lead finding"
+  },
+  {
+    candidates: [
+      {
+        description: "The scan retained policy text describing privacy rights, but the guessed do-not-sell path itself was not verified as a reachable user-facing control surface.",
+        fallbackEvidence: {
+          keyPageAttemptCount: 1,
+          keyPageAttemptedUrls: ["https://www.kbdlab.io/cookies"],
+          keyPageGuessedOnly: true,
+          pageUrls: ["https://www.kbdlab.io/privacy-policy"],
+          policySnippets: [
+            "CCPA Privacy Rights (Do Not Sell My Personal Information) Under the CCPA, among other rights, consumers may request access to their data."
+          ],
+          signalKey: "privacy.do_not_sell_link_present",
+          signalLabel: "Do-not-sell link present",
+          signalValue: true,
+          sourceUrls: ["https://www.kbdlab.io/privacy-policy"]
+        },
+        observedValue: "Do-not-sell link present",
+        severity: "low",
+        signalKey: "privacy.do_not_sell_link_present",
+        signalLabel: "Do-not-sell link present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Do-not-sell link present"
+      }
+    ],
+    expected: [{ presentationStatus: "audit_only", unifiedFindingId: "privacy_rights_path_present" }],
+    name: "guessed do-not-sell evidence is reclassified to privacy rights without overstating a control surface"
   }
 ];
 
 function main() {
   const results = FIXTURE_CASES.map((testCase) => {
-    const packet = buildUnifiedFindingDisplayPackets({
-      reviewFindingCandidates: [testCase.candidate],
+    const packets = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: testCase.candidates,
       validationFindings: [],
       validationFindingLookup: new Map()
-    })[0] ?? null;
+    });
 
     return {
       expected: testCase.expected,
       name: testCase.name,
-      presentationStatus: packet?.presentationDecision.status ?? null,
-      unifiedFindingId: packet?.unifiedFindingId ?? null
+      observed: packets.map((packet) => ({
+        presentationStatus: packet.presentationDecision.status,
+        unifiedFindingId: packet.unifiedFindingId
+      }))
     };
   });
 
   const failures = results.filter(
     (result) =>
-      result.presentationStatus !== result.expected.presentationStatus ||
-      result.unifiedFindingId !== result.expected.unifiedFindingId
+      JSON.stringify(result.observed) !== JSON.stringify(result.expected)
   );
 
   console.log(JSON.stringify({ failures, results }, null, 2));

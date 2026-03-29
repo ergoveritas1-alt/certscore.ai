@@ -2614,6 +2614,42 @@ test("normalizes whitespace-heavy targeted advertising snippets before final evi
   assert.deepEqual(packet?.evidence?.snippets, ["Manage Cookies"]);
 });
 
+test("reclassifies guessed do-not-sell evidence into a privacy-rights path when no explicit control surface was retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description:
+          "The scan retained policy text describing privacy rights, but the guessed do-not-sell path itself was not verified as a reachable user-facing control surface.",
+        fallbackEvidence: {
+          keyPageAttemptCount: 1,
+          keyPageAttemptedUrls: ["https://www.example.com/cookies"],
+          keyPageGuessedOnly: true,
+          pageUrls: ["https://www.example.com/privacy-policy"],
+          policySnippets: [
+            "CCPA Privacy Rights (Do Not Sell My Personal Information) Under the CCPA, among other rights, consumers may request access to their data."
+          ],
+          signalKey: "privacy.do_not_sell_link_present",
+          signalLabel: "Do-not-sell link present",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/privacy-policy"]
+        },
+        observedValue: "Do-not-sell link present",
+        severity: "low",
+        signalKey: "privacy.do_not_sell_link_present",
+        signalLabel: "Do-not-sell link present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Do-not-sell link present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.example.com/privacy-policy"]);
+});
+
 test("keeps affiliate disclosure audit-only when only the path was retained without visible page text", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
@@ -3318,7 +3354,7 @@ test("keeps behavioral analytics disclosure audit-only when only summary text is
 });
 
 test("surfaces affiliate disclosure present from snapshot evidence", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "The scan retained a clear affiliate disclosure path.",
@@ -3342,9 +3378,10 @@ test("surfaces affiliate disclosure present from snapshot evidence", () => {
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.match(packet?.presentation.whyThisMatters ?? "", /affiliate disclosure/i);
+  const scopePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_scope_limited");
+  const affiliatePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_present");
+  assert.equal(scopePacket?.presentationDecision.status, "surface");
+  assert.equal(affiliatePacket?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces affiliate disclosure when retained affiliate summary text is available", () => {
@@ -3377,7 +3414,7 @@ test("surfaces affiliate disclosure when retained affiliate summary text is avai
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.snippets, [
     "We may earn a commission from purchases made through links on this page."
   ]);
@@ -3449,6 +3486,153 @@ test("keeps affiliate disclosure audit-only when only summary text is retained w
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
   assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("synthesizes affiliate disclosure scope review when evidence only shows a dedicated disclosure page", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear affiliate disclosure path.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/affiliate-disclosure"],
+          policySnippets: ["Affiliate Disclosure | Example"],
+          signalKey: "commerce.affiliate_disclosure_present",
+          signalLabel: "Affiliate disclosure present",
+          signalValue: true
+        },
+        observedValue: "Affiliate disclosure present",
+        severity: "low",
+        signalKey: "commerce.affiliate_disclosure_present",
+        signalLabel: "Affiliate disclosure present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Affiliate disclosure present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const scopePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_scope_limited");
+  assert.equal(scopePacket?.presentationDecision.status, "surface");
+  assert.match(scopePacket?.presentation.whyThisMatters ?? "", /affiliate disclosure/i);
+});
+
+test("synthesizes retained surface title mismatch when the fetched title conflicts with the surface type", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a reachable privacy-policy surface.",
+        fallbackEvidence: {
+          keyPageTitleRecords: [
+            {
+              title: "Affiliate Disclosure | Example",
+              url: "https://www.example.com/privacy-policy"
+            }
+          ],
+          pageUrls: ["https://www.example.com/privacy-policy"],
+          policySnippets: ["Affiliate Disclosure | Example"],
+          signalKey: "disclosure.privacy_policy_present",
+          signalLabel: "Privacy policy surface present",
+          signalValue: true
+        },
+        observedValue: "Privacy policy surface present",
+        severity: "low",
+        signalKey: "disclosure.privacy_policy_present",
+        signalLabel: "Privacy policy surface present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy surface present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const mismatchPacket = packets.find((packet) => packet.unifiedFindingId === "surface_title_mismatch");
+  assert.equal(mismatchPacket?.presentationDecision.status, "surface");
+  assert.deepEqual(mismatchPacket?.evidence?.snippets, ["Affiliate Disclosure | Example"]);
+});
+
+test("synthesizes policy clarity risk from boilerplate-heavy legal text", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a reachable privacy-policy surface.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/privacy-policy"],
+          policySnippets: [
+            "Advertising Partners Privacy Policies",
+            "Cookies and Web Beacons",
+            "Log Files"
+          ],
+          signalKey: "disclosure.privacy_policy_present",
+          signalLabel: "Privacy policy surface present",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/privacy-policy"]
+        },
+        observedValue: "Privacy policy surface present",
+        severity: "low",
+        signalKey: "disclosure.privacy_policy_present",
+        signalLabel: "Privacy policy surface present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy surface present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const clarityPacket = packets.find((packet) => packet.unifiedFindingId === "policy_clarity_risk");
+  assert.equal(clarityPacket?.presentationDecision.status, "surface");
+});
+
+test("suppresses fetch-failed coverage gaps when another retained finding already verified the same target url", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear contact path.",
+        fallbackEvidence: {
+          pageUrls: ["https://www.example.com/contact-us"],
+          policySnippets: ["Contact Us | Example"],
+          signalKey: "disclosure.contact_page_present",
+          signalLabel: "Contact page present",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/contact-us"]
+        },
+        observedValue: "Contact page present",
+        severity: "low",
+        signalKey: "disclosure.contact_page_present",
+        signalLabel: "Contact page present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Contact page present"
+      },
+      {
+        description: "A key disclosure or support page was linked from the scanned site, but automated retrieval of that target was limited during the scan.",
+        fallbackEvidence: {
+          fetchQuality: "unreachable",
+          keyPageAttemptCount: 2,
+          keyPageAttemptedUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"],
+          pageUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"],
+          signalKey: "disclosure.contact_page_fetch_failed",
+          signalLabel: "Contact page not retrievable",
+          signalValue: true,
+          sourceUrls: ["https://www.example.com/contact-us", "https://www.example.com/contact"]
+        },
+        observedValue: "Contact page not retrievable",
+        severity: "medium",
+        sourceType: "issue",
+        title: "Contact page not retrievable"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.ok(packets.some((packet) => packet.unifiedFindingId === "contact_support_path_present"));
+  assert.ok(!packets.some((packet) => packet.unifiedFindingId === "contact_page_unavailable"));
 });
 
 test("uses retargeting-specific unified finding copy instead of the generic fallback", () => {

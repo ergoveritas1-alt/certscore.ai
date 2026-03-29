@@ -320,6 +320,10 @@ function getPositiveInfrastructureEvidenceGrade(
         return snippets.some((value) => /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(value))
           ? "verified" as const
           : "weak" as const;
+      case "affiliate_disclosure_present":
+        return snippets.some((value) => /affiliate|commission|we may earn|paid link|qualifying purchases?/i.test(value))
+          ? "verified" as const
+          : "weak" as const;
       case "privacy_rights_path_present":
         return (
           (Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0) ||
@@ -375,6 +379,12 @@ function getPositiveInfrastructureEvidenceGrade(
     case "targeted_advertising_choices_present":
       return hasPacketBacking &&
         snippets.some((value) => /do not sell|opt out|privacy choices|ad choices|targeted advertising/i.test(value)) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
+    case "affiliate_disclosure_present":
+      return hasPacketBacking &&
+        snippets.some((value) => /affiliate|commission|we may earn|paid link|qualifying purchases?/i.test(value)) &&
         humanFacingUrlCount >= 1
         ? "corroborated" as const
         : "weak" as const;
@@ -571,6 +581,7 @@ export function isPositiveInfrastructureConcern(
     "targeted_advertising_disclosure_present",
     "behavioral_analytics_disclosure_present",
     "children_privacy_disclosure_present",
+    "affiliate_disclosure_present",
     "accessibility_support_path_present",
     "arbitration_clause_present"
   ].includes(concern.suggestedUnifiedFindingId ?? "");
@@ -611,6 +622,10 @@ function isRetargetingConcern(
 function isContradictionConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
+  if (isSurfaceIntegrityConcern(concern) || isDisclosurePlacementConcern(concern)) {
+    return false;
+  }
+
   const haystack = [
     concern.canonicalConcernKey,
     concern.suggestedUnifiedFindingId,
@@ -624,6 +639,18 @@ function isContradictionConcern(
   return /conflict|mismatch|contradiction|functional_misalignment|missing_technical_disclosure|session_replay_undisclosed/.test(
     haystack
   );
+}
+
+function isSurfaceIntegrityConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "surface_title_mismatch";
+}
+
+function isDisclosurePlacementConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "affiliate_disclosure_scope_limited";
 }
 
 function isLowConfidencePolicyExtractionConcern(
@@ -660,6 +687,18 @@ function isCoverageGapSurfaceMissingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return COVERAGE_GAP_SURFACE_MISSING_IDS.has(concern.suggestedUnifiedFindingId ?? "");
+}
+
+function isCoverageGapUnavailableConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return [
+    "privacy_policy_unavailable",
+    "terms_unavailable",
+    "cookie_policy_unavailable",
+    "accessibility_statement_unavailable",
+    "contact_page_unavailable"
+  ].includes(concern.suggestedUnifiedFindingId ?? "");
 }
 
 function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
@@ -801,9 +840,42 @@ function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unkn
     return false;
   }
 
-  return (
-    Array.isArray(rawEvidence.accessibilityRuleExamples) && rawEvidence.accessibilityRuleExamples.length > 0
-  );
+  if (!Array.isArray(rawEvidence.accessibilityRuleExamples) || rawEvidence.accessibilityRuleExamples.length === 0) {
+    return false;
+  }
+
+  return rawEvidence.accessibilityRuleExamples.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+
+    const pageUrl =
+      typeof (entry as { pageUrl?: unknown }).pageUrl === "string"
+        ? (entry as { pageUrl: string }).pageUrl
+        : typeof (entry as { page_url?: unknown }).page_url === "string"
+          ? (entry as { page_url: string }).page_url
+          : null;
+    const ruleId =
+      typeof (entry as { ruleId?: unknown }).ruleId === "string"
+        ? (entry as { ruleId: string }).ruleId
+        : typeof (entry as { rule_id?: unknown }).rule_id === "string"
+          ? (entry as { rule_id: string }).rule_id
+          : null;
+    const selector =
+      typeof (entry as { selector?: unknown }).selector === "string"
+        ? (entry as { selector: string }).selector
+        : typeof (entry as { target?: unknown }).target === "string"
+          ? (entry as { target: string }).target
+          : null;
+    const snippet =
+      typeof (entry as { snippet?: unknown }).snippet === "string"
+        ? (entry as { snippet: string }).snippet
+        : typeof (entry as { message?: unknown }).message === "string"
+          ? (entry as { message: string }).message
+          : null;
+
+    return Boolean(pageUrl && (ruleId || selector || snippet));
+  });
 }
 
 function getNumberEvidence(
@@ -921,6 +993,10 @@ function hasStableLinkedDiscoveryPath(rawEvidence: Record<string, unknown> | nul
         : null;
 
   return ["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(discoverySource ?? "");
+}
+
+function isGuessedOnlyDiscovery(rawEvidence: Record<string, unknown> | null | undefined) {
+  return rawEvidence?.keyPageGuessedOnly === true || rawEvidence?.key_page_guessed_only === true;
 }
 
 function getPolicyExtractionStatus(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1103,6 +1179,8 @@ export function deriveConcernPolicy(input: {
 
   if (
     isHighSensitivityConcern(input.concern) &&
+    !isSensitiveReplayConcern(input.concern) &&
+    !isSensitiveThirdPartyTrackingConcern(input.concern) &&
     input.concern.originType !== "validation_rule"
   ) {
     const contractDecision = evaluateStrongEvidenceContract({
@@ -1224,7 +1302,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: "weak",
+      allowedNarrativeTier: "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"
@@ -1343,6 +1421,42 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isSurfaceIntegrityConcern(input.concern)) {
+    if (!hasPageAttribution || !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isDisclosurePlacementConcern(input.concern)) {
+    if (!hasPageAttribution || !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (
     isDomainLevelSensitiveContextFinding(input.concern.suggestedUnifiedFindingId ?? "") &&
     !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)
@@ -1374,6 +1488,19 @@ export function deriveConcernPolicy(input: {
       evidenceStrengthFlags: input.evidenceStrengthFlags,
       rawEvidence: input.rawEvidence
     })
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isCoverageGapUnavailableConcern(input.concern) &&
+    isGuessedOnlyDiscovery(input.rawEvidence) &&
+    !hasStableLinkedDiscoveryPath(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
@@ -1510,14 +1637,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier:
-        hasVerifiedContentEvidence ||
-        (hasCorroboratedSurfaceEvidence &&
-          ["contact_support_path_present", "operator_contact_path_present", "accessibility_support_path_present"].includes(
-            input.concern.suggestedUnifiedFindingId ?? ""
-          ))
-          ? "moderate"
-          : "weak",
+      allowedNarrativeTier: hasVerifiedContentEvidence || hasCorroboratedSurfaceEvidence ? "moderate" : "weak",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

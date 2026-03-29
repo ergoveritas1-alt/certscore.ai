@@ -176,6 +176,13 @@ function getSuccessfulKeyPageTitleRecords(summaryRows: Array<Record<string, unkn
     typeof row.successfulPageTitle === "string" && row.successfulPageTitle.trim().length > 0
       ? [
           {
+            canonicalUrl: typeof row.canonicalUrl === "string" ? row.canonicalUrl : null,
+            ogUrl:
+              typeof row.ogUrl === "string"
+                ? row.ogUrl
+                : typeof row.og_url === "string"
+                  ? row.og_url
+                  : null,
             title: row.successfulPageTitle,
             url: typeof row.successfulUrl === "string" ? row.successfulUrl : null
           }
@@ -700,6 +707,21 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
       )
     : [];
   const explicitFetchQuality = getExplicitFetchQuality(relevantRows);
+  const hasExplicitChoiceSurfaceUrl = uniqueStrings([...effectiveGenericPageUrls, ...effectiveGenericSourceUrls]).some((url) =>
+    /privacy-choices|privacy_choices|your-privacy-choices|do-not-sell|do-not-share|opt-?out|ad-choices|cookie/i.test(url)
+  );
+  const shouldReanchorGuessedDoNotSellToPolicyPage =
+    isDoNotSellSignal &&
+    !hasExplicitChoiceSurfaceUrl &&
+    genericHumanPolicyPageUrl !== null &&
+    relevantRows.length > 0 &&
+    relevantRows.every(
+      (row) =>
+        typeof row.bestDiscoverySource !== "string" ||
+        !["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(row.bestDiscoverySource)
+    );
+  const reanchoredDoNotSellPageUrls = shouldReanchorGuessedDoNotSellToPolicyPage ? [genericHumanPolicyPageUrl] : effectiveGenericPageUrls;
+  const reanchoredDoNotSellSourceUrls = shouldReanchorGuessedDoNotSellToPolicyPage ? [genericHumanPolicyPageUrl] : effectiveGenericSourceUrls;
 
   return {
     affiliateDisclosurePresent: input.snapshot?.affiliate_disclosure_present === true,
@@ -708,22 +730,33 @@ export function buildSnapshotDisclosureFallbackEvidence(input: {
       (!reanchoredCookieSignalToPolicyEvidence ? explicitFetchQuality : null) ??
       getFetchQualityFromEvidence({
         attemptedUrls,
-        pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : effectiveGenericPageUrls,
+        pageUrls:
+          preferredDoNotSellPageUrls.length > 0
+            ? preferredDoNotSellPageUrls
+            : reanchoredDoNotSellPageUrls,
         snippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
         stopReason: !reanchoredCookieSignalToPolicyEvidence ? stopReasons[0] ?? null : null
       }),
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: [...new Set(attemptedUrls)],
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
+    keyPageGuessedOnly:
+      relevantRows.length > 0 &&
+      relevantRows.every(
+        (row) =>
+          typeof row.bestDiscoverySource !== "string" ||
+          !["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(row.bestDiscoverySource)
+      ),
     keyPageStopReason: stopReasons[0] ?? null,
-    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : effectiveGenericPageUrls,
+    keyPageTitleRecords: successfulTitleRecords,
+    pageUrls: preferredDoNotSellPageUrls.length > 0 ? preferredDoNotSellPageUrls : reanchoredDoNotSellPageUrls,
     policySnippets: preferredDoNotSellSnippets.length > 0 ? preferredDoNotSellSnippets : genericPolicySnippets,
     doNotSellLinkPresent: input.snapshot?.do_not_sell_link_present === true,
     privacyPolicyPresent: input.snapshot?.privacy_policy_present === true,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
     signalValue: input.signalValue,
-    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : effectiveGenericSourceUrls,
+    sourceUrls: preferredDoNotSellSourceUrls.length > 0 ? preferredDoNotSellSourceUrls : reanchoredDoNotSellSourceUrls,
     termsOfServicePresent: input.snapshot?.terms_of_service_present === true,
     policySummaryShort:
       genericPolicySnippets.length === 0 && effectiveGenericPolicyRow ? getPolicySummaryShort(effectiveGenericPolicyRow) : null
@@ -747,6 +780,7 @@ export function buildAccessibilitySupportFallbackEvidence(input: {
   const successfulUrls = uniqueStrings(getSuccessfulKeyPageUrls(preferredRows));
   const attemptedUrls = uniqueStrings(getAttemptedKeyPageUrls(relevantRows));
   const titleSnippets = normalizePolicySnippetList(getSuccessfulKeyPageTitles(preferredRows));
+  const titleRecords = getSuccessfulKeyPageTitleRecords(preferredRows);
   const stopReasons = getStopReasons(relevantRows);
   const explicitFetchQuality = getExplicitFetchQuality(preferredRows);
 
@@ -763,7 +797,15 @@ export function buildAccessibilitySupportFallbackEvidence(input: {
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: attemptedUrls,
     keyPageDiscoverySource: getBestDiscoverySource(relevantRows),
+    keyPageGuessedOnly:
+      relevantRows.length > 0 &&
+      relevantRows.every(
+        (row) =>
+          typeof row.bestDiscoverySource !== "string" ||
+          !["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(row.bestDiscoverySource)
+      ),
     keyPageStopReason: stopReasons[0] ?? null,
+    keyPageTitleRecords: titleRecords,
     pageUrls: successfulUrls,
     policySnippets: titleSnippets,
     signalKey: input.signalKey,
@@ -833,7 +875,15 @@ export function buildCookiePolicyFallbackEvidence(input: {
     keyPageAttemptCount: attemptedUrls.length > 0 ? attemptedUrls.length : null,
     keyPageAttemptedUrls: attemptedUrls,
     keyPageDiscoverySource: getBestDiscoverySource(cookiePolicyRows),
+    keyPageGuessedOnly:
+      cookiePolicyRows.length > 0 &&
+      cookiePolicyRows.every(
+        (row) =>
+          typeof row.bestDiscoverySource !== "string" ||
+          !["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(row.bestDiscoverySource)
+      ),
     keyPageStopReason: stopReasons[0] ?? null,
+    keyPageTitleRecords: getSuccessfulKeyPageTitleRecords(cookiePolicyRows),
     pageUrl: retainedPageUrls[0] ?? null,
     pageUrls: retainedPageUrls,
     policySnippets,

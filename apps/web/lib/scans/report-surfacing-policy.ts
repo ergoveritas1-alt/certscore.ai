@@ -41,6 +41,9 @@ export type SurfacingPolicyRuleId =
   | "evidence.coverage_gap.review_key_page_fetch_failed"
   | "evidence.coverage_gap.degrade_with_unresolved_discovery"
   | "evidence.policy_extraction.keep_review"
+  | "evidence.policy_extraction.review_surface_integrity"
+  | "evidence.policy_extraction.review_disclosure_placement"
+  | "evidence.policy_extraction.review_policy_fitness"
   | "evidence.rights_gap.confirmed_high_exposure_or_runtime"
   | "evidence.rights_gap.review_structured_policy_gap"
   | "evidence.contradiction.confirmed_when_explicit_basis_and_runtime"
@@ -185,6 +188,8 @@ const POLICY_EXTRACTION_IDS = [
   "policy_extraction_provider_error",
   "disclosure_likely_obstructed",
   "cookie_policy_structurally_obstructed",
+  "surface_title_mismatch",
+  "affiliate_disclosure_scope_limited",
   "policy_clarity_risk",
   "rule_only_policy_row_present"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -605,6 +610,20 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "confidence_and_coverage"
   },
+  surface_title_mismatch: {
+    findingId: "surface_title_mismatch",
+    family: "policy_extraction",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "confidence_and_coverage"
+  },
+  affiliate_disclosure_scope_limited: {
+    findingId: "affiliate_disclosure_scope_limited",
+    family: "policy_extraction",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "confidence_and_coverage"
+  },
   missing_dsar_high_exposure: {
     findingId: "missing_dsar_high_exposure",
     family: "rights_gap",
@@ -801,6 +820,20 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
 
 function hasConcreteHumanFacingUrl(urls: string[] | undefined) {
   return (urls ?? []).some((url) => /^https?:\/\//i.test(url));
+}
+
+function normalizeComparableUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${parsed.hostname.toLowerCase()}${pathname}`;
+  } catch {
+    return value.trim().toLowerCase();
+  }
 }
 
 function hasReadableSnippet(packet: UnifiedFindingPacket) {
@@ -1049,6 +1082,53 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "policy_extraction") {
+    if (
+      packet.unifiedFindingId === "surface_title_mismatch" &&
+      packet.confidenceInputs.hasPageAttribution &&
+      hasReadableSnippet(packet)
+    ) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason: "A retained, page-attributed title mismatch on a disclosure surface is substantive enough to surface in the main review lane.",
+        ruleId: "evidence.policy_extraction.review_surface_integrity"
+      });
+      return;
+    }
+
+    if (
+      packet.unifiedFindingId === "affiliate_disclosure_scope_limited" &&
+      packet.confidenceInputs.hasPageAttribution &&
+      (hasReadableSnippet(packet) || hasConcreteHumanFacingUrl(packet.evidence?.pageUrls))
+    ) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason: "A retained disclosure-placement gap is substantive enough to surface in the main review lane when it is page-attributed.",
+        ruleId: "evidence.policy_extraction.review_disclosure_placement"
+      });
+      return;
+    }
+
+    if (
+      packet.unifiedFindingId === "policy_clarity_risk" &&
+      packet.confidenceInputs.hasPageAttribution &&
+      hasReadableSnippet(packet) &&
+      (packet.evidence?.flags?.includes("policy_boilerplate_signals_retained") ||
+        ((packet.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2))
+    ) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason: "A page-attributed policy-fitness issue with multiple retained boilerplate signals is substantive enough to surface in the main review lane.",
+        ruleId: "evidence.policy_extraction.review_policy_fitness"
+      });
+      return;
+    }
+
     overrideDecision(decision, {
       state: "review",
       lane: "confidence_and_coverage",
@@ -1377,6 +1457,55 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
         "A retained positive surface with stronger page evidence outranked this weaker contradictory absence finding."
       );
     }
+  }
+
+  const strongFetchedTargets = new Map<string, string>();
+  for (const [findingId, packet] of packetsById) {
+    if (packet.details?.family === "coverage_gap") {
+      continue;
+    }
+    if (packet.evidence?.fetchQuality !== "verified_content" && packet.evidence?.fetchQuality !== "thin_content") {
+      continue;
+    }
+
+    for (const url of [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])]) {
+      const normalized = normalizeComparableUrl(url);
+      if (normalized) {
+        strongFetchedTargets.set(normalized, findingId);
+      }
+    }
+  }
+
+  for (const [findingId, packet] of packetsById) {
+    if (packet.details?.family !== "coverage_gap" || packet.details.gapKind !== "fetch_failed") {
+      continue;
+    }
+
+    const decision = decisionsById.get(findingId);
+    if (!decision || decision.decisionState === "suppressed") {
+      continue;
+    }
+
+    const attemptedTargets = [
+      ...(packet.details.attemptedUrls ?? []),
+      ...(packet.evidence?.pageUrls ?? []),
+      ...(packet.evidence?.sourceUrls ?? [])
+    ]
+      .map((url) => normalizeComparableUrl(url))
+      .filter((value): value is string => Boolean(value));
+    const overlappingTarget = attemptedTargets.find((target) => strongFetchedTargets.has(target));
+    if (!overlappingTarget) {
+      continue;
+    }
+
+    decision.decisionState = "suppressed";
+    decision.reportLane = "suppressed";
+    decision.surfaceTier = "support";
+    decision.suppressedBy = strongFetchedTargets.get(overlappingTarget);
+    decision.appliedRules.push("precedence.present_surface_beats_weak_absence");
+    decision.decisionReasons.push(
+      "Another retained finding already verified the same target URL, so this contradictory fetch-failed gap was suppressed."
+    );
   }
 
   const boundedDiscoveryDecision = decisionsById.get("bounded_key_page_discovery_unresolved");

@@ -268,6 +268,8 @@ const POLICY_EXTRACTION_FINDING_IDS = new Set([
   "policy_extraction_provider_error",
   "disclosure_likely_obstructed",
   "cookie_policy_structurally_obstructed",
+  "surface_title_mismatch",
+  "affiliate_disclosure_scope_limited",
   "policy_clarity_risk",
   "rule_only_policy_row_present"
 ]);
@@ -485,6 +487,244 @@ function getVerificationLabel(state: UnifiedFindingPresentationDecision["verific
     default:
       return "Triage signal";
   }
+}
+
+function getKeyPageTitleRecords(fallbackEvidence: Record<string, unknown> | null | undefined) {
+  const rows = Array.isArray(fallbackEvidence?.keyPageTitleRecords) ? fallbackEvidence.keyPageTitleRecords : [];
+  return rows.flatMap((row) => {
+    if (!row || typeof row !== "object") {
+      return [];
+    }
+
+    const title = typeof (row as { title?: unknown }).title === "string" ? (row as { title: string }).title.trim() : "";
+    const url = typeof (row as { url?: unknown }).url === "string" ? (row as { url: string }).url.trim() : "";
+    if (title.length === 0) {
+      return [];
+    }
+
+    const canonicalUrl =
+      typeof (row as { canonicalUrl?: unknown }).canonicalUrl === "string"
+        ? (row as { canonicalUrl: string }).canonicalUrl.trim()
+        : "";
+    const ogUrl =
+      typeof (row as { ogUrl?: unknown }).ogUrl === "string"
+        ? (row as { ogUrl: string }).ogUrl.trim()
+        : "";
+
+    return [
+      {
+        canonicalUrl: canonicalUrl.length > 0 ? canonicalUrl : null,
+        ogUrl: ogUrl.length > 0 ? ogUrl : null,
+        title,
+        url: url.length > 0 ? url : null
+      }
+    ];
+  });
+}
+
+function getSurfaceTypeExpectation(findingId: string) {
+  switch (findingId) {
+    case "privacy_policy_present":
+      return { disallowed: /affiliate disclosure|terms of service|contact us/i, expected: /privacy/i, label: "privacy policy" };
+    case "terms_of_service_present":
+      return { disallowed: /affiliate disclosure|privacy policy|contact us/i, expected: /terms|conditions|terms of use/i, label: "terms surface" };
+    case "cookie_policy_present":
+      return { disallowed: /affiliate disclosure|terms of service|contact us/i, expected: /cookie|privacy choices|privacy settings/i, label: "cookie surface" };
+    case "contact_support_path_present":
+      return { disallowed: /affiliate disclosure|privacy policy|terms of service/i, expected: /contact|support|help|feedback/i, label: "contact surface" };
+    default:
+      return null;
+  }
+}
+
+function synthesizeGenericReviewFindingCandidates(reviewFindingCandidates: UnifiedFindingCandidate[]) {
+  const synthetic: UnifiedFindingCandidate[] = [];
+
+  for (const candidate of reviewFindingCandidates) {
+    const findingId = resolveUnifiedFindingIdForCandidate(candidate);
+    const fallbackEvidence = candidate.fallbackEvidence ?? null;
+
+    if (!findingId || !fallbackEvidence) {
+      continue;
+    }
+
+    const titleRecords = getKeyPageTitleRecords(fallbackEvidence);
+    const expectation = getSurfaceTypeExpectation(findingId);
+
+    if (expectation) {
+      const mismatch = titleRecords.find(({ title, url, canonicalUrl, ogUrl }) => {
+        if (expectation.expected.test(title)) {
+          try {
+            if (url && canonicalUrl && new URL(url).pathname !== new URL(canonicalUrl).pathname) {
+              return true;
+            }
+            if (url && ogUrl && new URL(url).pathname !== new URL(ogUrl).pathname) {
+              return true;
+            }
+          } catch {
+            return false;
+          }
+
+          return false;
+        }
+        if (expectation.disallowed.test(title)) {
+          return true;
+        }
+        if (!url) {
+          return false;
+        }
+
+        try {
+          const path = new URL(url).pathname.toLowerCase();
+          if (findingId === "privacy_policy_present" && /privacy/.test(path) && !/privacy/i.test(title)) {
+            return true;
+          }
+          if (findingId === "terms_of_service_present" && /terms|conditions|tos/.test(path) && !/terms|conditions|terms of use/i.test(title)) {
+            return true;
+          }
+          if (findingId === "cookie_policy_present" && /cookie|privacy-choices|privacychoices/.test(path) && !/cookie|privacy choices|privacy settings/i.test(title)) {
+            return true;
+          }
+          if (findingId === "contact_support_path_present" && /contact|help|support|feedback/.test(path) && !/contact|support|help|feedback/i.test(title)) {
+            return true;
+          }
+        } catch {
+          return false;
+        }
+
+        return false;
+      });
+
+      if (mismatch) {
+        synthetic.push({
+          description: `The retained ${expectation.label} URL resolved to a page title that appears inconsistent with the expected surface type.`,
+          evidence: uniqueStrings([...(candidate.evidence ?? []), ...(mismatch.url ? [mismatch.url] : [])]),
+          fallbackEvidence: {
+            unifiedFindingId: "surface_title_mismatch",
+            canonicalUrl: mismatch.canonicalUrl,
+            ogUrl: mismatch.ogUrl,
+            pageUrl: mismatch.url,
+            pageUrls: mismatch.url ? [mismatch.url] : [],
+            policySnippets: [mismatch.title],
+            retainedSurfaceTitle: mismatch.title,
+            sourceSurfaceFindingId: findingId
+          },
+          observedValue: mismatch.title,
+          severity: "medium",
+          sourceType: "issue",
+          title: "Retained surface title mismatch"
+        });
+      }
+    }
+
+    if (findingId === "affiliate_disclosure_present") {
+      const pageUrls = uniqueStrings([
+        typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null,
+        ...(Array.isArray(fallbackEvidence.pageUrls)
+          ? fallbackEvidence.pageUrls.filter((value): value is string => typeof value === "string")
+          : [])
+      ]);
+      const dedicatedAffiliateOnly =
+        pageUrls.length > 0 &&
+        pageUrls.every((value) => {
+          try {
+            return /affiliate/i.test(new URL(value).pathname);
+          } catch {
+            return /affiliate/i.test(value);
+          }
+        });
+      const snippets = uniqueStrings([
+        ...(Array.isArray(fallbackEvidence.policySnippets)
+          ? fallbackEvidence.policySnippets.filter((value): value is string => typeof value === "string")
+          : []),
+        typeof fallbackEvidence.policySummaryShort === "string" ? fallbackEvidence.policySummaryShort : null
+      ]);
+      const hasInlineScopeLanguage = snippets.some((value) =>
+        /on this page|through links on this page|recommendations on this page|where we recommend/i.test(value)
+      );
+      const hasReadableAffiliateDisclosureText = snippets.some((value) => isReadableSurfaceSnippet(value));
+
+      if (dedicatedAffiliateOnly && hasReadableAffiliateDisclosureText && !hasInlineScopeLanguage) {
+        synthetic.push({
+          description:
+            "The retained affiliate disclosure evidence came from a dedicated disclosure surface, but the scan did not retain page-attributed evidence showing that disclosure near specific recommendations or outbound purchase paths.",
+          evidence: candidate.evidence,
+          fallbackEvidence: {
+            unifiedFindingId: "affiliate_disclosure_scope_limited",
+            pageUrls,
+            policySnippets: snippets,
+            sourceSurfaceFindingId: findingId
+          },
+          observedValue: snippets[0] ?? null,
+          severity: "medium",
+          sourceType: "issue",
+          title: "Affiliate disclosure scope limited"
+        });
+      }
+    }
+
+    if (findingId === "privacy_policy_present" || findingId === "terms_of_service_present") {
+      const retainedSnippets = uniqueStrings([
+        ...(Array.isArray(fallbackEvidence.policySnippets)
+          ? fallbackEvidence.policySnippets.filter((value): value is string => typeof value === "string")
+          : []),
+        typeof fallbackEvidence.policySummaryShort === "string" ? fallbackEvidence.policySummaryShort : null
+      ]);
+      const boilerplateSignals = uniqueStrings(
+        retainedSnippets.flatMap((value) => {
+          const hits: string[] = [];
+          if (/advertising partners privacy policies?/i.test(value)) {
+            hits.push("generic_ad_partner_disclosure");
+          }
+          if (/cookies and web beacons/i.test(value)) {
+            hits.push("generic_cookie_web_beacons");
+          }
+          if (/log files/i.test(value)) {
+            hits.push("generic_log_files");
+          }
+          if (/hyperlinking to our content/i.test(value)) {
+            hits.push("generic_hyperlinking_clause");
+          }
+          if (/\biframes?\b/i.test(value)) {
+            hits.push("generic_iframe_clause");
+          }
+          if (/comments?/i.test(value) && /post|publish|user/i.test(value)) {
+            hits.push("generic_user_comment_clause");
+          }
+          if (/ccpa privacy rights/i.test(value)) {
+            hits.push("ccpa_rights_template");
+          }
+          if (/gdpr/i.test(value)) {
+            hits.push("gdpr_template");
+          }
+          return hits;
+        })
+      );
+
+      if (boilerplateSignals.length >= 2) {
+        synthetic.push({
+          description:
+            "The retained legal disclosure text includes multiple broad boilerplate markers that may not be well-tailored to the observed site implementation.",
+          evidence: candidate.evidence,
+          fallbackEvidence: {
+            unifiedFindingId: "policy_clarity_risk",
+            pageUrls: Array.isArray(fallbackEvidence.pageUrls)
+              ? fallbackEvidence.pageUrls.filter((value): value is string => typeof value === "string")
+              : [],
+            policyBoilerplateSignals: boilerplateSignals,
+            policySnippets: retainedSnippets,
+            sourceSurfaceFindingId: findingId
+          },
+          observedValue: retainedSnippets[0] ?? null,
+          severity: "medium",
+          sourceType: "issue",
+          title: "Policy clarity risk"
+        });
+      }
+    }
+  }
+
+  return synthetic;
 }
 
 function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
@@ -1080,6 +1320,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(fallbackEvidence.keyPageAttemptedUrls)) {
     entities.attemptedUrls = uniqueStrings(fallbackEvidence.keyPageAttemptedUrls as string[]);
   }
+  if (Array.isArray(fallbackEvidence.policyBoilerplateSignals)) {
+    entities.policyBoilerplateSignals = uniqueStrings(fallbackEvidence.policyBoilerplateSignals as string[]);
+  }
   if (Array.isArray(fallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(fallbackEvidence.relatedVendors as string[]);
   }
@@ -1130,6 +1373,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     fallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
     fallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
     fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
+    Array.isArray(fallbackEvidence.policyBoilerplateSignals) &&
+    fallbackEvidence.policyBoilerplateSignals.some((entry) => typeof entry === "string" && entry.trim().length > 0)
+      ? "policy_boilerplate_signals_retained"
+      : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
     hasSanitizedNetworkEvidenceHash(fallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
@@ -1714,13 +1961,17 @@ function sanitizeEvidenceForFinding(
   }
 
   if (findingId === "privacy_rights_path_present") {
-    const preferredPageUrls = next.pageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url));
+    const preferredPageUrls = stripGenericGuessedCookieProbeUrls(
+      next.pageUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)),
+      next.flags
+    );
     if (preferredPageUrls.length > 0) {
       next.pageUrls = preferMoreSpecificSameHostUrls(preferredPageUrls);
     }
 
-    const preferredSourceUrls = next.sourceUrls.filter(
-      (url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)
+    const preferredSourceUrls = stripGenericGuessedCookieProbeUrls(
+      next.sourceUrls.filter((url) => !isWeakRootLikeUrl(url) && !isMachineReadablePolicyEndpoint(url)),
+      next.flags
     );
     if (preferredSourceUrls.length > 0) {
       next.sourceUrls = preferMoreSpecificSameHostUrls(preferredSourceUrls);
@@ -2703,6 +2954,18 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Keep the affiliate disclosure easy to reach anywhere endorsements, recommendations, or affiliate-linked product references appear.",
     whyThisMatters: "A visible affiliate disclosure helps users understand when recommendations or links may carry a financial relationship."
   },
+  affiliate_disclosure_scope_limited: {
+    suggestedFix:
+      "Retain clearer page-attributed evidence that the affiliate disclosure appears near the relevant recommendation, endorsement, or outbound purchase context, not only on a dedicated legal page.",
+    whyThisMatters:
+      "A dedicated affiliate disclosure page is helpful, but reviewers also need evidence that the disclosure is exposed where monetized recommendations or purchase paths actually appear."
+  },
+  surface_title_mismatch: {
+    suggestedFix:
+      "Review the retained page title and route pairing so legal, privacy, cookie, contact, or similar surfaces use titles that match the live page purpose.",
+    whyThisMatters:
+      "If a retained disclosure or support surface resolves to a mismatched title, users and reviewers may be routed to the wrong page or left unsure whether the intended disclosure was actually fetched."
+  },
   legal_entity_name_present: {
     suggestedFix: "Keep the operating legal entity easy to identify on public-facing legal, about, or contact surfaces and make sure the retained text matches the live operator identity.",
     whyThisMatters: "A visible legal entity name helps users and reviewers understand who operates the site and who is accountable for the offer."
@@ -3567,14 +3830,75 @@ function resolveUnifiedFindingIdForCandidate(candidate: UnifiedFindingCandidate)
     return familyPacketFindingId.id;
   }
 
-  return candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
-    ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey)?.id ??
-        getReportUnifiedFindingByAlias(candidate.title)?.id ??
-        null
-    : getReportUnifiedFindingByAlias(candidate.title)?.id ??
-        (candidate.linkedValidationFinding
-          ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)?.id ?? null
-          : null);
+  const directlyResolvedId =
+    candidate.sourceType === "signal" && candidate.signalSource && candidate.signalKey
+      ? getReportUnifiedFindingForSignal(candidate.signalSource, candidate.signalKey)?.id ??
+          getReportUnifiedFindingByAlias(candidate.title)?.id ??
+          null
+      : getReportUnifiedFindingByAlias(candidate.title)?.id ??
+          (candidate.linkedValidationFinding
+            ? getReportUnifiedFindingForValidationRule(candidate.linkedValidationFinding.ruleKey)?.id ?? null
+            : null);
+
+  return remapRawSignalFindingIdFromFallback({
+    currentFindingId: directlyResolvedId,
+    fallbackEvidence: candidate.fallbackEvidence ?? null
+  });
+}
+
+function remapRawSignalFindingIdFromFallback(input: {
+  currentFindingId: string | null;
+  fallbackEvidence?: Record<string, unknown> | null;
+}) {
+  if (input.currentFindingId !== "targeted_advertising_choices_present" || !input.fallbackEvidence) {
+    return input.currentFindingId;
+  }
+
+  const fallback = input.fallbackEvidence;
+  const attributedUrls = uniqueStrings([
+    ...(Array.isArray(fallback.pageUrls) ? fallback.pageUrls.filter((value): value is string => typeof value === "string") : []),
+    ...(Array.isArray(fallback.sourceUrls)
+      ? fallback.sourceUrls.filter((value): value is string => typeof value === "string")
+      : []),
+    typeof fallback.pageUrl === "string" ? fallback.pageUrl : null,
+    typeof fallback.sourceUrl === "string" ? fallback.sourceUrl : null
+  ]);
+  const policySnippets = uniqueStrings([
+    ...(Array.isArray(fallback.policySnippets)
+      ? fallback.policySnippets.filter((value): value is string => typeof value === "string")
+      : []),
+    typeof fallback.policySummaryShort === "string" ? fallback.policySummaryShort : null
+  ]);
+  const isGuessedOnly = fallback.keyPageGuessedOnly === true || fallback.key_page_guessed_only === true;
+  const hasExplicitControlUrl = attributedUrls.some((value) => {
+    if (!/privacy-choices|privacy_choices|your-privacy-choices|do-not-sell|do-not-share|opt-?out|ad-choices|cookie/i.test(value)) {
+      return false;
+    }
+
+    if (!isGuessedOnly) {
+      return true;
+    }
+
+    return !/\/(?:legal\/)?cookies\/?$/i.test(value);
+  });
+  const hasRightsLikeSnippet = policySnippets.some((value) =>
+    /privacy rights|ccpa privacy rights|the right to access|the right to request|delete request|access request|correction request/i.test(
+      value
+    )
+  );
+
+  return !hasExplicitControlUrl && isGuessedOnly && hasRightsLikeSnippet
+    ? "privacy_rights_path_present"
+    : input.currentFindingId;
+}
+
+function stripGenericGuessedCookieProbeUrls(urls: string[], flags: string[]) {
+  if (!flags.includes("guessed_only")) {
+    return urls;
+  }
+
+  const nonCookieUrls = urls.filter((url) => !/\/(?:legal\/)?cookies\/?$/i.test(url));
+  return nonCookieUrls.length > 0 ? nonCookieUrls : urls;
 }
 
 function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate | ConcernBackedUnifiedFindingCandidate) {
@@ -3600,8 +3924,9 @@ export function buildUnifiedFindingPackets(input: {
     const findingId = resolveUnifiedFindingIdForCandidate(candidate);
     return !findingId || !packetBackedFindingIds.has(findingId);
   });
+  const synthesizedCandidates = synthesizeGenericReviewFindingCandidates([...reviewFindingCandidates, ...familyPacketCandidates]);
   const normalizedConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [...reviewFindingCandidates, ...familyPacketCandidates],
+    reviewFindingCandidates: [...reviewFindingCandidates, ...familyPacketCandidates, ...synthesizedCandidates],
     validationFindings: input.validationFindings
   });
   const normalizedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);

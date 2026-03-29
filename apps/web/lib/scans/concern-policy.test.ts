@@ -258,7 +258,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         policySemanticConfidence: 0.81
       },
       expected: {
-        allowedNarrativeTier: "weak",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -281,7 +281,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         policySemanticConfidence: 0.8
       },
       expected: {
-        allowedNarrativeTier: "weak",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -400,7 +400,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         signalKey: "commercial.explicit_fee_disclosure_text_present"
       },
       expected: {
-        allowedNarrativeTier: "weak",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -515,7 +515,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         policySnippets: ["If your browser communicates an opt-out preference signal, we will honor that signal."]
       },
       expected: {
-        allowedNarrativeTier: "weak",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -539,7 +539,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         accessibilityContactMethodPresent: false
       },
       expected: {
-        allowedNarrativeTier: "weak",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -750,7 +750,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
       },
       expected: {
-        allowedNarrativeTier: "strong",
+        allowedNarrativeTier: "moderate",
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
@@ -790,6 +790,26 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       evidenceStrengthFlags: ["structured_validation"] as const,
       rawEvidence: {
         value: -4
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "guessed-only unavailable coverage stays audit-only without a linked discovery path",
+      concern: makeConcern({
+        originKey: "disclosure.cookie_policy_fetch_failed",
+        suggestedUnifiedFindingId: "cookie_policy_unavailable",
+        title: "Cookie policy unavailable"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "key_page_discovery"] as const,
+      rawEvidence: {
+        keyPageAttemptCount: 2,
+        keyPageAttemptedUrls: ["https://example.com/cookies", "https://example.com/legal/cookies"],
+        keyPageGuessedOnly: true
       },
       expected: {
         allowedNarrativeTier: "weak",

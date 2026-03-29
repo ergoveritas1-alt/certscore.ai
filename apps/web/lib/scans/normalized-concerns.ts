@@ -337,16 +337,27 @@ function getFieldCoverageState(
   return foundValues.some(Boolean);
 }
 
-function inferSpecializedUnifiedFindingId(input: {
+export function inferSpecializedUnifiedFindingId(input: {
   currentSuggestedId?: string;
-  originType: NormalizedConcernOriginType;
+  originType?: NormalizedConcernOriginType;
   rawEvidence?: Record<string, unknown> | null;
   signalKey?: string;
-  title: string;
+  title?: string;
 }) {
   const rawEvidence = input.rawEvidence ?? null;
   const currentId = input.currentSuggestedId ?? null;
-  const title = input.title.toLowerCase();
+  const title = (input.title ?? "").toLowerCase();
+
+  const attributedUrls = [
+    ...getStringArrayEvidence(rawEvidence?.pageUrls),
+    ...getStringArrayEvidence(rawEvidence?.sourceUrls),
+    getStringValue(rawEvidence?.pageUrl),
+    getStringValue(rawEvidence?.sourceUrl)
+  ].filter((value): value is string => Boolean(value));
+  const policySnippets = [
+    ...getStringArrayEvidence(rawEvidence?.policySnippets),
+    getStringValue(rawEvidence?.policySummaryShort)
+  ].filter((value): value is string => Boolean(value));
 
   const keyboardIssueCount = getNumberValue(
     rawEvidence?.wcagKeyboardNavigationIssueCount ?? rawEvidence?.wcag_keyboard_navigation_issue_count
@@ -453,6 +464,34 @@ function inferSpecializedUnifiedFindingId(input: {
     }
   }
 
+  if (currentId === "targeted_advertising_choices_present") {
+    const isGuessedOnly = rawEvidence?.keyPageGuessedOnly === true || rawEvidence?.key_page_guessed_only === true;
+    const hasExplicitControlUrl = attributedUrls.some((value) => {
+      if (!/privacy-choices|privacy_choices|your-privacy-choices|do-not-sell|do-not-share|opt-?out|ad-choices|cookie/i.test(value)) {
+        return false;
+      }
+
+      if (!isGuessedOnly) {
+        return true;
+      }
+
+      return !/\/(?:legal\/)?cookies\/?$/i.test(value);
+    });
+    const hasExplicitControlSnippet = policySnippets.some((value) =>
+      /privacy choices|your privacy choices|do not sell|do not share|ad choices|manage cookies|cookie settings|global privacy control|\bgpc\b/i.test(
+        value
+      )
+    );
+    const hasRightsLikeSnippet = policySnippets.some((value) =>
+      /privacy rights|ccpa privacy rights|the right to access|the right to request|delete request|access request|correction request/i.test(
+        value
+      )
+    );
+    if (!hasExplicitControlUrl && isGuessedOnly && hasRightsLikeSnippet) {
+      return "privacy_rights_path_present";
+    }
+  }
+
   return currentId ?? undefined;
 }
 
@@ -536,7 +575,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    if (/operator_relationship|policyRightsSignals|rights_signals?/i.test(key)) {
+    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;
     }
@@ -793,14 +832,26 @@ function resolveSuggestedUnifiedFindingId(input: {
   if (explicitFindingId) {
     const explicitFinding = getReportUnifiedFinding(explicitFindingId);
     if (explicitFinding) {
-      return explicitFinding.id;
+      return inferSpecializedUnifiedFindingId({
+        currentSuggestedId: explicitFinding.id,
+        originType: input.originType,
+        rawEvidence: input.rawEvidence,
+        signalKey: input.signalKey,
+        title: input.title
+      });
     }
   }
 
   if (input.signalKey && input.signalSource) {
     const signalMatch = getReportUnifiedFindingForSignal(input.signalSource, input.signalKey);
     if (signalMatch) {
-      return signalMatch.id;
+      return inferSpecializedUnifiedFindingId({
+        currentSuggestedId: signalMatch.id,
+        originType: input.originType,
+        rawEvidence: input.rawEvidence,
+        signalKey: input.signalKey,
+        title: input.title
+      });
     }
   }
 

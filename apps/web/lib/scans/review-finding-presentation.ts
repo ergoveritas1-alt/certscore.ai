@@ -1798,18 +1798,21 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     }
 
     if (/cookie policy unavailable|cookie_policy_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
-      presentation.whyThisMatters =
-        `The scan attempted to locate a dedicated cookie policy at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to retrieve content at any of them${provenanceSuffix}. ${stopReasonSuffix}Clear disclosure of tracking technologies is a core requirement under privacy frameworks like the ePrivacy Directive and GDPR. The absence of a policy at these standard paths suggests it either does not exist, is located at an unmapped URL, or is consolidated within the primary privacy policy.`;
+      presentation.whyThisMatters = fetchEvidence.guessedOnly
+        ? `The scan probed ${attemptLabel} common cookie-policy URL${attemptLabel === 1 ? "" : "s"} but did not verify a linked, user-facing cookie surface. ${stopReasonSuffix}That is weaker than a failed fetch of a page the site actually linked and usually means manual review should confirm whether cookie disclosures live elsewhere, such as the main privacy policy.`
+        : `The scan attempted to locate a dedicated cookie policy at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to retrieve content at any of them${provenanceSuffix}. ${stopReasonSuffix}Clear disclosure of tracking technologies is a core requirement under privacy frameworks like the ePrivacy Directive and GDPR. The absence of a policy at these standard paths suggests it either does not exist, is located at an unmapped URL, or is consolidated within the primary privacy policy.`;
     }
 
     if (/accessibility statement unavailable|accessibility statement not retrievable|accessibility_statement_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
-      presentation.whyThisMatters =
-        `The scan attempted to retrieve an accessibility statement at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}For public-sector sites this may indicate a missing required disclosure, and more broadly it prevents users from easily finding the site's stated accessibility status, known limitations, and support contact channel.`;
+      presentation.whyThisMatters = fetchEvidence.guessedOnly
+        ? `The scan probed ${attemptLabel} common accessibility-statement URL${attemptLabel === 1 ? "" : "s"} but did not verify a linked accessibility statement on the site. ${stopReasonSuffix}That usually supports a softer coverage review outcome rather than a hard failed-fetch claim.`
+        : `The scan attempted to retrieve an accessibility statement at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}For public-sector sites this may indicate a missing required disclosure, and more broadly it prevents users from easily finding the site's stated accessibility status, known limitations, and support contact channel.`;
     }
 
     if (/contact page unavailable|contact_page_fetch_failed/i.test(input.haystack) && fetchEvidence.attemptedUrls.length > 0) {
-      presentation.whyThisMatters =
-        `The scan attempted to retrieve a public contact page at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}That can make support and privacy contact channels harder for users to locate and verify.`;
+      presentation.whyThisMatters = fetchEvidence.guessedOnly
+        ? `The scan probed ${attemptLabel} common contact-page URL${attemptLabel === 1 ? "" : "s"} but did not verify a linked public contact page at those locations. ${stopReasonSuffix}That is weaker than a failed fetch of a page the site actually linked.`
+        : `The scan attempted to retrieve a public contact page at ${attemptLabel} specific candidate URL${attemptLabel === 1 ? "" : "s"} and failed to fetch any of them${provenanceSuffix}. ${stopReasonSuffix}That can make support and privacy contact channels harder for users to locate and verify.`;
     }
 
     const strongerRenderedDiscovery =

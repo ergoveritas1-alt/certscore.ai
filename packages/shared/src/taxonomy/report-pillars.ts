@@ -2926,6 +2926,22 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "snapshot_signal", key: "commerce.affiliate_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "surface_title_mismatch",
+    label: "Retained surface title mismatch",
+    owner: "clarity_completeness_risk",
+    mirrors: ["legal_commercial_disclosure_coverage"],
+    overlays: ["disclosures_claim_substantiation", "notice_rights_baseline"],
+    aliases: ["Policy surface title mismatch", "Page title mismatch on retained disclosure surface"]
+  }),
+  defineReportUnifiedFinding({
+    id: "affiliate_disclosure_scope_limited",
+    label: "Affiliate disclosure scope limited",
+    owner: "legal_commercial_disclosure_coverage",
+    mirrors: ["clarity_completeness_risk"],
+    overlays: ["disclosures_claim_substantiation", "notice_rights_baseline"],
+    aliases: ["Affiliate disclosure placement unclear", "Affiliate disclosure not evidenced near recommendations"]
+  }),
+  defineReportUnifiedFinding({
     id: "targeted_advertising_disclosure_present",
     label: "Targeted advertising disclosure present",
     owner: "data_handling_disclosures",
