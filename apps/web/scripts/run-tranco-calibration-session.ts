@@ -46,7 +46,7 @@ const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), "tmp/tranco-calibration/s
 const DEFAULT_BATCH_LIMIT = 20;
 const DEFAULT_MAX_PENDING_BATCHES = 3;
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
-const DEFAULT_DURATION_HOURS = 0.5;
+const DEFAULT_DURATION_HOURS = 2;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

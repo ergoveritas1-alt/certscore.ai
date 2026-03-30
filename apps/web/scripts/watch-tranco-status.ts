@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_SESSION_DIR = path.resolve(process.cwd(), "tmp/tranco-calibration/session-30m");
+const DEFAULT_SESSION_DIR = path.resolve(process.cwd(), "tmp/tranco-calibration/session-2h");
 const DEFAULT_INTERVAL_SECONDS = 60;
-const DEFAULT_DURATION_MINUTES = 30;
+const DEFAULT_DURATION_MINUTES = 120;
 
 type SessionHeartbeat = {
   activeBatchCount?: number;
