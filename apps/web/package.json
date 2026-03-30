@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm check-runtime:build && next build",
+    "build:tranco-calibration": "node --enable-source-maps --import tsx ./scripts/build-tranco-calibration-queue.ts",
     "check-env": "node --enable-source-maps ./scripts/check-env.ts",
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts",
