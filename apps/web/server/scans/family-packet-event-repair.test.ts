@@ -58,7 +58,7 @@ test("repairs weak privacy-controls family packets with cookie evidence from pri
 
   const cookiePacket = packets.find((packet) => packet.unifiedFindingId === "cookie_policy_present");
   assert.ok(cookiePacket);
-  assert.equal(cookiePacket?.presentationDecision.status, "surface");
+  assert.equal(cookiePacket?.presentationDecision.status, "audit_only");
   assert.equal(cookiePacket?.primaryPageUrl, "https://www.schwab.com/legal/privacy/us-residents");
   assert.equal(cookiePacket?.evidence?.fetchQuality, "verified_content");
   assert.ok(
@@ -117,4 +117,153 @@ test("does not modify privacy-controls packets that already retain strong cookie
   });
 
   assert.deepEqual(event, originalEvent);
+});
+
+test("replaces weak vanity contact targets with strong rendered-link discovery evidence", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 111,
+                candidateUrl: "https://www.example.com/t/contact_us/",
+                discoveredFrom: "rendered_link",
+                hostRelation: "same_host",
+                pageType: "contact",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/contact",
+                  fetchQuality: "verified_content",
+                  snippet:
+                    "contact - Example About Press Copyright Contact us Creators Advertise Developers Terms Privacy Policy",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "contact - Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/contact"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.ok(contactPacket);
+  assert.equal(contactPacket?.presentationDecision.status, "audit_only");
+  assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/t/contact_us/");
+  assert.ok(contactPacket?.evidence?.pageUrls?.includes("https://www.example.com/t/contact_us/"));
+  assert.ok(contactPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Contact Us."));
+  assert.ok(!contactPacket?.evidence?.pageUrls?.includes("https://www.example.com/contact"));
+});
+
+test("backfills a missing terms finding from strong rendered-link discovery evidence", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_terms",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 51,
+                candidateUrl: "https://www.example.com/t/terms",
+                discoveredFrom: "rendered_link",
+                hostRelation: "same_host",
+                pageType: "terms_of_service",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_terms",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Privacy Policy"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+  assert.ok(termsPacket);
+  assert.equal(termsPacket?.presentationDecision.status, "audit_only");
+  assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/t/terms");
+  assert.ok(termsPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Terms of Service."));
 });
