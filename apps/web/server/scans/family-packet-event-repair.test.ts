@@ -278,6 +278,183 @@ test("backfills a missing terms finding from strong rendered-link discovery evid
   assert.ok(termsPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Terms of Service."));
 });
 
+test("suppresses lone off-domain legal outliers when another legal domain cluster is dominant", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_packets",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.pmc.com/privacy-policy",
+                  snippet: "Privacy Policy | PMC",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  supportingRefs: [
+                    {
+                      refType: "title",
+                      text: "Privacy Policy | PMC",
+                      url: "https://www.pmc.com/privacy-policy",
+                      verified: true
+                    }
+                  ],
+                  title: "Privacy Policy | PMC"
+                },
+                {
+                  canonicalUrl: "https://policies.google.com/terms",
+                  snippet: "Google Terms of Service – Privacy & Terms – Google",
+                  supportedSurfaceTypes: ["terms_of_service"],
+                  supportingRefs: [
+                    {
+                      refType: "title",
+                      text: "Google Terms of Service – Privacy & Terms – Google",
+                      url: "https://policies.google.com/terms",
+                      verified: true
+                    }
+                  ],
+                  title: "Google Terms of Service – Privacy & Terms – Google"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.pmc.com/privacy-policy"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                },
+                {
+                  evidenceUrls: ["https://policies.google.com/terms"],
+                  findingId: "terms_of_service_present",
+                  reason: "Verified legal-core evidence includes a terms of service or terms and conditions surface.",
+                  sourceSurfaceTypes: ["terms_of_service"]
+                }
+              ]
+            },
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.pmc.com/privacy-policy",
+                  snippet: "Your Privacy Choices",
+                  supportedSurfaceTypes: ["cookie_policy_or_settings", "privacy_choices"],
+                  title: "Privacy Policy | PMC"
+                },
+                {
+                  canonicalUrl: "https://www.pmc.com/california-opt-out-of-sale-of-data",
+                  snippet: "California Residents: Opt Out of Sale of Personal Information | PMC",
+                  supportedSurfaceTypes: ["privacy_choices"],
+                  title: "California Residents: Opt Out of Sale of Personal Information | PMC"
+                }
+              ],
+              familyId: "privacy_controls",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.pmc.com/privacy-policy"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy or settings language.",
+                  sourceSurfaceTypes: ["cookie_policy_or_settings"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+
+  assert.ok(privacyPacket);
+  assert.equal(privacyPacket?.primaryPageUrl, "https://www.pmc.com/privacy-policy");
+  assert.equal(termsPacket, undefined);
+});
+
+test("suppresses weak privacy-policy hub pages with insufficient retained policy content", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_weak_privacy_hub",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://help.example.com/hc/sections/123-Terms-and-policies",
+                  snippet: "Terms and policies – Help Centre",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Terms and policies – Help Centre"
+                },
+                {
+                  canonicalUrl: "https://www.example.com/terms",
+                  snippet: "Terms of Use",
+                  supportedSurfaceTypes: ["terms_of_service"],
+                  title: "Terms of Use"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://help.example.com/hc/sections/123-Terms-and-policies"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                },
+                {
+                  evidenceUrls: ["https://www.example.com/terms"],
+                  findingId: "terms_of_service_present",
+                  reason: "Verified legal-core evidence includes a terms of service or terms and conditions surface.",
+                  sourceSurfaceTypes: ["terms_of_service"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://help.example.com/hc/sections/123-Terms-and-policies",
+        policy_actionable_flags: ["policy_fetch_insufficient_content"],
+        policy_structurally_weak: true,
+        policy_summary_short: "Insufficient policy content fetched for semantic review."
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+
+  assert.equal(privacyPacket, undefined);
+  assert.ok(termsPacket);
+  assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/terms");
+});
+
 test("backfills a missing privacy finding from human-facing policy enrichment on a localized route", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

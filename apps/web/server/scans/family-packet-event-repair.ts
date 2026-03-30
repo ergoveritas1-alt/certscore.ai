@@ -69,6 +69,219 @@ function getRecordArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object") : [];
 }
 
+function getHostKey(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function getTargetDomainKey(target: FamilyPacketTargetRecord) {
+  return typeof target.canonicalUrl === "string" ? getHostKey(target.canonicalUrl) : null;
+}
+
+function getTargetSupportingRefs(target: FamilyPacketTargetRecord) {
+  return getRecordArray(target.supportingRefs);
+}
+
+function targetHasOnlySelfReferentialDocumentRefs(target: FamilyPacketTargetRecord) {
+  const targetDomainKey = getTargetDomainKey(target);
+  const refs = getTargetSupportingRefs(target);
+
+  if (refs.length === 0) {
+    return true;
+  }
+
+  return refs.every((ref) => {
+    const refType = typeof ref.refType === "string" ? ref.refType : null;
+    if (refType && refType !== "title" && refType !== "excerpt") {
+      return false;
+    }
+
+    const refDomainKey = typeof ref.url === "string" ? getHostKey(ref.url) : null;
+    return !refDomainKey || refDomainKey === targetDomainKey;
+  });
+}
+
+function getCanonicalTargetDomainCounts(events: ScanEventRecordLike[]) {
+  const counts = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      continue;
+    }
+
+    const metadata = event.metadataJson as Record<string, unknown>;
+    if (metadata.phase !== "finding_family_packets" || !Array.isArray(metadata.packets)) {
+      continue;
+    }
+
+    for (const packet of metadata.packets as Array<Record<string, unknown>>) {
+      const canonicalTargets = Array.isArray(packet.canonicalTargets)
+        ? (packet.canonicalTargets as FamilyPacketTargetRecord[])
+        : [];
+      for (const target of canonicalTargets) {
+        const domainKey = getTargetDomainKey(target);
+        if (!domainKey) {
+          continue;
+        }
+        counts.set(domainKey, (counts.get(domainKey) ?? 0) + 1);
+      }
+    }
+  }
+
+  return counts;
+}
+
+function suppressOutlierLegalTargets(input: {
+  canonicalTargets: FamilyPacketTargetRecord[];
+  supportedUnifiedFindings: FamilyPacketFindingRecord[];
+  canonicalTargetDomainCounts: Map<string, number>;
+}) {
+  const domainCounts = input.canonicalTargetDomainCounts;
+  const dominantCount = Math.max(0, ...domainCounts.values());
+  if (dominantCount < 2) {
+    return {
+      changed: false,
+      canonicalTargets: input.canonicalTargets,
+      supportedUnifiedFindings: input.supportedUnifiedFindings
+    };
+  }
+
+  const dominantDomainKeys = new Set(
+    [...domainCounts.entries()].filter(([, count]) => count >= dominantCount).map(([domainKey]) => domainKey)
+  );
+  const suspiciousDomainKeys = new Set<string>();
+
+  for (const target of input.canonicalTargets) {
+    const surfaceTypes = getStringArray(target.supportedSurfaceTypes);
+    if (!surfaceTypes.includes("privacy_policy") && !surfaceTypes.includes("terms_of_service")) {
+      continue;
+    }
+
+    const domainKey = getTargetDomainKey(target);
+    if (!domainKey || dominantDomainKeys.has(domainKey) || (domainCounts.get(domainKey) ?? 0) > 1) {
+      continue;
+    }
+
+    if (!targetHasOnlySelfReferentialDocumentRefs(target)) {
+      continue;
+    }
+
+    suspiciousDomainKeys.add(domainKey);
+  }
+
+  if (suspiciousDomainKeys.size === 0) {
+    return {
+      changed: false,
+      canonicalTargets: input.canonicalTargets,
+      supportedUnifiedFindings: input.supportedUnifiedFindings
+    };
+  }
+
+  const canonicalTargets = input.canonicalTargets.filter((target) => {
+    const domainKey = getTargetDomainKey(target);
+    return !domainKey || !suspiciousDomainKeys.has(domainKey);
+  });
+
+  const supportedUnifiedFindings = input.supportedUnifiedFindings.filter((finding) => {
+    const evidenceUrls = getStringArray(finding.evidenceUrls);
+    if (evidenceUrls.length === 0) {
+      return true;
+    }
+
+    const evidenceDomainKeys = new Set(evidenceUrls.map((url) => getHostKey(url)).filter((value): value is string => Boolean(value)));
+    if (evidenceDomainKeys.size === 0) {
+      return true;
+    }
+
+    return [...evidenceDomainKeys].some((domainKey) => !suspiciousDomainKeys.has(domainKey));
+  });
+
+  return {
+    changed: canonicalTargets.length !== input.canonicalTargets.length || supportedUnifiedFindings.length !== input.supportedUnifiedFindings.length,
+    canonicalTargets,
+    supportedUnifiedFindings
+  };
+}
+
+function isSuspiciousRelatedPartyLegalDiscoveryCandidate(
+  candidate: DiscoveryCandidateRecord | null,
+  canonicalTargetDomainCounts: Map<string, number>
+) {
+  if (!candidate || candidate.hostRelation !== "related_party") {
+    return false;
+  }
+
+  const dominantCount = Math.max(0, ...canonicalTargetDomainCounts.values());
+  if (dominantCount < 2) {
+    return false;
+  }
+
+  const domainKey = getHostKey(candidate.candidateUrl);
+  if (!domainKey) {
+    return false;
+  }
+
+  return (canonicalTargetDomainCounts.get(domainKey) ?? 0) <= 1;
+}
+
+function getPolicyRowForTarget(
+  policyEnrichment: Array<Record<string, unknown>>,
+  target: FamilyPacketTargetRecord
+) {
+  const canonicalUrl = typeof target.canonicalUrl === "string" ? target.canonicalUrl : null;
+  if (!canonicalUrl) {
+    return null;
+  }
+
+  return (
+    policyEnrichment.find((row) => {
+      const pageUrl = typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+      return pageUrl === canonicalUrl;
+    }) ?? null
+  );
+}
+
+function isWeakPrivacyHubTarget(
+  target: FamilyPacketTargetRecord,
+  policyEnrichment: Array<Record<string, unknown>>
+) {
+  const surfaceTypes = getStringArray(target.supportedSurfaceTypes);
+  if (!surfaceTypes.includes("privacy_policy")) {
+    return false;
+  }
+
+  const canonicalUrl = typeof target.canonicalUrl === "string" ? target.canonicalUrl.toLowerCase() : "";
+  const text = [typeof target.title === "string" ? target.title : null, typeof target.snippet === "string" ? target.snippet : null]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+  const looksLikeHub =
+    /\/hc\/sections?\//.test(canonicalUrl) ||
+    /\/sections?\//.test(canonicalUrl) ||
+    ((/terms and policies|help centre|help center|policy center|policy centre|section/i.test(text) &&
+      !/privacy policy|privacy notice|data privacy/i.test(text)));
+
+  if (!looksLikeHub) {
+    return false;
+  }
+
+  const policyRow = getPolicyRowForTarget(policyEnrichment, target);
+  if (!policyRow) {
+    return false;
+  }
+
+  const structurallyWeak = policyRow.policy_structurally_weak === true;
+  const actionableFlags = getStringArray(policyRow.policy_actionable_flags);
+  return structurallyWeak || actionableFlags.includes("policy_fetch_insufficient_content");
+}
+
 function getPolicyEvidenceSnippets(row: Record<string, unknown>) {
   return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
     ? (row.policyEvidenceSnippets as Record<string, unknown>)
@@ -182,7 +395,16 @@ function getPolicySurfaceRepairEvidence(
       const rowPageType = String(row.pageType ?? row.page_type ?? "");
       const pageUrl = getPolicyPageUrl(row);
       const summary = getPolicySummaryShort(row);
-      if (rowPageType !== pageType || !pageUrl || isMachineReadablePolicyEndpoint(pageUrl) || isWeakRootLikeUrl(pageUrl)) {
+      const actionableFlags = getStringArray(row.policy_actionable_flags);
+      const structurallyWeak = row.policy_structurally_weak === true;
+      if (
+        rowPageType !== pageType ||
+        !pageUrl ||
+        isMachineReadablePolicyEndpoint(pageUrl) ||
+        isWeakRootLikeUrl(pageUrl) ||
+        structurallyWeak ||
+        actionableFlags.includes("policy_fetch_insufficient_content")
+      ) {
         return null;
       }
 
@@ -745,6 +967,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   policyEnrichment: Array<Record<string, unknown>>;
 }): TEvent[] {
   const discoveryCandidates = extractDiscoveryCandidates(input.events);
+  const canonicalTargetDomainCounts = getCanonicalTargetDomainCounts(input.events);
   const verifiedSurfaceRecoveryResults = extractVerifiedSurfaceRecoveryResults(input.events);
   const cookieRepair = getCookieRepairEvidence(input.policyEnrichment);
   const privacySurfaceRepair = getPolicySurfaceRepairEvidence(input.policyEnrichment, "privacy_policy", "Privacy Notice");
@@ -1001,11 +1224,46 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       }
 
       if (packetRecord.familyId === "legal_core") {
-        const repairedTargets = [...canonicalTargets];
-        const repairedFindings = [...supportedUnifiedFindings];
+        const legalOutlierSuppression = suppressOutlierLegalTargets({
+          canonicalTargetDomainCounts,
+          canonicalTargets,
+          supportedUnifiedFindings
+        });
+        let repairedTargets = [...legalOutlierSuppression.canonicalTargets];
+        let repairedFindings = [...legalOutlierSuppression.supportedUnifiedFindings];
+        packetsChanged ||= legalOutlierSuppression.changed;
+
+        const weakPrivacyHubTargets = repairedTargets.filter((target) => isWeakPrivacyHubTarget(target, input.policyEnrichment));
+        if (weakPrivacyHubTargets.length > 0) {
+          const weakPrivacyUrls = new Set(
+            weakPrivacyHubTargets
+              .map((target) => (typeof target.canonicalUrl === "string" ? target.canonicalUrl : null))
+              .filter((value): value is string => Boolean(value))
+          );
+          repairedTargets = repairedTargets.filter((target) => {
+            const canonicalUrl = typeof target.canonicalUrl === "string" ? target.canonicalUrl : null;
+            return !canonicalUrl || !weakPrivacyUrls.has(canonicalUrl);
+          });
+          repairedFindings = repairedFindings.filter((finding) => {
+            if (finding.findingId !== "privacy_policy_present") {
+              return true;
+            }
+
+            const evidenceUrls = getStringArray(finding.evidenceUrls);
+            return evidenceUrls.some((url) => !weakPrivacyUrls.has(url));
+          });
+          packetsChanged = true;
+        }
+
         const hasPrivacyTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_policy"));
         const hasPrivacyFinding = repairedFindings.some((finding) => finding.findingId === "privacy_policy_present");
-        const privacyDiscoveryCandidate = getBestDiscoveryCandidate(discoveryCandidates, "privacy_policy");
+        const privacyDiscoveryCandidateRaw = getBestDiscoveryCandidate(discoveryCandidates, "privacy_policy");
+        const privacyDiscoveryCandidate = isSuspiciousRelatedPartyLegalDiscoveryCandidate(
+          privacyDiscoveryCandidateRaw,
+          canonicalTargetDomainCounts
+        )
+          ? null
+          : privacyDiscoveryCandidateRaw;
         if (privacySurfaceRepair && (!hasPrivacyTarget || !hasPrivacyFinding)) {
           if (!hasPrivacyTarget) {
             repairedTargets.push({
@@ -1064,7 +1322,13 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         }
         const hasTermsTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("terms_of_service"));
         const hasTermsFinding = repairedFindings.some((finding) => finding.findingId === "terms_of_service_present");
-        const termsCandidate = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
+        const termsCandidateRaw = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
+        const termsCandidate = isSuspiciousRelatedPartyLegalDiscoveryCandidate(
+          termsCandidateRaw,
+          canonicalTargetDomainCounts
+        )
+          ? null
+          : termsCandidateRaw;
 
         if (termsCandidate && (!hasTermsTarget || !hasTermsFinding)) {
           if (!hasTermsTarget) {
