@@ -50,6 +50,8 @@ const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
 
 const TERMS_PATH_PATTERN =
   /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
+const PRIVACY_PATH_PATTERN =
+  /\/privacy(?:\/|$)|\/privacy-policy(?:\/|$)|\/privacy-notice(?:\/|$)|\/policy\/privacy(?:\/|$)|\/politica(?:[-_])?de(?:[-_])?confidentialitate(?:\/|$)|\/datenschutzerklaerung(?:\/|$)|\/privacy(?:\.html)?(?:\/|$)|\/terms(?:\/|#|$).*#privacy(?:[_-])?policy(?:\/|$)?/;
 const CONTACT_PATH_PATTERN =
   /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|\/contact(?:[-_]?us)?(?:\.html)?(?:\/|$)|\/info\/contact(?:[-_]?us)?\.html(?:\/|$)/;
 const ACCESSIBILITY_PATH_PATTERN =
@@ -426,6 +428,19 @@ function getUrlPath(value: string | null | undefined) {
   }
 }
 
+function getUrlPathWithFragment(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(value);
+    return `${parsed.pathname.toLowerCase()}${parsed.hash.toLowerCase()}`;
+  } catch {
+    return value.toLowerCase();
+  }
+}
+
 function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord, pageType: string) {
   if (candidate.pageType !== pageType) {
     return false;
@@ -436,6 +451,17 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
   }
 
   const path = getUrlPath(candidate.candidateUrl);
+  const pathWithFragment = getUrlPathWithFragment(candidate.candidateUrl);
+  if (pageType === "privacy_policy") {
+    const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
+    const isStrongFooterLegalLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    return (
+      (isStrongDiscoverySource || isStrongFooterLegalLink) &&
+      candidate.candidateScore >= 40 &&
+      (PRIVACY_PATH_PATTERN.test(pathWithFragment) || (/\/terms(?:\/|$)/.test(path) && /#privacy(?:[_-])?policy/i.test(candidate.candidateUrl)))
+    );
+  }
+
   if (pageType === "terms_of_service") {
     const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
     const isStrongFooterLegalLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
@@ -475,7 +501,18 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
 
 function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord, pageType: string) {
   const path = getUrlPath(candidate.candidateUrl);
+  const pathWithFragment = getUrlPathWithFragment(candidate.candidateUrl);
   let bonus = 0;
+
+  if (pageType === "privacy_policy") {
+    if (/\/privacy-policy(?:\/|$)|\/policy\/privacy(?:\/|$)/.test(path)) {
+      bonus += 35;
+    } else if (/\/privacy(?:\/|$)|\/privacy(?:\.html)?(?:\/|$)/.test(path)) {
+      bonus += 25;
+    } else if (/\/terms(?:\/|$).*#privacy(?:[_-])?policy/.test(pathWithFragment)) {
+      bonus += 20;
+    }
+  }
 
   if (pageType === "terms_of_service") {
     if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
@@ -706,6 +743,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   );
   const hasDiscoveryRepairs =
     Boolean(privacySurfaceRepair) ||
+    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "privacy_policy")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement")) ||
@@ -957,6 +995,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         const repairedFindings = [...supportedUnifiedFindings];
         const hasPrivacyTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_policy"));
         const hasPrivacyFinding = repairedFindings.some((finding) => finding.findingId === "privacy_policy_present");
+        const privacyDiscoveryCandidate = getBestDiscoveryCandidate(discoveryCandidates, "privacy_policy");
         if (privacySurfaceRepair && (!hasPrivacyTarget || !hasPrivacyFinding)) {
           if (!hasPrivacyTarget) {
             repairedTargets.push({
@@ -989,6 +1028,27 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
               reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
               sourceSurfaceTypes: ["privacy_policy"]
             } satisfies FamilyPacketFindingRecord);
+          }
+          packetsChanged = true;
+        } else if (privacyDiscoveryCandidate && (!hasPrivacyTarget || !hasPrivacyFinding)) {
+          if (!hasPrivacyTarget) {
+            repairedTargets.push(
+              buildDiscoveryRepairTarget({
+                candidate: privacyDiscoveryCandidate,
+                label: "Privacy Notice",
+                surfaceType: "privacy_policy"
+              })
+            );
+          }
+          if (!hasPrivacyFinding) {
+            repairedFindings.push(
+              buildDiscoveryRepairFinding({
+                findingId: "privacy_policy_present",
+                reason: "Homepage discovery retained a strong same-brand privacy surface.",
+                sourceSurfaceType: "privacy_policy",
+                url: privacyDiscoveryCandidate.candidateUrl
+              })
+            );
           }
           packetsChanged = true;
         }

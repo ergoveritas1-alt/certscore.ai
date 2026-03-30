@@ -324,6 +324,79 @@ test("backfills a missing privacy finding from human-facing policy enrichment on
   );
 });
 
+test("backfills a missing privacy finding from anchored terms-page privacy discovery", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_privacy_anchor",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 84,
+                candidateUrl: "https://www.example.com/terms#privacy_policy",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "privacy_policy",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_privacy_anchor",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/terms",
+                  fetchQuality: "verified_content",
+                  snippet: "Terms of Use",
+                  supportedSurfaceTypes: ["terms_of_service"],
+                  title: "Terms of Use"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/terms"],
+                  findingId: "terms_of_service_present",
+                  reason: "Verified legal-core evidence includes terms of service or terms and conditions.",
+                  sourceSurfaceTypes: ["terms_of_service"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+  assert.ok(privacyPacket);
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(privacyPacket?.primaryPageUrl, "https://www.example.com/terms#privacy_policy");
+  assert.ok(privacyPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Privacy Notice."));
+});
+
 test("backfills a missing terms finding from a strong same-host footer legal link", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [
