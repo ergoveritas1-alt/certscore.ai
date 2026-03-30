@@ -412,3 +412,53 @@ test("backfills a missing accessibility support finding from a strong same-host 
   assert.equal(accessibilityPacket?.primaryPageUrl, "https://www.example.com/accessibility/");
   assert.ok(accessibilityPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Accessibility."));
 });
+
+test("suppresses editorial accessibility initiative pages that do not retain support-path evidence", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_editorial_accessibility",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://belonging.example.com/disability-innovation/",
+                  fetchQuality: "verified_content",
+                  snippet:
+                    "Co-creating a world where people with disabilities can thrive. Explore accessibility in our products & features.",
+                  supportedSurfaceTypes: ["accessibility_support"],
+                  title: "Disability Innovation in the Workplace and Beyond — Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://belonging.example.com/disability-innovation/"],
+                  findingId: "accessibility_support_path_present",
+                  reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+                  sourceSurfaceTypes: ["accessibility_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
+  assert.equal(accessibilityPacket, undefined);
+});

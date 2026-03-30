@@ -370,7 +370,18 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
     const weakTitle = /^accessibility\s*-\s*[^|]+$/i.test(title);
     const hasStrongAccessibilityLanguage =
       /caption|audio description|screen reader|assistive|accommodation|accessibility support|accessibility help/i.test(text);
-    return genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongAccessibilityLanguage;
+    const hasStrongAccessibilityPathSignals =
+      /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|caption|audio description|screen reader|assistive|accommodation|accessibility support|accessibility help/i.test(
+        `${path} ${text}`
+      );
+    const looksLikeEditorialInitiative =
+      /\/belonging(?:\/|$)|\/disability-innovation(?:\/|$)|\/stories(?:\/|$)|\/blog(?:\/|$)|\/news(?:\/|$)|\/about(?:\/|$)/.test(path) &&
+      /innovation|belonging|co-creating|explore accessibility in our products|disability innovation/i.test(text);
+
+    return (
+      (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongAccessibilityLanguage) ||
+      (looksLikeEditorialInitiative && !hasStrongAccessibilityPathSignals)
+    );
   }
 
   return false;
@@ -431,7 +442,38 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement"));
-  if (!cookieRepair && !hasFindingSpecificPolicyRepairs && !hasDiscoveryRepairs) {
+  const hasSupportPacketFilterCandidates = input.events.some((event) => {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      return false;
+    }
+
+    const metadata = event.metadataJson as Record<string, unknown>;
+    if (metadata.phase !== "finding_family_packets" || !Array.isArray(metadata.packets)) {
+      return false;
+    }
+
+    return metadata.packets.some((packet) => {
+      if (!packet || typeof packet !== "object") {
+        return false;
+      }
+
+      const packetRecord = packet as Record<string, unknown>;
+      if (packetRecord.familyId !== "support_access" || !Array.isArray(packetRecord.canonicalTargets)) {
+        return false;
+      }
+
+      return (packetRecord.canonicalTargets as FamilyPacketTargetRecord[]).some((target) => {
+        const surfaceTypes = getStringArray(target.supportedSurfaceTypes);
+        return (
+          (surfaceTypes.includes("contact_support") && isLikelyChromeOnlySupportTarget(target, "contact_support_path_present")) ||
+          (surfaceTypes.includes("accessibility_support") &&
+            isLikelyChromeOnlySupportTarget(target, "accessibility_support_path_present"))
+        );
+      });
+    });
+  });
+
+  if (!cookieRepair && !hasFindingSpecificPolicyRepairs && !hasDiscoveryRepairs && !hasSupportPacketFilterCandidates) {
     return input.events;
   }
 
