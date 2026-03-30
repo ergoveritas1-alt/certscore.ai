@@ -20,6 +20,7 @@ type SessionState = {
   currentBatch: number;
   lastError: string | null;
   lastHeartbeatAt: string | null;
+  status?: "finished" | "running" | "sleeping";
   startedAt: string;
 };
 
@@ -102,6 +103,23 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
 
 function writeJsonFile(filePath: string, value: unknown) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeHeartbeat(outputDir: string, state: SessionState) {
+  writeJsonFile(path.join(outputDir, "heartbeat.json"), {
+    activeBatchCount: state.batches.length,
+    currentBatch: state.currentBatch,
+    lastError: state.lastError,
+    lastHeartbeatAt: state.lastHeartbeatAt,
+    queuedButUnsummarized: getQueuedButUnsummarizedCount(state),
+    startedAt: state.startedAt,
+    status: state.status ?? "running"
+  });
+}
+
+function flushState(outputDir: string, statePath: string, state: SessionState) {
+  writeJsonFile(statePath, state);
+  writeHeartbeat(outputDir, state);
 }
 
 function appendLog(filePath: string, message: string) {
@@ -224,15 +242,22 @@ async function main() {
     currentBatch: 0,
     lastError: null,
     lastHeartbeatAt: null,
+    status: "running",
     startedAt: new Date().toISOString()
   });
 
-  writeJsonFile(statePath, state);
+  state.status = "running";
+  state.lastHeartbeatAt = new Date().toISOString();
+  flushState(outputDir, statePath, state);
   appendLog(eventLogPath, "session_started");
 
   const deadline = Date.now() + durationHours * 60 * 60 * 1000;
 
   while (Date.now() < deadline) {
+    state.status = "running";
+    state.lastHeartbeatAt = new Date().toISOString();
+    flushState(outputDir, statePath, state);
+
     try {
       const queuedButUnsummarized = getQueuedButUnsummarizedCount(state);
 
@@ -280,21 +305,16 @@ async function main() {
       appendLog(eventLogPath, `error ${message}`);
     }
 
+    state.status = "sleeping";
     state.lastHeartbeatAt = new Date().toISOString();
+    flushState(outputDir, statePath, state);
     await sleep(pollIntervalMinutes * 60 * 1000);
-    writeJsonFile(statePath, state);
-    writeJsonFile(heartbeatPath, {
-      activeBatchCount: state.batches.length,
-      currentBatch: state.currentBatch,
-      lastError: state.lastError,
-      lastHeartbeatAt: state.lastHeartbeatAt,
-      queuedButUnsummarized: getQueuedButUnsummarizedCount(state),
-      startedAt: state.startedAt
-    });
   }
 
   appendLog(eventLogPath, "session_finished");
-  writeJsonFile(statePath, state);
+  state.status = "finished";
+  state.lastHeartbeatAt = new Date().toISOString();
+  flushState(outputDir, statePath, state);
 }
 
 void main().catch((error: unknown) => {
