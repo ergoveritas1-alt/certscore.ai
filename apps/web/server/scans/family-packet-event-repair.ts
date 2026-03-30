@@ -546,6 +546,10 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       /help center|support (team|center)|customer support|submit a request|feedback form|reach us by|contact us (?:for|about|with)|questions\??\s+contact us/i.test(
         text
       );
+    const looksLikeProfileRedirect =
+      /^\/(?:user|users|profile|profiles)\/[a-z0-9._%+-]+(?:\/)?$/i.test(path) &&
+      (/^.+\(@[^)]+\)\s*-\s*[^|]+$/i.test(title) || /\bfollow\b|\bmessage\b|\breading list\b/i.test(text)) &&
+      !hasStrongSupportLanguage;
     const looksLikeTopicArticleFromContactSlug =
       /^\/contact-[a-z0-9-]+(?:\/)?$/.test(path) &&
       !/contact|support|help|feedback|get in touch|reach us|email us/i.test(title) &&
@@ -559,6 +563,7 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
 
     return (
       (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongSupportLanguage) ||
+      looksLikeProfileRedirect ||
       looksLikeTopicArticleFromContactSlug ||
       (looksLikeCommercialOfferPage && !hasStrongSupportLanguage)
     );
@@ -573,6 +578,10 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|caption|audio description|screen reader|assistive|accommodation|accessibility support|accessibility help/i.test(
         `${path} ${text}`
       );
+    const looksLikeProfileRedirect =
+      /^\/(?:user|users|profile|profiles)\/[a-z0-9._%+-]+(?:\/)?$/i.test(path) &&
+      (/^.+\(@[^)]+\)\s*-\s*[^|]+$/i.test(title) || /\bfollow\b|\bmessage\b|\breading list\b/i.test(text)) &&
+      !hasStrongAccessibilityLanguage;
     const looksLikeTopicArticleFromAccessibilitySlug =
       /^\/accessibility-[a-z0-9-]+(?:\/)?$/.test(path) &&
       !hasStrongAccessibilityLanguage &&
@@ -583,6 +592,7 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
 
     return (
       (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongAccessibilityLanguage) ||
+      looksLikeProfileRedirect ||
       looksLikeTopicArticleFromAccessibilitySlug ||
       (looksLikeEditorialInitiative && !hasStrongAccessibilityPathSignals)
     );

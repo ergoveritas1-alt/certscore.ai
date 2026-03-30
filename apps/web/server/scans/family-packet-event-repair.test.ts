@@ -616,6 +616,55 @@ test("filters redirected topic articles that only inherit a contact slug", () =>
   assert.equal(contactPacket, undefined);
 });
 
+test("filters profile redirects that only inherit a contact slug", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_contact_profile",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/user/contact",
+                  fetchQuality: "verified_content",
+                  snippet: "Follow this user and browse their reading list.",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "Zainab (@contact) - Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/user/contact"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.equal(contactPacket, undefined);
+});
+
 test("filters redirected topic articles that only inherit an accessibility slug", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [
@@ -640,6 +689,55 @@ test("filters redirected topic articles that only inherit an accessibility slug"
               supportedUnifiedFindings: [
                 {
                   evidenceUrls: ["https://www.example.com/accessibility-design/"],
+                  findingId: "accessibility_support_path_present",
+                  reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+                  sourceSurfaceTypes: ["accessibility_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
+  assert.equal(accessibilityPacket, undefined);
+});
+
+test("filters profile redirects that only inherit an accessibility slug", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_accessibility_profile",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/user/accessibility",
+                  fetchQuality: "verified_content",
+                  snippet: "Follow this creator and browse their reading list.",
+                  supportedSurfaceTypes: ["accessibility_support"],
+                  title: "accessibility - Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/user/accessibility"],
                   findingId: "accessibility_support_path_present",
                   reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
                   sourceSurfaceTypes: ["accessibility_support"]
