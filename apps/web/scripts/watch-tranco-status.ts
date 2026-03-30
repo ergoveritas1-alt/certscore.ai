@@ -164,6 +164,10 @@ function getCurrentWork(snapshot: StatusSnapshot) {
     return `The 30-minute calibration session has finished. The remaining pending rows are unresolved from the final summarized batch, not evidence of an actively running worker.`;
   }
 
+  if (snapshot.activity.isStale && snapshot.summary.pendingRows === 0) {
+    return `The session has not updated its heartbeat for ${formatAge(snapshot.activity.heartbeatAgeSeconds)}, and there are no pending rows left. This looks more like a finished or inactive session than an actively running calibration loop.`;
+  }
+
   if (snapshot.activity.isStale) {
     return `The session has not updated its heartbeat for ${formatAge(snapshot.activity.heartbeatAgeSeconds)}, so it is likely stalled or waiting on external scan completion rather than actively summarizing new results.`;
   }
@@ -178,6 +182,10 @@ function getCurrentWork(snapshot: StatusSnapshot) {
 function getNextWork(snapshot: StatusSnapshot) {
   if (snapshot.activity.isFinished) {
     return "Next: start a fresh calibration session if you want more scans queued, or inspect the remaining repeated finding clusters from this finished run.";
+  }
+
+  if (snapshot.activity.isStale && snapshot.summary.pendingRows === 0) {
+    return "Next: either start a fresh calibration session for more scan coverage or inspect the completed finding clusters from this inactive run.";
   }
 
   if (snapshot.activity.isStale) {
