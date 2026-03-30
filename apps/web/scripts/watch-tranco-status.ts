@@ -40,6 +40,7 @@ type SessionState = {
   currentBatch?: number;
   lastError?: string | null;
   lastHeartbeatAt?: string | null;
+  status?: "finished" | "running" | "sleeping";
   startedAt?: string;
 };
 
