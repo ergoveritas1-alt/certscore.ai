@@ -8,6 +8,7 @@
     "check-env": "node --enable-source-maps ./scripts/check-env.ts",
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts",
+    "run:tranco-batch": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-batch.ts",
     "dev": "next dev --port 3000",
     "dev:validation:local": "next dev --port 3003",
     "typecheck": "next typegen . && tsc --noEmit",

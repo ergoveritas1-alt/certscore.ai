@@ -226,6 +226,7 @@ async function main() {
   const orgId = getArgValue("--org") ?? DEFAULT_ORG_ID;
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
   const onlySummarize = hasFlag("--summarize-only");
+  const queueOnly = hasFlag("--queue-only");
   const argv = process.argv.slice(2);
   const positionalDomains: string[] = [];
 
@@ -255,6 +256,10 @@ async function main() {
   }
 
   const supabase = createAdminClient();
+  if (onlySummarize && queueOnly) {
+    throw new Error("Use either --summarize-only or --queue-only, not both.");
+  }
+
   const results: Array<Record<string, unknown>> = [];
 
   for (const entry of parsedBatch.valid) {
@@ -282,6 +287,21 @@ async function main() {
       }
 
       scanId = (latest.data as { id: string }).id;
+    } else if (queueOnly) {
+      const queued = await queueScan({
+        domain,
+        organizationId: orgId,
+        supabase
+      });
+
+      results.push({
+        domain: domain.hostname,
+        scanId: queued.id,
+        queuedAt: queued.created_at,
+        status: queued.status
+      });
+
+      continue;
     } else {
       const queued = await queueScan({
         domain,
