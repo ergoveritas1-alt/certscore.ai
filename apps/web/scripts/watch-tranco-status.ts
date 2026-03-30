@@ -12,6 +12,7 @@ type SessionHeartbeat = {
   lastHeartbeatAt?: string | null;
   queuedButUnsummarized?: number;
   startedAt?: string;
+  status?: "finished" | "running" | "sleeping";
 };
 
 type AggregateSummary = {
@@ -45,6 +46,7 @@ type SessionState = {
 type StatusSnapshot = {
   activity: {
     heartbeatAgeSeconds: number | null;
+    isFinished: boolean;
     isStale: boolean;
   };
   checkedAt: string;
@@ -157,6 +159,10 @@ function formatAge(seconds: number | null) {
 }
 
 function getCurrentWork(snapshot: StatusSnapshot) {
+  if (snapshot.activity.isFinished) {
+    return `The 30-minute calibration session has finished. The remaining pending rows are unresolved from the final summarized batch, not evidence of an actively running worker.`;
+  }
+
   if (snapshot.activity.isStale) {
     return `The session has not updated its heartbeat for ${formatAge(snapshot.activity.heartbeatAgeSeconds)}, so it is likely stalled or waiting on external scan completion rather than actively summarizing new results.`;
   }
@@ -169,6 +175,10 @@ function getCurrentWork(snapshot: StatusSnapshot) {
 }
 
 function getNextWork(snapshot: StatusSnapshot) {
+  if (snapshot.activity.isFinished) {
+    return "Next: start a fresh calibration session if you want more scans queued, or inspect the remaining repeated finding clusters from this finished run.";
+  }
+
   if (snapshot.activity.isStale) {
     return "Next: refresh or restart the calibration session so the pending batch can resume and new completed scans can flow into the summaries.";
   }
@@ -199,9 +209,11 @@ function formatStatusMessage(current: StatusSnapshot, previous: StatusSnapshot |
     pendingDelta !== 0
       ? `Pending rows changed by ${pendingDelta > 0 ? "+" : ""}${pendingDelta}, now at ${current.summary.pendingRows}.`
       : `Pending rows remain at ${current.summary.pendingRows}.`;
-  const activityText = current.activity.isStale
-    ? `No session heartbeat update has landed for ${formatAge(current.activity.heartbeatAgeSeconds)}.`
-    : "Session heartbeat is current.";
+  const activityText = current.activity.isFinished
+    ? "Session has finished."
+    : current.activity.isStale
+      ? `No session heartbeat update has landed for ${formatAge(current.activity.heartbeatAgeSeconds)}.`
+      : "Session heartbeat is current.";
 
   return [
     `[${current.checkedAt}]`,
@@ -237,11 +249,14 @@ async function main() {
     const inferredCurrentBatch = Math.max(state?.currentBatch ?? 0, heartbeat?.currentBatch ?? 0, aggregateBatchCount);
     const lastHeartbeatAt = heartbeat?.lastHeartbeatAt ?? state?.lastHeartbeatAt ?? null;
     const heartbeatAgeSeconds = getHeartbeatAgeSeconds(checkedAt, lastHeartbeatAt);
-    const isStale = heartbeatAgeSeconds !== null && heartbeatAgeSeconds > intervalSeconds * 2;
+    const runnerStatus = heartbeat?.status ?? state?.status ?? null;
+    const isFinished = runnerStatus === "finished";
+    const isStale = !isFinished && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > intervalSeconds * 2;
 
     const snapshot: StatusSnapshot = {
       activity: {
         heartbeatAgeSeconds,
+        isFinished,
         isStale
       },
       checkedAt,
