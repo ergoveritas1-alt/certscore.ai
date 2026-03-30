@@ -313,7 +313,7 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
       (isStrongDiscoverySource || isStrongFooterLegalLink) &&
       candidate.candidateScore >= 40 &&
       (
-        /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)/.test(path) ||
+        /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)/.test(path) ||
         /\/legal\/.*terms(?:\/|$)/.test(path) ||
         /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)
       )
@@ -354,6 +354,8 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   if (pageType === "terms_of_service") {
     if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
       bonus += 40;
+    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)/.test(path)) {
+      bonus += 30;
     } else if (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path)) {
       bonus += 25;
     }
