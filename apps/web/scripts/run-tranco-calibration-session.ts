@@ -18,6 +18,8 @@ type BatchRunState = {
 type SessionState = {
   batches: BatchRunState[];
   currentBatch: number;
+  lastError: string | null;
+  lastHeartbeatAt: string | null;
   startedAt: string;
 };
 
@@ -42,8 +44,8 @@ const DEFAULT_QUEUE_PATH = path.resolve(process.cwd(), "tmp/tranco-calibration/c
 const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), "tmp/tranco-calibration/session");
 const DEFAULT_BATCH_LIMIT = 20;
 const DEFAULT_MAX_PENDING_BATCHES = 3;
-const DEFAULT_POLL_INTERVAL_MINUTES = 10;
-const DEFAULT_DURATION_HOURS = 8;
+const DEFAULT_POLL_INTERVAL_MINUTES = 5;
+const DEFAULT_DURATION_HOURS = 0.5;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -100,6 +102,10 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
 
 function writeJsonFile(filePath: string, value: unknown) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function appendLog(filePath: string, message: string) {
+  fs.appendFileSync(filePath, `${new Date().toISOString()} ${message}\n`);
 }
 
 function runBatchCommand(args: string[], cwd: string) {
@@ -205,6 +211,8 @@ async function main() {
   const pollIntervalMinutes = Number(getArgValue("--poll-minutes") ?? DEFAULT_POLL_INTERVAL_MINUTES);
   const durationHours = Number(getArgValue("--hours") ?? DEFAULT_DURATION_HOURS);
   const statePath = path.join(outputDir, "session-state.json");
+  const heartbeatPath = path.join(outputDir, "heartbeat.json");
+  const eventLogPath = path.join(outputDir, "events.log");
   const summariesDir = path.join(outputDir, "summaries");
   const queueRows = readQueueRows(queuePath);
 
@@ -214,53 +222,79 @@ async function main() {
   const state = readJsonFile<SessionState>(statePath, {
     batches: [],
     currentBatch: 0,
+    lastError: null,
+    lastHeartbeatAt: null,
     startedAt: new Date().toISOString()
   });
+
+  writeJsonFile(statePath, state);
+  appendLog(eventLogPath, "session_started");
 
   const deadline = Date.now() + durationHours * 60 * 60 * 1000;
 
   while (Date.now() < deadline) {
-    const queuedButUnsummarized = getQueuedButUnsummarizedCount(state);
+    try {
+      const queuedButUnsummarized = getQueuedButUnsummarizedCount(state);
 
-    if (queuedButUnsummarized < maxPendingBatches) {
-      const nextBatch = getNextBatchToQueue(state, queueRows);
-      if (nextBatch !== null) {
-        runBatchCommand(["--batch", String(nextBatch), "--limit", String(batchLimit), "--queue-only"], cwd);
-        state.batches.push({
-          batch: nextBatch,
-          queuedAt: new Date().toISOString(),
-          summarizedAt: null,
-          summaryPath: null
-        });
-        state.currentBatch = Math.max(state.currentBatch, nextBatch);
-        writeJsonFile(statePath, state);
+      if (queuedButUnsummarized < maxPendingBatches) {
+        const nextBatch = getNextBatchToQueue(state, queueRows);
+        if (nextBatch !== null) {
+          runBatchCommand(["--batch", String(nextBatch), "--limit", String(batchLimit), "--queue-only"], cwd);
+          state.batches.push({
+            batch: nextBatch,
+            queuedAt: new Date().toISOString(),
+            summarizedAt: null,
+            summaryPath: null
+          });
+          state.currentBatch = Math.max(state.currentBatch, nextBatch);
+          appendLog(eventLogPath, `batch_queued batch=${nextBatch}`);
+        }
       }
+
+      for (const batch of state.batches) {
+        if (batch.summarizedAt !== null) {
+          continue;
+        }
+
+        const summaryRows = runBatchCommand(
+          ["--batch", String(batch.batch), "--limit", String(batchLimit), "--summarize-only"],
+          cwd
+        ) as SummarizeRow[];
+        const summaryPath = path.join(summariesDir, `batch-${batch.batch}.json`);
+
+        writeJsonFile(summaryPath, summaryRows);
+
+        const hasPendingRows = summaryRows.some((row) => row.pendingReason === "no_terminal_scan");
+        if (!hasPendingRows) {
+          batch.summarizedAt = new Date().toISOString();
+          appendLog(eventLogPath, `batch_summarized batch=${batch.batch}`);
+        }
+        batch.summaryPath = summaryPath;
+      }
+
+      state.lastError = null;
+      writeAggregateReport(outputDir, state);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      state.lastError = message;
+      appendLog(eventLogPath, `error ${message}`);
     }
 
-    for (const batch of state.batches) {
-      if (batch.summarizedAt !== null) {
-        continue;
-      }
-
-      const summaryRows = runBatchCommand(
-        ["--batch", String(batch.batch), "--limit", String(batchLimit), "--summarize-only"],
-        cwd
-      ) as SummarizeRow[];
-      const summaryPath = path.join(summariesDir, `batch-${batch.batch}.json`);
-
-      writeJsonFile(summaryPath, summaryRows);
-
-      const hasPendingRows = summaryRows.some((row) => row.pendingReason === "no_terminal_scan");
-      if (!hasPendingRows) {
-        batch.summarizedAt = new Date().toISOString();
-      }
-      batch.summaryPath = summaryPath;
-      writeJsonFile(statePath, state);
-    }
-
-    writeAggregateReport(outputDir, state);
+    state.lastHeartbeatAt = new Date().toISOString();
     await sleep(pollIntervalMinutes * 60 * 1000);
+    writeJsonFile(statePath, state);
+    writeJsonFile(heartbeatPath, {
+      activeBatchCount: state.batches.length,
+      currentBatch: state.currentBatch,
+      lastError: state.lastError,
+      lastHeartbeatAt: state.lastHeartbeatAt,
+      queuedButUnsummarized: getQueuedButUnsummarizedCount(state),
+      startedAt: state.startedAt
+    });
   }
+
+  appendLog(eventLogPath, "session_finished");
+  writeJsonFile(statePath, state);
 }
 
 void main().catch((error: unknown) => {

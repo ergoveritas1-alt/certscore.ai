@@ -88,11 +88,17 @@ async function main() {
 
   const result = spawnSync("node", args, {
     cwd: process.cwd(),
-    encoding: "utf8",
-    stdio: "inherit"
+    encoding: "utf8"
   });
 
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+
   if (result.status !== 0) {
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
     process.exitCode = result.status ?? 1;
   }
 }
