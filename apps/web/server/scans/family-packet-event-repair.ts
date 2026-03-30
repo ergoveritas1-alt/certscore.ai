@@ -507,6 +507,10 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       /help center|support (team|center)|customer support|submit a request|feedback form|reach us by|contact us (?:for|about|with)|questions\??\s+contact us/i.test(
         text
       );
+    const looksLikeTopicArticleFromContactSlug =
+      /^\/contact-[a-z0-9-]+(?:\/)?$/.test(path) &&
+      !/contact|support|help|feedback|get in touch|reach us|email us/i.test(title) &&
+      !hasStrongSupportLanguage;
     const looksLikeCommercialOfferPage =
       /\/pricing(?:\/|$)|\/plans?(?:\/|$)|\/packages?(?:\/|$)|\/services?(?:\/|$)|\/products?(?:\/|$)|\/shop(?:\/|$)|\/buy(?:\/|$)/.test(
         path
@@ -516,6 +520,7 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
 
     return (
       (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongSupportLanguage) ||
+      looksLikeTopicArticleFromContactSlug ||
       (looksLikeCommercialOfferPage && !hasStrongSupportLanguage)
     );
   }
@@ -529,12 +534,17 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|caption|audio description|screen reader|assistive|accommodation|accessibility support|accessibility help/i.test(
         `${path} ${text}`
       );
+    const looksLikeTopicArticleFromAccessibilitySlug =
+      /^\/accessibility-[a-z0-9-]+(?:\/)?$/.test(path) &&
+      !hasStrongAccessibilityLanguage &&
+      !/support|help|screen reader|assistive|accommodation|caption|audio description/i.test(title);
     const looksLikeEditorialInitiative =
       /\/belonging(?:\/|$)|\/disability-innovation(?:\/|$)|\/stories(?:\/|$)|\/blog(?:\/|$)|\/news(?:\/|$)|\/about(?:\/|$)/.test(path) &&
       /innovation|belonging|co-creating|explore accessibility in our products|disability innovation/i.test(text);
 
     return (
       (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongAccessibilityLanguage) ||
+      looksLikeTopicArticleFromAccessibilitySlug ||
       (looksLikeEditorialInitiative && !hasStrongAccessibilityPathSignals)
     );
   }

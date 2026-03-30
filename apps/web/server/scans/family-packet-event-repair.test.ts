@@ -521,6 +521,104 @@ test("filters commercial offer pages that were misclassified as contact support"
   assert.equal(contactPacket, undefined);
 });
 
+test("filters redirected topic articles that only inherit a contact slug", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_contact_topic",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/contact-hypothesis/",
+                  fetchQuality: "verified_content",
+                  snippet: "Contact hypothesis is a decision-making concept for evaluating customer touchpoints.",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "Acquisition Hypothesis | Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/contact-hypothesis/"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.equal(contactPacket, undefined);
+});
+
+test("filters redirected topic articles that only inherit an accessibility slug", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_accessibility_topic",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/accessibility-design/",
+                  fetchQuality: "verified_content",
+                  snippet: "Accessibility design is a product-design topic and framework for inclusive interfaces.",
+                  supportedSurfaceTypes: ["accessibility_support"],
+                  title: "Accessibility Design | Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/accessibility-design/"],
+                  findingId: "accessibility_support_path_present",
+                  reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+                  sourceSurfaceTypes: ["accessibility_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
+  assert.equal(accessibilityPacket, undefined);
+});
+
 test("backfills a missing support-access packet from strong same-host discovery evidence", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [
