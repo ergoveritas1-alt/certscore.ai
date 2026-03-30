@@ -1619,6 +1619,48 @@ test("backfills targeted advertising choices from a retained privacy-choices tar
   assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/do-not-sell");
 });
 
+test("does not backfill targeted advertising choices from a generic privacy page without an explicit control signal", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_privacy_controls_generic_privacy",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy-policy",
+                  fetchQuality: "verified_content",
+                  snippet: "Our privacy policy explains privacy rights and how we handle your data.",
+                  supportedSurfaceTypes: ["privacy_choices"],
+                  title: "Privacy Policy | Example"
+                }
+              ],
+              familyId: "privacy_controls",
+              supportedUnifiedFindings: []
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const targetedChoicesPacket = packets.find((packet) => packet.unifiedFindingId === "targeted_advertising_choices_present");
+  assert.equal(targetedChoicesPacket, undefined);
+});
+
 test("recovers verified contact support from surface-recovery results even when discovery matching is weak", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

@@ -350,6 +350,23 @@ function hasCookieLikeEvidenceText(value: string | null | undefined) {
   );
 }
 
+function hasExplicitPrivacyChoicesSignal(input: { url?: string | null; text?: string | null }) {
+  const url = typeof input.url === "string" ? input.url.toLowerCase() : "";
+  const text = typeof input.text === "string" ? input.text.toLowerCase() : "";
+
+  const hasExplicitUrl =
+    /privacy-choices|privacy_choices|your-privacy-choices|do-not-sell|do-not-share|ad-choices|cookie-settings|manage-cookies|opt-?out/.test(
+      url
+    ) ||
+    /\/cookies(?:\/|$)/.test(url);
+  const hasExplicitText =
+    /privacy choices|your privacy choices|do not sell|do not share|ad choices|manage cookies|cookie settings|opt out|global privacy control|\bgpc\b/i.test(
+      text
+    );
+
+  return hasExplicitUrl || hasExplicitText;
+}
+
 function getCookieSnippetCandidates(row: Record<string, unknown>) {
   const snippets = getPolicyEvidenceSnippets(row);
   const summary = getPolicySummaryShort(row);
@@ -1473,8 +1490,11 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         const privacyChoicesTarget =
           repairedTargets.find((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")) ?? null;
         const privacyChoicesUrl = typeof privacyChoicesTarget?.canonicalUrl === "string" ? privacyChoicesTarget.canonicalUrl : null;
+        const privacyChoicesText = privacyChoicesTarget
+          ? [privacyChoicesTarget.title, privacyChoicesTarget.snippet].filter((value): value is string => typeof value === "string").join(" ")
+          : null;
 
-        if (privacyChoicesUrl) {
+        if (privacyChoicesUrl && hasExplicitPrivacyChoicesSignal({ text: privacyChoicesText, url: privacyChoicesUrl })) {
           repairedFindings.push(
             buildDiscoveryRepairFinding({
               findingId: "targeted_advertising_choices_present",
