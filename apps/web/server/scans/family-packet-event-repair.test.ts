@@ -278,6 +278,52 @@ test("backfills a missing terms finding from strong rendered-link discovery evid
   assert.ok(termsPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Terms of Service."));
 });
 
+test("backfills a missing privacy finding from human-facing policy enrichment on a localized route", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_localized_privacy",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [],
+              familyId: "legal_core",
+              supportedUnifiedFindings: []
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/ochrana-udajov.php",
+        policy_summary_short: "Zásady ochrany osobných údajov pre návštevníkov a používateľov služby."
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+  assert.ok(privacyPacket);
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(privacyPacket?.primaryPageUrl, "https://www.example.com/ochrana-udajov.php");
+  assert.ok(privacyPacket?.evidence?.pageUrls?.includes("https://www.example.com/ochrana-udajov.php"));
+  assert.ok(
+    privacyPacket?.evidence?.snippets?.includes("Zásady ochrany osobných údajov pre návštevníkov a používateľov služby.")
+  );
+});
+
 test("backfills a missing terms finding from a strong same-host footer legal link", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

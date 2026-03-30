@@ -163,6 +163,44 @@ function getFindingPolicySnippetCandidate(row: Record<string, unknown>, findingI
   return summary ? normalizePolicySnippet(summary) : null;
 }
 
+function getPolicySurfaceRepairEvidence(
+  policyEnrichment: Array<Record<string, unknown>>,
+  pageType: string,
+  label: string
+) {
+  const scoredRows = policyEnrichment
+    .map((row) => {
+      const rowPageType = String(row.pageType ?? row.page_type ?? "");
+      const pageUrl = getPolicyPageUrl(row);
+      const summary = getPolicySummaryShort(row);
+      if (rowPageType !== pageType || !pageUrl || isMachineReadablePolicyEndpoint(pageUrl) || isWeakRootLikeUrl(pageUrl)) {
+        return null;
+      }
+
+      let score = 0;
+      if (summary) {
+        score += 3;
+      }
+      if (/privacy|policy|notice|gdpr|ochrana|privacidad|datenschutz|confidential/i.test(pageUrl)) {
+        score += 2;
+      }
+
+      return {
+        pageUrl,
+        score,
+        snippet: summary ?? `Verified policy-enrichment evidence for ${label}.`,
+        title: label
+      };
+    })
+    .filter(
+      (entry): entry is { pageUrl: string; score: number; snippet: string; title: string } =>
+        Boolean(entry?.pageUrl) && Boolean(entry?.snippet)
+    )
+    .sort((left, right) => right.score - left.score);
+
+  return scoredRows[0] ?? null;
+}
+
 function rowMatchesFindingPage(row: Record<string, unknown>, evidenceUrls: string[]) {
   const pageUrl = getPolicyPageUrl(row);
   return Boolean(pageUrl && evidenceUrls.includes(pageUrl));
@@ -651,10 +689,12 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   const discoveryCandidates = extractDiscoveryCandidates(input.events);
   const verifiedSurfaceRecoveryResults = extractVerifiedSurfaceRecoveryResults(input.events);
   const cookieRepair = getCookieRepairEvidence(input.policyEnrichment);
+  const privacySurfaceRepair = getPolicySurfaceRepairEvidence(input.policyEnrichment, "privacy_policy", "Privacy Notice");
   const hasFindingSpecificPolicyRepairs = input.policyEnrichment.some((row) =>
     Object.keys(FINDING_POLICY_EVIDENCE_KEYS).some((findingId) => Boolean(getFindingPolicySnippetCandidate(row, findingId)))
   );
   const hasDiscoveryRepairs =
+    Boolean(privacySurfaceRepair) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement")) ||
@@ -904,6 +944,43 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       if (packetRecord.familyId === "legal_core") {
         const repairedTargets = [...canonicalTargets];
         const repairedFindings = [...supportedUnifiedFindings];
+        const hasPrivacyTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_policy"));
+        const hasPrivacyFinding = repairedFindings.some((finding) => finding.findingId === "privacy_policy_present");
+        if (privacySurfaceRepair && (!hasPrivacyTarget || !hasPrivacyFinding)) {
+          if (!hasPrivacyTarget) {
+            repairedTargets.push({
+              canonicalUrl: privacySurfaceRepair.pageUrl,
+              fetchQuality: "verified_content",
+              snippet: privacySurfaceRepair.snippet,
+              supportedSurfaceTypes: ["privacy_policy"],
+              supportingRefs: [
+                {
+                  refType: "policy_enrichment_page",
+                  text: privacySurfaceRepair.snippet,
+                  title: privacySurfaceRepair.title,
+                  url: privacySurfaceRepair.pageUrl,
+                  verified: true
+                }
+              ],
+              title: privacySurfaceRepair.title
+            } satisfies FamilyPacketTargetRecord);
+          }
+          if (!hasPrivacyFinding) {
+            repairedFindings.push({
+              evidencePayload: {
+                fetchQuality: "verified_content",
+                pageUrls: [privacySurfaceRepair.pageUrl],
+                policySnippets: [privacySurfaceRepair.snippet],
+                sourceUrls: [privacySurfaceRepair.pageUrl]
+              },
+              evidenceUrls: [privacySurfaceRepair.pageUrl],
+              findingId: "privacy_policy_present",
+              reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+              sourceSurfaceTypes: ["privacy_policy"]
+            } satisfies FamilyPacketFindingRecord);
+          }
+          packetsChanged = true;
+        }
         const hasTermsTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("terms_of_service"));
         const hasTermsFinding = repairedFindings.some((finding) => finding.findingId === "terms_of_service_present");
         const termsCandidate = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
