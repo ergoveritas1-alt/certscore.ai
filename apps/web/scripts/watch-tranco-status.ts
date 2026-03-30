@@ -15,6 +15,10 @@ type SessionHeartbeat = {
 };
 
 type AggregateSummary = {
+  batches?: Array<{
+    batch: number;
+    summaryPath: string;
+  }>;
   completedRows?: number;
   findingCounts?: Array<{
     count: number;
@@ -39,6 +43,10 @@ type SessionState = {
 };
 
 type StatusSnapshot = {
+  activity: {
+    heartbeatAgeSeconds: number | null;
+    isStale: boolean;
+  };
   checkedAt: string;
   heartbeat: SessionHeartbeat | null;
   sessionDir: string;
@@ -92,7 +100,27 @@ function summarizeTopFindings(aggregate: AggregateSummary | null) {
     count: entry.count,
     domains: entry.domains.slice(0, 5),
     findingId: entry.findingId
-      }));
+  }));
+}
+
+function parseTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function getHeartbeatAgeSeconds(checkedAt: string, lastHeartbeatAt: string | null) {
+  const checkedAtMs = parseTimestamp(checkedAt);
+  const lastHeartbeatAtMs = parseTimestamp(lastHeartbeatAt);
+
+  if (checkedAtMs === null || lastHeartbeatAtMs === null) {
+    return null;
+  }
+
+  return Math.max(0, Math.round((checkedAtMs - lastHeartbeatAtMs) / 1000));
 }
 
 function getPriorityReason(topFinding: { count: number; domains: string[]; findingId: string } | undefined) {
@@ -115,7 +143,24 @@ function getPriorityReason(topFinding: { count: number; domains: string[]; findi
   return `${topFinding.findingId} is the highest repeated cluster right now, which makes it the best source of the next transferable calibration improvement.`;
 }
 
+function formatAge(seconds: number | null) {
+  if (seconds === null) {
+    return "unknown time";
+  }
+
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.round(seconds / 60);
+  return `${minutes}m`;
+}
+
 function getCurrentWork(snapshot: StatusSnapshot) {
+  if (snapshot.activity.isStale) {
+    return `The session has not updated its heartbeat for ${formatAge(snapshot.activity.heartbeatAgeSeconds)}, so it is likely stalled or waiting on external scan completion rather than actively summarizing new results.`;
+  }
+
   if (snapshot.summary.pendingRows > 0) {
     return `Reviewing completed scans while batch ${snapshot.state.currentBatch ?? "-"} continues to finish (${snapshot.summary.pendingRows} rows still pending).`;
   }
@@ -124,6 +169,10 @@ function getCurrentWork(snapshot: StatusSnapshot) {
 }
 
 function getNextWork(snapshot: StatusSnapshot) {
+  if (snapshot.activity.isStale) {
+    return "Next: refresh or restart the calibration session so the pending batch can resume and new completed scans can flow into the summaries.";
+  }
+
   const topFinding = snapshot.summary.topFindings[0];
   if (!topFinding) {
     return "Next: wait for more completed scans and then rank repeated finding clusters.";
@@ -150,10 +199,13 @@ function formatStatusMessage(current: StatusSnapshot, previous: StatusSnapshot |
     pendingDelta !== 0
       ? `Pending rows changed by ${pendingDelta > 0 ? "+" : ""}${pendingDelta}, now at ${current.summary.pendingRows}.`
       : `Pending rows remain at ${current.summary.pendingRows}.`;
+  const activityText = current.activity.isStale
+    ? `No session heartbeat update has landed for ${formatAge(current.activity.heartbeatAgeSeconds)}.`
+    : "Session heartbeat is current.";
 
   return [
     `[${current.checkedAt}]`,
-    `Completed since last status: ${completedText} ${batchText} ${pendingText}`,
+    `Completed since last status: ${completedText} ${batchText} ${pendingText} ${activityText}`,
     `Working on now: ${getCurrentWork(current)}`,
     `Why this is high priority: ${getPriorityReason(topFinding)}`,
     `Working on next: ${getNextWork(current)}`
@@ -177,18 +229,31 @@ async function main() {
     const heartbeat = readJson<SessionHeartbeat | null>(path.join(sessionDir, "heartbeat.json"), null);
     const aggregate = readJson<AggregateSummary | null>(path.join(sessionDir, "aggregate-summary.json"), null);
     const state = readJson<SessionState | null>(path.join(sessionDir, "session-state.json"), null);
+    const checkedAt = new Date().toISOString();
+    const aggregateBatchCount = aggregate?.batches?.length ?? 0;
+    const stateBatchCount = state?.batches?.length ?? 0;
+    const stateSummarizedBatches = (state?.batches ?? []).filter((batch) => batch.summarizedAt !== null).length;
+    const aggregateSummarizedBatches = aggregateBatchCount > 0 ? aggregateBatchCount : 0;
+    const inferredCurrentBatch = Math.max(state?.currentBatch ?? 0, heartbeat?.currentBatch ?? 0, aggregateBatchCount);
+    const lastHeartbeatAt = heartbeat?.lastHeartbeatAt ?? state?.lastHeartbeatAt ?? null;
+    const heartbeatAgeSeconds = getHeartbeatAgeSeconds(checkedAt, lastHeartbeatAt);
+    const isStale = heartbeatAgeSeconds !== null && heartbeatAgeSeconds > intervalSeconds * 2;
 
     const snapshot: StatusSnapshot = {
-      checkedAt: new Date().toISOString(),
+      activity: {
+        heartbeatAgeSeconds,
+        isStale
+      },
+      checkedAt,
       heartbeat,
       sessionDir,
       state: {
-        batchCount: state?.batches?.length ?? 0,
-        currentBatch: state?.currentBatch ?? null,
+        batchCount: Math.max(stateBatchCount, aggregateBatchCount),
+        currentBatch: inferredCurrentBatch > 0 ? inferredCurrentBatch : null,
         lastError: state?.lastError ?? null,
-        lastHeartbeatAt: state?.lastHeartbeatAt ?? null,
+        lastHeartbeatAt,
         startedAt: state?.startedAt ?? null,
-        summarizedBatches: (state?.batches ?? []).filter((batch) => batch.summarizedAt !== null).length
+        summarizedBatches: Math.max(stateSummarizedBatches, aggregateSummarizedBatches)
       },
       summary: {
         completedRows: aggregate?.completedRows ?? 0,
