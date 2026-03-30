@@ -507,7 +507,17 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       /help center|support (team|center)|customer support|submit a request|feedback form|reach us by|contact us (?:for|about|with)|questions\??\s+contact us/i.test(
         text
       );
-    return genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongSupportLanguage;
+    const looksLikeCommercialOfferPage =
+      /\/pricing(?:\/|$)|\/plans?(?:\/|$)|\/packages?(?:\/|$)|\/services?(?:\/|$)|\/products?(?:\/|$)|\/shop(?:\/|$)|\/buy(?:\/|$)/.test(
+        path
+      ) &&
+      /\b(pricing|plans?|packages?|services?|products?|shop|buy now|get started|request a quote)\b/i.test(text) &&
+      !/contact|support|help|feedback|get in touch|reach us|email us/i.test(title);
+
+    return (
+      (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongSupportLanguage) ||
+      (looksLikeCommercialOfferPage && !hasStrongSupportLanguage)
+    );
   }
 
   if (findingId === "accessibility_support_path_present") {

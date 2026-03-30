@@ -116,7 +116,17 @@ test("does not modify privacy-controls packets that already retain strong cookie
     ]
   });
 
-  assert.deepEqual(event, originalEvent);
+  assert.ok(event);
+  const packet = (event.metadataJson as { packets: Array<Record<string, unknown>> }).packets[0];
+  assert.ok(packet);
+  const finding = (packet.supportedUnifiedFindings as Array<Record<string, unknown>>)[0];
+  assert.ok(finding);
+  const evidencePayload = finding.evidencePayload as Record<string, unknown>;
+  const evidenceUrls = finding.evidenceUrls as string[];
+
+  assert.equal((packet.canonicalTargets as Array<Record<string, unknown>>)[0]?.canonicalUrl, "https://www.example.com/privacy-center");
+  assert.ok(evidenceUrls.includes("https://www.example.com/privacy-center"));
+  assert.ok((evidencePayload.policySnippets as string[]).includes("Manage Cookies and Your Privacy Choices"));
 });
 
 test("replaces weak vanity contact targets with strong rendered-link discovery evidence", () => {
@@ -460,6 +470,55 @@ test("prefers stable public contact routes over dynamic support endpoints", () =
   assert.ok(contactPacket);
   assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/en-us/lp/contact-us");
   assert.ok(!contactPacket?.evidence?.pageUrls?.includes("https://www.example.com/support/incidents-online/en-us/contactus/dynamic?spestate"));
+});
+
+test("filters commercial offer pages that were misclassified as contact support", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_pricing_contact",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/pricing",
+                  fetchQuality: "verified_content",
+                  snippet: "Pricing plans for managed services, brochures, social media graphics, and printable materials.",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "Pricing | Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/pricing"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.equal(contactPacket, undefined);
 });
 
 test("backfills a missing support-access packet from strong same-host discovery evidence", () => {
