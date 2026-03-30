@@ -20,6 +20,7 @@ type SessionState = {
   currentBatch: number;
   lastError: string | null;
   lastHeartbeatAt: string | null;
+  pollIntervalMinutes?: number;
   status?: "finished" | "running" | "sleeping";
   startedAt: string;
 };
@@ -111,6 +112,7 @@ function writeHeartbeat(outputDir: string, state: SessionState) {
     currentBatch: state.currentBatch,
     lastError: state.lastError,
     lastHeartbeatAt: state.lastHeartbeatAt,
+    pollIntervalMinutes: state.pollIntervalMinutes,
     queuedButUnsummarized: getQueuedButUnsummarizedCount(state),
     startedAt: state.startedAt,
     status: state.status ?? "running"
@@ -242,10 +244,12 @@ async function main() {
     currentBatch: 0,
     lastError: null,
     lastHeartbeatAt: null,
+    pollIntervalMinutes,
     status: "running",
     startedAt: new Date().toISOString()
   });
 
+  state.pollIntervalMinutes = pollIntervalMinutes;
   state.status = "running";
   state.lastHeartbeatAt = new Date().toISOString();
   flushState(outputDir, statePath, state);

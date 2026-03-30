@@ -10,6 +10,7 @@ type SessionHeartbeat = {
   currentBatch?: number;
   lastError?: string | null;
   lastHeartbeatAt?: string | null;
+  pollIntervalMinutes?: number;
   queuedButUnsummarized?: number;
   startedAt?: string;
   status?: "finished" | "running" | "sleeping";
@@ -40,6 +41,7 @@ type SessionState = {
   currentBatch?: number;
   lastError?: string | null;
   lastHeartbeatAt?: string | null;
+  pollIntervalMinutes?: number;
   status?: "finished" | "running" | "sleeping";
   startedAt?: string;
 };
@@ -161,7 +163,11 @@ function formatAge(seconds: number | null) {
 
 function getCurrentWork(snapshot: StatusSnapshot) {
   if (snapshot.activity.isFinished) {
-    return `The 30-minute calibration session has finished. The remaining pending rows are unresolved from the final summarized batch, not evidence of an actively running worker.`;
+    return `The calibration session has finished. The remaining pending rows are unresolved from the final summarized batch, not evidence of an actively running worker.`;
+  }
+
+  if (snapshot.heartbeat?.status === "sleeping" && !snapshot.activity.isStale) {
+    return `The session is between polling cycles and is sleeping normally. It will wake up on the next scheduled poll to queue or summarize more Tranco work.`;
   }
 
   if (snapshot.activity.isStale && snapshot.summary.pendingRows === 0) {
@@ -182,6 +188,10 @@ function getCurrentWork(snapshot: StatusSnapshot) {
 function getNextWork(snapshot: StatusSnapshot) {
   if (snapshot.activity.isFinished) {
     return "Next: start a fresh calibration session if you want more scans queued, or inspect the remaining repeated finding clusters from this finished run.";
+  }
+
+  if (snapshot.heartbeat?.status === "sleeping" && !snapshot.activity.isStale) {
+    return "Next: wait for the next poll cycle; the runner should resume automatically without a restart.";
   }
 
   if (snapshot.activity.isStale && snapshot.summary.pendingRows === 0) {
@@ -220,6 +230,8 @@ function formatStatusMessage(current: StatusSnapshot, previous: StatusSnapshot |
       : `Pending rows remain at ${current.summary.pendingRows}.`;
   const activityText = current.activity.isFinished
     ? "Session has finished."
+    : current.heartbeat?.status === "sleeping" && !current.activity.isStale
+      ? "Session is sleeping normally between poll cycles."
     : current.activity.isStale
       ? `No session heartbeat update has landed for ${formatAge(current.activity.heartbeatAgeSeconds)}.`
       : "Session heartbeat is current.";
@@ -260,7 +272,10 @@ async function main() {
     const heartbeatAgeSeconds = getHeartbeatAgeSeconds(checkedAt, lastHeartbeatAt);
     const runnerStatus = heartbeat?.status ?? state?.status ?? null;
     const isFinished = runnerStatus === "finished";
-    const isStale = !isFinished && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > intervalSeconds * 2;
+    const pollIntervalMinutes = heartbeat?.pollIntervalMinutes ?? state?.pollIntervalMinutes ?? null;
+    const staleThresholdSeconds =
+      pollIntervalMinutes !== null ? Math.max(intervalSeconds * 2, pollIntervalMinutes * 60 + intervalSeconds) : intervalSeconds * 2;
+    const isStale = !isFinished && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > staleThresholdSeconds;
 
     const snapshot: StatusSnapshot = {
       activity: {
