@@ -1784,3 +1784,52 @@ test("suppresses editorial accessibility initiative pages that do not retain sup
   const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
   assert.equal(accessibilityPacket, undefined);
 });
+
+test("suppresses funding support pages that are not real contact or help surfaces", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_financial_support",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://gradschool.example.edu/financial-support/",
+                  fetchQuality: "verified_content",
+                  snippet: "Financial support for graduate students, including fellowships and tuition assistance.",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "Financial Support | Example Graduate School"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://gradschool.example.edu/financial-support/"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.equal(contactPacket, undefined);
+});

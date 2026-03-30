@@ -829,12 +829,21 @@ function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findi
       ) &&
       /\b(pricing|plans?|packages?|services?|products?|shop|buy now|get started|request a quote)\b/i.test(text) &&
       !/contact|support|help|feedback|get in touch|reach us|email us/i.test(title);
+    const looksLikeFundingSupportPage =
+      /\/financial-support(?:\/|$)|\/financial-aid(?:\/|$)|\/student-support(?:\/|$)|\/scholarships?(?:\/|$)|\/fellowships?(?:\/|$)/.test(
+        path
+      ) &&
+      /\b(financial support|financial aid|student support|scholarships?|fellowships?|graduate support|tuition assistance)\b/i.test(
+        text
+      ) &&
+      !hasStrongSupportLanguage;
 
     return (
       (genericPath && weakTitle && hasChromeOnlyBoilerplate && !hasStrongSupportLanguage) ||
       looksLikeProfileRedirect ||
       looksLikeTopicArticleFromContactSlug ||
-      (looksLikeCommercialOfferPage && !hasStrongSupportLanguage)
+      (looksLikeCommercialOfferPage && !hasStrongSupportLanguage) ||
+      looksLikeFundingSupportPage
     );
   }
 

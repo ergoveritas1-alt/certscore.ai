@@ -274,16 +274,27 @@ async function main() {
     if (onlySummarize) {
       const latest = await supabase
         .from("scans")
-        .select("id, created_at")
+        .select("id, created_at, status")
         .eq("organization_id", orgId)
         .eq("domain_id", domain.id)
         .eq("scan_type", "full")
+        .in("status", ["completed", "failed", "canceled"])
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (latest.error || !latest.data) {
-        throw new Error(`No latest scan found for ${domain.hostname}`);
+      if (latest.error) {
+        throw new Error(`Failed to load latest terminal scan for ${domain.hostname}: ${latest.error.message}`);
+      }
+
+      if (!latest.data) {
+        results.push({
+          domain: domain.hostname,
+          pendingReason: "no_terminal_scan",
+          scanId: null,
+          surfaced: []
+        });
+        continue;
       }
 
       scanId = (latest.data as { id: string }).id;
