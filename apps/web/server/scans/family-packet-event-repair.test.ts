@@ -413,6 +413,265 @@ test("backfills a missing accessibility support finding from a strong same-host 
   assert.ok(accessibilityPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Accessibility."));
 });
 
+test("prefers stable public contact routes over dynamic support endpoints", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_contact_priority",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 104,
+                candidateUrl: "https://www.example.com/support/incidents-online/en-us/contactus/dynamic?spestate",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "contact",
+                sourceUrl: "https://www.example.com/"
+              },
+              {
+                candidateScore: 99,
+                candidateUrl: "https://www.example.com/en-us/lp/contact-us",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "contact",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.ok(contactPacket);
+  assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/en-us/lp/contact-us");
+  assert.ok(!contactPacket?.evidence?.pageUrls?.includes("https://www.example.com/support/incidents-online/en-us/contactus/dynamic?spestate"));
+});
+
+test("backfills a missing support-access packet from strong same-host discovery evidence", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_missing_support_packet",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 99,
+                candidateUrl: "https://www.example.com/en-us/lp/contact-us",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "contact",
+                sourceUrl: "https://www.example.com/"
+              },
+              {
+                candidateScore: 99,
+                candidateUrl: "https://www.example.com/en-us/lp/accessibility",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "accessibility_statement",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_missing_support_packet",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Privacy Policy"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
+  assert.ok(contactPacket);
+  assert.ok(accessibilityPacket);
+  assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/en-us/lp/contact-us");
+  assert.equal(accessibilityPacket?.primaryPageUrl, "https://www.example.com/en-us/lp/accessibility");
+});
+
+test("backfills terms from terms-of-sale style legal routes", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_terms_of_sale",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 59,
+                candidateUrl: "https://www.example.com/en-us/lp/legal/terms-of-sale",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "terms_of_service",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_terms_of_sale",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Privacy Policy"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+  assert.ok(termsPacket);
+  assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/en-us/lp/legal/terms-of-sale");
+});
+
+test("backfills targeted advertising choices from a retained privacy-choices target", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_privacy_choices",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy",
+                  supportedSurfaceTypes: ["privacy_rights_dsar"],
+                  title: "Privacy Policy"
+                },
+                {
+                  canonicalUrl: "https://www.example.com/do-not-sell",
+                  fetchQuality: "verified_content",
+                  snippet: "Do Not Sell or Share My Personal Information",
+                  supportedSurfaceTypes: ["privacy_choices"],
+                  title: "Do Not Sell or Share My Personal Information"
+                }
+              ],
+              familyId: "privacy_controls",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy"],
+                  findingId: "privacy_rights_path_present",
+                  reason: "Verified privacy-rights evidence includes a DSAR path.",
+                  sourceSurfaceTypes: ["privacy_rights_dsar"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const targetedChoicesPacket = packets.find((packet) => packet.unifiedFindingId === "targeted_advertising_choices_present");
+  assert.ok(targetedChoicesPacket);
+  assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/do-not-sell");
+});
+
 test("suppresses editorial accessibility initiative pages that do not retain support-path evidence", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

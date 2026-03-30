@@ -312,7 +312,11 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return (
       (isStrongDiscoverySource || isStrongFooterLegalLink) &&
       candidate.candidateScore >= 40 &&
-      (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path) || /\/legal\/.+\/terms(?:\/|$)/.test(path))
+      (
+        /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)/.test(path) ||
+        /\/legal\/.*terms(?:\/|$)/.test(path) ||
+        /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)
+      )
     );
   }
 
@@ -326,24 +330,74 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     );
   }
 
-  if (!["rendered_link", "html_link"].includes(candidate.discoveredFrom)) {
-    return false;
-  }
-
   if (pageType === "contact") {
+    const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
+    const isStrongFooterContactLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
     return (
+      (isStrongDiscoverySource || isStrongFooterContactLink) &&
       candidate.candidateScore >= 70 &&
       /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)/.test(path)
     );
   }
 
+  if (!["rendered_link", "html_link"].includes(candidate.discoveredFrom)) {
+    return false;
+  }
+
   return false;
+}
+
+function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord, pageType: string) {
+  const path = getUrlPath(candidate.candidateUrl);
+  let bonus = 0;
+
+  if (pageType === "terms_of_service") {
+    if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
+      bonus += 40;
+    } else if (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path)) {
+      bonus += 25;
+    }
+  }
+
+  if (pageType === "accessibility_statement") {
+    if (/\/lp\/accessibility(?:\/|$)|\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(path)) {
+      bonus += 35;
+    }
+  }
+
+  if (pageType === "contact") {
+    if (/\/lp\/contact-us(?:\/|$)|\/contact-us(?:\/|$)/.test(path)) {
+      bonus += 45;
+    } else if (/\/contact(?:\/|$)/.test(path)) {
+      bonus += 25;
+    } else if (/\/support\/contents\/.*contact/i.test(path)) {
+      bonus += 15;
+    }
+
+    if (/\?/.test(candidate.candidateUrl) || /\/incidents-online\//.test(path) || /\/dynamic(?:\/|$)/.test(path)) {
+      bonus -= 60;
+    }
+    if (/\/support\/home(?:\/|$)/.test(path)) {
+      bonus -= 25;
+    }
+  }
+
+  return bonus;
 }
 
 function getBestDiscoveryCandidate(candidates: DiscoveryCandidateRecord[], pageType: string) {
   return candidates
     .filter((candidate) => isStrongRenderedDiscoveryCandidate(candidate, pageType))
-    .sort((left, right) => right.candidateScore - left.candidateScore)[0] ?? null;
+    .sort((left, right) => {
+      const weightedDelta =
+        right.candidateScore + getDiscoveryCandidatePriorityBonus(right, pageType) -
+        (left.candidateScore + getDiscoveryCandidatePriorityBonus(left, pageType));
+      if (weightedDelta !== 0) {
+        return weightedDelta;
+      }
+
+      return right.candidateScore - left.candidateScore;
+    })[0] ?? null;
 }
 
 function isLikelyChromeOnlySupportTarget(target: FamilyPacketTargetRecord, findingId: string) {
@@ -473,11 +527,55 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
     });
   });
 
-  if (!cookieRepair && !hasFindingSpecificPolicyRepairs && !hasDiscoveryRepairs && !hasSupportPacketFilterCandidates) {
+  const hasPrivacyChoicesRepairCandidates = input.events.some((event) => {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      return false;
+    }
+
+    const metadata = event.metadataJson as Record<string, unknown>;
+    if (metadata.phase !== "finding_family_packets" || !Array.isArray(metadata.packets)) {
+      return false;
+    }
+
+    return metadata.packets.some((packet) => {
+      if (!packet || typeof packet !== "object") {
+        return false;
+      }
+
+      const packetRecord = packet as Record<string, unknown>;
+      if (packetRecord.familyId !== "privacy_controls") {
+        return false;
+      }
+
+      const canonicalTargets = Array.isArray(packetRecord.canonicalTargets)
+        ? (packetRecord.canonicalTargets as FamilyPacketTargetRecord[])
+        : [];
+      const supportedUnifiedFindings = Array.isArray(packetRecord.supportedUnifiedFindings)
+        ? (packetRecord.supportedUnifiedFindings as FamilyPacketFindingRecord[])
+        : [];
+
+      const hasPrivacyChoicesTarget = canonicalTargets.some((target) =>
+        getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")
+      );
+      const hasTargetedAdvertisingChoicesFinding = supportedUnifiedFindings.some(
+        (finding) => finding.findingId === "targeted_advertising_choices_present"
+      );
+
+      return hasPrivacyChoicesTarget && !hasTargetedAdvertisingChoicesFinding;
+    });
+  });
+
+  if (
+    !cookieRepair &&
+    !hasFindingSpecificPolicyRepairs &&
+    !hasDiscoveryRepairs &&
+    !hasSupportPacketFilterCandidates &&
+    !hasPrivacyChoicesRepairCandidates
+  ) {
     return input.events;
   }
 
-  return input.events.map((event) => {
+  const repairedEvents = input.events.map((event) => {
     if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
       return event;
     }
@@ -638,12 +736,9 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       const alreadyStrong =
         canonicalTargets.some((target) => targetHasStrongCookieEvidence(target)) ||
         supportedUnifiedFindings.some((finding) => findingHasStrongCookieEvidence(finding));
-      if (cookieFinding && alreadyStrong) {
-        return packet;
-      }
 
       const repairedTargets =
-        cookieFinding && cookieRepair
+        cookieFinding && cookieRepair && !alreadyStrong
           ? [
               ...canonicalTargets,
               {
@@ -655,7 +750,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
                 title: cookieRepair.title
               }
             ]
-          : canonicalTargets;
+          : [...canonicalTargets];
 
       const repairedFindings = supportedUnifiedFindings.map((finding) => {
         const payload =
@@ -727,6 +822,31 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         };
       });
 
+      const hasPrivacyChoicesTarget = repairedTargets.some((target) =>
+        getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")
+      );
+      const hasTargetedAdvertisingChoicesFinding = repairedFindings.some(
+        (finding) => finding.findingId === "targeted_advertising_choices_present"
+      );
+
+      if (hasPrivacyChoicesTarget && !hasTargetedAdvertisingChoicesFinding) {
+        const privacyChoicesTarget =
+          repairedTargets.find((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")) ?? null;
+        const privacyChoicesUrl = typeof privacyChoicesTarget?.canonicalUrl === "string" ? privacyChoicesTarget.canonicalUrl : null;
+
+        if (privacyChoicesUrl) {
+          repairedFindings.push(
+            buildDiscoveryRepairFinding({
+              findingId: "targeted_advertising_choices_present",
+              reason: "Verified privacy-controls evidence includes a dedicated privacy choices or do-not-sell/share path.",
+              sourceSurfaceType: "privacy_choices",
+              url: privacyChoicesUrl
+            })
+          );
+          packetsChanged = true;
+        }
+      }
+
       if (!packetsChanged) {
         return packet;
       }
@@ -737,6 +857,62 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         supportedUnifiedFindings: repairedFindings
       };
     });
+
+    const packetRecords = packets.filter((packet): packet is Record<string, unknown> => Boolean(packet) && typeof packet === "object");
+    const hasSupportAccessPacket = packetRecords.some((packet) => packet.familyId === "support_access");
+    const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
+    const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
+
+    if (!hasSupportAccessPacket && (contactCandidate || accessibilityCandidate)) {
+      const canonicalTargets: FamilyPacketTargetRecord[] = [];
+      const supportedUnifiedFindings: FamilyPacketFindingRecord[] = [];
+
+      if (contactCandidate) {
+        canonicalTargets.push(
+          buildDiscoveryRepairTarget({
+            candidate: contactCandidate,
+            label: "Contact Us",
+            surfaceType: "contact_support"
+          })
+        );
+        supportedUnifiedFindings.push(
+          buildDiscoveryRepairFinding({
+            findingId: "contact_support_path_present",
+            reason: "Homepage discovery retained a strong same-brand contact/help path.",
+            sourceSurfaceType: "contact_support",
+            url: contactCandidate.candidateUrl
+          })
+        );
+      }
+
+      if (accessibilityCandidate) {
+        canonicalTargets.push(
+          buildDiscoveryRepairTarget({
+            candidate: accessibilityCandidate,
+            label: "Accessibility",
+            surfaceType: "accessibility_support"
+          })
+        );
+        supportedUnifiedFindings.push(
+          buildDiscoveryRepairFinding({
+            findingId: "accessibility_support_path_present",
+            reason: "Homepage discovery retained a strong same-brand accessibility support path.",
+            sourceSurfaceType: "accessibility_support",
+            url: accessibilityCandidate.candidateUrl
+          })
+        );
+      }
+
+      packets.push({
+        contract: {
+          id: "support_access"
+        },
+        familyId: "support_access",
+        canonicalTargets,
+        supportedUnifiedFindings
+      });
+      packetsChanged = true;
+    }
 
     if (!packetsChanged) {
       return event;
@@ -750,4 +926,111 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       }
     };
   });
+
+  const hasFamilyPacketEvent = repairedEvents.some((event) => {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      return false;
+    }
+
+    const metadata = event.metadataJson as Record<string, unknown>;
+    return metadata.phase === "finding_family_packets" && Array.isArray(metadata.packets);
+  });
+
+  if (hasFamilyPacketEvent) {
+    return repairedEvents;
+  }
+
+  const syntheticPackets: Array<Record<string, unknown>> = [];
+  const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
+  const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
+  const termsCandidate = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
+
+  if (contactCandidate || accessibilityCandidate) {
+    const canonicalTargets: FamilyPacketTargetRecord[] = [];
+    const supportedUnifiedFindings: FamilyPacketFindingRecord[] = [];
+
+    if (contactCandidate) {
+      canonicalTargets.push(
+        buildDiscoveryRepairTarget({
+          candidate: contactCandidate,
+          label: "Contact Us",
+          surfaceType: "contact_support"
+        })
+      );
+      supportedUnifiedFindings.push(
+        buildDiscoveryRepairFinding({
+          findingId: "contact_support_path_present",
+          reason: "Homepage discovery retained a strong same-brand contact/help path.",
+          sourceSurfaceType: "contact_support",
+          url: contactCandidate.candidateUrl
+        })
+      );
+    }
+
+    if (accessibilityCandidate) {
+      canonicalTargets.push(
+        buildDiscoveryRepairTarget({
+          candidate: accessibilityCandidate,
+          label: "Accessibility",
+          surfaceType: "accessibility_support"
+        })
+      );
+      supportedUnifiedFindings.push(
+        buildDiscoveryRepairFinding({
+          findingId: "accessibility_support_path_present",
+          reason: "Homepage discovery retained a strong same-brand accessibility support path.",
+          sourceSurfaceType: "accessibility_support",
+          url: accessibilityCandidate.candidateUrl
+        })
+      );
+    }
+
+    syntheticPackets.push({
+      contract: {
+        id: "support_access"
+      },
+      familyId: "support_access",
+      canonicalTargets,
+      supportedUnifiedFindings
+    });
+  }
+
+  if (termsCandidate) {
+    syntheticPackets.push({
+      contract: {
+        id: "legal_core"
+      },
+      familyId: "legal_core",
+      canonicalTargets: [
+        buildDiscoveryRepairTarget({
+          candidate: termsCandidate,
+          label: "Terms of Service",
+          surfaceType: "terms_of_service"
+        })
+      ],
+      supportedUnifiedFindings: [
+        buildDiscoveryRepairFinding({
+          findingId: "terms_of_service_present",
+          reason: "Homepage discovery retained a strong same-brand terms surface.",
+          sourceSurfaceType: "terms_of_service",
+          url: termsCandidate.candidateUrl
+        })
+      ]
+    });
+  }
+
+  if (syntheticPackets.length === 0) {
+    return repairedEvents;
+  }
+
+  return [
+    ...repairedEvents,
+    {
+      eventType: "runtime.build_phase_diagnostic",
+      metadataJson: {
+        phase: "finding_family_packets",
+        packets: syntheticPackets
+      }
+    } as TEvent
+  ];
 }
