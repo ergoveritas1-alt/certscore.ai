@@ -49,7 +49,7 @@ const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
 };
 
 const TERMS_PATH_PATTERN =
-  /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
+  /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
 const CONTACT_PATH_PATTERN =
   /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|\/contact(?:[-_]?us)?(?:\.html)?(?:\/|$)|\/info\/contact(?:[-_]?us)?\.html(?:\/|$)/;
 const ACCESSIBILITY_PATH_PATTERN =
@@ -480,7 +480,7 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   if (pageType === "terms_of_service") {
     if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
       bonus += 40;
-    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/.test(path)) {
+    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/.test(path)) {
       bonus += 30;
     } else if (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path)) {
       bonus += 25;
