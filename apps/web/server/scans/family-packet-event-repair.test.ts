@@ -397,6 +397,62 @@ test("backfills a missing privacy finding from anchored terms-page privacy disco
   assert.ok(privacyPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Privacy Notice."));
 });
 
+test("backfills a missing privacy finding from a strong related-party legal link", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_related_privacy",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 91,
+                candidateUrl: "https://www.related.example/privacy-policy/",
+                discoveredFrom: "footer_link",
+                hostRelation: "related_party",
+                pageType: "privacy_policy",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_related_privacy",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [],
+              familyId: "legal_core",
+              supportedUnifiedFindings: []
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+  assert.ok(privacyPacket);
+  assert.equal(privacyPacket?.primaryPageUrl, "https://www.related.example/privacy-policy/");
+});
+
 test("backfills a missing terms finding from a strong same-host footer legal link", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [
@@ -1200,6 +1256,62 @@ test("backfills terms from legal-hub policy routes", () => {
   const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
   assert.ok(termsPacket);
   assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/policy/legal");
+});
+
+test("backfills terms from a strong related-party legal link", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_related_terms",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 92,
+                candidateUrl: "https://www.related.example/company/legal/terms-of-service/",
+                discoveredFrom: "footer_link",
+                hostRelation: "related_party",
+                pageType: "terms_of_service",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_related_terms",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [],
+              familyId: "legal_core",
+              supportedUnifiedFindings: []
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+  assert.ok(termsPacket);
+  assert.equal(termsPacket?.primaryPageUrl, "https://www.related.example/company/legal/terms-of-service/");
 });
 
 test("backfills contact from html help routes", () => {

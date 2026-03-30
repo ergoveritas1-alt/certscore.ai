@@ -49,7 +49,7 @@ const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
 };
 
 const TERMS_PATH_PATTERN =
-  /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
+  /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-service(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?(?:service|use)(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
 const PRIVACY_PATH_PATTERN =
   /\/privacy(?:\/|$)|\/privacy-policy(?:\/|$)|\/privacy-notice(?:\/|$)|\/policy\/privacy(?:\/|$)|\/politica(?:[-_])?de(?:[-_])?confidentialitate(?:\/|$)|\/datenschutzerklaerung(?:\/|$)|\/privacy(?:\.html)?(?:\/|$)|\/terms(?:\/|#|$).*#privacy(?:[_-])?policy(?:\/|$)?/;
 const CONTACT_PATH_PATTERN =
@@ -446,30 +446,40 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return false;
   }
 
-  if (!["same_host", "same_brand_subdomain"].includes(candidate.hostRelation)) {
-    return false;
-  }
-
   const path = getUrlPath(candidate.candidateUrl);
   const pathWithFragment = getUrlPathWithFragment(candidate.candidateUrl);
   if (pageType === "privacy_policy") {
+    if (!["same_host", "same_brand_subdomain", "related_party"].includes(candidate.hostRelation)) {
+      return false;
+    }
     const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
     const isStrongFooterLegalLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    const isStrongRelatedPartyLegalLink =
+      candidate.hostRelation === "related_party" && ["rendered_link", "html_link", "footer_link", "legal_hub"].includes(candidate.discoveredFrom);
     return (
-      (isStrongDiscoverySource || isStrongFooterLegalLink) &&
-      candidate.candidateScore >= 40 &&
+      (isStrongDiscoverySource || isStrongFooterLegalLink || isStrongRelatedPartyLegalLink) &&
+      candidate.candidateScore >= (candidate.hostRelation === "related_party" ? 80 : 40) &&
       (PRIVACY_PATH_PATTERN.test(pathWithFragment) || (/\/terms(?:\/|$)/.test(path) && /#privacy(?:[_-])?policy/i.test(candidate.candidateUrl)))
     );
   }
 
   if (pageType === "terms_of_service") {
+    if (!["same_host", "same_brand_subdomain", "related_party"].includes(candidate.hostRelation)) {
+      return false;
+    }
     const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
     const isStrongFooterLegalLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    const isStrongRelatedPartyLegalLink =
+      candidate.hostRelation === "related_party" && ["rendered_link", "html_link", "footer_link", "legal_hub"].includes(candidate.discoveredFrom);
     return (
-      (isStrongDiscoverySource || isStrongFooterLegalLink) &&
-      candidate.candidateScore >= 40 &&
+      (isStrongDiscoverySource || isStrongFooterLegalLink || isStrongRelatedPartyLegalLink) &&
+      candidate.candidateScore >= (candidate.hostRelation === "related_party" ? 80 : 40) &&
       TERMS_PATH_PATTERN.test(path)
     );
+  }
+
+  if (!["same_host", "same_brand_subdomain"].includes(candidate.hostRelation)) {
+    return false;
   }
 
   if (pageType === "accessibility_statement") {
@@ -517,7 +527,7 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   if (pageType === "terms_of_service") {
     if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
       bonus += 40;
-    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/.test(path)) {
+    } else if (/\/terms-of-service(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?(?:service|use)(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/policy\/legal(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/.test(path)) {
       bonus += 30;
     } else if (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path)) {
       bonus += 25;
