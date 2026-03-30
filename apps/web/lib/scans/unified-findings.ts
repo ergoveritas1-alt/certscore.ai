@@ -2175,6 +2175,61 @@ function getSourceUrl(packet: UnifiedFindingPacket) {
   return packet.primaryPageUrl ?? packet.evidence?.pageUrls?.[0] ?? packet.evidence?.sourceUrls?.[0];
 }
 
+function getSurfaceTitleMismatchUrlPriority(value: string) {
+  const lowered = value.toLowerCase();
+  if (lowered.includes("/privacy")) {
+    return 0;
+  }
+  if (lowered.includes("/terms") || lowered.includes("/conditions") || lowered.includes("/tos")) {
+    return 1;
+  }
+  if (lowered.includes("/cookie")) {
+    return 2;
+  }
+  if (lowered.includes("/contact") || lowered.includes("/help") || lowered.includes("/support")) {
+    return 3;
+  }
+  return 4;
+}
+
+function sortSurfaceTitleMismatchUrls(urls: string[]) {
+  return [...urls].sort((left, right) => {
+    const priorityDelta = getSurfaceTitleMismatchUrlPriority(left) - getSurfaceTitleMismatchUrlPriority(right);
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return left.localeCompare(right);
+  });
+}
+
+function maybeRepairSurfaceTitleMismatchPacket(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "surface_title_mismatch") {
+    return packet;
+  }
+
+  const existingEvidence = packet.evidence ?? {};
+  const preferredPageUrls = sortSurfaceTitleMismatchUrls(uniqueStrings(existingEvidence.pageUrls ?? []));
+  const preferredSourceUrls = sortSurfaceTitleMismatchUrls(uniqueStrings(existingEvidence.sourceUrls ?? []));
+  const preferredPrimaryUrl = preferredPageUrls[0] ?? preferredSourceUrls[0] ?? packet.primaryPageUrl;
+  const affectedUrlCount = uniqueStrings([...preferredPageUrls, ...preferredSourceUrls]).length;
+  const summary =
+    affectedUrlCount >= 2
+      ? "Multiple retained disclosure or support surfaces resolved to page titles that appear inconsistent with their expected surface types."
+      : packet.summary;
+
+  return {
+    ...packet,
+    summary,
+    primaryPageUrl: preferredPrimaryUrl,
+    evidence: {
+      ...existingEvidence,
+      pageUrls: preferredPageUrls,
+      sourceUrls: preferredSourceUrls
+    }
+  };
+}
+
 function maybeRepairCookiePolicyPacketFromPolicyEnrichment(input: {
   packet: UnifiedFindingPacket;
   policyEnrichment?: Array<Record<string, unknown>>;
@@ -3182,6 +3237,13 @@ function getSourceLabel(packet: UnifiedFindingPacket) {
     return undefined;
   }
 
+  if (
+    packet.unifiedFindingId === "surface_title_mismatch" &&
+    uniqueStrings([...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])]).length >= 2
+  ) {
+    return "Multiple surfaces";
+  }
+
   const lowered = sourceUrl.toLowerCase();
   if (lowered.includes("/terms")) {
     return "TOS";
@@ -4131,10 +4193,12 @@ export function buildUnifiedFindingDisplayPackets(input: {
   });
 
   const repairedPackets = packets.map((packet) =>
-    maybeRepairCookiePolicyPacketFromPolicyEnrichment({
-      packet,
-      policyEnrichment: input.policyEnrichment
-    })
+    maybeRepairSurfaceTitleMismatchPacket(
+      maybeRepairCookiePolicyPacketFromPolicyEnrichment({
+        packet,
+        policyEnrichment: input.policyEnrichment
+      })
+    )
   );
   const surfacingEvaluation = evaluateUnifiedFindingSurfacing({
     packets: repairedPackets

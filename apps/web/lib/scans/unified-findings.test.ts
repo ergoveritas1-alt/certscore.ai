@@ -3599,6 +3599,95 @@ test("synthesizes retained surface title mismatch when the fetched title conflic
   assert.deepEqual(mismatchPacket?.evidence?.snippets, ["Affiliate Disclosure | Example"]);
 });
 
+test("surface title mismatch prefers legal/privacy attribution when multiple retained surfaces mismatch", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The scan retained a clear contact surface.",
+        fallbackEvidence: {
+          keyPageTitleRecords: [
+            {
+              title: "Creative Content IP Protection | Example",
+              url: "https://www.example.com/contact"
+            }
+          ],
+          pageUrls: ["https://www.example.com/contact"],
+          policySnippets: ["Creative Content IP Protection | Example"],
+          signalKey: "disclosure.contact_page_present",
+          signalLabel: "Contact page present",
+          signalValue: true
+        },
+        observedValue: "Contact page present",
+        severity: "low",
+        signalKey: "disclosure.contact_page_present",
+        signalLabel: "Contact page present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Contact page present"
+      },
+      {
+        description: "The scan retained a reachable privacy-policy surface.",
+        fallbackEvidence: {
+          keyPageTitleRecords: [
+            {
+              title: "Creative Content IP Protection | Example",
+              url: "https://www.example.com/privacy"
+            }
+          ],
+          pageUrls: ["https://www.example.com/privacy"],
+          policySnippets: ["Creative Content IP Protection | Example"],
+          signalKey: "disclosure.privacy_policy_present",
+          signalLabel: "Privacy policy surface present",
+          signalValue: true
+        },
+        observedValue: "Privacy policy surface present",
+        severity: "low",
+        signalKey: "disclosure.privacy_policy_present",
+        signalLabel: "Privacy policy surface present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy policy surface present"
+      },
+      {
+        description: "The scan retained a reachable terms surface.",
+        fallbackEvidence: {
+          keyPageTitleRecords: [
+            {
+              title: "Creative Content IP Protection | Example",
+              url: "https://www.example.com/terms"
+            }
+          ],
+          pageUrls: ["https://www.example.com/terms"],
+          policySnippets: ["Creative Content IP Protection | Example"],
+          signalKey: "disclosure.terms_of_service_present",
+          signalLabel: "Terms surface present",
+          signalValue: true
+        },
+        observedValue: "Terms surface present",
+        severity: "low",
+        signalKey: "disclosure.terms_of_service_present",
+        signalLabel: "Terms surface present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Terms surface present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const mismatchPacket = packets.find((packet) => packet.unifiedFindingId === "surface_title_mismatch");
+  assert.equal(mismatchPacket?.primaryPageUrl, "https://www.example.com/privacy");
+  assert.equal(mismatchPacket?.sourceUrl, "https://www.example.com/privacy");
+  assert.equal(mismatchPacket?.sourceLabel, "Multiple surfaces");
+  assert.match(mismatchPacket?.summary ?? "", /Multiple retained disclosure or support surfaces/i);
+  assert.deepEqual(mismatchPacket?.evidence?.pageUrls, [
+    "https://www.example.com/privacy",
+    "https://www.example.com/terms",
+    "https://www.example.com/contact"
+  ]);
+});
+
 test("synthesizes policy clarity risk from boilerplate-heavy legal text", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
