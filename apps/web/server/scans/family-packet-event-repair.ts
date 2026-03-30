@@ -21,6 +21,16 @@ type FamilyPacketFindingRecord = {
   sourceSurfaceTypes?: unknown;
 };
 
+const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
+  affiliate_disclosure_present: ["affiliate_disclosure", "affiliate", "notice_contact"],
+  privacy_contact_path_present: ["notice_contact", "privacy_contact", "dsar"],
+  privacy_rights_path_present: ["dsar", "rights_signal:access", "rights_signal:delete", "rights_signal:correction", "notice_contact"],
+  targeted_advertising_choices_present: ["do_not_sell", "privacy_choices", "targeted_advertising"],
+  third_party_advertising_disclosure_present: ["topic:third_party_advertising_disclosure"],
+  tracking_technologies_disclosure_present: ["topic:tracking_technologies_disclosure", "cookies", "cookie_notice", "cookie_table"],
+  children_privacy_disclosure_present: ["topic:children", "children"]
+};
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -115,6 +125,28 @@ function getCookieSnippetCandidates(row: Record<string, unknown>) {
     .filter((value): value is string => Boolean(value) && hasCookieLikeEvidenceText(value));
 }
 
+function getFindingPolicySnippetCandidate(row: Record<string, unknown>, findingId: string) {
+  const snippets = getPolicyEvidenceSnippets(row);
+  const wantedKeys = FINDING_POLICY_EVIDENCE_KEYS[findingId] ?? [];
+  const direct = uniqueStrings(
+    wantedKeys.flatMap((key) => (isMeaningfulPolicyText(snippets?.[key]) ? [String(snippets?.[key])] : []))
+  )
+    .map((value) => normalizePolicySnippet(value))
+    .filter((value): value is string => Boolean(value));
+
+  if (direct.length > 0) {
+    return direct[0];
+  }
+
+  const summary = getPolicySummaryShort(row);
+  return summary ? normalizePolicySnippet(summary) : null;
+}
+
+function rowMatchesFindingPage(row: Record<string, unknown>, evidenceUrls: string[]) {
+  const pageUrl = getPolicyPageUrl(row);
+  return Boolean(pageUrl && evidenceUrls.includes(pageUrl));
+}
+
 function getCookieRepairEvidence(policyEnrichment: Array<Record<string, unknown>>) {
   const scoredRows = policyEnrichment
     .map((row) => {
@@ -200,7 +232,10 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   policyEnrichment: Array<Record<string, unknown>>;
 }): TEvent[] {
   const cookieRepair = getCookieRepairEvidence(input.policyEnrichment);
-  if (!cookieRepair) {
+  const hasFindingSpecificPolicyRepairs = input.policyEnrichment.some((row) =>
+    Object.keys(FINDING_POLICY_EVIDENCE_KEYS).some((findingId) => Boolean(getFindingPolicySnippetCandidate(row, findingId)))
+  );
+  if (!cookieRepair && !hasFindingSpecificPolicyRepairs) {
     return input.events;
   }
 
@@ -233,64 +268,101 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         : [];
       const cookieFinding = supportedUnifiedFindings.find((finding) => finding.findingId === "cookie_policy_present");
 
-      if (!cookieFinding) {
-        return packet;
-      }
-
       const alreadyStrong =
         canonicalTargets.some((target) => targetHasStrongCookieEvidence(target)) ||
         supportedUnifiedFindings.some((finding) => findingHasStrongCookieEvidence(finding));
-      if (alreadyStrong) {
+      if (cookieFinding && alreadyStrong) {
         return packet;
       }
 
-      packetsChanged = true;
-      const repairedTargets = [
-        ...canonicalTargets,
-        {
-          canonicalUrl: cookieRepair.pageUrl,
-          fetchQuality: "verified_content",
-          snippet: cookieRepair.snippet,
-          supportedSurfaceTypes: ["cookie_policy_or_settings", "privacy_choices"],
-          supportingRefs: [{ text: cookieRepair.title, url: cookieRepair.pageUrl, verified: true }],
-          title: cookieRepair.title
-        }
-      ];
+      const repairedTargets =
+        cookieFinding && cookieRepair
+          ? [
+              ...canonicalTargets,
+              {
+                canonicalUrl: cookieRepair.pageUrl,
+                fetchQuality: "verified_content",
+                snippet: cookieRepair.snippet,
+                supportedSurfaceTypes: ["cookie_policy_or_settings", "privacy_choices"],
+                supportingRefs: [{ text: cookieRepair.title, url: cookieRepair.pageUrl, verified: true }],
+                title: cookieRepair.title
+              }
+            ]
+          : canonicalTargets;
 
       const repairedFindings = supportedUnifiedFindings.map((finding) => {
-        if (finding.findingId !== "cookie_policy_present") {
-          return finding;
-        }
-
         const payload =
           finding.evidencePayload && typeof finding.evidencePayload === "object"
             ? (finding.evidencePayload as Record<string, unknown>)
             : {};
+        const findingId = typeof finding.findingId === "string" ? finding.findingId : null;
+        const evidenceUrls = uniqueStrings([
+          ...getStringArray(payload.pageUrls),
+          ...getStringArray(payload.sourceUrls),
+          ...getStringArray(finding.evidenceUrls)
+        ]);
+        const matchedPolicyRow =
+          findingId
+            ? input.policyEnrichment.find((row) => rowMatchesFindingPage(row, evidenceUrls)) ?? null
+            : null;
+        const policySnippet =
+          findingId && matchedPolicyRow ? getFindingPolicySnippetCandidate(matchedPolicyRow, findingId) : null;
+        const cookieSpecificRepair = finding.findingId === "cookie_policy_present" && cookieRepair
+          ? {
+              fetchQuality: "verified_content",
+              pageUrls: uniqueStrings([
+                ...getStringArray(payload.pageUrls),
+                ...getStringArray(finding.evidenceUrls),
+                cookieRepair.pageUrl
+              ]),
+              policySnippets: uniqueStrings([...getStringArray(payload.policySnippets), cookieRepair.snippet]),
+              policySummaryShort:
+                (typeof payload.policySummaryShort === "string" && payload.policySummaryShort.trim().length > 0
+                  ? payload.policySummaryShort
+                  : cookieRepair.snippet),
+              sourceUrls: uniqueStrings([
+                ...getStringArray(payload.sourceUrls),
+                ...getStringArray(finding.evidenceUrls),
+                cookieRepair.pageUrl
+              ])
+            }
+          : null;
 
+        if (!cookieSpecificRepair && !policySnippet) {
+          return finding;
+        }
+
+        packetsChanged = true;
         return {
           ...finding,
           evidencePayload: {
             ...payload,
-            fetchQuality: "verified_content",
-            pageUrls: uniqueStrings([
-              ...getStringArray(payload.pageUrls),
-              ...getStringArray(finding.evidenceUrls),
-              cookieRepair.pageUrl
-            ]),
-            policySnippets: uniqueStrings([...getStringArray(payload.policySnippets), cookieRepair.snippet]),
-            policySummaryShort:
-              (typeof payload.policySummaryShort === "string" && payload.policySummaryShort.trim().length > 0
-                ? payload.policySummaryShort
-                : cookieRepair.snippet),
-            sourceUrls: uniqueStrings([
-              ...getStringArray(payload.sourceUrls),
-              ...getStringArray(finding.evidenceUrls),
-              cookieRepair.pageUrl
-            ])
+            ...(cookieSpecificRepair ?? {}),
+            ...(policySnippet
+              ? {
+                  pageUrls: uniqueStrings([...(cookieSpecificRepair?.pageUrls ?? getStringArray(payload.pageUrls)), ...evidenceUrls]),
+                  policySnippets: uniqueStrings([
+                    ...(cookieSpecificRepair?.policySnippets ?? getStringArray(payload.policySnippets)),
+                    policySnippet
+                  ]),
+                  policySummaryShort:
+                    (typeof payload.policySummaryShort === "string" && payload.policySummaryShort.trim().length > 0
+                      ? payload.policySummaryShort
+                      : policySnippet),
+                  sourceUrls: uniqueStrings([...(cookieSpecificRepair?.sourceUrls ?? getStringArray(payload.sourceUrls)), ...evidenceUrls])
+                }
+              : {})
           },
-          evidenceUrls: uniqueStrings([...getStringArray(finding.evidenceUrls), cookieRepair.pageUrl])
+          evidenceUrls:
+            cookieSpecificRepair && cookieRepair
+              ? uniqueStrings([...getStringArray(finding.evidenceUrls), cookieRepair.pageUrl])
+              : getStringArray(finding.evidenceUrls)
         };
       });
+
+      if (!packetsChanged) {
+        return packet;
+      }
 
       return {
         ...packetRecord,

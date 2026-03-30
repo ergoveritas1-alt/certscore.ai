@@ -614,10 +614,55 @@ test("surfaces legal-core unified findings from finding-family packets", () => {
   assert.ok(termsPacket);
   assert.equal(privacyPacket?.primaryPageUrl, "https://www.example.com/privacy");
   assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/terms");
-  assert.equal(privacyPacket?.presentationDecision.status, "surface");
-  assert.equal(termsPacket?.presentationDecision.status, "surface");
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(termsPacket?.presentationDecision.status, "audit_only");
   assert.ok(privacyPacket?.evidence?.snippets?.includes("Privacy Policy"));
   assert.ok(termsPacket?.evidence?.snippets?.includes("Terms and Conditions"));
+});
+
+test("synthesizes surface integrity findings from family-packet legal targets with mismatched titles", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "legal_core",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy-policy",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy for Example Co.",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Affiliate Disclosure | Example Co."
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy-policy"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const mismatchPacket = packets.find((packet) => packet.unifiedFindingId === "surface_title_mismatch");
+  const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
+
+  assert.equal(mismatchPacket?.presentationDecision.status, "surface");
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(privacyPacket?.observedValue, "Privacy Policy for Example Co");
 });
 
 test("surfaces commerce-disclosure unified findings from finding-family packets", () => {

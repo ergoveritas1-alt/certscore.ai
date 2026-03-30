@@ -237,6 +237,22 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function uniqueTitleRecords(values: Array<{ title: string; url: string }>) {
+  const seen = new Set<string>();
+  const next: Array<{ title: string; url: string }> = [];
+
+  for (const value of values) {
+    const key = `${value.url.trim().toLowerCase()}::${value.title.trim().toLowerCase()}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    next.push(value);
+  }
+
+  return next;
+}
+
 export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
   linkedValidationFinding: ScanValidationFinding | null;
   observedValue: string | null;
@@ -1722,7 +1738,75 @@ function hasFindingSpecificSurfaceSnippet(findingId: string, snippets: string[] 
     );
   }
 
+  if (findingId === "privacy_policy_present") {
+    return readableSnippets.some((snippet) => /(privacy policy|privacy notice)/i.test(snippet));
+  }
+
+  if (findingId === "privacy_rights_path_present") {
+    return readableSnippets.some(
+      (snippet) => /(privacy rights|right to access|right to request|delete request|access request|correction request|data request)/i.test(
+        snippet
+      )
+    );
+  }
+
+  if (findingId === "terms_of_service_present") {
+    return readableSnippets.some((snippet) => /(terms of service|terms and conditions|terms of use)/i.test(snippet));
+  }
+
+  if (findingId === "affiliate_disclosure_present" || findingId === "affiliate_disclosure_scope_limited") {
+    return readableSnippets.some((snippet) => /(affiliate|commission|we may earn|partner links?)/i.test(snippet));
+  }
+
   return readableSnippets.length > 0;
+}
+
+function getFindingSpecificSnippetScore(findingId: string, snippet: string) {
+  const normalized = snippet.trim();
+  if (normalized.length === 0) {
+    return -100;
+  }
+
+  let score = isReadableSurfaceSnippet(normalized) ? 10 : 0;
+  if (hasFindingSpecificSurfaceSnippet(findingId, [normalized])) {
+    score += 25;
+  }
+
+  if (findingId === "privacy_policy_present") {
+    if (/affiliate disclosure/i.test(normalized)) {
+      score -= 20;
+    }
+    if (/privacy policy|privacy notice/i.test(normalized)) {
+      score += 10;
+    }
+  }
+
+  if (findingId === "privacy_rights_path_present") {
+    if (/affiliate disclosure/i.test(normalized)) {
+      score -= 20;
+    }
+    if (/privacy rights|right to access|right to request|delete request|access request|correction request/i.test(normalized)) {
+      score += 12;
+    }
+  }
+
+  if (findingId === "terms_of_service_present") {
+    if (/terms of service|terms and conditions|terms of use/i.test(normalized)) {
+      score += 10;
+    }
+  }
+
+  if (findingId === "affiliate_disclosure_present" || findingId === "affiliate_disclosure_scope_limited") {
+    if (/affiliate|commission|we may earn|partner links?/i.test(normalized)) {
+      score += 10;
+    }
+  }
+
+  return score;
+}
+
+function rankSnippetsForFinding(findingId: string, snippets: string[]) {
+  return [...snippets].sort((left, right) => getFindingSpecificSnippetScore(findingId, right) - getFindingSpecificSnippetScore(findingId, left));
 }
 
 function hasCorroboratedPositiveSurfaceEvidence(packet: UnifiedFindingPacket) {
@@ -2231,7 +2315,8 @@ function looksSynthesizedPolicySummary(value: string | null | undefined) {
 }
 
 function selectObservedValue(packet: UnifiedFindingPacket) {
-  const snippet = packet.evidence?.snippets?.[0] ?? null;
+  const rankedSnippets = rankSnippetsForFinding(packet.unifiedFindingId, packet.evidence?.snippets ?? []);
+  const snippet = rankedSnippets[0] ?? null;
   const summary = packet.summary;
   const allUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
 
@@ -2259,7 +2344,7 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
   }
 
   if (packet.unifiedFindingId === "cookie_policy_present") {
-    const descriptiveSnippet = (packet.evidence?.snippets ?? []).find(
+    const descriptiveSnippet = rankedSnippets.find(
       (value) =>
         typeof value === "string" &&
         !isLikelyHomepageTitle(value) &&
@@ -2272,6 +2357,20 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
 
     if (allUrls.some((url) => /cookie|privacy|legal/i.test(url))) {
       return "Detected first-party cookie-policy or privacy-controls surface.";
+    }
+  }
+
+  if (packet.unifiedFindingId === "privacy_policy_present") {
+    const descriptiveSnippet = rankedSnippets.find((value) => /(privacy policy|privacy notice)/i.test(value));
+    if (descriptiveSnippet) {
+      const phraseMatch = descriptiveSnippet.match(
+        /(privacy policy(?:\s+for\s+[^.|\n]{1,60})?|privacy notice(?:\s+for\s+[^.|\n]{1,60})?)/i
+      );
+      if (phraseMatch?.[0]) {
+        return phraseMatch[0];
+      }
+
+      return descriptiveSnippet;
     }
   }
 
@@ -3477,14 +3576,14 @@ function getFamilyPacketPolicySnippets(input: {
     supportingRefSnippets
   });
 
-  return uniqueStrings([
+  return rankSnippetsForFinding(input.findingId, uniqueStrings([
     ...input.targets.flatMap((target) => [
       typeof target.title === "string" ? target.title : null,
       typeof target.snippet === "string" ? target.snippet : null
     ]),
     ...supportingRefSnippets,
     ...derivedSurfaceSnippets
-  ])
+  ]))
     .map((snippet) => normalizePolicySnippet(snippet))
     .filter((snippet): snippet is string => Boolean(snippet));
 }
@@ -3570,7 +3669,27 @@ function buildFamilyPacketFallbackEvidence(input: {
     .filter((snippet): snippet is string => Boolean(snippet));
   const mergedPageUrls = sortUrlsByTargetStrength(uniqueStrings([...input.pageUrls, ...payloadPageUrls]), input.familyTargets);
   const mergedSourceUrls = sortUrlsByTargetStrength(uniqueStrings([...input.sourceUrls, ...payloadSourceUrls]), input.familyTargets);
-  const mergedPolicySnippets = uniqueStrings([...input.policySnippets, ...payloadSnippets]);
+  const mergedPolicySnippets = rankSnippetsForFinding(input.findingId, uniqueStrings([...input.policySnippets, ...payloadSnippets]));
+  const keyPageTitleRecords = uniqueTitleRecords([
+    ...input.familyTargets.flatMap((target) =>
+      typeof target.title === "string" && typeof target.canonicalUrl === "string"
+        ? [
+            {
+              title: target.title,
+              url: target.canonicalUrl
+            }
+          ]
+        : []
+    ),
+    ...(Array.isArray(evidencePayload.keyPageTitleRecords)
+      ? (evidencePayload.keyPageTitleRecords as Array<Record<string, unknown>>)
+          .flatMap((record) =>
+            typeof record?.title === "string" && typeof record?.url === "string"
+              ? [{ title: record.title, url: record.url }]
+              : []
+          )
+      : [])
+  ]);
   const bestSnippet =
     mergedPolicySnippets.find((snippet) => hasFindingSpecificSurfaceSnippet(input.findingId, [snippet])) ??
     mergedPolicySnippets.find((snippet) => isReadableSurfaceSnippet(snippet)) ??
@@ -3595,6 +3714,7 @@ function buildFamilyPacketFallbackEvidence(input: {
     familyPacketVerified: true,
     pageUrl: preferredPageUrl,
     pageUrls: mergedPageUrls,
+    keyPageTitleRecords,
     policyIsPrimarySource: true,
     policyPageType: input.policyPageType,
     policySnippets: mergedPolicySnippets,
