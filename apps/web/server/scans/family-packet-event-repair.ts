@@ -48,6 +48,13 @@ const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
   children_privacy_disclosure_present: ["topic:children", "children"]
 };
 
+const TERMS_PATH_PATTERN =
+  /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/legal\/.*terms(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/;
+const CONTACT_PATH_PATTERN =
+  /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|\/contact(?:[-_]?us)?(?:\.html)?(?:\/|$)|\/info\/contact(?:[-_]?us)?\.html(?:\/|$)/;
+const ACCESSIBILITY_PATH_PATTERN =
+  /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/accessibility(?:\.html)?(?:\/|$)/;
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -367,9 +374,7 @@ function extractVerifiedSurfaceRecoveryResults(events: ScanEventRecordLike[]) {
         (() => {
           if (surfaceType === "contact_support") {
             return (
-              /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)/.test(
-                getUrlPath(candidateUrl)
-              ) &&
+              CONTACT_PATH_PATTERN.test(getUrlPath(candidateUrl)) &&
               /contact us|contact|phone numbers|support|help/i.test(surfaceText) &&
               !isLikelyChromeOnlySupportTarget(candidateTarget, "contact_support_path_present")
             );
@@ -377,7 +382,7 @@ function extractVerifiedSurfaceRecoveryResults(events: ScanEventRecordLike[]) {
 
           if (surfaceType === "accessibility_support") {
             return (
-              /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(getUrlPath(candidateUrl)) &&
+              ACCESSIBILITY_PATH_PATTERN.test(getUrlPath(candidateUrl)) &&
               /accessibility|screen reader|assistive|accommodation|caption|audio description/i.test(surfaceText) &&
               !isLikelyChromeOnlySupportTarget(candidateTarget, "accessibility_support_path_present")
             );
@@ -385,9 +390,7 @@ function extractVerifiedSurfaceRecoveryResults(events: ScanEventRecordLike[]) {
 
           if (surfaceType === "terms_of_service") {
             return (
-              /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/legal\/.*terms(?:\/|$)/.test(
-                getUrlPath(candidateUrl)
-              ) &&
+              TERMS_PATH_PATTERN.test(getUrlPath(candidateUrl)) &&
               /terms|agreement|conditions|legal/i.test(surfaceText)
             );
           }
@@ -439,11 +442,7 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return (
       (isStrongDiscoverySource || isStrongFooterLegalLink) &&
       candidate.candidateScore >= 40 &&
-      (
-        /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)/.test(path) ||
-        /\/legal\/.*terms(?:\/|$)/.test(path) ||
-        /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)
-      )
+      TERMS_PATH_PATTERN.test(path)
     );
   }
 
@@ -453,7 +452,7 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return (
       (isStrongDiscoverySource || isStrongFooterAccessibilityLink) &&
       candidate.candidateScore >= 80 &&
-      /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(path)
+      ACCESSIBILITY_PATH_PATTERN.test(path)
     );
   }
 
@@ -463,7 +462,7 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return (
       (isStrongDiscoverySource || isStrongFooterContactLink) &&
       candidate.candidateScore >= 70 &&
-      /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)/.test(path)
+      CONTACT_PATH_PATTERN.test(path)
     );
   }
 
@@ -481,7 +480,7 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   if (pageType === "terms_of_service") {
     if (/\/lp\/legal\/.*terms-of-sale(?:\/|$)/.test(path) || /\/legal\/.*terms-of-sale(?:\/|$)/.test(path)) {
       bonus += 40;
-    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)/.test(path)) {
+    } else if (/\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/terms(?:[-_])?of(?:[-_])?use(?:\.html)?(?:\/|$)|\/termsofuse(?:\.html)?(?:\/|$)|\/terms(?:[-_])?and(?:[-_])?conditions?(?:\.html)?(?:\/|$)|\/info\/terms(?:ofuse)?\.html(?:\/|$)/.test(path)) {
       bonus += 30;
     } else if (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path)) {
       bonus += 25;
@@ -489,7 +488,7 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   }
 
   if (pageType === "accessibility_statement") {
-    if (/\/lp\/accessibility(?:\/|$)|\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(path)) {
+    if (/\/lp\/accessibility(?:\/|$)|\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/accessibility(?:\.html)?(?:\/|$)/.test(path)) {
       bonus += 35;
     }
   }
@@ -497,6 +496,8 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   if (pageType === "contact") {
     if (/\/lp\/contact-us(?:\/|$)|\/contact-us(?:\/|$)/.test(path)) {
       bonus += 45;
+    } else if (/\/info\/contact(?:[-_])?us?\.html(?:\/|$)|\/contact(?:[-_])?us(?:\.html)?(?:\/|$)/.test(path)) {
+      bonus += 35;
     } else if (/\/contact(?:\/|$)/.test(path)) {
       bonus += 25;
     } else if (/\/support\/contents\/.*contact/i.test(path)) {
