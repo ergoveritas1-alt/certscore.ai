@@ -301,17 +301,33 @@ function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord,
     return false;
   }
 
-  if (!["rendered_link", "html_link"].includes(candidate.discoveredFrom)) {
-    return false;
-  }
-
   if (!["same_host", "same_brand_subdomain"].includes(candidate.hostRelation)) {
     return false;
   }
 
   const path = getUrlPath(candidate.candidateUrl);
   if (pageType === "terms_of_service") {
-    return candidate.candidateScore >= 40 && /\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path);
+    const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
+    const isStrongFooterLegalLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    return (
+      (isStrongDiscoverySource || isStrongFooterLegalLink) &&
+      candidate.candidateScore >= 40 &&
+      (/\/t\/terms(?:\/|$)|\/terms(?:\/|$)/.test(path) || /\/legal\/.+\/terms(?:\/|$)/.test(path))
+    );
+  }
+
+  if (pageType === "accessibility_statement") {
+    const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
+    const isStrongFooterAccessibilityLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    return (
+      (isStrongDiscoverySource || isStrongFooterAccessibilityLink) &&
+      candidate.candidateScore >= 80 &&
+      /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(path)
+    );
+  }
+
+  if (!["rendered_link", "html_link"].includes(candidate.discoveredFrom)) {
+    return false;
   }
 
   if (pageType === "contact") {
@@ -413,7 +429,8 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   );
   const hasDiscoveryRepairs =
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
-    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact"));
+    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
+    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement"));
   if (!cookieRepair && !hasFindingSpecificPolicyRepairs && !hasDiscoveryRepairs) {
     return input.events;
   }
@@ -496,6 +513,29 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
               reason: "Homepage discovery retained a strong same-brand contact/help path.",
               sourceSurfaceType: "contact_support",
               url: contactCandidate.candidateUrl
+            })
+          );
+          packetsChanged = true;
+        }
+
+        const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
+        const hasStrongAccessibilityTarget = repairedTargets.some((target) =>
+          getStringArray(target.supportedSurfaceTypes).includes("accessibility_support")
+        );
+        if (accessibilityCandidate && !hasStrongAccessibilityTarget) {
+          repairedTargets.push(
+            buildDiscoveryRepairTarget({
+              candidate: accessibilityCandidate,
+              label: "Accessibility",
+              surfaceType: "accessibility_support"
+            })
+          );
+          repairedFindings.push(
+            buildDiscoveryRepairFinding({
+              findingId: "accessibility_support_path_present",
+              reason: "Homepage discovery retained a strong same-brand accessibility support path.",
+              sourceSurfaceType: "accessibility_support",
+              url: accessibilityCandidate.candidateUrl
             })
           );
           packetsChanged = true;

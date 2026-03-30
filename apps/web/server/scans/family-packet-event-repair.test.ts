@@ -267,3 +267,148 @@ test("backfills a missing terms finding from strong rendered-link discovery evid
   assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/t/terms");
   assert.ok(termsPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Terms of Service."));
 });
+
+test("backfills a missing terms finding from a strong same-host footer legal link", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_footer_terms",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 95,
+                candidateUrl: "https://www.example.com/legal/internet-services/terms/site.html",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "terms_of_service",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_footer_terms",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/legal/privacy/",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Policy",
+                  supportedSurfaceTypes: ["privacy_policy"],
+                  title: "Privacy Policy"
+                }
+              ],
+              familyId: "legal_core",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/legal/privacy/"],
+                  findingId: "privacy_policy_present",
+                  reason: "Verified legal-core evidence includes a privacy policy or privacy notice surface.",
+                  sourceSurfaceTypes: ["privacy_policy"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const termsPacket = packets.find((packet) => packet.unifiedFindingId === "terms_of_service_present");
+  assert.ok(termsPacket);
+  assert.equal(termsPacket?.presentationDecision.status, "audit_only");
+  assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/legal/internet-services/terms/site.html");
+});
+
+test("backfills a missing accessibility support finding from a strong same-host footer link", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_footer_accessibility",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 99,
+                candidateUrl: "https://www.example.com/accessibility/",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "accessibility_statement",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_footer_accessibility",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/contact/",
+                  fetchQuality: "verified_content",
+                  snippet: "Contact support",
+                  supportedSurfaceTypes: ["contact_support"],
+                  title: "Contact"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/contact/"],
+                  findingId: "contact_support_path_present",
+                  reason: "Verified support-access evidence includes help, contact, or feedback language.",
+                  sourceSurfaceTypes: ["contact_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const accessibilityPacket = packets.find((packet) => packet.unifiedFindingId === "accessibility_support_path_present");
+  assert.ok(accessibilityPacket);
+  assert.equal(accessibilityPacket?.presentationDecision.status, "audit_only");
+  assert.equal(accessibilityPacket?.primaryPageUrl, "https://www.example.com/accessibility/");
+  assert.ok(accessibilityPacket?.evidence?.snippets?.includes("Homepage rendered link candidate for Accessibility."));
+});

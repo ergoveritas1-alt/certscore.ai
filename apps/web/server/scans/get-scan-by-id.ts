@@ -13,6 +13,7 @@ import type { ScanValidationFinding } from "../../lib/scans/validation-review-li
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
+import { deriveSupplementalSnapshotSignals } from "../../lib/scans/scan-detail-supplemental-signals";
 import { deriveSupplementalCoverageSignals, type SupplementalCoverageSignal } from "../../lib/scans/supplemental-coverage-signals";
 import { deriveSupplementalPolicySignals, type SupplementalPolicySignal } from "../../lib/scans/supplemental-policy-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
@@ -275,111 +276,6 @@ function stripTimestampFields(record: Record<string, unknown>) {
   return next;
 }
 
-function deriveSupplementalSnapshotSignals(input: {
-  existingSignals: ScanSignalRecord[];
-  snapshot: Record<string, unknown> | null;
-}): ScanSignalRecord[] {
-  if (!input.snapshot) {
-    return [];
-  }
-
-  const seenKeys = new Set(input.existingSignals.map((signal) => signal.key));
-  const snapshot = input.snapshot;
-  const supplementalSignals: Array<{
-    category: "privacy" | "accessibility";
-    key: string;
-    label: string;
-    value: true;
-  }> = [];
-
-  const pushBoolean = (
-    category: "privacy" | "accessibility",
-    key: string,
-    label: string,
-    value: boolean
-  ) => {
-    if (!value || seenKeys.has(key)) {
-      return;
-    }
-
-    supplementalSignals.push({
-      category,
-      key,
-      label,
-      value: true
-    });
-  };
-
-  const childrenAudienceLikely = snapshot.children_audience_likely === true;
-  const kidDirectedContentDetected = snapshot.kid_directed_content_detected === true;
-  const privacyPolicyPresent = snapshot.privacy_policy_present === true;
-  const privacyContactChannelType =
-    typeof snapshot.privacy_contact_channel_type === "string" ? snapshot.privacy_contact_channel_type : null;
-  const consentMechanismType =
-    typeof snapshot.consent_mechanism_type === "string" ? snapshot.consent_mechanism_type : null;
-  const cookieBannerPresent = snapshot.cookie_banner_present === true;
-  const cmpVendorName = typeof snapshot.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : null;
-  const consentInteractionModel =
-    typeof snapshot.consent_interaction_model === "string" ? snapshot.consent_interaction_model : null;
-  const doNotSellLinkPresent = snapshot.do_not_sell_link_present === true;
-  const retargetingPixelDetected = snapshot.retargeting_pixel_detected === true;
-
-  pushBoolean(
-    "privacy",
-    "privacy.children_privacy_context_without_supporting_disclosure",
-    "Child-directed context without supporting privacy disclosure",
-    (childrenAudienceLikely || kidDirectedContentDetected) &&
-      !privacyPolicyPresent &&
-      privacyContactChannelType === "none"
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.privacy_contact_channel_missing",
-    "Privacy contact path missing",
-    privacyContactChannelType === "none"
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.consent_surface_missing",
-    "Consent surface missing",
-    consentMechanismType === "none" &&
-      !cookieBannerPresent &&
-      !cmpVendorName &&
-      (!consentInteractionModel || consentInteractionModel === "none")
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.sale_sharing_controls_missing",
-    "Sale/sharing controls missing",
-    !doNotSellLinkPresent && retargetingPixelDetected
-  );
-  pushBoolean(
-    "accessibility",
-    "accessibility.accessibility_support_path_missing",
-    "Accessibility support path missing",
-    snapshot.accessibility_contact_method_present === false
-  );
-
-  return supplementalSignals.map((signal) => {
-    const taxonomy = mapSignalKeyToTaxonomy({
-      category: signal.category,
-      key: signal.key,
-      label: signal.label
-    });
-
-    return {
-      category: signal.category,
-      primaryCategory: taxonomy.primaryCategory,
-      primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
-      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
-      key: signal.key,
-      label: signal.label,
-      subcategory: taxonomy.subcategory ?? null,
-      value: signal.value,
-      valueType: "boolean"
-    } satisfies ScanSignalRecord;
-  });
-}
 
 function normalizeSupplementalPolicySignals(signals: SupplementalPolicySignal[]): ScanSignalRecord[] {
   return signals.map((signal) => {
@@ -774,6 +670,8 @@ async function loadScanDetailRecord(input: {
     : null;
   const supplementalSnapshotSignals = deriveSupplementalSnapshotSignals({
     existingSignals: normalizedSignals,
+    events: normalizedEvents,
+    primaryPolicyEnrichment,
     snapshot: normalizedSnapshot
   });
   const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
