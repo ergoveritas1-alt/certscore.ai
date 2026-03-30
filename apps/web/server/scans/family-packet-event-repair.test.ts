@@ -743,6 +743,122 @@ test("backfills targeted advertising choices from a retained privacy-choices tar
   assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/do-not-sell");
 });
 
+test("recovers verified contact support from surface-recovery results even when discovery matching is weak", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_surface_recovery_contact",
+        message: "surface recovery",
+        metadataJson: {
+          phase: "surface_recovery_side_merge",
+          verificationResults: [
+            {
+              confidence: 0.99,
+              failureReason: "url_disallowed_for_surface",
+              pageTypeVerified: false,
+              requestedUrl: "https://www.example.com/en-us/contact",
+              snippet: "Contact page with office addresses, phone numbers, and sales/service help.",
+              surfaceType: "contact_support",
+              title: "Contact Us | Example Office Addresses & Phone Numbers",
+              urlVerified: true,
+              verified: true,
+              verifiedUrl: "https://www.example.com/en-us/contact"
+            }
+          ]
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.ok(contactPacket);
+  assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/en-us/contact");
+});
+
+test("accepts strong url-verified contact support recovery when strict surface verification rejects the page type", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_contact",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/accessibility",
+                  fetchQuality: "verified_content",
+                  snippet: "Accessibility overview",
+                  supportedSurfaceTypes: ["accessibility_support"],
+                  title: "Accessibility | Example"
+                }
+              ],
+              familyId: "support_access",
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/accessibility"],
+                  findingId: "accessibility_support_path_present",
+                  reason: "Verified support-access evidence includes accessibility support language.",
+                  sourceSurfaceTypes: ["accessibility_support"]
+                }
+              ]
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_surface_recovery_contact_url_verified",
+        message: "surface recovery",
+        metadataJson: {
+          phase: "surface_recovery_side_merge",
+          verificationResults: [
+            {
+              confidence: 0.99,
+              failureReason: "url_disallowed_for_surface",
+              pageTypeVerified: false,
+              requestedUrl: "https://www.example.com/en-us/contact",
+              snippet: null,
+              surfaceType: "contact_support",
+              title: "Contact Us | Example Office Addresses & Phone Numbers",
+              urlVerified: true,
+              verified: false,
+              verifiedUrl: null
+            }
+          ]
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_support_path_present");
+  assert.ok(contactPacket);
+  assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/en-us/contact");
+  assert.ok(contactPacket?.evidence?.pageUrls?.includes("https://www.example.com/en-us/contact"));
+});
+
 test("suppresses editorial accessibility initiative pages that do not retain support-path evidence", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

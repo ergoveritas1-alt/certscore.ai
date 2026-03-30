@@ -31,6 +31,13 @@ type DiscoveryCandidateRecord = {
   sourceUrl: string | null;
 };
 
+type VerifiedSurfaceRecoveryRecord = {
+  snippet: string | null;
+  surfaceType: string;
+  title: string | null;
+  url: string;
+};
+
 const FINDING_POLICY_EVIDENCE_KEYS: Record<string, string[]> = {
   affiliate_disclosure_present: ["affiliate_disclosure", "affiliate", "notice_contact"],
   privacy_contact_path_present: ["notice_contact", "privacy_contact", "dsar"],
@@ -284,6 +291,88 @@ function extractDiscoveryCandidates(events: ScanEventRecordLike[]) {
   return candidates;
 }
 
+function extractVerifiedSurfaceRecoveryResults(events: ScanEventRecordLike[]) {
+  const results: VerifiedSurfaceRecoveryRecord[] = [];
+
+  for (const event of events) {
+    if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
+      continue;
+    }
+
+    const metadata = event.metadataJson as Record<string, unknown>;
+    if (metadata.phase !== "surface_recovery_side_merge") {
+      continue;
+    }
+
+    const verificationResults = getRecordArray(metadata.verificationResults);
+    for (const record of verificationResults) {
+      const surfaceType = typeof record.surfaceType === "string" ? record.surfaceType : null;
+      const verifiedUrl = typeof record.verifiedUrl === "string" ? record.verifiedUrl : null;
+      const requestedUrl = typeof record.requestedUrl === "string" ? record.requestedUrl : null;
+      const title = typeof record.title === "string" ? record.title : null;
+      const snippet = typeof record.snippet === "string" ? record.snippet : null;
+      const candidateUrl = verifiedUrl ?? requestedUrl;
+      if (!surfaceType || !candidateUrl) {
+        continue;
+      }
+
+      const candidateTarget = {
+        canonicalUrl: candidateUrl,
+        snippet,
+        title
+      } satisfies FamilyPacketTargetRecord;
+      const surfaceText = `${title ?? ""} ${snippet ?? ""}`.toLowerCase();
+      const failureReason = typeof record.failureReason === "string" ? record.failureReason : null;
+      const hasAcceptedVerifiedFallback =
+        record.urlVerified === true &&
+        failureReason === "url_disallowed_for_surface" &&
+        (() => {
+          if (surfaceType === "contact_support") {
+            return (
+              /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)/.test(
+                getUrlPath(candidateUrl)
+              ) &&
+              /contact us|contact|phone numbers|support|help/i.test(surfaceText) &&
+              !isLikelyChromeOnlySupportTarget(candidateTarget, "contact_support_path_present")
+            );
+          }
+
+          if (surfaceType === "accessibility_support") {
+            return (
+              /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)/.test(getUrlPath(candidateUrl)) &&
+              /accessibility|screen reader|assistive|accommodation|caption|audio description/i.test(surfaceText) &&
+              !isLikelyChromeOnlySupportTarget(candidateTarget, "accessibility_support_path_present")
+            );
+          }
+
+          if (surfaceType === "terms_of_service") {
+            return (
+              /\/t\/terms(?:\/|$)|\/terms(?:\/|$)|\/terms-of-sale(?:\/|$)|\/terms-of-use(?:\/|$)|\/termsofuse(?:\/|$)|\/termsandconditions?(?:\/|$)|\/account-terms(?:\/|$)|\/legal\/.*terms(?:\/|$)/.test(
+                getUrlPath(candidateUrl)
+              ) &&
+              /terms|agreement|conditions|legal/i.test(surfaceText)
+            );
+          }
+
+          return false;
+        })();
+
+      if (record.verified !== true && !hasAcceptedVerifiedFallback) {
+        continue;
+      }
+
+      results.push({
+        snippet,
+        surfaceType,
+        title,
+        url: candidateUrl
+      });
+    }
+  }
+
+  return results;
+}
+
 function getUrlPath(value: string | null | undefined) {
   if (!value) {
     return "";
@@ -485,11 +574,62 @@ function buildDiscoveryRepairFinding(input: {
   } satisfies FamilyPacketFindingRecord;
 }
 
+function buildVerifiedSurfaceRecoveryTarget(input: {
+  label: string;
+  snippet?: string | null;
+  surfaceType: string;
+  title?: string | null;
+  url: string;
+}) {
+  const title = input.title?.trim() || input.label;
+  const snippet = input.snippet?.trim() || `Verified surface-recovery evidence for ${input.label}.`;
+
+  return {
+    canonicalUrl: input.url,
+    fetchQuality: "verified_content",
+    snippet,
+    supportedSurfaceTypes: [input.surfaceType],
+    supportingRefs: [
+      {
+        refType: "surface_recovery_verified",
+        text: snippet,
+        title,
+        url: input.url,
+        verified: true
+      }
+    ],
+    title
+  } satisfies FamilyPacketTargetRecord;
+}
+
+function buildVerifiedSurfaceRecoveryFinding(input: {
+  findingId: string;
+  reason: string;
+  snippet?: string | null;
+  sourceSurfaceType: string;
+  url: string;
+}) {
+  const snippet = input.snippet?.trim() || input.reason;
+  return {
+    evidencePayload: {
+      fetchQuality: "verified_content",
+      pageUrls: [input.url],
+      policySnippets: [snippet],
+      sourceUrls: [input.url]
+    },
+    evidenceUrls: [input.url],
+    findingId: input.findingId,
+    reason: input.reason,
+    sourceSurfaceTypes: [input.sourceSurfaceType]
+  } satisfies FamilyPacketFindingRecord;
+}
+
 export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLike>(input: {
   events: TEvent[];
   policyEnrichment: Array<Record<string, unknown>>;
 }): TEvent[] {
   const discoveryCandidates = extractDiscoveryCandidates(input.events);
+  const verifiedSurfaceRecoveryResults = extractVerifiedSurfaceRecoveryResults(input.events);
   const cookieRepair = getCookieRepairEvidence(input.policyEnrichment);
   const hasFindingSpecificPolicyRepairs = input.policyEnrichment.some((row) =>
     Object.keys(FINDING_POLICY_EVIDENCE_KEYS).some((findingId) => Boolean(getFindingPolicySnippetCandidate(row, findingId)))
@@ -497,7 +637,10 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   const hasDiscoveryRepairs =
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
-    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement"));
+    Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement")) ||
+    verifiedSurfaceRecoveryResults.some((result) =>
+      ["contact_support", "accessibility_support", "terms_of_service"].includes(result.surfaceType)
+    );
   const hasSupportPacketFilterCandidates = input.events.some((event) => {
     if (event.eventType !== "runtime.build_phase_diagnostic" || !event.metadataJson || typeof event.metadataJson !== "object") {
       return false;
@@ -640,8 +783,30 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         });
 
         const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
+        const verifiedContactSupport =
+          verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "contact_support") ?? null;
         const hasStrongContactTarget = repairedTargets.some((target) => getStringArray(target.supportedSurfaceTypes).includes("contact_support"));
-        if (contactCandidate && !hasStrongContactTarget) {
+        if (verifiedContactSupport && !hasStrongContactTarget) {
+          repairedTargets.push(
+            buildVerifiedSurfaceRecoveryTarget({
+              label: "Contact Us",
+              snippet: verifiedContactSupport.snippet,
+              surfaceType: "contact_support",
+              title: verifiedContactSupport.title,
+              url: verifiedContactSupport.url
+            })
+          );
+          repairedFindings.push(
+            buildVerifiedSurfaceRecoveryFinding({
+              findingId: "contact_support_path_present",
+              reason: "Verified support-access evidence includes help, contact, or feedback language.",
+              snippet: verifiedContactSupport.snippet,
+              sourceSurfaceType: "contact_support",
+              url: verifiedContactSupport.url
+            })
+          );
+          packetsChanged = true;
+        } else if (contactCandidate && !hasStrongContactTarget) {
           repairedTargets.push(
             buildDiscoveryRepairTarget({
               candidate: contactCandidate,
@@ -661,10 +826,32 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         }
 
         const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
+        const verifiedAccessibilitySupport =
+          verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "accessibility_support") ?? null;
         const hasStrongAccessibilityTarget = repairedTargets.some((target) =>
           getStringArray(target.supportedSurfaceTypes).includes("accessibility_support")
         );
-        if (accessibilityCandidate && !hasStrongAccessibilityTarget) {
+        if (verifiedAccessibilitySupport && !hasStrongAccessibilityTarget) {
+          repairedTargets.push(
+            buildVerifiedSurfaceRecoveryTarget({
+              label: "Accessibility",
+              snippet: verifiedAccessibilitySupport.snippet,
+              surfaceType: "accessibility_support",
+              title: verifiedAccessibilitySupport.title,
+              url: verifiedAccessibilitySupport.url
+            })
+          );
+          repairedFindings.push(
+            buildVerifiedSurfaceRecoveryFinding({
+              findingId: "accessibility_support_path_present",
+              reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+              snippet: verifiedAccessibilitySupport.snippet,
+              sourceSurfaceType: "accessibility_support",
+              url: verifiedAccessibilitySupport.url
+            })
+          );
+          packetsChanged = true;
+        } else if (accessibilityCandidate && !hasStrongAccessibilityTarget) {
           repairedTargets.push(
             buildDiscoveryRepairTarget({
               candidate: accessibilityCandidate,
@@ -864,12 +1051,35 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
     const hasSupportAccessPacket = packetRecords.some((packet) => packet.familyId === "support_access");
     const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
     const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
+    const verifiedContactSupport =
+      verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "contact_support") ?? null;
+    const verifiedAccessibilitySupport =
+      verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "accessibility_support") ?? null;
 
-    if (!hasSupportAccessPacket && (contactCandidate || accessibilityCandidate)) {
+    if (!hasSupportAccessPacket && (contactCandidate || accessibilityCandidate || verifiedContactSupport || verifiedAccessibilitySupport)) {
       const canonicalTargets: FamilyPacketTargetRecord[] = [];
       const supportedUnifiedFindings: FamilyPacketFindingRecord[] = [];
 
-      if (contactCandidate) {
+      if (verifiedContactSupport) {
+        canonicalTargets.push(
+          buildVerifiedSurfaceRecoveryTarget({
+            label: "Contact Us",
+            snippet: verifiedContactSupport.snippet,
+            surfaceType: "contact_support",
+            title: verifiedContactSupport.title,
+            url: verifiedContactSupport.url
+          })
+        );
+        supportedUnifiedFindings.push(
+          buildVerifiedSurfaceRecoveryFinding({
+            findingId: "contact_support_path_present",
+            reason: "Verified support-access evidence includes help, contact, or feedback language.",
+            snippet: verifiedContactSupport.snippet,
+            sourceSurfaceType: "contact_support",
+            url: verifiedContactSupport.url
+          })
+        );
+      } else if (contactCandidate) {
         canonicalTargets.push(
           buildDiscoveryRepairTarget({
             candidate: contactCandidate,
@@ -887,7 +1097,26 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
         );
       }
 
-      if (accessibilityCandidate) {
+      if (verifiedAccessibilitySupport) {
+        canonicalTargets.push(
+          buildVerifiedSurfaceRecoveryTarget({
+            label: "Accessibility",
+            snippet: verifiedAccessibilitySupport.snippet,
+            surfaceType: "accessibility_support",
+            title: verifiedAccessibilitySupport.title,
+            url: verifiedAccessibilitySupport.url
+          })
+        );
+        supportedUnifiedFindings.push(
+          buildVerifiedSurfaceRecoveryFinding({
+            findingId: "accessibility_support_path_present",
+            reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+            snippet: verifiedAccessibilitySupport.snippet,
+            sourceSurfaceType: "accessibility_support",
+            url: verifiedAccessibilitySupport.url
+          })
+        );
+      } else if (accessibilityCandidate) {
         canonicalTargets.push(
           buildDiscoveryRepairTarget({
             candidate: accessibilityCandidate,
@@ -946,12 +1175,35 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
   const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
   const termsCandidate = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
+  const verifiedContactSupport =
+    verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "contact_support") ?? null;
+  const verifiedAccessibilitySupport =
+    verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "accessibility_support") ?? null;
 
-  if (contactCandidate || accessibilityCandidate) {
+  if (contactCandidate || accessibilityCandidate || verifiedContactSupport || verifiedAccessibilitySupport) {
     const canonicalTargets: FamilyPacketTargetRecord[] = [];
     const supportedUnifiedFindings: FamilyPacketFindingRecord[] = [];
 
-    if (contactCandidate) {
+    if (verifiedContactSupport) {
+      canonicalTargets.push(
+        buildVerifiedSurfaceRecoveryTarget({
+          label: "Contact Us",
+          snippet: verifiedContactSupport.snippet,
+          surfaceType: "contact_support",
+          title: verifiedContactSupport.title,
+          url: verifiedContactSupport.url
+        })
+      );
+      supportedUnifiedFindings.push(
+        buildVerifiedSurfaceRecoveryFinding({
+          findingId: "contact_support_path_present",
+          reason: "Verified support-access evidence includes help, contact, or feedback language.",
+          snippet: verifiedContactSupport.snippet,
+          sourceSurfaceType: "contact_support",
+          url: verifiedContactSupport.url
+        })
+      );
+    } else if (contactCandidate) {
       canonicalTargets.push(
         buildDiscoveryRepairTarget({
           candidate: contactCandidate,
@@ -969,7 +1221,26 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       );
     }
 
-    if (accessibilityCandidate) {
+    if (verifiedAccessibilitySupport) {
+      canonicalTargets.push(
+        buildVerifiedSurfaceRecoveryTarget({
+          label: "Accessibility",
+          snippet: verifiedAccessibilitySupport.snippet,
+          surfaceType: "accessibility_support",
+          title: verifiedAccessibilitySupport.title,
+          url: verifiedAccessibilitySupport.url
+        })
+      );
+      supportedUnifiedFindings.push(
+        buildVerifiedSurfaceRecoveryFinding({
+          findingId: "accessibility_support_path_present",
+          reason: "Verified support-access evidence includes accessibility, captioning, or accommodation language.",
+          snippet: verifiedAccessibilitySupport.snippet,
+          sourceSurfaceType: "accessibility_support",
+          url: verifiedAccessibilitySupport.url
+        })
+      );
+    } else if (accessibilityCandidate) {
       canonicalTargets.push(
         buildDiscoveryRepairTarget({
           candidate: accessibilityCandidate,
