@@ -93,6 +93,7 @@ export default async function DomainsPage() {
               <thead>
                 <tr className="text-left text-slate-500">
                   <th className="pb-3 pr-4 font-medium">Website</th>
+                  <th className="pb-3 pr-4 font-medium">Industry</th>
                   <th className="pb-3 pr-4 font-medium">Monitoring</th>
                   <th className="pb-3 pr-4 font-medium">Latest scan</th>
                   <th className="pb-3 pr-4 font-medium">Last activity</th>
@@ -108,6 +109,7 @@ export default async function DomainsPage() {
                         <p className="text-slate-500">{domain.normalizedUrl}</p>
                       </div>
                     </td>
+                    <td className="py-4 pr-4 text-slate-600">{domain.industryPrimaryLabel ?? "Unassigned"}</td>
                     <td className="py-4 pr-4 text-slate-600">
                       <div className="space-y-1">
                         <p>{domain.scanFrequency}</p>

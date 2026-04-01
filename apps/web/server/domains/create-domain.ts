@@ -5,6 +5,7 @@ import { createDomainRequestSchema, getPlanDefinition, parseDomainBatchInput } f
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
+import { inferPrimaryIndustryIdForHostname } from "./infer-domain-industry";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
 
@@ -65,6 +66,7 @@ export async function createOrQueueDomainScan(input: {
   }
 
   const { hostname, normalizedUrl } = parsedInput.data;
+  const industryPrimaryId = await inferPrimaryIndustryIdForHostname(hostname);
 
   const { data: existingDomain } = await supabase
     .from("domains")
@@ -114,6 +116,7 @@ export async function createOrQueueDomainScan(input: {
     .insert({
       organization_id: dashboardContext.organization.id,
       hostname,
+      industry_primary_id: industryPrimaryId,
       normalized_url: normalizedUrl,
       scan_frequency:
         ((organizationSettings as { default_scan_frequency: string | null } | null)?.default_scan_frequency as
