@@ -4,6 +4,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
+import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
@@ -933,16 +934,27 @@ async function loadOrganizationScans(
       snapshot,
       diagnosticEventMap.get(scan.id) ?? []
     );
-    const accessPosture = deriveAccessPosturePresentation({
+    const totalSignals =
+      (typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null) ??
+      signalCountMap.get(scan.id) ??
+      null;
+    const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
-      stopTier: snapshot?.stop_tier ?? null,
-      totalSignals:
-        (typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null) ??
-        signalCountMap.get(scan.id) ??
-        null,
+      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+      homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
       pagesScanned: scan.pages_scanned,
-      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
+      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
+      stopTier: snapshot?.stop_tier ?? null,
+      totalSignals
+    });
+    const accessPosture = deriveAccessPosturePresentation({
+      accessPostureClass: normalizedAccessPosture.accessPostureClass,
+      highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
+      stopTier: normalizedAccessPosture.stopTier,
+      totalSignals,
+      pagesScanned: scan.pages_scanned,
+      recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     });
     const interruptionLabel =
       (typeof snapshot?.stop_reason_label === "string" && snapshot.stop_reason_label.trim().length > 0
@@ -958,11 +970,6 @@ async function loadOrganizationScans(
       pagesScanned: scan.pages_scanned,
       status: scan.status
     });
-    const totalSignals =
-      (typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null) ??
-      signalCountMap.get(scan.id) ??
-      null;
-
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -1005,10 +1012,10 @@ async function loadOrganizationScans(
         scanCoverageRatio: qualitySummary.coverageRatio,
         interruptionLabel,
         interruptionReason,
-        accessPostureClass: snapshot?.access_posture_class ?? null,
-        highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
-        stopTier: snapshot?.stop_tier ?? null,
-        recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
+        accessPostureClass: normalizedAccessPosture.accessPostureClass,
+        highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
+        stopTier: normalizedAccessPosture.stopTier,
+        recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     } satisfies OrganizationScanListItem;
     }),
     totalCount: count ?? scanRows.length

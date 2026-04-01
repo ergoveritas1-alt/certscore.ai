@@ -3,6 +3,7 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
+import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
@@ -164,13 +165,23 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
 
   return scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
-    const accessPosture = deriveAccessPosturePresentation({
+    const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
+      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+      homepageFetchStatus: null,
+      pagesScanned: scan.pages_scanned,
+      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
       stopTier: snapshot?.stop_tier ?? null,
+      totalSignals: snapshot?.total_signals ?? null
+    });
+    const accessPosture = deriveAccessPosturePresentation({
+      accessPostureClass: normalizedAccessPosture.accessPostureClass,
+      highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
+      stopTier: normalizedAccessPosture.stopTier,
       totalSignals: snapshot?.total_signals ?? null,
       pagesScanned: scan.pages_scanned,
-      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
+      recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     });
 
     return {
@@ -190,10 +201,10 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
       blockedFlag: snapshot?.blocked_flag ?? null,
       captchaFlag: snapshot?.captcha_flag ?? null,
-      accessPostureClass: snapshot?.access_posture_class ?? null,
-      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
-      stopTier: snapshot?.stop_tier ?? null,
-      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
+      accessPostureClass: normalizedAccessPosture.accessPostureClass,
+      highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
+      stopTier: normalizedAccessPosture.stopTier,
+      recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses,
       interruptionLabel: accessPosture.label,
       interruptionReason: accessPosture.reason
     };

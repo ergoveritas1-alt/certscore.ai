@@ -15,6 +15,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
+import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
@@ -927,25 +928,23 @@ async function loadScanDetailRecord(input: {
     typeof normalizedSnapshot?.homepage_fetch_status === "string"
       ? normalizedSnapshot.homepage_fetch_status
       : null;
-  const hasEarlyHomepageEvidence = homepageFetchHttpStatus !== null || homepageFetchStatus !== null;
-  const highestSuccessfulTier =
-    accessPostureClass === "early_loss" && (totalSignals ?? 0) === 0 && scanRow.pages_scanned === 0
-      ? null
-      : rawHighestSuccessfulTier;
-  const stopTier =
-    accessPostureClass === "early_loss" &&
-    rawStopTier === "tier5_full_scan" &&
-    (totalSignals ?? 0) === 0 &&
-    scanRow.pages_scanned === 0
-      ? hasEarlyHomepageEvidence
-        ? "tier1_front_door"
-        : null
-      : rawStopTier;
   const recoverableFindingClasses = Array.isArray(normalizedSnapshot?.recoverable_finding_classes)
     ? normalizedSnapshot.recoverable_finding_classes.filter(
         (value): value is RecoverableFindingClass => typeof value === "string"
       )
     : [];
+  const accessPostureSummary = normalizeAccessPostureSummary({
+    accessPostureClass,
+    highestSuccessfulTier: rawHighestSuccessfulTier,
+    homepageFetchHttpStatus,
+    homepageFetchStatus,
+    pagesScanned: scanRow.pages_scanned,
+    recoverableFindingClasses,
+    stopTier: rawStopTier,
+    totalSignals
+  });
+  const highestSuccessfulTier = accessPostureSummary.highestSuccessfulTier;
+  const stopTier = accessPostureSummary.stopTier;
   const stopReason = normalizedSnapshot
     ? deriveScanStopReason({
         authWallDetected: normalizedSnapshot.auth_wall_detected === true,
@@ -980,20 +979,20 @@ async function loadScanDetailRecord(input: {
       })
     : null;
   const accessPosturePresentation = deriveAccessPosturePresentation({
-    accessPostureClass,
+    accessPostureClass: accessPostureSummary.accessPostureClass,
     highestSuccessfulTier,
     stopTier,
     totalSignals,
     pagesScanned: scanRow.pages_scanned,
-    recoverableFindingClasses
+    recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses
   });
 
   return {
     accessPostureSummary: {
-      accessPostureClass,
+      accessPostureClass: accessPostureSummary.accessPostureClass,
       highestSuccessfulTier,
       stopTier,
-      recoverableFindingClasses,
+      recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses,
       totalSignals,
       pagesScanned: scanRow.pages_scanned,
       homepageFetchHttpStatus,

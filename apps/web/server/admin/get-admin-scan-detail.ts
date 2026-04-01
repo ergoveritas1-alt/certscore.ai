@@ -14,6 +14,7 @@ import {
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanDetail = {
@@ -235,11 +236,11 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     typeof (snapshot as Record<string, unknown> | null)?.access_posture_class === "string"
       ? ((snapshot as Record<string, unknown>).access_posture_class as AccessPostureClass)
       : null;
-  const highestSuccessfulTier =
+  const rawHighestSuccessfulTier =
     typeof (snapshot as Record<string, unknown> | null)?.highest_successful_tier === "string"
       ? ((snapshot as Record<string, unknown>).highest_successful_tier as ScanExecutionTier)
       : null;
-  const stopTier =
+  const rawStopTier =
     typeof (snapshot as Record<string, unknown> | null)?.stop_tier === "string"
       ? ((snapshot as Record<string, unknown>).stop_tier as ScanExecutionTier)
       : null;
@@ -248,24 +249,43 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
         (value): value is RecoverableFindingClass => typeof value === "string"
       ))
     : [];
-  const accessPosturePresentation = deriveAccessPosturePresentation({
+  const totalSignals =
+    typeof (snapshot as Record<string, unknown> | null)?.total_signals === "number"
+      ? ((snapshot as Record<string, unknown>).total_signals as number)
+      : null;
+  const homepageFetchHttpStatus =
+    typeof (snapshot as Record<string, unknown> | null)?.homepage_fetch_http_status === "number"
+      ? ((snapshot as Record<string, unknown>).homepage_fetch_http_status as number)
+      : null;
+  const homepageFetchStatus =
+    typeof (snapshot as Record<string, unknown> | null)?.homepage_fetch_status === "string"
+      ? ((snapshot as Record<string, unknown>).homepage_fetch_status as string)
+      : null;
+  const accessPostureSummary = normalizeAccessPostureSummary({
     accessPostureClass,
-    highestSuccessfulTier,
-    stopTier,
-    totalSignals:
-      typeof (snapshot as Record<string, unknown> | null)?.total_signals === "number"
-        ? ((snapshot as Record<string, unknown>).total_signals as number)
-        : null,
+    highestSuccessfulTier: rawHighestSuccessfulTier,
+    homepageFetchHttpStatus,
+    homepageFetchStatus,
     pagesScanned: scanRow.pages_scanned,
-    recoverableFindingClasses
+    recoverableFindingClasses,
+    stopTier: rawStopTier,
+    totalSignals
+  });
+  const accessPosturePresentation = deriveAccessPosturePresentation({
+    accessPostureClass: accessPostureSummary.accessPostureClass,
+    highestSuccessfulTier: accessPostureSummary.highestSuccessfulTier,
+    stopTier: accessPostureSummary.stopTier,
+    totalSignals,
+    pagesScanned: scanRow.pages_scanned,
+    recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses
   });
 
   return {
     accessPostureSummary: {
-      accessPostureClass,
-      highestSuccessfulTier,
-      stopTier,
-      recoverableFindingClasses,
+      accessPostureClass: accessPostureSummary.accessPostureClass,
+      highestSuccessfulTier: accessPostureSummary.highestSuccessfulTier,
+      stopTier: accessPostureSummary.stopTier,
+      recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses,
       interruptionLabel: accessPosturePresentation.label,
       interruptionReason: accessPosturePresentation.reason
     },
