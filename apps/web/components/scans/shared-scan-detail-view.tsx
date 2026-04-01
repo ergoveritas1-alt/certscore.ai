@@ -3026,16 +3026,44 @@ function formatRecoverableFindingClass(value: string) {
 function AccessPostureSummaryCard(input: {
   summary: {
     accessPostureClass: string | null;
+    blockVendorGuess?: string | null;
+    blockPageClassification?: string | null;
+    cmpVendorName?: string | null;
+    finalEffectiveUrl?: string | null;
+    homepageFetchHttpStatus?: number | null;
+    homepageFetchStatus?: string | null;
     highestSuccessfulTier: string | null;
     interruptionLabel: string | null;
     interruptionReason: string | null;
+    pagesScanned?: number | null;
     recoverableFindingClasses: string[];
+    robotsAllowed?: boolean | null;
+    robotsFetchHttpStatus?: number | null;
+    serverHeader?: string | null;
     stopTier: string | null;
+    stopOutcomeTitle?: string | null;
+    stopReason?: string | null;
+    stopReviewTitle?: string | null;
+    totalSignals?: number | null;
+    whatThisMeans?: string[];
+    verifiedPublicSurfacesCount?: number | null;
   } | null | undefined;
 }) {
   if (!input.summary?.interruptionLabel) {
     return null;
   }
+
+  const formatHomepageEvidence = () => {
+    if (typeof input.summary?.homepageFetchHttpStatus === "number") {
+      return `HTTP ${input.summary.homepageFetchHttpStatus}`;
+    }
+
+    if (typeof input.summary?.homepageFetchStatus === "string" && input.summary.homepageFetchStatus.length > 0) {
+      return input.summary.homepageFetchStatus;
+    }
+
+    return null;
+  };
 
   const highestSuccessfulTier = formatExecutionTierLabel(input.summary.highestSuccessfulTier);
   const stopTier = formatExecutionTierLabel(input.summary.stopTier);
@@ -3043,42 +3071,161 @@ function AccessPostureSummaryCard(input: {
     .filter((value) => typeof value === "string" && value.length > 0)
     .slice(0, 6)
     .map(formatRecoverableFindingClass);
+  const robotsPosture =
+    input.summary.robotsAllowed === true
+      ? typeof input.summary.robotsFetchHttpStatus === "number"
+        ? `Allowed (HTTP ${input.summary.robotsFetchHttpStatus})`
+        : "Allowed"
+      : input.summary.robotsAllowed === false
+        ? typeof input.summary.robotsFetchHttpStatus === "number"
+          ? `Restricted (HTTP ${input.summary.robotsFetchHttpStatus})`
+          : "Restricted"
+        : null;
+  const evidenceTiles = [
+    {
+      label: "Homepage",
+      value: formatHomepageEvidence()
+    },
+    {
+      label: "Final URL",
+      value: input.summary.finalEffectiveUrl
+    },
+    {
+      label: "Server",
+      value: input.summary.serverHeader
+    },
+    {
+      label: "Block vendor",
+      value: input.summary.blockVendorGuess
+    },
+    {
+      label: "Block page",
+      value: input.summary.blockPageClassification
+    },
+    {
+      label: "Robots",
+      value: robotsPosture
+    },
+    {
+      label: "Verified surfaces",
+      value:
+        typeof input.summary.verifiedPublicSurfacesCount === "number" && input.summary.verifiedPublicSurfacesCount > 0
+          ? String(input.summary.verifiedPublicSurfacesCount)
+          : null
+    },
+    {
+      label: "CMP",
+      value: input.summary.cmpVendorName
+    },
+    {
+      label: "Signals retained",
+      value:
+        typeof input.summary.totalSignals === "number" && input.summary.totalSignals > 0
+          ? String(input.summary.totalSignals)
+          : null
+    },
+    {
+      label: "Pages scanned",
+      value:
+        typeof input.summary.pagesScanned === "number" && input.summary.pagesScanned > 0
+          ? String(input.summary.pagesScanned)
+          : null
+    }
+  ].filter((item) => item.value !== null && item.value !== undefined && item.value !== "");
+  const deepestTierReached = highestSuccessfulTier ?? stopTier;
+  const notYetVerified = (() => {
+    switch (input.summary.stopTier) {
+      case "tier1_front_door":
+      case "tier0_passive":
+        return [
+          "No rendered browser surface was verified.",
+          "No initial cookies, storage, or tracker activity were captured.",
+          "No consent or privacy interaction flow was tested."
+        ];
+      case "tier2_browser_surface":
+        return [
+          "No initial runtime cookie or request capture was completed.",
+          "No consent-state or tracker timing evidence was confirmed.",
+          "No privacy-choice interaction flow was tested."
+        ];
+      case "tier3_runtime_observation":
+        return [
+          "No privacy-choice or preferences interaction flow was tested.",
+          "No reject-path or consent-effectiveness verification was completed.",
+          "No comparative accept vs reject interaction evidence was collected."
+        ];
+      case "tier4a_surface_inspection":
+        return [
+          "No bounded consent action was completed.",
+          "No reject-path effectiveness was verified.",
+          "No comparative interaction burden was measured."
+        ];
+      case "tier4b_bounded_interaction":
+        return [
+          "No comparative accept vs reject interaction evidence was collected.",
+          "No full Tier 5 public-surface scan was completed."
+        ];
+      default:
+        return [];
+    }
+  })();
 
   return (
     <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50 px-6 py-5">
       <div className="space-y-1">
         <p className="text-base font-semibold text-sky-950">Access posture</p>
         <p className="text-sm text-sky-900">
-          This scan retained usable evidence, but the site’s access posture affected how far the scanner could safely progress.
+          This scan retained some evidence before access limitations cut off deeper tiers.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Deepest tier reached</p>
+          <p className="mt-1 text-sm font-medium text-sky-950">{deepestTierReached ?? "Not established"}</p>
+        </div>
+        <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Status</p>
           <p className="mt-1 text-sm font-medium text-sky-950">{input.summary.interruptionLabel}</p>
         </div>
-        {highestSuccessfulTier ? (
+        {highestSuccessfulTier && highestSuccessfulTier !== deepestTierReached ? (
           <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Highest successful tier</p>
             <p className="mt-1 text-sm font-medium text-sky-950">{highestSuccessfulTier}</p>
           </div>
         ) : null}
-        {stopTier ? (
+        {stopTier && stopTier !== deepestTierReached ? (
           <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Stop tier</p>
             <p className="mt-1 text-sm font-medium text-sky-950">{stopTier}</p>
           </div>
         ) : null}
-        {input.summary.accessPostureClass ? (
-          <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Class</p>
-            <p className="mt-1 text-sm font-medium text-sky-950">{input.summary.accessPostureClass}</p>
-          </div>
-        ) : null}
       </div>
+      {evidenceTiles.length > 0 ? (
+        <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">What We Uncovered</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {evidenceTiles.map((item) => (
+              <div key={item.label} className="rounded-xl border border-sky-200/80 bg-sky-50/60 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">{item.label}</p>
+                <p className="mt-1 text-sm font-medium break-all text-sky-950">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {notYetVerified.length > 0 ? (
+        <div className="rounded-xl border border-slate-200/80 bg-white/70 px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">What We Could Not Yet Verify</p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-900">
+            {notYetVerified.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {input.summary.interruptionReason ? (
         <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Why the scan stopped here</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Why The Scan Stopped Here</p>
           <p className="mt-1 text-sm text-sky-950">{input.summary.interruptionReason}</p>
         </div>
       ) : null}
@@ -3512,6 +3659,15 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const highPriorityCount = mainFindings.filter((finding) => finding.severity === "high").length;
   const mediumPriorityCount = mainFindings.filter((finding) => finding.severity === "medium").length;
   const lowPriorityCount = mainFindings.filter((finding) => finding.severity === "low").length;
+  const hasAnyFindings =
+    mainFindings.length > 0 ||
+    confidenceCoverageFindings.length > 0 ||
+    supportingContextFindings.length > 0 ||
+    positiveSurfaceFindings.length > 0;
+
+  if (!hasAnyFindings) {
+    return null;
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
@@ -4307,6 +4463,10 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
     scanRecord: input.scanRecord,
     snapshot: input.snapshot
   });
+  const suppressEmptyBlockedChrome =
+    input.scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
+    input.scanRecord.accessPostureSummary?.stopTier === "tier1_front_door" &&
+    reviewFindings.length === 0;
   const sectionTiles = [
     ...new Map(
       pillarSections.flatMap(({ sections }) =>
@@ -4328,38 +4488,42 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
 
   return (
     <div className="space-y-6">
-      <AgencyAdvisorySummary
-        badges={input.executiveSummary.badges}
-        findings={reviewFindings}
-        metrics={input.executiveSummary.metrics}
-        sectionTiles={sectionTiles}
-        snapshot={input.snapshot}
-        statusCallout={input.executiveSummary.statusCallout}
-        vendorGroups={vendorGroups}
-      />
-      <div className="relative overflow-hidden rounded-2xl">
-        <FindingsOverview findings={reviewFindings} />
-        {showHomepagePreviewGate && input.createAccountHref ? (
-          <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
-        ) : null}
-      </div>
+      {!suppressEmptyBlockedChrome ? (
+        <>
+          <AgencyAdvisorySummary
+            badges={input.executiveSummary.badges}
+            findings={reviewFindings}
+            metrics={input.executiveSummary.metrics}
+            sectionTiles={sectionTiles}
+            snapshot={input.snapshot}
+            statusCallout={input.executiveSummary.statusCallout}
+            vendorGroups={vendorGroups}
+          />
+          <div className="relative overflow-hidden rounded-2xl">
+            <FindingsOverview findings={reviewFindings} />
+            {showHomepagePreviewGate && input.createAccountHref ? (
+              <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
+            ) : null}
+          </div>
 
-      <div className="relative overflow-hidden rounded-2xl">
-        <CoverageMatrix
-          pillarSections={pillarSections.map(({ pillar, sections }) => ({
-            pillar,
-            sections: sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => ({
-              alignedReviewFindings,
-              ownerReviewFindings,
-              section,
-              visibleCategories
-            }))
-          }))}
-        />
-        {showHomepagePreviewGate && input.createAccountHref ? (
-          <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
-        ) : null}
-      </div>
+          <div className="relative overflow-hidden rounded-2xl">
+            <CoverageMatrix
+              pillarSections={pillarSections.map(({ pillar, sections }) => ({
+                pillar,
+                sections: sections.map(({ alignedReviewFindings, ownerReviewFindings, section, visibleCategories }) => ({
+                  alignedReviewFindings,
+                  ownerReviewFindings,
+                  section,
+                  visibleCategories
+                }))
+              }))}
+            />
+            {showHomepagePreviewGate && input.createAccountHref ? (
+              <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -4536,6 +4700,9 @@ export function SharedScanDetailView({
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
     : null;
+  const suppressLimitedSurfaceReview =
+    scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
+    scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
@@ -4709,7 +4876,7 @@ export function SharedScanDetailView({
               title="Review sections unavailable"
               message={`The live scan loaded, but the structured review sections could not be prepared for this scan. ${reviewSectionError}`}
             />
-          ) : unverifiedHomepageReview ? (
+          ) : unverifiedHomepageReview && !suppressLimitedSurfaceReview ? (
             <LimitedSurfaceReview review={unverifiedHomepageReview} />
           ) : (
             renderCanonicalTaxonomyReviewSafely({
