@@ -3,6 +3,7 @@ import {
   getScannerExecutionSummary,
   PREVIEW_SCAN_EVENT_TYPES,
   type AgencyMapping,
+  type PreviewEarlyResultItem,
   type PreviewBuildPhaseSummary,
   type PreviewIssueCounts,
   type PreviewScanPayload,
@@ -148,6 +149,126 @@ type ScanEventRow = {
 type RuntimeArtifactsRow = {
   build_phase_summaries?: Array<Record<string, unknown>> | null;
 } | null;
+
+function getRecordValue(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  return (record as Record<string, unknown>)[key];
+}
+
+function getStringValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getNumberValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getBooleanValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function buildLiveEarlyResults(input: {
+  events: ScanEventRow[];
+  executionSummary: ReturnType<typeof getScannerExecutionSummary>;
+}): PreviewEarlyResultItem[] {
+  const stageMetadata = new Map(
+    (input.executionSummary?.stages ?? [])
+      .filter((stage) => stage.metadata && typeof stage.metadata === "object" && !Array.isArray(stage.metadata))
+      .map((stage) => [stage.stage, stage.metadata as Record<string, unknown>])
+  );
+  const baselineMetadata = stageMetadata.get("baseline_lookup") ?? null;
+  const crawlMetadata = stageMetadata.get("crawl_discovery") ?? null;
+  const runtimeMetadata = stageMetadata.get("runtime_snapshot_capture") ?? null;
+  const eventMetadata = [...input.events]
+    .reverse()
+    .map((event) => event.metadata_json)
+    .filter((metadata): metadata is Record<string, unknown> => Boolean(metadata && typeof metadata === "object" && !Array.isArray(metadata)));
+  const sourceRecords = [runtimeMetadata, crawlMetadata, baselineMetadata, ...eventMetadata];
+  const items: PreviewEarlyResultItem[] = [];
+  const push = (label: string, value: string | null) => {
+    if (!value || items.some((item) => item.label === label)) {
+      return;
+    }
+    items.push({ label, value });
+  };
+
+  push("Host", getStringValue(baselineMetadata, "resolvedHostname", "hostname", "canonicalHost"));
+  push("TLS issuer", getStringValue(baselineMetadata, "tlsIssuer", "certificateIssuer"));
+
+  for (const record of sourceRecords) {
+    push("Tier", getStringValue(record, "tier"));
+    const homepageStatus = getNumberValue(record, "homepageFetchHttpStatus", "httpStatus", "statusCode");
+    if (homepageStatus !== null) {
+      push("Homepage", `HTTP ${homepageStatus}`);
+    }
+    push("Final URL", getStringValue(record, "finalUrl", "url"));
+    push("Server", getStringValue(record, "serverHeader", "server"));
+    push("Block vendor", getStringValue(record, "blockVendorGuess"));
+    const accessPosture = getStringValue(record, "accessPostureClass");
+    if (accessPosture) {
+      push("Access posture", titleCaseWords(accessPosture));
+    }
+    const verifiedSurfaces = getNumberValue(record, "verifiedPublicSurfacesCount");
+    if (verifiedSurfaces !== null) {
+      push("Verified surfaces", String(verifiedSurfaces));
+    }
+    push("CMP", getStringValue(record, "cmpVendorName"));
+    const consentSurface = getBooleanValue(record, "cookieBannerPresent", "consentSurfaceObserved");
+    if (consentSurface === true) {
+      push("Consent surface", "Observed");
+    }
+    const thirdPartyRequests = getNumberValue(record, "thirdPartyRequestCount");
+    if (thirdPartyRequests !== null) {
+      push("3P requests", String(thirdPartyRequests));
+    }
+    const initialCookies = getNumberValue(record, "initialCookieCount", "cookieCountTotal");
+    if (initialCookies !== null) {
+      push("Initial cookies", String(initialCookies));
+    }
+    const blocked = getBooleanValue(record, "blockedFlag");
+    if (blocked === true) {
+      push("Front door", "Blocked");
+    }
+    const challenge = getBooleanValue(record, "challengeSuspected");
+    if (challenge === true) {
+      push("Challenge", "Suspected");
+    }
+  }
+
+  return items.slice(0, 12);
+}
 
 function getStatusMessage(status: ScanStatus) {
   if (status === "queued") {
@@ -776,6 +897,7 @@ export function serializePreviewScan(input: {
 }): PreviewScanStatusResponse {
   const payload = getPreviewPayload(input.scan);
   const events = input.events ?? input.recentEvents ?? [];
+  const executionSummary = getScannerExecutionSummary(input.scan.scan_config_json);
 
   return {
     scanId: input.scan.id,
@@ -798,8 +920,12 @@ export function serializePreviewScan(input: {
     activityFeed: buildActivityFeed(input.scan, input.recentEvents ?? []),
     activityRef: buildActivityRef(input.scan.id, input.latestEvent ?? null),
     events: serializePreviewEvents(events),
-    executionSummary: getScannerExecutionSummary(input.scan.scan_config_json),
+    executionSummary,
     buildPhaseSummaries: serializeBuildPhaseSummaries(input.runtimeArtifacts ?? null),
+    liveEarlyResults: buildLiveEarlyResults({
+      events,
+      executionSummary
+    }),
     agencyMappings: input.agencyMappings ?? [],
     regulatoryRisk: input.regulatoryRisk ?? null,
     previewPayload: payload

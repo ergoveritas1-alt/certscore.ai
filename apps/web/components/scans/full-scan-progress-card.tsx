@@ -51,6 +51,11 @@ type DashboardRow = {
   sublines: string[];
 };
 
+type EarlyResultItem = {
+  label: string;
+  value: string;
+};
+
 const STAGE_LABELS: Record<string, string> = {
   queue_wait: "Queue wait",
   setup_load: "Setup load",
@@ -246,6 +251,138 @@ function formatStageLabel(value: string) {
       .join(" ");
 }
 
+function getRecordValue(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  return (record as Record<string, unknown>)[key];
+}
+
+function getStringValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getNumberValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getBooleanValue(record: unknown, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function buildEarlyResultItems(input: {
+  events: ScanEventRow[];
+  executionSummary: ScannerExecutionSummary | null;
+}) {
+  const stageMetadata = new Map(
+    (input.executionSummary?.stages ?? [])
+      .filter((stage) => stage.metadata && typeof stage.metadata === "object" && !Array.isArray(stage.metadata))
+      .map((stage) => [stage.stage, stage.metadata as Record<string, unknown>])
+  );
+  const crawlMetadata = stageMetadata.get("crawl_discovery") ?? null;
+  const baselineMetadata = stageMetadata.get("baseline_lookup") ?? null;
+  const runtimeMetadata = stageMetadata.get("runtime_snapshot_capture") ?? null;
+  const latestEventMetadata =
+    [...input.events]
+      .reverse()
+      .map((event) => event.metadataJson)
+      .find((value) => value && typeof value === "object" && !Array.isArray(value)) ?? null;
+
+  const sourceRecords = [runtimeMetadata, crawlMetadata, baselineMetadata, latestEventMetadata];
+  const items: EarlyResultItem[] = [];
+  const push = (label: string, value: string | null) => {
+    if (!value || items.some((item) => item.label === label)) {
+      return;
+    }
+    items.push({ label, value });
+  };
+
+  const baselineHost = getStringValue(baselineMetadata, "resolvedHostname", "hostname", "canonicalHost");
+  if (baselineHost) {
+    push("Host", baselineHost);
+  }
+
+  const baselineTlsIssuer = getStringValue(baselineMetadata, "tlsIssuer", "certificateIssuer");
+  if (baselineTlsIssuer) {
+    push("TLS issuer", baselineTlsIssuer);
+  }
+
+  for (const record of sourceRecords) {
+    push("Tier", getStringValue(record, "tier"));
+    const homepageStatus = getNumberValue(record, "homepageFetchHttpStatus", "httpStatus", "statusCode");
+    if (homepageStatus !== null) {
+      push("Homepage", `HTTP ${homepageStatus}`);
+    }
+    push("Final URL", getStringValue(record, "finalUrl", "url"));
+    push("Server", getStringValue(record, "serverHeader", "server"));
+    push("Block vendor", getStringValue(record, "blockVendorGuess"));
+    const accessPosture = getStringValue(record, "accessPostureClass");
+    if (accessPosture) {
+      push("Access posture", titleCaseWords(accessPosture));
+    }
+    const verifiedSurfaces = getNumberValue(record, "verifiedPublicSurfacesCount");
+    if (verifiedSurfaces !== null) {
+      push("Verified surfaces", String(verifiedSurfaces));
+    }
+    const cmpVendor = getStringValue(record, "cmpVendorName");
+    if (cmpVendor) {
+      push("CMP", cmpVendor);
+    }
+    const bannerVisible = getBooleanValue(record, "cookieBannerPresent", "consentSurfaceObserved");
+    if (bannerVisible === true) {
+      push("Consent surface", "Observed");
+    }
+    const thirdPartyRequests = getNumberValue(record, "thirdPartyRequestCount");
+    if (thirdPartyRequests !== null) {
+      push("3P requests", String(thirdPartyRequests));
+    }
+    const initialCookies = getNumberValue(record, "initialCookieCount", "cookieCountTotal");
+    if (initialCookies !== null) {
+      push("Initial cookies", String(initialCookies));
+    }
+    const blocked = getBooleanValue(record, "blockedFlag");
+    if (blocked === true) {
+      push("Front door", "Blocked");
+    }
+    const challenge = getBooleanValue(record, "challengeSuspected");
+    if (challenge === true) {
+      push("Challenge", "Suspected");
+    }
+  }
+
+  return items.slice(0, 12);
+}
+
 function getQueueRow(input: {
   createdAt: string;
   events: ScanEventRow[];
@@ -377,6 +514,14 @@ export function FullScanProgressCard({
   }, [status]);
 
   const latestActivityLine = useMemo(() => buildLatestActivityLine({ createdAt, events, status }), [createdAt, events, status]);
+  const earlyResultItems = useMemo(
+    () =>
+      buildEarlyResultItems({
+        events,
+        executionSummary
+      }),
+    [events, executionSummary]
+  );
   const progressValue = useMemo(
     () =>
       getProgressValue({
@@ -449,6 +594,23 @@ export function FullScanProgressCard({
           <LiveActivityLine line={latestActivityLine} />
         </div>
       </div>
+
+      {earlyResultItems.length > 0 ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-sky-950">
+            <span>Early results</span>
+            <InfoTip text="Signals already retained from passive baseline, front-door probing, or the current running stage. These can appear before the final snapshot is persisted." />
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {earlyResultItems.map((item) => (
+              <div key={`${item.label}:${item.value}`} className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">{item.label}</p>
+                <p className="mt-1 text-sm text-slate-800 break-all">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div ref={tableScrollRef} className="max-h-[56.25vh] overflow-auto rounded-2xl border border-slate-200 bg-white">
         <div className="grid grid-cols-[140px_170px_170px_130px_minmax(320px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">

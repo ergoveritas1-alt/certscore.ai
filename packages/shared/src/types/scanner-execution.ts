@@ -1,5 +1,18 @@
 export const SCAN_EXECUTION_CONTRACT_VERSION = "scanner-execution.v1" as const;
 
+export const SCAN_EXECUTION_TIERS = [
+  "tier0_passive",
+  "tier1_front_door",
+  "tier2_browser_surface",
+  "tier3_runtime_observation",
+  "tier4a_surface_inspection",
+  "tier4b_bounded_interaction",
+  "tier4c_comparative_interaction",
+  "tier5_full_scan"
+] as const;
+
+export const SCAN_STOP_TIER_KINDS = ["hard_stop", "soft_stop", "max_depth_reached", "completed"] as const;
+
 export const SCAN_EXECUTION_STAGES = [
   "setup_load",
   "baseline_lookup",
@@ -28,6 +41,8 @@ export const SCAN_EXECUTION_ERROR_CATEGORIES = [
 export type ScanExecutionStage = (typeof SCAN_EXECUTION_STAGES)[number];
 export type ScanStageOutcomeKind = (typeof SCAN_STAGE_OUTCOME_KINDS)[number];
 export type ScanExecutionErrorCategory = (typeof SCAN_EXECUTION_ERROR_CATEGORIES)[number];
+export type ScannerExecutionSummaryTier = (typeof SCAN_EXECUTION_TIERS)[number];
+export type ScannerExecutionSummaryStopTierKind = (typeof SCAN_STOP_TIER_KINDS)[number];
 
 export type ScannerExecutionLifecycle = "running" | "completed" | "failed";
 

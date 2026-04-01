@@ -2973,6 +2973,131 @@ function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
   );
 }
 
+function formatExecutionTierLabel(value: string | null | undefined) {
+  switch (value) {
+    case "tier0_passive":
+      return "Tier 0";
+    case "tier1_front_door":
+      return "Tier 1";
+    case "tier2_browser_surface":
+      return "Tier 2";
+    case "tier3_runtime_observation":
+      return "Tier 3";
+    case "tier4a_surface_inspection":
+      return "Tier 4A";
+    case "tier4b_bounded_interaction":
+      return "Tier 4B";
+    case "tier4c_comparative_interaction":
+      return "Tier 4C";
+    case "tier5_full_scan":
+      return "Tier 5";
+    default:
+      return null;
+  }
+}
+
+function formatRecoverableFindingClass(value: string) {
+  switch (value) {
+    case "access_surface":
+      return "Access surface";
+    case "privacy_surface":
+      return "Privacy surface";
+    case "cmp_presence":
+      return "CMP presence";
+    case "initial_tracking":
+      return "Initial tracking";
+    case "initial_storage":
+      return "Initial storage";
+    case "implicit_consent_state":
+      return "Implicit consent state";
+    case "privacy_choice_surface":
+      return "Privacy choice surface";
+    case "preferences_ui_exposure":
+      return "Preferences UI exposure";
+    case "consent_effectiveness":
+      return "Consent effectiveness";
+    case "policy_runtime_contradiction":
+      return "Policy/runtime contradiction";
+    default:
+      return value;
+  }
+}
+
+function AccessPostureSummaryCard(input: {
+  summary: {
+    accessPostureClass: string | null;
+    highestSuccessfulTier: string | null;
+    interruptionLabel: string | null;
+    interruptionReason: string | null;
+    recoverableFindingClasses: string[];
+    stopTier: string | null;
+  } | null | undefined;
+}) {
+  if (!input.summary?.interruptionLabel) {
+    return null;
+  }
+
+  const highestSuccessfulTier = formatExecutionTierLabel(input.summary.highestSuccessfulTier);
+  const stopTier = formatExecutionTierLabel(input.summary.stopTier);
+  const recoverableFindingClasses = input.summary.recoverableFindingClasses
+    .filter((value) => typeof value === "string" && value.length > 0)
+    .slice(0, 6)
+    .map(formatRecoverableFindingClass);
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50 px-6 py-5">
+      <div className="space-y-1">
+        <p className="text-base font-semibold text-sky-950">Access posture</p>
+        <p className="text-sm text-sky-900">
+          This scan retained usable evidence, but the site’s access posture affected how far the scanner could safely progress.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Status</p>
+          <p className="mt-1 text-sm font-medium text-sky-950">{input.summary.interruptionLabel}</p>
+        </div>
+        {highestSuccessfulTier ? (
+          <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Highest successful tier</p>
+            <p className="mt-1 text-sm font-medium text-sky-950">{highestSuccessfulTier}</p>
+          </div>
+        ) : null}
+        {stopTier ? (
+          <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Stop tier</p>
+            <p className="mt-1 text-sm font-medium text-sky-950">{stopTier}</p>
+          </div>
+        ) : null}
+        {input.summary.accessPostureClass ? (
+          <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Class</p>
+            <p className="mt-1 text-sm font-medium text-sky-950">{input.summary.accessPostureClass}</p>
+          </div>
+        ) : null}
+      </div>
+      {input.summary.interruptionReason ? (
+        <div className="rounded-xl border border-sky-200/80 bg-white/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-800">Why the scan stopped here</p>
+          <p className="mt-1 text-sm text-sky-950">{input.summary.interruptionReason}</p>
+        </div>
+      ) : null}
+      {recoverableFindingClasses.length > 0 ? (
+        <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800">Recoverable coverage</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {recoverableFindingClasses.map((item) => (
+              <span key={item} className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs text-emerald-900">
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AgencyAdvisorySummary(input: {
   sectionTiles: Array<{
     className?: string;
@@ -4576,6 +4701,7 @@ export function SharedScanDetailView({
           status={scanRecord.scan.status}
         />
       ) : null}
+      <AccessPostureSummaryCard summary={scanRecord.accessPostureSummary} />
       {snapshot ? (
         <>
           {reviewSectionError ? (

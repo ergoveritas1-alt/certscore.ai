@@ -1,6 +1,9 @@
 "use server";
 
 import {
+  type AccessPostureClass,
+  type RecoverableFindingClass,
+  type ScanExecutionTier,
   buildAgencyMappings,
   buildRegulatoryRiskAssessment,
   getScannerExecutionSummary,
@@ -9,6 +12,7 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -828,7 +832,44 @@ async function loadScanDetailRecord(input: {
       )
   ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
 
+  const accessPostureClass =
+    typeof normalizedSnapshot?.access_posture_class === "string"
+      ? (normalizedSnapshot.access_posture_class as AccessPostureClass)
+      : null;
+  const highestSuccessfulTier =
+    typeof normalizedSnapshot?.highest_successful_tier === "string"
+      ? (normalizedSnapshot.highest_successful_tier as ScanExecutionTier)
+      : null;
+  const stopTier =
+    typeof normalizedSnapshot?.stop_tier === "string"
+      ? (normalizedSnapshot.stop_tier as ScanExecutionTier)
+      : null;
+  const recoverableFindingClasses = Array.isArray(normalizedSnapshot?.recoverable_finding_classes)
+    ? normalizedSnapshot.recoverable_finding_classes.filter(
+        (value): value is RecoverableFindingClass => typeof value === "string"
+      )
+    : [];
+  const accessPosturePresentation = deriveAccessPosturePresentation({
+    accessPostureClass,
+    highestSuccessfulTier,
+    stopTier,
+    totalSignals:
+      typeof normalizedSnapshot?.total_signals === "number"
+        ? normalizedSnapshot.total_signals
+        : null,
+    pagesScanned: scanRow.pages_scanned,
+    recoverableFindingClasses
+  });
+
   return {
+    accessPostureSummary: {
+      accessPostureClass,
+      highestSuccessfulTier,
+      stopTier,
+      recoverableFindingClasses,
+      interruptionLabel: accessPosturePresentation.label,
+      interruptionReason: accessPosturePresentation.reason
+    },
     scan: {
       id: scanRow.id,
       domainId: scanRow.domain_id,
