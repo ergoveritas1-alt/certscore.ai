@@ -1,9 +1,12 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
+  accessPostureClass: AccessPostureClass | null;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   certscoreOverall: number | null;
@@ -11,13 +14,18 @@ export type AdminScanListItem = {
   createdAt: string;
   domainHostname: string | null;
   domainId: string | null;
+  highestSuccessfulTier: ScanExecutionTier | null;
   homepageFetchHttpStatus: number | null;
+  interruptionLabel: string | null;
+  interruptionReason: string | null;
   organizationName: string | null;
   pagesScanned: number;
+  recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
   scanType: string;
   status: string;
+  stopTier: ScanExecutionTier | null;
   totalSignals: number | null;
 };
 
@@ -60,6 +68,7 @@ type OrganizationRow = {
 };
 
 type SnapshotRow = {
+  access_posture_class?: AccessPostureClass | null;
   asn?: number | null;
   block_vendor_guess?: string | null;
   blocked_flag: boolean | null;
@@ -67,14 +76,28 @@ type SnapshotRow = {
   certscore_overall: number;
   egress_id?: string | null;
   egress_type?: string | null;
+  highest_successful_tier?: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   normalized_body_hash?: string | null;
+  recoverable_finding_classes?: RecoverableFindingClass[] | null;
   scan_outcome?: string | null;
   scan_timestamp?: string | null;
   robots_fetch_http_status: number | null;
   scan_id: string;
+  stop_tier?: ScanExecutionTier | null;
   total_signals: number;
 };
+
+function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
+  const message = `${error?.message ?? ""}`.toLowerCase();
+  return (
+    `${error?.code ?? ""}` === "42703" ||
+    message.includes("access_posture_class") ||
+    message.includes("highest_successful_tier") ||
+    message.includes("stop_tier") ||
+    message.includes("recoverable_finding_classes")
+  );
+}
 
 export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
@@ -94,40 +117,82 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
   const scanIds = scanRows.map((scan) => scan.id);
 
-  const [{ data: domains }, { data: organizations }, { data: snapshots }] = await Promise.all([
+  const snapshotsPromise = scanIds.length
+    ? supabase
+        .from("scan_snapshots")
+        .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes")
+        .in("scan_id", scanIds)
+    : Promise.resolve({ data: [] as SnapshotRow[], error: null });
+  const snapshotsFallbackPromise = scanIds.length
+    ? supabase
+        .from("scan_snapshots")
+        .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
+        .in("scan_id", scanIds)
+    : Promise.resolve({ data: [] as SnapshotRow[], error: null });
+
+  const [{ data: domains }, { data: organizations }, { data: snapshots, error: snapshotsError }] = await Promise.all([
     domainIds.length ? supabase.from("domains").select("id, hostname").in("id", domainIds) : Promise.resolve({ data: [] as DomainRow[] }),
     organizationIds.length
       ? supabase.from("organizations").select("id, name").in("id", organizationIds)
       : Promise.resolve({ data: [] as OrganizationRow[] }),
-    scanIds.length
-      ? supabase
-          .from("scan_snapshots")
-          .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
-          .in("scan_id", scanIds)
-      : Promise.resolve({ data: [] as SnapshotRow[] })
+    snapshotsPromise
   ]);
+  let resolvedSnapshots = snapshots;
+  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
+    const fallback = await snapshotsFallbackPromise;
+    if (fallback.error) {
+      throw new Error(`Failed to load scans: ${fallback.error.message}`);
+    }
+    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
+      ...(row as SnapshotRow),
+      access_posture_class: null,
+      highest_successful_tier: null,
+      stop_tier: null,
+      recoverable_finding_classes: []
+    }));
+  } else if (snapshotsError) {
+    throw new Error(`Failed to load scans: ${snapshotsError.message}`);
+  }
 
   const domainMap = new Map(((domains ?? []) as DomainRow[]).map((domain) => [domain.id, domain]));
   const organizationMap = new Map(((organizations ?? []) as OrganizationRow[]).map((organization) => [organization.id, organization]));
-  const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
+  const snapshotMap = new Map(((resolvedSnapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
 
-  return scanRows.map((scan) => ({
-    scanId: scan.id,
-    domainId: scan.domain_id,
-    domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
-    organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
-    scanType: scan.scan_type,
-    status: scan.status,
-    createdAt: scan.created_at,
-    completedAt: scan.completed_at,
-    pagesScanned: scan.pages_scanned,
-    totalSignals: snapshotMap.get(scan.id)?.total_signals ?? null,
-    certscoreOverall: snapshotMap.get(scan.id)?.certscore_overall ?? null,
-    homepageFetchHttpStatus: snapshotMap.get(scan.id)?.homepage_fetch_http_status ?? null,
-    robotsFetchHttpStatus: snapshotMap.get(scan.id)?.robots_fetch_http_status ?? null,
-    blockedFlag: snapshotMap.get(scan.id)?.blocked_flag ?? null,
-    captchaFlag: snapshotMap.get(scan.id)?.captcha_flag ?? null
-  }));
+  return scanRows.map((scan) => {
+    const snapshot = snapshotMap.get(scan.id) ?? null;
+    const accessPosture = deriveAccessPosturePresentation({
+      accessPostureClass: snapshot?.access_posture_class ?? null,
+      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
+      stopTier: snapshot?.stop_tier ?? null,
+      totalSignals: snapshot?.total_signals ?? null,
+      pagesScanned: scan.pages_scanned,
+      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
+    });
+
+    return {
+      scanId: scan.id,
+      domainId: scan.domain_id,
+      domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
+      organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
+      scanType: scan.scan_type,
+      status: scan.status,
+      createdAt: scan.created_at,
+      completedAt: scan.completed_at,
+      pagesScanned: scan.pages_scanned,
+      totalSignals: snapshot?.total_signals ?? null,
+      certscoreOverall: snapshot?.certscore_overall ?? null,
+      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+      robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
+      blockedFlag: snapshot?.blocked_flag ?? null,
+      captchaFlag: snapshot?.captcha_flag ?? null,
+      accessPostureClass: snapshot?.access_posture_class ?? null,
+      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
+      stopTier: snapshot?.stop_tier ?? null,
+      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
+      interruptionLabel: accessPosture.label,
+      interruptionReason: accessPosture.reason
+    };
+  });
 }
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {

@@ -1,7 +1,9 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
@@ -17,6 +19,8 @@ import {
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 
 export type OrganizationScanListItem = {
+  accessPostureClass: AccessPostureClass | null;
+  highestSuccessfulTier: ScanExecutionTier | null;
   id: string;
   domainActiveScanExists: boolean;
   domainHostname: string | null;
@@ -52,6 +56,8 @@ export type OrganizationScanListItem = {
   scanCoverageRatio: number | null;
   interruptionLabel: string | null;
   interruptionReason: string | null;
+  recoverableFindingClasses: RecoverableFindingClass[];
+  stopTier: ScanExecutionTier | null;
 };
 
 export type OrganizationScanPageResult = {
@@ -91,6 +97,7 @@ type DomainCompletedScanRow = {
 };
 
 type SnapshotRow = {
+  access_posture_class: AccessPostureClass | null;
   auth_wall_detected: boolean | null;
   accessibility_score: number | null;
   blocked_flag: boolean | null;
@@ -99,9 +106,11 @@ type SnapshotRow = {
   cmp_vendor_name: string | null;
   consent_score: number | null;
   cookie_banner_present: boolean | null;
+  highest_successful_tier: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
   privacy_score: number | null;
+  recoverable_finding_classes: RecoverableFindingClass[] | null;
   regulatory_exposure_score: number | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;
@@ -112,6 +121,7 @@ type SnapshotRow = {
   stop_reason_detail: string | null;
   stop_reason_http_status: number | null;
   stop_reason_label: string | null;
+  stop_tier: ScanExecutionTier | null;
   report_finding_count: number | null;
   total_signals: number;
 };
@@ -208,6 +218,17 @@ const CHANGE_EVENT_BATCH_SIZE = 50;
 
 function isMissingLastScannedAtColumn(error: { message?: string } | null) {
   return Boolean(error?.message?.includes("last_scanned_at"));
+}
+
+function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
+  const message = `${error?.message ?? ""}`.toLowerCase();
+  return (
+    `${error?.code ?? ""}` === "42703" ||
+    message.includes("access_posture_class") ||
+    message.includes("highest_successful_tier") ||
+    message.includes("stop_tier") ||
+    message.includes("recoverable_finding_classes")
+  );
 }
 
 function chunkValues<T>(values: T[], size: number) {
@@ -526,6 +547,14 @@ async function loadOrganizationScans(
     ? supabase
         .from("scan_snapshots")
         .select(
+          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
+        )
+        .in("scan_id", summaryScanIds)
+    : Promise.resolve({ data: [] as SnapshotRow[], error: null as SupabaseQueryError });
+  const snapshotsFallbackPromise = summaryScanIds.length
+    ? supabase
+        .from("scan_snapshots")
+        .select(
           "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
         )
         .in("scan_id", summaryScanIds)
@@ -554,7 +583,20 @@ async function loadOrganizationScans(
   } else if (domainsError) {
     throw new Error(`Failed to load organization scans: ${domainsError.message}`);
   }
-  if (snapshotsError) {
+  let resolvedSnapshots = snapshots;
+  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
+    const fallback = await snapshotsFallbackPromise;
+    if (fallback.error) {
+      throw new Error(`Failed to load organization scans: ${fallback.error.message}`);
+    }
+    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
+      ...(row as SnapshotRow),
+      access_posture_class: null,
+      highest_successful_tier: null,
+      stop_tier: null,
+      recoverable_finding_classes: []
+    }));
+  } else if (snapshotsError) {
     throw new Error(`Failed to load organization scans: ${snapshotsError.message}`);
   }
   if (runtimeArtifactsError) {
@@ -616,7 +658,7 @@ async function loadOrganizationScans(
   const latestDomainScanMap = new Map(
     ((latestDomainScans ?? []) as LatestDomainScanRow[]).map((scan) => [scan.id, scan])
   );
-  const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
+  const snapshotMap = new Map(((resolvedSnapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
   const zeroSignalScanIds = summaryScanIds
     .filter((scanId) => {
       const totalSignals = snapshotMap.get(scanId)?.total_signals ?? null;
@@ -891,14 +933,25 @@ async function loadOrganizationScans(
       snapshot,
       diagnosticEventMap.get(scan.id) ?? []
     );
+    const accessPosture = deriveAccessPosturePresentation({
+      accessPostureClass: snapshot?.access_posture_class ?? null,
+      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
+      stopTier: snapshot?.stop_tier ?? null,
+      totalSignals:
+        (typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null) ??
+        signalCountMap.get(scan.id) ??
+        null,
+      pagesScanned: scan.pages_scanned,
+      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
+    });
     const interruptionLabel =
       (typeof snapshot?.stop_reason_label === "string" && snapshot.stop_reason_label.trim().length > 0
         ? snapshot.stop_reason_label.trim()
-        : null) ?? derivedState.interruptionLabel;
+        : null) ?? accessPosture.label ?? derivedState.interruptionLabel;
     const interruptionReason =
       (typeof snapshot?.stop_reason_detail === "string" && snapshot.stop_reason_detail.trim().length > 0
         ? snapshot.stop_reason_detail.trim()
-        : null) ?? derivedState.interruptionReason;
+        : null) ?? accessPosture.reason ?? derivedState.interruptionReason;
     const qualitySummary = deriveScanQualitySummary({
       interruptionReason,
       pagesRequested: scan.pages_requested,
@@ -951,7 +1004,11 @@ async function loadOrganizationScans(
         scanQualityWarning: qualitySummary.warning,
         scanCoverageRatio: qualitySummary.coverageRatio,
         interruptionLabel,
-        interruptionReason
+        interruptionReason,
+        accessPostureClass: snapshot?.access_posture_class ?? null,
+        highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
+        stopTier: snapshot?.stop_tier ?? null,
+        recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? []
     } satisfies OrganizationScanListItem;
     }),
     totalCount: count ?? scanRows.length

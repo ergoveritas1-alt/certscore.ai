@@ -97,3 +97,89 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
   assert.doesNotMatch(html, /Step 3/);
   assert.doesNotMatch(html, /Message and metadata/);
 });
+
+test("surfaces early tier results while a scan is still running", () => {
+  const html = renderToStaticMarkup(
+    <FullScanProgressCard
+      buildPhaseSummaries={[]}
+      createdAt="2026-03-22T22:14:00.000Z"
+      events={[
+        {
+          createdAt: "2026-03-22T22:14:00.000Z",
+          eventType: SCAN_EVENT_TYPES.fullQueued,
+          message: "Scan queued and awaiting scanner pickup.",
+          metadataJson: { profile: "team", pagesRequested: 5 }
+        },
+        {
+          createdAt: "2026-03-22T22:14:02.000Z",
+          eventType: "runtime.build_phase_diagnostic",
+          message: "Front-door probe complete.",
+          metadataJson: {
+            tier: "tier1_front_door",
+            homepageFetchHttpStatus: 403,
+            finalUrl: "https://www.example.com/",
+            serverHeader: "cloudflare",
+            blockVendorGuess: "cloudflare",
+            accessPostureClass: "early_loss",
+            verifiedPublicSurfacesCount: 0,
+            challengeSuspected: true
+          }
+        }
+      ]}
+      executionSummary={{
+        ...makeSummary(),
+        stages: [
+          makeStage("baseline_lookup", "2026-03-22T22:14:03.000Z", {
+            metadata: {
+              tier: "tier0_passive",
+              resolvedHostname: "www.example.com",
+              tlsIssuer: "Amazon RSA 2048 M01"
+            }
+          }),
+          makeStage("crawl_discovery", "2026-03-22T22:14:05.000Z", {
+            metadata: {
+              tier: "tier1_front_door",
+              homepageFetchHttpStatus: 403,
+              finalUrl: "https://www.example.com/",
+              serverHeader: "cloudflare",
+              blockVendorGuess: "cloudflare",
+              accessPostureClass: "early_loss"
+            }
+          }),
+          makeStage("runtime_snapshot_capture", "2026-03-22T22:14:08.000Z", {
+            metadata: {
+              tier: "tier2_browser_surface",
+              cmpVendorName: "OneTrust",
+              cookieBannerPresent: true,
+              thirdPartyRequestCount: 7,
+              initialCookieCount: 4
+            }
+          })
+        ]
+      }}
+      status="running"
+    />
+  );
+
+  assert.match(html, /Early results/);
+  assert.match(html, /Tier/);
+  assert.match(html, /tier1_front_door/);
+  assert.match(html, /Host/);
+  assert.match(html, /www\.example\.com/);
+  assert.match(html, /TLS issuer/);
+  assert.match(html, /Amazon RSA 2048 M01/);
+  assert.match(html, /Homepage/);
+  assert.match(html, /HTTP 403/);
+  assert.match(html, /Block vendor/);
+  assert.match(html, /cloudflare/);
+  assert.match(html, /Access posture/);
+  assert.match(html, /Early Loss/);
+  assert.match(html, /CMP/);
+  assert.match(html, /OneTrust/);
+  assert.match(html, /Consent surface/);
+  assert.match(html, /Observed/);
+  assert.match(html, /3P requests/);
+  assert.match(html, />7</);
+  assert.match(html, /Initial cookies/);
+  assert.match(html, />4</);
+});

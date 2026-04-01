@@ -1,6 +1,11 @@
 "use server";
 
 import {
+  type AccessPostureClass,
+  type BlockPageClassification,
+  type BlockVendorGuess,
+  type RecoverableFindingClass,
+  type ScanExecutionTier,
   buildAgencyMappings,
   buildRegulatoryRiskAssessment,
   getScannerExecutionSummary,
@@ -9,6 +14,8 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
+import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -175,6 +182,70 @@ type ScanEventRow = {
 
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
   return rows.find((row) => row.page_type === "privacy_policy" || row.pageType === "privacy_policy") ?? rows[0] ?? null;
+}
+
+function deriveHostnameFromTargetUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function getStringRecordValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function deriveHostnameFromScanConfig(value: Record<string, unknown> | null | undefined) {
+  const directUrl = deriveHostnameFromTargetUrl(
+    getStringRecordValue(value, ["targetUrl", "startUrl", "homepageUrl", "normalizedUrl", "url"])
+  );
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const executionSummary =
+    value && typeof value.executionSummary === "object" && value.executionSummary !== null && !Array.isArray(value.executionSummary)
+      ? (value.executionSummary as Record<string, unknown>)
+      : null;
+  const stages = Array.isArray(executionSummary?.stages) ? executionSummary.stages : [];
+
+  for (const stage of stages) {
+    if (!stage || typeof stage !== "object" || Array.isArray(stage)) {
+      continue;
+    }
+
+    const metadata =
+      "metadata" in stage &&
+      stage.metadata &&
+      typeof stage.metadata === "object" &&
+      !Array.isArray(stage.metadata)
+        ? (stage.metadata as Record<string, unknown>)
+        : null;
+    const hostname = deriveHostnameFromTargetUrl(
+      getStringRecordValue(metadata, ["targetUrl", "startUrl", "homepageUrl", "finalUrl", "resolvedHostname", "canonicalHost"])
+    );
+    if (hostname) {
+      return hostname;
+    }
+  }
+
+  return null;
 }
 
 type SignalRow = {
@@ -393,6 +464,10 @@ async function loadScanDetailRecord(input: {
     const { data: domain } = await domainQuery.maybeSingle();
 
     domainHostname = (domain as DomainRow | null)?.hostname ?? null;
+  }
+
+  if (!domainHostname) {
+    domainHostname = deriveHostnameFromScanConfig(scanRow.scan_config_json ?? null);
   }
 
   const previousScanPromise =
@@ -828,7 +903,126 @@ async function loadScanDetailRecord(input: {
       )
   ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
 
+  const accessPostureClass =
+    typeof normalizedSnapshot?.access_posture_class === "string"
+      ? (normalizedSnapshot.access_posture_class as AccessPostureClass)
+      : null;
+  const rawHighestSuccessfulTier =
+    typeof normalizedSnapshot?.highest_successful_tier === "string"
+      ? (normalizedSnapshot.highest_successful_tier as ScanExecutionTier)
+      : null;
+  const rawStopTier =
+    typeof normalizedSnapshot?.stop_tier === "string"
+      ? (normalizedSnapshot.stop_tier as ScanExecutionTier)
+      : null;
+  const totalSignals =
+    typeof normalizedSnapshot?.total_signals === "number"
+      ? normalizedSnapshot.total_signals
+      : null;
+  const homepageFetchHttpStatus =
+    typeof normalizedSnapshot?.homepage_fetch_http_status === "number"
+      ? normalizedSnapshot.homepage_fetch_http_status
+      : null;
+  const homepageFetchStatus =
+    typeof normalizedSnapshot?.homepage_fetch_status === "string"
+      ? normalizedSnapshot.homepage_fetch_status
+      : null;
+  const hasEarlyHomepageEvidence = homepageFetchHttpStatus !== null || homepageFetchStatus !== null;
+  const highestSuccessfulTier =
+    accessPostureClass === "early_loss" && (totalSignals ?? 0) === 0 && scanRow.pages_scanned === 0
+      ? null
+      : rawHighestSuccessfulTier;
+  const stopTier =
+    accessPostureClass === "early_loss" &&
+    rawStopTier === "tier5_full_scan" &&
+    (totalSignals ?? 0) === 0 &&
+    scanRow.pages_scanned === 0
+      ? hasEarlyHomepageEvidence
+        ? "tier1_front_door"
+        : null
+      : rawStopTier;
+  const recoverableFindingClasses = Array.isArray(normalizedSnapshot?.recoverable_finding_classes)
+    ? normalizedSnapshot.recoverable_finding_classes.filter(
+        (value): value is RecoverableFindingClass => typeof value === "string"
+      )
+    : [];
+  const stopReason = normalizedSnapshot
+    ? deriveScanStopReason({
+        authWallDetected: normalizedSnapshot.auth_wall_detected === true,
+        blockedFlag: normalizedSnapshot.blocked_flag === true,
+        captchaFlag: normalizedSnapshot.captcha_flag === true,
+        homepageFetchHttpStatus,
+        homepageFetchStatus,
+        pagesScanned: scanRow.pages_scanned,
+        robotsAllowed:
+          normalizedSnapshot.robots_allowed === true
+            ? true
+            : normalizedSnapshot.robots_allowed === false
+              ? false
+              : null,
+        robotsFetchHttpStatus:
+          typeof normalizedSnapshot.robots_fetch_http_status === "number" ? normalizedSnapshot.robots_fetch_http_status : null,
+        robotsFetchStatus:
+          typeof normalizedSnapshot.robots_fetch_status === "string" ? normalizedSnapshot.robots_fetch_status : null,
+        blockPageClassification:
+          typeof normalizedSnapshot.block_page_classification === "string"
+            ? (normalizedSnapshot.block_page_classification as BlockPageClassification)
+            : null,
+        blockVendorGuess:
+          typeof normalizedSnapshot.block_vendor_guess === "string"
+            ? (normalizedSnapshot.block_vendor_guess as BlockVendorGuess)
+            : null,
+        challengeSuspected: normalizedSnapshot.challenge_suspected === true,
+        authWallSuspected: normalizedSnapshot.auth_wall_suspected === true,
+        rateLimitSuspected: normalizedSnapshot.rate_limit_suspected === true,
+        geoBlockSuspected: normalizedSnapshot.geo_block_suspected === true,
+        fingerprintBlockSuspected: normalizedSnapshot.fingerprint_block_suspected === true
+      })
+    : null;
+  const accessPosturePresentation = deriveAccessPosturePresentation({
+    accessPostureClass,
+    highestSuccessfulTier,
+    stopTier,
+    totalSignals,
+    pagesScanned: scanRow.pages_scanned,
+    recoverableFindingClasses
+  });
+
   return {
+    accessPostureSummary: {
+      accessPostureClass,
+      highestSuccessfulTier,
+      stopTier,
+      recoverableFindingClasses,
+      totalSignals,
+      pagesScanned: scanRow.pages_scanned,
+      homepageFetchHttpStatus,
+      homepageFetchStatus,
+      finalEffectiveUrl: typeof normalizedSnapshot?.final_effective_url === "string" ? normalizedSnapshot.final_effective_url : null,
+      serverHeader: typeof normalizedSnapshot?.server_header === "string" ? normalizedSnapshot.server_header : null,
+      blockVendorGuess:
+        typeof normalizedSnapshot?.block_vendor_guess === "string"
+          ? (normalizedSnapshot.block_vendor_guess as BlockVendorGuess)
+          : null,
+      blockPageClassification:
+        typeof normalizedSnapshot?.block_page_classification === "string"
+          ? (normalizedSnapshot.block_page_classification as BlockPageClassification)
+          : null,
+      cmpVendorName: typeof normalizedSnapshot?.cmp_vendor_name === "string" ? normalizedSnapshot.cmp_vendor_name : null,
+      robotsAllowed:
+        normalizedSnapshot?.robots_allowed === true ? true : normalizedSnapshot?.robots_allowed === false ? false : null,
+      robotsFetchHttpStatus:
+        typeof normalizedSnapshot?.robots_fetch_http_status === "number" ? normalizedSnapshot.robots_fetch_http_status : null,
+      stopOutcomeTitle: stopReason?.outcomeTitle ?? null,
+      stopReason: stopReason?.reason ?? null,
+      stopReviewTitle: stopReason?.reviewTitle ?? null,
+      whatThisMeans: stopReason?.whatThisMeans ?? [],
+      verifiedPublicSurfacesCount: Array.isArray(normalizedSnapshot?.verified_public_surfaces)
+        ? normalizedSnapshot.verified_public_surfaces.length
+        : 0,
+      interruptionLabel: accessPosturePresentation.label,
+      interruptionReason: accessPosturePresentation.reason
+    },
     scan: {
       id: scanRow.id,
       domainId: scanRow.domain_id,

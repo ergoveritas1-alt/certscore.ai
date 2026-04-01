@@ -1,6 +1,9 @@
 "use server";
 
 import {
+  type AccessPostureClass,
+  type RecoverableFindingClass,
+  type ScanExecutionTier,
   buildAgencyMappings,
   buildStandardPolicyReviewNote,
   normalizePolicyReviewNote,
@@ -9,10 +12,19 @@ import {
   type PolicyReviewVerdict
 } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanDetail = {
+  accessPostureSummary: {
+    accessPostureClass: AccessPostureClass | null;
+    highestSuccessfulTier: ScanExecutionTier | null;
+    interruptionLabel: string | null;
+    interruptionReason: string | null;
+    recoverableFindingClasses: RecoverableFindingClass[];
+    stopTier: ScanExecutionTier | null;
+  };
   accessibilityRuleCounts: Array<{
     instanceCount: number;
     ruleCode: string;
@@ -219,7 +231,44 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
     ]);
 
+  const accessPostureClass =
+    typeof (snapshot as Record<string, unknown> | null)?.access_posture_class === "string"
+      ? ((snapshot as Record<string, unknown>).access_posture_class as AccessPostureClass)
+      : null;
+  const highestSuccessfulTier =
+    typeof (snapshot as Record<string, unknown> | null)?.highest_successful_tier === "string"
+      ? ((snapshot as Record<string, unknown>).highest_successful_tier as ScanExecutionTier)
+      : null;
+  const stopTier =
+    typeof (snapshot as Record<string, unknown> | null)?.stop_tier === "string"
+      ? ((snapshot as Record<string, unknown>).stop_tier as ScanExecutionTier)
+      : null;
+  const recoverableFindingClasses = Array.isArray((snapshot as Record<string, unknown> | null)?.recoverable_finding_classes)
+    ? (((snapshot as Record<string, unknown>).recoverable_finding_classes as unknown[]).filter(
+        (value): value is RecoverableFindingClass => typeof value === "string"
+      ))
+    : [];
+  const accessPosturePresentation = deriveAccessPosturePresentation({
+    accessPostureClass,
+    highestSuccessfulTier,
+    stopTier,
+    totalSignals:
+      typeof (snapshot as Record<string, unknown> | null)?.total_signals === "number"
+        ? ((snapshot as Record<string, unknown>).total_signals as number)
+        : null,
+    pagesScanned: scanRow.pages_scanned,
+    recoverableFindingClasses
+  });
+
   return {
+    accessPostureSummary: {
+      accessPostureClass,
+      highestSuccessfulTier,
+      stopTier,
+      recoverableFindingClasses,
+      interruptionLabel: accessPosturePresentation.label,
+      interruptionReason: accessPosturePresentation.reason
+    },
     scan: {
       id: scanRow.id,
       scanType: scanRow.scan_type,

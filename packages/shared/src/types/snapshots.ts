@@ -1,5 +1,28 @@
 export type CrawlSource = "manual" | "scheduled" | "preview" | "rescan";
 export type CrawlTier = "quick" | "standard" | "deep";
+export type ScanExecutionTier =
+  | "tier0_passive"
+  | "tier1_front_door"
+  | "tier2_browser_surface"
+  | "tier3_runtime_observation"
+  | "tier4a_surface_inspection"
+  | "tier4b_bounded_interaction"
+  | "tier4c_comparative_interaction"
+  | "tier5_full_scan";
+export type ScanStopTierKind = "hard_stop" | "soft_stop" | "max_depth_reached" | "completed";
+export type BrowserStateQuality = "fresh_isolated" | "reused_context" | "not_applicable_http_only" | "unknown";
+export type AccessPostureClass = "tolerant" | "degraded_but_useful" | "early_loss" | "robots_limited" | "unknown";
+export type RecoverableFindingClass =
+  | "access_surface"
+  | "privacy_surface"
+  | "cmp_presence"
+  | "initial_tracking"
+  | "initial_storage"
+  | "implicit_consent_state"
+  | "privacy_choice_surface"
+  | "preferences_ui_exposure"
+  | "consent_effectiveness"
+  | "policy_runtime_contradiction";
 export type HeadlessMode = "headless" | "headed" | "unknown";
 export type FetchStatus =
   | "ok"
@@ -205,6 +228,18 @@ export type ScanSnapshot = {
   fingerprintBlockSuspected?: boolean | null;
   passiveVerificationAttempted?: boolean | null;
   verifiedPublicSurfacesCount?: number | null;
+  maxRequestedTier?: ScanExecutionTier | null;
+  highestAttemptedTier?: ScanExecutionTier | null;
+  highestSuccessfulTier?: ScanExecutionTier | null;
+  stopTier?: ScanExecutionTier | null;
+  stopTierKind?: ScanStopTierKind | null;
+  tierTrace?: Record<string, unknown>[] | null;
+  browserStateQuality?: BrowserStateQuality | null;
+  accessPostureClass?: AccessPostureClass | null;
+  recoverableFindingClasses?: RecoverableFindingClass[] | null;
+  recommendedNextTier?: ScanExecutionTier | null;
+  cooldownRecommended?: boolean | null;
+  cooldownUntil?: string | null;
   coverageLevel?: string | null;
   reportFindingCount?: number | null;
   siteLanguagePrimary: string | null;

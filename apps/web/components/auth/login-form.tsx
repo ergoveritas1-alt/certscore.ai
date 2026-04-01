@@ -85,12 +85,14 @@ export function LoginForm(input?: {
   const allowCreateAccount = input?.allowCreateAccount ?? true;
   const initialMessage = searchParams?.get("message") ?? null;
   const initialError = searchParams?.get("error") ?? null;
+  const deniedOAuthEmail = searchParams?.get("email") ?? null;
   const [mode, setMode] = useState<AuthMode>("sign_in");
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [clientEmailError, setClientEmailError] = useState<string | null>(null);
   const [createAccountHint, setCreateAccountHint] = useState<string | null>(null);
+  const [showOauthDeniedDialog, setShowOauthDeniedDialog] = useState(initialError === "oauth_email_not_allowed");
   const [status, setStatus] = useState<string | null>(
     initialMessage === "email_verified"
       ? "Email verified."
@@ -105,6 +107,8 @@ export function LoginForm(input?: {
         ? "Google sign-in expired or became stale. Try again."
         : initialError === "auth_service_unavailable"
           ? "Authentication is temporarily unavailable from this local runtime. If you're on localhost, use a supported Node LTS version and confirm DNS access to Supabase."
+        : initialError === "oauth_email_not_allowed"
+          ? null
         : initialError
   );
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
@@ -112,7 +116,6 @@ export function LoginForm(input?: {
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const [actionState, formAction, isPending] = useActionState(submitCredentialsAction, initialCredentialsActionState);
-  const supabase = createBrowserSupabaseClient();
   const fieldErrors = actionState.mode === mode ? actionState.fieldErrors : {};
   const actionError = actionState.mode === mode ? actionState.error : null;
   const accountRecovery = actionState.mode === mode ? actionState.accountRecovery : null;
@@ -170,16 +173,28 @@ export function LoginForm(input?: {
 
     clearBrowserSupabaseAuthState();
 
-    const redirectTo = getAuthCallbackUrl(nextPath);
-    const { error } = await supabase.auth.signInWithOAuth({
-      options: {
-        redirectTo
-      },
-      provider: "google"
-    });
+    let errorMessage: string | null = null;
 
-    if (error) {
-      setGoogleError(error.message);
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const redirectTo = getAuthCallbackUrl(nextPath);
+      const { error } = await supabase.auth.signInWithOAuth({
+        options: {
+          redirectTo
+        },
+        provider: "google"
+      });
+
+      errorMessage = error?.message ?? null;
+    } catch (error) {
+      errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Google sign-in is unavailable because the public Supabase environment is missing.";
+    }
+
+    if (errorMessage) {
+      setGoogleError(errorMessage);
       setIsGoogleSubmitting(false);
     }
   }
@@ -227,6 +242,42 @@ export function LoginForm(input?: {
 
   return (
     <div className="space-y-[10px]">
+      {showOauthDeniedDialog ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-6">
+          <div
+            aria-labelledby="oauth-denied-title"
+            aria-modal="true"
+            role="dialog"
+            className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.28)]"
+          >
+            <div className="space-y-3">
+              <h2 id="oauth-denied-title" className="text-xl font-semibold tracking-tight text-slate-950">
+                Google sign-in isn&apos;t available for this account
+              </h2>
+              <p className="text-sm text-slate-600">
+                {deniedOAuthEmail ? `${deniedOAuthEmail} ` : "This Google account "}
+                isn&apos;t approved for OAuth access. Please contact us if you need access enabled.
+              </p>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/contact-sales"
+                className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
+                Contact us
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowOauthDeniedDialog(false)}
+                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] text-[13px] font-semibold text-sky-700 ring-1 ring-sky-200">
@@ -358,7 +409,7 @@ export function LoginForm(input?: {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
-            {!isCreateAccount && allowCreateAccount ? (
+            {!isCreateAccount ? (
               <Link
                 className="absolute right-0 top-0 text-xs font-medium text-sky-700 transition hover:text-sky-800"
                 href={email.trim().length > 0 ? `/reset-password?email=${encodeURIComponent(email.trim())}` : "/reset-password"}
@@ -386,18 +437,20 @@ export function LoginForm(input?: {
           </div>
         ) : null}
 
-        <Button
-          className="w-full"
-          disabled={
-            isSubmitting ||
-            email.trim().length === 0 ||
-            ((!isCreateAccount || isCreatePasswordStep) && password.length === 0)
-          }
-          type="submit"
-          variant="secondary"
-        >
-          {isCreateAccount ? (isCreatePasswordStep ? "Create account" : "Continue") : "Sign in"}
-        </Button>
+        <div style={{ marginTop: "10px" }}>
+          <Button
+            className="w-full"
+            disabled={
+              isSubmitting ||
+              email.trim().length === 0 ||
+              ((!isCreateAccount || isCreatePasswordStep) && password.length === 0)
+            }
+            type="submit"
+            variant="secondary"
+          >
+            {isCreateAccount ? (isCreatePasswordStep ? "Create account" : "Continue") : "Sign in"}
+          </Button>
+        </div>
 
         {allowCreateAccount && isCreateAccount ? <p className="text-xs text-slate-500">No credit card required.</p> : null}
       </form>

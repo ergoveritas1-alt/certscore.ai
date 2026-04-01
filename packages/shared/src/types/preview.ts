@@ -20,6 +20,11 @@ export type PreviewBuildPhaseSummary = {
   startedAt: string | null;
 };
 
+export type PreviewEarlyResultItem = {
+  label: string;
+  value: string;
+};
+
 export type PreviewSampleFinding = {
   category: FindingCategory;
   severity: FindingSeverity;
@@ -87,6 +92,7 @@ export type PreviewScanStatusResponse = {
   events: PreviewScanEvent[];
   executionSummary: ScannerExecutionSummary | null;
   buildPhaseSummaries: PreviewBuildPhaseSummary[];
+  liveEarlyResults?: PreviewEarlyResultItem[];
   agencyMappings: AgencyMapping[];
   regulatoryRisk: RegulatoryRiskAssessment | null;
   previewPayload: PreviewScanPayload | null;
