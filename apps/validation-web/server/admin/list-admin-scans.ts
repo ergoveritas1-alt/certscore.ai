@@ -11,6 +11,7 @@ export type AdminScanListItem = {
   createdAt: string;
   domainHostname: string | null;
   domainId: string | null;
+  findingCount: number | null;
   homepageFetchHttpStatus: number | null;
   organizationName: string | null;
   pagesScanned: number;
@@ -54,6 +55,7 @@ type SnapshotRow = {
   captcha_flag: boolean | null;
   certscore_overall: number;
   homepage_fetch_http_status: number | null;
+  report_finding_count: number | null;
   robots_fetch_http_status: number | null;
   scan_id: string;
   total_signals: number;
@@ -85,7 +87,9 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     scanIds.length
       ? supabase
           .from("scan_snapshots")
-          .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
+          .select(
+            "scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag"
+          )
           .in("scan_id", scanIds)
       : Promise.resolve({ data: [] as SnapshotRow[] })
   ]);
@@ -105,6 +109,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     completedAt: scan.completed_at,
     pagesScanned: scan.pages_scanned,
     totalSignals: snapshotMap.get(scan.id)?.total_signals ?? null,
+    findingCount: snapshotMap.get(scan.id)?.report_finding_count ?? null,
     certscoreOverall: snapshotMap.get(scan.id)?.certscore_overall ?? null,
     homepageFetchHttpStatus: snapshotMap.get(scan.id)?.homepage_fetch_http_status ?? null,
     robotsFetchHttpStatus: snapshotMap.get(scan.id)?.robots_fetch_http_status ?? null,

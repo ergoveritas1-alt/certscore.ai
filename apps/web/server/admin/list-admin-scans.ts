@@ -14,6 +14,7 @@ export type AdminScanListItem = {
   createdAt: string;
   domainHostname: string | null;
   domainId: string | null;
+  findingCount: number | null;
   highestSuccessfulTier: ScanExecutionTier | null;
   homepageFetchHttpStatus: number | null;
   interruptionLabel: string | null;
@@ -79,6 +80,7 @@ type SnapshotRow = {
   highest_successful_tier?: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   normalized_body_hash?: string | null;
+  report_finding_count?: number | null;
   recoverable_finding_classes?: RecoverableFindingClass[] | null;
   scan_outcome?: string | null;
   scan_timestamp?: string | null;
@@ -120,13 +122,15 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const snapshotsPromise = scanIds.length
     ? supabase
         .from("scan_snapshots")
-        .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes")
+        .select(
+          "scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
+        )
         .in("scan_id", scanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null });
   const snapshotsFallbackPromise = scanIds.length
     ? supabase
         .from("scan_snapshots")
-        .select("scan_id, total_signals, certscore_overall, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
+        .select("scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
         .in("scan_id", scanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null });
 
@@ -180,6 +184,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
+      findingCount: snapshot?.report_finding_count ?? null,
       certscoreOverall: snapshot?.certscore_overall ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,

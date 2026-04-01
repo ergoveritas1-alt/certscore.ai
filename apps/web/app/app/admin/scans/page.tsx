@@ -58,7 +58,7 @@ export default async function AdminScansPage() {
                   </td>
                   <td className="py-4 pr-4 text-slate-700">
                     <p>Signals {scan.totalSignals ?? 0}</p>
-                    <p>CertScore.ai {scan.certscoreOverall ?? "n/a"}</p>
+                    <p>Findings {scan.findingCount ?? 0}</p>
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.completedAt)}</td>
                   <td className="py-4">
