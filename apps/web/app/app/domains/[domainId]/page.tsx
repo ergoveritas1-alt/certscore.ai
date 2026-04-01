@@ -7,6 +7,8 @@ import { PendingButtonLink } from "../../../../components/ui/pending-link";
 import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
 import { getDashboardContext } from "../../../../server/auth";
 import { getDomainById } from "../../../../server/domains/get-domain-by-id";
+import { listIndustries } from "../../../../server/domains/list-industries";
+import { updateDomainIndustryFormAction } from "../../../../server/domains/update-domain-industry";
 import { updateDomainScanFrequencyFormAction } from "../../../../server/domains/update-domain-scan-frequency";
 import { getDomainScanHistory } from "../../../../server/history/get-domain-scan-history";
 import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
@@ -77,7 +79,7 @@ type DomainDetailPageProps = {
 
 export default async function DomainDetailPage({ params }: DomainDetailPageProps) {
   const [{ domainId }, { organization }] = await Promise.all([params, getDashboardContext()]);
-  const [domainRecord, planLimits, scanHistory, monitoringState] = await Promise.all([
+  const [domainRecord, planLimits, scanHistory, monitoringState, industries] = await Promise.all([
     getDomainById({
       domainId,
       organizationId: organization.id
@@ -90,10 +92,12 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
     getDomainMonitoringState({
       domainId,
       organizationId: organization.id
-    })
+    }),
+    listIndustries()
   ]);
+  const domainRecordResult = domainRecord;
 
-  if (!domainRecord) {
+  if (!domainRecordResult) {
     notFound();
   }
 
@@ -105,14 +109,14 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-3">
           <Badge tone="neutral">{organization.plan} plan</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight">{domainRecord.domain.hostname}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{domainRecordResult.domain.hostname}</h1>
           <p className="max-w-3xl text-slate-600">
-            {domainRecord.domain.normalizedUrl} is configured for repeatable scanning, signal summaries, and change tracking.
+            {domainRecordResult.domain.normalizedUrl} is configured for repeatable scanning, signal summaries, and change tracking.
           </p>
         </div>
 
         <QueueFullScanForm
-          domainId={domainRecord.domain.id}
+          domainId={domainRecordResult.domain.id}
           disabled={!queueAvailability.enabled}
           unavailableReason={queueAvailability.reason}
         />
@@ -126,7 +130,8 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
           <CardContent className="space-y-2 text-sm text-slate-600">
             <p>Plan profile: {planLimits.scanProfile}</p>
             <p>Coverage: {getPlanDefinition(planLimits.planCode).coverageLabel}</p>
-            <p>Frequency target: {monitoringState?.effectiveFrequency ?? domainRecord.domain.scanFrequency ?? planLimits.scanFrequency}</p>
+            <p>Frequency target: {monitoringState?.effectiveFrequency ?? domainRecordResult.domain.scanFrequency ?? planLimits.scanFrequency}</p>
+            <p>Primary industry: {domainRecordResult.domain.industryPrimaryLabel ?? "Unassigned"}</p>
           </CardContent>
         </Card>
         <Card className="border border-slate-200 bg-white">
@@ -167,6 +172,39 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
 
       <Card className="border border-slate-200 bg-white">
         <CardHeader>
+          <CardTitle>Industry classification</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-slate-600">
+          <p>Assign the primary industry used for segmentation, reporting, and admin workflows.</p>
+          <form action={updateDomainIndustryFormAction} className="grid gap-4 md:grid-cols-[1fr,auto]">
+            <input name="domainId" type="hidden" value={domainRecordResult.domain.id} />
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700" htmlFor="industryPrimaryId">
+                Primary industry
+              </label>
+              <select
+                className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
+                defaultValue={domainRecordResult.domain.industryPrimaryId ?? ""}
+                id="industryPrimaryId"
+                name="industryPrimaryId"
+              >
+                <option value="">Unassigned</option>
+                {industries.map((industry) => (
+                  <option key={industry.id} value={industry.id}>
+                    {industry.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:self-end">
+              <PendingSubmitButton idleContent="Save industry" pendingContent="Saving..." variant="secondary" />
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-slate-200 bg-white">
+        <CardHeader>
           <CardTitle>Monitoring schedule</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-slate-600">
@@ -186,14 +224,14 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
           </div>
 
           <form action={updateDomainScanFrequencyFormAction} className="grid gap-4 md:grid-cols-[1fr,auto]">
-            <input name="domainId" type="hidden" value={domainRecord.domain.id} />
+            <input name="domainId" type="hidden" value={domainRecordResult.domain.id} />
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700" htmlFor="scanFrequency">
                 Website scan frequency
               </label>
               <select
                 className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
-                defaultValue={domainRecord.domain.scanFrequency ?? monitoringState?.effectiveFrequency ?? planLimits.scanFrequency}
+                defaultValue={domainRecordResult.domain.scanFrequency ?? monitoringState?.effectiveFrequency ?? planLimits.scanFrequency}
                 id="scanFrequency"
                 name="scanFrequency"
               >
