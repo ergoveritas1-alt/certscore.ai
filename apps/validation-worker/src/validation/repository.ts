@@ -795,6 +795,7 @@ export async function replaceValidationRunFindings(
   }>
 ) {
   const supabase = createAdminClient();
+  const run = await getValidationRun(runId);
   const { error: deleteError } = await supabase.from("validation_run_findings").delete().eq("validation_run_id", runId);
 
   if (deleteError) {
@@ -806,6 +807,13 @@ export async function replaceValidationRunFindings(
       finding_count: 0,
       reviewed_finding_count: 0
     });
+    if (run?.scan_id) {
+      await persistValidationRunReportFindingCount({
+        runId,
+        scanId: run.scan_id,
+        supabase
+      });
+    }
     return [];
   }
 
@@ -845,6 +853,14 @@ export async function replaceValidationRunFindings(
   await updateValidationRun(runId, {
     finding_count: findings.length
   });
+
+  if (run?.scan_id) {
+    await persistValidationRunReportFindingCount({
+      runId,
+      scanId: run.scan_id,
+      supabase
+    });
+  }
 
   return (insertResult.data ?? []) as Array<Record<string, unknown>>;
 }
@@ -939,43 +955,11 @@ export async function finalizeValidationRun(runId: string) {
   });
 
   if (run.scan_id) {
-    try {
-      const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
-      const [{ buildScanReportUnifiedFindings }] = await Promise.all([
-        import(detailViewModulePath) as Promise<{
-          buildScanReportUnifiedFindings: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
-        }>
-      ]);
-      const scanRecord = await loadScanRecordForFindingCount({
-        runId,
-        scanId: run.scan_id,
-        supabase
-      });
-
-      if (scanRecord) {
-        const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
-        const { error: snapshotUpdateError } = await supabase
-          .from("scan_snapshots")
-          .update({
-            report_finding_count: reportFindingCount
-          })
-          .eq("scan_id", run.scan_id);
-
-        if (snapshotUpdateError) {
-          console.error("[validation-worker] failed to persist report finding count", {
-            error: snapshotUpdateError.message,
-            runId,
-            scanId: run.scan_id
-          });
-        }
-      }
-    } catch (error) {
-      console.error("[validation-worker] failed to compute report finding count", {
-        error: error instanceof Error ? error.message : String(error),
-        runId,
-        scanId: run.scan_id
-      });
-    }
+    await persistValidationRunReportFindingCount({
+      runId,
+      scanId: run.scan_id,
+      supabase
+    });
   }
 
   if (!run.validation_target_id) {
@@ -1021,6 +1005,52 @@ export async function finalizeValidationRun(runId: string) {
       last_status: "completed"
     })
     .eq("id", run.validation_target_id);
+}
+
+async function persistValidationRunReportFindingCount(input: {
+  runId: string;
+  scanId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  try {
+    const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
+    const [{ buildScanReportUnifiedFindings }] = await Promise.all([
+      import(detailViewModulePath) as Promise<{
+        buildScanReportUnifiedFindings: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
+      }>
+    ]);
+    const scanRecord = await loadScanRecordForFindingCount({
+      runId: input.runId,
+      scanId: input.scanId,
+      supabase: input.supabase
+    });
+
+    if (!scanRecord) {
+      return;
+    }
+
+    const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+    const { error: snapshotUpdateError } = await input.supabase
+      .from("scan_snapshots")
+      .update({
+        report_finding_count: reportFindingCount
+      })
+      .eq("scan_id", input.scanId);
+
+    if (snapshotUpdateError) {
+      console.error("[validation-worker] failed to persist report finding count", {
+        error: snapshotUpdateError.message,
+        runId: input.runId,
+        scanId: input.scanId
+      });
+    }
+  } catch (error) {
+    console.error("[validation-worker] failed to compute report finding count", {
+      error: error instanceof Error ? error.message : String(error),
+      runId: input.runId,
+      scanId: input.scanId
+    });
+  }
 }
 
 async function loadScanRecordForFindingCount(input: {
