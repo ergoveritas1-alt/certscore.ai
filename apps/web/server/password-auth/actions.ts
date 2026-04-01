@@ -1,6 +1,5 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -87,55 +86,12 @@ export async function submitCredentialsAction(
     const supabase = await createSupabasePasswordSessionClient();
 
     if (mode === "create_account") {
-      const adminSupabase = createAdminClient();
-      const existingAccount = await findAppUserByEmail(values.email);
-
-      if (existingAccount) {
-        const { error: updateError } = await adminSupabase.auth.admin.updateUserById(existingAccount.id, {
-          password: values.password
-        });
-
-        if (updateError) {
-          return {
-            accountRecovery: null,
-            error: `Could not set a password for this account. ${updateError.message}`,
-            fieldErrors: {},
-            mode
-          };
-        }
-      } else {
-        const { error: createError, data } = await adminSupabase.auth.admin.createUser({
-          email: values.email,
-          email_confirm: true,
-          password: values.password
-        });
-
-        if (createError || !data.user) {
-          return {
-            accountRecovery: null,
-            error: `Could not create account right now. ${createError?.message ?? "Try again."}`,
-            fieldErrors: {},
-            mode
-          };
-        }
-      }
-
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password
-      });
-
-      if (signInError || !signInData.user) {
-        return {
-          accountRecovery: null,
-          error: `Account created, but sign in failed. ${signInError?.message ?? "Try signing in."}`,
-          fieldErrors: {},
-          mode
-        };
-      }
-
-      await bootstrapUserFromSession(signInData.user);
-      redirect(values.next);
+      return {
+        accountRecovery: null,
+        error: "Account creation is disabled. Contact us if you need access.",
+        fieldErrors: {},
+        mode: "sign_in"
+      };
     }
 
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
