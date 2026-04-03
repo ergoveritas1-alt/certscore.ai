@@ -76,6 +76,14 @@ import {
   normalizePolicySnippetList
 } from "../../lib/scans/policy-snippet-normalization";
 import {
+  getPolicyActionableFlags,
+  getPolicyEvidenceSnippets,
+  getPolicyMentions,
+  getPolicyPageType,
+  getPolicyPageUrl,
+  getPolicySummaryText
+} from "../../lib/scans/policy-enrichment-row";
+import {
   type ContradictionEvidenceBundle
 } from "../../lib/scans/contradiction-evidence-contract";
 import {
@@ -1742,22 +1750,13 @@ function getPolicySignalFallbackEvidence(input: {
   const topicKey = policyPositiveSpec?.evidenceSnippetKey ?? null;
   const pageType = policyPositiveSpec?.pageType ?? "privacy_policy";
   const row =
-    input.policyEnrichment.find((entry) => (entry.pageType ?? entry.page_type) === pageType) ??
+    input.policyEnrichment.find((entry) => getPolicyPageType(entry) === pageType) ??
     input.policyEnrichment[0] ??
     null;
 
-  const pageUrl =
-    row && typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
-  const policySummaryShort =
-    row && isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
-      ? String(row.policySummaryShort ?? row.policy_summary_short)
-      : null;
-  const evidenceSnippets =
-    row?.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-      ? (row.policyEvidenceSnippets as Record<string, unknown>)
-      : row?.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-        ? (row.policy_evidence_snippets as Record<string, unknown>)
-        : null;
+  const pageUrl = row ? getPolicyPageUrl(row) : null;
+  const policySummaryShort = row ? getPolicySummaryText(row) : null;
+  const evidenceSnippets = row ? getPolicyEvidenceSnippets(row) : null;
   const mergedPolicyRightsSignals = findMergedSignalValue(input.mergedSignals, "policyRightsSignals");
   const policyRightsSignals = Array.isArray(mergedPolicyRightsSignals)
     ? mergedPolicyRightsSignals.filter((value): value is string => typeof value === "string")
@@ -2859,21 +2858,17 @@ function humanizePolicyFlag(flag: string) {
 function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, unknown>>) {
   return policyEnrichments
     .filter((row) => {
-      const pageType = String(row.pageType ?? row.page_type ?? "");
+      const pageType = String(getPolicyPageType(row) ?? "");
       return pageType === "privacy_policy" || pageType === "terms_of_service" || pageType === "cookie_policy";
     })
     .map((row) => {
-      const pageType = String(row.pageType ?? row.page_type ?? "");
-      const rawPolicyMentions = row.policyMentions ?? row.policy_mentions;
-      const rawPolicyFlags = row.policyActionableFlags ?? row.policy_actionable_flags;
-      const pageUrl =
-        typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
-      const summary =
-        isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
-          ? String(row.policySummaryShort ?? row.policy_summary_short)
-          : null;
-      const topics = Array.isArray(rawPolicyMentions)
-        ? rawPolicyMentions
+      const pageType = String(getPolicyPageType(row) ?? "");
+      const pageUrl = getPolicyPageUrl(row);
+      const summary = getPolicySummaryText(row);
+      const policyMentions = getPolicyMentions(row);
+      const policyFlags = getPolicyActionableFlags(row);
+      const topics = Array.isArray(policyMentions)
+        ? policyMentions
             .map((item) =>
               item && typeof item === "object" && typeof (item as Record<string, unknown>).topic === "string"
                 ? humanizePolicyTopic(String((item as Record<string, unknown>).topic))
@@ -2882,8 +2877,8 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
             .filter((value): value is string => Boolean(value))
             .slice(0, 4)
         : [];
-      const flags = Array.isArray(rawPolicyFlags)
-        ? rawPolicyFlags
+      const flags = Array.isArray(policyFlags)
+        ? policyFlags
             .filter((value): value is string => typeof value === "string" && value !== "blocked_homepage_direct_policy_page")
             .map((value) => humanizePolicyFlag(value))
             .slice(0, 3)

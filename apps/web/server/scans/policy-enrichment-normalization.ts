@@ -4,59 +4,17 @@ import {
   normalizePolicyEvidenceSnippetsRecord,
   normalizePolicySnippet
 } from "../../lib/scans/policy-snippet-normalization";
+import {
+  getPolicyChildrenReference,
+  getPolicyEvidenceSnippets,
+  getPolicyMentions,
+  getPolicyRightsSignals,
+  getPolicySummaryText,
+  getPrivacyContactChannelType
+} from "../../lib/scans/policy-enrichment-row";
 
 function looksLikeEvidenceHash(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
-}
-
-function getPolicyEvidenceSnippets(row: Record<string, unknown>) {
-  return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-    ? (row.policyEvidenceSnippets as Record<string, unknown>)
-    : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-      ? (row.policy_evidence_snippets as Record<string, unknown>)
-      : null;
-}
-
-function getPolicyRightsSignals(row: Record<string, unknown>, snippets?: Record<string, unknown> | null) {
-  return Array.isArray(row.policyRightsSignals)
-    ? row.policyRightsSignals
-    : Array.isArray(row.policy_rights_signals)
-      ? row.policy_rights_signals
-      : Array.isArray(snippets?.policy_rights_signals)
-        ? snippets.policy_rights_signals
-        : [];
-}
-
-function getPolicyMentions(row: Record<string, unknown>) {
-  return Array.isArray(row.policyMentions)
-    ? row.policyMentions
-    : Array.isArray(row.policy_mentions)
-      ? row.policy_mentions
-      : [];
-}
-
-function getPolicySummaryText(row: Record<string, unknown>) {
-  return isMeaningfulPolicyText(row.policySummaryShort)
-    ? row.policySummaryShort
-    : isMeaningfulPolicyText(row.policy_summary_short)
-      ? row.policy_summary_short
-      : null;
-}
-
-function getPrivacyContactChannelType(row: Record<string, unknown>) {
-  return isMeaningfulPolicyText(row.privacyContactChannelType)
-    ? row.privacyContactChannelType
-    : isMeaningfulPolicyText(row.privacy_contact_channel_type)
-      ? row.privacy_contact_channel_type
-      : null;
-}
-
-function getPolicyChildrenReference(row: Record<string, unknown>) {
-  return isMeaningfulPolicyText(row.policyChildrenReference)
-    ? row.policyChildrenReference
-    : isMeaningfulPolicyText(row.policy_children_reference)
-      ? row.policy_children_reference
-      : null;
 }
 
 export function collectPolicyEvidenceHashes(rows: Array<Record<string, unknown>>) {
