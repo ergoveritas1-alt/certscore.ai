@@ -4,6 +4,12 @@ import {
   normalizePolicySnippet,
   normalizePolicySnippetList
 } from "./policy-snippet-normalization";
+import {
+  getPolicyEvidenceSnippets as getSharedPolicyEvidenceSnippets,
+  getPolicyPageType as getSharedPolicyPageType,
+  getPolicyPageUrl as getSharedPolicyPageUrl,
+  getPolicySummaryText as getSharedPolicySummaryText
+} from "./policy-enrichment-row";
 
 export type FetchQuality = KeyPageFetchQuality;
 
@@ -138,30 +144,10 @@ function getBestDiscoverySource(summaryRows: Array<Record<string, unknown>>) {
 
 function normalizePolicyRow(row: Record<string, unknown>): NormalizedPolicyRow {
   return {
-    pageType:
-      typeof row.pageType === "string"
-        ? row.pageType
-        : typeof row.page_type === "string"
-          ? row.page_type
-          : null,
-    pageUrl:
-      typeof row.pageUrl === "string"
-        ? row.pageUrl
-        : typeof row.page_url === "string"
-          ? row.page_url
-          : null,
-    policyEvidenceSnippets:
-      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-        ? (row.policyEvidenceSnippets as Record<string, unknown>)
-        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-          ? (row.policy_evidence_snippets as Record<string, unknown>)
-          : null,
-    policySummaryShort:
-      typeof row.policySummaryShort === "string"
-        ? row.policySummaryShort
-        : typeof row.policy_summary_short === "string"
-          ? row.policy_summary_short
-          : null,
+    pageType: getSharedPolicyPageType(row),
+    pageUrl: getSharedPolicyPageUrl(row),
+    policyEvidenceSnippets: getSharedPolicyEvidenceSnippets(row),
+    policySummaryShort: getSharedPolicySummaryText(row),
     raw: row
   };
 }
@@ -183,7 +169,7 @@ function getPolicySummaryShort(row: NormalizedPolicyRow | null) {
     return null;
   }
 
-  return isMeaningfulPolicyText(row.policySummaryShort) ? row.policySummaryShort : null;
+  return row.policySummaryShort;
 }
 
 function getKeyPageSummaryRowsForTypes(summary: unknown, pageTypes: string[]) {
