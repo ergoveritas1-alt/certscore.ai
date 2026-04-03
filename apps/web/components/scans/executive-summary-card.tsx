@@ -70,16 +70,6 @@ function DetailDisclosure(input: {
   );
 }
 
-function getConfidenceTone(confidence: "low" | "medium" | "high") {
-  if (confidence === "high") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  }
-  if (confidence === "medium") {
-    return "border-amber-200 bg-amber-50 text-amber-800";
-  }
-  return "border-slate-200 bg-slate-50 text-slate-700";
-}
-
 function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
   const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
 
@@ -105,42 +95,57 @@ function BenchmarkMetricCard(input: {
 }) {
   const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
   const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
-  const scaleMax = Math.max(input.maxValue ?? 0, actualValue ?? 0, benchmarkValue ?? 0, 1);
+  const dynamicScaleBase = Math.max(actualValue ?? 0, benchmarkValue ?? 0, 1);
+  const scaleMax =
+    input.maxValue ??
+    Math.max(10, Math.ceil((dynamicScaleBase * 1.25) / 5) * 5);
+  const gaugeCx = 80;
+  const gaugeCy = 78;
+  const actualRadius = 58;
+  const benchmarkRadius = 71;
   const actualRatio = Math.max(0, Math.min(1, (actualValue ?? 0) / scaleMax));
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
-  const actualArc = describeArc(72, 72, 54, 180, 180 - actualRatio * 180);
+  const actualArc = describeArc(gaugeCx, gaugeCy, actualRadius, 180, 180 - actualRatio * 180);
   const benchmarkArc =
     benchmarkRatio !== null
       ? describeArc(
-          72,
-          72,
-          66,
+          gaugeCx,
+          gaugeCy,
+          benchmarkRadius,
           Math.max(180 - benchmarkRatio * 180 - 8, 0),
           Math.max(180 - benchmarkRatio * 180 + 8, 0)
         )
       : null;
 
   return (
-    <div className="rounded-[1.4rem] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.24),_rgba(255,255,255,0)_58%)] px-4 py-4">
+    <div className="rounded-[1.4rem] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.16),_rgba(255,255,255,0)_62%)] px-4 py-4">
       <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
       <div className="mt-2 flex items-center justify-center">
-        <div className="relative h-[104px] w-[144px]">
-          <svg viewBox="0 0 144 86" className="h-[86px] w-[144px] overflow-visible">
-            <path d={describeArc(72, 72, 54, 180, 0)} fill="none" stroke="rgba(226,232,240,0.95)" strokeWidth="16" strokeLinecap="round" />
+        <div className="relative h-[118px] w-[160px]">
+          <svg viewBox="0 0 160 94" className="h-[94px] w-[160px] overflow-visible">
+            <path d={describeArc(gaugeCx, gaugeCy, actualRadius, 180, 0)} fill="none" stroke="rgba(226,232,240,0.95)" strokeWidth="16" strokeLinecap="round" />
             {benchmarkArc ? (
               <path d={benchmarkArc} fill="none" stroke="rgba(196,181,253,0.95)" strokeWidth="12" strokeLinecap="round" />
             ) : null}
             <path d={actualArc} fill="none" stroke="rgba(96,165,250,0.95)" strokeWidth="16" strokeLinecap="round" />
           </svg>
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center text-center">
-            <div className="flex items-end gap-1">
-              <span className="text-[2rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
-              <span className="pb-1 text-base text-slate-500">/{scaleMax}</span>
-            </div>
+            <span className="text-[2rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+            {input.maxValue ? (
+              <span className="-mt-1 text-sm text-slate-500">/100</span>
+            ) : null}
             {benchmarkValue !== null ? (
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                Expected {benchmarkValue}
-              </p>
+              <div className="mt-2 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+                <span className="inline-block h-2 w-2 rounded-full bg-sky-400" />
+                <span>Current {actualValue ?? "—"}</span>
+                <span className="inline-block h-2 w-2 rounded-full bg-violet-300" />
+                <span>Expected {benchmarkValue}</span>
+              </div>
+            ) : null}
+            {!input.maxValue ? (
+              <span className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                Scale {scaleMax}
+              </span>
             ) : null}
           </div>
         </div>
@@ -294,14 +299,13 @@ export function ExecutiveSummaryCard(input: {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
               Scanned {formatFreshness(input.lastScannedAt)}
             </span>
-            {input.domainBenchmark ? (
-              <>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
-                  Industry {input.domainBenchmark.industry}
-                </span>
-              </>
-            ) : null}
           </div>
+          {input.domainBenchmark ? (
+            <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+              <span className="font-medium text-slate-900">Benchmark estimate for {input.domainBenchmark.industry}.</span>{" "}
+              Expected ranges below are a nano best-guess for this type of domain, used only as lightweight context.
+            </div>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-3">
             <BenchmarkMetricCard
