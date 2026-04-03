@@ -371,6 +371,9 @@ test("selectPendingNanoDocumentSourcesForExtraction skips optional terms when fa
         id: "doc-terms"
       }
     ],
+    snapshot: {
+      session_replay_without_disclosure_detected: true
+    },
     runtimeArtifacts: null
   });
 
@@ -378,6 +381,54 @@ test("selectPendingNanoDocumentSourcesForExtraction skips optional terms when fa
     rows.map((row) => row.id),
     ["doc-privacy"]
   );
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction skips terms without terms-specific runtime need", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [],
+    policyEnrichments: [],
+    rows: [
+      {
+        document_type: "privacy_policy",
+        document_text: "Privacy text",
+        id: "doc-privacy"
+      },
+      {
+        document_type: "terms_of_service",
+        document_text: "Terms text",
+        id: "doc-terms"
+      }
+    ],
+    snapshot: {},
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["doc-privacy"]);
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction keeps terms when session replay disclosure needs review", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [],
+    policyEnrichments: [],
+    rows: [
+      {
+        document_type: "privacy_policy",
+        document_text: "Privacy text",
+        id: "doc-privacy"
+      },
+      {
+        document_type: "terms_of_service",
+        document_text: "Terms text",
+        id: "doc-terms"
+      }
+    ],
+    snapshot: {
+      session_replay_without_disclosure_detected: true
+    },
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["doc-privacy", "doc-terms"]);
 });
 
 test("selectPendingNanoDocumentSourcesForExtraction keeps cookie docs when runtime cookie evidence exists", () => {
