@@ -7,6 +7,7 @@ import {
   type MergedSignalRecord,
   type PopulatedSignalRecord,
   type RecoverableFindingClass,
+  SCAN_EVENT_TYPES,
   type ScanExecutionTier,
   buildAgencyMappings,
   buildRegulatoryRiskAssessment,
@@ -1166,12 +1167,22 @@ async function loadScanDetailRecord(input: {
       source: "validation"
     })
   });
+  const latestUnifiedFindingsCompletedEvent = [...normalizedEvents]
+    .reverse()
+    .find((event) => event.eventType === SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted);
+  const workflowFindingCount =
+    validationFindings.length > 0
+      ? validationFindings.length
+      : typeof (latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount?: unknown } | undefined)?.findingCount === "number" &&
+          Number.isFinite((latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount?: number } | undefined)?.findingCount)
+        ? (latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount: number }).findingCount
+        : 0;
   const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
     events: normalizedEvents.map((event) => ({
       createdAt: event.createdAt,
       eventType: event.eventType
     })),
-    findingsCount: validationFindings.length,
+    findingsCount: workflowFindingCount,
     mergedSignalCount: mergedSignals.length,
     nanoSignalCount: storedNanoSignalRows.length,
     policyDocumentCount: normalizedPolicyEnrichment.length,
