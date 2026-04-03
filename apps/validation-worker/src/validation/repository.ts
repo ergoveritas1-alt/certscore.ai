@@ -1590,6 +1590,29 @@ export async function replaceScanDocumentSources(input: {
   return input.rows;
 }
 
+export async function appendScanDocumentSources(input: {
+  rows: Array<Record<string, unknown>>;
+  scanId: string;
+}) {
+  if (input.rows.length === 0) {
+    return [];
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("scan_document_sources").insert(
+    input.rows.map((row) => ({
+      ...row,
+      scan_id: input.scanId
+    }))
+  );
+
+  if (error) {
+    throw new Error(`Failed to append document sources for scan ${input.scanId}: ${error.message}`);
+  }
+
+  return input.rows;
+}
+
 export async function updateScanDocumentSourceExtractions(input: {
   rows: Array<{
     extractedFields: Record<string, unknown>;

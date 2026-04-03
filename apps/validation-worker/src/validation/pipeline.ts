@@ -24,6 +24,7 @@ import {
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
+  appendScanDocumentSources,
   persistDerivedNanoPolicySignals,
   replaceScanDocumentSources,
   replaceValidationRunFindings,
@@ -1337,17 +1338,17 @@ async function enqueueValidationVerdict(runId: string) {
 }
 
 export function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages: Array<Record<string, unknown>> }) {
-  const urls = new Map<string, string>();
+  const candidates = new Map<string, { documentType: string; priorityTier: "priority" | "secondary"; url: string }>();
   const seedPaths = [
-    ["/privacy", "privacy_policy"],
-    ["/privacy-policy", "privacy_policy"],
-    ["/legal/privacy-policy", "privacy_policy"],
-    ["/terms", "terms_of_service"],
-    ["/terms-of-service", "terms_of_service"],
-    ["/legal/terms", "terms_of_service"],
-    ["/cookies", "cookie_policy"],
-    ["/cookie-policy", "cookie_policy"],
-    ["/legal/cookie-policy", "cookie_policy"]
+    ["/privacy", "privacy_policy", "priority"],
+    ["/privacy-policy", "privacy_policy", "priority"],
+    ["/legal/privacy-policy", "privacy_policy", "secondary"],
+    ["/terms", "terms_of_service", "priority"],
+    ["/terms-of-service", "terms_of_service", "priority"],
+    ["/legal/terms", "terms_of_service", "secondary"],
+    ["/cookies", "cookie_policy", "secondary"],
+    ["/cookie-policy", "cookie_policy", "priority"],
+    ["/legal/cookie-policy", "cookie_policy", "secondary"]
   ] as const;
 
   for (const page of input.pages) {
@@ -1356,19 +1357,27 @@ export function buildNanoDocCandidateUrls(input: { domainHostname: string | null
     if (!pageUrl || !pageType || !["privacy_policy", "terms_of_service", "cookie_policy"].includes(pageType)) {
       continue;
     }
-    urls.set(pageUrl, pageType);
+    candidates.set(pageUrl, {
+      documentType: pageType,
+      priorityTier: "priority",
+      url: pageUrl
+    });
   }
 
   if (input.domainHostname) {
-    for (const [path, type] of seedPaths) {
+    for (const [path, type, priorityTier] of seedPaths) {
       const url = `https://${input.domainHostname}${path}`;
-      if (!urls.has(url)) {
-        urls.set(url, type);
+      if (!candidates.has(url)) {
+        candidates.set(url, {
+          documentType: type,
+          priorityTier,
+          url
+        });
       }
     }
   }
 
-  return [...urls.entries()].map(([url, documentType]) => ({ documentType, url }));
+  return [...candidates.values()];
 }
 
 export function normalizeDocUrl(url: string | null) {
@@ -1479,13 +1488,18 @@ async function fetchNanoDocumentSource(input: { documentType: string; url: strin
   }
 }
 
+function getNanoDocumentSourceDedupKey(row: Record<string, unknown>) {
+  const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
+  const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
+  return `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? ""}`;
+}
+
 export function dedupeNanoDocumentSources(rows: Array<Record<string, unknown>>) {
   const byKey = new Map<string, Record<string, unknown>>();
 
   for (const row of rows) {
     const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
-    const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
-    const key = `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? crypto.randomUUID()}`;
+    const key = getNanoDocumentSourceDedupKey(row) || crypto.randomUUID();
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, row);
@@ -1508,6 +1522,18 @@ export function dedupeNanoDocumentSources(rows: Array<Record<string, unknown>>) 
   }
 
   return [...byKey.values()];
+}
+
+function splitNanoDocCandidatesByPriority(
+  candidates: Array<{ documentType: string; priorityTier: "priority" | "secondary"; url: string }>
+) {
+  const priority = candidates.filter((candidate) => candidate.priorityTier === "priority");
+  const secondary = candidates.filter((candidate) => candidate.priorityTier === "secondary");
+
+  return {
+    priority: priority.length > 0 ? priority : candidates,
+    secondary: priority.length > 0 ? secondary : []
+  };
 }
 
 function summarizeNanoDocRetrievalResults(input: {
@@ -1588,27 +1614,46 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     domainHostname: artifacts.domainHostname,
     pages: artifacts.pages
   });
-  const fetchedResults = await Promise.all(
-    candidates.map((candidate) =>
-      fetchNanoDocumentSource(candidate)
-    )
-  );
-  const rows = dedupeNanoDocumentSources(
-    fetchedResults.flatMap((result) => (result.row ? [result.row] : []))
-  );
-  const retrievalSummary = summarizeNanoDocRetrievalResults({
-    fetched: fetchedResults,
-    rows
-  });
-
+  const candidateWaves = splitNanoDocCandidatesByPriority(candidates);
   await replaceScanDocumentSources({
-    rows,
+    rows: [],
     scanId
   });
 
-  if (rows.length > 0) {
+  const priorityFetchedResults = await Promise.all(candidateWaves.priority.map((candidate) => fetchNanoDocumentSource(candidate)));
+  const priorityRows = dedupeNanoDocumentSources(priorityFetchedResults.flatMap((result) => (result.row ? [result.row] : [])));
+
+  if (priorityRows.length > 0) {
+    await replaceScanDocumentSources({
+      rows: priorityRows,
+      scanId
+    });
     await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
   }
+
+  const secondaryFetchedResults =
+    candidateWaves.secondary.length > 0
+      ? await Promise.all(candidateWaves.secondary.map((candidate) => fetchNanoDocumentSource(candidate)))
+      : [];
+  const combinedRows = dedupeNanoDocumentSources([
+    ...priorityRows,
+    ...secondaryFetchedResults.flatMap((result) => (result.row ? [result.row] : []))
+  ]);
+  const existingKeys = new Set(priorityRows.map((row) => getNanoDocumentSourceDedupKey(row)));
+  const appendedRows = combinedRows.filter((row) => !existingKeys.has(getNanoDocumentSourceDedupKey(row)));
+
+  if (appendedRows.length > 0) {
+    await appendScanDocumentSources({
+      rows: appendedRows,
+      scanId
+    });
+    await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+  }
+
+  const retrievalSummary = summarizeNanoDocRetrievalResults({
+    fetched: [...priorityFetchedResults, ...secondaryFetchedResults],
+    rows: combinedRows
+  });
 
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.nanoDocRetrievalCompleted,
@@ -1616,11 +1661,13 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     metadataJson: {
       candidateCount: candidates.length,
       duplicateCount: retrievalSummary.duplicateCount,
-      documentSourceCount: rows.length,
+      documentSourceCount: combinedRows.length,
       errorCount: retrievalSummary.errorCount,
       insufficientCount: retrievalSummary.insufficientCount,
       intermediaryCount: retrievalSummary.intermediaryCount,
       nonOkCount: retrievalSummary.nonOkCount,
+      priorityCandidateCount: candidateWaves.priority.length,
+      priorityDocumentSourceCount: priorityRows.length,
       stage: "nano_doc_retrieval"
     },
     scanId

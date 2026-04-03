@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildNanoDocCandidateUrls,
   dedupeNanoDocumentSources,
   deriveValidationFindings,
   determineValidationCollectAction,
@@ -141,6 +142,45 @@ test("dedupeNanoDocumentSources keeps one row per canonical url and document typ
       (row) =>
         row.canonical_url === "https://www.target.com/c/terms-conditions/-/N-4sr7l" &&
         row.document_type === "terms_of_service"
+    )
+  );
+});
+
+test("buildNanoDocCandidateUrls prioritizes discovered and canonical seed legal urls first", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    domainHostname: "example.com",
+    pages: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy-center"
+      }
+    ]
+  });
+
+  assert.deepEqual(candidates[0], {
+    documentType: "privacy_policy",
+    priorityTier: "priority",
+    url: "https://www.example.com/privacy-center"
+  });
+  assert.equal(candidates.findIndex((candidate) => candidate.url === "https://example.com/privacy"), 1);
+  assert.equal(candidates.findIndex((candidate) => candidate.url === "https://example.com/privacy-policy"), 2);
+  assert.equal(
+    candidates.find((candidate) => candidate.url === "https://example.com/terms")?.priorityTier,
+    "priority"
+  );
+
+  assert.ok(
+    candidates.some(
+      (candidate) =>
+        candidate.url === "https://example.com/legal/privacy-policy" &&
+        candidate.priorityTier === "secondary"
+    )
+  );
+  assert.ok(
+    candidates.some(
+      (candidate) =>
+        candidate.url === "https://example.com/cookie-policy" &&
+        candidate.priorityTier === "priority"
     )
   );
 });
