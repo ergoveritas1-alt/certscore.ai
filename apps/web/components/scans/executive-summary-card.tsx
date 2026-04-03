@@ -314,7 +314,7 @@ function getFindingReferenceLink(finding: CertScoreFinding) {
     };
   }
 
-  if (finding.id === "asymmetric_consent_ui") {
+  if (finding.id === "asymmetric_consent_ui" || finding.id === "consent_dark_patterns_detected") {
     return {
       href: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/online-tracking/how-do-we-comply-with-the-rules-on-storing-information-and-gaining-access-to-information/",
       label: "ICO guidance on consent choice presentation"
