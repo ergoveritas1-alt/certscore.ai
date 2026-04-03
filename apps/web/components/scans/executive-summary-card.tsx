@@ -80,6 +80,23 @@ function getConfidenceTone(confidence: "low" | "medium" | "high") {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+
+  return {
+    x: cx + radius * Math.cos(angleInRadians),
+    y: cy + radius * Math.sin(angleInRadians)
+  };
+}
+
+function describeArc(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const start = polarToCartesian(cx, cy, radius, endAngle);
+  const end = polarToCartesian(cx, cy, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+}
+
 function BenchmarkMetricCard(input: {
   actualValue: number | null;
   benchmarkValue: number | null;
@@ -89,39 +106,45 @@ function BenchmarkMetricCard(input: {
   const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
   const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
   const scaleMax = Math.max(input.maxValue ?? 0, actualValue ?? 0, benchmarkValue ?? 0, 1);
+  const actualRatio = Math.max(0, Math.min(1, (actualValue ?? 0) / scaleMax));
+  const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
+  const actualArc = describeArc(72, 72, 54, 180, 180 - actualRatio * 180);
+  const benchmarkArc =
+    benchmarkRatio !== null
+      ? describeArc(
+          72,
+          72,
+          66,
+          Math.max(180 - benchmarkRatio * 180 - 8, 0),
+          Math.max(180 - benchmarkRatio * 180 + 8, 0)
+        )
+      : null;
 
   return (
-    <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="rounded-[1.4rem] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.24),_rgba(255,255,255,0)_58%)] px-4 py-4">
       <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
-      <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{actualValue ?? "—"}</p>
-      {benchmarkValue !== null ? (
-        <div className="mt-3 space-y-2">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[11px] text-slate-600">
-              <span>Current</span>
-              <span>{actualValue ?? "—"}</span>
+      <div className="mt-2 flex items-center justify-center">
+        <div className="relative h-[104px] w-[144px]">
+          <svg viewBox="0 0 144 86" className="h-[86px] w-[144px] overflow-visible">
+            <path d={describeArc(72, 72, 54, 180, 0)} fill="none" stroke="rgba(226,232,240,0.95)" strokeWidth="16" strokeLinecap="round" />
+            {benchmarkArc ? (
+              <path d={benchmarkArc} fill="none" stroke="rgba(196,181,253,0.95)" strokeWidth="12" strokeLinecap="round" />
+            ) : null}
+            <path d={actualArc} fill="none" stroke="rgba(96,165,250,0.95)" strokeWidth="16" strokeLinecap="round" />
+          </svg>
+          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center text-center">
+            <div className="flex items-end gap-1">
+              <span className="text-[2rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+              <span className="pb-1 text-base text-slate-500">/{scaleMax}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-slate-900"
-                style={{ width: `${Math.max(4, ((actualValue ?? 0) / scaleMax) * 100)}%` }}
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[11px] text-slate-600">
-              <span>Expected</span>
-              <span>{benchmarkValue}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-sky-400"
-                style={{ width: `${Math.max(4, (benchmarkValue / scaleMax) * 100)}%` }}
-              />
-            </div>
+            {benchmarkValue !== null ? (
+              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                Expected {benchmarkValue}
+              </p>
+            ) : null}
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
