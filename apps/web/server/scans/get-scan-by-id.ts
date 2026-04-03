@@ -19,7 +19,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import { getHybridNanoSignalPopulations, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
+import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -1154,14 +1154,11 @@ async function loadScanDetailRecord(input: {
       stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
     : null;
   const mergedSignals = buildMergedSignalRecords({
-    nanoSignals:
-      storedNanoSignalRows.length > 0
-        ? buildStoredSignalPopulationRecords({
-            observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
-            rows: storedNanoSignalRows,
-            source: "nano"
-          })
-        : getHybridNanoSignalPopulations(normalizedRuntimeArtifacts),
+    nanoSignals: buildStoredSignalPopulationRecords({
+      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+      rows: storedNanoSignalRows,
+      source: "nano"
+    }),
     scannerSignals: scannerSignalPopulations,
     validationSignals: buildStoredSignalPopulationRecords({
       observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,

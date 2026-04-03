@@ -19,7 +19,6 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
-import { getHybridNanoSignalPopulations } from "../../../web/lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
 import { buildNanoPolicySignalRows, MANAGED_NANO_POLICY_SIGNAL_KEYS } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
@@ -1288,14 +1287,11 @@ async function loadScanRecordForFindingCount(input: {
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     mergedSignals: buildMergedSignalRecords({
-      nanoSignals:
-        storedNanoSignalRows.length > 0
-          ? buildStoredSignalPopulationRecords({
-              observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
-              rows: storedNanoSignalRows,
-              source: "nano"
-            })
-          : getHybridNanoSignalPopulations((runtimeArtifacts as Record<string, unknown> | null) ?? null),
+      nanoSignals: buildStoredSignalPopulationRecords({
+        observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
+        rows: storedNanoSignalRows,
+        source: "nano"
+      }),
       validationSignals: buildStoredSignalPopulationRecords({
         observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
         rows: storedValidationSignalRows,

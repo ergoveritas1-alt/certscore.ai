@@ -119,7 +119,9 @@ Nano does not emit findings directly. It emits typed signal records with confide
 
 ## Current Nano Ingestion Shape
 
-`WC01` now reads persisted nano signal rows from [scan_runtime_artifacts.hybrid_runtime_evidence](/Users/benmasek/WC01/packages/db/migrations/0081_runtime_hybrid_evidence.sql) before concern normalization and unified-finding promotion.
+`WC01` now reads persisted nano signal rows from [scan_signals](/Users/benmasek/WC01/packages/db/migrations/0083_scan_signal_populations.sql) before concern normalization and unified-finding promotion.
+
+Legacy `scan_runtime_artifacts.hybrid_runtime_evidence` nano rows are now migration-only input for the backfill tool and are no longer part of the canonical read path.
 
 Accepted payload keys under `hybrid_runtime_evidence`:
 
@@ -141,7 +143,7 @@ Expected row fields:
 
 These rows are normalized into `source: "nano"` signal-population records and merged with scanner-owned populations before any downstream finding derivation.
 
-The current producer-side bootstrap writes these rows from existing `policy_enrichment` records during validation ranking. That persisted set currently covers:
+The current producer-side bootstrap writes these rows into `scan_signals` from existing `policy_enrichment` records during validation ranking. That persisted set currently covers:
 
 - canonical positive policy/disclosure signals from the policy signal contract
 - low-confidence policy extraction signal population
