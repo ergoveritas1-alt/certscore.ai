@@ -841,8 +841,16 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
+  const dedupedFindings = findings.filter((finding) => {
+    if (finding.id !== "pre_consent_tracking_detected") {
+      return true;
+    }
+
+    return !findings.some((candidate) => candidate.id === "third_party_tracking_pre_consent");
+  });
+
   const groupedEntries = new Map<CertScoreFindingSection, CertScoreFinding[]>();
-  for (const finding of findings) {
+  for (const finding of dedupedFindings) {
     const existing = groupedEntries.get(finding.section) ?? [];
     existing.push(finding);
     groupedEntries.set(finding.section, existing);
@@ -860,7 +868,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     null;
 
   return {
-    findings,
+    findings: dedupedFindings,
     groupedFindings,
     posture: getPosture(findings),
     score,
