@@ -86,9 +86,39 @@ function BenchmarkMetricCard(input: {
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
   const delta =
     actualValue !== null && benchmarkValue !== null ? actualValue - benchmarkValue : null;
+  const tone =
+    input.label === "Overall score"
+      ? {
+          card: "bg-[radial-gradient(circle_at_28%_78%,rgba(125,211,252,0.22),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))]",
+          rail: "bg-sky-100/90",
+          fill: "bg-sky-500/85",
+          marker: "bg-cyan-500 shadow-[0_0_0_3px_rgba(236,254,255,0.95)]",
+          value: "text-sky-700",
+          deltaPositive: "text-sky-700",
+          deltaNegative: "text-cyan-700"
+        }
+      : input.label === "Third-party requests"
+        ? {
+            card: "bg-[radial-gradient(circle_at_28%_78%,rgba(253,230,138,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(255,251,235,0.98),rgba(255,255,255,1))]",
+            rail: "bg-amber-100/90",
+            fill: "bg-amber-500/85",
+            marker: "bg-orange-500 shadow-[0_0_0_3px_rgba(255,247,237,0.95)]",
+            value: "text-amber-700",
+            deltaPositive: "text-amber-700",
+            deltaNegative: "text-orange-700"
+          }
+        : {
+            card: "bg-[radial-gradient(circle_at_28%_78%,rgba(244,114,182,0.16),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(253,242,248,0.98),rgba(255,255,255,1))]",
+            rail: "bg-pink-100/90",
+            fill: "bg-fuchsia-500/82",
+            marker: "bg-violet-500 shadow-[0_0_0_3px_rgba(250,245,255,0.95)]",
+            value: "text-fuchsia-700",
+            deltaPositive: "text-fuchsia-700",
+            deltaNegative: "text-violet-700"
+          };
 
   return (
-    <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_28%_78%,rgba(153,246,228,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] px-5 py-4">
+    <div className={`relative overflow-hidden rounded-[1.6rem] border border-slate-200 px-5 py-4 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
           {input.label === "Overall score" ? (
@@ -105,26 +135,26 @@ function BenchmarkMetricCard(input: {
       </div>
       <div className="mt-5">
         <div className="flex items-end gap-1">
-          <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+          <span className={`text-[3.2rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
           {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
         </div>
       </div>
       <div className="mt-5 space-y-2">
-        <div className="relative h-3 rounded-full bg-sky-100/80">
+        <div className={`relative h-3 rounded-full ${tone.rail}`}>
           <div
-            className="absolute left-0 top-0 h-3 rounded-full bg-sky-500/85"
+            className={`absolute left-0 top-0 h-3 rounded-full ${tone.fill}`}
             style={{ width: `${Math.max(actualRatio * 100, actualValue === null ? 0 : 6)}%` }}
           />
           {benchmarkRatio !== null ? (
             <div
-              className="absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400 shadow-[0_0_0_3px_rgba(245,243,255,0.95)]"
+              className={`absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${tone.marker}`}
               style={{ left: `${benchmarkRatio * 100}%` }}
             />
           ) : null}
         </div>
         <div className="flex items-center text-[11px] text-slate-500">
           {delta !== null ? (
-            <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
+            <span className={delta > 0 ? tone.deltaPositive : delta < 0 ? tone.deltaNegative : "text-slate-500"}>
               {delta > 0 ? "+" : ""}
               {delta} vs expected
             </span>
