@@ -8,6 +8,7 @@ import {
   getPolicyChildrenReference,
   getPolicyEvidenceSnippets,
   getPolicyMentions,
+  getPolicyPageType,
   getPolicyRightsSignals,
   getPolicySummaryText,
   getPrivacyContactChannelType
@@ -115,7 +116,7 @@ export function derivePositivePolicySignalMap(input: {
   const privacyPolicyRows = [
     primaryPolicy,
     ...input.policyEnrichment.filter(
-      (row) => row !== primaryPolicy && (row.pageType === "privacy_policy" || row.page_type === "privacy_policy")
+      (row) => row !== primaryPolicy && getPolicyPageType(row) === "privacy_policy"
     )
   ];
   const rowHasPolicyMention = (row: Record<string, unknown>, topic: string) =>

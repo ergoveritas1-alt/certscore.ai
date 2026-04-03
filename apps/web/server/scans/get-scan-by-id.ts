@@ -27,6 +27,7 @@ import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToT
 import { deriveSupplementalSnapshotSignals } from "../../lib/scans/scan-detail-supplemental-signals";
 import { deriveSupplementalCoverageSignals, type SupplementalCoverageSignal } from "../../lib/scans/supplemental-coverage-signals";
 import { deriveSupplementalPolicySignals, type SupplementalPolicySignal } from "../../lib/scans/supplemental-policy-signals";
+import { getPrimaryPolicyEnrichmentRow, getPolicyPageType } from "../../lib/scans/policy-enrichment-row";
 import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
@@ -189,7 +190,7 @@ type ScanEventRow = {
 };
 
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
-  return rows.find((row) => row.page_type === "privacy_policy" || row.pageType === "privacy_policy") ?? rows[0] ?? null;
+  return getPrimaryPolicyEnrichmentRow(rows);
 }
 
 function deriveHostnameFromTargetUrl(value: string | null | undefined) {
