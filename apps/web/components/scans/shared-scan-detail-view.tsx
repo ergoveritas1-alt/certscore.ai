@@ -4835,8 +4835,28 @@ function formatWorkflowStageStatus(status: SignalEnrichmentWorkflowStageStatus) 
   }
 }
 
+function getLatestNanoDocRetrievalDiagnostics(scanEvents: ScanEventSummaryRecord[]) {
+  const event = [...scanEvents].reverse().find((row) => row.eventType === "signals.nano_doc_retrieval_completed");
+  const metadata = event?.metadataJson;
+
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  return {
+    candidateCount: getRecordNumber(metadata, "candidateCount"),
+    documentSourceCount: getRecordNumber(metadata, "documentSourceCount"),
+    duplicateCount: getRecordNumber(metadata, "duplicateCount"),
+    errorCount: getRecordNumber(metadata, "errorCount"),
+    insufficientCount: getRecordNumber(metadata, "insufficientCount"),
+    intermediaryCount: getRecordNumber(metadata, "intermediaryCount"),
+    nonOkCount: getRecordNumber(metadata, "nonOkCount")
+  };
+}
+
 function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse }) {
   const workflow = input.scanRecord.signalEnrichmentWorkflow;
+  const retrievalDiagnostics = getLatestNanoDocRetrievalDiagnostics(input.scanRecord.events);
   const counts = {
     stagesCompleted: workflow.stages.filter((stage) => stage.status === "completed").length,
     totalStages: workflow.stages.length
@@ -4861,6 +4881,22 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
           <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
             {counts.stagesCompleted} of {counts.totalStages} stages completed
           </div>
+          {retrievalDiagnostics ? (
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div className="font-medium text-slate-900">Nano doc retrieval diagnostics</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-4">
+                <div>Candidates: {retrievalDiagnostics.candidateCount ?? "—"}</div>
+                <div>Retained docs: {retrievalDiagnostics.documentSourceCount ?? "—"}</div>
+                <div>Duplicates dropped: {retrievalDiagnostics.duplicateCount ?? "—"}</div>
+                <div>Interstitial drops: {retrievalDiagnostics.intermediaryCount ?? "—"}</div>
+              </div>
+              <div className="mt-1 grid gap-2 md:grid-cols-3">
+                <div>Insufficient docs: {retrievalDiagnostics.insufficientCount ?? "—"}</div>
+                <div>Non-OK fetches: {retrievalDiagnostics.nonOkCount ?? "—"}</div>
+                <div>Fetch/runtime errors: {retrievalDiagnostics.errorCount ?? "—"}</div>
+              </div>
+            </div>
+          ) : null}
           <div className="divide-y divide-slate-200">
             {workflow.stages.map((stage) => (
               <div key={stage.id} className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-start md:justify-between">

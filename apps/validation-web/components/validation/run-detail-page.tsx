@@ -39,6 +39,15 @@ function safeNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function getRecordNumber(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function getWorkflowStageTone(status: SignalEnrichmentWorkflowStageStatus) {
   switch (status) {
     case "completed":
@@ -67,6 +76,25 @@ function formatWorkflowStageStatus(status: SignalEnrichmentWorkflowStageStatus) 
     default:
       return "Queued";
   }
+}
+
+function getLatestNanoDocRetrievalDiagnostics(events: Array<{ eventType: string; metadataJson: unknown }>) {
+  const event = [...events].reverse().find((row) => row.eventType === "signals.nano_doc_retrieval_completed");
+  const metadata = event?.metadataJson;
+
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  return {
+    candidateCount: getRecordNumber(metadata, "candidateCount"),
+    documentSourceCount: getRecordNumber(metadata, "documentSourceCount"),
+    duplicateCount: getRecordNumber(metadata, "duplicateCount"),
+    errorCount: getRecordNumber(metadata, "errorCount"),
+    insufficientCount: getRecordNumber(metadata, "insufficientCount"),
+    intermediaryCount: getRecordNumber(metadata, "intermediaryCount"),
+    nonOkCount: getRecordNumber(metadata, "nonOkCount")
+  };
 }
 
 export async function ValidationRunDetailPage(input: {
@@ -166,6 +194,25 @@ export async function ValidationRunDetailPage(input: {
             <CardTitle>Signal enrichment workflow</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {(() => {
+              const retrievalDiagnostics = getLatestNanoDocRetrievalDiagnostics(input.scanDetail?.events ?? []);
+              return retrievalDiagnostics ? (
+                <div className="rounded-xl border border-white/10 bg-slate-950/30 p-4 text-sm text-slate-300">
+                  <div className="font-medium text-white">Nano doc retrieval diagnostics</div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-4">
+                    <div>Candidates: {retrievalDiagnostics.candidateCount ?? "—"}</div>
+                    <div>Retained docs: {retrievalDiagnostics.documentSourceCount ?? "—"}</div>
+                    <div>Duplicates dropped: {retrievalDiagnostics.duplicateCount ?? "—"}</div>
+                    <div>Interstitial drops: {retrievalDiagnostics.intermediaryCount ?? "—"}</div>
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                    <div>Insufficient docs: {retrievalDiagnostics.insufficientCount ?? "—"}</div>
+                    <div>Non-OK fetches: {retrievalDiagnostics.nonOkCount ?? "—"}</div>
+                    <div>Fetch/runtime errors: {retrievalDiagnostics.errorCount ?? "—"}</div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
             <p className="text-sm text-slate-300">
               Scanner, nano, merge, and unified-finding derivation status for this scan.
             </p>

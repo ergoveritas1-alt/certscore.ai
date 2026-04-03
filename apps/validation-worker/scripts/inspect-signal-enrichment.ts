@@ -57,6 +57,15 @@ function printHeader(label: string) {
   console.log(`\n${label}`);
 }
 
+function getRecordNumber(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 async function main() {
   const scanId = getArgValue("--scan-id");
   const json = hasFlag("--json");
@@ -204,7 +213,22 @@ async function main() {
     documentSourcesByExtractionStatus: countBy(documentRows, (row) => String(row.extraction_status ?? "unknown")),
     documentSourcesByType: countBy(documentRows, (row) => String(row.document_type ?? "unknown")),
     eventCounts: countBy(eventRows, (row) => row.eventType),
-    signalCountsBySource: countBy(signalRows, (row) => String(row.population_source ?? "scanner"))
+    signalCountsBySource: countBy(signalRows, (row) => String(row.population_source ?? "scanner")),
+    nanoDocRetrievalDiagnostics: (() => {
+      const event = [...((events ?? []) as ScanEventRow[])].reverse().find((row) => row.event_type === "signals.nano_doc_retrieval_completed");
+      const metadata = event?.metadata_json ?? null;
+      return metadata
+        ? {
+            candidateCount: getRecordNumber(metadata, "candidateCount"),
+            documentSourceCount: getRecordNumber(metadata, "documentSourceCount"),
+            duplicateCount: getRecordNumber(metadata, "duplicateCount"),
+            errorCount: getRecordNumber(metadata, "errorCount"),
+            insufficientCount: getRecordNumber(metadata, "insufficientCount"),
+            intermediaryCount: getRecordNumber(metadata, "intermediaryCount"),
+            nonOkCount: getRecordNumber(metadata, "nonOkCount")
+          }
+        : null;
+    })()
   };
 
   if (json) {
@@ -244,6 +268,11 @@ async function main() {
 
   printHeader("Document Sources By Extraction Status");
   console.log(JSON.stringify(payload.documentSourcesByExtractionStatus, null, 2));
+
+  if (payload.nanoDocRetrievalDiagnostics) {
+    printHeader("Nano Doc Retrieval Diagnostics");
+    console.log(JSON.stringify(payload.nanoDocRetrievalDiagnostics, null, 2));
+  }
 
   printHeader("Signal Counts By Source");
   console.log(JSON.stringify(payload.signalCountsBySource, null, 2));
