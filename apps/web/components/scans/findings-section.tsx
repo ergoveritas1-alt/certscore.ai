@@ -14,6 +14,7 @@ export function FindingsSection(input: {
     <CollapsibleSectionCard
       title={input.section}
       subtitle={`${input.findings.length} surfaced finding${input.findings.length === 1 ? "" : "s"} with direct evidence or strong runtime inference.`}
+      defaultOpen={false}
       contentClassName="space-y-4"
     >
       {input.findings.map((finding) => (

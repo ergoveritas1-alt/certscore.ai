@@ -5537,65 +5537,72 @@ export function SharedScanDetailView({
               Plain-language findings first. Direct evidence, confidence, and analyst detail are available immediately below each card.
             </p>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <VendorFootprintCard
-              adtechHosts={certScoreSummary.rawAdtechHosts}
-              domains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
-              preConsentVendors={certScoreSummary.preConsentVendorNames}
-              sessionReplayVendors={certScoreSummary.sessionReplayVendorNames}
-              topObservedEntities={certScoreSummary.topObservedEntities}
-              trackerSummary={certScoreSummary.trackerSummary}
-              unresolvedHosts={certScoreSummary.unresolvedVendorHosts}
-              vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
-              vendors={certScoreSummary.resolvedVendorNames}
-            />
-            <FingerprintingPanel
-              categories={getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
-                count: typeof row.count === "number" ? row.count : 0,
-                firstSeenMs: typeof row.firstSeenMs === "number" ? row.firstSeenMs : null,
-                name: typeof row.name === "string" ? row.name : "unknown"
-              }))}
-              confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
-              label={certScoreSummary.fingerprintLabel}
-              narrative={certScoreSummary.fingerprintNarrative}
-              reasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
-            />
-            <CookieStoragePanel
-              adtechCookieNames={certScoreSummary.adtechCookieNames}
-              analyticsCookieNames={certScoreSummary.analyticsCookieNames}
-              cookieNamesBeforeConsent={certScoreSummary.cookieNamesBeforeConsent}
-              cookiesBeforeConsentCount={certScoreSummary.cookieNamesBeforeConsent.length > 0 ? certScoreSummary.cookieNamesBeforeConsent.length : cookiesBeforeConsentCount}
-              cookiesSeenCount={cookiesSeenCount}
-              localStorageKeys={getRecordStringArray(hybridStorageSummary, "localStorageKeySample")}
-              securityCookieNames={certScoreSummary.securityCookieNames}
-              sessionStorageKeys={getRecordStringArray(hybridStorageSummary, "sessionStorageKeySample")}
-              storageWrittenBeforeConsent={hybridStorageSummary?.storageWrittenBeforeConsent === true}
-              thirdPartyCookieNames={certScoreSummary.thirdPartyCookieNamesSeen}
-              thirdPartyCookieBeforeConsentCount={
-                certScoreSummary.thirdPartyCookieNamesBeforeConsent.length > 0
-                  ? certScoreSummary.thirdPartyCookieNamesBeforeConsent.length
-                  : (getRecordNumber(hybridStorageSummary, "thirdPartyCookieBeforeConsentCount") ?? 0)
-              }
-              thirdPartyCookieNamesBeforeConsent={certScoreSummary.thirdPartyCookieNamesBeforeConsent}
-              thirdPartyCookiesSeenCount={thirdPartyCookiesSeenCount}
-            />
-            <RedirectFlowPanel
-              autoRedirect={hybridNavigationSummary?.autoRedirect === true}
-              crossDomainHopCount={getRecordNumber(hybridNavigationSummary, "crossDomainHopCount") ?? 0}
-              finalUrl={typeof hybridNavigationSummary?.finalUrl === "string" ? hybridNavigationSummary.finalUrl : null}
-              initialUrl={typeof hybridNavigationSummary?.initialUrl === "string" ? hybridNavigationSummary.initialUrl : null}
-              redirectHopCount={getRecordNumber(hybridNavigationSummary, "redirectHopCount") ?? 0}
-            />
-            <div className="xl:col-span-2">
-              <DiagnosticsPanel
-                autoplayObserved={hybridMediaSummary?.autoplayVideoObserved === true || hybridMediaSummary?.autoplayAudioObserved === true}
-                forcedActionRequired={hybridUiSummary?.forcedActionRequired === true}
-                interstitialDetected={hybridUiSummary?.interstitialDetected === true}
-                overlayDetected={hybridUiSummary?.overlayDetected === true}
-                popupCount={getRecordNumber(hybridUiSummary, "popupCount") ?? 0}
+          <CollapsibleSectionCard
+            title="Supporting evidence"
+            subtitle="Tracker, storage, navigation, and UI evidence kept available without dominating the main report."
+            defaultOpen={false}
+            contentClassName="space-y-4"
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              <VendorFootprintCard
+                adtechHosts={certScoreSummary.rawAdtechHosts}
+                domains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
+                preConsentVendors={certScoreSummary.preConsentVendorNames}
+                sessionReplayVendors={certScoreSummary.sessionReplayVendorNames}
+                topObservedEntities={certScoreSummary.topObservedEntities}
+                trackerSummary={certScoreSummary.trackerSummary}
+                unresolvedHosts={certScoreSummary.unresolvedVendorHosts}
+                vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
+                vendors={certScoreSummary.resolvedVendorNames}
               />
+              <FingerprintingPanel
+                categories={getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
+                  count: typeof row.count === "number" ? row.count : 0,
+                  firstSeenMs: typeof row.firstSeenMs === "number" ? row.firstSeenMs : null,
+                  name: typeof row.name === "string" ? row.name : "unknown"
+                }))}
+                confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
+                label={certScoreSummary.fingerprintLabel}
+                narrative={certScoreSummary.fingerprintNarrative}
+                reasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
+              />
+              <CookieStoragePanel
+                adtechCookieNames={certScoreSummary.adtechCookieNames}
+                analyticsCookieNames={certScoreSummary.analyticsCookieNames}
+                cookieNamesBeforeConsent={certScoreSummary.cookieNamesBeforeConsent}
+                cookiesBeforeConsentCount={certScoreSummary.cookieNamesBeforeConsent.length > 0 ? certScoreSummary.cookieNamesBeforeConsent.length : cookiesBeforeConsentCount}
+                cookiesSeenCount={cookiesSeenCount}
+                localStorageKeys={getRecordStringArray(hybridStorageSummary, "localStorageKeySample")}
+                securityCookieNames={certScoreSummary.securityCookieNames}
+                sessionStorageKeys={getRecordStringArray(hybridStorageSummary, "sessionStorageKeySample")}
+                storageWrittenBeforeConsent={hybridStorageSummary?.storageWrittenBeforeConsent === true}
+                thirdPartyCookieNames={certScoreSummary.thirdPartyCookieNamesSeen}
+                thirdPartyCookieBeforeConsentCount={
+                  certScoreSummary.thirdPartyCookieNamesBeforeConsent.length > 0
+                    ? certScoreSummary.thirdPartyCookieNamesBeforeConsent.length
+                    : (getRecordNumber(hybridStorageSummary, "thirdPartyCookieBeforeConsentCount") ?? 0)
+                }
+                thirdPartyCookieNamesBeforeConsent={certScoreSummary.thirdPartyCookieNamesBeforeConsent}
+                thirdPartyCookiesSeenCount={thirdPartyCookiesSeenCount}
+              />
+              <RedirectFlowPanel
+                autoRedirect={hybridNavigationSummary?.autoRedirect === true}
+                crossDomainHopCount={getRecordNumber(hybridNavigationSummary, "crossDomainHopCount") ?? 0}
+                finalUrl={typeof hybridNavigationSummary?.finalUrl === "string" ? hybridNavigationSummary.finalUrl : null}
+                initialUrl={typeof hybridNavigationSummary?.initialUrl === "string" ? hybridNavigationSummary.initialUrl : null}
+                redirectHopCount={getRecordNumber(hybridNavigationSummary, "redirectHopCount") ?? 0}
+              />
+              <div className="xl:col-span-2">
+                <DiagnosticsPanel
+                  autoplayObserved={hybridMediaSummary?.autoplayVideoObserved === true || hybridMediaSummary?.autoplayAudioObserved === true}
+                  forcedActionRequired={hybridUiSummary?.forcedActionRequired === true}
+                  interstitialDetected={hybridUiSummary?.interstitialDetected === true}
+                  overlayDetected={hybridUiSummary?.overlayDetected === true}
+                  popupCount={getRecordNumber(hybridUiSummary, "popupCount") ?? 0}
+                />
+              </div>
             </div>
-          </div>
+          </CollapsibleSectionCard>
           <div className="space-y-5">
             {certScoreSummary.groupedFindings.map((group) => (
               <FindingsSection key={group.section} findings={group.findings} section={group.section} />
@@ -5603,7 +5610,6 @@ export function SharedScanDetailView({
           </div>
         </section>
       ) : null}
-      <AccessPostureSummaryCard summary={scanRecord.accessPostureSummary} />
       {snapshot ? (
         <>
           {reviewSectionError ? (
@@ -5723,6 +5729,18 @@ export function SharedScanDetailView({
           }
           contentClassName="space-y-6"
         >
+          <CollapsibleSectionCard
+            title={
+              <span className="flex items-center gap-1.5">
+                <span>Scan coverage & access posture</span>
+                <InfoTip text="Operational scan-stop detail, access posture, and retained early-surface evidence. Kept here for troubleshooting instead of the main narrative." />
+              </span>
+            }
+            defaultOpen={false}
+          >
+            <AccessPostureSummaryCard summary={scanRecord.accessPostureSummary} />
+          </CollapsibleSectionCard>
+
           {snapshot ? (
             <CollapsibleSectionCard
               title={
