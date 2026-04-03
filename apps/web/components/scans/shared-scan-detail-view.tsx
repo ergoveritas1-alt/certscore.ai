@@ -68,8 +68,7 @@ import {
 import {
   getPolicyPositiveSignalSpec,
   isPolicyPositiveSignalKey,
-  isPrivacyRightsSignalKey,
-  normalizePolicyPositiveSignalKey
+  isPrivacyRightsSignalKey
 } from "../../lib/scans/policy-positive-signal-contract";
 import {
   isMeaningfulPolicyText,
@@ -511,16 +510,9 @@ function derivePolicyBehaviorContradictions(input: {
   const mergedPolicyFlags = findMergedSignalValue(input.mergedSignals, "policyActionableFlags");
   const policyFlags = Array.isArray(mergedPolicyFlags)
     ? mergedPolicyFlags.filter((value): value is string => typeof value === "string")
-    : Array.isArray(getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags"))
-      ? ((getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags") as unknown[]) ?? []).filter(
-          (value): value is string => typeof value === "string"
-        )
-      : [];
+    : [];
   const mergedPolicyDoNotSell = findMergedSignalValue(input.mergedSignals, "policyDoNotSell");
-  const policyDoNotSell =
-    typeof mergedPolicyDoNotSell === "string"
-      ? mergedPolicyDoNotSell
-      : String(getPolicyField(privacyEnrichment, "policyDoNotSell", "policy_do_not_sell") ?? "unknown");
+  const policyDoNotSell = typeof mergedPolicyDoNotSell === "string" ? mergedPolicyDoNotSell : "unknown";
   const policyPageUrl =
     typeof (privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url) === "string"
       ? String(privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url)
@@ -1150,10 +1142,6 @@ type CanonicalSignalItem = {
   value: unknown;
 };
 
-function toSnakeCase(value: string) {
-  return value.replace(/[A-Z]/g, (character) => `_${character.toLowerCase()}`);
-}
-
 function getSignalNamespaceKey(key: string) {
   const separatorIndex = key.indexOf(".");
   return separatorIndex >= 0 ? key.slice(separatorIndex + 1) : key;
@@ -1176,35 +1164,6 @@ function findMergedSignalValue(
 ) {
   const row = mergedSignals?.find((signal) => signal.key === key) ?? null;
   return row?.selectedPopulation?.value ?? row?.value ?? null;
-}
-
-function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
-  const canonicalKey = normalizePolicyPositiveSignalKey(key);
-
-  for (const row of policyEnrichment) {
-    const value = getPolicyField(row, canonicalKey, toSnakeCase(canonicalKey), key, toSnakeCase(key));
-    if (value !== null && isSignalValuePopulated(canonicalKey, value)) {
-      return value;
-    }
-
-    if (isPrivacyRightsSignalKey(canonicalKey)) {
-      const evidenceSnippets =
-        row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-          ? (row.policyEvidenceSnippets as Record<string, unknown>)
-          : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-            ? (row.policy_evidence_snippets as Record<string, unknown>)
-            : null;
-      const nestedRightsSignals = Array.isArray(evidenceSnippets?.policy_rights_signals)
-        ? (evidenceSnippets.policy_rights_signals as string[])
-        : null;
-
-      if (nestedRightsSignals && isSignalValuePopulated(canonicalKey, nestedRightsSignals)) {
-        return nestedRightsSignals;
-      }
-    }
-  }
-
-  return null;
 }
 
 function getSnapshotSignalValue(snapshot: Record<string, unknown> | null, signalKey: string) {
@@ -1273,7 +1232,7 @@ function getReportSignalValue(input: {
     return input.runtimeArtifacts?.[input.signal.key] ?? mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
 
-  return mergedSignalValue ?? getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
+  return mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
 }
 
 function isSignalValuePopulated(key: string, value: unknown) {
@@ -1802,13 +1761,7 @@ function getPolicySignalFallbackEvidence(input: {
   const mergedPolicyRightsSignals = findMergedSignalValue(input.mergedSignals, "policyRightsSignals");
   const policyRightsSignals = Array.isArray(mergedPolicyRightsSignals)
     ? mergedPolicyRightsSignals.filter((value): value is string => typeof value === "string")
-    : Array.isArray(row?.policyRightsSignals)
-      ? row.policyRightsSignals
-      : Array.isArray(row?.policy_rights_signals)
-        ? row.policy_rights_signals
-        : Array.isArray(evidenceSnippets?.policy_rights_signals)
-          ? (evidenceSnippets.policy_rights_signals as string[])
-          : [];
+    : [];
   const topicSnippetKeys = topicKey
     ? [topicKey]
     : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
@@ -1829,16 +1782,12 @@ function getPolicySignalFallbackEvidence(input: {
   const privacyContactChannelType =
     typeof mergedPrivacyContactChannelType === "string" && isMeaningfulPolicyText(mergedPrivacyContactChannelType)
       ? mergedPrivacyContactChannelType
-      : row && isMeaningfulPolicyText(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
-        ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
-        : null;
+      : null;
   const mergedPolicyChildrenReference = findMergedSignalValue(input.mergedSignals, "policyChildrenReference");
   const policyChildrenReference =
     typeof mergedPolicyChildrenReference === "string" && isMeaningfulPolicyText(mergedPolicyChildrenReference)
       ? mergedPolicyChildrenReference
-      : row && isMeaningfulPolicyText(row.policyChildrenReference ?? row.policy_children_reference)
-        ? String(row.policyChildrenReference ?? row.policy_children_reference)
-        : null;
+      : null;
 
   return {
     pageUrl,
