@@ -1,0 +1,191 @@
+import { SCAN_EVENT_TYPES } from "../constants/queue";
+import type {
+  SignalEnrichmentWorkflowStage,
+  SignalEnrichmentWorkflowStageStatus,
+  SignalEnrichmentWorkflowState
+} from "../types/scan-signal-workflow";
+
+type WorkflowEventRecord = {
+  createdAt: string;
+  eventType: string;
+};
+
+type WorkflowTimestampMap = {
+  completedAt: string | null;
+  startedAt: string | null;
+};
+
+function getLatestEventTimestamp(events: WorkflowEventRecord[], eventTypes: string[]) {
+  const matches = events
+    .filter((event) => eventTypes.includes(event.eventType))
+    .map((event) => event.createdAt)
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches.at(-1) ?? null;
+}
+
+function getEarliestEventTimestamp(events: WorkflowEventRecord[], eventTypes: string[]) {
+  const matches = events
+    .filter((event) => eventTypes.includes(event.eventType))
+    .map((event) => event.createdAt)
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches[0] ?? null;
+}
+
+function deriveLifecycleTimestamps(input: {
+  completedEventTypes: string[];
+  events: WorkflowEventRecord[];
+  failedEventTypes?: string[];
+  startedEventTypes: string[];
+}): WorkflowTimestampMap & { failedAt: string | null } {
+  return {
+    completedAt: getLatestEventTimestamp(input.events, input.completedEventTypes),
+    failedAt: input.failedEventTypes ? getLatestEventTimestamp(input.events, input.failedEventTypes) : null,
+    startedAt: getEarliestEventTimestamp(input.events, input.startedEventTypes)
+  };
+}
+
+function deriveStageStatus(input: {
+  blocked?: boolean;
+  completedAt: string | null;
+  failedAt?: string | null;
+  startedAt: string | null;
+}): SignalEnrichmentWorkflowStageStatus {
+  if (input.failedAt) {
+    return "failed";
+  }
+
+  if (input.completedAt) {
+    return "completed";
+  }
+
+  if (input.startedAt) {
+    return "running";
+  }
+
+  return input.blocked ? "blocked" : "queued";
+}
+
+export function deriveSignalEnrichmentWorkflowState(input: {
+  events: WorkflowEventRecord[];
+  findingsCount: number;
+  mergedSignalCount: number;
+  nanoSignalCount: number;
+  policyDocumentCount: number;
+  scanCompletedAt?: string | null;
+  scanStatus: string | null;
+  scannerSignalCount: number;
+}) : SignalEnrichmentWorkflowState {
+  const scannerCompletedAt =
+    getLatestEventTimestamp(input.events, [SCAN_EVENT_TYPES.fullCompleted, SCAN_EVENT_TYPES.previewCompleted]) ??
+    input.scanCompletedAt ??
+    null;
+  const scannerStartedAt =
+    getEarliestEventTimestamp(input.events, [SCAN_EVENT_TYPES.fullStarted, SCAN_EVENT_TYPES.previewStarted]) ??
+    null;
+  const scannerFailedAt = getLatestEventTimestamp(input.events, [SCAN_EVENT_TYPES.fullFailed, SCAN_EVENT_TYPES.previewFailed]);
+
+  const nanoTimestamps = deriveLifecycleTimestamps({
+    completedEventTypes: [SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted],
+    events: input.events,
+    failedEventTypes: [SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed],
+    startedEventTypes: [SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted]
+  });
+  const mergeTimestamps = deriveLifecycleTimestamps({
+    completedEventTypes: [SCAN_EVENT_TYPES.signalMergeCompleted],
+    events: input.events,
+    failedEventTypes: [SCAN_EVENT_TYPES.signalMergeFailed],
+    startedEventTypes: [SCAN_EVENT_TYPES.signalMergeStarted]
+  });
+  const findingsTimestamps = deriveLifecycleTimestamps({
+    completedEventTypes: [SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted],
+    events: input.events,
+    failedEventTypes: [SCAN_EVENT_TYPES.unifiedFindingsDerivedFailed],
+    startedEventTypes: [SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted]
+  });
+
+  const actualMode =
+    nanoTimestamps.startedAt && scannerCompletedAt && nanoTimestamps.startedAt < scannerCompletedAt
+      ? "parallelized"
+      : "serial_bridge";
+
+  const scannerStatus =
+    input.scanStatus === "failed"
+      ? "failed"
+      : input.scanStatus === "completed"
+        ? "completed"
+        : input.scanStatus === "running" || input.scanStatus === "processing"
+          ? "running"
+          : "queued";
+
+  const nanoStatus = deriveStageStatus({
+    blocked: actualMode === "serial_bridge" && scannerStatus !== "completed" && scannerStatus !== "failed",
+    completedAt: nanoTimestamps.completedAt,
+    failedAt: nanoTimestamps.failedAt,
+    startedAt: nanoTimestamps.startedAt
+  });
+  const mergeStatus = deriveStageStatus({
+    blocked: nanoStatus !== "completed" || scannerStatus !== "completed",
+    completedAt: mergeTimestamps.completedAt,
+    failedAt: mergeTimestamps.failedAt,
+    startedAt: mergeTimestamps.startedAt
+  });
+  const findingsStatus = deriveStageStatus({
+    blocked: mergeStatus !== "completed",
+    completedAt: findingsTimestamps.completedAt,
+    failedAt: findingsTimestamps.failedAt,
+    startedAt: findingsTimestamps.startedAt
+  });
+
+  const stages: SignalEnrichmentWorkflowStage[] = [
+    {
+      completedAt: scannerStatus === "completed" ? scannerCompletedAt : null,
+      dependsOn: [],
+      description: "WS01 scanner evidence collection and direct scanner-owned signal population.",
+      id: "scanner",
+      itemCount: input.scannerSignalCount,
+      label: "Scanner",
+      startedAt: scannerStartedAt,
+      status: scannerStatus,
+    },
+    {
+      completedAt: nanoTimestamps.completedAt,
+      dependsOn: [],
+      description: "Nano-owned document and disclosure signal enrichment.",
+      id: "nano_doc_signals",
+      itemCount: input.nanoSignalCount > 0 ? input.nanoSignalCount : input.policyDocumentCount,
+      label: "Nano Doc Signals",
+      startedAt: nanoTimestamps.startedAt,
+      status: nanoStatus
+    },
+    {
+      completedAt: mergeTimestamps.completedAt,
+      dependsOn: ["scanner", "nano_doc_signals"],
+      description: "Canonical merge of scanner, nano, and validation populations into merged signals.",
+      id: "signal_merge",
+      itemCount: input.mergedSignalCount,
+      label: "Merged Signals",
+      startedAt: mergeTimestamps.startedAt,
+      status: mergeStatus
+    },
+    {
+      completedAt: findingsTimestamps.completedAt,
+      dependsOn: ["signal_merge"],
+      description: "Concern and unified-finding derivation from the merged signal set.",
+      id: "unified_findings",
+      itemCount: input.findingsCount,
+      label: "Unified Findings",
+      startedAt: findingsTimestamps.startedAt,
+      status: findingsStatus
+    }
+  ];
+
+  return {
+    actualMode,
+    findingsReady: findingsStatus === "completed" || input.findingsCount > 0,
+    mergedSignalsReady: mergeStatus === "completed" || input.mergedSignalCount > 0,
+    preferredMode: "parallel_evidence_collection",
+    stages
+  };
+}

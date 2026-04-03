@@ -1,6 +1,7 @@
 "use server";
 
 import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
+import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { getPrimaryPolicyEnrichmentRow } from "../../lib/scans/policy-enrichment-row";
@@ -159,6 +160,7 @@ function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
 
 type SignalRow = {
   category: string;
+  population_source?: string | null;
   signal_key: string;
   signal_label: string;
   signal_value_json: boolean | number | string | string[];
@@ -321,7 +323,7 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       .maybeSingle(),
     supabase
       .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type")
+      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source")
       .eq("scan_id", input.scanId)
       .order("category", { ascending: true })
       .order("signal_key", { ascending: true }),
@@ -562,6 +564,20 @@ export async function getScanById(input: { organizationId: string; scanId: strin
           }) satisfies PreconsentChangeRecord
       )
   ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
+  const rawSignalRows = (signals ?? []) as SignalRow[];
+  const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
+    events: ((events ?? []) as ScanEventRow[]).map((event) => ({
+      createdAt: event.created_at,
+      eventType: event.event_type
+    })),
+    findingsCount: 0,
+    mergedSignalCount: new Set(rawSignalRows.map((signal) => signal.signal_key)).size,
+    nanoSignalCount: rawSignalRows.filter((signal) => signal.population_source === "nano").length,
+    policyDocumentCount: normalizedPolicyEnrichment.length,
+    scanCompletedAt: scanRow.completed_at,
+    scanStatus: scanRow.status,
+    scannerSignalCount: rawSignalRows.filter((signal) => (signal.population_source ?? "scanner") === "scanner").length
+  });
 
   return {
     scan: {
@@ -594,6 +610,7 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       : null,
     policyEnrichment: normalizedPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    signalEnrichmentWorkflow,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot
       ? buildAgencyMappings(buildAgencyMappingSource(regulatorySnapshot as Record<string, unknown>), regulatoryRisk)

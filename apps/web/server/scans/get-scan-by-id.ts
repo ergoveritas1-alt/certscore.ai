@@ -15,6 +15,7 @@ import {
   type RegulatoryRiskAssessment,
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
+import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
@@ -1165,6 +1166,19 @@ async function loadScanDetailRecord(input: {
       source: "validation"
     })
   });
+  const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
+    events: normalizedEvents.map((event) => ({
+      createdAt: event.createdAt,
+      eventType: event.eventType
+    })),
+    findingsCount: validationFindings.length,
+    mergedSignalCount: mergedSignals.length,
+    nanoSignalCount: storedNanoSignalRows.length,
+    policyDocumentCount: normalizedPolicyEnrichment.length,
+    scanCompletedAt: scanRow.completed_at,
+    scanStatus: scanRow.status,
+    scannerSignalCount: scannerSignalPopulations.length
+  });
 
   return {
     accessPostureSummary: {
@@ -1233,6 +1247,7 @@ async function loadScanDetailRecord(input: {
     policyEnrichment: normalizedPolicyEnrichment,
     primaryPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    signalEnrichmentWorkflow,
     validationFindings,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot

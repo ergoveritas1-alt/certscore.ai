@@ -123,6 +123,22 @@ Nano does not emit findings directly. It emits typed signal records with confide
 
 Legacy `scan_runtime_artifacts.hybrid_runtime_evidence` nano rows are now migration-only input for the backfill tool and are no longer part of the canonical read path.
 
+The scan detail loaders now expose an explicit `signalEnrichmentWorkflow` state object derived from scan events and persisted signal populations.
+
+Current behavior is reported as:
+
+- `actualMode: "serial_bridge"` when nano doc-signal enrichment starts only after WS01 completion
+- `actualMode: "parallelized"` when nano enrichment begins before scanner completion
+
+The preferred target remains `preferredMode: "parallel_evidence_collection"` across four stages:
+
+- `scanner`
+- `nano_doc_signals`
+- `signal_merge`
+- `unified_findings`
+
+The validation worker now emits explicit stage events for nano doc enrichment, merged-signal derivation, and unified-finding derivation so this workflow can be observed directly instead of inferred from generic validation-run status.
+
 Accepted payload keys under `hybrid_runtime_evidence`:
 
 - `nano_signals`

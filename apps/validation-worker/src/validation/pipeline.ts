@@ -7,6 +7,7 @@ import {
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
 import {
+  appendScanWorkflowEvent,
   claimNextAutomaticTarget,
   createScanForValidationRun,
   createValidationRun,
@@ -260,6 +261,19 @@ function classifyFinancialValidationPage(pageType: string | null) {
   return "unknown" as const;
 }
 
+type ValidationArtifactBundle = {
+  pageEvidence: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+  policyEnrichments: Array<Record<string, unknown>>;
+  policyReviewQueue: Array<Record<string, unknown>>;
+  preconsentViolations: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  scan: Record<string, unknown> | null;
+  signalHits: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown> | null;
+  trackerVendors: Array<Record<string, unknown>>;
+};
+
 function getStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   return Array.isArray(record?.[key])
     ? (record?.[key] as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -301,7 +315,7 @@ function getFinancialValidationDefinition(signalKey: string) {
   }
 }
 
-function deriveFinancialValidationFindings(input: Awaited<ReturnType<typeof loadCompletedScanArtifacts>>) {
+function deriveFinancialValidationFindings(input: ValidationArtifactBundle) {
   const evidenceById = new Map(
     input.pageEvidence.map((row) => [String(row.evidence_id ?? ""), row])
   );
@@ -1088,7 +1102,7 @@ function deriveAccessibilitySectionFindings(input: { snapshot: Record<string, un
   );
 }
 
-export function deriveValidationFindings(input: Awaited<ReturnType<typeof loadCompletedScanArtifacts>>) {
+export function deriveValidationFindings(input: ValidationArtifactBundle) {
   const policyEnrichmentsById = new Map(
     input.policyEnrichments.map((row) => [String(row.id ?? ""), row])
   );
@@ -1289,32 +1303,99 @@ export async function processValidationRankJob(validationRunId: string) {
     if (!run?.scan_id) {
       throw new Error("Validation run is missing a scan.");
     }
+    const scanId = run.scan_id;
 
     await enrichUnknownScanVendors({
       hostname: run.hostname,
-      scanId: run.scan_id
+      scanId
     }).catch((error) => {
       console.error("[validation-worker] vendor enrichment failed", {
         error: error instanceof Error ? error.message : String(error),
-        scanId: run.scan_id
+        scanId
       });
     });
 
-    const artifacts = await loadCompletedScanArtifacts(run.scan_id);
-    await persistDerivedNanoPolicySignals({
+    const artifacts = await loadCompletedScanArtifacts(scanId);
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
+      message: "Nano document signal enrichment started.",
+      metadataJson: {
+        stage: "nano_doc_signals"
+      },
+      scanId
+    }).catch(() => undefined);
+    const nanoSignalRows = await persistDerivedNanoPolicySignals({
       policyEnrichments: artifacts.policyEnrichments,
       policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
-      scanId: run.scan_id,
+      scanId,
       snapshot: artifacts.snapshot
     }).catch((error) => {
+      void appendScanWorkflowEvent({
+        eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+        message: "Nano document signal enrichment failed.",
+        metadataJson: {
+          error: error instanceof Error ? error.message : String(error),
+          stage: "nano_doc_signals"
+        },
+        scanId
+      }).catch(() => undefined);
       console.error("[validation-worker] nano policy signal persistence failed", {
         error: error instanceof Error ? error.message : String(error),
-        scanId: run.scan_id
+        scanId
       });
+
+      return [];
     });
-    const findings = deriveValidationFindings(artifacts);
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+      message: "Nano document signal enrichment completed.",
+      metadataJson: {
+        nanoSignalCount: nanoSignalRows.length,
+        policyDocumentCount: artifacts.policyEnrichments.length,
+        stage: "nano_doc_signals"
+      },
+      scanId
+    }).catch(() => undefined);
+
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.signalMergeStarted,
+      message: "Merged signal derivation started.",
+      metadataJson: {
+        stage: "signal_merge"
+      },
+      scanId
+    }).catch(() => undefined);
+    const refreshedArtifacts = await loadCompletedScanArtifacts(scanId);
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
+      message: "Merged signal derivation completed.",
+      metadataJson: {
+        mergedSignalCount: refreshedArtifacts.mergedSignals.length,
+        stage: "signal_merge"
+      },
+      scanId
+    }).catch(() => undefined);
+
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
+      message: "Unified finding derivation started.",
+      metadataJson: {
+        stage: "unified_findings"
+      },
+      scanId
+    }).catch(() => undefined);
+    const findings = deriveValidationFindings(refreshedArtifacts);
     await replaceValidationRunFindings(validationRunId, findings);
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+      message: "Unified finding derivation completed.",
+      metadataJson: {
+        findingCount: findings.length,
+        stage: "unified_findings"
+      },
+      scanId
+    }).catch(() => undefined);
 
     if (findings.length === 0) {
       await finalizeValidationRun(validationRunId);

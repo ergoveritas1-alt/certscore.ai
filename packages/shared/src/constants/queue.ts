@@ -88,6 +88,15 @@ export const SCAN_EVENT_TYPES = {
   validationVerdictStarted: "validation.verdict_started",
   validationVerdictCompleted: "validation.verdict_completed",
   validationVerdictFailed: "validation.verdict_failed",
+  nanoSignalEnrichmentStarted: "signals.nano_doc_enrichment_started",
+  nanoSignalEnrichmentCompleted: "signals.nano_doc_enrichment_completed",
+  nanoSignalEnrichmentFailed: "signals.nano_doc_enrichment_failed",
+  signalMergeStarted: "signals.merge_started",
+  signalMergeCompleted: "signals.merge_completed",
+  signalMergeFailed: "signals.merge_failed",
+  unifiedFindingsDerivedStarted: "findings.unified_derivation_started",
+  unifiedFindingsDerivedCompleted: "findings.unified_derivation_completed",
+  unifiedFindingsDerivedFailed: "findings.unified_derivation_failed",
   validationRunCompleted: "validation.run_completed",
   validationRunFailed: "validation.run_failed"
 } as const;

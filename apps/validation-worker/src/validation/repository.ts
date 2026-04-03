@@ -745,6 +745,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     { data: scan, error: scanError },
     { data: snapshot, error: snapshotError },
     { data: runtimeArtifacts, error: runtimeArtifactsError },
+    { data: rawSignals, error: signalsError },
     { data: trackerVendors, error: trackerError },
     { data: pages, error: pagesError },
     { data: policyEnrichments, error: policyEnrichmentError },
@@ -760,6 +761,12 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       .maybeSingle(),
     supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
     supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    supabase
+      .from("scan_signals")
+      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
+      .eq("scan_id", scanId)
+      .order("category", { ascending: true })
+      .order("signal_key", { ascending: true }),
     supabase
       .from("scan_tracker_vendors")
       .select("vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id")
@@ -807,6 +814,9 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   if (runtimeArtifactsError) {
     throw new Error(`Failed to load validation runtime artifacts ${scanId}: ${runtimeArtifactsError.message}`);
   }
+  if (signalsError) {
+    throw new Error(`Failed to load validation signal populations ${scanId}: ${signalsError.message}`);
+  }
   if (trackerError) {
     throw new Error(`Failed to load validation tracker vendors ${scanId}: ${trackerError.message}`);
   }
@@ -830,11 +840,55 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   }
 
   const runtimeArtifactsRecord = (runtimeArtifacts as Record<string, unknown> | null) ?? null;
+  const rawSignalRows = (rawSignals ?? []) as SignalPopulationRow[];
+  const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
+  const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
+  const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
   const loadedPageEvidence = (pageEvidenceError ? [] : pageEvidence ?? []) as Array<Record<string, unknown>>;
   const loadedSignalHits = (signalHitsError ? [] : signalHits ?? []) as Array<Record<string, unknown>>;
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: buildStoredSignalPopulationRecords({
+      observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
+      rows: storedNanoSignalRows,
+      source: "nano"
+    }),
+    scannerSignals: scannerSignalRows.map((signal) => ({
+      confidence: typeof signal.confidence === "number" ? signal.confidence : null,
+      evidenceRefs: Array.isArray(signal.evidence_refs) ? signal.evidence_refs.filter((value): value is string => typeof value === "string") : [],
+      key: signal.signal_key,
+      label: signal.signal_label,
+      observedAt: signal.observed_at ?? (typeof scan?.completed_at === "string" ? scan.completed_at : null),
+      populationStatus:
+        signal.population_status === "present" ||
+        signal.population_status === "missing" ||
+        signal.population_status === "conflicting" ||
+        signal.population_status === "insufficient"
+          ? signal.population_status
+          : "present",
+      provenance: [],
+      reportSignalSource: null,
+      source: "scanner",
+      value: signal.signal_value_json,
+      valueType: signal.value_type === "boolean" || signal.value_type === "number" || signal.value_type === "text" || signal.value_type === "string_array"
+        ? signal.value_type
+        : Array.isArray(signal.signal_value_json)
+          ? "string_array"
+          : typeof signal.signal_value_json === "number"
+            ? "number"
+            : typeof signal.signal_value_json === "boolean"
+              ? "boolean"
+              : "text"
+    })),
+    validationSignals: buildStoredSignalPopulationRecords({
+      observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
+      rows: storedValidationSignalRows,
+      source: "validation"
+    })
+  });
 
   return {
+    mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
@@ -1436,6 +1490,27 @@ export async function persistDerivedNanoPolicySignals(input: {
   }
 
   return nextRows;
+}
+
+export async function appendScanWorkflowEvent(input: {
+  eventType: string;
+  message: string;
+  metadataJson?: Record<string, unknown>;
+  scanId: string;
+}) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("scan_events").insert({
+    domain_id: null,
+    event_type: input.eventType,
+    message: input.message,
+    metadata_json: input.metadataJson ?? {},
+    organization_id: null,
+    scan_id: input.scanId
+  });
+
+  if (error) {
+    throw new Error(`Failed to append scan workflow event ${input.eventType} for scan ${input.scanId}: ${error.message}`);
+  }
 }
 
 export function normalizeValidationTargetInput(value: string) {
