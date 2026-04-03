@@ -1286,7 +1286,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     }).catch(() => undefined);
   }
 
-  if (artifacts.policyEnrichments.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
+  if (artifacts.policySignalInputs.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
     if (pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS) {
       await enqueueNanoSignalEnrichment(scanId, pollCount + 1, NANO_SIGNAL_ENRICHMENT_POLL_MS);
       return;
@@ -1307,7 +1307,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
   }
 
   const nanoSignalRows = await persistDerivedNanoPolicySignals({
-    policyEnrichments: artifacts.policyEnrichments,
+    policyEnrichments: artifacts.policySignalInputs,
     policyReviewQueue: artifacts.policyReviewQueue,
     runtimeArtifacts: artifacts.runtimeArtifacts,
     scanId,
@@ -1318,10 +1318,13 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
     message: "Nano document signal enrichment completed.",
     metadataJson: {
+      documentSourceCount: artifacts.documentSources.length,
       nanoSignalCount: nanoSignalRows.length,
-      policyDocumentCount: artifacts.policyEnrichments.length,
+      policyDocumentCount: artifacts.policySignalInputs.length,
+      policyEnrichmentCount: artifacts.policyEnrichments.length,
       scanStartedAt: startedAt,
-      stage: "nano_doc_signals"
+      stage: "nano_doc_signals",
+      sourceMode: artifacts.documentSources.length > 0 ? "document_sources" : "policy_enrichment"
     },
     scanId
   }).catch(() => undefined);

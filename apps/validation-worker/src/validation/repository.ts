@@ -20,6 +20,7 @@ import {
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
+import { buildNanoPolicyInputsFromDocumentSources } from "../../../web/lib/scans/nano-document-sources";
 import { buildNanoPolicySignalRows, MANAGED_NANO_POLICY_SIGNAL_KEYS } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
@@ -909,13 +910,19 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     { data: snapshot, error: snapshotError },
     { data: runtimeArtifacts, error: runtimeArtifactsError },
     { data: policyEnrichments, error: policyEnrichmentError },
-    { data: policyReviewQueue, error: policyReviewQueueError }
+    { data: policyReviewQueue, error: policyReviewQueueError },
+    { data: documentSources, error: documentSourcesError }
   ] = await Promise.all([
     supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
     supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
     supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
     supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+    supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    supabase
+      .from("scan_document_sources")
+      .select("*")
+      .eq("scan_id", scanId)
+      .order("created_at", { ascending: true })
   ]);
 
   if (scanError) {
@@ -933,8 +940,15 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
   if (policyReviewQueueError) {
     throw new Error(`Failed to load policy review queue for nano signal enrichment ${scanId}: ${policyReviewQueueError.message}`);
   }
+  if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
+    throw new Error(`Failed to load document sources for nano signal enrichment ${scanId}: ${documentSourcesError.message}`);
+  }
 
+  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const documentBackedPolicyInputs = buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources);
   return {
+    documentSources: normalizedDocumentSources,
+    policySignalInputs: documentBackedPolicyInputs.length > 0 ? documentBackedPolicyInputs : ((policyEnrichments ?? []) as Array<Record<string, unknown>>),
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,

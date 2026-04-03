@@ -159,7 +159,7 @@ Expected row fields:
 
 These rows are normalized into `source: "nano"` signal-population records and merged with scanner-owned populations before any downstream finding derivation.
 
-The current producer-side bootstrap writes these rows into `scan_signals` from existing `policy_enrichment` records during validation ranking. That persisted set currently covers:
+The current producer-side bootstrap writes these rows into `scan_signals` from policy-style document inputs during validation ranking. Today that still usually means `policy_enrichment`, but the nano worker can now prefer independent rows from `scan_document_sources` when they exist. That persisted set currently covers:
 
 - canonical positive policy/disclosure signals from the policy signal contract
 - low-confidence policy extraction signal population
