@@ -147,6 +147,29 @@ test("dedupeNanoDocumentSources keeps one row per canonical url and document typ
   );
 });
 
+test("dedupeNanoDocumentSources prefers ready rows over rejected duplicates", () => {
+  const rows = dedupeNanoDocumentSources([
+    {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      extraction_status: "failed",
+      source_status: "rejected",
+      source_url: "https://example.com/privacy"
+    },
+    {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      extraction_status: "pending",
+      source_status: "ready",
+      source_url: "https://example.com/privacy-policy"
+    }
+  ]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.source_status, "ready");
+  assert.equal(rows[0]?.extraction_status, "pending");
+});
+
 test("buildNanoDocCandidateUrls prioritizes discovered and canonical seed legal urls first", () => {
   const candidates = buildNanoDocCandidateUrls({
     domainHostname: "example.com",

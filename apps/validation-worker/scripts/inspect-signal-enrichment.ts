@@ -94,6 +94,13 @@ function getRecordNumber(record: unknown, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function getDocumentSourceStatusCount(rows: Array<Record<string, unknown>>, status: string) {
+  return rows.filter((row) => {
+    const value = row.source_status;
+    return typeof value === "string" ? value === status : false;
+  }).length;
+}
+
 async function main() {
   const scanId = getArgValue("--scan-id");
   const json = hasFlag("--json");
@@ -202,12 +209,14 @@ async function main() {
   const signalRows = (signals ?? []) as ScanSignalRow[];
   const documentRows = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
+  const readyDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "ready");
+  const rejectedDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "rejected");
 
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
   const validationSignalCount = signalRows.filter((row) => row.population_source === "validation").length;
   const workflow = deriveSignalEnrichmentWorkflowState({
-    documentSourceCount: documentRows.length,
+    documentSourceCount: readyDocumentSourceCount,
     events: eventRows,
     findingsCount: findingRows.length,
     mergedSignalCount: signalRows.length,
@@ -231,7 +240,9 @@ async function main() {
     counts: {
       documentSourcesAvailable: !documentSourcesError,
       signalSourceColumnAvailable: !(signalResult.error && isMissingColumnError(signalResult.error, "population_source")),
-      documentSources: documentRows.length,
+      documentSources: readyDocumentSourceCount,
+      rejectedDocumentSources: rejectedDocumentSourceCount,
+      totalDocumentSourceRows: documentRows.length,
       findings: findingRows.length,
       nanoSignals: nanoSignalCount,
       scannerSignals: scannerSignalCount,
@@ -253,7 +264,8 @@ async function main() {
             errorCount: getRecordNumber(metadata, "errorCount"),
             insufficientCount: getRecordNumber(metadata, "insufficientCount"),
             intermediaryCount: getRecordNumber(metadata, "intermediaryCount"),
-            nonOkCount: getRecordNumber(metadata, "nonOkCount")
+            nonOkCount: getRecordNumber(metadata, "nonOkCount"),
+            rejectedCount: getRecordNumber(metadata, "rejectedCount")
           }
         : null;
     })()
@@ -307,6 +319,19 @@ async function main() {
     printHeader("Nano Doc Retrieval Diagnostics");
     console.log(JSON.stringify(payload.nanoDocRetrievalDiagnostics, null, 2));
   }
+
+  printHeader("Document Sources By Status");
+  console.log(
+    JSON.stringify(
+      {
+        ready: readyDocumentSourceCount,
+        rejected: rejectedDocumentSourceCount,
+        total: documentRows.length
+      },
+      null,
+      2
+    )
+  );
 
   printHeader("Signal Counts By Source");
   console.log(JSON.stringify(payload.signalCountsBySource, null, 2));

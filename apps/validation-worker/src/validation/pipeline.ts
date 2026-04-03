@@ -1435,61 +1435,147 @@ async function fetchNanoDocumentSource(input: {
   priorityTier?: "priority" | "secondary";
   url: string;
 }) {
+  const baseMetadata = {
+    priority_tier: input.priorityTier ?? "secondary",
+    retrieval_mode: "nano_doc_retrieval"
+  } satisfies Record<string, unknown>;
+
   try {
-  const request = buildValidationWorkerCrawlerHeaders(input.url);
-  const response = await fetch(input.url, {
-    headers: request.headers,
-    redirect: "follow",
-    signal: AbortSignal.timeout(15_000)
-  });
+    const request = buildValidationWorkerCrawlerHeaders(input.url);
+    const response = await fetch(input.url, {
+      headers: request.headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(15_000)
+    });
+    const fetchedUrl = response.url || input.url;
+    const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return {
+        outcome: "non_ok" as const,
+        row: {
+          canonical_url: canonicalUrl,
+          document_text: null,
+          document_type: input.documentType,
+          extraction_status: "failed",
+          evidence_refs: canonicalUrl ? [canonicalUrl] : [],
+          extracted_fields_json: {
+            page_type: input.documentType,
+            page_url: canonicalUrl
+          },
+          metadata_json: {
+            ...baseMetadata,
+            http_status: response.status,
+            rejection_reason: "non_ok_http_status"
+          },
+          source: "nano_doc_retrieval",
+          source_status: "rejected",
+          source_url: input.url,
+          title: null
+        } satisfies Record<string, unknown>
+      };
+    }
+
+    const html = await response.text();
+    const text = stripHtmlToText(html);
+    const title = extractTitle(html);
+
+    if (looksLikeIntermediaryOrBlockPage({ canonicalUrl, text, title })) {
+      return {
+        outcome: "intermediary" as const,
+        row: {
+          canonical_url: canonicalUrl,
+          document_text: null,
+          document_type: input.documentType,
+          extraction_status: "failed",
+          evidence_refs: canonicalUrl ? [canonicalUrl] : [],
+          extracted_fields_json: {
+            page_type: input.documentType,
+            page_url: canonicalUrl
+          },
+          metadata_json: {
+            ...baseMetadata,
+            http_status: response.status,
+            rejection_reason: "intermediary_or_block_page"
+          },
+          source: "nano_doc_retrieval",
+          source_status: "rejected",
+          source_url: input.url,
+          title
+        } satisfies Record<string, unknown>
+      };
+    }
+
+    if (text.length <= 20) {
+      return {
+        outcome: "insufficient" as const,
+        row: {
+          canonical_url: canonicalUrl,
+          document_text: null,
+          document_type: input.documentType,
+          extraction_status: "insufficient",
+          evidence_refs: canonicalUrl ? [canonicalUrl] : [],
+          extracted_fields_json: {
+            page_type: input.documentType,
+            page_url: canonicalUrl
+          },
+          metadata_json: {
+            ...baseMetadata,
+            http_status: response.status,
+            rejection_reason: "insufficient_document_text"
+          },
+          source: "nano_doc_retrieval",
+          source_status: "rejected",
+          source_url: input.url,
+          title
+        } satisfies Record<string, unknown>
+      };
+    }
+
     return {
-      outcome: "non_ok" as const,
-      row: null
+      outcome: "ready" as const,
+      row: {
+        canonical_url: canonicalUrl,
+        document_text: text.slice(0, 50_000),
+        document_type: input.documentType,
+        extraction_status: "pending",
+        evidence_refs: [canonicalUrl],
+        extracted_fields_json: {
+          page_type: input.documentType,
+          page_url: canonicalUrl
+        },
+        metadata_json: {
+          ...baseMetadata,
+          http_status: response.status
+        },
+        source: "nano_doc_retrieval",
+        source_status: "ready",
+        source_url: input.url,
+        title
+      } satisfies Record<string, unknown>
     };
-  }
-
-  const html = await response.text();
-  const text = stripHtmlToText(html);
-  const title = extractTitle(html);
-  const fetchedUrl = response.url || input.url;
-  const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
-
-  if (looksLikeIntermediaryOrBlockPage({ canonicalUrl, text, title })) {
-    return {
-      outcome: "intermediary" as const,
-      row: null
-    };
-  }
-
-  return {
-    outcome: text.length > 20 ? ("ready" as const) : ("insufficient" as const),
-    row: {
-      canonical_url: canonicalUrl,
-      document_text: text.length > 20 ? text.slice(0, 50_000) : null,
-      document_type: input.documentType,
-      extraction_status: text.length > 20 ? "pending" : "insufficient",
-      evidence_refs: [canonicalUrl],
-      extracted_fields_json: {
-        page_type: input.documentType,
-        page_url: canonicalUrl
-      },
-      metadata_json: {
-        http_status: response.status,
-        priority_tier: input.priorityTier ?? "secondary",
-        retrieval_mode: "nano_doc_retrieval"
-      },
-      source: "nano_doc_retrieval",
-      source_status: "ready",
-      source_url: input.url,
-      title
-    } satisfies Record<string, unknown>
-  };
   } catch {
     return {
       outcome: "error" as const,
-      row: null
+      row: {
+        canonical_url: normalizeDocUrl(input.url) ?? input.url,
+        document_text: null,
+        document_type: input.documentType,
+        extraction_status: "failed",
+        evidence_refs: [normalizeDocUrl(input.url) ?? input.url],
+        extracted_fields_json: {
+          page_type: input.documentType,
+          page_url: normalizeDocUrl(input.url) ?? input.url
+        },
+        metadata_json: {
+          ...baseMetadata,
+          rejection_reason: "fetch_runtime_error"
+        },
+        source: "nano_doc_retrieval",
+        source_status: "failed",
+        source_url: input.url,
+        title: null
+      } satisfies Record<string, unknown>
     };
   }
 }
@@ -1498,6 +1584,25 @@ function getNanoDocumentSourceDedupKey(row: Record<string, unknown>) {
   const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
   const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
   return `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? ""}`;
+}
+
+function getNanoDocumentSourceStatusRank(row: Record<string, unknown>) {
+  const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+  const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus) ?? "pending";
+
+  if (sourceStatus === "ready" && extractionStatus === "pending") {
+    return 4;
+  }
+  if (sourceStatus === "ready") {
+    return 3;
+  }
+  if (sourceStatus === "rejected" && extractionStatus === "insufficient") {
+    return 2;
+  }
+  if (sourceStatus === "rejected") {
+    return 1;
+  }
+  return 0;
 }
 
 export function dedupeNanoDocumentSources(rows: Array<Record<string, unknown>>) {
@@ -1509,6 +1614,16 @@ export function dedupeNanoDocumentSources(rows: Array<Record<string, unknown>>) 
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, row);
+      continue;
+    }
+
+    const existingRank = getNanoDocumentSourceStatusRank(existing);
+    const nextRank = getNanoDocumentSourceStatusRank(row);
+    if (nextRank > existingRank) {
+      byKey.set(key, row);
+      continue;
+    }
+    if (nextRank < existingRank) {
       continue;
     }
 
@@ -1615,7 +1730,14 @@ function summarizeNanoDocRetrievalResults(input: {
     insufficientCount: input.fetched.filter((row) => row.outcome === "insufficient").length,
     intermediaryCount: input.fetched.filter((row) => row.outcome === "intermediary").length,
     nonOkCount: input.fetched.filter((row) => row.outcome === "non_ok").length,
-    retainedCount: input.rows.length
+    rejectedCount: input.rows.filter((row) => {
+      const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
+      return sourceStatus === "rejected";
+    }).length,
+    retainedCount: input.rows.filter((row) => {
+      const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
+      return sourceStatus === "ready";
+    }).length
   };
 }
 
@@ -1673,13 +1795,16 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
 
   const priorityFetchedResults = await Promise.all(candidateWaves.priority.map((candidate) => fetchNanoDocumentSource(candidate)));
   const priorityRows = dedupeNanoDocumentSources(priorityFetchedResults.flatMap((result) => (result.row ? [result.row] : [])));
+  const priorityReadyRows = priorityRows.filter((row) => (getString(row.source_status) ?? "ready") === "ready");
 
   if (priorityRows.length > 0) {
     await replaceScanDocumentSources({
       rows: priorityRows,
       scanId
     });
-    await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+    if (priorityReadyRows.length > 0) {
+      await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+    }
   }
 
   const secondaryFetchedResults =
@@ -1692,13 +1817,16 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   ]);
   const existingKeys = new Set(priorityRows.map((row) => getNanoDocumentSourceDedupKey(row)));
   const appendedRows = combinedRows.filter((row) => !existingKeys.has(getNanoDocumentSourceDedupKey(row)));
+  const appendedReadyRows = appendedRows.filter((row) => (getString(row.source_status) ?? "ready") === "ready");
 
   if (appendedRows.length > 0) {
     await appendScanDocumentSources({
       rows: appendedRows,
       scanId
     });
-    await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+    if (appendedReadyRows.length > 0) {
+      await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+    }
   }
 
   const retrievalSummary = summarizeNanoDocRetrievalResults({
@@ -1712,13 +1840,14 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     metadataJson: {
       candidateCount: candidates.length,
       duplicateCount: retrievalSummary.duplicateCount,
-      documentSourceCount: combinedRows.length,
+      documentSourceCount: retrievalSummary.retainedCount,
       errorCount: retrievalSummary.errorCount,
       insufficientCount: retrievalSummary.insufficientCount,
       intermediaryCount: retrievalSummary.intermediaryCount,
       nonOkCount: retrievalSummary.nonOkCount,
+      rejectedCount: retrievalSummary.rejectedCount,
       priorityCandidateCount: candidateWaves.priority.length,
-      priorityDocumentSourceCount: priorityRows.length,
+      priorityDocumentSourceCount: priorityReadyRows.length,
       stage: "nano_doc_retrieval"
     },
     scanId

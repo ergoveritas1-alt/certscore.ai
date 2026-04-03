@@ -121,7 +121,8 @@ function getLatestNanoDocRetrievalDiagnostics(events: Array<{ eventType: string;
     errorCount: getRecordNumber(metadata, "errorCount"),
     insufficientCount: getRecordNumber(metadata, "insufficientCount"),
     intermediaryCount: getRecordNumber(metadata, "intermediaryCount"),
-    nonOkCount: getRecordNumber(metadata, "nonOkCount")
+    nonOkCount: getRecordNumber(metadata, "nonOkCount"),
+    rejectedCount: getRecordNumber(metadata, "rejectedCount")
   };
 }
 
@@ -230,10 +231,11 @@ export async function ValidationRunDetailPage(input: {
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <div>Candidates: {retrievalDiagnostics.candidateCount ?? "—"}</div>
                     <div>Retained docs: {retrievalDiagnostics.documentSourceCount ?? "—"}</div>
+                    <div>Rejected docs: {retrievalDiagnostics.rejectedCount ?? "—"}</div>
                     <div>Duplicates dropped: {retrievalDiagnostics.duplicateCount ?? "—"}</div>
-                    <div>Interstitial drops: {retrievalDiagnostics.intermediaryCount ?? "—"}</div>
                   </div>
-                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  <div className="mt-2 grid gap-2 md:grid-cols-4">
+                    <div>Interstitial drops: {retrievalDiagnostics.intermediaryCount ?? "—"}</div>
                     <div>Insufficient docs: {retrievalDiagnostics.insufficientCount ?? "—"}</div>
                     <div>Non-OK fetches: {retrievalDiagnostics.nonOkCount ?? "—"}</div>
                     <div>Fetch/runtime errors: {retrievalDiagnostics.errorCount ?? "—"}</div>

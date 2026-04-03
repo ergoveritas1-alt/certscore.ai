@@ -28,6 +28,13 @@ type ScanSignalRow = {
   signal_key: string;
 };
 
+function getDocumentSourceStatusCount(rows: Array<Record<string, unknown>>, status: string) {
+  return rows.filter((row) => {
+    const value = row.source_status;
+    return typeof value === "string" ? value === status : false;
+  }).length;
+}
+
 type DomainRow = {
   hostname: string;
   id: string;
@@ -425,6 +432,8 @@ async function summarizeScan(input: {
   }
 
   const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const readyDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "ready");
+  const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
@@ -473,7 +482,7 @@ async function summarizeScan(input: {
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
   const workflow = deriveSignalEnrichmentWorkflowState({
-    documentSourceCount: normalizedDocumentSources.length,
+    documentSourceCount: readyDocumentSourceCount,
     events: ((events ?? []) as ScanEventRow[]).map((event) => ({
       createdAt: event.created_at,
       eventType: event.event_type
@@ -489,7 +498,9 @@ async function summarizeScan(input: {
 
   return {
     counts: {
-      documentSources: normalizedDocumentSources.length,
+      documentSources: readyDocumentSourceCount,
+      rejectedDocumentSources: rejectedDocumentSourceCount,
+      totalDocumentSourceRows: normalizedDocumentSources.length,
       findings: findingRows.length,
       nanoSignals: nanoSignalCount,
       scannerSignals: scannerSignalCount,
