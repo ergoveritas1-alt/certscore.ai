@@ -108,7 +108,32 @@ If a check fails:
 4. Confirm the report page shows the compact “Changes since previous scan” section.
 5. For the first completed scan on a domain, confirm baseline messaging appears instead of a delta.
 
-## 7. Scheduler validation
+## 7. Signal enrichment validation
+
+1. Run a full scan on a domain with likely public legal pages.
+2. Open the scan detail page.
+3. Confirm the “Signal enrichment workflow” card shows:
+   - `Scanner`
+   - `Nano Doc Retrieval`
+   - `Nano Doc Signals`
+   - `Merged Signals`
+   - `Unified Findings`
+4. Confirm:
+   - `Actual mode` is `Parallelized` for new scans
+   - `Merged signals` becomes `Ready`
+   - `Findings` becomes `Ready`
+5. Run:
+   - `pnpm --filter @website-signal-risk-scanner/validation-worker inspect:signal-enrichment --scan-id <scan-id>`
+6. Confirm the inspector reports:
+   - document sources present for privacy/terms/cookie pages when available
+   - nano signals persisted in `scan_signals`
+   - workflow stage completion events
+7. If the pipeline looks wrong, inspect:
+   - `scan_document_sources`
+   - `scan_signals`
+   - `scan_events`
+
+## 8. Scheduler validation
 
 1. Set a domain to `daily`, `weekly`, or `monthly`.
 2. Run:
@@ -120,7 +145,7 @@ If a check fails:
    - active queued/running scans cause skip behavior instead of duplicates
 4. Confirm scheduler-related events appear in `scan_events`.
 
-## 8. Branding and client validation
+## 9. Branding and client validation
 
 1. Create a client in `/app/clients`.
 2. Assign a domain to that client.
@@ -133,12 +158,16 @@ If a check fails:
    - web report header
    - PDF header/footer
 
-## 9. What to watch in logs
+## 10. What to watch in logs
 
 Relevant runtime logs should show:
 
 - standalone scanner service startup and heartbeat behavior
 - scan start
+- nano document retrieval start/completion
+- nano document enrichment start/completion
+- signal merge completion
+- unified finding derivation completion
 - crawl completion
 - scoring completion
 - report persistence
@@ -152,7 +181,7 @@ If a scan fails, check:
 - `scan_events` timeline
 - standalone scanner logs for the failing stage
 
-## 10. First production validation order
+## 11. First production validation order
 
 Use this order after deploying:
 
@@ -161,8 +190,9 @@ Use this order after deploying:
 3. verify auth
 4. verify preview scan
 5. verify full scan
-6. verify report render
-7. verify PDF export
-8. verify second scan regression
-9. verify scheduler sweep
-10. verify branding/client grouping
+6. verify signal enrichment workflow
+7. verify report render
+8. verify PDF export
+9. verify second scan regression
+10. verify scheduler sweep
+11. verify branding/client grouping
