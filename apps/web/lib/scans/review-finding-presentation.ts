@@ -931,10 +931,6 @@ function getPolicyExtractionStatus(evidence: Record<string, unknown> | null | un
     return evidence.policyExtractionStatus;
   }
 
-  if (typeof evidence?.policy_extraction_status === "string") {
-    return evidence.policy_extraction_status;
-  }
-
   return null;
 }
 
@@ -992,7 +988,7 @@ function getNegativeEvidenceFlags(evidence: Record<string, unknown> | null | und
 }
 
 function getSnippetEvidence(evidence: Record<string, unknown> | null | undefined) {
-  return getStringArrayEvidence(evidence, ["snippets", "policySnippets", "policy_snippets", "sourceEvidence"]);
+  return getStringArrayEvidence(evidence, ["snippets", "policySnippets", "sourceEvidence"]);
 }
 
 function hasStrongContactSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
@@ -1261,9 +1257,7 @@ function computeSupportStrength(input: {
   const policyCoverageRatio =
     typeof evidence.policyCoverageRatio === "number"
       ? evidence.policyCoverageRatio
-      : typeof evidence.policy_coverage_ratio === "number"
-        ? evidence.policy_coverage_ratio
-        : null;
+      : null;
   if (typeof policyCoverageRatio === "number") {
     if (policyCoverageRatio >= 0.75) {
       score += 0.15;
@@ -1276,17 +1270,12 @@ function computeSupportStrength(input: {
   const policySnippetCount =
     typeof evidence.policySnippetCount === "number"
       ? evidence.policySnippetCount
-      : typeof evidence.policy_snippet_count === "number"
-        ? evidence.policy_snippet_count
-        : null;
+      : null;
   const policyAmbiguityScore =
     typeof evidence.policyAmbiguityScore === "number"
       ? evidence.policyAmbiguityScore
-      : typeof evidence.policy_ambiguity_score === "number"
-        ? evidence.policy_ambiguity_score
-        : null;
-  const policyStructurallyWeak =
-    evidence.policyStructurallyWeak === true || evidence.policy_structurally_weak === true;
+      : null;
+  const policyStructurallyWeak = evidence.policyStructurallyWeak === true;
   const reviewPolicy =
     evidence.reviewPolicy && typeof evidence.reviewPolicy === "object"
       ? (evidence.reviewPolicy as Record<string, unknown>)
@@ -1318,9 +1307,7 @@ function computeSupportStrength(input: {
   const policyFieldCoverage =
     evidence.policyFieldCoverage && typeof evidence.policyFieldCoverage === "object"
       ? (evidence.policyFieldCoverage as Record<string, unknown>)
-      : evidence.policy_field_coverage && typeof evidence.policy_field_coverage === "object"
-        ? (evidence.policy_field_coverage as Record<string, unknown>)
-        : null;
+      : null;
   if (policyFieldCoverage) {
     const fieldCoverageCount = Object.keys(policyFieldCoverage).length;
     if (fieldCoverageCount > 0) {
@@ -1336,7 +1323,7 @@ function computeSupportStrength(input: {
   if (evidenceArrayLength(evidence, "disclosedCookieRows") > 0) {
     score += 0.1;
   }
-  if (typeof evidence.pageUrl === "string" || typeof evidence.cookiePolicyUrl === "string" || typeof evidence.source_policy_url === "string") {
+  if (typeof evidence.pageUrl === "string" || typeof evidence.cookiePolicyUrl === "string" || typeof evidence.sourceUrl === "string") {
     score += 0.1;
   }
   if (typeof evidence.signalValue === "boolean" && evidence.signalValue) {
