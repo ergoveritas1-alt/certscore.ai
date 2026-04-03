@@ -82,6 +82,24 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function getPostureHeadline(posture: "Clear" | "Watch" | "Action Needed") {
+  if (posture === "Action Needed") {
+    return "Immediate privacy and consent issues detected";
+  }
+  if (posture === "Watch") {
+    return "Notable privacy and consent issues detected";
+  }
+  return "No major privacy and consent issues surfaced";
+}
+
+function formatTopFindingHeadline(findings: CertScoreFinding[]) {
+  const labels = findings.slice(0, 3).map((finding) => finding.label);
+  if (labels.length === 0) {
+    return "No headline findings surfaced yet.";
+  }
+  return labels.join(" • ");
+}
+
 function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
   beforeConsentCookieCount: number;
   thirdPartyRequestCount: number;
@@ -462,6 +480,7 @@ export function ExecutiveSummaryCard(input: {
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
   ];
+  const executiveHeadline = formatTopFindingHeadline(primaryFindings);
   const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
@@ -471,20 +490,32 @@ export function ExecutiveSummaryCard(input: {
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8">
         <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}>
-              {input.posture}
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
-              Scanned {formatFreshness(input.lastScannedAt)}
-            </span>
-          </div>
-          {input.domainBenchmark ? (
-            <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">Benchmark estimate for {input.domainBenchmark.industry}.</span>
+          <div className="rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.28)]">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}>
+                {input.posture}
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                Scanned {formatFreshness(input.lastScannedAt)}
+              </span>
+              {input.domainBenchmark ? (
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
+                  Benchmark: {input.domainBenchmark.industry}
+                </span>
+              ) : null}
             </div>
-          ) : null}
-
+            <div className="mt-5 space-y-3">
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Executive readout</p>
+                <h2 className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]">
+                  {getPostureHeadline(input.posture)}
+                </h2>
+              </div>
+              <div className="rounded-[1.2rem] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-700">
+                <span className="font-medium text-slate-950">Primary concerns:</span> {executiveHeadline}
+              </div>
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <BenchmarkMetricCard
               label="Overall score"
@@ -543,11 +574,12 @@ export function ExecutiveSummaryCard(input: {
           ) : null}
         </div>
 
-        <div className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-slate-50/85 p-4">
+        <div className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
+            <p className="text-sm leading-6 text-slate-600">Quick context for vendor footprint, fingerprinting, and regulator-style review.</p>
           </div>
-        <div className="space-y-3">
+          <div className="space-y-3">
             <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
               <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
