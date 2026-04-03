@@ -413,10 +413,10 @@ export function ExecutiveSummaryCard(input: {
     .slice(0, 4)
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
-  const primaryFindings = input.topFindings.slice(0, 3);
+  const primaryFindings = input.topFindings.slice(0, 5);
   const secondaryFindings = input.topFindings
     .filter((finding) => finding.id !== "multi_vendor_tracking_detected" && finding.id !== "large_third_party_footprint")
-    .slice(3, 6);
+    .slice(5, 8);
   const namedVendors = input.resolvedVendorNames.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
   const vendorMixDetails = input.topObservedEntities
