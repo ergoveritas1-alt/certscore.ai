@@ -408,14 +408,20 @@ export function ExecutiveSummaryCard(input: {
   unresolvedVendorHosts: string[];
   vendorCategoryCounts: Record<string, number>;
 }) {
+  const suppressedTopFindingIds = new Set([
+    "multi_vendor_tracking_detected",
+    "large_third_party_footprint",
+    "collection_endpoints_detected",
+    "high_request_density"
+  ]);
   const categorySummary = Object.entries(input.vendorCategoryCounts)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4)
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
-  const primaryFindings = input.topFindings.slice(0, 5);
-  const secondaryFindings = input.topFindings
-    .filter((finding) => finding.id !== "multi_vendor_tracking_detected" && finding.id !== "large_third_party_footprint")
+  const filteredTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const primaryFindings = filteredTopFindings.slice(0, 5);
+  const secondaryFindings = filteredTopFindings
     .slice(5, 8);
   const namedVendors = input.resolvedVendorNames.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
