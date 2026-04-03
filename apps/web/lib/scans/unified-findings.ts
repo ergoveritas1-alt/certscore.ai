@@ -238,6 +238,41 @@ type FindingFamilyPacketRecord = {
   supportedUnifiedFindings?: unknown;
 };
 
+function normalizeUnifiedFindingEvidenceRecord(
+  record: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  if (!record) {
+    return {};
+  }
+
+  const normalized: Record<string, unknown> = { ...record };
+  const assignCanonicalField = (canonicalKey: string, legacyKeys: string[]) => {
+    if (normalized[canonicalKey] !== undefined) {
+      return;
+    }
+
+    for (const legacyKey of legacyKeys) {
+      if (record[legacyKey] !== undefined) {
+        normalized[canonicalKey] = record[legacyKey];
+        return;
+      }
+    }
+  };
+
+  assignCanonicalField("fetchQuality", ["fetch_quality"]);
+  assignCanonicalField("pageUrl", ["page_url"]);
+  assignCanonicalField("pageUrls", ["page_urls"]);
+  assignCanonicalField("policySnippet", ["policy_snippet"]);
+  assignCanonicalField("policySnippets", ["policy_snippets"]);
+  assignCanonicalField("policySummaryShort", ["policy_summary_short"]);
+  assignCanonicalField("runtimeEvidence", ["runtime_evidence"]);
+  assignCanonicalField("runtimeEvidenceArtifacts", ["runtime_evidence_artifacts"]);
+  assignCanonicalField("sourceUrl", ["source_url"]);
+  assignCanonicalField("sourceUrls", ["source_urls"]);
+
+  return normalized;
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -861,15 +896,14 @@ function isDistinctExplicitPolicySnippet(
 }
 
 function getExplicitPolicySnippetCandidate(record: Record<string, unknown> | null | undefined) {
+  const normalizedRecord = normalizeUnifiedFindingEvidenceRecord(record);
   return (
-    (Array.isArray(record?.policySnippets)
-      ? record.policySnippets.find((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    (Array.isArray(normalizedRecord.policySnippets)
+      ? normalizedRecord.policySnippets.find((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
       : null) ??
-    (typeof record?.policySnippet === "string" && record.policySnippet.trim().length > 0
-      ? record.policySnippet
-      : typeof record?.policy_snippet === "string" && record.policy_snippet.trim().length > 0
-        ? record.policy_snippet
-        : null)
+    (typeof normalizedRecord.policySnippet === "string" && normalizedRecord.policySnippet.trim().length > 0
+      ? normalizedRecord.policySnippet
+      : null)
   );
 }
 
@@ -1245,87 +1279,86 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     };
   }
 
-  const contradictionEvidence = getContradictionEvidenceBundle(fallbackEvidence);
-  const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(fallbackEvidence, contradictionEvidence);
+  const normalizedFallbackEvidence = normalizeUnifiedFindingEvidenceRecord(fallbackEvidence);
+  const contradictionEvidence = getContradictionEvidenceBundle(normalizedFallbackEvidence);
+  const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(normalizedFallbackEvidence, contradictionEvidence);
   const isContradictionEvidenceContext =
     Boolean(contradictionEvidence?.contradictionBasis) ||
     (contradictionEvidence?.runtimeEvidenceArtifacts.length ?? 0) > 0 ||
     (contradictionEvidence?.runtimeVendors.length ?? 0) > 0 ||
     (contradictionEvidence?.relatedVendors.length ?? 0) > 0 ||
-    (contradictionEvidence?.supportingSignals.some((signal) => /conflict|misalignment|undisclosed|technical_disclosure/i.test(signal)) ?? false) ||
-    (typeof fallbackEvidence.unifiedFindingId === "string" && CONTRADICTION_FINDING_IDS.has(fallbackEvidence.unifiedFindingId)) ||
-    (typeof fallbackEvidence.familyPacketFindingId === "string" && CONTRADICTION_FINDING_IDS.has(fallbackEvidence.familyPacketFindingId));
+    (contradictionEvidence?.supportingSignals.some((signal) => /conflict|misalignment|undisclosed|technical_disclosure/i.test(signal)) ??
+      false) ||
+    (typeof normalizedFallbackEvidence.unifiedFindingId === "string" &&
+      CONTRADICTION_FINDING_IDS.has(normalizedFallbackEvidence.unifiedFindingId)) ||
+    (typeof normalizedFallbackEvidence.familyPacketFindingId === "string" &&
+      CONTRADICTION_FINDING_IDS.has(normalizedFallbackEvidence.familyPacketFindingId));
   const hasExplicitPolicySnippet =
     isContradictionEvidenceContext &&
     isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim);
   const hasExplicitRuntimeArtifact =
     isContradictionEvidenceContext &&
-    ((Array.isArray(fallbackEvidence.runtimeEvidenceArtifacts) &&
-      fallbackEvidence.runtimeEvidenceArtifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    (Array.isArray(fallbackEvidence.runtime_evidence_artifacts) &&
-      fallbackEvidence.runtime_evidence_artifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    (Array.isArray(fallbackEvidence.runtimeEvidence) &&
-      fallbackEvidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    (Array.isArray(fallbackEvidence.runtime_evidence) &&
-      fallbackEvidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
-    ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
-    ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
+    ((Array.isArray(normalizedFallbackEvidence.runtimeEvidenceArtifacts) &&
+      normalizedFallbackEvidence.runtimeEvidenceArtifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+      (Array.isArray(normalizedFallbackEvidence.runtimeEvidence) &&
+        normalizedFallbackEvidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
+      ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
+      ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
+      ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
   const pageUrls = uniqueStrings([
-    ...(Array.isArray(fallbackEvidence.pageUrls) ? (fallbackEvidence.pageUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.pageUrls) ? (normalizedFallbackEvidence.pageUrls as string[]) : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
-    typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null,
-    typeof fallbackEvidence.consentBlockerUrl === "string" ? fallbackEvidence.consentBlockerUrl : null
+    typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null,
+    typeof normalizedFallbackEvidence.consentBlockerUrl === "string" ? normalizedFallbackEvidence.consentBlockerUrl : null
   ]);
 
   const sourceUrls = uniqueStrings([
-    ...(Array.isArray(fallbackEvidence.sourceUrls) ? (fallbackEvidence.sourceUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.sourceUrls) ? (normalizedFallbackEvidence.sourceUrls as string[]) : []),
     ...(contradictionEvidence?.sourceUrls ?? []),
-    typeof fallbackEvidence.sourceUrl === "string" ? fallbackEvidence.sourceUrl : null,
-    typeof fallbackEvidence.pageUrl === "string" ? fallbackEvidence.pageUrl : null
+    typeof normalizedFallbackEvidence.sourceUrl === "string" ? normalizedFallbackEvidence.sourceUrl : null,
+    typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null
   ]);
 
   const snippets = uniqueStrings([
-    isMeaningfulPolicyText(fallbackEvidence.consentBlockerTextSnippet) ? fallbackEvidence.consentBlockerTextSnippet : null,
-    isMeaningfulPolicyText(fallbackEvidence.policyChildrenReference) ? fallbackEvidence.policyChildrenReference : null,
+    isMeaningfulPolicyText(normalizedFallbackEvidence.consentBlockerTextSnippet)
+      ? normalizedFallbackEvidence.consentBlockerTextSnippet
+      : null,
+    isMeaningfulPolicyText(normalizedFallbackEvidence.policyChildrenReference)
+      ? normalizedFallbackEvidence.policyChildrenReference
+      : null,
     contradictionEvidence?.claim,
     contradictionEvidence?.policyAnchor.snippet,
     contradictionEvidence?.policySnippet,
     contradictionEvidence?.runtimeSummary,
     contradictionEvidence?.conflictBridge.reasoning,
     ...(contradictionEvidence?.runtimeEvidenceArtifacts ?? []),
-    Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
+    Array.isArray(normalizedFallbackEvidence.policySnippets) && normalizedFallbackEvidence.policySnippets.length > 0
       ? null
-      : isMeaningfulPolicyText(fallbackEvidence.policySummaryShort)
-        ? fallbackEvidence.policySummaryShort
+      : isMeaningfulPolicyText(normalizedFallbackEvidence.policySummaryShort)
+        ? normalizedFallbackEvidence.policySummaryShort
         : null,
-    ...(Array.isArray(fallbackEvidence.policySnippets)
-      ? (fallbackEvidence.policySnippets as unknown[]).filter((entry): entry is string => isMeaningfulPolicyText(entry))
+    ...(Array.isArray(normalizedFallbackEvidence.policySnippets)
+      ? (normalizedFallbackEvidence.policySnippets as unknown[]).filter((entry): entry is string => isMeaningfulPolicyText(entry))
       : []),
-    (
-      Array.isArray(fallbackEvidence.policySnippets) && fallbackEvidence.policySnippets.length > 0
-    ) ||
-    isMeaningfulPolicyText(fallbackEvidence.policySummaryShort)
+    (Array.isArray(normalizedFallbackEvidence.policySnippets) && normalizedFallbackEvidence.policySnippets.length > 0) ||
+    isMeaningfulPolicyText(normalizedFallbackEvidence.policySummaryShort)
       ? null
-      : isMeaningfulPolicyText(fallbackEvidence.signalValue)
-        ? fallbackEvidence.signalValue
+      : isMeaningfulPolicyText(normalizedFallbackEvidence.signalValue)
+        ? normalizedFallbackEvidence.signalValue
         : null
-  ]).map((snippet) => normalizePolicySnippet(snippet)).filter((snippet): snippet is string => Boolean(snippet));
+  ])
+    .map((snippet) => normalizePolicySnippet(snippet))
+    .filter((snippet): snippet is string => Boolean(snippet));
 
   const counts: Record<string, number> = {};
-  for (const key of [
-    "consentFrictionDelta",
-    "consentOptInClicks",
-    "consentOptOutClicks",
-    "keyPageAttemptCount"
-  ]) {
-    const value = fallbackEvidence[key];
+  for (const key of ["consentFrictionDelta", "consentOptInClicks", "consentOptOutClicks", "keyPageAttemptCount"]) {
+    const value = normalizedFallbackEvidence[key];
     if (typeof value === "number" && Number.isFinite(value)) {
       counts[key] = value;
     }
   }
-  if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
-    const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
+  if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
+    const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
     for (const key of [
       "totalCookiesAnalyzed",
       "missingSecureCount",
@@ -1339,8 +1372,8 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       }
     }
   }
-  if (fallbackEvidence.gpcVerification && typeof fallbackEvidence.gpcVerification === "object") {
-    const verification = fallbackEvidence.gpcVerification as Record<string, unknown>;
+  if (normalizedFallbackEvidence.gpcVerification && typeof normalizedFallbackEvidence.gpcVerification === "object") {
+    const verification = normalizedFallbackEvidence.gpcVerification as Record<string, unknown>;
     for (const key of [
       "baselineTrackerCount",
       "baselineThirdPartyCookieCount",
@@ -1355,31 +1388,34 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       }
     }
   }
-  if (typeof fallbackEvidence.childrenPrivacyRiskScore === "number" && Number.isFinite(fallbackEvidence.childrenPrivacyRiskScore)) {
-    counts.childrenPrivacyRiskScore = fallbackEvidence.childrenPrivacyRiskScore;
+  if (
+    typeof normalizedFallbackEvidence.childrenPrivacyRiskScore === "number" &&
+    Number.isFinite(normalizedFallbackEvidence.childrenPrivacyRiskScore)
+  ) {
+    counts.childrenPrivacyRiskScore = normalizedFallbackEvidence.childrenPrivacyRiskScore;
   }
 
   const entities: Record<string, string[]> = {};
-  if (Array.isArray(fallbackEvidence.keyPageAttemptedUrls)) {
-    entities.attemptedUrls = uniqueStrings(fallbackEvidence.keyPageAttemptedUrls as string[]);
+  if (Array.isArray(normalizedFallbackEvidence.keyPageAttemptedUrls)) {
+    entities.attemptedUrls = uniqueStrings(normalizedFallbackEvidence.keyPageAttemptedUrls as string[]);
   }
-  if (Array.isArray(fallbackEvidence.policyBoilerplateSignals)) {
-    entities.policyBoilerplateSignals = uniqueStrings(fallbackEvidence.policyBoilerplateSignals as string[]);
+  if (Array.isArray(normalizedFallbackEvidence.policyBoilerplateSignals)) {
+    entities.policyBoilerplateSignals = uniqueStrings(normalizedFallbackEvidence.policyBoilerplateSignals as string[]);
   }
-  if (Array.isArray(fallbackEvidence.relatedVendors)) {
-    entities.relatedVendors = uniqueStrings(fallbackEvidence.relatedVendors as string[]);
+  if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
+    entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
   }
   if ((contradictionEvidence?.relatedVendors.length ?? 0) > 0) {
     entities.relatedVendors = uniqueStrings([...(entities.relatedVendors ?? []), ...((contradictionEvidence?.relatedVendors ?? []) as string[])]);
   }
-  if (Array.isArray(fallbackEvidence.runtimeVendors)) {
-    entities.runtimeVendors = uniqueStrings(fallbackEvidence.runtimeVendors as string[]);
+  if (Array.isArray(normalizedFallbackEvidence.runtimeVendors)) {
+    entities.runtimeVendors = uniqueStrings(normalizedFallbackEvidence.runtimeVendors as string[]);
   }
   if ((contradictionEvidence?.runtimeVendors.length ?? 0) > 0) {
     entities.runtimeVendors = uniqueStrings([...(entities.runtimeVendors ?? []), ...((contradictionEvidence?.runtimeVendors ?? []) as string[])]);
   }
-  if (fallbackEvidence.cookieAttributeSummary && typeof fallbackEvidence.cookieAttributeSummary === "object") {
-    const summary = fallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
+  if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
+    const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
     for (const key of [
       "missingSecureCookieNames",
       "missingHttpOnlyCookieNames",
@@ -1393,51 +1429,51 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
 
   const flags = uniqueStrings([
-    typeof fallbackEvidence.familyPacketFamilyId === "string" ? "family_packet_backed" : null,
-    typeof fallbackEvidence.familyPacketFamilyId === "string"
-      ? `family_packet:${fallbackEvidence.familyPacketFamilyId}`
+    typeof normalizedFallbackEvidence.familyPacketFamilyId === "string" ? "family_packet_backed" : null,
+    typeof normalizedFallbackEvidence.familyPacketFamilyId === "string"
+      ? `family_packet:${normalizedFallbackEvidence.familyPacketFamilyId}`
       : null,
-    typeof fallbackEvidence.familyPacketFindingId === "string"
-      ? `family_packet_finding:${fallbackEvidence.familyPacketFindingId}`
+    typeof normalizedFallbackEvidence.familyPacketFindingId === "string"
+      ? `family_packet_finding:${normalizedFallbackEvidence.familyPacketFindingId}`
       : null,
-    fallbackEvidence.keyPageGuessedOnly === true ? "guessed_only" : null,
-    fallbackEvidence.consentRedirectOrAuthRequired === true ? "redirect_or_auth_required" : null,
-    fallbackEvidence.gpcVerification &&
-    typeof fallbackEvidence.gpcVerification === "object" &&
-    (fallbackEvidence.gpcVerification as { status?: unknown }).status === "ignored"
+    normalizedFallbackEvidence.keyPageGuessedOnly === true ? "guessed_only" : null,
+    normalizedFallbackEvidence.consentRedirectOrAuthRequired === true ? "redirect_or_auth_required" : null,
+    normalizedFallbackEvidence.gpcVerification &&
+    typeof normalizedFallbackEvidence.gpcVerification === "object" &&
+    (normalizedFallbackEvidence.gpcVerification as { status?: unknown }).status === "ignored"
       ? "gpc_ignored"
       : null,
-    fallbackEvidence.ageGatePresent === true ? "age_gate_present" : null,
-    fallbackEvidence.childrenAudienceLikely === true ? "children_audience_likely" : null,
-    fallbackEvidence.kidDirectedContentDetected === true ? "kid_directed_content_detected" : null,
-    fallbackEvidence.parentalConsentReferencePresent === true ? "parental_consent_reference_present" : null,
-    fallbackEvidence.mentionsCoppa === true ? "mentions_coppa" : null,
-    fallbackEvidence.mentionsUnder13 === true ? "mentions_under_13" : null,
-    fallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
-    fallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
-    fallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
-    Array.isArray(fallbackEvidence.policyBoilerplateSignals) &&
-    fallbackEvidence.policyBoilerplateSignals.some((entry) => typeof entry === "string" && entry.trim().length > 0)
+    normalizedFallbackEvidence.ageGatePresent === true ? "age_gate_present" : null,
+    normalizedFallbackEvidence.childrenAudienceLikely === true ? "children_audience_likely" : null,
+    normalizedFallbackEvidence.kidDirectedContentDetected === true ? "kid_directed_content_detected" : null,
+    normalizedFallbackEvidence.parentalConsentReferencePresent === true ? "parental_consent_reference_present" : null,
+    normalizedFallbackEvidence.mentionsCoppa === true ? "mentions_coppa" : null,
+    normalizedFallbackEvidence.mentionsUnder13 === true ? "mentions_under_13" : null,
+    normalizedFallbackEvidence.mentionsUnder16 === true ? "mentions_under_16" : null,
+    normalizedFallbackEvidence.formCollectsBirthdate === true ? "form_collects_birthdate" : null,
+    normalizedFallbackEvidence.dateOfBirthInputPresent === true ? "date_of_birth_input_present" : null,
+    Array.isArray(normalizedFallbackEvidence.policyBoilerplateSignals) &&
+    normalizedFallbackEvidence.policyBoilerplateSignals.some((entry) => typeof entry === "string" && entry.trim().length > 0)
       ? "policy_boilerplate_signals_retained"
       : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
-    hasSanitizedNetworkEvidenceHash(fallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
+    hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
-    typeof fallbackEvidence.signalKey === "string" ? fallbackEvidence.signalKey : null
+    typeof normalizedFallbackEvidence.signalKey === "string" ? normalizedFallbackEvidence.signalKey : null
   ]);
 
   return {
     counts,
     entities,
     fetchQuality: deriveFetchQualityValue({
-      attemptedUrls: Array.isArray(fallbackEvidence.keyPageAttemptedUrls)
-        ? fallbackEvidence.keyPageAttemptedUrls.filter((value): value is string => typeof value === "string")
+      attemptedUrls: Array.isArray(normalizedFallbackEvidence.keyPageAttemptedUrls)
+        ? normalizedFallbackEvidence.keyPageAttemptedUrls.filter((value): value is string => typeof value === "string")
         : [],
-      explicit: fallbackEvidence.fetchQuality ?? fallbackEvidence.fetch_quality ?? fallbackEvidence.normalizedConcernFetchQuality,
+      explicit: normalizedFallbackEvidence.fetchQuality ?? normalizedFallbackEvidence.normalizedConcernFetchQuality,
       pageUrls,
       snippets,
-      stopReason: fallbackEvidence.keyPageStopReason
+      stopReason: normalizedFallbackEvidence.keyPageStopReason
     }),
     flags,
     pageUrls,
@@ -1459,7 +1495,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     };
   }
 
-  const evidence = finding.evidence as Record<string, unknown>;
+  const evidence = normalizeUnifiedFindingEvidenceRecord(finding.evidence as Record<string, unknown>);
   const contradictionEvidence = getContradictionEvidenceBundle(evidence);
   const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(evidence, contradictionEvidence);
   const isContradictionEvidenceContext =
@@ -1476,12 +1512,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     isContradictionEvidenceContext &&
     ((Array.isArray(evidence.runtimeEvidenceArtifacts) &&
       evidence.runtimeEvidenceArtifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    (Array.isArray(evidence.runtime_evidence_artifacts) &&
-      evidence.runtime_evidence_artifacts.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
     (Array.isArray(evidence.runtimeEvidence) &&
       evidence.runtimeEvidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
-    (Array.isArray(evidence.runtime_evidence) &&
-      evidence.runtime_evidence.some((entry) => typeof entry === "string" && entry.trim().length > 0)) ||
     ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
     ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
     ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
@@ -1503,8 +1535,10 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
   for (const [key, value] of Object.entries(evidence)) {
     if (typeof value === "string") {
       if (/^https?:\/\//i.test(value.trim())) {
-        if (/pageurl|page_url/i.test(key)) {
+        if (key === "pageUrl") {
           pageUrls.add(value);
+        } else if (key === "sourceUrl") {
+          sourceUrls.add(value);
         } else {
           sourceUrls.add(value);
         }
@@ -1537,8 +1571,10 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
 
     if (stringValues.some((entry) => /^https?:\/\//i.test(entry.trim()))) {
       for (const entry of stringValues) {
-        if (/pageurl|page_url/i.test(key)) {
+        if (key === "pageUrls") {
           pageUrls.add(entry);
+        } else if (key === "sourceUrls") {
+          sourceUrls.add(entry);
         } else {
           sourceUrls.add(entry);
         }
@@ -1556,7 +1592,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     counts,
     entities,
     fetchQuality: deriveFetchQualityValue({
-      explicit: evidence.fetchQuality ?? evidence.fetch_quality ?? evidence.normalizedConcernFetchQuality,
+      explicit: evidence.fetchQuality ?? evidence.normalizedConcernFetchQuality,
       pageUrls: [...pageUrls],
       snippets: [...snippets]
     }),
@@ -2532,16 +2568,21 @@ function deriveConfidenceInputs(input: {
       Object.keys(row).some((key) => /runtime|request|network|tracker/i.test(key))
     );
 
-  const hasPolicyTextEvidence = normalizedConcernStrengthFlags.includes("policy_text") || allEvidenceRows.some((row) =>
-    {
-      const contradictionEvidence = getContradictionEvidenceBundle(row);
-      return (
-        Boolean(contradictionEvidence?.policySnippet) ||
-        Boolean(contradictionEvidence?.claim) ||
-        Object.keys(row).some((key) => /claim|policy|disclosure|summary|snippet|description|pageurl|page_url/i.test(key))
-      );
-    }
-  );
+  const hasPolicyTextEvidence = normalizedConcernStrengthFlags.includes("policy_text") || allEvidenceRows.some((row) => {
+    const normalizedRow = normalizeUnifiedFindingEvidenceRecord(row);
+    const contradictionEvidence = getContradictionEvidenceBundle(normalizedRow);
+    return (
+      Boolean(contradictionEvidence?.policySnippet) ||
+      Boolean(contradictionEvidence?.claim) ||
+      isMeaningfulPolicyText(normalizedRow.policySnippet) ||
+      (Array.isArray(normalizedRow.policySnippets) &&
+        normalizedRow.policySnippets.some((entry) => typeof entry === "string" && isMeaningfulPolicyText(entry))) ||
+      isMeaningfulPolicyText(normalizedRow.policySummaryShort) ||
+      isMeaningfulPolicyText(normalizedRow.description) ||
+      isMeaningfulPolicyText(normalizedRow.disclosureSummary) ||
+      typeof normalizedRow.pageUrl === "string"
+    );
+  });
 
   const hasKeyPageDiscoveryEvidence = normalizedConcernStrengthFlags.includes("key_page_discovery") || allEvidenceRows.some((row) =>
     Object.keys(row).some((key) => /keyPage|attemptedUrls|attemptCount|stopReason|discovery/i.test(key))
@@ -3751,10 +3792,11 @@ function buildFamilyPacketFallbackEvidence(input: {
   sourceUrls: string[];
   supportedUnifiedFindings: FamilyPacketFindingRecord[];
 }) {
-  const evidencePayload =
+  const evidencePayload = normalizeUnifiedFindingEvidenceRecord(
     input.findingRecord.evidencePayload && typeof input.findingRecord.evidencePayload === "object"
       ? (input.findingRecord.evidencePayload as Record<string, unknown>)
-      : {};
+      : {}
+  );
   const payloadPageUrls = uniqueStrings([
     ...(Array.isArray(evidencePayload.pageUrls) ? (evidencePayload.pageUrls as string[]) : []),
     ...(Array.isArray(evidencePayload.evidenceUrls) ? (evidencePayload.evidenceUrls as string[]) : []),
@@ -3768,6 +3810,7 @@ function buildFamilyPacketFallbackEvidence(input: {
     ...(Array.isArray(evidencePayload.policySnippets) ? (evidencePayload.policySnippets as string[]) : []),
     ...(Array.isArray(evidencePayload.snippets) ? (evidencePayload.snippets as string[]) : []),
     ...(Array.isArray(evidencePayload.supportingSignals) ? (evidencePayload.supportingSignals as string[]) : []),
+    typeof evidencePayload.policySnippet === "string" ? evidencePayload.policySnippet : null,
     typeof evidencePayload.policySummaryShort === "string" ? evidencePayload.policySummaryShort : null,
     typeof evidencePayload.observation === "string" ? evidencePayload.observation : null
   ])

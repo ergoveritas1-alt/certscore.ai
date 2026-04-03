@@ -1773,6 +1773,61 @@ test("repairs weak cookie-policy packets from policy enrichment during display a
   );
 });
 
+test("normalizes legacy family-packet policy evidence keys before assembling unified findings", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy-notice",
+                  fetchQuality: "verified_content",
+                  snippet: "Privacy Notice",
+                  supportedSurfaceTypes: ["cookie_policy"],
+                  title: "Privacy Notice"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidencePayload: {
+                    fetch_quality: "verified_content",
+                    page_url: "https://www.example.com/privacy-notice",
+                    policy_snippet:
+                      "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies.",
+                    source_url: "https://www.example.com/privacy-notice"
+                  },
+                  evidenceUrls: ["https://www.example.com/privacy-notice"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy language.",
+                  sourceSurfaceTypes: ["cookie_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.equal(packet?.primaryPageUrl, "https://www.example.com/privacy-notice");
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.example.com/privacy-notice"]);
+  assert.ok(
+    packet?.evidence?.snippets?.includes(
+      "How We Use Cookies and Other Tracking Technologies. We use analytical cookies and marketing cookies."
+    )
+  );
+});
+
 test("does not treat insufficient-policy placeholder text as a surfaced cookie-policy snippet", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],
