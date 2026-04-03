@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   NANO_DOC_RETRIEVAL_JOB,
   NANO_SIGNAL_ENRICHMENT_JOB,
@@ -22,6 +23,7 @@ import {
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
   loadNanoDocRetrievalInputs,
+  loadReusableNanoDocumentExtractions,
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
@@ -84,6 +86,11 @@ function stripHtmlToText(html: string) {
 function extractTitle(html: string) {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return match ? stripHtmlToText(match[1] ?? "") : null;
+}
+
+export function buildNanoDocumentContentHash(documentText: string) {
+  const normalized = documentText.replace(/\s+/g, " ").trim();
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 export function determineValidationCollectAction(scanStatus: string | null | undefined) {
@@ -1526,6 +1533,7 @@ async function fetchNanoDocumentSource(input: {
         },
         metadata_json: {
           ...baseMetadata,
+          content_hash: buildNanoDocumentContentHash(text),
           http_status: response.status
         },
         source: "nano_doc_retrieval",
@@ -1558,6 +1566,54 @@ async function fetchNanoDocumentSource(input: {
       } satisfies Record<string, unknown>
     };
   }
+}
+
+function getDocumentSourceMetadata(row: Record<string, unknown>) {
+  return typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+    ? (row.metadata_json as Record<string, unknown>)
+    : {};
+}
+
+function getDocumentSourceContentHash(row: Record<string, unknown>) {
+  const metadata = getDocumentSourceMetadata(row);
+  return typeof metadata.content_hash === "string" && metadata.content_hash.trim().length > 0 ? metadata.content_hash.trim() : null;
+}
+
+export function resolveReusableNanoDocumentExtractions(input: {
+  candidates: Array<Record<string, unknown>>;
+  priorExtractions: Array<Record<string, unknown>>;
+}) {
+  const reusableByCandidateId = new Map<string, Record<string, unknown>>();
+  const priorByKey = new Map<string, Record<string, unknown>>();
+
+  for (const row of input.priorExtractions) {
+    const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
+    const contentHash = getDocumentSourceContentHash(row);
+    if (!canonicalUrl || !contentHash) {
+      continue;
+    }
+
+    const key = `${canonicalUrl}::${contentHash}`;
+    if (!priorByKey.has(key)) {
+      priorByKey.set(key, row);
+    }
+  }
+
+  for (const candidate of input.candidates) {
+    const candidateId = getString(candidate.id);
+    const canonicalUrl = getString(candidate.canonical_url) ?? getString(candidate.canonicalUrl);
+    const contentHash = getDocumentSourceContentHash(candidate);
+    if (!candidateId || !canonicalUrl || !contentHash) {
+      continue;
+    }
+
+    const match = priorByKey.get(`${canonicalUrl}::${contentHash}`);
+    if (match) {
+      reusableByCandidateId.set(candidateId, match);
+    }
+  }
+
+  return reusableByCandidateId;
 }
 
 function getNanoDocumentSourceDedupKey(row: Record<string, unknown>) {
@@ -1953,7 +2009,63 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     rows: pendingDocumentSources,
     runtimeArtifacts: artifacts.runtimeArtifacts
   });
-  const selectedPendingIds = new Set(selectedPendingDocumentSources.map((row) => String(row.id ?? "")));
+  const reusableExtractions = resolveReusableNanoDocumentExtractions({
+    candidates: selectedPendingDocumentSources,
+    priorExtractions: await loadReusableNanoDocumentExtractions({
+      rows: selectedPendingDocumentSources,
+      scanId
+    })
+  });
+  const reusableExtractionUpdates = selectedPendingDocumentSources.flatMap((row) => {
+    const id = getString(row.id);
+    if (!id) {
+      return [];
+    }
+
+    const reused = reusableExtractions.get(id);
+    if (!reused) {
+      return [];
+    }
+
+    const extractedFields =
+      typeof reused.extracted_fields_json === "object" && reused.extracted_fields_json !== null && !Array.isArray(reused.extracted_fields_json)
+        ? (reused.extracted_fields_json as Record<string, unknown>)
+        : {};
+
+    return [{
+      extractedFields,
+      extractionStatus: "ready" as const,
+      id,
+      metadata: {
+        ...getDocumentSourceMetadata(row),
+        extraction_reuse_reason: "canonical_url_content_hash_match",
+        reused_extraction_from_document_source_id: getString(reused.id),
+        reused_extraction_from_scan_id: getString(reused.scan_id),
+        reused_extraction_updated_at: getString(reused.updated_at)
+      },
+      semanticConfidence:
+        typeof reused.semantic_confidence === "number"
+          ? reused.semantic_confidence
+          : typeof reused.semanticConfidence === "number"
+            ? reused.semanticConfidence
+            : null
+    }];
+  });
+  if (reusableExtractionUpdates.length > 0) {
+    await updateScanDocumentSourceExtractions({
+      rows: reusableExtractionUpdates
+    });
+    artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  }
+
+  const remainingPendingDocumentSources = selectedPendingDocumentSources.filter((row) => {
+    const id = getString(row.id);
+    return !id || !reusableExtractions.has(id);
+  });
+  const selectedPendingIds = new Set([...remainingPendingDocumentSources, ...selectedPendingDocumentSources.filter((row) => {
+    const id = getString(row.id);
+    return id ? reusableExtractions.has(id) : false;
+  })].map((row) => String(row.id ?? "")));
   const skippedPendingDocumentSources = pendingDocumentSources.filter((row) => !selectedPendingIds.has(String(row.id ?? "")));
 
   if (skippedPendingDocumentSources.length > 0) {
@@ -1982,10 +2094,20 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     artifacts = await loadNanoSignalEnrichmentInputs(scanId);
   }
 
-  if (selectedPendingDocumentSources.length > 0) {
+  if (artifacts.policySemanticRows.length > 0) {
+    await persistDerivedNanoPolicySignals({
+      policySemanticRows: artifacts.policySemanticRows,
+      policyReviewQueue: artifacts.policyReviewQueue,
+      runtimeArtifacts: artifacts.runtimeArtifacts,
+      scanId,
+      snapshot: artifacts.snapshot
+    });
+  }
+
+  if (remainingPendingDocumentSources.length > 0) {
     let partialSignalsPersisted = false;
 
-    for (const batch of chunkRows(selectedPendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
+    for (const batch of chunkRows(remainingPendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
       const extractionRows = await Promise.all(
         batch.map(async (row) => {
           const result = await extractNanoDocumentSourceWithLlm(row);

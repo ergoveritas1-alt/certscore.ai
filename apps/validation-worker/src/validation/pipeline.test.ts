@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildNanoDocumentContentHash,
   buildNanoDocCandidateUrls,
   dedupeNanoDocumentSources,
   deriveValidationFindings,
   determineValidationCollectAction,
   looksLikeIntermediaryOrBlockPage,
   prioritizePendingNanoDocumentSources,
+  resolveReusableNanoDocumentExtractions,
   selectPendingNanoDocumentSourcesForExtraction
 } from "./pipeline";
 
@@ -324,6 +326,42 @@ test("selectPendingNanoDocumentSourcesForExtraction keeps cookie docs when runti
     rows.map((row) => row.id),
     ["doc-cookie"]
   );
+});
+
+test("buildNanoDocumentContentHash normalizes whitespace before hashing", () => {
+  const left = buildNanoDocumentContentHash("Privacy policy   text\nwith spacing.");
+  const right = buildNanoDocumentContentHash("Privacy policy text with spacing.");
+
+  assert.equal(left, right);
+});
+
+test("resolveReusableNanoDocumentExtractions matches prior ready rows by canonical url and content hash", () => {
+  const contentHash = buildNanoDocumentContentHash("Privacy policy text with spacing.");
+  const reusable = resolveReusableNanoDocumentExtractions({
+    candidates: [
+      {
+        canonical_url: "https://example.com/privacy",
+        id: "doc-current",
+        metadata_json: {
+          content_hash: contentHash
+        }
+      }
+    ],
+    priorExtractions: [
+      {
+        canonical_url: "https://example.com/privacy",
+        id: "doc-prior",
+        metadata_json: {
+          content_hash: contentHash
+        },
+        extracted_fields_json: {
+          page_type: "privacy_policy"
+        }
+      }
+    ]
+  });
+
+  assert.equal(reusable.get("doc-current")?.id, "doc-prior");
 });
 
 test("deriveValidationFindings emits pilot financial review rows from retained signal evidence", () => {

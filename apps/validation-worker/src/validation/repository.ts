@@ -1703,6 +1703,42 @@ export async function updateScanDocumentSourceExtractions(input: {
   }
 }
 
+export async function loadReusableNanoDocumentExtractions(input: {
+  rows: Array<Record<string, unknown>>;
+  scanId: string;
+}) {
+  const canonicalUrls = [...new Set(
+    input.rows
+      .map((row) => (typeof row.canonical_url === "string" && row.canonical_url.trim().length > 0 ? row.canonical_url.trim() : null))
+      .filter((value): value is string => typeof value === "string")
+  )];
+
+  if (canonicalUrls.length === 0) {
+    return [] as Array<Record<string, unknown>>;
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("scan_document_sources")
+    .select("*")
+    .in("canonical_url", canonicalUrls)
+    .eq("extraction_status", "ready")
+    .neq("scan_id", input.scanId)
+    .order("updated_at", { ascending: false });
+
+  if (error && !isMissingOptionalTableError(error)) {
+    throw new Error(`Failed to load reusable document source extractions for scan ${input.scanId}: ${error.message}`);
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).filter((row) => {
+    const metadata = typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+      ? (row.metadata_json as Record<string, unknown>)
+      : {};
+    const contentHash = typeof metadata.content_hash === "string" ? metadata.content_hash : null;
+    return typeof contentHash === "string" && contentHash.length > 0;
+  });
+}
+
 export async function persistDerivedNanoPolicySignals(input: {
   policySemanticRows: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
