@@ -129,6 +129,7 @@ type SignalPopulationRow = {
 };
 
 type NanoDocRetrievalInput = {
+  discoveryCandidates: Array<Record<string, unknown>>;
   domainHostname: string | null;
   existingDocumentSources: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
@@ -1013,10 +1014,17 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   const [
     { data: domain, error: domainError },
     { data: pages, error: pagesError },
+    { data: events, error: eventsError },
     { data: documentSources, error: documentSourcesError }
   ] = await Promise.all([
     domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     supabase.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
+    supabase
+      .from("scan_events")
+      .select("event_type, metadata_json, created_at")
+      .eq("scan_id", scanId)
+      .eq("event_type", "runtime.build_phase_diagnostic")
+      .order("created_at", { ascending: true }),
     supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
   ]);
 
@@ -1026,11 +1034,48 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   if (pagesError) {
     throw new Error(`Failed to load scan pages for nano doc retrieval ${scanId}: ${pagesError.message}`);
   }
+  if (eventsError) {
+    throw new Error(`Failed to load discovery events for nano doc retrieval ${scanId}: ${eventsError.message}`);
+  }
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
   }
 
+  const discoveryCandidates = ((events ?? []) as Array<Record<string, unknown>>).flatMap((event) => {
+    const metadata =
+      event.metadata_json && typeof event.metadata_json === "object" && !Array.isArray(event.metadata_json)
+        ? (event.metadata_json as Record<string, unknown>)
+        : null;
+    if (metadata?.phase !== "page_discovery_fetch") {
+      return [];
+    }
+
+    const discoveryDebug =
+      metadata.discoveryDebug && typeof metadata.discoveryDebug === "object" && !Array.isArray(metadata.discoveryDebug)
+        ? (metadata.discoveryDebug as Record<string, unknown>)
+        : null;
+    const topCandidates = Array.isArray(discoveryDebug?.topDiscoveryCandidates)
+      ? discoveryDebug.topDiscoveryCandidates.filter(
+          (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+        )
+      : [];
+
+    return topCandidates.map((candidate) => ({
+      anchor_text: typeof candidate.anchorText === "string" ? candidate.anchorText : null,
+      candidate_score:
+        typeof candidate.candidateScore === "number"
+          ? candidate.candidateScore
+          : Number(candidate.candidateScore ?? 0),
+      candidate_url: typeof candidate.candidateUrl === "string" ? candidate.candidateUrl : null,
+      discovered_from: typeof candidate.discoveredFrom === "string" ? candidate.discoveredFrom : null,
+      host_relation: typeof candidate.hostRelation === "string" ? candidate.hostRelation : null,
+      page_type: typeof candidate.pageType === "string" ? candidate.pageType : null,
+      source_url: typeof candidate.sourceUrl === "string" ? candidate.sourceUrl : null
+    }));
+  });
+
   return {
+    discoveryCandidates,
     domainHostname: (domain?.hostname as string | null) ?? null,
     existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
     pages: (pages ?? []) as Array<Record<string, unknown>>,

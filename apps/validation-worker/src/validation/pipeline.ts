@@ -1338,7 +1338,11 @@ async function enqueueValidationVerdict(runId: string) {
   );
 }
 
-export function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages: Array<Record<string, unknown>> }) {
+export function buildNanoDocCandidateUrls(input: {
+  discoveryCandidates?: Array<Record<string, unknown>>;
+  domainHostname: string | null;
+  pages: Array<Record<string, unknown>>;
+}) {
   const candidates = new Map<string, { documentType: string; priorityTier: "priority" | "secondary"; url: string }>();
   const seedPaths = [
     ["/privacy", "privacy_policy", "priority"],
@@ -1363,6 +1367,36 @@ export function buildNanoDocCandidateUrls(input: { domainHostname: string | null
       priorityTier: "priority",
       url: pageUrl
     });
+  }
+
+  for (const candidate of input.discoveryCandidates ?? []) {
+    const candidateUrl = getString(candidate.candidate_url) ?? getString(candidate.candidateUrl);
+    const pageType = getString(candidate.page_type) ?? getString(candidate.pageType);
+    const discoveredFrom = getString(candidate.discovered_from) ?? getString(candidate.discoveredFrom) ?? "";
+    const candidateScoreRaw = candidate.candidate_score ?? candidate.candidateScore;
+    const candidateScore =
+      typeof candidateScoreRaw === "number" && Number.isFinite(candidateScoreRaw)
+        ? candidateScoreRaw
+        : Number(candidateScoreRaw ?? 0);
+    if (!candidateUrl || !pageType || !["privacy_policy", "terms_of_service", "cookie_policy"].includes(pageType)) {
+      continue;
+    }
+
+    const priorityTier =
+      discoveredFrom === "footer_link" ||
+      discoveredFrom === "legal_hub" ||
+      discoveredFrom === "rendered_link" ||
+      candidateScore >= 0.75
+        ? "priority"
+        : "secondary";
+
+    if (!candidates.has(candidateUrl)) {
+      candidates.set(candidateUrl, {
+        documentType: pageType,
+        priorityTier,
+        url: candidateUrl
+      });
+    }
   }
 
   if (input.domainHostname) {
@@ -1804,6 +1838,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   }
 
   const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: artifacts.discoveryCandidates,
     domainHostname: artifacts.domainHostname,
     pages: artifacts.pages
   });
