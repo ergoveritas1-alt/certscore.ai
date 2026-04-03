@@ -122,15 +122,14 @@ function BenchmarkMetricCard(input: {
             />
           ) : null}
         </div>
-        <div className="flex items-center justify-between text-[11px] text-slate-500">
-          <span>&nbsp;</span>
+        <div className="flex items-center text-[11px] text-slate-500">
           {delta !== null ? (
             <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
               {delta > 0 ? "+" : ""}
               {delta} vs expected
             </span>
           ) : (
-            <span>Expected marker</span>
+            <span>&nbsp;</span>
           )}
         </div>
       </div>
