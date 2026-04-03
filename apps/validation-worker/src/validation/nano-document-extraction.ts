@@ -69,6 +69,9 @@ export function normalizeNanoDocumentExtraction(input: {
     page_type: documentType,
     page_url: pageUrl,
     policy_actionable_flags: getStringArray(input.parsed.policy_actionable_flags ?? input.parsed.policyActionableFlags),
+    policy_ambiguity_score:
+      getNumber(input.parsed.policy_ambiguity_score) ??
+      getNumber(input.parsed.policyAmbiguityScore),
     policy_arbitration_present: input.parsed.policy_arbitration_present === true || input.parsed.policyArbitrationPresent === true,
     policy_children_reference:
       getString(input.parsed.policy_children_reference) ??
@@ -79,6 +82,9 @@ export function normalizeNanoDocumentExtraction(input: {
       : Array.isArray(input.parsed.policyCookieDisclosures)
         ? input.parsed.policyCookieDisclosures
         : [],
+    policy_coverage_ratio:
+      getNumber(input.parsed.policy_coverage_ratio) ??
+      getNumber(input.parsed.policyCoverageRatio),
     policy_do_not_sell:
       getString(input.parsed.policy_do_not_sell) ??
       getString(input.parsed.policyDoNotSell) ??
@@ -90,10 +96,25 @@ export function normalizeNanoDocumentExtraction(input: {
     policy_mentions: policyMentions,
     policy_rights_signals: getStringArray(input.parsed.policy_rights_signals ?? input.parsed.policyRightsSignals),
     policy_semantic_confidence: semanticConfidence,
+    policy_snippet_count:
+      getNumber(input.parsed.policy_snippet_count) ??
+      getNumber(input.parsed.policySnippetCount),
+    policy_structurally_weak:
+      input.parsed.policy_structurally_weak === true || input.parsed.policyStructurallyWeak === true,
     policy_summary_short:
       getString(input.parsed.policy_summary_short) ??
       getString(input.parsed.policySummaryShort) ??
       (input.documentText ? input.documentText.slice(0, 280) : null),
+    policy_transfer_mechanisms: Array.isArray(input.parsed.policy_transfer_mechanisms)
+      ? input.parsed.policy_transfer_mechanisms
+      : Array.isArray(input.parsed.policyTransferMechanisms)
+        ? input.parsed.policyTransferMechanisms
+        : [],
+    policy_retention_periods: Array.isArray(input.parsed.policy_retention_periods)
+      ? input.parsed.policy_retention_periods
+      : Array.isArray(input.parsed.policyRetentionPeriods)
+        ? input.parsed.policyRetentionPeriods
+        : [],
     privacy_contact_channel_type:
       getString(input.parsed.privacy_contact_channel_type) ??
       getString(input.parsed.privacyContactChannelType) ??
@@ -144,7 +165,7 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
         {
           role: "system",
           content:
-            "You extract structured legal-document semantics from website legal pages. Return JSON only. Use these enums exactly when applicable: policy_dsar_mechanism = present|partial|absent|unknown, policy_do_not_sell = present_link|present_text|absent|unknown, policy_children_reference = under_13|under_16|none|unknown, privacy_contact_channel_type = email|form|portal|none. policy_rights_signals must be a string array of short tokens like access_request, delete_request, correction_request, portability_request, opt_out_request, appeal_request. policy_mentions must be an array of objects with topic. Allowed topics include gpc_disclosure, tracking_technologies_disclosure, targeted_advertising_disclosure, third_party_advertising_disclosure, children, session_replay_disclosure. Keep policy_summary_short under 280 chars. If uncertain, prefer unknown, empty arrays, and low confidence."
+            "You extract structured legal-document semantics from website legal pages. Return JSON only. Use these enums exactly when applicable: policy_dsar_mechanism = present|partial|absent|unknown, policy_do_not_sell = present_link|present_text|absent|unknown, policy_children_reference = under_13|under_16|none|unknown, privacy_contact_channel_type = email|form|portal|none. policy_rights_signals must be a string array of short tokens like access_request, delete_request, correction_request, portability_request, opt_out_request, appeal_request. policy_mentions must be an array of objects with topic. Allowed topics include gpc_disclosure, tracking_technologies_disclosure, targeted_advertising_disclosure, third_party_advertising_disclosure, children, session_replay_disclosure. Also return numeric policy_ambiguity_score (0-100), numeric policy_coverage_ratio (0-1), numeric policy_snippet_count, boolean policy_structurally_weak, and arrays for policy_transfer_mechanisms and policy_retention_periods when clearly disclosed. Keep policy_summary_short under 280 chars. If uncertain, prefer unknown, empty arrays, and low confidence."
         },
         {
           role: "user",
