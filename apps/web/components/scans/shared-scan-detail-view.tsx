@@ -521,14 +521,8 @@ function derivePolicyBehaviorContradictions(input: {
     : [];
   const mergedPolicyDoNotSell = findMergedSignalValue(input.mergedSignals, "policyDoNotSell");
   const policyDoNotSell = typeof mergedPolicyDoNotSell === "string" ? mergedPolicyDoNotSell : "unknown";
-  const policyPageUrl =
-    typeof (privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url) === "string"
-      ? String(privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url)
-      : null;
-  const policySummary =
-    typeof (privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short) === "string"
-      ? String(privacyEnrichment?.policySummaryShort ?? privacyEnrichment?.policy_summary_short)
-      : null;
+  const policyPageUrl = privacyEnrichment ? getPolicyPageUrl(privacyEnrichment) : null;
+  const policySummary = privacyEnrichment ? getPolicySummaryText(privacyEnrichment) : null;
 
   if (preconsentVendors.length > 0) {
     contradictions.push({
