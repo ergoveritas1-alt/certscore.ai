@@ -19,16 +19,10 @@ These usages are acceptable because they do not treat `policy_enrichment` as the
 
 - `apps/web/server/scans/get-scan-by-id.ts`
   - Loads raw policy rows for scan detail evidence, snippets, and fallback display data.
-- `apps/validation-web/server/scans/get-scan-by-id.ts`
-  - Validation-web mirror of scan detail evidence loading.
 - `apps/web/server/admin/get-admin-scan-detail.ts`
   - Admin detail/debug read path.
-- `apps/validation-web/server/admin/get-admin-scan-detail.ts`
-  - Validation-web admin mirror.
 - `apps/web/server/admin/policy-review-queue.ts`
   - Queue/admin linkage by `policy_enrichment_id`.
-- `apps/validation-web/server/admin/policy-review-queue.ts`
-  - Validation-web admin mirror.
 - `apps/web/server/validation/repository.ts`
   - Supplemental review queue loading and queue-item lookup by `policy_enrichment_id`.
 - `apps/web/components/scans/shared-scan-detail-view.tsx`
