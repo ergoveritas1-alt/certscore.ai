@@ -18,10 +18,7 @@ function toPrivacyContactChannelType(value: unknown): RegulatoryRiskSource["priv
 
 export function buildRegulatoryRiskSource(input: {
   snapshot: Record<string, unknown>;
-  primaryPolicyEnrichment?: Record<string, unknown> | null;
 }): RegulatoryRiskSource {
-  const policy = input.primaryPolicyEnrichment ?? null;
-
   return {
     homepageFetchStatus:
       input.snapshot.homepage_fetch_status === "ok" ||
@@ -46,14 +43,17 @@ export function buildRegulatoryRiskSource(input: {
     dataAccessRequestPresent: toBoolean(input.snapshot.data_access_request_present),
     dataDeletionRequestPresent: toBoolean(input.snapshot.data_deletion_request_present),
     privacyContactChannelType:
-      toPrivacyContactChannelType(policy?.privacyContactChannelType ?? policy?.privacy_contact_channel_type) ??
+      toPrivacyContactChannelType(input.snapshot.privacyContactChannelType) ??
       toPrivacyContactChannelType(input.snapshot.privacy_contact_channel_type),
     mentionsDataRetention: toBoolean(input.snapshot.mentions_data_retention),
     dataRetentionSpecificPeriodDetected: toBoolean(input.snapshot.data_retention_specific_period_detected),
-    retentionDisclosureQuality: toRetentionDisclosure(policy?.policyRetentionDisclosure ?? policy?.policy_retention_disclosure),
-    policyClaimNoSale: toBoolean(policy?.policyClaimNoSale ?? policy?.policy_claim_no_sale),
-    policyClaimNoTracking: toBoolean(policy?.policyClaimNoTracking ?? policy?.policy_claim_no_tracking),
-    policyClaimPrivacyProtective: toBoolean(policy?.policyClaimPrivacyProtective ?? policy?.policy_claim_privacy_protective),
+    retentionDisclosureQuality:
+      toRetentionDisclosure(input.snapshot.policyRetentionDisclosure) ??
+      toRetentionDisclosure(input.snapshot.policy_retention_disclosure),
+    policyClaimNoSale: toBoolean(input.snapshot.policyClaimNoSale) ?? toBoolean(input.snapshot.policy_claim_no_sale),
+    policyClaimNoTracking: toBoolean(input.snapshot.policyClaimNoTracking) ?? toBoolean(input.snapshot.policy_claim_no_tracking),
+    policyClaimPrivacyProtective:
+      toBoolean(input.snapshot.policyClaimPrivacyProtective) ?? toBoolean(input.snapshot.policy_claim_privacy_protective),
     policyBehaviorConflictDetected: toBoolean(input.snapshot.policy_behavior_conflict_detected),
     sessionReplayWithoutDisclosureDetected: toBoolean(input.snapshot.session_replay_without_disclosure_detected),
     mentionsSensitiveData: toBoolean(input.snapshot.mentions_sensitive_data),

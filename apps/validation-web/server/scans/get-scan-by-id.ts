@@ -420,14 +420,12 @@ export async function getScanById(input: { organizationId: string; scanId: strin
   const regulatoryRisk = snapshot
     ? buildRegulatoryRiskAssessment({
         source: buildRegulatoryRiskSource({
-          snapshot: regulatorySnapshot as Record<string, unknown>,
-          primaryPolicyEnrichment
+          snapshot: regulatorySnapshot as Record<string, unknown>
         }),
         previousOverallScore: previousSnapshot
           ? buildRegulatoryRiskAssessment({
               source: buildRegulatoryRiskSource({
-                snapshot: previousSnapshot as Record<string, unknown>,
-                primaryPolicyEnrichment: previousPrimaryPolicyEnrichment
+                snapshot: previousSnapshot as Record<string, unknown>
               })
             }).overallScore
           : null

@@ -1,5 +1,4 @@
 import { buildAgencyMappings, buildRegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildPreviewPayloadFromSnapshot } from "./build-preview-payload";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -71,20 +70,9 @@ export async function getPreviewScan(scanId: string) {
     finalUrl: derivedFinalUrl ?? (snapshot as unknown as Record<string, unknown>).finalUrl ?? null
   };
 
-  const supabase = createAdminClient();
-  const { data: policyEnrichment } = await supabase
-    .from("policy_enrichment")
-    .select("*")
-    .eq("scan_id", scanId)
-    .order("created_at", { ascending: true });
-  const primaryPolicyEnrichment =
-    ((policyEnrichment ?? []) as Array<Record<string, unknown>>).find((row) => row.page_type === "privacy_policy") ??
-    ((policyEnrichment ?? []) as Array<Record<string, unknown>>)[0] ??
-    null;
   const regulatoryRisk = buildRegulatoryRiskAssessment({
     source: buildRegulatoryRiskSource({
-      snapshot: snapshotWithDerivedRuntime,
-      primaryPolicyEnrichment
+      snapshot: snapshotWithDerivedRuntime
     })
   });
 
