@@ -395,7 +395,7 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
 }
 
 function FindingTitleIcon(input: { finding: CertScoreFinding }) {
-  const common = "h-[18px] w-[18px]";
+  const common = "h-4 w-4";
 
   if (input.finding.id === "third_party_tracking_pre_consent") {
     return (
@@ -436,8 +436,8 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const tone = getFindingCardTone(input.finding, false);
 
   return (
-    <details className={`group mt-4 rounded-xl border px-4 py-3 ${tone.summary}`}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
+    <details className={`group mt-3 rounded-xl border px-3 py-2 ${tone.summary}`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
         <span>{input.finding.shortSummary}</span>
         <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
       </summary>
@@ -588,21 +588,21 @@ export function ExecutiveSummaryCard(input: {
           <div className="grid gap-3">
             {primaryFindings.map((finding, index) => (
               <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
-                <div className={`h-1.5 w-full ${getFindingCardTone(finding, index === 0).band}`} />
-                <div className="px-4 py-4">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
+                <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
+                <div className="px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
                     {finding.severity}
                   </span>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
                     {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
                   </span>
                 </div>
-                <div className="mt-3 flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                <div className="mt-2.5 flex items-start gap-2.5">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
                     <FindingTitleIcon finding={finding} />
                   </div>
-                  <p className="pt-0.5 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-slate-950">{finding.label}</p>
+                  <p className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">{finding.label}</p>
                 </div>
                 <FindingDetailDisclosure finding={finding} />
                 </div>
