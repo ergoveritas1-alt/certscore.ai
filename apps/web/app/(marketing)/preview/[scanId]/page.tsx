@@ -3,7 +3,6 @@ import { PreviewScanState } from "../../../../components/marketing/preview-scan-
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
-import { PendingButtonLink } from "../../../../components/ui/pending-link";
 import { getPreviewScan } from "../../../../server/preview-scan/get-preview-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 
@@ -50,17 +49,6 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
           ) : loginHref && fullScanRecord ? (
             <SharedScanDetailView
               createAccountHref={loginHref}
-              headerActions={
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <PendingButtonLink href={loginHref} idleContent="Create account to continue" pendingContent="Opening..." />
-                  <PendingButtonLink
-                    href={loginHref}
-                    idleContent="Already have an account? Sign in"
-                    pendingContent="Opening..."
-                    variant="secondary"
-                  />
-                </div>
-              }
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
