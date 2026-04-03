@@ -4,6 +4,8 @@ import {
   type AccessPostureClass,
   type BlockPageClassification,
   type BlockVendorGuess,
+  type MergedSignalRecord,
+  type PopulatedSignalRecord,
   type RecoverableFindingClass,
   type ScanExecutionTier,
   buildAgencyMappings,
@@ -17,6 +19,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
+import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -24,6 +27,8 @@ import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToT
 import { deriveSupplementalSnapshotSignals } from "../../lib/scans/scan-detail-supplemental-signals";
 import { deriveSupplementalCoverageSignals, type SupplementalCoverageSignal } from "../../lib/scans/supplemental-coverage-signals";
 import { deriveSupplementalPolicySignals, type SupplementalPolicySignal } from "../../lib/scans/supplemental-policy-signals";
+import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-evidence";
+import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
 import {
@@ -67,6 +72,8 @@ export type ScanSignalRecord = {
   value: boolean | number | string | string[];
   valueType: string;
 };
+
+export type ScanMergedSignalRecord = MergedSignalRecord;
 
 export type ScanSnapshotRecord = {
   [key: string]: unknown;
@@ -369,6 +376,44 @@ function normalizeSupplementalPolicySignals(signals: SupplementalPolicySignal[])
       valueType: "boolean"
     } satisfies ScanSignalRecord;
   });
+}
+
+function buildScannerSignalPopulationRecords(input: {
+  observedAt: string | null;
+  signals: ScanSignalRecord[];
+}): PopulatedSignalRecord[] {
+  return input.signals.map((signal) => ({
+    confidence: 1,
+    evidenceRefs: [],
+    key: signal.key,
+    label: signal.label,
+    observedAt: input.observedAt,
+    populationStatus: "present",
+    provenance: [
+      {
+        detail: "scanner_retained_signal",
+        kind: "signal"
+      }
+    ],
+    reportSignalSource:
+      signal.key.startsWith("privacy.") && /reject_reduced|weak_cookie_security|gpc_signal_not_honored/i.test(signal.key)
+        ? "runtime_artifact_signal"
+        : signal.key.startsWith("privacy.") ||
+            signal.key.startsWith("commerce.") ||
+            signal.key.startsWith("financial.") ||
+            signal.key.startsWith("entity.") ||
+            signal.key.startsWith("disclosure.") ||
+            signal.key.startsWith("context.") ||
+            signal.key.startsWith("accessibility.")
+          ? "snapshot_signal"
+          : null,
+    source: "scanner",
+    value: signal.value,
+    valueType:
+      signal.valueType === "number" || signal.valueType === "string_array" || signal.valueType === "text"
+        ? signal.valueType
+        : "boolean"
+  }));
 }
 
 function mergeRelatedPreviewSnapshot(
@@ -756,6 +801,35 @@ async function loadScanDetailRecord(input: {
     primaryPolicyEnrichment,
     snapshot: normalizedSnapshot
   }));
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: buildScannerSignalPopulationRecords({
+      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+      signals: [
+        ...normalizedSignals,
+        ...supplementalSnapshotSignals,
+        ...supplementalPolicySignals,
+        ...supplementalCoverageSignals.supplementalSignals.map((signal) => {
+          const taxonomy = mapSignalKeyToTaxonomy({
+            category: "disclosure",
+            key: signal.key,
+            label: signal.label
+          });
+
+          return {
+            category: "disclosure",
+            primaryCategory: taxonomy.primaryCategory,
+            primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+            primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+            key: signal.key,
+            label: signal.label,
+            subcategory: taxonomy.subcategory ?? null,
+            value: signal.value,
+            valueType: Array.isArray(signal.value) ? "string_array" : "boolean"
+          } satisfies ScanSignalRecord;
+        })
+      ]
+    })
+  });
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
   const regulatoryRisk = snapshot
     ? buildRegulatoryRiskAssessment({
@@ -773,7 +847,7 @@ async function loadScanDetailRecord(input: {
           : null
       })
     : null;
-  const normalizedTrackerVendors = ((trackerVendors ?? []) as Array<Record<string, unknown>>).map(
+  const persistedTrackerVendors = ((trackerVendors ?? []) as Array<Record<string, unknown>>).map(
     (tracker) =>
       ({
         vendorName: String(tracker.vendor_name),
@@ -786,6 +860,33 @@ async function loadScanDetailRecord(input: {
         scriptHost: (tracker.script_host as string | null) ?? null,
         matchedSignatureId: (tracker.matched_signature_id as string | null) ?? null
       }) satisfies ScanTrackerVendorRecord
+  );
+  const runtimeDerivedTrackerVendors = getHybridDerivedTrackerVendors((runtimeArtifacts as Record<string, unknown> | null) ?? null).map(
+    (tracker) =>
+      ({
+        beforeConsent: tracker.beforeConsent,
+        collectionEndpointType: tracker.collectionEndpointType,
+        confidence: tracker.confidence,
+        detectionSource: tracker.detectionSource,
+        firstPartyOrThirdParty: tracker.firstPartyOrThirdParty,
+        matchedSignatureId: tracker.matchedSignatureId,
+        scriptHost: tracker.scriptHost,
+        vendorCategory: tracker.vendorCategory,
+        vendorName: tracker.vendorName
+      }) satisfies ScanTrackerVendorRecord
+  );
+  const normalizedTrackerVendors = [
+    ...new Map(
+      [...persistedTrackerVendors, ...runtimeDerivedTrackerVendors].map((tracker) => [
+        `${tracker.vendorName}|${tracker.detectionSource}|${tracker.scriptHost ?? ""}`,
+        tracker
+      ])
+    ).values()
+  ].sort(
+    (left, right) =>
+      left.vendorCategory.localeCompare(right.vendorCategory) ||
+      left.vendorName.localeCompare(right.vendorName) ||
+      (left.scriptHost ?? "").localeCompare(right.scriptHost ?? "")
   );
   const normalizedPreconsentViolations = ((preconsentViolations ?? []) as PreconsentViolationRow[]).map(
     (violation) =>
@@ -986,6 +1087,10 @@ async function loadScanDetailRecord(input: {
     pagesScanned: scanRow.pages_scanned,
     recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses
   });
+  const normalizedRuntimeArtifacts = runtimeArtifacts
+    ? withHybridRuntimeArtifactFallbacks(stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)) ??
+      stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
+    : null;
 
   return {
     accessPostureSummary: {
@@ -1038,8 +1143,8 @@ async function loadScanDetailRecord(input: {
       errorMessage: scanRow.error_message
     } satisfies ScanDetailRecord,
     snapshot: normalizedSnapshot ? (normalizedSnapshot satisfies Exclude<ScanSnapshotRecord, null>) : null,
-    runtimeArtifacts: runtimeArtifacts
-      ? (stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>) satisfies Exclude<ScanRuntimeArtifactRecord, null>)
+    runtimeArtifacts: normalizedRuntimeArtifacts
+      ? (normalizedRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
     preconsentViolations: normalizedPreconsentViolations,
     accessibilityRuleCounts: normalizedAccessibilityRuleCounts,
@@ -1082,6 +1187,7 @@ async function loadScanDetailRecord(input: {
         } satisfies ScanSignalRecord;
       })
     ],
+    mergedSignals,
     events: normalizedEvents
   };
 }
