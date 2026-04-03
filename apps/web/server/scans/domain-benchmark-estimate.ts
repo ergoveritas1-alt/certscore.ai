@@ -23,6 +23,13 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function shouldAllowZeroCookieEstimate(input: { industry: string; rationale: string }) {
+  const haystack = `${input.industry} ${input.rationale}`.toLowerCase();
+  return /minimal static|personal site|placeholder|government|public sector|privacy-first|brochure site|documentation-only|open source project/.test(
+    haystack
+  );
+}
+
 function extractJsonObject(text: string) {
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
@@ -57,10 +64,15 @@ export function normalizeDomainBenchmarkEstimate(value: unknown): DomainBenchmar
     return null;
   }
 
+  const normalizedCookieEstimate =
+    expectedCookiesBeforeConsent === 0 && !shouldAllowZeroCookieEstimate({ industry, rationale })
+      ? 2
+      : expectedCookiesBeforeConsent;
+
   return {
     confidence,
     estimatedRankLabel,
-    expectedCookiesBeforeConsent: clampNumber(expectedCookiesBeforeConsent, 0, 100),
+    expectedCookiesBeforeConsent: clampNumber(normalizedCookieEstimate, 0, 100),
     expectedOverallScore: clampNumber(expectedOverallScore, 0, 100),
     expectedThirdPartyRequests: clampNumber(expectedThirdPartyRequests, 0, 200),
     industry,
@@ -91,7 +103,7 @@ export async function generateDomainBenchmarkEstimate(input: {
         {
           role: "system",
           content:
-            "You estimate likely website privacy/consent posture from a domain alone. Return only JSON with: industry, estimatedRankLabel, expectedOverallScore, expectedThirdPartyRequests, expectedCookiesBeforeConsent, confidence, rationale."
+            "You estimate website benchmark values from a domain name only. Infer likely industry/category from the domain and use realistic priors from typical sites in that category. Return only JSON with: industry, estimatedRankLabel, expectedOverallScore, expectedThirdPartyRequests, expectedCookiesBeforeConsent, confidence, rationale. Output calibrated, non-extreme estimates. For expectedCookiesBeforeConsent, do not default to 0: most modern sites set at least 1 to 3 cookies before consent for session, load-balancing, security, consent-state, analytics, or embedded services. Use 0 only when the domain strongly suggests a minimal static, personal, placeholder, privacy-first, or government-style site with very limited tracking. If uncertain, prefer a small positive value over 0."
         },
         {
           role: "user",
@@ -105,6 +117,8 @@ export async function generateDomainBenchmarkEstimate(input: {
             "  2. third-party requests on first load",
             "  3. cookies before consent",
             "- This is a benchmark estimate for this type of domain, not a restatement of any observed scan output.",
+            "- Use realistic website-category priors and common web patterns.",
+            "- For cookies before consent, avoid 0 unless the domain clearly indicates a very minimal or privacy-centric site; otherwise usually choose at least 1 to 3, and more for ecommerce, media, SaaS, marketing, or ad-supported sites.",
             "- Keep rationale short and concrete."
           ].join("\n")
         }
