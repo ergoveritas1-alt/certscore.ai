@@ -4891,7 +4891,12 @@ function getLatestNanoDocRetrievalDiagnostics(scanEvents: ScanEventSummaryRecord
   };
 }
 
-function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse }) {
+function SignalEnrichmentWorkflowCard(input: {
+  finalHost: string | null;
+  landedOnDifferentHost: boolean;
+  requestedHost: string | null;
+  scanRecord: ScanDetailResponse;
+}) {
   const workflow = input.scanRecord.signalEnrichmentWorkflow;
   const retrievalDiagnostics = getLatestNanoDocRetrievalDiagnostics(input.scanRecord.events);
   const counts = {
@@ -4908,6 +4913,12 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
         <p className="text-sm leading-6 text-slate-600">
           Scanner, nano, merge, and finding-derivation status for this scan.
         </p>
+        {input.landedOnDifferentHost && input.requestedHost && input.finalHost ? (
+          <div className="rounded-2xl border border-sky-200/80 bg-sky-50/75 px-4 py-3 text-sm text-sky-950">
+            Findings reflect the landed domain <span className="font-semibold">{input.finalHost}</span>, not the requested domain{" "}
+            <span className="font-semibold">{input.requestedHost}</span>.
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-4">
           <SummaryMetricTile label="Preferred mode" value={workflow.preferredMode === "parallel_evidence_collection" ? "Parallel" : workflow.preferredMode} />
           <SummaryMetricTile label="Actual mode" value={workflow.actualMode === "parallelized" ? "Parallelized" : "Serial bridge"} />
@@ -5726,7 +5737,12 @@ export function SharedScanDetailView({
         </>
       ) : null}
 
-      <SignalEnrichmentWorkflowCard scanRecord={scanRecord} />
+      <SignalEnrichmentWorkflowCard
+        finalHost={certScoreSummary.finalHost}
+        landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
+        requestedHost={certScoreSummary.requestedHost}
+        scanRecord={scanRecord}
+      />
 
       <div className="relative overflow-hidden rounded-2xl">
         <CollapsibleSectionCard

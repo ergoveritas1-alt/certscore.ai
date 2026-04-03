@@ -314,11 +314,6 @@ export function ExecutiveSummaryCard(input: {
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">Highest-priority issues</h2>
               </div>
             </div>
-            {input.landedOnDifferentHost && input.requestedHost && input.finalHost ? (
-              <div className="rounded-[1.2rem] border border-sky-200/80 bg-sky-50/75 px-4 py-3 text-sm text-sky-950">
-                Findings reflect the landed domain <span className="font-semibold">{input.finalHost}</span>, not the requested domain <span className="font-semibold">{input.requestedHost}</span>.
-              </div>
-            ) : null}
           </div>
 
           <div className="grid gap-3">
