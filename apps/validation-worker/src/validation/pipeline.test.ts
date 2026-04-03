@@ -180,7 +180,7 @@ test("dedupeNanoDocumentSources prefers ready rows over rejected duplicates", ()
   assert.equal(rows[0]?.extraction_status, "pending");
 });
 
-test("buildNanoDocCandidateUrls prioritizes discovered and canonical seed legal urls first", () => {
+test("buildNanoDocCandidateUrls prefers scanner and discovery evidence over slug guessing", () => {
   const candidates = buildNanoDocCandidateUrls({
     discoveryCandidates: [
       {
@@ -211,27 +211,35 @@ test("buildNanoDocCandidateUrls prioritizes discovered and canonical seed legal 
         candidate.priorityTier === "priority"
     )
   );
-  assert.ok(candidates.findIndex((candidate) => candidate.url === "https://example.com/privacy") >= 1);
-  assert.ok(candidates.findIndex((candidate) => candidate.url === "https://example.com/privacy-policy") >= 1);
-  assert.equal(
-    candidates.find((candidate) => candidate.url === "https://example.com/terms")?.priorityTier,
-    "priority"
-  );
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/privacy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/privacy-policy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
+});
 
-  assert.ok(
-    candidates.some(
-      (candidate) =>
-        candidate.url === "https://example.com/legal/privacy-policy" &&
-        candidate.priorityTier === "secondary"
-    )
-  );
-  assert.ok(
-    candidates.some(
-      (candidate) =>
-        candidate.url === "https://example.com/cookie-policy" &&
-        candidate.priorityTier === "priority"
-    )
-  );
+test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no discovery evidence exists", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "example.com",
+    pages: []
+  });
+
+  assert.deepEqual(candidates, [
+    {
+      documentType: "privacy_policy",
+      priorityTier: "secondary",
+      url: "https://example.com/privacy"
+    },
+    {
+      documentType: "terms_of_service",
+      priorityTier: "secondary",
+      url: "https://example.com/terms"
+    },
+    {
+      documentType: "cookie_policy",
+      priorityTier: "secondary",
+      url: "https://example.com/cookie-policy"
+    }
+  ]);
 });
 
 test("prioritizePendingNanoDocumentSources prefers priority privacy docs before secondary terms docs", () => {

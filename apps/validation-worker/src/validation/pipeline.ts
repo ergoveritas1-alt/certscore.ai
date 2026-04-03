@@ -34,6 +34,7 @@ import {
   upsertValidationVerdict
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
+import { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 import { extractNanoDocumentSourceWithLlm } from "./nano-document-extraction";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
@@ -44,6 +45,8 @@ import {
   createValidationRankQueue,
   createValidationVerdictQueue
 } from "../queue/queues";
+
+export { buildNanoDocCandidateUrls } from "./nano-document-discovery";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 5_000;
@@ -1338,83 +1341,6 @@ async function enqueueValidationVerdict(runId: string) {
   );
 }
 
-export function buildNanoDocCandidateUrls(input: {
-  discoveryCandidates?: Array<Record<string, unknown>>;
-  domainHostname: string | null;
-  pages: Array<Record<string, unknown>>;
-}) {
-  const candidates = new Map<string, { documentType: string; priorityTier: "priority" | "secondary"; url: string }>();
-  const seedPaths = [
-    ["/privacy", "privacy_policy", "priority"],
-    ["/privacy-policy", "privacy_policy", "priority"],
-    ["/legal/privacy-policy", "privacy_policy", "secondary"],
-    ["/terms", "terms_of_service", "priority"],
-    ["/terms-of-service", "terms_of_service", "priority"],
-    ["/legal/terms", "terms_of_service", "secondary"],
-    ["/cookies", "cookie_policy", "secondary"],
-    ["/cookie-policy", "cookie_policy", "priority"],
-    ["/legal/cookie-policy", "cookie_policy", "secondary"]
-  ] as const;
-
-  for (const page of input.pages) {
-    const pageUrl = getString(page.page_url) ?? getString(page.pageUrl);
-    const pageType = getString(page.page_type) ?? getString(page.pageType);
-    if (!pageUrl || !pageType || !["privacy_policy", "terms_of_service", "cookie_policy"].includes(pageType)) {
-      continue;
-    }
-    candidates.set(pageUrl, {
-      documentType: pageType,
-      priorityTier: "priority",
-      url: pageUrl
-    });
-  }
-
-  for (const candidate of input.discoveryCandidates ?? []) {
-    const candidateUrl = getString(candidate.candidate_url) ?? getString(candidate.candidateUrl);
-    const pageType = getString(candidate.page_type) ?? getString(candidate.pageType);
-    const discoveredFrom = getString(candidate.discovered_from) ?? getString(candidate.discoveredFrom) ?? "";
-    const candidateScoreRaw = candidate.candidate_score ?? candidate.candidateScore;
-    const candidateScore =
-      typeof candidateScoreRaw === "number" && Number.isFinite(candidateScoreRaw)
-        ? candidateScoreRaw
-        : Number(candidateScoreRaw ?? 0);
-    if (!candidateUrl || !pageType || !["privacy_policy", "terms_of_service", "cookie_policy"].includes(pageType)) {
-      continue;
-    }
-
-    const priorityTier =
-      discoveredFrom === "footer_link" ||
-      discoveredFrom === "legal_hub" ||
-      discoveredFrom === "rendered_link" ||
-      candidateScore >= 0.75
-        ? "priority"
-        : "secondary";
-
-    if (!candidates.has(candidateUrl)) {
-      candidates.set(candidateUrl, {
-        documentType: pageType,
-        priorityTier,
-        url: candidateUrl
-      });
-    }
-  }
-
-  if (input.domainHostname) {
-    for (const [path, type, priorityTier] of seedPaths) {
-      const url = `https://${input.domainHostname}${path}`;
-      if (!candidates.has(url)) {
-        candidates.set(url, {
-          documentType: type,
-          priorityTier,
-          url
-        });
-      }
-    }
-  }
-
-  return [...candidates.values()];
-}
-
 export function normalizeDocUrl(url: string | null) {
   if (!url) {
     return null;
@@ -1892,7 +1818,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     return;
   }
 
-  const candidates = buildNanoDocCandidateUrls({
+  const candidates = await selectNanoDocCandidates({
     discoveryCandidates: artifacts.discoveryCandidates,
     domainHostname: artifacts.domainHostname,
     pages: artifacts.pages
