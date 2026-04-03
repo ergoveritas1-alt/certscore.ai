@@ -843,6 +843,15 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
 
   const dedupedFindings = findings.filter((finding) => {
     if (finding.id !== "pre_consent_tracking_detected") {
+      if (
+        (finding.id === "third_party_cookie_pre_consent" ||
+          finding.id === "analytics_cookie_pre_consent" ||
+          finding.id === "adtech_cookie_pre_consent") &&
+        findings.some((candidate) => candidate.id === "third_party_tracking_pre_consent")
+      ) {
+        return false;
+      }
+
       return true;
     }
 
