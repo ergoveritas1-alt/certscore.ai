@@ -2509,8 +2509,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "privacy_contacts_accountability",
     overlays: ["privacy_governance_contactability", "consumer_rights_request_handling", "notice_rights_baseline"],
     signalMappings: [
-      { source: "snapshot_signal", key: "privacy.privacy_contact_channel_missing" },
-      { source: "document_semantic_signal", key: "privacyContactChannelType" }
+      { source: "snapshot_signal", key: "privacy.privacy_contact_channel_missing" }
     ],
     aliases: ["Missing privacy contact channel", "No clear privacy contact channel"]
   }),

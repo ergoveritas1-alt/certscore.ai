@@ -382,6 +382,14 @@ test("maps signals and validation rules into unified findings", () => {
     "privacy_contact_path_present"
   );
   assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacyContactChannelType"),
+    undefined
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_contact_path_present")?.id,
+    "privacy_contact_path_present"
+  );
+  assert.equal(
     getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.gpc_disclosure_present")?.id,
     "gpc_disclosure_present"
   );

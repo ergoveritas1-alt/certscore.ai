@@ -4534,3 +4534,40 @@ test("merged signals feed unified finding derivation through the canonical displ
 
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "gpc_disclosure_present"), true);
 });
+
+test("document semantic contact channel does not surface missing-contact finding and uses positive contact path signal instead", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.88,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacyContactChannelType",
+        label: "Privacy contact channel type",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: "email",
+        valueType: "text"
+      },
+      {
+        confidence: 0.88,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.privacy_contact_path_present",
+        label: "Privacy contact path present",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    mergedSignals,
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_channel_missing"), false);
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_path_present"), true);
+});

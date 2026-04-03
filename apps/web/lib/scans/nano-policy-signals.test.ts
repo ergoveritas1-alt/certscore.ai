@@ -34,6 +34,7 @@ test("builds persisted nano policy signal rows from policy enrichment", () => {
   assert.equal(rows.some((row) => row.key === "policyAmbiguityScore" && row.value === 68), true);
   assert.equal(rows.some((row) => row.key === "policyDsarMechanism" && row.value === "form"), true);
   assert.equal(rows.some((row) => row.key === "privacyContactChannelType" && row.value === "email"), true);
+  assert.equal(rows.some((row) => row.key === "privacy.privacy_contact_path_present" && row.value === true), true);
   assert.equal(rows.some((row) => row.key === "policyDoNotSell" && row.value === "present"), true);
   assert.equal(rows.some((row) => row.key === "commerce.arbitration_clause_present" && row.value === true), true);
 });

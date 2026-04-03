@@ -42,6 +42,7 @@ export const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
   "policyDsarMechanism",
   "policyDoNotSell",
   "privacyContactChannelType",
+  "privacy.privacy_contact_path_present",
   "policyRightsSignals",
   "policyChildrenReference",
   "policyBehaviorConflictCandidate",
@@ -293,6 +294,16 @@ export function buildNanoPolicySignalRows(input: {
       provenance_detail: "policy_enrichment.privacy_policy",
       report_signal_source: "document_semantic_signal",
       value: primaryPrivacyContactChannelType
+    });
+    rows.push({
+      confidence: primaryPolicyConfidence,
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
+      key: "privacy.privacy_contact_path_present",
+      label: "Privacy contact path present",
+      population_status: "present",
+      provenance_detail: "policy_enrichment.privacy_policy",
+      report_signal_source: "document_semantic_signal",
+      value: true
     });
   }
 
