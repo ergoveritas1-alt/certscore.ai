@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "audit:live-consent": "npx -y node@22 --enable-source-maps --import tsx ./scripts/live-consent-audit.ts",
+    "backfill:nano-signals": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/backfill-nano-signal-populations.ts",
     "build": "tsc -p tsconfig.json",
     "check-env": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-env.ts",
     "check-runtime": "npx -y node@22 --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-runtime.ts",
