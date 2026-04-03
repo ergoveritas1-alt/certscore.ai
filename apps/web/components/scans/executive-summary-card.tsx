@@ -270,6 +270,12 @@ function BenchmarkMetricCard(input: {
               <br />
               score
             </>
+          ) : input.label === "Third-party requests" ? (
+            <>
+              Third-party
+              <br />
+              requests
+            </>
           ) : (
             input.label
           )}
