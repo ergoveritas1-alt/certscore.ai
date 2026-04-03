@@ -1409,10 +1409,17 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
   const text = input.text?.toLowerCase() ?? "";
   const url = input.canonicalUrl.toLowerCase();
 
-  const blockedTitleMarkers = ["login", "sign in", "routing to checkout", "hang tight"];
+  const legalDocSignals = [
+    "privacy policy",
+    "cookie policy",
+    "terms of service",
+    "terms and conditions",
+    "data processing",
+    "privacy notice"
+  ];
+  const hasLegalDocSignal = legalDocSignals.some((marker) => title.includes(marker) || text.includes(marker));
+  const blockedTitleMarkers = ["login", "routing to checkout", "hang tight"];
   const blockedTextMarkers = [
-    "log in",
-    "sign in",
     "routing to checkout",
     "checking your browser",
     "verify you are human",
@@ -1425,6 +1432,19 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
 
   if (blockedTextMarkers.some((marker) => text.includes(marker))) {
     return true;
+  }
+
+  if (!hasLegalDocSignal) {
+    const gatedTitleMarkers = ["sign in", "log in to continue", "continue to"];
+    const gatedTextMarkers = ["log in to continue", "sign in to continue", "continue to access", "continue to proceed"];
+
+    if (gatedTitleMarkers.some((marker) => title.includes(marker))) {
+      return true;
+    }
+
+    if (gatedTextMarkers.some((marker) => text.includes(marker))) {
+      return true;
+    }
   }
 
   return url.includes("/login");

@@ -109,6 +109,15 @@ test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout inters
     }),
     false
   );
+
+  assert.equal(
+    looksLikeIntermediaryOrBlockPage({
+      canonicalUrl: "https://vercel.com/legal/privacy-policy",
+      text: "Privacy Policy Sign in Contact Sales This Privacy Policy explains how Vercel collects and uses personal data.",
+      title: "Privacy Policy"
+    }),
+    false
+  );
 });
 
 test("dedupeNanoDocumentSources keeps one row per canonical url and document type", () => {
