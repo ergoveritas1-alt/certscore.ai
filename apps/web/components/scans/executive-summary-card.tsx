@@ -84,16 +84,6 @@ function BenchmarkMetricCard(input: {
     Math.max(10, Math.ceil((dynamicScaleBase * 1.25) / 5) * 5);
   const actualRatio = Math.max(0, Math.min(1, (actualValue ?? 0) / scaleMax));
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
-  const scoreDescriptor =
-    input.maxValue === 100
-      ? actualValue === null
-        ? "Pending"
-        : actualValue >= 75
-          ? "Strong"
-          : actualValue >= 55
-            ? "Medium"
-            : "Weak"
-      : null;
   const delta =
     actualValue !== null && benchmarkValue !== null ? actualValue - benchmarkValue : null;
 
@@ -133,7 +123,7 @@ function BenchmarkMetricCard(input: {
           ) : null}
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500">
-          <span>{scoreDescriptor ? scoreDescriptor : "\u00A0"}</span>
+          <span>&nbsp;</span>
           {delta !== null ? (
             <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
               {delta > 0 ? "+" : ""}
