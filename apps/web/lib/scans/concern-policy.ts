@@ -66,6 +66,23 @@ function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
 
+function getCanonicalStringEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+}
+
 function getBooleanEvidence(
   evidence: Record<string, unknown> | null | undefined,
   keys: string[]
@@ -120,6 +137,27 @@ function getStringArrayValues(
   }
 
   return [...new Set(values)];
+}
+
+function getPolicySignalString(
+  evidence: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  return getCanonicalStringEvidence(evidence, [key]);
+}
+
+function getPolicySignalNumber(
+  evidence: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  return getNumberEvidence(evidence, [key]);
+}
+
+function getPolicySignalStringArray(
+  evidence: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  return getStringArrayValues(evidence, [key]);
 }
 
 function getFetchQuality(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -326,7 +364,7 @@ function getPositiveInfrastructureEvidenceGrade(
           : "weak" as const;
       case "privacy_rights_path_present":
         return (
-          (Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0) ||
+          getPolicyRightsSignals(rawEvidence).length > 0 ||
           snippets.some((value) =>
             /privacy rights|rights center|delete request|access request|request access|access to|deletion|data request/i.test(value)
           )
@@ -371,7 +409,7 @@ function getPositiveInfrastructureEvidenceGrade(
         : "weak" as const;
     case "privacy_rights_path_present":
       return hasPacketBacking &&
-        ((Array.isArray(rawEvidence.policyRightsSignals) && rawEvidence.policyRightsSignals.length > 0) ||
+        (getPolicyRightsSignals(rawEvidence).length > 0 ||
           snippets.some((value) => /privacy rights|rights center|delete request|access request|data request/i.test(value))) &&
         humanFacingUrlCount >= 1
         ? "corroborated" as const
@@ -433,29 +471,10 @@ export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null
     return false;
   }
 
-  const dsarMechanism =
-    typeof evidence.policyDsarMechanism === "string"
-      ? evidence.policyDsarMechanism
-      : typeof evidence.policy_dsar_mechanism === "string"
-        ? evidence.policy_dsar_mechanism
-        : null;
-  const policySemanticConfidence =
-    typeof evidence.policySemanticConfidence === "number"
-      ? evidence.policySemanticConfidence
-      : typeof evidence.policy_semantic_confidence === "number"
-        ? evidence.policy_semantic_confidence
-        : null;
-  const extractionStatus =
-    typeof evidence.policyExtractionStatus === "string"
-      ? evidence.policyExtractionStatus
-      : typeof evidence.policy_extraction_status === "string"
-        ? evidence.policy_extraction_status
-        : null;
-  const policyRightsSignals = Array.isArray(evidence.policyRightsSignals)
-    ? evidence.policyRightsSignals
-    : Array.isArray(evidence.policy_rights_signals)
-      ? evidence.policy_rights_signals
-      : [];
+  const dsarMechanism = getPolicySignalString(evidence, "policyDsarMechanism");
+  const policySemanticConfidence = getPolicySignalNumber(evidence, "policySemanticConfidence");
+  const extractionStatus = getPolicyExtractionStatus(evidence);
+  const policyRightsSignals = getPolicyRightsSignals(evidence);
 
   return (
     dsarMechanism === "absent" &&
@@ -1000,23 +1019,19 @@ function isGuessedOnlyDiscovery(rawEvidence: Record<string, unknown> | null | un
 }
 
 function getPolicyExtractionStatus(rawEvidence: Record<string, unknown> | null | undefined) {
-  return typeof rawEvidence?.policyExtractionStatus === "string"
-    ? rawEvidence.policyExtractionStatus
-    : typeof rawEvidence?.policy_extraction_status === "string"
-      ? rawEvidence.policy_extraction_status
-      : null;
+  return getPolicySignalString(rawEvidence, "policyExtractionStatus");
 }
 
 function getPolicySemanticConfidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  return getNumberEvidence(rawEvidence, ["policySemanticConfidence", "policy_semantic_confidence"]);
+  return getPolicySignalNumber(rawEvidence, "policySemanticConfidence");
 }
 
 function getPolicyCoverageRatio(rawEvidence: Record<string, unknown> | null | undefined) {
-  return getNumberEvidence(rawEvidence, ["policyCoverageRatio", "policy_coverage_ratio"]);
+  return getPolicySignalNumber(rawEvidence, "policyCoverageRatio");
 }
 
 function getPolicySnippetCount(rawEvidence: Record<string, unknown> | null | undefined) {
-  return getNumberEvidence(rawEvidence, ["policySnippetCount", "policy_snippet_count"]);
+  return getPolicySignalNumber(rawEvidence, "policySnippetCount");
 }
 
 function hasStrongStructuredPolicyDisclosureGapEvidence(
@@ -1037,11 +1052,7 @@ function hasStrongStructuredPolicyDisclosureGapEvidence(
 }
 
 function getPolicyRightsSignals(rawEvidence: Record<string, unknown> | null | undefined) {
-  return Array.isArray(rawEvidence?.policyRightsSignals)
-    ? rawEvidence.policyRightsSignals
-    : Array.isArray(rawEvidence?.policy_rights_signals)
-      ? rawEvidence.policy_rights_signals
-      : [];
+  return getPolicySignalStringArray(rawEvidence, "policyRightsSignals");
 }
 
 export function concernRequiresPageAttribution(
