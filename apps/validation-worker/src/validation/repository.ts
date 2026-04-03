@@ -764,6 +764,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     { data: trackerVendors, error: trackerError },
     { data: pages, error: pagesError },
     { data: policyEnrichments, error: policyEnrichmentError },
+    { data: documentSources, error: documentSourcesError },
     { data: policyReviewQueue, error: policyReviewQueueError },
     { data: preconsentViolations, error: preconsentError },
     { data: signalHits, error: signalHitsError },
@@ -796,6 +797,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       .from("policy_enrichment")
       .select("id, page_type, page_url, policy_summary_short, policy_actionable_flags, policy_evidence_snippets, policy_mentions, policy_semantic_confidence, policy_ambiguity_score, policy_dsar_mechanism, policy_rights_signals, policy_children_reference, policy_transfer_mechanisms, policy_retention_periods, policy_do_not_sell, policy_cookie_disclosures, policy_effective_date, policy_governing_law, policy_arbitration_present, policy_notice_contact_present, policy_termination_or_suspension_present, policy_cancellation_or_refund_present, policy_field_coverage, policy_coverage_ratio, policy_snippet_count, policy_structurally_weak")
       .eq("scan_id", scanId),
+    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
     supabase
       .from("policy_review_queue")
       .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
@@ -841,6 +843,9 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   if (policyEnrichmentError) {
     throw new Error(`Failed to load policy enrichment ${scanId}: ${policyEnrichmentError.message}`);
   }
+  if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
+    throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
+  }
   if (policyReviewQueueError) {
     throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
   }
@@ -862,6 +867,11 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
   const loadedPageEvidence = (pageEvidenceError ? [] : pageEvidence ?? []) as Array<Record<string, unknown>>;
   const loadedSignalHits = (signalHitsError ? [] : signalHits ?? []) as Array<Record<string, unknown>>;
+  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const policySemanticInputs = preferDocumentSources
+    ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
+    : ((policyEnrichments ?? []) as Array<Record<string, unknown>>);
   const mergedSignals = buildMergedSignalRecords({
     nanoSignals: buildStoredSignalPopulationRecords({
       observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
@@ -903,11 +913,14 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   });
 
   return {
+    documentSources: normalizedDocumentSources,
     mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
+    policySemanticInputs,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    preferDocumentSources,
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: runtimeArtifactsRecord,
     scan: (scan as Record<string, unknown> | null) ?? null,

@@ -311,10 +311,13 @@ function classifyFinancialValidationPage(pageType: string | null) {
 }
 
 type ValidationArtifactBundle = {
+  documentSources?: Array<Record<string, unknown>>;
   pageEvidence: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
   policyEnrichments: Array<Record<string, unknown>>;
+  policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
+  preferDocumentSources?: boolean;
   preconsentViolations: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   scan: Record<string, unknown> | null;
@@ -712,6 +715,7 @@ function buildSectionIssueFinding(input: {
 
 function derivePolicySectionFindings(input: {
   policyEnrichments: Array<Record<string, unknown>>;
+  policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown> | null;
 }) {
@@ -739,7 +743,9 @@ function derivePolicySectionFindings(input: {
     getRecordBoolean(input.snapshot, "session_replay_without_disclosure_detected") ||
     getRecordBoolean(input.snapshot, "session_replay_detected_without_disclosure");
 
-  for (const enrichment of input.policyEnrichments) {
+  const semanticRows = input.policySemanticInputs ?? input.policyEnrichments;
+
+  for (const enrichment of semanticRows) {
     const enrichmentId = String(enrichment.id ?? "");
     const pageType = typeof enrichment.page_type === "string" ? enrichment.page_type : null;
     const pageUrl = typeof enrichment.page_url === "string" ? enrichment.page_url : null;
@@ -1155,6 +1161,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
   const policyEnrichmentsById = new Map(
     input.policyEnrichments.map((row) => [String(row.id ?? ""), row])
   );
+  const semanticRows = input.policySemanticInputs ?? input.policyEnrichments;
   const findings: Array<{
     category: "scan_report_review";
     description: string;
@@ -1171,13 +1178,31 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     title: string;
   }> = [];
 
+  const findSemanticRowForReview = (reviewItem: Record<string, unknown>) => {
+    const enrichment = policyEnrichmentsById.get(String(reviewItem.policy_enrichment_id ?? "")) ?? null;
+    const enrichmentPageUrl = typeof enrichment?.page_url === "string" ? enrichment.page_url : null;
+    const enrichmentPageType = typeof enrichment?.page_type === "string" ? enrichment.page_type : null;
+
+    if (!input.preferDocumentSources || (!enrichmentPageUrl && !enrichmentPageType)) {
+      return enrichment;
+    }
+
+    return (
+      semanticRows.find((row) => {
+        const rowUrl = typeof row.page_url === "string" ? row.page_url : null;
+        const rowType = typeof row.page_type === "string" ? row.page_type : null;
+        return rowUrl === enrichmentPageUrl || (rowType !== null && rowType === enrichmentPageType);
+      }) ?? enrichment
+    );
+  };
+
   for (const reviewItem of input.policyReviewQueue) {
     const reason = String(reviewItem.reason ?? "");
     if (!reason) {
       continue;
     }
 
-    const enrichment = policyEnrichmentsById.get(String(reviewItem.policy_enrichment_id ?? "")) ?? null;
+    const enrichment = findSemanticRowForReview(reviewItem);
     const definition = reviewIssueDefinition(reason);
     const pageUrl = typeof enrichment?.page_url === "string" ? enrichment.page_url : null;
     const taxonomy = deriveValidationFindingTaxonomy({
@@ -1222,6 +1247,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     }),
     ...derivePolicySectionFindings({
       policyEnrichments: input.policyEnrichments,
+      policySemanticInputs: input.policySemanticInputs,
       policyReviewQueue: input.policyReviewQueue,
       snapshot: input.snapshot
     }),

@@ -3,14 +3,18 @@ import assert from "node:assert/strict";
 import { deriveValidationFindings, determineValidationCollectAction } from "./pipeline";
 
 function buildArtifacts(overrides?: {
+  documentSources?: Array<Record<string, unknown>>;
   pageEvidence?: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
+  policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
+  preferDocumentSources?: boolean;
   runtimeArtifacts?: Record<string, unknown> | null;
   signalHits?: Array<Record<string, unknown>>;
   snapshot?: Record<string, unknown>;
 }) {
   return {
+    documentSources: overrides?.documentSources ?? [],
     pageEvidence: overrides?.pageEvidence ?? [],
     pages: [{ page_type: "privacy_policy", page_url: "https://www.example.com/privacy", fetch_status: "ok" }],
     policyEnrichments: overrides?.policyEnrichments ?? [
@@ -27,6 +31,7 @@ function buildArtifacts(overrides?: {
         policy_summary_short: "This policy describes analytics and disclosure posture."
       }
     ],
+    policySemanticInputs: overrides?.policySemanticInputs,
     policyReviewQueue: overrides?.policyReviewQueue ?? [
       {
         id: "review-1",
@@ -39,6 +44,7 @@ function buildArtifacts(overrides?: {
       }
     ],
     preconsentViolations: [],
+    preferDocumentSources: overrides?.preferDocumentSources ?? false,
     runtimeArtifacts: overrides?.runtimeArtifacts ?? null,
     scan: { id: "scan_123" },
     signalHits: overrides?.signalHits ?? [],
@@ -129,6 +135,40 @@ test("deriveValidationFindings carries policy review evidence into the validatio
   assert.deepEqual(finding?.evidence.policy_actionable_flags, ["policy_behavior_conflict_candidate"]);
   assert.equal(finding?.evidence.policy_review_reason, "policy_behavior_conflict_candidate");
   assert.equal(finding?.evidence.review_status, "pending");
+});
+
+test("deriveValidationFindings prefers document-source policy semantics when available", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "policy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: [],
+          policy_ambiguity_score: 12,
+          policy_semantic_confidence: 0.41,
+          policy_summary_short: "Thin fallback policy row."
+        }
+      ],
+      policySemanticInputs: [
+        {
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: ["low_confidence"],
+          policy_ambiguity_score: 71,
+          policy_semantic_confidence: 0.83,
+          policy_summary_short: "Document-source semantic row."
+        }
+      ],
+      preferDocumentSources: true
+    })
+  );
+
+  const reviewFinding = findings.find((item) => item.ruleKey === "scan_report_review.policy_behavior_conflict_candidate");
+  assert.equal(reviewFinding?.evidence.policy_ambiguity_score, 71);
+  assert.equal(reviewFinding?.evidence.policy_semantic_confidence, 0.83);
+  assert.equal(reviewFinding?.evidence.policy_summary_short, "Document-source semantic row.");
 });
 
 test("deriveValidationFindings skips empty review reasons", () => {
@@ -615,4 +655,40 @@ test("duplicate runtime cookies and prefix overlaps do not create duplicate cook
   assert.equal(findings.filter((item) => item.ruleKey === "cookie_runtime.disclosure_gap").length, 1);
   const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
   assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_custom_tracker"]);
+});
+
+test("hybrid runtime cookie observations drive cookie disclosure matching before legacy cookie fields", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.9,
+          policy_cookie_disclosures: [
+            {
+              confidence: 0.95,
+              cookie_name: "_ga",
+              provider: "Google Analytics",
+              purpose: "Analytics",
+              duration: "2 years",
+              snippet_hash: "hash-1"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["legacy_cookie_should_not_win"],
+        hybrid_runtime_evidence: {
+          cookieWriteObservations: [{ cookieName: "_ga" }]
+        }
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
 });
