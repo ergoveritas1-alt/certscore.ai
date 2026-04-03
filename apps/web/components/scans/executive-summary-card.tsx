@@ -340,13 +340,44 @@ function getFindingFixText(finding: CertScoreFinding) {
   return finding.remediation;
 }
 
+function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
+  if (finding.severity === "critical" || isFirst) {
+    return {
+      card: "border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.92),rgba(255,255,255,1))]",
+      band: "bg-rose-500",
+      severityBadge: "border-rose-200 bg-rose-50 text-rose-800",
+      confidenceBadge: "border-rose-100 bg-white text-rose-700",
+      summary: "border-rose-200 bg-white/90 text-rose-950"
+    };
+  }
+
+  if (finding.severity === "high") {
+    return {
+      card: "border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.9),rgba(255,255,255,1))]",
+      band: "bg-amber-500",
+      severityBadge: "border-amber-200 bg-amber-50 text-amber-800",
+      confidenceBadge: "border-amber-100 bg-white text-amber-700",
+      summary: "border-amber-200 bg-white/90 text-slate-900"
+    };
+  }
+
+  return {
+    card: "border-slate-200 bg-white",
+    band: "bg-slate-300",
+    severityBadge: "border-slate-200 bg-slate-50 text-slate-700",
+    confidenceBadge: "border-slate-200 bg-white text-slate-700",
+    summary: "border-slate-200 bg-slate-50/85 text-slate-800"
+  };
+}
+
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const jsonPayload = JSON.stringify(input.finding, null, 2);
+  const tone = getFindingCardTone(input.finding, false);
 
   return (
-    <details className="group mt-4 rounded-xl border border-slate-200 bg-slate-50/85 px-4 py-3">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-slate-800">
+    <details className={`group mt-4 rounded-xl border px-4 py-3 ${tone.summary}`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
         <span>{input.finding.shortSummary}</span>
         <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
       </summary>
@@ -483,22 +514,20 @@ export function ExecutiveSummaryCard(input: {
 
           <div className="grid gap-3">
             {primaryFindings.map((finding, index) => (
-              <div
-                key={finding.id}
-                className={`rounded-[1.4rem] border px-4 py-4 shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${
-                  index === 0 ? "border-rose-200 bg-rose-50/70" : "border-slate-200 bg-white"
-                }`}
-              >
+              <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
+                <div className={`h-1.5 w-full ${getFindingCardTone(finding, index === 0).band}`} />
+                <div className="px-4 py-4">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
                     {finding.severity}
                   </span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
                     {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
                   </span>
                 </div>
-                <p className="mt-3 text-[15px] font-semibold tracking-tight text-slate-950">{finding.label}</p>
+                <p className="mt-3 text-[17px] font-semibold tracking-tight text-slate-950">{finding.label}</p>
                 <FindingDetailDisclosure finding={finding} />
+                </div>
               </div>
             ))}
           </div>
