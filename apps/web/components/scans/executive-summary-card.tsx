@@ -25,28 +25,83 @@ function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
   return "border-emerald-200 bg-emerald-50/90 text-emerald-950";
 }
 
+function formatCategoryLabel(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function DetailDisclosure(input: {
+  items: string[];
+  summary: string;
+  title: string;
+}) {
+  const uniqueItems = [...new Set(input.items.filter(Boolean))];
+
+  if (uniqueItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+        <span>{input.summary}</span>
+        <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="mt-3 space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+        <div className="flex flex-wrap gap-2">
+          {uniqueItems.map((item) => (
+            <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
   finalHost: string | null;
+  fingerprintReasons: string[];
   fingerprintLabel: string;
   fingerprintNarrative: string;
   landedOnDifferentHost: boolean;
   lastScannedAt: string;
   posture: "Clear" | "Watch" | "Action Needed";
+  preConsentVendorNames: string[];
   requestedHost: string | null;
+  resolvedVendorNames: string[];
   score: number | null;
+  sessionReplayVendorNames: string[];
   thirdPartyRequestCount: number;
+  thirdPartyDomains: string[];
   topFindings: CertScoreFinding[];
+  topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
   trackerSummary: string;
+  unresolvedVendorHosts: string[];
   vendorCategoryCounts: Record<string, number>;
 }) {
   const categorySummary = Object.entries(input.vendorCategoryCounts)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4)
-    .map(([key, count]) => `${key.replaceAll("_", " ")} ${count}`)
+    .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const primaryFindings = input.topFindings.slice(0, 3);
   const secondaryFindings = input.topFindings.slice(3, 6);
+  const namedVendors = input.resolvedVendorNames.slice(0, 8);
+  const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
+  const vendorMixDetails = input.topObservedEntities
+    .slice(0, 6)
+    .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
+  const fingerprintEvidence = [
+    input.fingerprintLabel,
+    ...input.fingerprintReasons
+  ].filter(Boolean);
+  const vendorEvidence = [
+    ...namedVendors,
+    ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
+  ];
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -84,12 +139,6 @@ export function ExecutiveSummaryCard(input: {
               <div>
                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">Highest-priority issues</h2>
-              </div>
-              <div className="hidden min-w-[180px] rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-3 lg:block">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
-                <p className="mt-1 text-sm font-semibold text-slate-950">{input.trackerSummary}</p>
-                <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
-                <p className="mt-1 text-sm font-semibold text-slate-950">{input.fingerprintNarrative}</p>
               </div>
             </div>
             {input.landedOnDifferentHost && input.requestedHost && input.finalHost ? (
@@ -136,15 +185,38 @@ export function ExecutiveSummaryCard(input: {
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <SummaryMetricTile label="Tracker footprint" value={input.trackerSummary} className="rounded-[1.3rem] border border-slate-200 bg-white px-4 py-4" />
-            <SummaryMetricTile label="Fingerprinting" value={input.fingerprintNarrative} className="rounded-[1.3rem] border border-slate-200 bg-white px-4 py-4" />
-            <SummaryMetricTile label="Top findings surfaced" value={String(input.topFindings.length)} className="rounded-[1.3rem] border border-slate-200 bg-white px-4 py-4" />
+          <div className="space-y-3">
+            <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+              <SummaryMetricTile label="Tracker footprint" value={input.trackerSummary} className="border-0 bg-transparent px-0 py-0 shadow-none" />
+              <DetailDisclosure
+                summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
+                title="Observed vendors and domains"
+                items={[...vendorEvidence, ...thirdPartyDomains]}
+              />
+            </div>
+            <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+              <SummaryMetricTile label="Fingerprinting" value={input.fingerprintNarrative} className="border-0 bg-transparent px-0 py-0 shadow-none" />
+              <DetailDisclosure
+                summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
+                title="Fingerprint evidence"
+                items={fingerprintEvidence}
+              />
+            </div>
           </div>
           {categorySummary ? (
             <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
               <p className="mt-2 text-sm text-slate-800">{categorySummary}</p>
+              <DetailDisclosure
+                summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
+                title="Category and entity detail"
+                items={[
+                  ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
+                  ...vendorMixDetails,
+                  ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
+                  ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
+                ]}
+              />
             </div>
           ) : null}
         </div>

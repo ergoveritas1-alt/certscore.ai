@@ -5512,20 +5512,26 @@ export function SharedScanDetailView({
           status={scanRecord.scan.status}
         />
       ) : null}
-      <SignalEnrichmentWorkflowCard scanRecord={scanRecord} />
       <ExecutiveSummaryCard
         beforeConsentCookieCount={cookiesBeforeConsentCount}
         finalHost={certScoreSummary.finalHost}
+        fingerprintReasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
         fingerprintLabel={certScoreSummary.fingerprintLabel}
         fingerprintNarrative={certScoreSummary.fingerprintNarrative}
         landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
         lastScannedAt={certScoreSummary.lastScannedAt}
         posture={certScoreSummary.posture}
+        preConsentVendorNames={certScoreSummary.preConsentVendorNames}
         requestedHost={certScoreSummary.requestedHost}
+        resolvedVendorNames={certScoreSummary.resolvedVendorNames}
         score={certScoreSummary.score}
+        sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
         thirdPartyRequestCount={certScoreSummary.thirdPartyRequestCount}
+        thirdPartyDomains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
         topFindings={topCertScoreFindings}
+        topObservedEntities={certScoreSummary.topObservedEntities}
         trackerSummary={certScoreSummary.trackerSummary}
+        unresolvedVendorHosts={certScoreSummary.unresolvedVendorHosts}
         vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
       />
       {certScoreSummary.findings.length > 0 ? (
@@ -5718,6 +5724,8 @@ export function SharedScanDetailView({
           )}
         </>
       ) : null}
+
+      <SignalEnrichmentWorkflowCard scanRecord={scanRecord} />
 
       <div className="relative overflow-hidden rounded-2xl">
         <CollapsibleSectionCard
