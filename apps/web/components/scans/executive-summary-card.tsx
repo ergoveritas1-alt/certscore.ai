@@ -361,9 +361,9 @@ function getFindingFixText(finding: CertScoreFinding) {
 function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
   if (finding.severity === "critical" || isFirst) {
     return {
-      card: "border-rose-200 bg-[linear-gradient(180deg,rgba(255,247,248,0.78),rgba(255,255,255,1))]",
-      band: "bg-rose-300",
-      severityBadge: "border-rose-200 bg-white text-rose-800",
+      card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,252,0.94),rgba(255,255,255,1))]",
+      band: "bg-rose-200",
+      severityBadge: "border-rose-200 bg-rose-50 text-rose-800",
       confidenceBadge: "border-slate-200 bg-white text-slate-700",
       summary: "border-slate-200 bg-white text-slate-900"
     };
@@ -371,9 +371,9 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
 
   if (finding.severity === "high") {
     return {
-      card: "border-slate-200 bg-[linear-gradient(180deg,rgba(250,250,249,0.72),rgba(255,255,255,1))]",
-      band: "bg-amber-300",
-      severityBadge: "border-amber-200 bg-white text-amber-800",
+      card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,251,0.82),rgba(255,255,255,1))]",
+      band: "bg-slate-200",
+      severityBadge: "border-slate-200 bg-slate-50 text-slate-800",
       confidenceBadge: "border-slate-200 bg-white text-slate-700",
       summary: "border-slate-200 bg-slate-50/65 text-slate-900"
     };
@@ -386,6 +386,42 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
     confidenceBadge: "border-slate-200 bg-white text-slate-700",
     summary: "border-slate-200 bg-slate-50/85 text-slate-800"
   };
+}
+
+function FindingTitleIcon(input: { finding: CertScoreFinding }) {
+  const common = "h-[18px] w-[18px]";
+
+  if (input.finding.id === "third_party_tracking_pre_consent") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
+        <path d="M5 12h6m2 0h6M14 7l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "session_recording_services_detected") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <rect x="4" y="6" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M16 10.5l4-2.5v8l-4-2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "consent_dark_patterns_detected" || input.finding.id === "asymmetric_consent_ui") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M12 3l7 3v6c0 4.2-2.8 7.5-7 9-4.2-1.5-7-4.8-7-9V6l7-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 12h6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className={`${common} text-slate-600`} aria-hidden="true">
+      <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
 }
 
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
@@ -556,7 +592,12 @@ export function ExecutiveSummaryCard(input: {
                     {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
                   </span>
                 </div>
-                <p className="mt-3 text-[17px] font-semibold tracking-tight text-slate-950">{finding.label}</p>
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                    <FindingTitleIcon finding={finding} />
+                  </div>
+                  <p className="pt-0.5 text-[18px] font-semibold leading-6 tracking-[-0.02em] text-slate-950">{finding.label}</p>
+                </div>
                 <FindingDetailDisclosure finding={finding} />
                 </div>
               </div>
