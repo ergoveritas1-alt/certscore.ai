@@ -20,6 +20,14 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+type NormalizedPolicyRow = {
+  pageType: string | null;
+  pageUrl: string | null;
+  policyEvidenceSnippets: Record<string, unknown> | null;
+  policySummaryShort: string | null;
+  raw: Record<string, unknown>;
+};
+
 const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
   /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
 
@@ -128,30 +136,54 @@ function getBestDiscoverySource(summaryRows: Array<Record<string, unknown>>) {
   return typeof fallback?.bestDiscoverySource === "string" ? fallback.bestDiscoverySource : null;
 }
 
-function getPolicyEnrichmentSnippetRecord(row: Record<string, unknown>) {
-  return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-    ? (row.policyEvidenceSnippets as Record<string, unknown>)
-    : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-      ? (row.policy_evidence_snippets as Record<string, unknown>)
-      : null;
+function normalizePolicyRow(row: Record<string, unknown>): NormalizedPolicyRow {
+  return {
+    pageType:
+      typeof row.pageType === "string"
+        ? row.pageType
+        : typeof row.page_type === "string"
+          ? row.page_type
+          : null,
+    pageUrl:
+      typeof row.pageUrl === "string"
+        ? row.pageUrl
+        : typeof row.page_url === "string"
+          ? row.page_url
+          : null,
+    policyEvidenceSnippets:
+      row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
+        ? (row.policyEvidenceSnippets as Record<string, unknown>)
+        : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
+          ? (row.policy_evidence_snippets as Record<string, unknown>)
+          : null,
+    policySummaryShort:
+      typeof row.policySummaryShort === "string"
+        ? row.policySummaryShort
+        : typeof row.policy_summary_short === "string"
+          ? row.policy_summary_short
+          : null,
+    raw: row
+  };
 }
 
-function getPolicyPageUrl(row: Record<string, unknown> | null) {
+function getPolicyEnrichmentSnippetRecord(row: NormalizedPolicyRow | null) {
   if (!row) {
     return null;
   }
 
-  return typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+  return row.policyEvidenceSnippets;
 }
 
-function getPolicySummaryShort(row: Record<string, unknown> | null) {
+function getPolicyPageUrl(row: NormalizedPolicyRow | null) {
+  return row?.pageUrl ?? null;
+}
+
+function getPolicySummaryShort(row: NormalizedPolicyRow | null) {
   if (!row) {
     return null;
   }
 
-  return isMeaningfulPolicyText(row.policySummaryShort ?? row.policy_summary_short)
-    ? String(row.policySummaryShort ?? row.policy_summary_short)
-    : null;
+  return isMeaningfulPolicyText(row.policySummaryShort) ? row.policySummaryShort : null;
 }
 
 function getKeyPageSummaryRowsForTypes(summary: unknown, pageTypes: string[]) {
@@ -220,12 +252,12 @@ function getStopReasons(summaryRows: Array<Record<string, unknown>>) {
 function getPolicyRowByPageTypes(policyEnrichment: Array<Record<string, unknown>>, pageTypes: string[]) {
   const wantedTypes = new Set(pageTypes);
   return (
-    policyEnrichment.find((row) => wantedTypes.has(String(row.pageType ?? row.page_type ?? ""))) ??
+    policyEnrichment.map(normalizePolicyRow).find((row) => wantedTypes.has(String(row.pageType ?? ""))) ??
     null
   );
 }
 
-function getPolicySnippetCandidates(row: Record<string, unknown> | null, snippetKeys: string[]) {
+function getPolicySnippetCandidates(row: NormalizedPolicyRow | null, snippetKeys: string[]) {
   if (!row) {
     return [] as string[];
   }
@@ -279,8 +311,9 @@ function isGenericCookiePathUrl(value: string | null | undefined) {
 
 function getCookiePolicyFallbackRow(policyEnrichment: Array<Record<string, unknown>>) {
   const scoredRows = policyEnrichment
-    .map((row) => {
-      const pageType = String(row.pageType ?? row.page_type ?? "");
+    .map((policyRow) => {
+      const row = normalizePolicyRow(policyRow);
+      const pageType = String(row.pageType ?? "");
       const pageUrl = getPolicyPageUrl(row);
       const policySummaryShort = getPolicySummaryShort(row);
       const snippets = getCookiePolicySnippetCandidates(row);
@@ -413,24 +446,13 @@ function isLikelyLocaleSubdomainUrl(value: string | null | undefined) {
 }
 
 function getAffiliatePolicyFallbackRow(policyEnrichment: Array<Record<string, unknown>>) {
-  const hasAffiliateEvidence = (row: Record<string, unknown>) => {
-    const summary =
-      typeof row.policySummaryShort === "string"
-        ? row.policySummaryShort
-        : typeof row.policy_summary_short === "string"
-          ? row.policy_summary_short
-          : null;
-    const pageUrl =
-      typeof row.pageUrl === "string"
-        ? row.pageUrl
-        : typeof row.page_url === "string"
-          ? row.page_url
-          : null;
+  const hasAffiliateEvidence = (row: NormalizedPolicyRow) => {
+    const summary = row.policySummaryShort;
+    const pageUrl = row.pageUrl;
     const snippets = getPolicyEnrichmentSnippetRecord(row);
 
     return (
-      (typeof row.pageType === "string" && row.pageType === "affiliate_disclosure") ||
-      (typeof row.page_type === "string" && row.page_type === "affiliate_disclosure") ||
+      row.pageType === "affiliate_disclosure" ||
       (typeof pageUrl === "string" && /affiliate/i.test(pageUrl)) ||
       (isMeaningfulPolicyText(summary) && /\baffiliate disclosure\b/i.test(summary)) ||
       Object.entries(snippets ?? {}).some(
@@ -442,10 +464,10 @@ function getAffiliatePolicyFallbackRow(policyEnrichment: Array<Record<string, un
     );
   };
 
-  return policyEnrichment.find(hasAffiliateEvidence) ?? null;
+  return policyEnrichment.map(normalizePolicyRow).find(hasAffiliateEvidence) ?? null;
 }
 
-function getAffiliatePolicyFallbackSnippet(row: Record<string, unknown> | null) {
+function getAffiliatePolicyFallbackSnippet(row: NormalizedPolicyRow | null) {
   if (!row) {
     return null;
   }
@@ -471,12 +493,7 @@ function getAffiliatePolicyFallbackSnippet(row: Record<string, unknown> | null) 
     return normalizePolicySnippetList(explicitAffiliateSnippet)[0] ?? null;
   }
 
-  const summary =
-    typeof row.policySummaryShort === "string"
-      ? row.policySummaryShort
-      : typeof row.policy_summary_short === "string"
-        ? row.policy_summary_short
-        : null;
+  const summary = row.policySummaryShort;
 
   if (
     isMeaningfulPolicyText(summary) &&
