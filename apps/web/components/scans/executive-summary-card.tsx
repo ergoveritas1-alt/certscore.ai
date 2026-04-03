@@ -1,6 +1,4 @@
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
-import { SummaryMetricTile } from "./report-primitives";
-
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
@@ -520,9 +518,10 @@ export function ExecutiveSummaryCard(input: {
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
           </div>
-          <div className="space-y-3">
+        <div className="space-y-3">
             <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-              <SummaryMetricTile label="Tracker footprint" value={input.trackerSummary} className="border-0 bg-transparent px-0 py-0 shadow-none" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
+              <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
               <DetailDisclosure
                 summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
                 title="Observed vendors and domains"
@@ -530,7 +529,8 @@ export function ExecutiveSummaryCard(input: {
               />
             </div>
             <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-              <SummaryMetricTile label="Fingerprinting" value={input.fingerprintNarrative} className="border-0 bg-transparent px-0 py-0 shadow-none" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
+              <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
               <DetailDisclosure
                 summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
                 title="Fingerprint evidence"
