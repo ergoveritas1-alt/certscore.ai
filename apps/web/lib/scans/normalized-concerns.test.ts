@@ -271,6 +271,38 @@ test("structured policy enrichment can infer missing purpose-of-use disclosure",
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+test("normalization canonicalizes legacy policy evidence keys", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Legacy policy evidence should normalize into canonical policy fields.",
+    fallbackEvidence: {
+      page_type: "privacy_policy",
+      page_url: "https://example.com/privacy",
+      policy_extraction_status: "fetched",
+      policy_semantic_confidence: 0.81,
+      policy_coverage_ratio: 0.44,
+      policy_snippet_count: 2,
+      policy_rights_signals: ["access", "delete"],
+      is_primary_policy_enrichment: true
+    },
+    observedValue: null,
+    severity: "medium",
+    signalKey: "policySemanticConfidence",
+    signalLabel: "Policy semantic confidence",
+    signalSource: "policy_enrichment_signal",
+    sourceType: "signal",
+    title: "Policy semantic confidence"
+  });
+
+  assert.equal(concern.evidenceBundle.rawEvidence?.pageType, "privacy_policy");
+  assert.equal(concern.evidenceBundle.rawEvidence?.pageUrl, "https://example.com/privacy");
+  assert.equal(concern.evidenceBundle.rawEvidence?.policyExtractionStatus, "fetched");
+  assert.equal(concern.evidenceBundle.rawEvidence?.policySemanticConfidence, 0.81);
+  assert.equal(concern.evidenceBundle.rawEvidence?.policyCoverageRatio, 0.44);
+  assert.equal(concern.evidenceBundle.rawEvidence?.policySnippetCount, 2);
+  assert.deepEqual(concern.evidenceBundle.rawEvidence?.policyRightsSignals, ["access", "delete"]);
+  assert.equal(concern.evidenceBundle.rawEvidence?.policyIsPrimarySource, true);
+});
+
 test("account-exit gaps can specialize into missing cancellation-method disclosure", () => {
   const concern = normalizeConcernFromValidationFinding(
     makeValidationFinding({

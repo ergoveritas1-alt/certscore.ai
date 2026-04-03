@@ -277,34 +277,108 @@ function getPolicyNumberValue(rawEvidence: Record<string, unknown> | null | unde
   return null;
 }
 
+function normalizePolicySemanticEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return null;
+  }
+
+  const normalized = { ...rawEvidence };
+
+  const assignString = (canonicalKey: string, legacyKeys: string[]) => {
+    if (typeof normalized[canonicalKey] === "string" && String(normalized[canonicalKey]).trim().length > 0) {
+      return;
+    }
+
+    const value = getPolicyStringValue(rawEvidence, legacyKeys);
+    if (value !== null) {
+      normalized[canonicalKey] = value;
+    }
+  };
+
+  const assignNumber = (canonicalKey: string, legacyKeys: string[]) => {
+    if (typeof normalized[canonicalKey] === "number" && Number.isFinite(normalized[canonicalKey] as number)) {
+      return;
+    }
+
+    const value = getPolicyNumberValue(rawEvidence, legacyKeys);
+    if (value !== null) {
+      normalized[canonicalKey] = value;
+    }
+  };
+
+  const assignBoolean = (canonicalKey: string, legacyKeys: string[]) => {
+    if (typeof normalized[canonicalKey] === "boolean") {
+      return;
+    }
+
+    const value = getPolicyBooleanValue(rawEvidence, legacyKeys);
+    if (value !== null) {
+      normalized[canonicalKey] = value;
+    }
+  };
+
+  const assignArray = (canonicalKey: string, legacyKeys: string[]) => {
+    if (Array.isArray(normalized[canonicalKey])) {
+      return;
+    }
+
+    const value = getPolicyArrayValue(rawEvidence, legacyKeys);
+    if (Array.isArray(value)) {
+      normalized[canonicalKey] = value;
+    }
+  };
+
+  assignString("policyExtractionStatus", ["policyExtractionStatus", "policy_extraction_status"]);
+  assignNumber("policySemanticConfidence", ["policySemanticConfidence", "policy_semantic_confidence"]);
+  assignNumber("policyCoverageRatio", ["policyCoverageRatio", "policy_coverage_ratio"]);
+  assignNumber("policySnippetCount", ["policySnippetCount", "policy_snippet_count"]);
+  assignArray("policyRightsSignals", ["policyRightsSignals", "policy_rights_signals"]);
+  assignArray("policyDataCategories", ["policyDataCategories", "policy_data_categories"]);
+  assignBoolean("policySubprocessorsListed", ["policySubprocessorsListed", "policy_subprocessors_listed"]);
+  assignBoolean("subscriptionCancellationPolicyPresent", [
+    "subscriptionCancellationPolicyPresent",
+    "subscription_cancellation_policy_present"
+  ]);
+  assignBoolean("cancellationTermsPresent", ["cancellationTermsPresent", "cancellation_terms_present"]);
+  assignBoolean("policyCancellationOrRefundPresent", [
+    "policyCancellationOrRefundPresent",
+    "policy_cancellation_or_refund_present"
+  ]);
+  assignBoolean("accountClosureTermsPresent", ["accountClosureTermsPresent", "account_closure_terms_present"]);
+  assignString("pageType", ["pageType", "page_type"]);
+  assignString("pageUrl", ["pageUrl", "page_url"]);
+  assignString("sourceUrl", ["sourceUrl", "source_url"]);
+  assignBoolean("policyIsPrimarySource", [
+    "policyIsPrimarySource",
+    "policy_is_primary_source",
+    "isPrimaryPolicy",
+    "is_primary_policy",
+    "isPrimaryPolicyEnrichment",
+    "is_primary_policy_enrichment"
+  ]);
+  assignString("policySourceRole", ["policySourceRole", "policy_source_role"]);
+
+  if (!normalized.policyFieldCoverage && rawEvidence.policy_field_coverage && typeof rawEvidence.policy_field_coverage === "object") {
+    normalized.policyFieldCoverage = rawEvidence.policy_field_coverage;
+  }
+
+  return normalized;
+}
+
 function getPolicyFieldCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
   const value =
     rawEvidence?.policyFieldCoverage && typeof rawEvidence.policyFieldCoverage === "object"
       ? rawEvidence.policyFieldCoverage
-      : rawEvidence?.policy_field_coverage && typeof rawEvidence.policy_field_coverage === "object"
-        ? rawEvidence.policy_field_coverage
-        : null;
+      : null;
 
   return value as Record<string, { confidence?: unknown; found?: unknown; snippetHash?: unknown }> | null;
 }
 
 function hasStructuredPolicySupport(rawEvidence: Record<string, unknown> | null | undefined) {
-  const extractionStatus = getPolicyStringValue(rawEvidence, [
-    "policyExtractionStatus",
-    "policy_extraction_status"
-  ]);
-  const semanticConfidence = getPolicyNumberValue(rawEvidence, [
-    "policySemanticConfidence",
-    "policy_semantic_confidence"
-  ]);
-  const coverageRatio = getPolicyNumberValue(rawEvidence, [
-    "policyCoverageRatio",
-    "policy_coverage_ratio"
-  ]);
-  const snippetCount = getPolicyNumberValue(rawEvidence, [
-    "policySnippetCount",
-    "policy_snippet_count"
-  ]);
+  const extractionStatus = getPolicyStringValue(rawEvidence, ["policyExtractionStatus"]);
+  const semanticConfidence = getPolicyNumberValue(rawEvidence, ["policySemanticConfidence"]);
+  const coverageRatio = getPolicyNumberValue(rawEvidence, ["policyCoverageRatio"]);
+  const snippetCount = getPolicyNumberValue(rawEvidence, ["policySnippetCount"]);
 
   return (
     extractionStatus === "fetched" &&
@@ -410,20 +484,16 @@ export function inferSpecializedUnifiedFindingId(input: {
 
   if (currentId === "account_exit_terms_missing") {
     const subscriptionCancellationPolicyPresent = getPolicyBooleanValue(rawEvidence, [
-      "subscriptionCancellationPolicyPresent",
-      "subscription_cancellation_policy_present"
+      "subscriptionCancellationPolicyPresent"
     ]);
     const cancellationTermsPresent = getPolicyBooleanValue(rawEvidence, [
-      "cancellationTermsPresent",
-      "cancellation_terms_present"
+      "cancellationTermsPresent"
     ]);
     const policyCancellationOrRefundPresent = getPolicyBooleanValue(rawEvidence, [
-      "policyCancellationOrRefundPresent",
-      "policy_cancellation_or_refund_present"
+      "policyCancellationOrRefundPresent"
     ]);
     const accountClosureTermsPresent = getPolicyBooleanValue(rawEvidence, [
-      "accountClosureTermsPresent",
-      "account_closure_terms_present"
+      "accountClosureTermsPresent"
     ]);
 
     if (
@@ -437,12 +507,10 @@ export function inferSpecializedUnifiedFindingId(input: {
 
   if (!currentId && hasStructuredPolicySupport(rawEvidence)) {
     const policyDataCategories = getPolicyArrayValue(rawEvidence, [
-      "policyDataCategories",
-      "policy_data_categories"
+      "policyDataCategories"
     ]);
     const policySubprocessorsListed = getPolicyBooleanValue(rawEvidence, [
-      "policySubprocessorsListed",
-      "policy_subprocessors_listed"
+      "policySubprocessorsListed"
     ]);
     const dataCategoriesCoverage = getFieldCoverageState(rawEvidence, /data[_-]?categor|category|categories/i);
     const purposeCoverage = getFieldCoverageState(rawEvidence, /purpose|processing[_-]?purpose|data[_-]?use|use[_-]?of[_-]?data/i);
@@ -736,9 +804,7 @@ function derivePolicyPageType(input: {
 }): NormalizedConcernPolicyPageType {
   const explicitType =
     normalizePolicyPageType(input.rawEvidence.policyPageType) ??
-    normalizePolicyPageType(input.rawEvidence.policy_page_type) ??
     normalizePolicyPageType(input.rawEvidence.pageType) ??
-    normalizePolicyPageType(input.rawEvidence.page_type) ??
     normalizePolicyPageType(input.rawEvidence.normalizedConcernPolicyPageType);
 
   if (explicitType) {
@@ -756,11 +822,8 @@ function derivePolicyPageType(input: {
 function derivePolicyPrimarySource(rawEvidence: Record<string, unknown>) {
   const explicit =
     getBooleanValue(rawEvidence.policyIsPrimarySource) ??
-    getBooleanValue(rawEvidence.policy_is_primary_source) ??
     getBooleanValue(rawEvidence.isPrimaryPolicy) ??
-    getBooleanValue(rawEvidence.is_primary_policy) ??
-    getBooleanValue(rawEvidence.isPrimaryPolicyEnrichment) ??
-    getBooleanValue(rawEvidence.is_primary_policy_enrichment);
+    getBooleanValue(rawEvidence.isPrimaryPolicyEnrichment);
 
   if (explicit !== null) {
     return explicit;
@@ -768,7 +831,6 @@ function derivePolicyPrimarySource(rawEvidence: Record<string, unknown>) {
 
   const sourceRole =
     getStringValue(rawEvidence.policySourceRole) ??
-    getStringValue(rawEvidence.policy_source_role) ??
     getStringValue(rawEvidence.normalizedConcernPolicySourceRole);
 
   if (sourceRole === "primary_policy") {
@@ -958,17 +1020,18 @@ function buildConcernFromSharedInput(input: {
   sourceType: "issue" | "signal" | "validation";
   title: string;
 }) {
-  const fallbackBundle = extractEvidenceFromRaw(input.rawEvidence ?? null);
+  const normalizedRawEvidence = normalizePolicySemanticEvidence(input.rawEvidence ?? null);
+  const fallbackBundle = extractEvidenceFromRaw(normalizedRawEvidence);
   const validationBundle = extractEvidenceFromValidationFinding(input.linkedValidationFinding ?? null);
   const evidenceBundle = {
     ...mergeConcernEvidenceBundles(fallbackBundle, validationBundle, input.evidence),
-    rawEvidence: input.rawEvidence ?? null
+    rawEvidence: normalizedRawEvidence
   };
   const suggestedUnifiedFindingId = resolveSuggestedUnifiedFindingId({
     linkedValidationFinding: input.linkedValidationFinding,
     originKey: input.originKey,
     originType: input.originType,
-    rawEvidence: input.rawEvidence ?? null,
+    rawEvidence: normalizedRawEvidence,
     signalKey: input.signalKey,
     signalSource: input.signalSource,
     title: input.title
@@ -983,7 +1046,7 @@ function buildConcernFromSharedInput(input: {
     bundle: evidenceBundle,
     linkedValidationFinding: input.linkedValidationFinding,
     originType: input.originType,
-    rawEvidence: input.rawEvidence ?? null
+    rawEvidence: normalizedRawEvidence
   });
   const eligibility = deriveConcernPolicy({
     concern: {
@@ -996,7 +1059,7 @@ function buildConcernFromSharedInput(input: {
       title: input.title
     },
     evidenceStrengthFlags,
-    rawEvidence: input.rawEvidence ?? null
+    rawEvidence: normalizedRawEvidence
   });
 
   return {
