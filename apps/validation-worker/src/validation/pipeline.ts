@@ -1,4 +1,5 @@
 import {
+  NANO_DOC_RETRIEVAL_JOB,
   NANO_SIGNAL_ENRICHMENT_JOB,
   SCAN_EVENT_TYPES,
   VALIDATION_COLLECT_JOB,
@@ -19,10 +20,12 @@ import {
   getValidationRun,
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
+  loadNanoDocRetrievalInputs,
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
   persistDerivedNanoPolicySignals,
+  replaceScanDocumentSources,
   replaceValidationRunFindings,
   syncTrancoTargets,
   updateValidationRun,
@@ -30,7 +33,9 @@ import {
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
+import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
 import {
+  createNanoDocRetrievalQueue,
   createNanoSignalEnrichmentQueue,
   createValidationCollectQueue,
   createValidationRankQueue,
@@ -38,8 +43,41 @@ import {
 } from "../queue/queues";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
+const NANO_DOC_RETRIEVAL_POLL_MS = 15_000;
+const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 15_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
+
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function stripHtmlToText(html: string) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function extractTitle(html: string) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? stripHtmlToText(match[1] ?? "") : null;
+}
 
 export function determineValidationCollectAction(scanStatus: string | null | undefined) {
   if (scanStatus === "queued") {
@@ -1208,6 +1246,19 @@ export async function enqueueValidationCollect(runId: string) {
   await enqueueValidationCollectWithDelay(runId, 0);
 }
 
+export async function enqueueNanoDocRetrieval(scanId: string, pollCount = 0, delayMs = 0) {
+  await createNanoDocRetrievalQueue().add(
+    NANO_DOC_RETRIEVAL_JOB,
+    { pollCount, scanId },
+    {
+      attempts: 2,
+      delay: delayMs,
+      removeOnComplete: 50,
+      removeOnFail: 50
+    }
+  );
+}
+
 export async function enqueueNanoSignalEnrichment(scanId: string, pollCount = 0, delayMs = 0) {
   await createNanoSignalEnrichmentQueue().add(
     NANO_SIGNAL_ENRICHMENT_JOB,
@@ -1256,6 +1307,148 @@ async function enqueueValidationVerdict(runId: string) {
       removeOnFail: 50
     }
   );
+}
+
+function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages: Array<Record<string, unknown>> }) {
+  const urls = new Map<string, string>();
+  const seedPaths = [
+    ["/privacy", "privacy_policy"],
+    ["/privacy-policy", "privacy_policy"],
+    ["/legal/privacy-policy", "privacy_policy"],
+    ["/terms", "terms_of_service"],
+    ["/terms-of-service", "terms_of_service"],
+    ["/legal/terms", "terms_of_service"],
+    ["/cookies", "cookie_policy"],
+    ["/cookie-policy", "cookie_policy"],
+    ["/legal/cookie-policy", "cookie_policy"]
+  ] as const;
+
+  for (const page of input.pages) {
+    const pageUrl = getString(page.page_url) ?? getString(page.pageUrl);
+    const pageType = getString(page.page_type) ?? getString(page.pageType);
+    if (!pageUrl || !pageType || !["privacy_policy", "terms_of_service", "cookie_policy"].includes(pageType)) {
+      continue;
+    }
+    urls.set(pageUrl, pageType);
+  }
+
+  if (input.domainHostname) {
+    for (const [path, type] of seedPaths) {
+      const url = `https://${input.domainHostname}${path}`;
+      if (!urls.has(url)) {
+        urls.set(url, type);
+      }
+    }
+  }
+
+  return [...urls.entries()].map(([url, documentType]) => ({ documentType, url }));
+}
+
+async function fetchNanoDocumentSource(input: { documentType: string; url: string }) {
+  const request = buildValidationWorkerCrawlerHeaders(input.url);
+  const response = await fetch(input.url, {
+    headers: request.headers,
+    redirect: "follow",
+    signal: AbortSignal.timeout(15_000)
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const html = await response.text();
+  const text = stripHtmlToText(html);
+  const title = extractTitle(html);
+
+  return {
+    canonical_url: response.url || input.url,
+    document_text: text.length > 20 ? text.slice(0, 50_000) : null,
+    document_type: input.documentType,
+    extraction_status: text.length > 20 ? "pending" : "insufficient",
+    evidence_refs: [response.url || input.url],
+    extracted_fields_json: {
+      page_type: input.documentType,
+      page_url: response.url || input.url
+    },
+    metadata_json: {
+      http_status: response.status,
+      retrieval_mode: "nano_doc_retrieval"
+    },
+    source: "nano_doc_retrieval",
+    source_status: "ready",
+    source_url: input.url,
+    title
+  } satisfies Record<string, unknown>;
+}
+
+export async function processNanoDocRetrievalJob(input: { pollCount?: number; scanId: string }) {
+  const { state } = await getValidationPipelineState();
+  if (state !== "running") {
+    return;
+  }
+
+  const scanId = input.scanId;
+  const pollCount = input.pollCount ?? 0;
+  const artifacts = await loadNanoDocRetrievalInputs(scanId);
+  const scanStatus = typeof artifacts.scan?.status === "string" ? artifacts.scan.status : null;
+
+  if (pollCount === 0) {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoDocRetrievalStarted,
+      message: "Nano document retrieval started.",
+      metadataJson: {
+        stage: "nano_doc_retrieval"
+      },
+      scanId
+    }).catch(() => undefined);
+  }
+
+  if (artifacts.pages.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
+    if (pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
+      await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
+      return;
+    }
+  }
+
+  if (scanStatus === "failed") {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoDocRetrievalFailed,
+      message: "Nano document retrieval failed because the scan failed.",
+      metadataJson: {
+        error: typeof artifacts.scan?.error_message === "string" ? artifacts.scan.error_message : "scan_failed",
+        stage: "nano_doc_retrieval"
+      },
+      scanId
+    }).catch(() => undefined);
+    return;
+  }
+
+  const candidates = buildNanoDocCandidateUrls({
+    domainHostname: artifacts.domainHostname,
+    pages: artifacts.pages
+  });
+  const retrievedRows = await Promise.all(
+    candidates.map((candidate) =>
+      fetchNanoDocumentSource(candidate).catch(() => null)
+    )
+  );
+  const rows = retrievedRows.filter((row): row is NonNullable<(typeof retrievedRows)[number]> => row !== null);
+
+  await replaceScanDocumentSources({
+    rows,
+    scanId
+  });
+
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.nanoDocRetrievalCompleted,
+    message: "Nano document retrieval completed.",
+    metadataJson: {
+      candidateCount: candidates.length,
+      documentSourceCount: rows.length,
+      stage: "nano_doc_retrieval"
+    },
+    scanId
+  }).catch(() => undefined);
 }
 
 export async function processNanoSignalEnrichmentJob(input: { pollCount?: number; scanId: string }) {

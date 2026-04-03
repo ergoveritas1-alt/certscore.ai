@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import {
+  NANO_DOC_RETRIEVAL_JOB,
   NANO_SIGNAL_ENRICHMENT_JOB,
   QUEUE_NAMES,
   VALIDATION_COLLECT_JOB,
@@ -9,6 +10,7 @@ import {
 import { getWorkerEnv } from "../env";
 import { getValidationRedisConnection } from "../queue/connection";
 import {
+  processNanoDocRetrievalJob,
   processNanoSignalEnrichmentJob,
   processValidationCollectJob,
   processValidationRankJob,
@@ -26,6 +28,21 @@ export function createValidationWorkers() {
       }
 
       await processValidationCollectJob(job.data.validationRunId);
+    },
+    {
+      connection: getValidationRedisConnection(),
+      concurrency: 1
+    }
+  );
+
+  const nanoDocRetrievalWorker = new Worker<{ pollCount?: number; scanId: string }>(
+    QUEUE_NAMES.nanoDocRetrieval,
+    async (job) => {
+      if (job.name !== NANO_DOC_RETRIEVAL_JOB) {
+        throw new Error(`Unsupported nano doc retrieval job: ${job.name}`);
+      }
+
+      await processNanoDocRetrievalJob(job.data);
     },
     {
       connection: getValidationRedisConnection(),
@@ -78,5 +95,5 @@ export function createValidationWorkers() {
     }
   );
 
-  return [collectWorker, nanoSignalWorker, rankWorker, verdictWorker];
+  return [collectWorker, nanoDocRetrievalWorker, nanoSignalWorker, rankWorker, verdictWorker];
 }

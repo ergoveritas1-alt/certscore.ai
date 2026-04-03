@@ -128,6 +128,20 @@ type SignalPopulationRow = {
   value_type: string;
 };
 
+type NanoDocRetrievalInput = {
+  domainHostname: string | null;
+  existingDocumentSources: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+  scan: {
+    completed_at?: string | null;
+    created_at?: string | null;
+    error_message?: string | null;
+    id?: string;
+    started_at?: string | null;
+    status?: string | null;
+  } | null;
+};
+
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 
@@ -964,6 +978,55 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
   };
 }
 
+export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
+  const supabase = createAdminClient();
+  const { data: scan, error: scanError } = await supabase
+    .from("scans")
+    .select("id, status, created_at, started_at, completed_at, error_message, domain_id")
+    .eq("id", scanId)
+    .maybeSingle();
+
+  if (scanError) {
+    throw new Error(`Failed to load scan for nano doc retrieval ${scanId}: ${scanError.message}`);
+  }
+
+  const domainId = typeof scan?.domain_id === "string" ? scan.domain_id : null;
+  const [
+    { data: domain, error: domainError },
+    { data: pages, error: pagesError },
+    { data: documentSources, error: documentSourcesError }
+  ] = await Promise.all([
+    domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    supabase.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
+    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+  ]);
+
+  if (domainError && !isMissingOptionalTableError(domainError)) {
+    throw new Error(`Failed to load domain for nano doc retrieval ${scanId}: ${domainError.message}`);
+  }
+  if (pagesError) {
+    throw new Error(`Failed to load scan pages for nano doc retrieval ${scanId}: ${pagesError.message}`);
+  }
+  if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
+    throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
+  }
+
+  return {
+    domainHostname: (domain?.hostname as string | null) ?? null,
+    existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
+    pages: (pages ?? []) as Array<Record<string, unknown>>,
+    scan:
+      (scan as {
+        completed_at?: string | null;
+        created_at?: string | null;
+        error_message?: string | null;
+        id?: string;
+        started_at?: string | null;
+        status?: string | null;
+      } | null) ?? null
+  };
+}
+
 export async function replaceValidationRunFindings(
   runId: string,
   findings: Array<{
@@ -1471,6 +1534,35 @@ export async function markValidationSchedule(input: {
   if (error) {
     throw new Error(`Failed to update validation scheduler state: ${error.message}`);
   }
+}
+
+export async function replaceScanDocumentSources(input: {
+  rows: Array<Record<string, unknown>>;
+  scanId: string;
+}) {
+  const supabase = createAdminClient();
+  const { error: deleteError } = await supabase.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
+
+  if (deleteError && !isMissingOptionalTableError(deleteError)) {
+    throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${deleteError.message}`);
+  }
+
+  if (input.rows.length === 0) {
+    return [];
+  }
+
+  const { error: insertError } = await supabase.from("scan_document_sources").insert(
+    input.rows.map((row) => ({
+      ...row,
+      scan_id: input.scanId
+    }))
+  );
+
+  if (insertError) {
+    throw new Error(`Failed to persist document sources for scan ${input.scanId}: ${insertError.message}`);
+  }
+
+  return input.rows;
 }
 
 export async function persistDerivedNanoPolicySignals(input: {

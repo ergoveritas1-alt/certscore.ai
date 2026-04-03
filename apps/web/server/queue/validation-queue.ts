@@ -1,11 +1,12 @@
 import "server-only";
 
 import { Queue, type ConnectionOptions } from "bullmq";
-import { NANO_SIGNAL_ENRICHMENT_JOB, VALIDATION_COLLECT_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
+import { NANO_DOC_RETRIEVAL_JOB, NANO_SIGNAL_ENRICHMENT_JOB, VALIDATION_COLLECT_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
 import { getConfiguredValidationRedisUrl } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
 let collectQueue: Queue<{ validationRunId: string }> | null = null;
+let nanoDocQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
 let nanoSignalQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
 let rankQueue: Queue<{ validationRunId: string }> | null = null;
 
@@ -87,6 +88,22 @@ function getNanoSignalQueue() {
   return nanoSignalQueue;
 }
 
+function getNanoDocQueue() {
+  if (nanoDocQueue) {
+    return nanoDocQueue;
+  }
+
+  nanoDocQueue = new Queue<{ pollCount?: number; scanId: string }>(QUEUE_NAMES.nanoDocRetrieval, {
+    connection: getRedisConnection(),
+    defaultJobOptions: {
+      removeOnComplete: 100,
+      removeOnFail: 100
+    }
+  });
+
+  return nanoDocQueue;
+}
+
 export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
   const redisUrl = getConfiguredValidationRedisUrl(env);
   if (!redisUrl) {
@@ -123,25 +140,37 @@ export async function enqueueValidationCollectJob(validationRunId: string) {
 }
 
 export async function enqueueNanoSignalEnrichmentJob(scanId: string) {
-  await getNanoSignalQueue().add(
-    NANO_SIGNAL_ENRICHMENT_JOB,
-    { pollCount: 0, scanId },
-    {
-      attempts: 2,
-      jobId: `${scanId}--nano-doc-signals--initial`
-    }
-  );
+  await Promise.all([
+    getNanoDocQueue().add(
+      NANO_DOC_RETRIEVAL_JOB,
+      { pollCount: 0, scanId },
+      {
+        attempts: 2,
+        jobId: `${scanId}--nano-doc-retrieval--initial`
+      }
+    ),
+    getNanoSignalQueue().add(
+      NANO_SIGNAL_ENRICHMENT_JOB,
+      { pollCount: 0, scanId },
+      {
+        attempts: 2,
+        jobId: `${scanId}--nano-doc-signals--initial`
+      }
+    )
+  ]);
 }
 
 export async function getValidationQueueHealth() {
-  const [collectCounts, nanoSignalCounts, rankCounts] = await Promise.all([
+  const [collectCounts, nanoDocCounts, nanoSignalCounts, rankCounts] = await Promise.all([
     getCollectQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
+    getNanoDocQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
     getNanoSignalQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
     getRankQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused")
   ]);
 
   return {
     collect: collectCounts,
+    nanoDocRetrieval: nanoDocCounts,
     nanoSignals: nanoSignalCounts,
     rank: rankCounts
   };

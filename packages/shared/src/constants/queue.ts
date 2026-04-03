@@ -4,6 +4,7 @@ export const SCAN_JOB_TYPES = {
   previewScan: "preview_scan",
   fullScan: "full_scan",
   scheduledScan: "scheduled_scan",
+  nanoDocRetrieval: "nano_doc_retrieval",
   nanoSignalEnrichment: "nano_signal_enrichment",
   validationCollect: "validation_collect",
   validationRank: "validation_rank",
@@ -14,6 +15,7 @@ export const QUEUE_NAMES = {
   previewScan: SCAN_JOB_TYPES.previewScan,
   fullScan: SCAN_JOB_TYPES.fullScan,
   scheduledScan: SCAN_JOB_TYPES.scheduledScan,
+  nanoDocRetrieval: SCAN_JOB_TYPES.nanoDocRetrieval,
   nanoSignalEnrichment: SCAN_JOB_TYPES.nanoSignalEnrichment,
   validationCollect: SCAN_JOB_TYPES.validationCollect,
   validationRank: SCAN_JOB_TYPES.validationRank,
@@ -23,6 +25,7 @@ export const QUEUE_NAMES = {
 export const PREVIEW_SCAN_JOB = SCAN_JOB_TYPES.previewScan;
 export const FULL_SCAN_JOB = SCAN_JOB_TYPES.fullScan;
 export const SCHEDULED_SCAN_JOB = SCAN_JOB_TYPES.scheduledScan;
+export const NANO_DOC_RETRIEVAL_JOB = SCAN_JOB_TYPES.nanoDocRetrieval;
 export const NANO_SIGNAL_ENRICHMENT_JOB = SCAN_JOB_TYPES.nanoSignalEnrichment;
 export const VALIDATION_COLLECT_JOB = SCAN_JOB_TYPES.validationCollect;
 export const VALIDATION_RANK_JOB = SCAN_JOB_TYPES.validationRank;
@@ -91,6 +94,9 @@ export const SCAN_EVENT_TYPES = {
   validationVerdictStarted: "validation.verdict_started",
   validationVerdictCompleted: "validation.verdict_completed",
   validationVerdictFailed: "validation.verdict_failed",
+  nanoDocRetrievalStarted: "signals.nano_doc_retrieval_started",
+  nanoDocRetrievalCompleted: "signals.nano_doc_retrieval_completed",
+  nanoDocRetrievalFailed: "signals.nano_doc_retrieval_failed",
   nanoSignalEnrichmentStarted: "signals.nano_doc_enrichment_started",
   nanoSignalEnrichmentCompleted: "signals.nano_doc_enrichment_completed",
   nanoSignalEnrichmentFailed: "signals.nano_doc_enrichment_failed",

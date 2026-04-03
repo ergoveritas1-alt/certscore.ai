@@ -68,6 +68,7 @@ function deriveStageStatus(input: {
 }
 
 export function deriveSignalEnrichmentWorkflowState(input: {
+  documentSourceCount?: number;
   events: WorkflowEventRecord[];
   findingsCount: number;
   mergedSignalCount: number;
@@ -92,6 +93,12 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     failedEventTypes: [SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed],
     startedEventTypes: [SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted]
   });
+  const docRetrievalTimestamps = deriveLifecycleTimestamps({
+    completedEventTypes: [SCAN_EVENT_TYPES.nanoDocRetrievalCompleted],
+    events: input.events,
+    failedEventTypes: [SCAN_EVENT_TYPES.nanoDocRetrievalFailed],
+    startedEventTypes: [SCAN_EVENT_TYPES.nanoDocRetrievalStarted]
+  });
   const mergeTimestamps = deriveLifecycleTimestamps({
     completedEventTypes: [SCAN_EVENT_TYPES.signalMergeCompleted],
     events: input.events,
@@ -106,7 +113,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
   });
 
   const actualMode =
-    nanoTimestamps.startedAt && scannerCompletedAt && nanoTimestamps.startedAt < scannerCompletedAt
+    (docRetrievalTimestamps.startedAt && scannerCompletedAt && docRetrievalTimestamps.startedAt < scannerCompletedAt) ||
+    (nanoTimestamps.startedAt && scannerCompletedAt && nanoTimestamps.startedAt < scannerCompletedAt)
       ? "parallelized"
       : "serial_bridge";
 
@@ -119,8 +127,15 @@ export function deriveSignalEnrichmentWorkflowState(input: {
           ? "running"
           : "queued";
 
+  const docRetrievalStatus = deriveStageStatus({
+    completedAt: docRetrievalTimestamps.completedAt,
+    failedAt: docRetrievalTimestamps.failedAt,
+    startedAt: docRetrievalTimestamps.startedAt
+  });
   const nanoStatus = deriveStageStatus({
-    blocked: actualMode === "serial_bridge" && scannerStatus !== "completed" && scannerStatus !== "failed",
+    blocked:
+      (actualMode === "serial_bridge" && scannerStatus !== "completed" && scannerStatus !== "failed") ||
+      docRetrievalStatus === "running",
     completedAt: nanoTimestamps.completedAt,
     failedAt: nanoTimestamps.failedAt,
     startedAt: nanoTimestamps.startedAt
@@ -150,8 +165,18 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       status: scannerStatus,
     },
     {
-      completedAt: nanoTimestamps.completedAt,
+      completedAt: docRetrievalTimestamps.completedAt,
       dependsOn: [],
+      description: "Nano-owned legal document retrieval and raw document persistence.",
+      id: "nano_doc_retrieval",
+      itemCount: input.documentSourceCount ?? input.policyDocumentCount,
+      label: "Nano Doc Retrieval",
+      startedAt: docRetrievalTimestamps.startedAt,
+      status: docRetrievalStatus
+    },
+    {
+      completedAt: nanoTimestamps.completedAt,
+      dependsOn: ["nano_doc_retrieval"],
       description: "Nano-owned document and disclosure signal enrichment.",
       id: "nano_doc_signals",
       itemCount: input.nanoSignalCount > 0 ? input.nanoSignalCount : input.policyDocumentCount,

@@ -15,6 +15,7 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
       { createdAt: "2026-04-02T10:10:00.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted },
       { createdAt: "2026-04-02T10:11:00.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted }
     ],
+    documentSourceCount: 2,
     findingsCount: 4,
     mergedSignalCount: 12,
     nanoSignalCount: 5,
@@ -31,6 +32,7 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
     workflow.stages.map((stage) => [stage.id, stage.status]),
     [
       ["scanner", "completed"],
+      ["nano_doc_retrieval", "queued"],
       ["nano_doc_signals", "completed"],
       ["signal_merge", "completed"],
       ["unified_findings", "completed"]
@@ -42,8 +44,9 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   const workflow = deriveSignalEnrichmentWorkflowState({
     events: [
       { createdAt: "2026-04-02T10:00:00.000Z", eventType: SCAN_EVENT_TYPES.fullStarted },
-      { createdAt: "2026-04-02T10:01:00.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted }
+      { createdAt: "2026-04-02T10:01:00.000Z", eventType: SCAN_EVENT_TYPES.nanoDocRetrievalStarted }
     ],
+    documentSourceCount: 0,
     findingsCount: 0,
     mergedSignalCount: 0,
     nanoSignalCount: 0,
@@ -54,6 +57,7 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   });
 
   assert.equal(workflow.actualMode, "parallelized");
-  assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "running");
+  assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_retrieval")?.status, "running");
+  assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "blocked");
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.status, "blocked");
 });

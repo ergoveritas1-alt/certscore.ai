@@ -2,6 +2,7 @@ export type SignalEnrichmentWorkflowMode = "serial_bridge" | "parallelized";
 
 export type SignalEnrichmentWorkflowStageId =
   | "scanner"
+  | "nano_doc_retrieval"
   | "nano_doc_signals"
   | "signal_merge"
   | "unified_findings";
