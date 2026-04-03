@@ -272,7 +272,7 @@ function buildLiveEarlyResults(input: {
 
 function getStatusMessage(status: ScanStatus) {
   if (status === "queued") {
-    return "Queued for a lightweight live preview.";
+    return "Queued.";
   }
 
   if (status === "running") {
