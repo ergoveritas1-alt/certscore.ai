@@ -59,3 +59,31 @@ test("nano can backfill missing signals and create signal-backed finding candida
   assert.equal(candidate?.signalSource, "policy_enrichment_signal");
   assert.equal(candidate?.sourceType, "signal");
 });
+
+test("insufficient major document-semantic signals create bounded unresolved candidates", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.4,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.gpc_disclosure_present",
+        label: "GPC disclosure present",
+        populationStatus: "insufficient",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const [candidate] = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  });
+
+  assert.equal(candidate?.signalKey, "disclosure.key_page_discovery_unresolved_after_bounded_search");
+  assert.equal(candidate?.signalSource, "snapshot_signal");
+  assert.equal(candidate?.title, "GPC handling disclosed unverified");
+  assert.equal(candidate?.fallbackEvidence?.inferredTargetFindingId, "gpc_disclosure_present");
+  assert.equal(candidate?.fallbackEvidence?.mergedSignalPopulationStatus, "insufficient");
+});

@@ -4571,3 +4571,32 @@ test("document semantic contact channel does not surface missing-contact finding
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_channel_missing"), false);
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_path_present"), true);
 });
+
+test("insufficient major merged signals surface as bounded discovery unresolved review findings", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.4,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.gpc_disclosure_present",
+        label: "GPC disclosure present",
+        populationStatus: "insufficient",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    mergedSignals,
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const unresolvedPacket = packets.find((packet) => packet.unifiedFindingId === "bounded_key_page_discovery_unresolved");
+  assert.equal(unresolvedPacket?.presentationDecision.status, "surface");
+  assert.equal(unresolvedPacket?.title, "Bounded key-page discovery unresolved");
+});

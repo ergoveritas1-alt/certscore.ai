@@ -3,11 +3,24 @@ import type {
   PopulatedSignalRecord,
   SignalPopulationSource,
   SignalPopulationStatus,
-  SignalProvenanceRecord
+  SignalProvenanceRecord,
+  ReportUnifiedFindingId
 } from "@website-signal-risk-scanner/shared";
-import type { ReportSignalSource } from "@website-signal-risk-scanner/shared";
+import { getReportUnifiedFindingForSignal, type ReportSignalSource } from "@website-signal-risk-scanner/shared";
 import { shouldSurfacePrimarySignalFinding } from "./finding-evidence-gates";
 import type { UnifiedFindingCandidate } from "./unified-findings";
+
+const BOUNDED_DISCOVERY_SIGNAL_KEY = "disclosure.key_page_discovery_unresolved_after_bounded_search";
+const BOUNDED_DISCOVERY_SIGNAL_LABEL = "Bounded key-page discovery unresolved";
+
+const MAJOR_INSUFFICIENT_FINDING_IDS = new Set<ReportUnifiedFindingId>([
+  "privacy_rights_path_present",
+  "privacy_contact_path_present",
+  "gpc_disclosure_present",
+  "tracking_technologies_disclosure_present",
+  "targeted_advertising_disclosure_present",
+  "third_party_advertising_disclosure_present"
+]);
 
 type MergeableSignalInput = {
   confidence?: number | null;
@@ -178,8 +191,44 @@ export function buildReviewFindingCandidatesFromMergedSignals(input: {
   mergedSignals: MergedSignalRecord[];
 }) {
   const candidates: UnifiedFindingCandidate[] = [];
+  const emittedInsufficientFindingIds = new Set<string>();
 
   for (const signal of input.mergedSignals) {
+    if (signal.populationStatus === "insufficient" && signal.reportSignalSource) {
+      const mappedFinding = getReportUnifiedFindingForSignal(signal.reportSignalSource, signal.key);
+      if (mappedFinding && MAJOR_INSUFFICIENT_FINDING_IDS.has(mappedFinding.id) && !emittedInsufficientFindingIds.has(mappedFinding.id)) {
+        emittedInsufficientFindingIds.add(mappedFinding.id);
+        candidates.push({
+          description: `${mappedFinding.label} could not be verified from retained scan evidence.`,
+          fallbackEvidence: {
+            evidenceRefs: signal.evidenceRefs,
+            inferredTargetFindingId: mappedFinding.id,
+            inferredTargetFindingLabel: mappedFinding.label,
+            keyPageDiscoverySource: "merged_signal_insufficient",
+            keyPageGuessedOnly: false,
+            mergedSignalConfidence: signal.confidence,
+            mergedSignalObservedAt: signal.observedAt,
+            mergedSignalPopulationStatus: signal.populationStatus,
+            mergedSignalSources: signal.populations.map((row) => row.source),
+            provenance: signal.selectedPopulation?.provenance ?? [],
+            selectedSignalSource: signal.selectedPopulation?.source ?? null,
+            signalKey: BOUNDED_DISCOVERY_SIGNAL_KEY,
+            signalLabel: BOUNDED_DISCOVERY_SIGNAL_LABEL,
+            signalValue: true,
+            sourceUrls: signal.evidenceRefs
+          } satisfies Record<string, unknown>,
+          observedValue: mappedFinding.label,
+          severity: "medium",
+          signalKey: BOUNDED_DISCOVERY_SIGNAL_KEY,
+          signalLabel: BOUNDED_DISCOVERY_SIGNAL_LABEL,
+          signalSource: "snapshot_signal",
+          sourceType: "signal",
+          title: `${mappedFinding.label} unverified`
+        });
+      }
+      continue;
+    }
+
     if (signal.populationStatus !== "present" || !signal.selectedPopulation || !signal.reportSignalSource) {
       continue;
     }
