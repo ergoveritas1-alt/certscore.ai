@@ -1154,6 +1154,18 @@ function findPersistedSignalValue(
   return signals.find((signal) => signal.key === key)?.value ?? null;
 }
 
+function findMergedSignalValue(
+  mergedSignals: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }> | null | undefined,
+  key: string
+) {
+  const row = mergedSignals?.find((signal) => signal.key === key) ?? null;
+  return row?.selectedPopulation?.value ?? row?.value ?? null;
+}
+
 function getPolicyEnrichmentValue(policyEnrichment: Array<Record<string, unknown>>, key: string) {
   const canonicalKey = normalizePolicyPositiveSignalKey(key);
 
@@ -1224,6 +1236,11 @@ function getSnapshotSignalValue(snapshot: Record<string, unknown> | null, signal
 }
 
 function getReportSignalValue(input: {
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
   policyEnrichment: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   signals: Array<{ key: string; value: boolean | number | string | string[] }>;
@@ -1234,16 +1251,17 @@ function getReportSignalValue(input: {
   if (hybridDerivedValue !== undefined) {
     return hybridDerivedValue;
   }
+  const mergedSignalValue = findMergedSignalValue(input.mergedSignals, input.signal.key);
 
   if (input.signal.source === "snapshot_signal") {
-    return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
+    return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
 
   if (input.signal.source === "runtime_artifact_signal") {
-    return input.runtimeArtifacts?.[input.signal.key] ?? findPersistedSignalValue(input.signals, input.signal.key);
+    return input.runtimeArtifacts?.[input.signal.key] ?? mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
 
-  return getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
+  return mergedSignalValue ?? getPolicyEnrichmentValue(input.policyEnrichment, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
 }
 
 function isSignalValuePopulated(key: string, value: unknown) {
@@ -1726,6 +1744,11 @@ function getKeyPageTypeForSignal(key: string) {
 }
 
 function getPolicySignalFallbackEvidence(input: {
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
   policyEnrichment: Array<Record<string, unknown>>;
   signalKey: string;
   signalLabel: string;
@@ -1764,13 +1787,16 @@ function getPolicySignalFallbackEvidence(input: {
       : row?.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
         ? (row.policy_evidence_snippets as Record<string, unknown>)
         : null;
-  const policyRightsSignals = Array.isArray(row?.policyRightsSignals)
-    ? row.policyRightsSignals
-    : Array.isArray(row?.policy_rights_signals)
-      ? row.policy_rights_signals
-      : Array.isArray(evidenceSnippets?.policy_rights_signals)
-        ? (evidenceSnippets.policy_rights_signals as string[])
-        : [];
+  const mergedPolicyRightsSignals = findMergedSignalValue(input.mergedSignals, "policyRightsSignals");
+  const policyRightsSignals = Array.isArray(mergedPolicyRightsSignals)
+    ? mergedPolicyRightsSignals.filter((value): value is string => typeof value === "string")
+    : Array.isArray(row?.policyRightsSignals)
+      ? row.policyRightsSignals
+      : Array.isArray(row?.policy_rights_signals)
+        ? row.policy_rights_signals
+        : Array.isArray(evidenceSnippets?.policy_rights_signals)
+          ? (evidenceSnippets.policy_rights_signals as string[])
+          : [];
   const topicSnippetKeys = topicKey
     ? [topicKey]
     : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
@@ -1787,14 +1813,20 @@ function getPolicySignalFallbackEvidence(input: {
         .slice(0, 2)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
+  const mergedPrivacyContactChannelType = findMergedSignalValue(input.mergedSignals, "privacyContactChannelType");
   const privacyContactChannelType =
-    row && isMeaningfulPolicyText(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
-      ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
-      : null;
+    typeof mergedPrivacyContactChannelType === "string" && isMeaningfulPolicyText(mergedPrivacyContactChannelType)
+      ? mergedPrivacyContactChannelType
+      : row && isMeaningfulPolicyText(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
+        ? String(row.privacyContactChannelType ?? row.privacy_contact_channel_type)
+        : null;
+  const mergedPolicyChildrenReference = findMergedSignalValue(input.mergedSignals, "policyChildrenReference");
   const policyChildrenReference =
-    row && isMeaningfulPolicyText(row.policyChildrenReference ?? row.policy_children_reference)
-      ? String(row.policyChildrenReference ?? row.policy_children_reference)
-      : null;
+    typeof mergedPolicyChildrenReference === "string" && isMeaningfulPolicyText(mergedPolicyChildrenReference)
+      ? mergedPolicyChildrenReference
+      : row && isMeaningfulPolicyText(row.policyChildrenReference ?? row.policy_children_reference)
+        ? String(row.policyChildrenReference ?? row.policy_children_reference)
+        : null;
 
   return {
     pageUrl,
@@ -1857,6 +1889,11 @@ function buildReviewFindings(input: {
   allSignals?: Array<{ key: string; value: unknown }>;
   categoryId?: string;
   issues: CanonicalReviewIssue[];
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
   policyEnrichment?: Array<Record<string, unknown>>;
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
@@ -1923,6 +1960,7 @@ function buildReviewFindings(input: {
             }
           : item.source === "policy_enrichment_signal" && isPolicyPositiveSignalKey(item.key)
             ? getPolicySignalFallbackEvidence({
+                mergedSignals: input.mergedSignals,
                 policyEnrichment: input.policyEnrichment ?? [],
                 signalKey: item.key,
                 signalLabel: item.label,
@@ -4350,6 +4388,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
               relation,
               source: signal.source,
               value: getReportSignalValue({
+                mergedSignals: scanRecord.mergedSignals,
                 policyEnrichment: scanRecord.policyEnrichment,
                 runtimeArtifacts: scanRecord.runtimeArtifacts,
                 signals: scanRecord.signals,
@@ -4367,6 +4406,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
             allSignals: scanRecord.signals,
             categoryId: category.id,
             issues: [],
+            mergedSignals: scanRecord.mergedSignals,
             policyEnrichment: scanRecord.policyEnrichment,
             prioritizedAccessibilityRuleRows,
             runtimeArtifacts: scanRecord.runtimeArtifacts,
@@ -4396,6 +4436,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         const issueFindings = buildReviewFindings({
           allSignals: scanRecord.signals,
           issues,
+          mergedSignals: scanRecord.mergedSignals,
           policyEnrichment: scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows,
           runtimeArtifacts: scanRecord.runtimeArtifacts,
@@ -4518,6 +4559,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
             relation,
             source: signal.source,
             value: getReportSignalValue({
+              mergedSignals: input.scanRecord.mergedSignals,
               policyEnrichment: input.scanRecord.policyEnrichment,
               runtimeArtifacts: input.scanRecord.runtimeArtifacts,
               signals: input.scanRecord.signals,
@@ -4535,6 +4577,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
           allSignals: input.scanRecord.signals,
           categoryId: category.id,
           issues: [],
+          mergedSignals: input.scanRecord.mergedSignals,
           policyEnrichment: input.scanRecord.policyEnrichment,
           prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
           runtimeArtifacts: input.scanRecord.runtimeArtifacts,
@@ -4565,6 +4608,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       const issueFindings = buildReviewFindings({
         allSignals: input.scanRecord.signals,
         issues,
+        mergedSignals: input.scanRecord.mergedSignals,
         policyEnrichment: input.scanRecord.policyEnrichment,
         prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
         runtimeArtifacts: input.scanRecord.runtimeArtifacts,
