@@ -137,12 +137,14 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             </a>
           ) : null}
         </div>
-        <details className="group/json rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <details className="group/json min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
             <span>{"{}"} JSON evidence</span>
             <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
           </summary>
-          <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-950 px-3 py-3 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
+          <div className="mt-3 min-w-0 overflow-hidden rounded-lg bg-slate-950">
+            <pre className="max-w-full overflow-x-auto px-3 py-3 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
+          </div>
         </details>
       </div>
     </details>
