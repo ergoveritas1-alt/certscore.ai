@@ -7,6 +7,7 @@ import {
   getUnifiedFindingOwnerCategoryId,
   type UnifiedFindingCandidate
 } from "./unified-findings";
+import { buildMergedSignalRecords } from "./merged-signals";
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
 import type { ScanValidationFinding } from "./validation-review-linking";
@@ -4451,4 +4452,30 @@ test("demotes generic coverage findings when mock regulator context is also pres
   assert.equal(packets[0]?.unifiedFindingId, "regulator_operated_mock_investment_example");
   assert.equal(packets[1]?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packets[1]?.presentationDecision.status, "audit_only");
+});
+
+test("merged signals feed unified finding derivation through the canonical display packet path", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.92,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.gpc_disclosure_present",
+        label: "GPC disclosure present",
+        reportSignalSource: "policy_enrichment_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    mergedSignals,
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "gpc_disclosure_present"), true);
 });

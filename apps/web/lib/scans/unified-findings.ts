@@ -1,4 +1,5 @@
 import {
+  type MergedSignalRecord,
   getReportUnifiedFinding,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForSignal,
@@ -36,6 +37,9 @@ import {
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
 import {
+  hasConcretePreconsentArtifact
+} from "./promotion-evidence-contracts";
+import {
   isMeaningfulPolicyText,
   normalizePolicySnippet
 } from "./policy-snippet-normalization";
@@ -52,6 +56,7 @@ import {
   type UnifiedFindingSurfacingDecision
 } from "./report-surfacing-policy";
 import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-fallback-evidence";
+import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals";
 
 export type UnifiedFindingDetails =
   | {
@@ -331,7 +336,8 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "accept_only_banner",
   "dismiss_without_reject",
   "session_replay_observed",
-  "retargeting_pixel_observed"
+  "retargeting_pixel_observed",
+  "fingerprinting_observed"
 ]);
 
 const SENSITIVE_DATA_FINDING_IDS = new Set([
@@ -357,7 +363,10 @@ const COMMERCIAL_FINDING_IDS = new Set([
 ]);
 
 const CONTEXT_FINDING_IDS = new Set([
-  "regulator_operated_mock_investment_example"
+  "regulator_operated_mock_investment_example",
+  "popup_behavior_observed",
+  "blocking_overlay_observed",
+  "autoplay_media_observed"
 ]);
 
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
@@ -1136,8 +1145,17 @@ function buildUnifiedFindingDetails(input: {
       ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_tracker_vendors)
         ? (input.linkedValidationFinding?.evidence?.preconsent_tracker_vendors as string[])
         : []),
+      ...(Array.isArray(input.fallbackEvidence?.preconsent_tracker_vendors)
+        ? (input.fallbackEvidence?.preconsent_tracker_vendors as string[])
+        : []),
       ...(Array.isArray(input.linkedValidationFinding?.evidence?.persisted_tracker_vendors)
         ? (input.linkedValidationFinding?.evidence?.persisted_tracker_vendors as string[])
+        : []),
+      ...(Array.isArray(input.fallbackEvidence?.persisted_tracker_vendors)
+        ? (input.fallbackEvidence?.persisted_tracker_vendors as string[])
+        : []),
+      ...(Array.isArray(input.fallbackEvidence?.post_reject_tracker_vendors)
+        ? (input.fallbackEvidence?.post_reject_tracker_vendors as string[])
         : [])
     ]);
 
@@ -1148,6 +1166,15 @@ function buildUnifiedFindingDetails(input: {
       requestUrls: uniqueStrings([
         ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls)
           ? (input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls as string[])
+          : []),
+        ...(Array.isArray(input.fallbackEvidence?.preconsent_tracker_evidence_urls)
+          ? (input.fallbackEvidence?.preconsent_tracker_evidence_urls as string[])
+          : []),
+        ...(Array.isArray(input.fallbackEvidence?.runtimeEvidenceUrls)
+          ? (input.fallbackEvidence?.runtimeEvidenceUrls as string[])
+          : []),
+        ...(Array.isArray(input.fallbackEvidence?.consentBaselineTrackerEvidenceUrls)
+          ? (input.fallbackEvidence?.consentBaselineTrackerEvidenceUrls as string[])
           : [])
       ])
     } satisfies UnifiedFindingDetails;
@@ -2498,6 +2525,7 @@ function deriveConfidenceInputs(input: {
     input.packet.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && sourceRef.source === "runtime_artifact_signal") ||
     normalizedConcernStrengthFlags.includes("direct_runtime") ||
     input.fallbackEvidenceRows.some((row) => Boolean(row?.gpcVerification) && typeof row?.gpcVerification === "object") ||
+    input.fallbackEvidenceRows.some((row) => hasConcretePreconsentArtifact(row)) ||
     input.fallbackEvidenceRows.some((row) => (getContradictionEvidenceBundle(row)?.runtimeEvidenceArtifacts.length ?? 0) > 0) ||
     input.fallbackEvidenceRows.some((row) => hasConcreteSanitizedNetworkEvidence(row)) ||
     validationEvidenceRows.some((row) =>
@@ -3067,6 +3095,22 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   retargeting_pixel_observed: {
     suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",
     whyThisMatters: "A retargeting-related signal can indicate advertising or remarketing infrastructure, but detector-only evidence should be confirmed against retained runtime artifacts before treating it as a confirmed pixel deployment."
+  },
+  fingerprinting_observed: {
+    suggestedFix: "Review the scripts collecting multiple device or browser attributes and gate that activity until it is clearly necessary, disclosed, and consent-aligned.",
+    whyThisMatters: "Multi-signal browser fingerprinting can make a site more privacy-invasive by identifying browsers or devices without relying only on cookies."
+  },
+  popup_behavior_observed: {
+    suggestedFix: "Reduce or defer popup behavior so users can reach core content without immediate interruption or repeated takeover prompts.",
+    whyThisMatters: "Frequent or early popup behavior can make the site feel intrusive and can interfere with user choice or content access."
+  },
+  blocking_overlay_observed: {
+    suggestedFix: "Remove or soften blocking overlays unless they are strictly necessary, and make sure users can still reach content or dismiss the takeover clearly.",
+    whyThisMatters: "Blocking overlays can obstruct content and limit meaningful interaction when they appear before users can engage with the page normally."
+  },
+  autoplay_media_observed: {
+    suggestedFix: "Disable autoplay by default or ensure media starts only after a clear user action, especially on landing pages and consent-sensitive flows.",
+    whyThisMatters: "Autoplaying audio or video can create intrusive page behavior and may undermine user expectations around control and accessibility."
   },
   gpc_disclosure_present: {
     suggestedFix: "Keep the GPC disclosure aligned with actual enforcement behavior and any related sale, sharing, or targeted-advertising controls.",
@@ -4180,14 +4224,20 @@ export function buildUnifiedFindingPackets(input: {
 }
 
 export function buildUnifiedFindingDisplayPackets(input: {
+  mergedSignals?: MergedSignalRecord[];
   policyEnrichment?: Array<Record<string, unknown>>;
   reviewFindingCandidates: UnifiedFindingCandidate[];
   scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
   validationFindingLookup: Map<string, ScanValidationFinding>;
 }) {
+  const mergedSignalCandidates = input.mergedSignals
+    ? buildReviewFindingCandidatesFromMergedSignals({
+        mergedSignals: input.mergedSignals
+      })
+    : [];
   const packets = buildUnifiedFindingPackets({
-    reviewFindingCandidates: input.reviewFindingCandidates,
+    reviewFindingCandidates: [...input.reviewFindingCandidates, ...mergedSignalCandidates],
     scanEvents: input.scanEvents,
     validationFindings: input.validationFindings
   });

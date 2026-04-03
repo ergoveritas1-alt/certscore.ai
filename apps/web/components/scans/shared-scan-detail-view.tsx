@@ -11,9 +11,16 @@ import {
   type ReportSignalDefinition
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { CookieStoragePanel } from "./cookie-storage-panel";
+import { DiagnosticsPanel } from "./diagnostics-panel";
+import { ExecutiveSummaryCard } from "./executive-summary-card";
+import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
+import { FingerprintingPanel } from "./fingerprinting-panel";
 import { InfoTip } from "./info-tip";
+import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { ScanPageHeader } from "./scan-page-header";
+import { VendorFootprintCard } from "./vendor-footprint-card";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
   EMPHASIS_METRIC_CARD_VALUE_CLASS,
@@ -35,6 +42,15 @@ import {
   buildChildContextFallbackEvidence,
   isChildContextSignalKey
 } from "../../lib/scans/signal-fallback-evidence";
+import {
+  deriveCertScoreFindings,
+} from "../../lib/scans/derive-findings";
+import {
+  getHybridDerivedSignalValue,
+  getHybridRuntimeEvidence,
+  getHybridSignalFallbackEvidence
+} from "../../lib/scans/hybrid-runtime-evidence";
+import { selectTopFindings } from "../../lib/scans/rank-findings";
 import {
   buildUnifiedFindingDisplayPackets,
   getUnifiedFindingCategoryRelation,
@@ -211,6 +227,10 @@ function getSnapshotBoolean(snapshot: Record<string, unknown>, key: string) {
   return snapshot[key] === true;
 }
 
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
 function getRecordBoolean(record: unknown, key: string) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     return false;
@@ -238,6 +258,50 @@ function getRecordObjectArray(record: Record<string, unknown> | null | undefined
   return Array.isArray(value)
     ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
     : [];
+}
+
+function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  if (!hybrid) {
+    return null;
+  }
+
+  const networkSummary = getRecord(hybrid.networkSummary);
+  const consentSummary = getRecord(hybrid.consentSummary);
+  const storageSummary = getRecord(hybrid.storageSummary);
+  const uiSummary = getRecord(hybrid.uiSummary);
+  const mediaSummary = getRecord(hybrid.mediaSummary);
+  const fingerprintSummary = getRecord(hybrid.fingerprintSummary);
+  const vendorSummary = getRecord(hybrid.vendorSummary);
+
+  return [
+    { label: "Requests observed", value: networkSummary?.totalRequestCount },
+    { label: "Third-party requests", value: networkSummary?.thirdPartyRequestCount },
+    { label: "Third-party domains", value: vendorSummary?.rawThirdPartyDomains },
+    { label: "Consent banner", value: consentSummary?.bannerPresent },
+    { label: "Reject option present", value: consentSummary?.rejectPresent },
+    { label: "Cookie wall detected", value: consentSummary?.cookieWallDetected },
+    { label: "Cookies seen", value: storageSummary?.cookiesSeenCount },
+    {
+      label: "Storage writes",
+      value:
+        storageSummary?.localStorageWriteDetected === true || storageSummary?.sessionStorageWriteDetected === true
+          ? "Observed"
+          : "Not observed"
+    },
+    { label: "Fingerprint tier", value: fingerprintSummary?.tier },
+    { label: "Fingerprint reasons", value: fingerprintSummary?.reasons },
+    { label: "Popup count", value: uiSummary?.popupCount },
+    {
+      label: "Overlay or forced action",
+      value:
+        uiSummary?.overlayDetected === true || uiSummary?.forcedActionRequired === true || uiSummary?.interstitialDetected === true
+    },
+    {
+      label: "Autoplay observed",
+      value: mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true
+    }
+  ];
 }
 
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
@@ -1166,6 +1230,11 @@ function getReportSignalValue(input: {
   snapshot: Record<string, unknown> | null;
   signal: ReportSignalDefinition;
 }) {
+  const hybridDerivedValue = getHybridDerivedSignalValue(input.runtimeArtifacts, input.signal.key);
+  if (hybridDerivedValue !== undefined) {
+    return hybridDerivedValue;
+  }
+
   if (input.signal.source === "snapshot_signal") {
     return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? findPersistedSignalValue(input.signals, input.signal.key);
   }
@@ -1221,6 +1290,7 @@ function isConcerningSignal(key: string, value: unknown) {
   const negativePatterns = [
     /dark_pattern/,
     /preconsent/,
+    /fingerprinting/,
     /gpc_signal_not_honored/,
     /weak_cookie_security_attributes_detected/,
     /conflict/,
@@ -1235,6 +1305,9 @@ function isConcerningSignal(key: string, value: unknown) {
     /service_suspension_or_termination/,
     /retargeting_pixel/,
     /session_replay/,
+    /popup_behavior/,
+    /autoplay_media/,
+    /overlay_blocking/,
     /functional_misalignment/,
     /technical_disclosure/,
     /disclosure_gap/,
@@ -1288,8 +1361,16 @@ function getSignalConcernReason(key: string, value: unknown) {
     return "Observed before a clear user choice was made.";
   }
 
+  if (/fingerprinting/i.test(key)) {
+    return "Observed coordinated browser or device attribute collection consistent with fingerprinting review risk.";
+  }
+
   if (/gpc_signal_not_honored/i.test(key)) {
     return "A browser-level opt-out preference signal appears not to have been honored during the scan.";
+  }
+
+  if (/popup_behavior|autoplay_media|overlay_blocking/i.test(key)) {
+    return "Observed intrusive or blocking runtime behavior that may interfere with normal page use.";
   }
 
   if (/children_audience_likely|kid_directed_content_detected|form_collects_birthdate|policyChildrenReference/i.test(key)) {
@@ -1406,6 +1487,7 @@ function buildSectionReviewIssues(input: {
   consentAuditFindings: PreviewSampleFinding[];
   policyBehaviorContradictions: PolicyBehaviorContradiction[];
   preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
+  runtimeArtifacts: Record<string, unknown> | null;
   scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"];
   sectionId: string;
   snapshot: Record<string, unknown>;
@@ -1500,6 +1582,15 @@ function buildSectionReviewIssues(input: {
     issues.push({
       description: `Observed vendor activity before consent for ${input.preconsentViolationRows.length} vendor${input.preconsentViolationRows.length === 1 ? "" : "s"}.`,
       evidence: input.preconsentViolationRows.flatMap((row) => row.evidenceUrls).slice(0, 3),
+      fallbackEvidence: {
+        preconsent_tracker_evidence_urls: uniqueStrings(
+          input.preconsentViolationRows.flatMap((row) => row.evidenceUrls)
+        ),
+        preconsent_tracker_vendors: uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName)),
+        preconsent_tracking_detected: true,
+        supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
+        tracking_before_consent_detected: true
+      },
       severity: "high",
       title: "Pre-consent tracking incidents detected"
     });
@@ -1507,11 +1598,44 @@ function buildSectionReviewIssues(input: {
 
   if (input.sectionId === "consent_controls_enforcement") {
     issues.push(
-      ...input.consentAuditFindings.map((finding) => ({
-        description: finding.description,
-        severity: finding.severity === "info" ? "low" : finding.severity,
-        title: finding.title
-      }))
+      ...input.consentAuditFindings.map((finding) => {
+        const baselineTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names");
+        const baselineTrackerEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
+        const persistedTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_reject_persisted_tracker_vendor_names");
+        const newTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_reject_new_tracker_vendor_names");
+        const postRejectTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_post_reject_tracker_vendor_names");
+
+        let fallbackEvidence: Record<string, unknown> | undefined;
+        if (finding.title === "Trackers fired before consent interaction") {
+          fallbackEvidence = {
+            preconsent_tracker_evidence_urls: baselineTrackerEvidenceUrls,
+            preconsent_tracker_vendors: baselineTrackerVendors,
+            preconsent_tracking_detected: true,
+            supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
+            tracking_before_consent_detected: true
+          };
+        } else if (finding.title === "Reject interaction did not reduce tracking") {
+          fallbackEvidence = {
+            persisted_tracker_vendors: uniqueStrings([...persistedTrackerVendors, ...newTrackerVendors, ...postRejectTrackerVendors]),
+            post_reject_tracker_vendors: postRejectTrackerVendors,
+            reject_did_not_reduce_tracking: true,
+            runtimeEvidenceUrls: baselineTrackerEvidenceUrls
+          };
+        } else if (finding.title === "Reject interaction did not reduce third-party cookies") {
+          fallbackEvidence = {
+            consent_post_reject_third_party_cookie_count: input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count ?? null,
+            consent_reject_reduced_third_party_cookies: false,
+            consentBaselineTrackerEvidenceUrls: baselineTrackerEvidenceUrls
+          };
+        }
+
+        return {
+          description: finding.description,
+          fallbackEvidence,
+          severity: finding.severity === "info" ? "low" : finding.severity,
+          title: finding.title
+        };
+      })
     );
   }
 
@@ -1757,7 +1881,7 @@ function buildReviewFindings(input: {
         signalKey: item.key
       });
 
-      const fallbackEvidence =
+      const baseFallbackEvidence =
         isRightsFrictionSignal(item.key)
           ? {
               consentBlockerPageTitle:
@@ -1893,6 +2017,16 @@ function buildReviewFindings(input: {
                   signalLabel: item.label,
                   signalValue: item.value
                 };
+      const hybridFallbackEvidence = getHybridSignalFallbackEvidence({
+        runtimeArtifacts: input.runtimeArtifacts,
+        signalKey: item.key,
+        signalLabel: item.label,
+        signalValue: item.value
+      });
+      const fallbackEvidence =
+        hybridFallbackEvidence && baseFallbackEvidence
+          ? { ...baseFallbackEvidence, ...hybridFallbackEvidence }
+          : hybridFallbackEvidence ?? baseFallbackEvidence;
 
       if (!shouldSurfacePrimarySignalFinding({
         fallbackEvidence,
@@ -1960,6 +2094,14 @@ function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewF
 
   if (/preconsent|tracking_before_consent|session_replay|conflict|mismatch/i.test(key)) {
     return "high";
+  }
+
+  if (/fingerprinting/i.test(key)) {
+    return "high";
+  }
+
+  if (/popup_behavior|autoplay_media|overlay_blocking/i.test(key)) {
+    return "medium";
   }
 
   if (/gpc_signal_not_honored/i.test(key)) {
@@ -2083,12 +2225,17 @@ function summarizeObservedIssueEvidence(evidence: string[] | undefined, severity
     return `${severity} severity`;
   }
 
-  const nonUrlEvidence = evidence.filter((entry) => !/^https?:\/\//i.test(entry.trim()));
+  const normalizedEvidence = evidence.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  if (normalizedEvidence.length === 0) {
+    return `${severity} severity`;
+  }
+
+  const nonUrlEvidence = normalizedEvidence.filter((entry) => !/^https?:\/\//i.test(entry.trim()));
   if (nonUrlEvidence.length > 0) {
     return summarizeReviewIssueEvidence(nonUrlEvidence);
   }
 
-  return evidence.length === 1 ? "Linked evidence available" : `${evidence.length} linked evidence items`;
+  return normalizedEvidence.length === 1 ? "Linked evidence available" : `${normalizedEvidence.length} linked evidence items`;
 }
 
 function isPositiveSurfaceFinding(finding: UnifiedFindingDisplayPacket) {
@@ -3294,14 +3441,14 @@ function AgencyAdvisorySummary(input: {
   const maxThemeCount = topThemes.reduce((max, theme) => Math.max(max, theme.count), 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-6 py-5">
       <div className="space-y-4">
-        <p className="text-base font-semibold text-slate-900">Executive summary</p>
+        <p className="text-base font-semibold text-slate-900">Supporting analysis</p>
 
         {topThemes.length > 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Findings</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Finding mix</p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
@@ -3360,7 +3507,7 @@ function AgencyAdvisorySummary(input: {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Coverage navigation</p>
-              <p className="text-xs text-slate-500">Jump to a report section in the matrix below.</p>
+              <p className="text-xs text-slate-500">Jump into the lower taxonomy matrix if you need section-level review.</p>
             </div>
             <div className="grid gap-2 md:grid-cols-5">
               {input.sectionTiles.map((metric) => (
@@ -3670,7 +3817,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-6 py-5">
       <details className="group/noteworthy" open={true}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
           <span className="flex min-w-0 items-center gap-3">
@@ -3679,7 +3826,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
             </span>
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="text-base font-semibold text-slate-900">Issues To Review</span>
+                <span className="text-base font-semibold text-slate-900">Detailed review findings</span>
                 <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-800">
                   {highPriorityCount} high
                 </span>
@@ -3691,7 +3838,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
                 </span>
               </span>
               <p className="mt-1 text-sm text-slate-500">
-                The main surfaced issues from this scan, prioritized for review and remediation.
+                Expanded finding packets, evidence lanes, and review-oriented detail from the lower taxonomy layer.
                 {lowPriorityCount > 0 ? ` This scan also surfaced ${lowPriorityCount} advisory finding${lowPriorityCount === 1 ? "" : "s"} shown in blue.` : ""}
               </p>
             </span>
@@ -4133,10 +4280,20 @@ function HomepagePreviewGate(input: {
   );
 }
 
-export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
+export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse) {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
-    return [] as UnifiedFindingDisplayPacket[];
+    return {
+      allReviewFindingCandidates: [] as CanonicalReviewFinding[],
+      globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      sectionDrafts: [] as Array<{
+        sections: Array<{
+          categories: Array<{ reviewFindings: CanonicalReviewFinding[] }>;
+          issueFindings: CanonicalReviewFinding[];
+          sectionCategoryIds: Set<string>;
+        }>;
+      }>
+    };
   }
 
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
@@ -4231,6 +4388,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
           consentAuditFindings,
           policyBehaviorContradictions,
           preconsentViolationRows,
+          runtimeArtifacts,
           scanReportReviewIssues,
           sectionId: section.id,
           snapshot
@@ -4264,12 +4422,43 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
       ])
     );
     const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+      mergedSignals: scanRecord.mergedSignals,
       policyEnrichment: scanRecord.policyEnrichment,
       reviewFindingCandidates: allReviewFindingCandidates,
       scanEvents: scanRecord.events,
       validationFindings: scanRecord.validationFindings,
       validationFindingLookup
     }).filter((finding) => finding.presentationDecision.status !== "suppress");
+
+    return {
+      allReviewFindingCandidates,
+      globalUnifiedFindings,
+      sectionDrafts
+    };
+  } catch (error) {
+    console.error("Failed to build scan report unified finding state", error);
+    return {
+      allReviewFindingCandidates: [] as CanonicalReviewFinding[],
+      globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      sectionDrafts: [] as Array<{
+        sections: Array<{
+          categories: Array<{ reviewFindings: CanonicalReviewFinding[] }>;
+          issueFindings: CanonicalReviewFinding[];
+          sectionCategoryIds: Set<string>;
+        }>;
+      }>
+    };
+  }
+}
+
+export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+
+  try {
+    const { globalUnifiedFindings, sectionDrafts } = debugBuildScanReportUnifiedFindingState(scanRecord);
 
     const pillarSections = sectionDrafts.map(({ sections }) => {
       return {
@@ -4368,6 +4557,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         consentAuditFindings: input.consentAuditFindings,
         policyBehaviorContradictions: input.policyBehaviorContradictions,
         preconsentViolationRows: input.preconsentViolationRows,
+        runtimeArtifacts: input.scanRecord.runtimeArtifacts,
         scanReportReviewIssues: input.scanReportReviewIssues,
         sectionId: section.id,
         snapshot: input.snapshot
@@ -4402,6 +4592,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
     ])
   );
   const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+    mergedSignals: input.scanRecord.mergedSignals,
     policyEnrichment: input.scanRecord.policyEnrichment,
     reviewFindingCandidates: allReviewFindingCandidates,
     scanEvents: input.scanRecord.events,
@@ -4489,7 +4680,12 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   return (
     <div className="space-y-6">
       {!suppressEmptyBlockedChrome ? (
-        <>
+        <CollapsibleSectionCard
+          title="Analyst detail"
+          subtitle="Expanded taxonomy review, coverage matrix, and supporting evidence below the executive findings layer."
+          defaultOpen={false}
+          contentClassName="space-y-6"
+        >
           <AgencyAdvisorySummary
             badges={input.executiveSummary.badges}
             findings={reviewFindings}
@@ -4522,7 +4718,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
               <HomepagePreviewGate href={input.createAccountHref} mode="partial" />
             ) : null}
           </div>
-        </>
+        </CollapsibleSectionCard>
       ) : null}
     </div>
   );
@@ -4577,6 +4773,233 @@ function summarizeReviewIssueEvidence(evidence: string[]) {
   return remainingCount > 0
     ? `${first} | ${second} | +${remainingCount} more`
     : `${first} | ${second}`;
+}
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+function getResultStatusTone(status: string) {
+  switch (status) {
+    case "completed":
+      return {
+        badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
+        panel: "from-emerald-100 via-white to-sky-100"
+      };
+    case "failed":
+      return {
+        badge: "border-rose-200 bg-rose-50 text-rose-800",
+        panel: "from-rose-100 via-white to-orange-100"
+      };
+    case "running":
+    case "queued":
+      return {
+        badge: "border-sky-200 bg-sky-50 text-sky-800",
+        panel: "from-sky-100 via-white to-cyan-100"
+      };
+    default:
+      return {
+        badge: "border-slate-200 bg-slate-50 text-slate-700",
+        panel: "from-slate-100 via-white to-slate-50"
+      };
+  }
+}
+
+function buildResultHeroHighlights(input: {
+  findingPackets: UnifiedFindingDisplayPacket[];
+  hybridRuntimeSummaryRows: Array<{ label: string; value: unknown }> | null;
+  runtimeArtifacts: Record<string, unknown> | null;
+}) {
+  const highlights: string[] = [];
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentSummary = getRecord(hybrid?.consentSummary);
+  const consentVisual = getRecord(hybrid?.consentVisual);
+  const uiSummary = getRecord(hybrid?.uiSummary);
+  const mediaSummary = getRecord(hybrid?.mediaSummary);
+  const fingerprintSummary = getRecord(hybrid?.fingerprintSummary);
+  const networkSummary = getRecord(hybrid?.networkSummary);
+
+  if ((getFiniteNumber(networkSummary?.preConsentThirdPartyRequestCount) ?? 0) > 0) {
+    highlights.push("Pre-consent tracking observed");
+  }
+  if (consentSummary?.cookieWallDetected === true || uiSummary?.forcedActionRequired === true) {
+    highlights.push("Consent wall or forced interaction");
+  }
+  if (consentSummary?.rejectPresent === false || consentVisual?.rejectHidden === true) {
+    highlights.push("Reject path weakened");
+  }
+  if ((getFiniteNumber(fingerprintSummary?.tier) ?? 0) >= 2) {
+    highlights.push(`Fingerprinting tier ${fingerprintSummary?.tier}`);
+  }
+  if ((getFiniteNumber(uiSummary?.popupCount) ?? 0) > 0) {
+    highlights.push("Popup behavior observed");
+  }
+  if (mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true) {
+    highlights.push("Autoplay observed");
+  }
+
+  if (highlights.length === 0) {
+    const topFindings = input.findingPackets
+      .slice(0, 3)
+      .map((finding) => finding.presentation.findingName)
+      .filter((value, index, values) => values.indexOf(value) === index);
+    highlights.push(...topFindings);
+  }
+
+  if (highlights.length === 0 && input.hybridRuntimeSummaryRows) {
+    const nonEmptyLabels = input.hybridRuntimeSummaryRows
+      .filter((row) => row.value !== null && row.value !== undefined && row.value !== false)
+      .slice(0, 3)
+      .map((row) => row.label);
+    highlights.push(...nonEmptyLabels);
+  }
+
+  return highlights.slice(0, 4);
+}
+
+function ResultHeroPanel(input: {
+  consentAuditCompleted: boolean;
+  consentRejectInteractionSucceeded: boolean;
+  consentRejectReducedTracking: unknown;
+  findingPackets: UnifiedFindingDisplayPacket[];
+  hybridRuntimeSummaryRows: Array<{ label: string; value: unknown }> | null;
+  preConsentTrackingObserved: boolean;
+  runtimeArtifacts: Record<string, unknown> | null;
+  scanExecutionSummary: ReturnType<typeof deriveScanExecutionSummary>;
+  scanRecord: ScanDetailResponse;
+}) {
+  const tone = getResultStatusTone(input.scanRecord.scan.status);
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const networkSummary = getRecord(hybrid?.networkSummary);
+  const vendorSummary = getRecord(hybrid?.vendorSummary);
+  const fingerprintSummary = getRecord(hybrid?.fingerprintSummary);
+  const uiSummary = getRecord(hybrid?.uiSummary);
+  const surfacedCount = input.findingPackets.length;
+  const highlights = buildResultHeroHighlights({
+    findingPackets: input.findingPackets,
+    hybridRuntimeSummaryRows: input.hybridRuntimeSummaryRows,
+    runtimeArtifacts: input.runtimeArtifacts
+  });
+  const scoreTiles = [
+    {
+      label: "Surfaced findings",
+      value: surfacedCount > 0 ? surfacedCount : "None"
+    },
+    {
+      label: "Third-party domains",
+      value: getRecordStringArray(vendorSummary, "rawThirdPartyDomains").length || "None"
+    },
+    {
+      label: "Fingerprint tier",
+      value: getFiniteNumber(fingerprintSummary?.tier) ?? "0"
+    },
+    {
+      label: "Runtime friction",
+      value:
+        uiSummary?.forcedActionRequired === true
+          ? "Forced"
+          : uiSummary?.overlayDetected === true
+            ? "Overlay"
+            : "Clear"
+    }
+  ];
+
+  return (
+    <section
+      className={cx(
+        "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] md:p-7",
+        tone.panel
+      )}
+    >
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.10),transparent_52%)]" />
+      <div className="relative grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cx("rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", tone.badge)}>
+              {input.scanRecord.scan.status}
+            </span>
+            {input.scanExecutionSummary ? (
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-xs font-medium text-slate-700">
+                {input.scanExecutionSummary.title}
+              </span>
+            ) : null}
+            {input.preConsentTrackingObserved ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs font-medium text-amber-800">
+                Pre-consent activity
+              </span>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="max-w-4xl text-3xl font-semibold tracking-tight text-slate-950 md:text-[2.1rem]">
+              {input.scanRecord.scan.domainHostname ?? "Scan results"}
+            </h2>
+            <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-[15px]">
+              {surfacedCount > 0
+                ? `The primary scan surfaced ${surfacedCount} prioritized finding${surfacedCount === 1 ? "" : "s"} with hybrid runtime evidence driving consent, tracking, and intrusive-behavior coverage.`
+                : "The hybrid scanner completed with a lighter runtime footprint and no prioritized findings surfaced at the top layer."}
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-[1.35rem] border border-white/70 bg-white/78 p-4 backdrop-blur">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Consent posture</p>
+              <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                {input.consentAuditCompleted
+                  ? input.consentRejectInteractionSucceeded
+                    ? input.consentRejectReducedTracking === true
+                      ? "Reject reduced tracking"
+                      : input.consentRejectReducedTracking === false
+                        ? "Reject did not reduce tracking"
+                        : "Reject path completed"
+                    : "Audit incomplete"
+                  : "Runtime-only coverage"}
+              </p>
+            </div>
+            <div className="rounded-[1.35rem] border border-white/70 bg-white/78 p-4 backdrop-blur">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Network posture</p>
+              <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                {(getFiniteNumber(networkSummary?.thirdPartyRequestCount) ?? 0) > 0
+                  ? `${getFiniteNumber(networkSummary?.thirdPartyRequestCount) ?? 0} third-party requests`
+                  : "No third-party traffic observed"}
+              </p>
+            </div>
+            <div className="rounded-[1.35rem] border border-white/70 bg-white/78 p-4 backdrop-blur">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Signals in focus</p>
+              <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                {highlights[0] ?? "No high-priority runtime flags"}
+              </p>
+            </div>
+          </div>
+
+          {highlights.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {highlights.map((highlight) => (
+                <span
+                  key={highlight}
+                  className="rounded-full border border-slate-200/80 bg-white/70 px-3 py-1.5 text-xs font-medium text-slate-700 backdrop-blur"
+                >
+                  {highlight}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          {scoreTiles.map((tile) => (
+            <div
+              key={tile.label}
+              className="rounded-[1.4rem] border border-slate-200/80 bg-white/78 p-4 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur"
+            >
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{tile.label}</p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{tile.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function ResultCategorySection(input: {
@@ -4704,6 +5127,32 @@ export function SharedScanDetailView({
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const hybridRuntimeSummaryRows = getHybridRuntimeSummaryRows(runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary);
+  const hybridStorageSummary = getRecord(hybridRuntimeEvidence?.storageSummary);
+  const hybridFingerprintSummary = getRecord(hybridRuntimeEvidence?.fingerprintSummary);
+  const hybridNavigationSummary = getRecord(hybridRuntimeEvidence?.navigationSummary);
+  const hybridUiSummary = getRecord(hybridRuntimeEvidence?.uiSummary);
+  const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
+  const fallbackInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
+  const certScoreSummary = deriveCertScoreFindings(scanRecord);
+  const cookiesSeenCount = Math.max(
+    getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
+    getRecordNumber(snapshot, "cookie_count_total") ?? 0,
+    fallbackInitialCookieCount
+  );
+  const thirdPartyCookiesSeenCount = Math.max(
+    getRecordNumber(hybridStorageSummary, "thirdPartyCookieCount") ?? 0,
+    getRecordNumber(snapshot, "third_party_cookie_count") ?? 0,
+    certScoreSummary.thirdPartyCookieNamesSeen.length
+  );
+  const cookiesBeforeConsentCount = Math.max(
+    getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
+    certScoreSummary.cookieNamesBeforeConsent.length,
+    fallbackInitialCookieCount
+  );
+  const topCertScoreFindings = selectTopFindings(certScoreSummary.findings, 5);
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
   let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
@@ -4823,6 +5272,11 @@ export function SharedScanDetailView({
   ]);
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const findingEvidenceDiagnostics = snapshot && !reviewSectionError ? buildScanReportUnifiedFindings(scanRecord) : [];
+  const shouldPreferCanonicalReview =
+    findingEvidenceDiagnostics.length > 0 ||
+    scanRecord.policyEnrichment.length > 0 ||
+    scanRecord.preconsentViolations.length > 0 ||
+    scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
@@ -4868,6 +5322,96 @@ export function SharedScanDetailView({
           status={scanRecord.scan.status}
         />
       ) : null}
+      <ExecutiveSummaryCard
+        beforeConsentCookieCount={cookiesBeforeConsentCount}
+        finalHost={certScoreSummary.finalHost}
+        fingerprintLabel={certScoreSummary.fingerprintLabel}
+        fingerprintNarrative={certScoreSummary.fingerprintNarrative}
+        landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
+        lastScannedAt={certScoreSummary.lastScannedAt}
+        posture={certScoreSummary.posture}
+        requestedHost={certScoreSummary.requestedHost}
+        score={certScoreSummary.score}
+        thirdPartyRequestCount={certScoreSummary.thirdPartyRequestCount}
+        topFindings={topCertScoreFindings}
+        trackerSummary={certScoreSummary.trackerSummary}
+        vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
+      />
+      {certScoreSummary.findings.length > 0 ? (
+        <section className="space-y-6">
+          <div className="space-y-2.5">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Key risk signals</p>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Evidence-backed findings</h2>
+            <p className="max-w-3xl text-sm leading-6 text-slate-600">
+              Plain-language findings first. Direct evidence, confidence, and analyst detail are available immediately below each card.
+            </p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <VendorFootprintCard
+              adtechHosts={certScoreSummary.rawAdtechHosts}
+              domains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
+              preConsentVendors={certScoreSummary.preConsentVendorNames}
+              sessionReplayVendors={certScoreSummary.sessionReplayVendorNames}
+              topObservedEntities={certScoreSummary.topObservedEntities}
+              trackerSummary={certScoreSummary.trackerSummary}
+              unresolvedHosts={certScoreSummary.unresolvedVendorHosts}
+              vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
+              vendors={certScoreSummary.resolvedVendorNames}
+            />
+            <FingerprintingPanel
+              categories={getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
+                count: typeof row.count === "number" ? row.count : 0,
+                firstSeenMs: typeof row.firstSeenMs === "number" ? row.firstSeenMs : null,
+                name: typeof row.name === "string" ? row.name : "unknown"
+              }))}
+              confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
+              label={certScoreSummary.fingerprintLabel}
+              narrative={certScoreSummary.fingerprintNarrative}
+              reasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
+            />
+            <CookieStoragePanel
+              adtechCookieNames={certScoreSummary.adtechCookieNames}
+              analyticsCookieNames={certScoreSummary.analyticsCookieNames}
+              cookieNamesBeforeConsent={certScoreSummary.cookieNamesBeforeConsent}
+              cookiesBeforeConsentCount={certScoreSummary.cookieNamesBeforeConsent.length > 0 ? certScoreSummary.cookieNamesBeforeConsent.length : cookiesBeforeConsentCount}
+              cookiesSeenCount={cookiesSeenCount}
+              localStorageKeys={getRecordStringArray(hybridStorageSummary, "localStorageKeySample")}
+              securityCookieNames={certScoreSummary.securityCookieNames}
+              sessionStorageKeys={getRecordStringArray(hybridStorageSummary, "sessionStorageKeySample")}
+              storageWrittenBeforeConsent={hybridStorageSummary?.storageWrittenBeforeConsent === true}
+              thirdPartyCookieNames={certScoreSummary.thirdPartyCookieNamesSeen}
+              thirdPartyCookieBeforeConsentCount={
+                certScoreSummary.thirdPartyCookieNamesBeforeConsent.length > 0
+                  ? certScoreSummary.thirdPartyCookieNamesBeforeConsent.length
+                  : (getRecordNumber(hybridStorageSummary, "thirdPartyCookieBeforeConsentCount") ?? 0)
+              }
+              thirdPartyCookieNamesBeforeConsent={certScoreSummary.thirdPartyCookieNamesBeforeConsent}
+              thirdPartyCookiesSeenCount={thirdPartyCookiesSeenCount}
+            />
+            <RedirectFlowPanel
+              autoRedirect={hybridNavigationSummary?.autoRedirect === true}
+              crossDomainHopCount={getRecordNumber(hybridNavigationSummary, "crossDomainHopCount") ?? 0}
+              finalUrl={typeof hybridNavigationSummary?.finalUrl === "string" ? hybridNavigationSummary.finalUrl : null}
+              initialUrl={typeof hybridNavigationSummary?.initialUrl === "string" ? hybridNavigationSummary.initialUrl : null}
+              redirectHopCount={getRecordNumber(hybridNavigationSummary, "redirectHopCount") ?? 0}
+            />
+            <div className="xl:col-span-2">
+              <DiagnosticsPanel
+                autoplayObserved={hybridMediaSummary?.autoplayVideoObserved === true || hybridMediaSummary?.autoplayAudioObserved === true}
+                forcedActionRequired={hybridUiSummary?.forcedActionRequired === true}
+                interstitialDetected={hybridUiSummary?.interstitialDetected === true}
+                overlayDetected={hybridUiSummary?.overlayDetected === true}
+                popupCount={getRecordNumber(hybridUiSummary, "popupCount") ?? 0}
+              />
+            </div>
+          </div>
+          <div className="space-y-5">
+            {certScoreSummary.groupedFindings.map((group) => (
+              <FindingsSection key={group.section} findings={group.findings} section={group.section} />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <AccessPostureSummaryCard summary={scanRecord.accessPostureSummary} />
       {snapshot ? (
         <>
@@ -4876,7 +5420,7 @@ export function SharedScanDetailView({
               title="Review sections unavailable"
               message={`The live scan loaded, but the structured review sections could not be prepared for this scan. ${reviewSectionError}`}
             />
-          ) : unverifiedHomepageReview && !suppressLimitedSurfaceReview ? (
+          ) : unverifiedHomepageReview && !suppressLimitedSurfaceReview && !shouldPreferCanonicalReview ? (
             <LimitedSurfaceReview review={unverifiedHomepageReview} />
           ) : (
             renderCanonicalTaxonomyReviewSafely({
@@ -5186,20 +5730,26 @@ export function SharedScanDetailView({
           <CollapsibleSectionCard
             title={
               <span className="flex items-center gap-1.5">
-                <span>Runtime evidence</span>
-                <InfoTip text="Compact browser-run evidence such as request domains, cookie counts, script domains, and DOM summary fields. Raw HTML and screenshots are not stored." />
+                <span>{hybridRuntimeSummaryRows ? "Hybrid Runtime Evidence" : "Runtime evidence"}</span>
+                <InfoTip text="Compact browser-run evidence from the active hybrid scanner. When available, this summary is sourced directly from hybrid runtime evidence instead of legacy flat runtime fields." />
               </span>
             }
             contentClassName="grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4"
           >
-            <p>Third-party request count: {formatValue(runtimeArtifacts.third_party_request_count)}</p>
-            <p>Third-party request domains: {formatValue(runtimeArtifacts.third_party_request_domains)}</p>
-            <p>Initial cookie count: {formatValue(runtimeArtifacts.initial_cookie_count)}</p>
-            <p>Initial cookie names: {formatValue(runtimeArtifacts.initial_cookie_names)}</p>
-            <p>Script tag count: {formatValue(runtimeArtifacts.script_tag_count)}</p>
-            <p>Script source domains: {formatValue(runtimeArtifacts.script_src_domains)}</p>
-            <p>DOM node count: {formatValue(runtimeArtifacts.dom_node_count)}</p>
-            <p>DOM structure hash: {formatValue(runtimeArtifacts.dom_structure_hash)}</p>
+            {hybridRuntimeSummaryRows
+              ? hybridRuntimeSummaryRows.map((row) => <p key={row.label}>{row.label}: {formatValue(row.value)}</p>)
+              : (
+                <>
+                  <p>Third-party request count: {formatValue(runtimeArtifacts.third_party_request_count)}</p>
+                  <p>Third-party request domains: {formatValue(runtimeArtifacts.third_party_request_domains)}</p>
+                  <p>Initial cookie count: {formatValue(runtimeArtifacts.initial_cookie_count)}</p>
+                  <p>Initial cookie names: {formatValue(runtimeArtifacts.initial_cookie_names)}</p>
+                  <p>Script tag count: {formatValue(runtimeArtifacts.script_tag_count)}</p>
+                  <p>Script source domains: {formatValue(runtimeArtifacts.script_src_domains)}</p>
+                  <p>DOM node count: {formatValue(runtimeArtifacts.dom_node_count)}</p>
+                  <p>DOM structure hash: {formatValue(runtimeArtifacts.dom_structure_hash)}</p>
+                </>
+              )}
           </CollapsibleSectionCard>
         ) : null}
         </CollapsibleSectionCard>
