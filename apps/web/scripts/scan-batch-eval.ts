@@ -48,12 +48,9 @@ const DEFAULT_TIMEOUT_MS = 8 * 60_000;
 const DEFAULT_ENRICHMENT_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_QUEUE = "nano_doc_retrieval";
-const NANO_SIGNAL_ENRICHMENT_QUEUE = "nano_signal_enrichment";
 const NANO_DOC_RETRIEVAL_JOB = "nano_doc_retrieval";
-const NANO_SIGNAL_ENRICHMENT_JOB = "nano_signal_enrichment";
 
 let nanoDocQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
-let nanoSignalQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
@@ -101,41 +98,15 @@ function getNanoDocQueue() {
   return nanoDocQueue;
 }
 
-function getNanoSignalQueue() {
-  if (nanoSignalQueue) {
-    return nanoSignalQueue;
-  }
-
-  nanoSignalQueue = new Queue<{ pollCount?: number; scanId: string }>(NANO_SIGNAL_ENRICHMENT_QUEUE, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return nanoSignalQueue;
-}
-
 async function enqueueNanoSignalEnrichment(scanId: string) {
-  await Promise.all([
-    getNanoDocQueue().add(
-      NANO_DOC_RETRIEVAL_JOB,
-      { pollCount: 0, scanId },
-      {
-        attempts: 2,
-        jobId: `${scanId}--nano-doc-retrieval--initial`
-      }
-    ),
-    getNanoSignalQueue().add(
-      NANO_SIGNAL_ENRICHMENT_JOB,
-      { pollCount: 0, scanId },
-      {
-        attempts: 2,
-        jobId: `${scanId}--nano-doc-signals--initial`
-      }
-    )
-  ]);
+  await getNanoDocQueue().add(
+    NANO_DOC_RETRIEVAL_JOB,
+    { pollCount: 0, scanId },
+    {
+      attempts: 2,
+      jobId: `${scanId}--nano-doc-retrieval--initial`
+    }
+  );
 }
 
 function sleep(ms: number) {
