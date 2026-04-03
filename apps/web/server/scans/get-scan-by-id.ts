@@ -19,7 +19,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
+import { getHybridNanoSignalPopulations, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -801,34 +801,32 @@ async function loadScanDetailRecord(input: {
     primaryPolicyEnrichment,
     snapshot: normalizedSnapshot
   }));
-  const mergedSignals = buildMergedSignalRecords({
-    scannerSignals: buildScannerSignalPopulationRecords({
-      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
-      signals: [
-        ...normalizedSignals,
-        ...supplementalSnapshotSignals,
-        ...supplementalPolicySignals,
-        ...supplementalCoverageSignals.supplementalSignals.map((signal) => {
-          const taxonomy = mapSignalKeyToTaxonomy({
-            category: "disclosure",
-            key: signal.key,
-            label: signal.label
-          });
+  const scannerSignalPopulations = buildScannerSignalPopulationRecords({
+    observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+    signals: [
+      ...normalizedSignals,
+      ...supplementalSnapshotSignals,
+      ...supplementalPolicySignals,
+      ...supplementalCoverageSignals.supplementalSignals.map((signal) => {
+        const taxonomy = mapSignalKeyToTaxonomy({
+          category: "disclosure",
+          key: signal.key,
+          label: signal.label
+        });
 
-          return {
-            category: "disclosure",
-            primaryCategory: taxonomy.primaryCategory,
-            primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
-            primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
-            key: signal.key,
-            label: signal.label,
-            subcategory: taxonomy.subcategory ?? null,
-            value: signal.value,
-            valueType: Array.isArray(signal.value) ? "string_array" : "boolean"
-          } satisfies ScanSignalRecord;
-        })
-      ]
-    })
+        return {
+          category: "disclosure",
+          primaryCategory: taxonomy.primaryCategory,
+          primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+          primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+          key: signal.key,
+          label: signal.label,
+          subcategory: taxonomy.subcategory ?? null,
+          value: signal.value,
+          valueType: Array.isArray(signal.value) ? "string_array" : "boolean"
+        } satisfies ScanSignalRecord;
+      })
+    ]
   });
   const regulatorySnapshot = mergeRelatedPreviewSnapshot(normalizedSnapshot, normalizedRelatedPreviewSnapshot);
   const regulatoryRisk = snapshot
@@ -1091,6 +1089,10 @@ async function loadScanDetailRecord(input: {
     ? withHybridRuntimeArtifactFallbacks(stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)) ??
       stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
     : null;
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: getHybridNanoSignalPopulations(normalizedRuntimeArtifacts),
+    scannerSignals: scannerSignalPopulations
+  });
 
   return {
     accessPostureSummary: {

@@ -116,3 +116,27 @@ Nano should own signal backfill for:
 - any critical non-policy signal that the scanner did not retain directly but can still be substantiated from retrieved evidence
 
 Nano does not emit findings directly. It emits typed signal records with confidence, provenance, evidence refs, and population status.
+
+## Current Nano Ingestion Shape
+
+`WC01` now reads persisted nano signal rows from [scan_runtime_artifacts.hybrid_runtime_evidence](/Users/benmasek/WC01/packages/db/migrations/0081_runtime_hybrid_evidence.sql) before concern normalization and unified-finding promotion.
+
+Accepted payload keys under `hybrid_runtime_evidence`:
+
+- `nano_signals`
+- `nanoSignals`
+- `signal_populations`
+- `signalPopulations`
+
+Expected row fields:
+
+- `key`
+- `label`
+- `value`
+- `confidence`
+- `report_signal_source`
+- `evidence_refs`
+- `population_status`
+- optional provenance detail via `provenance_detail`, `provenanceDetail`, or `provenance`
+
+These rows are normalized into `source: "nano"` signal-population records and merged with scanner-owned populations before any downstream finding derivation.
