@@ -1,5 +1,6 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 
@@ -166,7 +167,12 @@ async function summarizeScan(input: {
   scanId: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
-  const [{ data: snapshot, error: snapshotError }, { data: events, error: eventsError }, { data: policyEnrichment, error: policyError }] =
+  const [
+    { data: snapshot, error: snapshotError },
+    { data: events, error: eventsError },
+    { data: policyEnrichment, error: policyError },
+    { data: documentSources, error: documentSourcesError }
+  ] =
     await Promise.all([
       input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
       input.supabase
@@ -174,7 +180,8 @@ async function summarizeScan(input: {
         .select("id, event_type, message, metadata_json, created_at")
         .eq("scan_id", input.scanId)
         .order("created_at", { ascending: true }),
-      input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true })
+      input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+      input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true })
     ]);
 
   if (snapshotError) {
@@ -186,6 +193,24 @@ async function summarizeScan(input: {
   if (policyError) {
     throw new Error(`Failed to load policy enrichment for ${input.hostname}: ${policyError.message}`);
   }
+  if (documentSourcesError) {
+    throw new Error(`Failed to load document sources for ${input.hostname}: ${documentSourcesError.message}`);
+  }
+
+  const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const policySemanticRows = preferDocumentSources
+    ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
+    : ((policyEnrichment ?? []) as Array<Record<string, unknown>>);
+  const normalizedPolicyRows = policySemanticRows.map((row, index) => {
+    const next = { ...row };
+    if (typeof next.id !== "string") {
+      next.id = typeof row.source_document_id === "string" ? row.source_document_id : `document-semantic-${index + 1}`;
+    }
+    delete next.created_at;
+    delete next.updated_at;
+    return next;
+  });
 
   const repairedEvents = repairFindingFamilyPacketEvents({
     events: ((events ?? []) as ScanEventRow[]).map((event) => ({
@@ -195,11 +220,11 @@ async function summarizeScan(input: {
       message: event.message,
       metadataJson: event.metadata_json
     })),
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>)
+    policyEnrichment: normalizedPolicyRows
   });
 
   const displayPackets = buildUnifiedFindingDisplayPackets({
-    policyEnrichment: (policyEnrichment ?? []) as Array<Record<string, unknown>>,
+    policyEnrichment: normalizedPolicyRows,
     reviewFindingCandidates: [],
     scanEvents: repairedEvents,
     validationFindings: [],
