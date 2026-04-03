@@ -113,6 +113,31 @@ function getExtractionReuseCount(rows: Array<Record<string, unknown>>) {
   }).length;
 }
 
+function getExtractionSkipCounts(rows: Array<Record<string, unknown>>) {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    const extractionStatus = typeof row.extraction_status === "string" ? row.extraction_status : null;
+    const metadata = row.metadata_json;
+    const reason =
+      extractionStatus === "insufficient" &&
+      metadata &&
+      typeof metadata === "object" &&
+      !Array.isArray(metadata) &&
+      typeof (metadata as Record<string, unknown>).extraction_skip_reason === "string"
+        ? ((metadata as Record<string, unknown>).extraction_skip_reason as string)
+        : null;
+
+    if (!reason) {
+      continue;
+    }
+
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+
+  return Object.fromEntries([...counts.entries()].sort(([left], [right]) => left.localeCompare(right)));
+}
+
 async function main() {
   const scanId = getArgValue("--scan-id");
   const json = hasFlag("--json");
@@ -224,6 +249,8 @@ async function main() {
   const readyDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "rejected");
   const reusedExtractionCount = getExtractionReuseCount(documentRows);
+  const skippedExtractionReasons = getExtractionSkipCounts(documentRows);
+  const skippedExtractionCount = Object.values(skippedExtractionReasons).reduce((sum, count) => sum + count, 0);
   const freshExtractionCount = documentRows.filter((row) => {
     const extractionStatus = typeof row.extraction_status === "string" ? row.extraction_status : null;
     return extractionStatus === "ready";
@@ -241,6 +268,8 @@ async function main() {
     nanoSignalCount,
     policyDocumentCount: documentRows.length,
     reusedExtractionCount,
+    skippedExtractionCount,
+    skippedExtractionReasons,
     scanCompletedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
     scanStatus: typeof scan?.status === "string" ? scan.status : null,
     scannerSignalCount
@@ -270,7 +299,9 @@ async function main() {
     },
     extractionCounts: {
       fresh: Math.max(0, freshExtractionCount),
-      reused: reusedExtractionCount
+      reused: reusedExtractionCount,
+      skipped: skippedExtractionCount,
+      skippedByReason: skippedExtractionReasons
     },
     documentSourcesByExtractionStatus: countBy(documentRows, (row) => String(row.extraction_status ?? "unknown")),
     documentSourcesByType: countBy(documentRows, (row) => String(row.document_type ?? "unknown")),
@@ -321,6 +352,11 @@ async function main() {
   console.log(
     `extractions: fresh=${payload.workflow.extractionMetrics.freshExtractions} | reused=${payload.workflow.extractionMetrics.reusedExtractions}`
   );
+  if (payload.workflow.extractionMetrics.skippedExtractions > 0) {
+    console.log(
+      `skipped: total=${payload.workflow.extractionMetrics.skippedExtractions} | reasons=${JSON.stringify(payload.workflow.extractionMetrics.skippedByReason)}`
+    );
+  }
   for (const stage of payload.workflow.stages) {
     console.log(
       `- ${stage.id}: ${stage.status} | items=${stage.itemCount} | duration=${formatDurationMs(stage.durationMs)} | startedAt=${stage.startedAt ?? "null"} | completedAt=${stage.completedAt ?? "null"}`

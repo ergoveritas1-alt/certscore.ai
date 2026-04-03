@@ -31,6 +31,8 @@ export type SignalEnrichmentWorkflowState = {
   extractionMetrics: {
     freshExtractions: number;
     reusedExtractions: number;
+    skippedExtractions: number;
+    skippedByReason: Record<string, number>;
   };
   findingsReady: boolean;
   mergedSignalsReady: boolean;

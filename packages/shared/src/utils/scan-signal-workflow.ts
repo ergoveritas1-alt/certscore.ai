@@ -90,6 +90,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
   nanoSignalCount: number;
   policyDocumentCount: number;
   reusedExtractionCount?: number;
+  skippedExtractionCount?: number;
+  skippedExtractionReasons?: Record<string, number>;
   scanCompletedAt?: string | null;
   scanStatus: string | null;
   scannerSignalCount: number;
@@ -231,7 +233,9 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     actualMode,
     extractionMetrics: {
       freshExtractions: input.freshExtractionCount ?? 0,
-      reusedExtractions: input.reusedExtractionCount ?? 0
+      reusedExtractions: input.reusedExtractionCount ?? 0,
+      skippedExtractions: input.skippedExtractionCount ?? 0,
+      skippedByReason: input.skippedExtractionReasons ?? {}
     },
     findingsReady: findingsStatus === "completed" || input.findingsCount > 0,
     mergedSignalsReady: mergeStatus === "completed" || input.mergedSignalCount > 0,

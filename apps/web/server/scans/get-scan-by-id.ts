@@ -1201,6 +1201,30 @@ async function loadScanDetailRecord(input: {
       typeof (metadata as Record<string, unknown>).extraction_reuse_reason === "string"
     );
   }).length;
+  const skippedExtractionReasons = Object.fromEntries(
+    normalizedDocumentSources
+      .flatMap((row) => {
+        const extractionStatus = row.extraction_status;
+        const metadata = row.metadata_json;
+        const reason =
+          typeof extractionStatus === "string" &&
+          extractionStatus === "insufficient" &&
+          metadata &&
+          typeof metadata === "object" &&
+          !Array.isArray(metadata) &&
+          typeof (metadata as Record<string, unknown>).extraction_skip_reason === "string"
+            ? (metadata as Record<string, unknown>).extraction_skip_reason
+            : null;
+
+        return typeof reason === "string" ? [reason] : [];
+      })
+      .reduce((counts, reason) => {
+        counts.set(reason, (counts.get(reason) ?? 0) + 1);
+        return counts;
+      }, new Map<string, number>())
+      .entries()
+  );
+  const skippedExtractionCount = Object.values(skippedExtractionReasons).reduce((sum, count) => sum + count, 0);
   const freshExtractionCount = Math.max(
     0,
     normalizedDocumentSources.filter((row) => {
@@ -1220,6 +1244,8 @@ async function loadScanDetailRecord(input: {
     nanoSignalCount: storedNanoSignalRows.length,
     policyDocumentCount: normalizedPolicyEnrichment.length,
     reusedExtractionCount,
+    skippedExtractionCount,
+    skippedExtractionReasons,
     scanCompletedAt: scanRow.completed_at,
     scanStatus: scanRow.status,
     scannerSignalCount: scannerSignalPopulations.length

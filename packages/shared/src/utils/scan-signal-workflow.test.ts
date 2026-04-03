@@ -28,6 +28,12 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
   assert.equal(workflow.actualMode, "serial_bridge");
   assert.equal(workflow.mergedSignalsReady, true);
   assert.equal(workflow.findingsReady, true);
+  assert.deepEqual(workflow.extractionMetrics, {
+    freshExtractions: 0,
+    reusedExtractions: 0,
+    skippedExtractions: 0,
+    skippedByReason: {}
+  });
   assert.deepEqual(workflow.timings, {
     scannerDurationMs: 5 * 60 * 1000,
     nanoDocRetrievalDurationMs: null,
@@ -60,6 +66,11 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
     mergedSignalCount: 0,
     nanoSignalCount: 0,
     policyDocumentCount: 0,
+    skippedExtractionCount: 2,
+    skippedExtractionReasons: {
+      secondary_privacy_not_required: 1,
+      terms_extraction_not_required: 1
+    },
     scanCompletedAt: "2026-04-02T10:05:00.000Z",
     scanStatus: "running",
     scannerSignalCount: 3
@@ -73,4 +84,13 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   assert.equal(workflow.timings.nanoDocRetrievalDurationMs, null);
   assert.equal(workflow.timings.timeToMergedSignalsMs, null);
   assert.equal(workflow.timings.timeToFindingsMs, null);
+  assert.deepEqual(workflow.extractionMetrics, {
+    freshExtractions: 0,
+    reusedExtractions: 0,
+    skippedExtractions: 2,
+    skippedByReason: {
+      secondary_privacy_not_required: 1,
+      terms_extraction_not_required: 1
+    }
+  });
 });

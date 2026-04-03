@@ -196,6 +196,14 @@ function formatDurationMs(value: number | null | undefined) {
   return parts.join(" ");
 }
 
+function formatReasonLabel(value: string) {
+  return value
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part, index) => (index === 0 ? `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}` : part))
+    .join(" ");
+}
+
 function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -4916,6 +4924,24 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
           <SummaryMetricTile label="Fresh extractions" value={String(workflow.extractionMetrics.freshExtractions)} />
           <SummaryMetricTile label="Reused extractions" value={String(workflow.extractionMetrics.reusedExtractions)} />
         </div>
+        {workflow.extractionMetrics.skippedExtractions > 0 ? (
+          <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <span className="font-medium">Skipped extractions</span>
+              <span>{workflow.extractionMetrics.skippedExtractions}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(workflow.extractionMetrics.skippedByReason).map(([reason, count]) => (
+                <span
+                  key={reason}
+                  className="inline-flex items-center rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-900"
+                >
+                  {formatReasonLabel(reason)}: {count}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
             {counts.stagesCompleted} of {counts.totalStages} stages completed
