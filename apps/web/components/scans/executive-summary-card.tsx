@@ -70,6 +70,133 @@ function DetailDisclosure(input: {
   );
 }
 
+type RegulatoryLens = {
+  acronym: string;
+  detailTitle: string;
+  ratingLabel: string;
+  score: number;
+  summary: string;
+  toneClass: string;
+  findings: string[];
+};
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
+  beforeConsentCookieCount: number;
+  thirdPartyRequestCount: number;
+}) {
+  const findingIds = new Set(findings.map((finding) => finding.id));
+  const trackingFinding = findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
+  const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
+  const consentFinding = findings.find((finding) => finding.id === "asymmetric_consent_ui");
+  const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
+
+  const privacyTrackingNotes = [
+    trackingFinding ? trackingFinding.shortSummary : null,
+    counts.beforeConsentCookieCount > 0 ? `${counts.beforeConsentCookieCount} cookies were observed before consent.` : null,
+    consentFinding ? consentFinding.shortSummary : null,
+    replayFinding ? replayFinding.shortSummary : null
+  ].filter(Boolean) as string[];
+
+  const cpraNotes = [
+    trackingFinding ? trackingFinding.shortSummary : null,
+    counts.thirdPartyRequestCount > 0 ? `${counts.thirdPartyRequestCount} third-party requests were observed on the initial path.` : null,
+    replayFinding ? replayFinding.shortSummary : null,
+    clarityFinding ? clarityFinding.shortSummary : null
+  ].filter(Boolean) as string[];
+
+  const ftcNotes = [
+    consentFinding ? consentFinding.shortSummary : null,
+    replayFinding ? replayFinding.shortSummary : null,
+    trackingFinding ? trackingFinding.shortSummary : null
+  ].filter(Boolean) as string[];
+
+  const gdprScore = clampScore(
+    84 -
+      (findingIds.has("third_party_tracking_pre_consent") ? 32 : 0) -
+      (counts.beforeConsentCookieCount > 0 ? 14 : 0) -
+      (findingIds.has("asymmetric_consent_ui") ? 16 : 0) -
+      (findingIds.has("session_recording_services_detected") ? 10 : 0)
+  );
+  const cpraScore = clampScore(
+    82 -
+      (findingIds.has("third_party_tracking_pre_consent") ? 24 : 0) -
+      (counts.beforeConsentCookieCount > 0 ? 12 : 0) -
+      (findingIds.has("session_recording_services_detected") ? 10 : 0) -
+      (findingIds.has("policy_clarity_risk") ? 8 : 0)
+  );
+  const ftcScore = clampScore(
+    80 -
+      (findingIds.has("asymmetric_consent_ui") ? 24 : 0) -
+      (findingIds.has("third_party_tracking_pre_consent") ? 18 : 0) -
+      (findingIds.has("session_recording_services_detected") ? 10 : 0)
+  );
+
+  const buildTone = (score: number) => {
+    if (score >= 72) {
+      return { label: "Stronger", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+    }
+    if (score >= 50) {
+      return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
+    }
+    return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
+  };
+
+  const gdprTone = buildTone(gdprScore);
+  const cpraTone = buildTone(cpraScore);
+  const ftcTone = buildTone(ftcScore);
+
+  return [
+    {
+      acronym: "GDPR / ePrivacy",
+      detailTitle: "Consent and tracking issues",
+      findings: privacyTrackingNotes,
+      ratingLabel: gdprTone.label,
+      score: gdprScore,
+      summary: trackingFinding ? "Consent and pre-consent tracking risk is the main issue." : "No major consent-triggering issue surfaced in the top findings.",
+      toneClass: gdprTone.toneClass
+    },
+    {
+      acronym: "CCPA / CPRA",
+      detailTitle: "Disclosure and downstream sharing issues",
+      findings: cpraNotes,
+      ratingLabel: cpraTone.label,
+      score: cpraScore,
+      summary: replayFinding || trackingFinding ? "Third-party collection and disclosure posture drives this score." : "No strong sale/share-style signal surfaced in the top findings.",
+      toneClass: cpraTone.toneClass
+    },
+    {
+      acronym: "FTC",
+      detailTitle: "Dark pattern and disclosure issues",
+      findings: ftcNotes,
+      ratingLabel: ftcTone.label,
+      score: ftcScore,
+      summary: consentFinding ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
+      toneClass: ftcTone.toneClass
+    }
+  ] satisfies RegulatoryLens[];
+}
+
+function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
+  const filledSegments = Math.max(1, Math.min(5, Math.round(input.score / 20)));
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: 5 }, (_, index) => (
+        <span
+          key={index}
+          className={`h-2.5 w-7 rounded-full border ${
+            index < filledSegments ? input.toneClass : "border-slate-200 bg-slate-100 text-transparent"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
 function BenchmarkMetricCard(input: {
   actualValue: number | null;
   benchmarkValue: number | null;
@@ -300,6 +427,10 @@ export function ExecutiveSummaryCard(input: {
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
   ];
+  const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
+    beforeConsentCookieCount: input.beforeConsentCookieCount,
+    thirdPartyRequestCount: input.thirdPartyRequestCount
+  });
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -418,6 +549,47 @@ export function ExecutiveSummaryCard(input: {
               />
             </div>
           ) : null}
+          <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
+            <div className="mt-3 space-y-3">
+              {regulatoryLenses.map((lens) => (
+                <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                          {lens.ratingLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
+                      <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                      <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
+                    </div>
+                  </summary>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {lens.findings.length > 0 ? (
+                        lens.findings.map((item) => (
+                          <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                            {item}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                          No top-level issue mapped here
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>
