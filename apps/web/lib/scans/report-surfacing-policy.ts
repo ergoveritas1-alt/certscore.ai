@@ -36,6 +36,7 @@ export type SurfacingPolicyRuleId =
   | "family.financial_promotion.default"
   | "family.accessibility.default"
   | "evidence.positive_surface.support_only"
+  | "evidence.positive_surface.review_high_value_policy_path"
   | "evidence.coverage_gap.keep_review"
   | "evidence.coverage_gap.confirmed_key_page_surface_missing"
   | "evidence.coverage_gap.review_key_page_fetch_failed"
@@ -234,7 +235,8 @@ const CONSENT_TRACKING_IDS = [
   "accept_only_banner",
   "dismiss_without_reject",
   "session_replay_observed",
-  "retargeting_pixel_observed"
+  "retargeting_pixel_observed",
+  "fingerprinting_observed"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONFIRMED_CONSENT_RUNTIME_FAILURE_IDS = [
@@ -300,7 +302,10 @@ const ACCESSIBILITY_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONTEXT_IDS = [
-  "regulator_operated_mock_investment_example"
+  "regulator_operated_mock_investment_example",
+  "popup_behavior_observed",
+  "blocking_overlay_observed",
+  "autoplay_media_observed"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const FINANCIAL_PROMOTION_IDS = [
@@ -937,6 +942,17 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   return packet.confidenceInputs.hasStructuredValidationEvidence && hasVendors && hasUrls;
 }
 
+function hasStandalonePreconsentRuntimeEvidence(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
+    return false;
+  }
+
+  const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0);
+  const hasUrls = (packet.details.requestUrls ?? []).some((value) => /^https?:\/\//i.test(value));
+
+  return hasConcreteRuntimeEvidence(packet) && (hasVendors || hasUrls);
+}
+
 function hasFinancialContextAndBacking(packet: UnifiedFindingPacket) {
   return (
     packet.confidenceInputs.hasStructuredValidationEvidence ||
@@ -1024,6 +1040,23 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "positive_surface") {
+    if (
+      (packet.unifiedFindingId === "privacy_rights_path_present" || packet.unifiedFindingId === "privacy_contact_path_present") &&
+      packet.confidenceInputs.hasPolicyTextEvidence &&
+      hasReadableSnippet(packet) &&
+      hasConcreteHumanFacingUrl(packet.evidence?.pageUrls)
+    ) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason:
+          "A retained, page-attributed privacy rights or contact path is strong enough to surface in the main findings as review-level positive evidence instead of remaining hidden as support-only context.",
+        ruleId: "evidence.positive_surface.review_high_value_policy_path"
+      });
+      return;
+    }
+
     overrideDecision(decision, {
       state: "support_only",
       lane: "confidence_and_coverage",
@@ -1381,10 +1414,18 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
   for (const rule of EXPLICIT_PRECEDENCE_RULES) {
     const primaryDecision = decisionsById.get(rule.primaryFindingId);
     const supportingDecision = decisionsById.get(rule.supportingFindingId);
+    const supportingPacket = packetsById.get(rule.supportingFindingId);
     if (!primaryDecision || !supportingDecision) {
       continue;
     }
     if (primaryDecision.decisionState === "suppressed" || supportingDecision.decisionState === "suppressed") {
+      continue;
+    }
+    if (
+      rule.appliedRule === "precedence.specific_contradiction_supports_preconsent" &&
+      supportingPacket &&
+      hasStandalonePreconsentRuntimeEvidence(supportingPacket)
+    ) {
       continue;
     }
 

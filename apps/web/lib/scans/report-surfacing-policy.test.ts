@@ -205,6 +205,49 @@ test("positive present surface suppresses weak contradictory unavailable sibling
   assert.ok(unavailable?.appliedRules.includes("precedence.present_surface_beats_weak_absence"));
 });
 
+test("privacy rights and contact paths surface when page-attributed policy evidence is strong", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_rights_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_rights_path_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("privacy_rights_path_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["Use our Privacy Rights Center to submit access and deletion requests."]
+        }
+      }),
+      makePacket("privacy_contact_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_path_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("privacy_contact_path_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["If you have questions about this Privacy Policy, contact privacy@example.com."]
+        }
+      })
+    ]
+  });
+
+  const rightsPath = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_rights_path_present");
+  const contactPath = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_contact_path_present");
+
+  assert.equal(rightsPath?.decisionState, "review");
+  assert.equal(rightsPath?.reportLane, "main");
+  assert.ok(rightsPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
+  assert.equal(contactPath?.decisionState, "review");
+  assert.equal(contactPath?.reportLane, "main");
+  assert.ok(contactPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
+});
+
 test("unresolved low-confidence absence still surfaces in confidence and coverage", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
