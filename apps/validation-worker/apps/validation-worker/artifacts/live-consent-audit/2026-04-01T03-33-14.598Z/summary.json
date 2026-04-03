@@ -1,0 +1,15 @@
+[
+  {
+    "finalClassification": "possible pre-consent tracking",
+    "hostname": "robinhood.com",
+    "likelyVendorsObserved": [
+      "DoubleClick",
+      "Google Analytics",
+      "Google Tag Manager",
+      "Meta / Facebook"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 36,
+    "rejectResidualRequestCount": 0
+  }
+]

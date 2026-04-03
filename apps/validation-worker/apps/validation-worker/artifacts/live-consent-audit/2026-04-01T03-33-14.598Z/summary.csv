@@ -1,0 +1,2 @@
+hostname,finalClassification,manualReviewRecommended,preConsentRequestCount,rejectResidualRequestCount,likelyVendorsObserved
+robinhood.com,possible pre-consent tracking,true,36,0,"DoubleClick|Google Analytics|Google Tag Manager|Meta / Facebook"

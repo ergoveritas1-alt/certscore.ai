@@ -1,0 +1,403 @@
+{
+  "cookies": [
+    {
+      "domain": "robinhood.com",
+      "expires": 1809574417.11852,
+      "httpOnly": false,
+      "name": "device_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "f41be259-3d35-4d38-a126-f23acb45bf4f",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1775016218,
+      "httpOnly": false,
+      "name": "session_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": true,
+      "valuePreview": "da9329f3-ab0a-43fb-b5ba-e2145dcda29e",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1775100819,
+      "httpOnly": false,
+      "name": "_gid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GA1.2.768801479.1775014419",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1775014479,
+      "httpOnly": false,
+      "name": "_gat",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1809574419.265001,
+      "httpOnly": false,
+      "name": "_ga_N6DVMV7XZB",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GS2.1.s1775014419$o1$g0$t1775014419$j60$l0$h0",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1809574419.265195,
+      "httpOnly": false,
+      "name": "_ga",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "GA1.1.426313461.1775014419",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1782790419,
+      "httpOnly": false,
+      "name": "_gcl_au",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "1.1.734923044.1775014419",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": "robinhood.com",
+      "expires": 1775619219,
+      "httpOnly": false,
+      "name": "FPC",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "e7303586-5771-458e-827c-b39c191949ca",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1782790419,
+      "httpOnly": false,
+      "name": "_rdt_uuid",
+      "path": "/",
+      "sameSite": "Strict",
+      "secure": true,
+      "valuePreview": "1775014419417.e006f18c-4ab3-4ff8-aba6-8232bfe4959f",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1775100819,
+      "httpOnly": false,
+      "name": "_uetsid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "92ff41402d7b11f1bb36e174e2667267",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1808710419,
+      "httpOnly": false,
+      "name": "_uetvid",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "92ff48202d7b11f1987af3a3e70faee4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".doubleclick.net",
+      "expires": 1775015319.632833,
+      "httpOnly": false,
+      "name": "test_cookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "CheckForPermission",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1806550419,
+      "httpOnly": false,
+      "name": "singular_device_id",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "b969cbde-cf99-41c0-a819-375c04ee11fb",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bing.com",
+      "expires": 1808710419.621909,
+      "httpOnly": false,
+      "name": "MUID",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "178EA201BAB16EB4121BB52FBB8E6F41",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".bat.bing.com",
+      "expires": 1775619219.621945,
+      "httpOnly": false,
+      "name": "MR",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "0",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1806550419.697557,
+      "httpOnly": false,
+      "name": "li_gp",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "MTsxNzc1MDE0NDE5OzA=",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1782790419.95396,
+      "httpOnly": false,
+      "name": "li_sugr",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "327538ae-9720-47c5-a4ac-79defa93ef56",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1806550419.954016,
+      "httpOnly": false,
+      "name": "bcookie",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"v=2&5364db6c-6d22-4abe-8178-37bcf78f1671\"",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1775100819.697572,
+      "httpOnly": false,
+      "name": "lidc",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "\"b=VGST00:s=V:r=V:a=V:p=V:g=3848:u=1:x=1:i=1775014419:t=1775100819:v=2:sig=AQEPk...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".robinhood.com",
+      "expires": 1782790419,
+      "httpOnly": false,
+      "name": "_fbp",
+      "path": "/",
+      "sameSite": "Lax",
+      "secure": false,
+      "valuePreview": "fb.1.1775014419724.425030637497318732",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1777606419.953998,
+      "httpOnly": false,
+      "name": "UserMatchHistory",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AQJYhcoVmIlW1wAAAZ1HGp3h_46iVPckF1ijnl5gl-fcTp9_-scN6TysItU1NeCLM3clL0eeO44zgg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "domain": ".linkedin.com",
+      "expires": 1777606419.954008,
+      "httpOnly": false,
+      "name": "AnalyticsSyncHistory",
+      "path": "/",
+      "sameSite": "None",
+      "secure": true,
+      "valuePreview": "AQINKfWg5Lk6RQAAAZ1HGp3hyjcUrhzQe6QMMZeHLY_cIFV4Fsu0ptQuB8mk59c_1ye3h1dV3l6T9Eqp...",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "indexedDbNames": [],
+  "localStorage": [
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_did_visit_site",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "uc_gcm",
+      "preview": "{\"adsDataRedaction\":false,\"adPersonalization\":\"granted\",\"adStorage\":\"granted\",\"adUserData\":\"granted\",\"analyticsStorage\":\"granted\"}",
+      "size": 130
+    },
+    {
+      "key": "_uetvid_exp",
+      "preview": "Mon, 26 Apr 2027 03:33:39 GMT",
+      "size": 29
+    },
+    {
+      "key": "global_singular_id",
+      "preview": "b969cbde-cf99-41c0-a819-375c04ee11fb",
+      "size": 36
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_singular_first_page_visit_occurred",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_last_event_timestamp",
+      "preview": "1775014420",
+      "size": 10
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_web_url",
+      "preview": "https://robinhood.com/us/en/",
+      "size": 28
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_touchpoint_timestamp",
+      "preview": "1775014420",
+      "size": 10
+    },
+    {
+      "key": "__nt_anonymous_id__",
+      "preview": "\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\"",
+      "size": 66
+    },
+    {
+      "key": "_gcl_ls",
+      "preview": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"creationTimeMs\":1775014419283},\"expires\":1782790419283}}",
+      "size": 139
+    },
+    {
+      "key": "_uetsid",
+      "preview": "92ff41402d7b11f1bb36e174e2667267",
+      "size": 32
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_did_send_event.__PAGE_VISIT__",
+      "preview": "true",
+      "size": 4
+    },
+    {
+      "key": "__nt_profile__",
+      "preview": "{\"id\":\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\",\"stableId\":\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\",\"random\":0.9652271456935506,\"audiences\":[\"54XhfTKfP7LV6d6KURsP05\",\"PZqsU9hzR4o7ru9rAsF1l\"",
+      "size": 517
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_singular_instance_id",
+      "preview": "06a4f1a4-c0ab-473f-9d57-9c9317486bd1",
+      "size": 36
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_first_page_visit_url",
+      "preview": "https://robinhood.com/us/en/",
+      "size": 28
+    },
+    {
+      "key": "lastExternalReferrerTime",
+      "preview": "1775014419719",
+      "size": 13
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_singular_session_id",
+      "preview": "6b49d775-59a1-4c23-86fc-96c249261e21",
+      "size": 36
+    },
+    {
+      "key": "_uetsid_exp",
+      "preview": "Thu, 02 Apr 2026 03:33:39 GMT",
+      "size": 29
+    },
+    {
+      "key": "_uetvid",
+      "preview": "92ff48202d7b11f1987af3a3e70faee4",
+      "size": 32
+    },
+    {
+      "key": "lastExternalReferrer",
+      "preview": "empty",
+      "size": 5
+    },
+    {
+      "key": "__nt-consent__",
+      "preview": "\"accepted\"",
+      "size": 10
+    },
+    {
+      "key": "uc_settings",
+      "preview": "{\"controllerId\":\"cec88f6a36d974bbe6baab1d34da46dd516419bc9584aca9fef2a785442c461c\",\"id\":\"XpXabaxP5dY-KV\",\"language\":\"en\",\"services\":[{\"history\":[{\"action\":\"onNonEURegion\",\"language\":\"en\",\"status\":true,\"timestamp\":1775014418954,\"type\":\"impli",
+      "size": 6920
+    },
+    {
+      "key": "li_adsId",
+      "preview": "c8fe8c83-74d8-4588-8b5d-2d5f2ab6cdcc",
+      "size": 36
+    },
+    {
+      "key": "__nt_experiences__",
+      "preview": "[{\"experienceId\":\"1rj6npo4CRs49FnW35fs6q\",\"variantIndex\":1,\"variants\":{},\"sticky\":false},{\"experienceId\":\"1xY5oV8oHubFJVTyqcrYy4\",\"variantIndex\":0,\"variants\":{\"1uIS12gf9d4Ygu9VoRoUYs\":\"1uIS12gf9d4Ygu9VoRoUYs\"},\"sticky\":false},{\"experienceId",
+      "size": 1730
+    }
+  ],
+  "sessionStorage": [
+    {
+      "key": "uc_user_country",
+      "preview": "{\"countryCode\":\"US\",\"countryName\":\"US,USCA\",\"regionCode\":\"USCA\"}",
+      "size": 64
+    },
+    {
+      "key": "robinhood_acd79726_com.robinhood.web_singular_api_queue",
+      "preview": "[]",
+      "size": 2
+    }
+  ]
+}

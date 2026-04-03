@@ -1,6 +1,10 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import {
+  getHybridPreconsentTrackerVendors,
+  getHybridPreconsentViolationCount
+} from "../../lib/scans/hybrid-runtime-evidence";
 
 type CompletedScanRow = {
   completed_at: string;
@@ -26,6 +30,7 @@ type TrackerRow = {
 
 type RuntimeArtifactRow = {
   consent_preconsent_violation_count: number | null;
+  hybrid_runtime_evidence?: Record<string, unknown> | null;
   scan_id: string;
 };
 
@@ -113,7 +118,7 @@ export async function getOrganizationTrackerInventory(organizationId: string) {
     scanIds.length
       ? supabase
           .from("scan_runtime_artifacts")
-          .select("scan_id, consent_preconsent_violation_count")
+          .select("scan_id, consent_preconsent_violation_count, hybrid_runtime_evidence")
           .in("scan_id", scanIds)
       : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null }),
     scanIds.length
@@ -209,6 +214,41 @@ export async function getOrganizationTrackerInventory(organizationId: string) {
     });
   }
 
+  if (((preconsentViolations ?? []) as PreconsentViolationRow[]).length === 0) {
+    for (const artifact of (runtimeArtifacts ?? []) as RuntimeArtifactRow[]) {
+      const scan = scanMap.get(artifact.scan_id);
+      const domainId = scan?.domain_id ?? null;
+      const domainHostname = domainId ? domainMap.get(domainId) : null;
+      const hybridRuntimeArtifact = {
+        hybrid_runtime_evidence: artifact.hybrid_runtime_evidence ?? null
+      } satisfies Record<string, unknown>;
+      for (const vendorName of getHybridPreconsentTrackerVendors(hybridRuntimeArtifact)) {
+        const key = `${vendorName}::unknown`;
+        const existing = preconsentLeaderboard.get(key);
+        if (existing) {
+          if (domainHostname) {
+            existing.domainHostnames.add(domainHostname);
+            existing.domainCount = existing.domainHostnames.size;
+          }
+          existing.totalViolationCount += 1;
+          if (scan?.completed_at && (!existing.latestSeenAt || scan.completed_at > existing.latestSeenAt)) {
+            existing.latestSeenAt = scan.completed_at;
+          }
+          continue;
+        }
+
+        preconsentLeaderboard.set(key, {
+          domainCount: domainHostname ? 1 : 0,
+          domainHostnames: new Set(domainHostname ? [domainHostname] : []),
+          latestSeenAt: scan?.completed_at ?? null,
+          totalViolationCount: 1,
+          vendorCategory: "unknown",
+          vendorName
+        });
+      }
+    }
+  }
+
   const byScan = new Map<string, OrganizationDomainTrackerInventoryItem>();
   for (const scan of latestScans) {
     const hostname = scan.domain_id ? domainMap.get(scan.domain_id) : null;
@@ -218,7 +258,12 @@ export async function getOrganizationTrackerInventory(organizationId: string) {
     byScan.set(scan.id, {
       completedAt: scan.completed_at,
       domainHostname: hostname,
-      preconsentViolationCount: Number(runtimeArtifactMap.get(scan.id)?.consent_preconsent_violation_count ?? 0),
+      preconsentViolationCount: Math.max(
+        Number(runtimeArtifactMap.get(scan.id)?.consent_preconsent_violation_count ?? 0),
+        getHybridPreconsentViolationCount({
+          hybrid_runtime_evidence: runtimeArtifactMap.get(scan.id)?.hybrid_runtime_evidence ?? null
+        }) ?? 0
+      ),
       scanId: scan.id,
       trackers: []
     });

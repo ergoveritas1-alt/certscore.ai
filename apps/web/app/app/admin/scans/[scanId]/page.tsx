@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { RegulatoryRelevanceSection } from "../../../../../components/scans/regulatory-relevance-section";
+import { getHybridRuntimeEvidence } from "../../../../../lib/scans/hybrid-runtime-evidence";
 import { getAdminScanDetail } from "../../../../../server/admin/get-admin-scan-detail";
 
 function formatDateTime(value: string | null) {
@@ -33,6 +34,56 @@ function formatValue(value: unknown) {
   }
 
   return String(value);
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function buildRuntimeArtifactRows(runtimeArtifacts: Record<string, unknown> | null) {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  if (hybrid) {
+    const networkSummary = getRecord(hybrid.networkSummary);
+    const consentSummary = getRecord(hybrid.consentSummary);
+    const storageSummary = getRecord(hybrid.storageSummary);
+    const uiSummary = getRecord(hybrid.uiSummary);
+    const mediaSummary = getRecord(hybrid.mediaSummary);
+    const fingerprintSummary = getRecord(hybrid.fingerprintSummary);
+    const vendorSummary = getRecord(hybrid.vendorSummary);
+
+    return {
+      title: "Hybrid Runtime Evidence",
+      rows: [
+        { label: "Requests observed", value: networkSummary?.totalRequestCount },
+        { label: "Third-party requests", value: networkSummary?.thirdPartyRequestCount },
+        { label: "Third-party domains", value: vendorSummary?.rawThirdPartyDomains },
+        { label: "Consent banner", value: consentSummary?.bannerPresent },
+        { label: "Reject option present", value: consentSummary?.rejectPresent },
+        { label: "Cookie wall detected", value: consentSummary?.cookieWallDetected },
+        { label: "Cookies seen", value: storageSummary?.cookiesSeenCount },
+        { label: "Fingerprint tier", value: fingerprintSummary?.tier },
+        { label: "Fingerprint reasons", value: fingerprintSummary?.reasons },
+        { label: "Popup count", value: uiSummary?.popupCount },
+        { label: "Overlay or forced action", value: uiSummary?.overlayDetected === true || uiSummary?.forcedActionRequired === true },
+        { label: "Autoplay observed", value: mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true }
+      ]
+    };
+  }
+
+  return {
+    title: "Runtime Artifacts",
+    rows: [
+      { label: "Third-party request count", value: runtimeArtifacts?.third_party_request_count },
+      { label: "Third-party request domains", value: runtimeArtifacts?.third_party_request_domains },
+      { label: "Initial cookie count", value: runtimeArtifacts?.initial_cookie_count },
+      { label: "Initial cookie names", value: runtimeArtifacts?.initial_cookie_names },
+      { label: "Initial cookie domains", value: runtimeArtifacts?.initial_cookie_domains },
+      { label: "Script tag count", value: runtimeArtifacts?.script_tag_count },
+      { label: "Script source domains", value: runtimeArtifacts?.script_src_domains },
+      { label: "DOM node count", value: runtimeArtifacts?.dom_node_count },
+      { label: "DOM structure hash", value: runtimeArtifacts?.dom_structure_hash }
+    ]
+  };
 }
 
 function formatReason(value: string) {
@@ -320,6 +371,7 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
   }
 
   const executionPlan = getExecutionPlan(record.scan.scanConfigJson);
+  const runtimeArtifactSection = buildRuntimeArtifactRows(record.runtimeArtifacts);
 
   return (
     <div className="space-y-8">
@@ -381,18 +433,12 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
       {record.runtimeArtifacts ? (
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Runtime Artifacts</CardTitle>
+            <CardTitle>{runtimeArtifactSection.title}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-            <p>Third-party request count: {formatValue(record.runtimeArtifacts.third_party_request_count)}</p>
-            <p>Third-party request domains: {formatValue(record.runtimeArtifacts.third_party_request_domains)}</p>
-            <p>Initial cookie count: {formatValue(record.runtimeArtifacts.initial_cookie_count)}</p>
-            <p>Initial cookie names: {formatValue(record.runtimeArtifacts.initial_cookie_names)}</p>
-            <p>Initial cookie domains: {formatValue(record.runtimeArtifacts.initial_cookie_domains)}</p>
-            <p>Script tag count: {formatValue(record.runtimeArtifacts.script_tag_count)}</p>
-            <p>Script source domains: {formatValue(record.runtimeArtifacts.script_src_domains)}</p>
-            <p>DOM node count: {formatValue(record.runtimeArtifacts.dom_node_count)}</p>
-            <p>DOM structure hash: {formatValue(record.runtimeArtifacts.dom_structure_hash)}</p>
+            {runtimeArtifactSection.rows.map((row) => (
+              <p key={row.label}>{row.label}: {formatValue(row.value)}</p>
+            ))}
           </CardContent>
         </Card>
       ) : null}

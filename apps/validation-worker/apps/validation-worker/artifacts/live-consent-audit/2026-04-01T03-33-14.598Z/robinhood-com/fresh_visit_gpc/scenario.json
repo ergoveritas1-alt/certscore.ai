@@ -1,0 +1,1860 @@
+{
+  "actionSummary": {
+    "acceptPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    },
+    "rejectPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    }
+  },
+  "banner": {
+    "bannerHtmlPath": "/Users/benmasek/WC01/apps/validation-worker/apps/validation-worker/artifacts/live-consent-audit/2026-04-01T03-33-14.598Z/robinhood-com/fresh_visit_gpc/banner.html",
+    "bannerPresent": true,
+    "bannerText": "ProductInvestPredictStrategiesRetirementGoldCryptoChainWalletConnectAPILegendOptionsFuturesTradingCustodialVenturesSocialBankingGold CardPlatinum CardLearnSnacksLegal & RegulatoryTerms & ConditionsDisclosuresRobinhood US User Privacy StatementRobinhood Markets US Web Visitor Privacy StatementLaw Enforcement RequestsYour Privacy ChoicesCompanyAbout usBlogPartner With UsAffiliatesPressCareersInvestor RelationsSupportESGInvestor IndexRobinhood MerchLegal & RegulatoryTerms & ConditionsDisclosuresRobinhood US User Privacy StatementRobinhood Markets US Web Visitor Privacy StatementLaw Enforcement RequestsYour Privacy Choices",
+    "frameUrl": "https://robinhood.com/us/en/",
+    "screenshots": {
+      "banner": "/Users/benmasek/WC01/apps/validation-worker/apps/validation-worker/artifacts/live-consent-audit/2026-04-01T03-33-14.598Z/robinhood-com/fresh_visit_gpc/banner.png",
+      "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/apps/validation-worker/artifacts/live-consent-audit/2026-04-01T03-33-14.598Z/robinhood-com/fresh_visit_gpc/first-load.png",
+      "preferencesCenter": null
+    },
+    "visibleActions": {
+      "accept": false,
+      "manage": true,
+      "reject": false
+    }
+  },
+  "cmpSignals": [
+    {
+      "key": "api.usercentrics.eu",
+      "source": "request",
+      "value": "https://api.usercentrics.eu/ruleSet/M6Jkl5BTgFMHMJ.json"
+    },
+    {
+      "key": "api.usercentrics.eu",
+      "source": "request",
+      "value": "https://api.usercentrics.eu/settings/XpXabaxP5dY-KV/latest/languages.json"
+    },
+    {
+      "key": "api.usercentrics.eu",
+      "source": "request",
+      "value": "https://api.usercentrics.eu/settings/XpXabaxP5dY-KV/latest/en.json"
+    },
+    {
+      "key": "app.usercentrics.eu",
+      "source": "request",
+      "value": "https://app.usercentrics.eu/browser-sdk/4.30.0/cross-domain-bridge.html"
+    },
+    {
+      "key": "app.usercentrics.eu",
+      "source": "request",
+      "value": "https://app.usercentrics.eu/session/1px.png?settingsId=XpXabaxP5dY-KV"
+    },
+    {
+      "key": "api.usercentrics.eu",
+      "source": "request",
+      "value": "https://api.usercentrics.eu/translations/translations-en.json"
+    },
+    {
+      "key": "aggregator.service.usercentrics.eu",
+      "source": "request",
+      "value": "https://aggregator.service.usercentrics.eu/aggregate/en?templates=4bWJnAIHjmH1M2@1.0.8,661xX_8pMkaUXA@1.0.5,8u-otMeLg@3.1.5,9V8bg4D63@9.6.16,BJ59EidsWQ@25.7.29,H1Vl5NidjWX@40.18.46,HkocEodjb7@52.11.43,JQ2XQxIk@9.6.11,OxsYgtMfe7aP8u@1.0.2,PCM3ENiM_@2.1.1,QBkU7XsMMczvRi@3.2.6,W-HOHMTVq@5.1.5,Z0TcXjY0P@1.3.7,_TNqlKmFSnmV12@1.0.6,bur5nm9N5lg6va@1.0.5,ib1Ev0zRq@1.0.4,jN_bfP4L7bFXrF@1.0.6,rH1vNPCFR@8.1.5,rk-nqEj_o-m@8.6.5,sjAWaw1cW@7.2.2,twMyStLkn@15.9.15,xvRlt3feOOq0VI@1.0.6"
+    },
+    {
+      "key": "consent-api.service.consent.usercentrics.eu",
+      "source": "request",
+      "value": "https://consent-api.service.consent.usercentrics.eu/consent/uw/2"
+    }
+  ],
+  "errors": [],
+  "network": [
+    {
+      "documentUrl": "about:blank",
+      "hostname": "robinhood.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-01T03:33:36.630Z",
+      "url": "https://robinhood.com/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "about:blank",
+      "hostname": "robinhood.com",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-01T03:33:36.862Z",
+      "url": "https://robinhood.com/us/en/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/CapsuleSansText-Bold__0ef7c688bd1385a7df6941a13f3b4e980cd2f90f01b9268c9bb3e95394eec486.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/CapsuleSansText-Book__6573ba5ca76b29d5ffe83d94b27a4a8a09c8d5c8d5f2ca0719aaeef6856042d8.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/CapsuleSansText-Medium__d6e0f9a85b076741a771ec8574c1278fb65fe34160e73bd8beffa2f927831302.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/MartinaPlantijn-Regular__e02ea76d18e952604fbe5636471d4c7e48f8db1c01fa15ee0e0170347f966405.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://robinhood.com/scripts/suppress-uc.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/webapp/vendor/user_centrics/3.33.0/bundle.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.944Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/webpack-44e8c4edf833b9570215.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/main-791280f23fb66447a7e5.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/pages/_app-f699032d439c3355559e.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/ab5b2209-f5abaab6077bda7325cb.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/66904-2239bd75f8dec89711f5.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/75124-c7d5f95f8ae9c49713f0.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/29541-99e3518d02e4117d4b05.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/64010-57d27a8e802f96227fe2.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/23740-5ef4866e1bc0b58cce85.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/23162-68afc50aac7a639f7e3f.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/7199-ab00f66a57d42b1943ee.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/71066-bd9b55be1b9b4cca8b73.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/67893-956ecd225bc57b8a344b.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/58552-399bf5567bc97b31d394.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/3840-b98237faa24a6523845a.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.945Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/7717-85ec8a228c0af553385b.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.946Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/99172-9ac57475977d17dd376c.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.946Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/74040-85a5da96c3df2ef249c2.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.946Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/17532-c47c833b8138bfb9cc67.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.946Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/pages/us/en-ae67ace816c8df4f3c6d.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/6YbfNgibzJTPP5oDTTv4NI/52a61fcd09e2cc33c4d392a2ef401088/image_501.jpg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/4AMLNM2FP37FHghha7757l/c29e98a9b5a31535a7333855183dca7b/wide_homepage_investing_4k_3.jpeg",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/2zqFBs1Dk1ZFLa68vgaCUM/ae93f6273da3b74ae09899a4cdcee75e/wide_crypto_hero_4k_test_2.jpg",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/54Guv4y5evT0ZpKTaC09c1/391b135f648b2582deff63a48ef63c10/RH25_Strategiespromo_wide_homepage_hero_4k.jpeg",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/4eSlnvgaWAu2jaCVAyRcrY/602aa63fb17d4448ef651bd2944e963a/illo_secure.svg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/DwoUYJLid0EWhDOJPjFYN/673186170fb52deebdfaeb3691a28cac/illo_protect.svg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/2KMkk3plAKjRG2fPBI69a1/18a5f48bbf278bc91008f6904096b559/illo_multi-factor.svg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/4u2J3HEANe8rXfdytWGpAC/72bd780bca181f59b40dcf8c51f0e996/illo_247.svg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/PKdx5QPF2hxl9vcbxm55W/b1942354f732fbb69a019c53c73bf46b/homepage_learn_phone_2x.png",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "images.ctfassets.net",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://images.ctfassets.net/ilblxxee70tt/6WBms0BL77uZhazKdaye91/981a21240eef31028f4e760ae6fa9886/Investors_Hero.jpg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:36.947Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/images/privacyoptions__86f2eb97cc1f3909c12e4512de9e267215d94ac5aaee9393d0f007f18c34e8ba.svg",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.961Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/7824104825644f1c82762c4e7fc4f9da82c691fb/_buildManifest.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:36.961Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/7824104825644f1c82762c4e7fc4f9da82c691fb/_ssgManifest.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "videos.ctfassets.net",
+      "initiator": "media",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "media",
+      "timestamp": "2026-04-01T03:33:37.133Z",
+      "url": "https://videos.ctfassets.net/ilblxxee70tt/7tH4TTbWHPcfDpVU2a4XRw/0ca0ec01063c08f455739b29e47f5023/Robinhood_Homepage_Takeover_08s_compressed.mp4",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "videos.ctfassets.net",
+      "initiator": "media",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "media",
+      "timestamp": "2026-04-01T03:33:37.137Z",
+      "url": "https://videos.ctfassets.net/ilblxxee70tt/3r1UZhjsj4AexVmCH9hrfH/1e7b93b16249b7ef73025a31d4cfae38/Dotcom_NewGeneration_Animation_WEB.webm",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:37.145Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/RHPhonic-Regular__66da8fcfda05a8b53afe5c8697bdb1b2fd883e748a29f65a628d7a98aad40982.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "font",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "font",
+      "timestamp": "2026-04-01T03:33:37.145Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/fonts/RHPhonic-Bold__7f2cc2d831ae8cb196f347fee306ddd1ce4eb72b3dd76a05e28720a23f5a4ee3.woff2",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.435Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/78726.f548aea3706789f5cb80.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.435Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/46006.46eb2eb9b12332c34169.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.435Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/5597.2b82e902105652470d05.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "bonfire.robinhood.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.436Z",
+      "url": "https://bonfire.robinhood.com/region",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:37.622Z",
+      "url": "https://o62437.ingest.sentry.io/api/1336410/security/?sentry_key=dadc326d25814a55b5486cb04f439a29",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "api.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.622Z",
+      "url": "https://api.usercentrics.eu/ruleSet/M6Jkl5BTgFMHMJ.json",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "experience.ninetailed.co",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.632Z",
+      "url": "https://experience.ninetailed.co/v2/organizations/4338303b-9c15-405b-9b37-070126d0e61d/environments/main/profiles?locale=en",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "sentry.io",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.641Z",
+      "url": "https://sentry.io/api/1336410/envelope/?sentry_key=dadc326d25814a55b5486cb04f439a29&sentry_version=7",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "robinhood.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.649Z",
+      "url": "https://robinhood.com/_next/data/7824104825644f1c82762c4e7fc4f9da82c691fb/us/en/strategies.json",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.649Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/pages/us/en/strategies-dc478e565e52e454f4f3.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "robinhood.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.649Z",
+      "url": "https://robinhood.com/_next/data/7824104825644f1c82762c4e7fc4f9da82c691fb/us/en/gold.json",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.649Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/pages/us/en/gold-af0ce7fa95ff21fb1b0d.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "robinhood.com",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.650Z",
+      "url": "https://robinhood.com/_next/data/7824104825644f1c82762c4e7fc4f9da82c691fb/us/en/legend.json",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "cdn.robinhood.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:37.650Z",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/brand/_next/static/chunks/pages/us/en/legend-fc86b2b71abb4989227f.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "api.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:37.922Z",
+      "url": "https://api.usercentrics.eu/settings/XpXabaxP5dY-KV/latest/languages.json",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "api.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:38.132Z",
+      "url": "https://api.usercentrics.eu/settings/XpXabaxP5dY-KV/latest/en.json",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "",
+      "hostname": "app.usercentrics.eu",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-01T03:33:38.363Z",
+      "url": "https://app.usercentrics.eu/browser-sdk/4.30.0/cross-domain-bridge.html",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "app.usercentrics.eu",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:38.453Z",
+      "url": "https://app.usercentrics.eu/session/1px.png?settingsId=XpXabaxP5dY-KV",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "api.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:38.453Z",
+      "url": "https://api.usercentrics.eu/translations/translations-en.json",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "aggregator.service.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:38.669Z",
+      "url": "https://aggregator.service.usercentrics.eu/aggregate/en?templates=4bWJnAIHjmH1M2@1.0.8,661xX_8pMkaUXA@1.0.5,8u-otMeLg@3.1.5,9V8bg4D63@9.6.16,BJ59EidsWQ@25.7.29,H1Vl5NidjWX@40.18.46,HkocEodjb7@52.11.43,JQ2XQxIk@9.6.11,OxsYgtMfe7aP8u@1.0.2,PCM3ENiM_@2.1.1,QBkU7XsMMczvRi@3.2.6,W-HOHMTVq@5.1.5,Z0TcXjY0P@1.3.7,_TNqlKmFSnmV12@1.0.6,bur5nm9N5lg6va@1.0.5,ib1Ev0zRq@1.0.4,jN_bfP4L7bFXrF@1.0.6,rH1vNPCFR@8.1.5,rk-nqEj_o-m@8.6.5,sjAWaw1cW@7.2.2,twMyStLkn@15.9.15,xvRlt3feOOq0VI@1.0.6",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "consent-api.service.consent.usercentrics.eu",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:38.967Z",
+      "url": "https://consent-api.service.consent.usercentrics.eu/consent/uw/2",
+      "vendorCategory": "strictly_necessary",
+      "vendorName": "Consent Management Platform"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.us.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:38.984Z",
+      "url": "https://o62437.ingest.us.sentry.io/api/4509232895361024/security/?sentry_key=98a8908d38fbd5ecdf8e976a1cb6b404",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.googletagmanager.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:38.984Z",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-5Q7W7D3",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google-analytics.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:38.984Z",
+      "url": "https://www.google-analytics.com/analytics.js",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.googletagmanager.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:38.984Z",
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-N6DVMV7XZB",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google-analytics.com",
+      "initiator": "xhr",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-04-01T03:33:39.105Z",
+      "url": "https://www.google-analytics.com/j/collect?v=1&_v=j102&a=1513548683&t=pageview&_s=1&dl=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&dp=%2Fus%2Fen%2F&ul=en-us&dt=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&sr=1440x2200&vp=1440x2200&_u=YGBAgEABAAAAACAAI~&jid=17312538&gjid=1723551981&cid=426313461.1775014419&tid=UA-46330882-15&_gid=768801479.1775014419&_slc=1&cd1=archetype&z=840556176",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "stats.g.doubleclick.net",
+      "initiator": "xhr",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-04-01T03:33:39.105Z",
+      "url": "https://stats.g.doubleclick.net/j/collect?t=dc&aip=1&_r=3&v=1&_v=j102&tid=UA-46330882-15&cid=426313461.1775014419&jid=17312538&gjid=1723551981&_gid=768801479.1775014419&_u=YGBAgEABAAAAAGAAI~&z=347178858",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google-analytics.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.268Z",
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-N6DVMV7XZB&gtm=45je63u0v9122535394za200zd9122535394&_p=1775014418968&gcs=G111&gcd=13n3n3n3n5l1&npa=0&dma=0&gdid=dOThhZD&cid=426313461.1775014419&ul=en-us&sr=1440x2200&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=macOS&uapv=10_15_7&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=0~115938465~115938469~116991816&sid=1775014419&sct=1&seg=0&dl=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&dt=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&_tu=CA&en=page_view&_fv=1&_ss=1&_ee=1&tfd=2637",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Analytics"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.googletagmanager.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.287Z",
+      "url": "https://www.googletagmanager.com/gtag/js?id=DC-15324952&cx=c&gtm=4e63u0",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.googletagmanager.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.287Z",
+      "url": "https://www.googletagmanager.com/gtag/js?id=AW-860274355&cx=c&gtm=4e63u0",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.us.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:39.290Z",
+      "url": "https://o62437.ingest.us.sentry.io/api/4509232895361024/security/?sentry_key=98a8908d38fbd5ecdf8e976a1cb6b404",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "connect.facebook.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.290Z",
+      "url": "https://connect.facebook.net/en_US/fbevents.js",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "snap.licdn.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.290Z",
+      "url": "https://snap.licdn.com/li.lms-analytics/insight.min.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "bat.bing.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.290Z",
+      "url": "https://bat.bing.com/bat.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.us.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:39.291Z",
+      "url": "https://o62437.ingest.us.sentry.io/api/4509232895361024/security/?sentry_key=98a8908d38fbd5ecdf8e976a1cb6b404",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "web-sdk-cdn.singular.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.291Z",
+      "url": "https://web-sdk-cdn.singular.net/singular-gtm-interface/latest/singular-gtm-interface.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.redditstatic.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.291Z",
+      "url": "https://www.redditstatic.com/ads/pixel.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "collector-47804.us.tvsquared.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.294Z",
+      "url": "https://collector-47804.us.tvsquared.com/tv2track.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.296Z",
+      "url": "https://www.google.com/ccm/collect?frm=0&ae=g&en=page_view&dl=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&scrsrc=www.googletagmanager.com&rnd=336655265.1775014419&dt=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&auid=734923044.1775014419&navt=n&npa=0&ep.ads_data_redaction=0&gdid=dOThhZD&_tu=CA&gtm=45He63u0v811698941za200zd811698941xea&gcs=G111&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616986~115938465~115938469~116133313~116991817&apve=1&apvf=f&apvc=1&tft=1775014419292&tfd=2664",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.us.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:39.306Z",
+      "url": "https://o62437.ingest.us.sentry.io/api/4509232895361024/security/?sentry_key=98a8908d38fbd5ecdf8e976a1cb6b404",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.416Z",
+      "url": "https://www.google.com/ccm/collect?frm=0&en=page_view&dl=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&scrsrc=www.googletagmanager.com&rnd=336655265.1775014419&dt=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&auid=734923044.1775014419&navt=n&npa=0&gdid=dOThhZD&ep.user_data_mode=a&_tu=CA&gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xec&gcs=G111&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341&apve=1&apvf=f&apvc=0&tids=DC-15324952&tid=DC-15324952&tft=1775014419413&tfd=2785",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "ad.doubleclick.net",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.416Z",
+      "url": "https://ad.doubleclick.net/activity;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=734923044.1775014419;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=3;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.1;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F?",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "",
+      "hostname": "15324952.fls.doubleclick.net",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-01T03:33:39.417Z",
+      "url": "https://15324952.fls.doubleclick.net/activityi;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=734923044.1775014419;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=2;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.1;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;_dc_test=1;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F?",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "pixel-config.reddit.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-04-01T03:33:39.422Z",
+      "url": "https://pixel-config.reddit.com/pixels/t2_12bm51ff/config",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "alb.reddit.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.422Z",
+      "url": "https://alb.reddit.com/rp.gif?ts=1775014419421&id=t2_12bm51ff&event=PageVisit&m.itemCount=&m.value=&m.valueDecimal=&m.currency=&m.transactionId=&m.customEventName=&m.products=&m.conversionId=&uuid=e006f18c-4ab3-4ff8-aba6-8232bfe4959f&aaid=&external_id=&idfa=&integration=reddit&partner=&partner_version=&opt_out=0&sh=2200&sw=1440&v=rdt_f3936046&dpm=&dpcc=&dprc=",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "px.ads.linkedin.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.428Z",
+      "url": "https://px.ads.linkedin.com/wa/?medium=fetch&fmt=g",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "px.ads.linkedin.com",
+      "initiator": "xhr",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-04-01T03:33:39.429Z",
+      "url": "https://px.ads.linkedin.com/attribution_trigger?pid=6159124&time=1775014419427&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&tm=gtmv2",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "px.ads.linkedin.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.429Z",
+      "url": "https://px.ads.linkedin.com/collect?v=2&fmt=js&pid=6159124&time=1775014419427&li_adsId=c8fe8c83-74d8-4588-8b5d-2d5f2ab6cdcc&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&tm=gtmv2",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "googleads.g.doubleclick.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.473Z",
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/860274355/?random=1775014419445&cv=11&fst=1775014419445&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63u0v896820593z8811698941za20gzb811698941zd811698941xec&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616985~115938465~115938469~116991817&u_w=1440&u_h=2200&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&frm=0&tiba=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&did=dOThhZD&gdid=dOThhZD&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=734923044.1775014419&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=macOS&uapv=10_15_7&uaw=0&_tu=CA&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "googleads.g.doubleclick.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.473Z",
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/16485841526/?random=1775014419469&cv=11&fst=1775014419469&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63u0v896820593z8811698941za20gzb811698941zd811698941xec&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616985~115938465~115938469~116991817&u_w=1440&u_h=2200&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&frm=0&tiba=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&did=dOThhZD&gdid=dOThhZD&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=734923044.1775014419&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=macOS&uapv=10_15_7&uaw=0&_tu=CA&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.474Z",
+      "url": "https://www.google.com/ccm/collect?frm=0&en=page_view&dl=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&scrsrc=www.googletagmanager.com&rnd=336655265.1775014419&dt=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&auid=734923044.1775014419&navt=n&npa=0&did=dOThhZD&gdid=dOThhZD&_tu=CA&gtm=45be63u0v896820593z8811698941za20gzb811698941zd811698941xec&gcs=G111&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616985~115938465~115938469~116991817&apve=1&apvf=f&apvc=0&tids=AW-860274355~AW-16485841526&tid=AW-860274355&tft=1775014419472&tfd=2843",
+      "vendorCategory": "analytics",
+      "vendorName": "Google Tag Manager"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.us.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:39.475Z",
+      "url": "https://o62437.ingest.us.sentry.io/api/4509232895361024/security/?sentry_key=98a8908d38fbd5ecdf8e976a1cb6b404",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "web-sdk-cdn.singular.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.475Z",
+      "url": "https://web-sdk-cdn.singular.net/singular-sdk/latest/singular-sdk.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "connect.facebook.net",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.496Z",
+      "url": "https://connect.facebook.net/signals/config/815046923522815?v=2.9.288&r=stable&domain=robinhood.com&hme=c676e0b4e1b62cc7b9a55179c96fc72f4b50ddb02e06525868e7052c2bcfa5eb&ex_m=102%2C198%2C147%2C22%2C70%2C71%2C139%2C66%2C65%2C11%2C155%2C88%2C16%2C132%2C124%2C37%2C73%2C76%2C130%2C152%2C157%2C8%2C4%2C5%2C7%2C6%2C3%2C89%2C99%2C158%2C163%2C212%2C60%2C179%2C180%2C53%2C267%2C30%2C72%2C224%2C223%2C222%2C23%2C32%2C101%2C59%2C10%2C61%2C95%2C96%2C97%2C103%2C127%2C31%2C29%2C129%2C126%2C125%2C148%2C74%2C151%2C149%2C150%2C48%2C58%2C120%2C15%2C154%2C43%2C254%2C255%2C253%2C26%2C27%2C28%2C46%2C140%2C75%2C110%2C18%2C20%2C42%2C38%2C40%2C39%2C81%2C90%2C94%2C108%2C138%2C141%2C44%2C109%2C24%2C21%2C116%2C67%2C35%2C143%2C142%2C144%2C135%2C133%2C25%2C34%2C57%2C107%2C153%2C68%2C17%2C145%2C112%2C79%2C64%2C19%2C83%2C84%2C113%2C82%2C33%2C283%2C205%2C194%2C195%2C193%2C286%2C278%2C50%2C206%2C105%2C128%2C78%2C118%2C52%2C45%2C47%2C111%2C117%2C123%2C56%2C62%2C51%2C54%2C98%2C156%2C1%2C121%2C14%2C119%2C12%2C2%2C55%2C91%2C63%2C115%2C87%2C86%2C159%2C160%2C92%2C93%2C9%2C122%2C100%2C49%2C136%2C85%2C77%2C69%2C114%2C104%2C41%2C137%2C0%2C80%2C131%2C134%2C146%2C36%2C106%2C13%2C161",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "bat.bing.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.498Z",
+      "url": "https://bat.bing.com/p/action/148011151.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "",
+      "hostname": "15324952.fls.doubleclick.net",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-01T03:33:39.516Z",
+      "url": "https://15324952.fls.doubleclick.net/activityi;dc_pre=CNeGyv_by5MDFeRtCAQdk5U45Q;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=734923044.1775014419;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=2;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.1;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;_dc_test=1;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F?",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "bat.bing.com",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-01T03:33:39.564Z",
+      "url": "https://bat.bing.com/p/conversions/t/148011151",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "bat.bing.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.564Z",
+      "url": "https://bat.bing.com/action/0?ti=148011151&tm=gtm002&Ver=2&mid=746b9496-ce4c-48d6-ba70-ae59a213f72c&bo=1&sid=92ff41402d7b11f1bb36e174e2667267&vid=92ff48202d7b11f1987af3a3e70faee4&vids=1&msclkid=N&pi=0&lg=en-US&sw=1440&sh=2200&sc=24&nwd=1&tl=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&p=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&r=&lt=1031&evt=pageLoad&sv=2&cdb=AQAS&rn=815753",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://15324952.fls.doubleclick.net/activityi;dc_pre=CNeGyv_by5MDFeRtCAQdk5U45Q;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=734923044.1775014419;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=2;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.1;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;_dc_test=1;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F?",
+      "hostname": "adservice.google.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.574Z",
+      "url": "https://adservice.google.com/ddm/fls/z/dc_pre=CNeGyv_by5MDFeRtCAQdk5U45Q;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=*;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=2;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.*;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;_dc_test=1;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "sdk-api-v1.singular.net",
+      "initiator": "xhr",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "xhr",
+      "timestamp": "2026-04-01T03:33:39.596Z",
+      "url": "https://sdk-api-v1.singular.net/api/v1/event?current_device_time=1775014420&event_id=885c04f9-cdd3-4683-ab12-b083cdfeb874&conversion_event=true&k=SDID&a=robinhood_acd79726&p=Web&i=com.robinhood.web&screen_height=2200&screen_width=1440&sdk=WebSDK-v1.4.10&singular_instance_id=06a4f1a4-c0ab-473f-9d57-9c9317486bd1&sdid=b969cbde-cf99-41c0-a819-375c04ee11fb&storage_type=local&timezone=GMT-0700&touchpoint_timestamp=1775014420&u=b969cbde-cf99-41c0-a819-375c04ee11fb&n=__PAGE_VISIT__&is_revenue_event=false&first=true&is_after_conversion_event=false&s=6b49d775-59a1-4c23-86fc-96c249261e21&web_page_url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&is_first_visit=true&is_page_refreshed=false&sdid_persist_mode=auto&is_first_page_visit_in_session=true&ecid=b969cbde-cf99-41c0-a819-375c04ee11fb&os=MacOS&lag=0&h=78611bf6c579e58ae6ddb06ec59beaec5e645f0b",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "ad.doubleclick.net",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:39.597Z",
+      "url": "https://ad.doubleclick.net/activity;dc_pre=CJiwyv_by5MDFaC8jggdc2M9nA;src=15324952;type=robinh;cat=robin003;ord=6002592575098;npa=0;auiddc=734923044.1775014419;gdid=dOThhZD;uaa=x86;uab=64;uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6;uamb=0;uam=;uap=macOS;uapv=10_15_7;uaw=0;pscdl=noapi;frm=0;user_data_mode=a;_tu=KFA;gtm=45fe63u0v9207802566z8811698941za20gzb811698941zd811698941xea;gcs=G111;gcd=13n3n3n3n5l1;dma=0;dc_fmt=3;tag_exp=0~115938465~115938469~116133314~116991817~117266401~117884344~118089341;epver=2;em=tv.1;dc_random=1775014419_quD88sTJMiUvApn0ba84rKvry8KNM-ttDQ;~oref=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F?",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "DoubleClick"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "collector-47804.us.tvsquared.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.623Z",
+      "url": "https://collector-47804.us.tvsquared.com/tv2track.php?action_name=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&idsite=TV-5427189054-1&rec=1&r=017218&h=20&m=33&s=39&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&_id=0759157edb7dc72a&_idts=1775014420&_idvc=0&_idn=1&_viewts=&cookie=1&res=1440x2200&gt_ms=98",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.634Z",
+      "url": "https://www.google.com/pagead/1p-user-list/16485841526/?random=1775014419469&cv=11&fst=1775012400000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63u0v896820593z8811698941za20gzb811698941zd811698941xec&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616985~115938465~115938469~116991817&u_w=1440&u_h=2200&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&frm=0&tiba=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&did=dOThhZD&gdid=dOThhZD&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=734923044.1775014419&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=macOS&uapv=10_15_7&uaw=0&_tu=CA&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSsAEABaugfQ2aflaaG7rzDoH-yNMvjCW4Khtngqoz7CqHBnE9gX1q0g2Ftiw9aCoxiFUme8xlHxROAFkjTMV8wAq2KhzJ4UjMJOtZbYFCEWKdWFIeY_qU6ql2rOgMUEdl62qQHU73LDQVPbvLBS4idksICtju8MIrh-MDbBEwb4kDPA9Qy4eOjmJnRJ_WSQ696Vig5zQ5nJD5d2zVSKYg8YRuCzhbJ45Nz3lmAXq1hn4XKQ&random=1295753185&rmt_tld=0&ipr=y",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.google.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.634Z",
+      "url": "https://www.google.com/pagead/1p-user-list/860274355/?random=1775014419445&cv=11&fst=1775012400000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be63u0v896820593z8811698941za20gzb811698941zd811698941xec&gcd=13n3n3n3n5l1&dma=0&tag_exp=0~115616985~115938465~115938469~116991817&u_w=1440&u_h=2200&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&frm=0&tiba=Robinhood%3A%2024%2F5%20Commission-Free%20Stock%20Trading%20%26%20Investing&did=dOThhZD&gdid=dOThhZD&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=734923044.1775014419&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=macOS&uapv=10_15_7&uaw=0&_tu=CA&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSsAEABaugfe2hEGstGhBCC26dUz9DNgfYmjldJPfmVu3kIcFHqCDHB9eqCFrF-OifZVb-Xg6_f725LNFfkwBEuviCvqBa0qsmjCrVMVGYqqZwtJ2VXClBxq5kE3qhHxl7igbhV_QZ9BhCxvXioHko9Zd1PK9U8i7u5NV-QFTMNChcItRGT_W96VntF6uKWakUwC5I8wIM-7JwKeuXYNeGzHxcrBBrdhux79okjRe4Nnb1pQ&random=6637514&rmt_tld=0&ipr=y",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "px.ads.linkedin.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.698Z",
+      "url": "https://px.ads.linkedin.com/collect?v=2&fmt=js&pid=6159124&time=1775014419427&li_adsId=c8fe8c83-74d8-4588-8b5d-2d5f2ab6cdcc&url=https%3A%2F%2Frobinhood.com%2Fus%2Fen%2F&tm=gtmv2&cookiesTest=true",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.facebook.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.727Z",
+      "url": "https://www.facebook.com/tr/?id=815046923522815&ev=PageView&dl=https%3A%2F%2Frobinhood.com&rl=&if=false&ts=1775014419725&sw=1440&sh=2200&v=2.9.288&r=stable&a=tmSimo-GTM-WebTemplate&ec=0&o=12316&fbp=fb.1.1775014419724.425030637497318732&pm=1&hrl=4278d4&ler=empty&plt=508.29999999701977&ups[pv]=%7B%7D&ups[rpv]=%7B%7D&it=1775014419493&coo=false&tm=1&cs_cc=1&cas=25014382501504521%2C24823503350667520%2C25256180027333164%2C9795288507255608%2C9592477530773084%2C9316214438425327%2C9365160196898214%2C9370220106332778%2C8647204115357785&dlc=1&expv2[0]=pl0&expv2[1]=el2&expv2[2]=bc1&expv2[3]=ra0&expv2[4]=rp0&expv2[5]=im1&expv2[6]=hf1&rqm=GET",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "o62437.ingest.sentry.io",
+      "initiator": "other",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "other",
+      "timestamp": "2026-04-01T03:33:39.955Z",
+      "url": "https://o62437.ingest.sentry.io/api/1336410/security/?sentry_key=dadc326d25814a55b5486cb04f439a29",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "www.linkedin.com",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-01T03:33:39.955Z",
+      "url": "https://www.linkedin.com/px/li_sync?redirect=https%3A%2F%2Fpx.ads.linkedin.com%2Fcollect%3Fv%3D2%26fmt%3Djs%26pid%3D6159124%26time%3D1775014419427%26li_adsId%3Dc8fe8c83-74d8-4588-8b5d-2d5f2ab6cdcc%26url%3Dhttps%253A%252F%252Frobinhood.com%252Fus%252Fen%252F%26tm%3Dgtmv2%26cookiesTest%3Dtrue%26liSync%3Dtrue",
+      "vendorCategory": "advertising_marketing",
+      "vendorName": "Meta / Facebook"
+    },
+    {
+      "documentUrl": "https://robinhood.com/us/en/",
+      "hostname": "crumbs.robinhood.com",
+      "initiator": "fetch",
+      "method": "POST",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-01T03:33:45.566Z",
+      "url": "https://crumbs.robinhood.com/track",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "notes": [
+    "No interaction wait completed for 12000 ms."
+  ],
+  "preferences": null,
+  "refresh": null,
+  "storageDiffs": {
+    "acceptPhase": null,
+    "refreshPhase": null
+  },
+  "storageAfterAction": null,
+  "storageBeforeInteraction": {
+    "cookies": [
+      {
+        "domain": "robinhood.com",
+        "expires": 1809574417.11852,
+        "httpOnly": false,
+        "name": "device_id",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "valuePreview": "f41be259-3d35-4d38-a126-f23acb45bf4f",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1775016218,
+        "httpOnly": false,
+        "name": "session_id",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "valuePreview": "da9329f3-ab0a-43fb-b5ba-e2145dcda29e",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1775100819,
+        "httpOnly": false,
+        "name": "_gid",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "GA1.2.768801479.1775014419",
+        "vendorCategory": "analytics",
+        "vendorName": "Google Analytics"
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1775014479,
+        "httpOnly": false,
+        "name": "_gat",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "1",
+        "vendorCategory": "analytics",
+        "vendorName": "Google Analytics"
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1809574419.265001,
+        "httpOnly": false,
+        "name": "_ga_N6DVMV7XZB",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "GS2.1.s1775014419$o1$g0$t1775014419$j60$l0$h0",
+        "vendorCategory": "analytics",
+        "vendorName": "Google Analytics"
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1809574419.265195,
+        "httpOnly": false,
+        "name": "_ga",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "GA1.1.426313461.1775014419",
+        "vendorCategory": "analytics",
+        "vendorName": "Google Analytics"
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1782790419,
+        "httpOnly": false,
+        "name": "_gcl_au",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "1.1.734923044.1775014419",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": "robinhood.com",
+        "expires": 1775619219,
+        "httpOnly": false,
+        "name": "FPC",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "e7303586-5771-458e-827c-b39c191949ca",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1782790419,
+        "httpOnly": false,
+        "name": "_rdt_uuid",
+        "path": "/",
+        "sameSite": "Strict",
+        "secure": true,
+        "valuePreview": "1775014419417.e006f18c-4ab3-4ff8-aba6-8232bfe4959f",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1775100819,
+        "httpOnly": false,
+        "name": "_uetsid",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "92ff41402d7b11f1bb36e174e2667267",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1808710419,
+        "httpOnly": false,
+        "name": "_uetvid",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "92ff48202d7b11f1987af3a3e70faee4",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".doubleclick.net",
+        "expires": 1775015319.632833,
+        "httpOnly": false,
+        "name": "test_cookie",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "CheckForPermission",
+        "vendorCategory": "advertising_marketing",
+        "vendorName": "DoubleClick"
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1806550419,
+        "httpOnly": false,
+        "name": "singular_device_id",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "b969cbde-cf99-41c0-a819-375c04ee11fb",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".bing.com",
+        "expires": 1808710419.621909,
+        "httpOnly": false,
+        "name": "MUID",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "178EA201BAB16EB4121BB52FBB8E6F41",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".bat.bing.com",
+        "expires": 1775619219.621945,
+        "httpOnly": false,
+        "name": "MR",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "0",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1806550419.697557,
+        "httpOnly": false,
+        "name": "li_gp",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "MTsxNzc1MDE0NDE5OzA=",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1782790419.95396,
+        "httpOnly": false,
+        "name": "li_sugr",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "327538ae-9720-47c5-a4ac-79defa93ef56",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1806550419.954016,
+        "httpOnly": false,
+        "name": "bcookie",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "\"v=2&5364db6c-6d22-4abe-8178-37bcf78f1671\"",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1775100819.697572,
+        "httpOnly": false,
+        "name": "lidc",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "\"b=VGST00:s=V:r=V:a=V:p=V:g=3848:u=1:x=1:i=1775014419:t=1775100819:v=2:sig=AQEPk...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".robinhood.com",
+        "expires": 1782790419,
+        "httpOnly": false,
+        "name": "_fbp",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": false,
+        "valuePreview": "fb.1.1775014419724.425030637497318732",
+        "vendorCategory": "advertising_marketing",
+        "vendorName": "Meta / Facebook"
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1777606419.953998,
+        "httpOnly": false,
+        "name": "UserMatchHistory",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "AQJYhcoVmIlW1wAAAZ1HGp3h_46iVPckF1ijnl5gl-fcTp9_-scN6TysItU1NeCLM3clL0eeO44zgg",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      },
+      {
+        "domain": ".linkedin.com",
+        "expires": 1777606419.954008,
+        "httpOnly": false,
+        "name": "AnalyticsSyncHistory",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "valuePreview": "AQINKfWg5Lk6RQAAAZ1HGp3hyjcUrhzQe6QMMZeHLY_cIFV4Fsu0ptQuB8mk59c_1ye3h1dV3l6T9Eqp...",
+        "vendorCategory": "unknown_needs_manual_review",
+        "vendorName": null
+      }
+    ],
+    "indexedDbNames": [],
+    "localStorage": [
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_did_visit_site",
+        "preview": "true",
+        "size": 4
+      },
+      {
+        "key": "uc_gcm",
+        "preview": "{\"adsDataRedaction\":false,\"adPersonalization\":\"granted\",\"adStorage\":\"granted\",\"adUserData\":\"granted\",\"analyticsStorage\":\"granted\"}",
+        "size": 130
+      },
+      {
+        "key": "_uetvid_exp",
+        "preview": "Mon, 26 Apr 2027 03:33:39 GMT",
+        "size": 29
+      },
+      {
+        "key": "global_singular_id",
+        "preview": "b969cbde-cf99-41c0-a819-375c04ee11fb",
+        "size": 36
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_singular_first_page_visit_occurred",
+        "preview": "true",
+        "size": 4
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_last_event_timestamp",
+        "preview": "1775014420",
+        "size": 10
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_web_url",
+        "preview": "https://robinhood.com/us/en/",
+        "size": 28
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_touchpoint_timestamp",
+        "preview": "1775014420",
+        "size": 10
+      },
+      {
+        "key": "__nt_anonymous_id__",
+        "preview": "\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\"",
+        "size": 66
+      },
+      {
+        "key": "_gcl_ls",
+        "preview": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"creationTimeMs\":1775014419283},\"expires\":1782790419283}}",
+        "size": 139
+      },
+      {
+        "key": "_uetsid",
+        "preview": "92ff41402d7b11f1bb36e174e2667267",
+        "size": 32
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_did_send_event.__PAGE_VISIT__",
+        "preview": "true",
+        "size": 4
+      },
+      {
+        "key": "__nt_profile__",
+        "preview": "{\"id\":\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\",\"stableId\":\"2442c1629d830359695e49aaba8e71ca46dc3f6290d28308fabddf40ebe2790f\",\"random\":0.9652271456935506,\"audiences\":[\"54XhfTKfP7LV6d6KURsP05\",\"PZqsU9hzR4o7ru9rAsF1l\"",
+        "size": 517
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_singular_instance_id",
+        "preview": "06a4f1a4-c0ab-473f-9d57-9c9317486bd1",
+        "size": 36
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_first_page_visit_url",
+        "preview": "https://robinhood.com/us/en/",
+        "size": 28
+      },
+      {
+        "key": "lastExternalReferrerTime",
+        "preview": "1775014419719",
+        "size": 13
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_singular_session_id",
+        "preview": "6b49d775-59a1-4c23-86fc-96c249261e21",
+        "size": 36
+      },
+      {
+        "key": "_uetsid_exp",
+        "preview": "Thu, 02 Apr 2026 03:33:39 GMT",
+        "size": 29
+      },
+      {
+        "key": "_uetvid",
+        "preview": "92ff48202d7b11f1987af3a3e70faee4",
+        "size": 32
+      },
+      {
+        "key": "lastExternalReferrer",
+        "preview": "empty",
+        "size": 5
+      },
+      {
+        "key": "__nt-consent__",
+        "preview": "\"accepted\"",
+        "size": 10
+      },
+      {
+        "key": "uc_settings",
+        "preview": "{\"controllerId\":\"cec88f6a36d974bbe6baab1d34da46dd516419bc9584aca9fef2a785442c461c\",\"id\":\"XpXabaxP5dY-KV\",\"language\":\"en\",\"services\":[{\"history\":[{\"action\":\"onNonEURegion\",\"language\":\"en\",\"status\":true,\"timestamp\":1775014418954,\"type\":\"impli",
+        "size": 6920
+      },
+      {
+        "key": "li_adsId",
+        "preview": "c8fe8c83-74d8-4588-8b5d-2d5f2ab6cdcc",
+        "size": 36
+      },
+      {
+        "key": "__nt_experiences__",
+        "preview": "[{\"experienceId\":\"1rj6npo4CRs49FnW35fs6q\",\"variantIndex\":1,\"variants\":{},\"sticky\":false},{\"experienceId\":\"1xY5oV8oHubFJVTyqcrYy4\",\"variantIndex\":0,\"variants\":{\"1uIS12gf9d4Ygu9VoRoUYs\":\"1uIS12gf9d4Ygu9VoRoUYs\"},\"sticky\":false},{\"experienceId",
+        "size": 1730
+      }
+    ],
+    "sessionStorage": [
+      {
+        "key": "uc_user_country",
+        "preview": "{\"countryCode\":\"US\",\"countryName\":\"US,USCA\",\"regionCode\":\"USCA\"}",
+        "size": 64
+      },
+      {
+        "key": "robinhood_acd79726_com.robinhood.web_singular_api_queue",
+        "preview": "[]",
+        "size": 2
+      }
+    ]
+  },
+  "timestamp": "2026-04-01T03:33:56.795Z",
+  "url": "https://robinhood.com/us/en/"
+}

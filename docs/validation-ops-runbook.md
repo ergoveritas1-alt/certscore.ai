@@ -1,6 +1,6 @@
 # Validation Ops Runbook
 
-This runbook covers the new validation-only deployment lane:
+This runbook covers the validation runtime lane:
 
 - `apps/web` deployed to Vercel with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler running on a separate VM
@@ -15,7 +15,7 @@ This runbook covers the new validation-only deployment lane:
 - prepare a VM with Docker or Node 20 + pnpm
 - set the validation crawler contact/identity copy you want exposed on the public root page
 
-## 2. Validation Web Deploy
+## 2. Validation Surface Deploy
 
 Deploy the same `apps/web` app to Vercel, but with:
 
@@ -118,7 +118,7 @@ Run these before trusting the deployment:
 
 Expected results:
 
-- validation web env is complete
+- validation env is complete
 - validation worker env is complete
 - validation Redis connectivity passes
 - validation tables are reachable in Supabase

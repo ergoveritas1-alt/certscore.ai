@@ -8,7 +8,6 @@ CertScore (`certscore.ai`) is a production-minded MVP for scanning public websit
 website-signal-risk-scanner/
 ├─ apps/
 │  ├─ web/
-│  ├─ validation-web/
 │  └─ validation-worker/
 ├─ packages/
 │  ├─ shared/
@@ -26,7 +25,6 @@ website-signal-risk-scanner/
 ## Workspace packages
 
 - `apps/web`: product-facing web app and control-plane workflows
-- `apps/validation-web`: validation-only web surface
 - `apps/validation-worker`: active validation runtime owned by `WC01`
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
@@ -60,7 +58,6 @@ website-signal-risk-scanner/
 This monorepo should use [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local) as the single local development runtime env:
 
 - copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
-- copy [apps/web/.env.validation.example](/Users/benmasek/WC01/apps/web/.env.validation.example) to [apps/web/.env.validation.local](/Users/benmasek/WC01/apps/web/.env.validation.local) for the validation-only web app
 
 Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a root `.env.local` for app runtime configuration.
 
@@ -130,14 +127,12 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - `pnpm dev:validation`
 12. Start the main local app by itself when needed:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-13. Start the validation-only web app on a separate port when needed:
-   - `pnpm dev:validation:web`
-14. Use `WS01` when you need the standalone scanner locally.
-15. Start the standalone scanner locally against the same dev Supabase project as `localhost:3000`:
+13. Use `WS01` when you need the standalone scanner locally.
+14. Start the standalone scanner locally against the same dev Supabase project as `localhost:3000`:
    - `pnpm dev:scanner:local`
-16. Use the combined local runner only when you want web + validation together in `WC01`:
+15. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
-17. Run a validation scheduler sweep manually when needed:
+16. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 
 ## Development verification
