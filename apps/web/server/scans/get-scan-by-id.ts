@@ -257,7 +257,7 @@ function buildStoredSignalPopulationRecords(input: {
                   (value as { kind?: unknown }).kind === "validation")
             )
           : [],
-        reportSignalSource: "policy_enrichment_signal",
+        reportSignalSource: "document_semantic_signal",
         source: input.source,
         value: row.signal_value_json,
         valueType:

@@ -1914,7 +1914,8 @@ function buildReviewFindings(input: {
               signalLabel: item.label,
               signalValue: item.value
             }
-          : item.source === "policy_enrichment_signal" && isPolicyPositiveSignalKey(item.key)
+          : (item.source === "policy_enrichment_signal" || item.source === "document_semantic_signal") &&
+              isPolicyPositiveSignalKey(item.key)
             ? getPolicySignalFallbackEvidence({
                 mergedSignals: input.mergedSignals,
                 policyEnrichment: input.policyEnrichment ?? [],

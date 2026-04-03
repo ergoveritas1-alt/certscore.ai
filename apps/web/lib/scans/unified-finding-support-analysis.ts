@@ -45,7 +45,9 @@ export function buildUnifiedFindingSupportAnalysis(): UnifiedFindingSupportAnaly
   return REPORT_UNIFIED_FINDINGS.map((finding) => {
     const hasSnapshot = finding.signalMappings.some((mapping) => mapping.source === "snapshot_signal");
     const hasRuntime = finding.signalMappings.some((mapping) => mapping.source === "runtime_artifact_signal");
-    const hasPolicy = finding.signalMappings.some((mapping) => mapping.source === "policy_enrichment_signal");
+    const hasPolicy = finding.signalMappings.some(
+      (mapping) => mapping.source === "policy_enrichment_signal" || mapping.source === "document_semantic_signal"
+    );
     const hasValidation = finding.validationRuleKeys.length > 0;
     const currentTriggerShape = deriveTriggerShape({ hasPolicy, hasRuntime, hasSnapshot, hasValidation });
 

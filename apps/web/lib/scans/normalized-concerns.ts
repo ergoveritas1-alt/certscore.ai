@@ -23,6 +23,7 @@ export type NormalizedConcernOriginType =
   | "snapshot_signal"
   | "compatibility_signal"
   | "policy_enrichment"
+  | "document_semantic"
   | "policy_review_queue"
   | "validation_rule";
 
@@ -850,8 +851,8 @@ function deriveOriginTypeFromCandidate(candidate: ReviewFindingCandidateInput): 
     if (candidate.signalSource === "snapshot_signal") {
       return "snapshot_signal";
     }
-    if (candidate.signalSource === "policy_enrichment_signal") {
-      return "policy_enrichment";
+    if (candidate.signalSource === "policy_enrichment_signal" || candidate.signalSource === "document_semantic_signal") {
+      return candidate.signalSource === "document_semantic_signal" ? "document_semantic" : "policy_enrichment";
     }
     return "compatibility_signal";
   }

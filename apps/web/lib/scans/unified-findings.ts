@@ -2837,7 +2837,7 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
       packet.sourceRefs.some(
         (sourceRef) =>
           sourceRef.kind === "signal" &&
-          sourceRef.source === "policy_enrichment_signal" &&
+          (sourceRef.source === "policy_enrichment_signal" || sourceRef.source === "document_semantic_signal") &&
           getPolicyPositiveSignalKeysForFinding("privacy_rights_path_present").includes(sourceRef.key)
       )
   },
@@ -2849,7 +2849,7 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
       packet.sourceRefs.some(
         (sourceRef) =>
           sourceRef.kind === "signal" &&
-          sourceRef.source === "policy_enrichment_signal" &&
+          (sourceRef.source === "policy_enrichment_signal" || sourceRef.source === "document_semantic_signal") &&
           getPolicyPositiveSignalKeysForFinding("children_privacy_disclosure_present").includes(sourceRef.key)
       )
   },
@@ -2886,7 +2886,7 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
       packet.sourceRefs.some(
         (sourceRef) =>
           sourceRef.kind === "signal" &&
-          sourceRef.source === "policy_enrichment_signal" &&
+          (sourceRef.source === "policy_enrichment_signal" || sourceRef.source === "document_semantic_signal") &&
           getPolicyPositiveSignalKeysForFinding("third_party_advertising_disclosure_present").includes(sourceRef.key)
       )
   }

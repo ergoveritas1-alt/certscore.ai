@@ -30,7 +30,7 @@ export type PersistedNanoSignalRow = {
   label: string;
   population_status: "present" | "missing" | "conflicting" | "insufficient";
   provenance_detail: string;
-  report_signal_source: "policy_enrichment_signal";
+  report_signal_source: "document_semantic_signal";
   value: boolean | number | string | string[];
 };
 
@@ -215,7 +215,7 @@ export function buildNanoPolicySignalRows(input: {
       label: spec.label,
       population_status: "present",
       provenance_detail: `policy_enrichment.${spec.pageType}`,
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: true
     });
   }
@@ -234,7 +234,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy actionable flags",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPolicyFlags
     });
   }
@@ -251,7 +251,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy semantic confidence",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPolicyConfidence ?? 0
     });
   }
@@ -265,7 +265,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy ambiguity score",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPolicyAmbiguityScore
     });
   }
@@ -278,7 +278,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy DSAR mechanism",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPolicyDsarMechanism
     });
   }
@@ -291,7 +291,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Privacy contact channel type",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPrivacyContactChannelType
     });
   }
@@ -304,7 +304,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy do-not-sell posture",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: primaryPolicyDoNotSell
     });
   }
@@ -318,7 +318,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy rights signals",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: policyRightsSignals
     });
   }
@@ -332,7 +332,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy children reference",
       population_status: "present",
       provenance_detail: "policy_enrichment.privacy_policy",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: policyChildrenReference
     });
   }
@@ -350,7 +350,7 @@ export function buildNanoPolicySignalRows(input: {
       label: "Policy behavior conflict candidate",
       population_status: "present",
       provenance_detail: "policy_review_queue.policy_behavior_conflict_candidate",
-      report_signal_source: "policy_enrichment_signal",
+      report_signal_source: "document_semantic_signal",
       value: true
     });
   }
@@ -377,7 +377,7 @@ export function buildNanoPolicySignalRows(input: {
         label: "Cookie policy structurally obstructed",
         population_status: "present",
         provenance_detail: "policy_enrichment.cookie_policy",
-        report_signal_source: "policy_enrichment_signal",
+        report_signal_source: "document_semantic_signal",
         value: true
       });
     } else {
@@ -390,7 +390,7 @@ export function buildNanoPolicySignalRows(input: {
           label: "Cookie runtime disclosure gap detected",
           population_status: "present",
           provenance_detail: "policy_enrichment.cookie_policy",
-          report_signal_source: "policy_enrichment_signal",
+          report_signal_source: "document_semantic_signal",
           value: true
         });
       }
@@ -425,7 +425,7 @@ export function buildNanoPolicySignalRows(input: {
         label: "Policy/runtime functional misalignment detected",
         population_status: "present",
         provenance_detail: "policy_enrichment.low_confidence_runtime_synthesis",
-        report_signal_source: "policy_enrichment_signal",
+        report_signal_source: "document_semantic_signal",
         value: true
       });
     }
@@ -438,7 +438,7 @@ export function buildNanoPolicySignalRows(input: {
         label: "Policy/runtime missing technical disclosure detected",
         population_status: "present",
         provenance_detail: "policy_enrichment.low_confidence_runtime_synthesis",
-        report_signal_source: "policy_enrichment_signal",
+        report_signal_source: "document_semantic_signal",
         value: true
       });
     }
@@ -461,7 +461,7 @@ export function buildNanoPolicySignalRows(input: {
         label: "Policy/runtime disclosure likely obstructed",
         population_status: "present",
         provenance_detail: "policy_enrichment.low_confidence_runtime_synthesis",
-        report_signal_source: "policy_enrichment_signal",
+        report_signal_source: "document_semantic_signal",
         value: true
       });
     }

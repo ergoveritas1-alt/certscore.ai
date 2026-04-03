@@ -58,7 +58,12 @@ function getSignalValueType(value: unknown): PopulatedSignalRecord["valueType"] 
 }
 
 function getReportSignalSource(value: unknown): ReportSignalSource | null {
-  return value === "snapshot_signal" || value === "runtime_artifact_signal" || value === "policy_enrichment_signal" ? value : null;
+  return value === "snapshot_signal" ||
+    value === "runtime_artifact_signal" ||
+    value === "policy_enrichment_signal" ||
+    value === "document_semantic_signal"
+    ? value
+    : null;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

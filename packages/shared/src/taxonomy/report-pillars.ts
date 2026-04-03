@@ -120,7 +120,8 @@ export type ReportEvidenceCategoryDefinition = {
 export type ReportSignalSource =
   | "snapshot_signal"
   | "runtime_artifact_signal"
-  | "policy_enrichment_signal";
+  | "policy_enrichment_signal"
+  | "document_semantic_signal";
 
 export type ReportSignalDefinition = {
   id: string;
@@ -1320,6 +1321,38 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "privacy.fingerprinting_detected",
+    "Fingerprinting detected",
+    "adtech_analytics_replay_footprint",
+    [],
+    ["tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "privacy.popup_behavior_detected",
+    "Popup behavior detected",
+    "choice_symmetry_dark_pattern_indicators",
+    [],
+    ["choice_architecture_dark_patterns"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "privacy.overlay_blocking_detected",
+    "Overlay blocking detected",
+    "choice_symmetry_dark_pattern_indicators",
+    [],
+    ["choice_architecture_dark_patterns", "consent_lawful_basis_user_choice"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
+    "privacy.autoplay_media_detected",
+    "Autoplay media detected",
+    "choice_symmetry_dark_pattern_indicators",
+    [],
+    ["choice_architecture_dark_patterns"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "privacy.consent_withdrawal_mechanism_present",
     "Consent withdrawal mechanism present",
     "rights_request_mechanisms",
@@ -2007,7 +2040,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyDsarMechanism",
     "Policy DSAR mechanism",
     "rights_request_mechanisms",
@@ -2015,7 +2048,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacyContactChannelType",
     "Privacy contact channel type",
     "privacy_contacts_accountability",
@@ -2031,7 +2064,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["privacy_governance_contactability", "consumer_rights_request_handling", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyRetentionPeriods",
     "Policy retention periods",
     "data_handling_disclosures",
@@ -2039,7 +2072,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["governance_accountability_transfers", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyTransferMechanisms",
     "Policy transfer mechanisms",
     "data_handling_disclosures",
@@ -2047,7 +2080,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["governance_accountability_transfers", "cross_border_data_handling_transparency"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyDoNotSell",
     "Policy do-not-sell disclosure",
     "data_handling_disclosures",
@@ -2055,7 +2088,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policySubprocessorsListed",
     "Policy subprocessors listed",
     "data_handling_disclosures",
@@ -2063,7 +2096,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["governance_accountability_transfers", "privacy_governance_contactability"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyChildrenReference",
     "Policy children reference",
     "minor_related_age_gated_collection_context",
@@ -2071,19 +2104,19 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["children_youth_directed_data_practices", "sensitive_data_vulnerable_user_protections"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyAmbiguityScore",
     "Policy ambiguity score",
     "clarity_completeness_risk"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policySemanticConfidence",
     "Policy semantic confidence",
     "manual_review_triggers"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyBehaviorConflictCandidate",
     "Policy behavior conflict candidate",
     "policy_to_behavior_contradictions",
@@ -2091,13 +2124,13 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["disclosures_claim_substantiation", "transparency_notice_data_subject_rights"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyActionableFlags",
     "Policy actionable flags",
     "manual_review_triggers"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.policy_runtime_functional_misalignment_detected",
     "Policy/runtime functional misalignment detected",
     "policy_to_behavior_contradictions",
@@ -2105,7 +2138,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consumer_rights_request_handling", "opt_out_choice_design_dark_pattern_risk"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "disclosure.policy_runtime_missing_technical_disclosure_detected",
     "Missing technical disclosure detected",
     "policy_to_behavior_contradictions",
@@ -2113,7 +2146,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "disclosures_claim_substantiation"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "disclosure.policy_runtime_disclosure_likely_obstructed",
     "Policy disclosure likely obstructed",
     "clarity_completeness_risk",
@@ -2121,7 +2154,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["transparency_notice_data_subject_rights"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.cookie_runtime_disclosure_gap_detected",
     "Cookie disclosure gap detected",
     "third_party_network_cookie_surface",
@@ -2129,7 +2162,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "disclosure.cookie_policy_structurally_obstructed",
     "Cookie policy structurally obstructed",
     "manual_review_triggers",
@@ -2137,25 +2170,25 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["third_party_network_cookie_surface", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyEffectiveDate",
     "Policy effective date",
     "terms_coverage_enforceability_signals"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyGoverningLaw",
     "Policy governing law",
     "terms_coverage_enforceability_signals"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyArbitrationPresent",
     "Policy arbitration present",
     "terms_coverage_enforceability_signals"
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyRightsSignals",
     "Privacy-rights path present",
     "rights_request_mechanisms",
@@ -2163,7 +2196,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.privacy_contact_path_present",
     "Privacy contact path present",
     "privacy_contacts_accountability",
@@ -2171,7 +2204,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["privacy_governance_contactability", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.gpc_disclosure_present",
     "GPC handling disclosed",
     "sale_sharing_targeted_advertising_controls",
@@ -2179,7 +2212,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consumer_rights_request_handling", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.tracking_technologies_disclosure_present",
     "Tracking technologies disclosure present",
     "data_handling_disclosures",
@@ -2187,7 +2220,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.targeted_advertising_disclosure_present",
     "Targeted advertising disclosure present",
     "data_handling_disclosures",
@@ -2195,7 +2228,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.third_party_advertising_disclosure_present",
     "Third-party advertising disclosure present",
     "data_handling_disclosures",
@@ -2203,7 +2236,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.behavioral_analytics_disclosure_present",
     "Behavioral analytics disclosure present",
     "data_handling_disclosures",
@@ -2211,7 +2244,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "privacy.children_privacy_disclosure_present",
     "Children's privacy disclosure present",
     "data_handling_disclosures",
@@ -2219,14 +2252,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["notice_rights_baseline"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "commerce.arbitration_clause_present",
     "Arbitration clause present",
     "terms_coverage_enforceability_signals",
     ["legal_commercial_disclosure_coverage"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyClaimNoSale",
     "Policy claim no sale",
     "data_handling_disclosures",
@@ -2234,7 +2267,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["sale_sharing_targeted_advertising_controls"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyClaimNoTracking",
     "Policy claim no tracking",
     "data_handling_disclosures",
@@ -2242,7 +2275,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["tracking_profiling_sensitive_data_risk"]
   ),
   defineReportSignal(
-    "policy_enrichment_signal",
+    "document_semantic_signal",
     "policyClaimPrivacyProtective",
     "Policy claim privacy protective",
     "data_handling_disclosures",
@@ -2404,7 +2437,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     id: "low_confidence_policy_extraction",
     label: "Low-confidence policy extraction",
     owner: "manual_review_triggers",
-    signalMappings: [{ source: "policy_enrichment_signal", key: "policySemanticConfidence" }],
+    signalMappings: [{ source: "document_semantic_signal", key: "policySemanticConfidence" }],
     validationRuleKeys: [
       "section_review.low_confidence_critical_fields",
       "section_review.low_extraction_confidence",
@@ -2434,7 +2467,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "clarity_completeness_risk",
     mirrors: ["manual_review_triggers"],
     overlays: ["transparency_notice_data_subject_rights"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "disclosure.policy_runtime_disclosure_likely_obstructed" }],
+    signalMappings: [{ source: "document_semantic_signal", key: "disclosure.policy_runtime_disclosure_likely_obstructed" }],
     validationRuleKeys: ["policy_runtime.disclosure_likely_obstructed"],
     aliases: ["Disclosure likely obstructed"]
   }),
@@ -2444,7 +2477,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "manual_review_triggers",
     mirrors: ["clarity_completeness_risk"],
     overlays: ["third_party_network_cookie_surface", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "disclosure.cookie_policy_structurally_obstructed" }],
+    signalMappings: [{ source: "document_semantic_signal", key: "disclosure.cookie_policy_structurally_obstructed" }],
     validationRuleKeys: ["cookie_runtime.cookie_policy_obstructed"]
   }),
   defineReportUnifiedFinding({
@@ -2453,7 +2486,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "clarity_completeness_risk",
     signalMappings: [
       { source: "snapshot_signal", key: "disclosure.privacy_policy_word_count" },
-      { source: "policy_enrichment_signal", key: "policyAmbiguityScore" }
+      { source: "document_semantic_signal", key: "policyAmbiguityScore" }
     ]
   }),
   defineReportUnifiedFinding({
@@ -2477,7 +2510,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["privacy_governance_contactability", "consumer_rights_request_handling", "notice_rights_baseline"],
     signalMappings: [
       { source: "snapshot_signal", key: "privacy.privacy_contact_channel_missing" },
-      { source: "policy_enrichment_signal", key: "privacyContactChannelType" }
+      { source: "document_semantic_signal", key: "privacyContactChannelType" }
     ],
     aliases: ["Missing privacy contact channel", "No clear privacy contact channel"]
   }),
@@ -2488,8 +2521,8 @@ export const REPORT_UNIFIED_FINDINGS = [
     mirrors: ["privacy_contacts_accountability"],
     overlays: ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"],
     signalMappings: [
-      { source: "policy_enrichment_signal", key: "policyRightsSignals" },
-      { source: "policy_enrichment_signal", key: "privacy.privacy_rights_path_present" }
+      { source: "document_semantic_signal", key: "policyRightsSignals" },
+      { source: "document_semantic_signal", key: "privacy.privacy_rights_path_present" }
     ]
   }),
   defineReportUnifiedFinding({
@@ -2498,7 +2531,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "privacy_contacts_accountability",
     mirrors: ["rights_request_mechanisms"],
     overlays: ["privacy_governance_contactability", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.privacy_contact_path_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.privacy_contact_path_present" }]
   }),
   defineReportUnifiedFinding({
     id: "missing_dsar_high_exposure",
@@ -2525,7 +2558,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "third_party_network_cookie_surface",
     mirrors: ["data_handling_disclosures"],
     overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.cookie_runtime_disclosure_gap_detected" }],
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.cookie_runtime_disclosure_gap_detected" }],
     validationRuleKeys: ["cookie_runtime.disclosure_gap"]
   }),
   defineReportUnifiedFinding({
@@ -2550,8 +2583,8 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["disclosures_claim_substantiation", "transparency_notice_data_subject_rights", "tracking_profiling_sensitive_data_risk"],
     signalMappings: [
       { source: "snapshot_signal", key: "context.policy_behavior_conflict_detected" },
-      { source: "policy_enrichment_signal", key: "policyBehaviorConflictCandidate" },
-      { source: "policy_enrichment_signal", key: "disclosure.policy_runtime_missing_technical_disclosure_detected" }
+      { source: "document_semantic_signal", key: "policyBehaviorConflictCandidate" },
+      { source: "document_semantic_signal", key: "disclosure.policy_runtime_missing_technical_disclosure_detected" }
     ],
     validationRuleKeys: [
       "scan_report_review.policy_behavior_conflict_candidate",
@@ -2613,7 +2646,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "policy_to_behavior_contradictions",
     mirrors: ["rights_request_mechanisms"],
     overlays: ["consumer_rights_request_handling", "opt_out_choice_design_dark_pattern_risk"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.policy_runtime_functional_misalignment_detected" }],
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.policy_runtime_functional_misalignment_detected" }],
     validationRuleKeys: ["policy_runtime.functional_misalignment"],
     aliases: ["High-confidence functional misalignment", "Functional misalignment"]
   }),
@@ -2681,7 +2714,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "sale_sharing_targeted_advertising_controls",
     mirrors: ["data_handling_disclosures"],
     overlays: ["consumer_rights_request_handling", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.gpc_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.gpc_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "tracking_technologies_disclosure_present",
@@ -2689,7 +2722,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "data_handling_disclosures",
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.tracking_technologies_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.tracking_technologies_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "weak_cookie_security_attributes",
@@ -2789,6 +2822,38 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["sale_sharing_targeted_advertising_controls", "tracking_profiling_sensitive_data_risk", "opt_out_choice_design_dark_pattern_risk"],
     signalMappings: [{ source: "snapshot_signal", key: "commerce.retargeting_pixel_detected" }]
   }),
+  defineReportUnifiedFinding({
+    id: "fingerprinting_observed",
+    label: "Fingerprinting observed",
+    owner: "adtech_analytics_replay_footprint",
+    overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.fingerprinting_detected" }],
+    aliases: ["Potential fingerprinting observed", "Browser fingerprinting observed"]
+  }),
+  defineReportUnifiedFinding({
+    id: "popup_behavior_observed",
+    label: "Popup behavior observed",
+    owner: "choice_symmetry_dark_pattern_indicators",
+    overlays: ["choice_architecture_dark_patterns"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.popup_behavior_detected" }],
+    aliases: ["Intrusive popup behavior observed"]
+  }),
+  defineReportUnifiedFinding({
+    id: "blocking_overlay_observed",
+    label: "Blocking overlay observed",
+    owner: "choice_symmetry_dark_pattern_indicators",
+    overlays: ["choice_architecture_dark_patterns", "consent_lawful_basis_user_choice"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.overlay_blocking_detected" }],
+    aliases: ["Intrusive blocking overlay observed"]
+  }),
+  defineReportUnifiedFinding({
+    id: "autoplay_media_observed",
+    label: "Autoplay media observed",
+    owner: "choice_symmetry_dark_pattern_indicators",
+    overlays: ["choice_architecture_dark_patterns"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.autoplay_media_detected" }],
+    aliases: ["Autoplay observed", "Autoplay media behavior observed"]
+  }),
 
   defineReportUnifiedFinding({
     id: "high_sensitivity_data_collection",
@@ -2848,7 +2913,7 @@ export const REPORT_UNIFIED_FINDINGS = [
       { source: "snapshot_signal", key: "commerce.form_collects_birthdate" },
       { source: "snapshot_signal", key: "context.children_audience_likely" },
       { source: "snapshot_signal", key: "context.kid_directed_content_detected" },
-      { source: "policy_enrichment_signal", key: "policyChildrenReference" }
+      { source: "document_semantic_signal", key: "policyChildrenReference" }
     ]
   }),
   defineReportUnifiedFinding({
@@ -2916,7 +2981,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "Arbitration clause present",
     owner: "terms_coverage_enforceability_signals",
     mirrors: ["legal_commercial_disclosure_coverage"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "commerce.arbitration_clause_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "commerce.arbitration_clause_present" }]
   }),
   defineReportUnifiedFinding({
     id: "affiliate_disclosure_present",
@@ -2947,7 +3012,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "data_handling_disclosures",
     mirrors: ["sale_sharing_targeted_advertising_controls"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.targeted_advertising_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.targeted_advertising_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "third_party_advertising_disclosure_present",
@@ -2955,7 +3020,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "data_handling_disclosures",
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.third_party_advertising_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.third_party_advertising_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "behavioral_analytics_disclosure_present",
@@ -2963,7 +3028,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "data_handling_disclosures",
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "children_privacy_disclosure_present",
@@ -2971,7 +3036,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "data_handling_disclosures",
     mirrors: ["rights_request_mechanisms"],
     overlays: ["notice_rights_baseline"],
-    signalMappings: [{ source: "policy_enrichment_signal", key: "privacy.children_privacy_disclosure_present" }]
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.children_privacy_disclosure_present" }]
   }),
 
   defineReportUnifiedFinding({

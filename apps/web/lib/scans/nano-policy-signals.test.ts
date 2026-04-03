@@ -113,7 +113,7 @@ test("preserves unmanaged nano rows when replacing managed policy-derived rows",
         label: "GPC handling disclosed",
         population_status: "present",
         provenance_detail: "policy_enrichment.privacy_policy",
-        report_signal_source: "policy_enrichment_signal",
+        report_signal_source: "document_semantic_signal",
         value: true
       }
     ]

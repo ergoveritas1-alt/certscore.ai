@@ -81,7 +81,7 @@ export function shouldSurfacePrimarySignalFinding(input: {
   fallbackEvidence: Record<string, unknown> | null | undefined;
   key: string;
   linkedValidationEvidence: Record<string, unknown> | null | undefined;
-  signalSource?: "snapshot_signal" | "runtime_artifact_signal" | "policy_enrichment_signal";
+  signalSource?: "snapshot_signal" | "runtime_artifact_signal" | "policy_enrichment_signal" | "document_semantic_signal";
 }) {
   const mergedEvidence = {
     ...(input.fallbackEvidence ?? {}),
@@ -107,7 +107,7 @@ export function shouldSurfacePrimarySignalFinding(input: {
   }
 
   if (
-    input.signalSource === "policy_enrichment_signal" &&
+    (input.signalSource === "policy_enrichment_signal" || input.signalSource === "document_semantic_signal") &&
     isPositiveInfrastructureConcern(concern) &&
     concern.externalSurfacingEligibility !== "suppress"
   ) {
