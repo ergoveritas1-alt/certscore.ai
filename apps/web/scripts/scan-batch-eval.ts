@@ -1,6 +1,6 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
-import { parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { getConfiguredValidationRedisUrl } from "../lib/env";
@@ -38,6 +38,7 @@ type DomainRow = {
 const DEFAULT_ORG_ID = "2f2ef2a2-d86b-4993-8bd5-de912e7de905";
 const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_TIMEOUT_MS = 8 * 60_000;
+const DEFAULT_ENRICHMENT_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_QUEUE = "nano_doc_retrieval";
 const NANO_SIGNAL_ENRICHMENT_QUEUE = "nano_signal_enrichment";
@@ -291,6 +292,51 @@ async function waitForCompletion(input: {
   throw new Error(`Timed out waiting for scan ${input.scanId} (${input.hostname}) after ${input.timeoutMs}ms`);
 }
 
+async function waitForSignalEnrichmentCompletion(input: {
+  hostname: string;
+  scanId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+  timeoutMs: number;
+}) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < input.timeoutMs) {
+    const { data, error } = await input.supabase
+      .from("scan_events")
+      .select("event_type, created_at")
+      .eq("scan_id", input.scanId)
+      .in("event_type", [
+        SCAN_EVENT_TYPES.nanoDocRetrievalCompleted,
+        SCAN_EVENT_TYPES.nanoDocRetrievalFailed,
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed
+      ]);
+
+    if (error) {
+      throw new Error(`Failed to poll signal enrichment events for ${input.hostname}: ${error.message}`);
+    }
+
+    const eventTypes = new Set(
+      (data ?? [])
+        .map((row) => (row && typeof row === "object" ? (row as { event_type?: unknown }).event_type : null))
+        .filter((value): value is string => typeof value === "string")
+    );
+
+    const retrievalDone =
+      eventTypes.has(SCAN_EVENT_TYPES.nanoDocRetrievalCompleted) ||
+      eventTypes.has(SCAN_EVENT_TYPES.nanoDocRetrievalFailed);
+    const enrichmentDone =
+      eventTypes.has(SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted) ||
+      eventTypes.has(SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed);
+
+    if (retrievalDone && enrichmentDone) {
+      return;
+    }
+
+    await sleep(POLL_INTERVAL_MS);
+  }
+}
+
 async function summarizeScan(input: {
   hostname: string;
   scanId: string;
@@ -458,6 +504,7 @@ async function summarizeScan(input: {
 async function main() {
   const orgId = getArgValue("--org") ?? DEFAULT_ORG_ID;
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
+  const enrichmentTimeoutMs = Number(getArgValue("--enrichment-timeout-ms") ?? DEFAULT_ENRICHMENT_TIMEOUT_MS);
   const onlySummarize = hasFlag("--summarize-only");
   const queueOnly = hasFlag("--queue-only");
   const aggregateTimings = hasFlag("--aggregate-timings");
@@ -561,6 +608,12 @@ async function main() {
         supabase,
         timeoutMs
       });
+      await waitForSignalEnrichmentCompletion({
+        hostname: domain.hostname,
+        scanId,
+        supabase,
+        timeoutMs: enrichmentTimeoutMs
+      }).catch(() => undefined);
     }
 
     const summary = await summarizeScan({
