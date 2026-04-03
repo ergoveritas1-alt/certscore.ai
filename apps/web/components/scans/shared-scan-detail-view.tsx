@@ -106,6 +106,7 @@ import {
 } from "../../lib/scans/tracker-risk";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
+import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -514,6 +515,67 @@ function dedupeHeadlineFindings(findings: PreviewSampleFinding[]) {
   }
 
   return deduped;
+}
+
+function buildExecutiveSupplementalFindings(input: {
+  certFindings: CertScoreFinding[];
+  contradictions: PolicyBehaviorContradiction[];
+  snapshot: Record<string, unknown> | null;
+}) {
+  const findings: CertScoreFinding[] = [];
+  const hasDarkPatternCard = input.certFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
+  const darkPatternFlags = [
+    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_button_prominence") ? "Accept button prominence" : null,
+    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_reject_button_missing") ? "Reject button missing" : null,
+    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_forced_consent_wall") ? "Forced consent wall" : null,
+    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_only_banner") ? "Accept-only banner" : null,
+    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_dismiss_without_reject") ? "Dismiss without reject" : null
+  ].filter((value): value is string => Boolean(value));
+
+  if (!hasDarkPatternCard && darkPatternFlags.length > 0) {
+    findings.push({
+      id: "consent_dark_patterns_detected",
+      label: "Dark pattern consent signals detected",
+      section: "Consent Experience",
+      defaultSurfacePriority: 95,
+      whyItMatters:
+        "Choice architecture that steers users toward acceptance can undermine meaningful consent and create dark-pattern risk.",
+      remediation:
+        "Expose reject and settings at the first layer, remove accept-only or forced paths, and equalize button prominence and interaction cost across consent choices.",
+      confidence: "strong",
+      directVsInferred: "direct",
+      evidencePreview: darkPatternFlags.slice(0, 4),
+      evidenceRefs: [],
+      severity: "high",
+      shortSummary: `Detected consent-interface dark pattern signals: ${darkPatternFlags.join(", ")}.`
+    });
+  }
+
+  const primaryContradiction = input.contradictions.find((row) => row.status === "contradiction") ?? input.contradictions[0] ?? null;
+  if (primaryContradiction) {
+    findings.push({
+      id: "policy_behavior_contradiction_detected",
+      label: primaryContradiction.title,
+      section: "Privacy & Tracking",
+      defaultSurfacePriority: 97,
+      whyItMatters:
+        "A mismatch between public policy language and observed runtime behavior is one of the clearest reasons for targeted analyst review.",
+      remediation:
+        "Compare the retained policy claim against the observed runtime behavior, then either correct the implementation or narrow the policy language so it accurately reflects what the site does in practice.",
+      confidence: primaryContradiction.status === "contradiction" ? "strong" : "good",
+      directVsInferred: "mixed",
+      evidencePreview: [
+        primaryContradiction.claim,
+        primaryContradiction.observedBehavior,
+        ...primaryContradiction.relatedVendors.slice(0, 2)
+      ].filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+      evidenceRefs: primaryContradiction.evidence,
+      severity: primaryContradiction.severity,
+      shortSummary: primaryContradiction.observedBehavior
+    });
+  }
+
+  return findings;
 }
 
 function derivePolicyBehaviorContradictions(input: {
@@ -5351,7 +5413,6 @@ export function SharedScanDetailView({
     certScoreSummary.cookieNamesBeforeConsent.length,
     fallbackInitialCookieCount
   );
-  const topCertScoreFindings = selectTopFindings(certScoreSummary.findings, 5);
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
   let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
@@ -5479,6 +5540,15 @@ export function SharedScanDetailView({
     scanRecord.preconsentViolations.length > 0 ||
     scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
+  const executiveSupplementalFindings = buildExecutiveSupplementalFindings({
+    certFindings: certScoreSummary.findings,
+    contradictions: policyBehaviorContradictions,
+    snapshot
+  });
+  const topExecutiveFindings = selectTopFindings(
+    [...executiveSupplementalFindings, ...certScoreSummary.findings],
+    5
+  );
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -5540,7 +5610,7 @@ export function SharedScanDetailView({
         sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
         thirdPartyRequestCount={certScoreSummary.thirdPartyRequestCount}
         thirdPartyDomains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
-        topFindings={topCertScoreFindings}
+        topFindings={topExecutiveFindings}
         topObservedEntities={certScoreSummary.topObservedEntities}
         trackerSummary={certScoreSummary.trackerSummary}
         unresolvedVendorHosts={certScoreSummary.unresolvedVendorHosts}
