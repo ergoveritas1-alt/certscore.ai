@@ -28,6 +28,10 @@ export type SignalEnrichmentWorkflowStage = {
 
 export type SignalEnrichmentWorkflowState = {
   actualMode: SignalEnrichmentWorkflowMode;
+  extractionMetrics: {
+    freshExtractions: number;
+    reusedExtractions: number;
+  };
   findingsReady: boolean;
   mergedSignalsReady: boolean;
   timings: {

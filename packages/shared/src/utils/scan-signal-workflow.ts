@@ -84,10 +84,12 @@ function deriveStageStatus(input: {
 export function deriveSignalEnrichmentWorkflowState(input: {
   documentSourceCount?: number;
   events: WorkflowEventRecord[];
+  freshExtractionCount?: number;
   findingsCount: number;
   mergedSignalCount: number;
   nanoSignalCount: number;
   policyDocumentCount: number;
+  reusedExtractionCount?: number;
   scanCompletedAt?: string | null;
   scanStatus: string | null;
   scannerSignalCount: number;
@@ -227,6 +229,10 @@ export function deriveSignalEnrichmentWorkflowState(input: {
 
   return {
     actualMode,
+    extractionMetrics: {
+      freshExtractions: input.freshExtractionCount ?? 0,
+      reusedExtractions: input.reusedExtractionCount ?? 0
+    },
     findingsReady: findingsStatus === "completed" || input.findingsCount > 0,
     mergedSignalsReady: mergeStatus === "completed" || input.mergedSignalCount > 0,
     timings: {

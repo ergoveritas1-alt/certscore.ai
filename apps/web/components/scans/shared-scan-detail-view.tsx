@@ -4912,6 +4912,10 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
           <SummaryMetricTile label="Nano retrieval" value={formatDurationMs(workflow.timings.nanoDocRetrievalDurationMs)} />
           <SummaryMetricTile label="Nano signal pass" value={formatDurationMs(workflow.timings.nanoDocSignalsDurationMs)} />
         </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <SummaryMetricTile label="Fresh extractions" value={String(workflow.extractionMetrics.freshExtractions)} />
+          <SummaryMetricTile label="Reused extractions" value={String(workflow.extractionMetrics.reusedExtractions)} />
+        </div>
         <div className="rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
             {counts.stagesCompleted} of {counts.totalStages} stages completed

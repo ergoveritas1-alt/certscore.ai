@@ -604,6 +604,7 @@ async function loadScanDetailRecord(input: {
     { data: accessibilityRuleExamples },
     { data: policyEnrichment },
     { data: policyReviewQueue },
+    { data: documentSources },
     { data: previousScan },
     { data: validationRun }
   ] = await Promise.all([
@@ -664,6 +665,11 @@ async function loadScanDetailRecord(input: {
     supabase
       .from("policy_review_queue")
       .select("*")
+      .eq("scan_id", input.scanId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("scan_document_sources")
+      .select("source_status, extraction_status, metadata_json")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
     previousScanPromise,
@@ -802,6 +808,7 @@ async function loadScanDetailRecord(input: {
     rows: rawPolicyEnrichmentRows
   });
   const normalizedPolicyReviewQueue = ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
+  const normalizedDocumentSources = ((documentSources ?? []) as Array<Record<string, unknown>>);
   const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(normalizedPolicyEnrichment);
   const previousPrimaryPolicyEnrichment = getPrimaryPolicyEnrichment((previousPolicyRows as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)));
   const rawNormalizedEvents: ScanEventRecord[] = ((events ?? []) as ScanEventRow[]).map(
@@ -1185,16 +1192,34 @@ async function loadScanDetailRecord(input: {
           Number.isFinite((latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount?: number } | undefined)?.findingCount)
         ? (latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount: number }).findingCount
         : 0;
+  const reusedExtractionCount = normalizedDocumentSources.filter((row) => {
+    const metadata = row.metadata_json;
+    return Boolean(
+      metadata &&
+      typeof metadata === "object" &&
+      !Array.isArray(metadata) &&
+      typeof (metadata as Record<string, unknown>).extraction_reuse_reason === "string"
+    );
+  }).length;
+  const freshExtractionCount = Math.max(
+    0,
+    normalizedDocumentSources.filter((row) => {
+      const extractionStatus = row.extraction_status;
+      return typeof extractionStatus === "string" && extractionStatus === "ready";
+    }).length - reusedExtractionCount
+  );
   const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
     documentSourceCount: workflowDocumentSourceCount,
     events: normalizedEvents.map((event) => ({
       createdAt: event.createdAt,
       eventType: event.eventType
     })),
+    freshExtractionCount,
     findingsCount: workflowFindingCount,
     mergedSignalCount: mergedSignals.length,
     nanoSignalCount: storedNanoSignalRows.length,
     policyDocumentCount: normalizedPolicyEnrichment.length,
+    reusedExtractionCount,
     scanCompletedAt: scanRow.completed_at,
     scanStatus: scanRow.status,
     scannerSignalCount: scannerSignalPopulations.length

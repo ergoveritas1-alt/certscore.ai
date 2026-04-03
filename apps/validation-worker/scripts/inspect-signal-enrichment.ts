@@ -101,6 +101,18 @@ function getDocumentSourceStatusCount(rows: Array<Record<string, unknown>>, stat
   }).length;
 }
 
+function getExtractionReuseCount(rows: Array<Record<string, unknown>>) {
+  return rows.filter((row) => {
+    const metadata = row.metadata_json;
+    return Boolean(
+      metadata &&
+      typeof metadata === "object" &&
+      !Array.isArray(metadata) &&
+      typeof (metadata as Record<string, unknown>).extraction_reuse_reason === "string"
+    );
+  }).length;
+}
+
 async function main() {
   const scanId = getArgValue("--scan-id");
   const json = hasFlag("--json");
@@ -129,7 +141,7 @@ async function main() {
       .order("created_at", { ascending: true }),
     supabase
       .from("scan_document_sources")
-      .select("id, source, source_status, document_type, extraction_status, semantic_confidence, source_url, canonical_url, created_at")
+      .select("id, source, source_status, document_type, extraction_status, semantic_confidence, source_url, canonical_url, created_at, metadata_json")
       .eq("scan_id", scanId)
       .order("created_at", { ascending: true }),
     supabase
@@ -211,6 +223,11 @@ async function main() {
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
   const readyDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "rejected");
+  const reusedExtractionCount = getExtractionReuseCount(documentRows);
+  const freshExtractionCount = documentRows.filter((row) => {
+    const extractionStatus = typeof row.extraction_status === "string" ? row.extraction_status : null;
+    return extractionStatus === "ready";
+  }).length - reusedExtractionCount;
 
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
@@ -218,10 +235,12 @@ async function main() {
   const workflow = deriveSignalEnrichmentWorkflowState({
     documentSourceCount: readyDocumentSourceCount,
     events: eventRows,
+    freshExtractionCount: Math.max(0, freshExtractionCount),
     findingsCount: findingRows.length,
     mergedSignalCount: signalRows.length,
     nanoSignalCount,
     policyDocumentCount: documentRows.length,
+    reusedExtractionCount,
     scanCompletedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
     scanStatus: typeof scan?.status === "string" ? scan.status : null,
     scannerSignalCount
@@ -248,6 +267,10 @@ async function main() {
       scannerSignals: scannerSignalCount,
       totalSignals: signalRows.length,
       validationSignals: validationSignalCount
+    },
+    extractionCounts: {
+      fresh: Math.max(0, freshExtractionCount),
+      reused: reusedExtractionCount
     },
     documentSourcesByExtractionStatus: countBy(documentRows, (row) => String(row.extraction_status ?? "unknown")),
     documentSourcesByType: countBy(documentRows, (row) => String(row.document_type ?? "unknown")),
@@ -294,6 +317,9 @@ async function main() {
   );
   console.log(
     `timeToReady: mergedSignals=${formatDurationMs(payload.workflow.timings.timeToMergedSignalsMs)} | findings=${formatDurationMs(payload.workflow.timings.timeToFindingsMs)}`
+  );
+  console.log(
+    `extractions: fresh=${payload.workflow.extractionMetrics.freshExtractions} | reused=${payload.workflow.extractionMetrics.reusedExtractions}`
   );
   for (const stage of payload.workflow.stages) {
     console.log(
