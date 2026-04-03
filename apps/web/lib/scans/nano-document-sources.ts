@@ -92,3 +92,10 @@ export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<
 
   return rows;
 }
+
+export function shouldPreferNanoDocumentSources(documentSources: Array<Record<string, unknown>>) {
+  return documentSources.some((row) => {
+    const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
+    return sourceStatus === "ready" || sourceStatus === "candidate";
+  });
+}

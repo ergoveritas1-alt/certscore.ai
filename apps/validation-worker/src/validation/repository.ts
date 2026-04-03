@@ -20,7 +20,7 @@ import {
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
-import { buildNanoPolicyInputsFromDocumentSources } from "../../../web/lib/scans/nano-document-sources";
+import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../../../web/lib/scans/nano-document-sources";
 import { buildNanoPolicySignalRows, MANAGED_NANO_POLICY_SIGNAL_KEYS } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
@@ -960,11 +960,13 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
 
   const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
   const documentBackedPolicyInputs = buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources);
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   return {
     documentSources: normalizedDocumentSources,
-    policySignalInputs: documentBackedPolicyInputs.length > 0 ? documentBackedPolicyInputs : ((policyEnrichments ?? []) as Array<Record<string, unknown>>),
+    policySignalInputs: preferDocumentSources ? documentBackedPolicyInputs : ((policyEnrichments ?? []) as Array<Record<string, unknown>>),
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    preferDocumentSources,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     scan: (scan as {
       completed_at?: string | null;

@@ -159,7 +159,7 @@ Expected row fields:
 
 These rows are normalized into `source: "nano"` signal-population records and merged with scanner-owned populations before any downstream finding derivation.
 
-The current producer-side bootstrap writes these rows into `scan_signals` from policy-style document inputs during validation ranking. The nano worker now persists raw retrieved legal-doc rows into `scan_document_sources`, runs a `gpt-5.4-nano` semantic extraction pass to populate `extracted_fields_json`, and prefers those extracted rows ahead of `policy_enrichment`. `policy_enrichment` remains the compatibility fallback when extracted document-source semantics are absent. That persisted set currently covers:
+The current producer-side bootstrap writes these rows into `scan_signals` from policy-style document inputs during validation ranking. The nano worker now persists raw retrieved legal-doc rows into `scan_document_sources`, runs a `gpt-5.4-nano` semantic extraction pass to populate `extracted_fields_json`, and treats those document-source rows as the preferred ownership layer for nano policy signals. `policy_enrichment` remains a compatibility fallback only for scans that do not yet have independent document-source rows. That persisted set currently covers:
 
 - canonical positive policy/disclosure signals from the policy signal contract
 - low-confidence policy extraction signal population

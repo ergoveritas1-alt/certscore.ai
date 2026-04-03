@@ -1549,9 +1549,10 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       nanoSignalCount: nanoSignalRows.length,
       policyDocumentCount: artifacts.policySignalInputs.length,
       policyEnrichmentCount: artifacts.policyEnrichments.length,
+      preferDocumentSources: artifacts.preferDocumentSources === true,
       scanStartedAt: startedAt,
       stage: "nano_doc_signals",
-      sourceMode: artifacts.documentSources.length > 0 ? "document_sources" : "policy_enrichment"
+      sourceMode: artifacts.preferDocumentSources === true ? "document_sources" : "policy_enrichment"
     },
     scanId
   }).catch(() => undefined);

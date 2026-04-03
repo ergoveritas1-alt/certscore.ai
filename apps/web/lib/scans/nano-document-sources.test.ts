@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildNanoPolicyInputsFromDocumentSources } from "./nano-document-sources";
+import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "./nano-document-sources";
 
 test("buildNanoPolicyInputsFromDocumentSources normalizes ready document rows into policy-style inputs", () => {
   const rows = buildNanoPolicyInputsFromDocumentSources([
@@ -35,4 +35,18 @@ test("buildNanoPolicyInputsFromDocumentSources normalizes ready document rows in
   assert.equal(rows[0]?.policy_semantic_confidence, 0.74);
   assert.deepEqual(rows[0]?.policy_rights_signals, ["access_request"]);
   assert.equal(rows[0]?.source_document_source, "nano_doc_retrieval");
+});
+
+test("shouldPreferNanoDocumentSources prefers document-source ownership once retrieval rows exist", () => {
+  assert.equal(
+    shouldPreferNanoDocumentSources([
+      {
+        extraction_status: "insufficient",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ]),
+    true
+  );
+  assert.equal(shouldPreferNanoDocumentSources([]), false);
 });
