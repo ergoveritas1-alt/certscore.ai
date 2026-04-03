@@ -23,6 +23,51 @@ function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function inferMentionTopics(documentText: string | null, title: string | null) {
+  const haystack = `${title ?? ""}\n${documentText ?? ""}`.toLowerCase();
+  const topics = new Set<string>();
+
+  if (/\bglobal privacy control\b|\bgpc\b/.test(haystack)) {
+    topics.add("gpc_disclosure");
+  }
+  if (/tracking technolog|cookies?|pixels?|web beacons?|local storage|sdk/.test(haystack)) {
+    topics.add("tracking_technologies_disclosure");
+  }
+  if (/targeted advertising|personalized advertising|interest-based advertising/.test(haystack)) {
+    topics.add("targeted_advertising_disclosure");
+  }
+  if (/third[- ]party advertising|advertising partners|third parties .* advertising/.test(haystack)) {
+    topics.add("third_party_advertising_disclosure");
+  }
+  if (/session replay|heatmap|behavioral analytics|replay tools?/.test(haystack)) {
+    topics.add("session_replay_disclosure");
+  }
+  if (/children|under 13|under 16|minor/.test(haystack)) {
+    topics.add("children");
+  }
+
+  return [...topics];
+}
+
+function inferContactChannelType(documentText: string | null, parsedValue: string | null) {
+  if (parsedValue && parsedValue !== "unknown" && parsedValue !== "none") {
+    return parsedValue;
+  }
+
+  const text = (documentText ?? "").toLowerCase();
+  if (/\bprivacy@[\w.-]+\.[a-z]{2,}\b/.test(text) || /\b[a-z0-9._%+-]+@[\w.-]+\.[a-z]{2,}\b/.test(text)) {
+    return "email";
+  }
+  if (/privacy request form|submit.*request|webform|online form/.test(text)) {
+    return "form";
+  }
+  if (/privacy portal|request portal/.test(text)) {
+    return "portal";
+  }
+
+  return parsedValue ?? "none";
+}
+
 function extractJson(raw: string) {
   const trimmed = raw.trim();
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -60,6 +105,13 @@ export function normalizeNanoDocumentExtraction(input: {
     .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
     .map((entry) => ({ topic: getString(entry.topic) ?? getString(entry.name) ?? "" }))
     .filter((entry) => entry.topic.length > 0);
+  const inferredMentionTopics = inferMentionTopics(input.documentText, getString(input.row.title) ?? null);
+  const mergedPolicyMentions = [
+    ...policyMentions,
+    ...inferredMentionTopics
+      .filter((topic) => !policyMentions.some((entry) => entry.topic === topic))
+      .map((topic) => ({ topic }))
+  ];
   const semanticConfidence =
     getNumber(input.parsed.semantic_confidence) ??
     getNumber(input.parsed.semanticConfidence) ??
@@ -93,7 +145,7 @@ export function normalizeNanoDocumentExtraction(input: {
       getString(input.parsed.policy_dsar_mechanism) ??
       getString(input.parsed.policyDsarMechanism) ??
       "unknown",
-    policy_mentions: policyMentions,
+    policy_mentions: mergedPolicyMentions,
     policy_rights_signals: getStringArray(input.parsed.policy_rights_signals ?? input.parsed.policyRightsSignals),
     policy_semantic_confidence: semanticConfidence,
     policy_snippet_count:
@@ -115,17 +167,17 @@ export function normalizeNanoDocumentExtraction(input: {
       : Array.isArray(input.parsed.policyRetentionPeriods)
         ? input.parsed.policyRetentionPeriods
         : [],
-    privacy_contact_channel_type:
-      getString(input.parsed.privacy_contact_channel_type) ??
-      getString(input.parsed.privacyContactChannelType) ??
-      "none"
+    privacy_contact_channel_type: inferContactChannelType(
+      input.documentText,
+      getString(input.parsed.privacy_contact_channel_type) ?? getString(input.parsed.privacyContactChannelType)
+    )
   };
 
   const hasMeaningfulSemanticField =
     Boolean(getString(extractedFields.policy_summary_short)) ||
     getStringArray(extractedFields.policy_rights_signals).length > 0 ||
     getStringArray(extractedFields.policy_actionable_flags).length > 0 ||
-    policyMentions.length > 0;
+    mergedPolicyMentions.length > 0;
 
   return {
     extractedFields,

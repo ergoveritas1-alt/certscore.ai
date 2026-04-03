@@ -6,7 +6,8 @@ import {
   deriveValidationFindings,
   determineValidationCollectAction,
   looksLikeIntermediaryOrBlockPage,
-  prioritizePendingNanoDocumentSources
+  prioritizePendingNanoDocumentSources,
+  selectPendingNanoDocumentSourcesForExtraction
 } from "./pipeline";
 
 function buildArtifacts(overrides?: {
@@ -259,6 +260,61 @@ test("prioritizePendingNanoDocumentSources prefers priority privacy docs before 
       "https://example.com/cookies",
       "https://example.com/terms"
     ]
+  );
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction skips optional terms when fallback policy rows already exist", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    policyEnrichments: [
+      {
+        page_type: "terms_of_service",
+        page_url: "https://www.example.com/terms"
+      }
+    ],
+    rows: [
+      {
+        document_type: "privacy_policy",
+        document_text: "Privacy text",
+        id: "doc-privacy"
+      },
+      {
+        document_type: "terms_of_service",
+        document_text: "Terms text",
+        id: "doc-terms"
+      }
+    ],
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["doc-privacy"]
+  );
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction keeps cookie docs when runtime cookie evidence exists", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    policyEnrichments: [
+      {
+        page_type: "cookie_policy",
+        page_url: "https://www.example.com/cookies"
+      }
+    ],
+    rows: [
+      {
+        document_type: "cookie_policy",
+        document_text: "Cookie text",
+        id: "doc-cookie"
+      }
+    ],
+    runtimeArtifacts: {
+      initial_cookie_names: ["_ga"]
+    }
+  });
+
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["doc-cookie"]
   );
 });
 

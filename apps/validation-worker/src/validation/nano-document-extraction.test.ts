@@ -39,3 +39,28 @@ test("normalizeNanoDocumentExtraction maps parsed nano output into policy-style 
   assert.equal(result.extractedFields.privacy_contact_channel_type, "email");
   assert.equal(result.semanticConfidence, 0.81);
 });
+
+test("normalizeNanoDocumentExtraction backfills strong mention topics and email contact from document text", () => {
+  const result = normalizeNanoDocumentExtraction({
+    documentText:
+      "We honor Global Privacy Control (GPC). We may use cookies and pixels for targeted advertising with advertising partners. Contact privacy@example.com for questions.",
+    parsed: {
+      policyMentions: [],
+      policySummaryShort: "Privacy notice."
+    },
+    row: {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      title: "Privacy Notice"
+    }
+  });
+
+  assert.equal(result.extractionStatus, "ready");
+  assert.equal(result.extractedFields.privacy_contact_channel_type, "email");
+  assert.deepEqual(result.extractedFields.policy_mentions, [
+    { topic: "gpc_disclosure" },
+    { topic: "tracking_technologies_disclosure" },
+    { topic: "targeted_advertising_disclosure" },
+    { topic: "third_party_advertising_disclosure" }
+  ]);
+});

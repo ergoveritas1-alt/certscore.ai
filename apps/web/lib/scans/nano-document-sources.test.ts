@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "./nano-document-sources";
+import {
+  buildNanoPolicyInputsFromDocumentSources,
+  mergeNanoPolicyInputsWithFallback,
+  shouldPreferNanoDocumentSources
+} from "./nano-document-sources";
 
 test("buildNanoPolicyInputsFromDocumentSources normalizes ready document rows into policy-style inputs", () => {
   const rows = buildNanoPolicyInputsFromDocumentSources([
@@ -41,7 +45,7 @@ test("shouldPreferNanoDocumentSources prefers document-source ownership once ret
   assert.equal(
     shouldPreferNanoDocumentSources([
       {
-        extraction_status: "insufficient",
+        extraction_status: "ready",
         id: "doc-1",
         source_status: "ready"
       }
@@ -49,4 +53,37 @@ test("shouldPreferNanoDocumentSources prefers document-source ownership once ret
     true
   );
   assert.equal(shouldPreferNanoDocumentSources([]), false);
+});
+
+test("mergeNanoPolicyInputsWithFallback keeps document-backed rows and falls back only for missing page types", () => {
+  const rows = mergeNanoPolicyInputsWithFallback({
+    documentSources: [
+      {
+        canonical_url: "https://www.example.com/privacy",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          policy_summary_short: "Document privacy row."
+        },
+        extraction_status: "ready",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ],
+    fallbackRows: [
+      {
+        id: "policy-privacy",
+        page_type: "privacy_policy",
+        policy_summary_short: "Fallback privacy row."
+      },
+      {
+        id: "policy-terms",
+        page_type: "terms_of_service",
+        policy_summary_short: "Fallback terms row."
+      }
+    ]
+  });
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find((row) => row.page_type === "privacy_policy")?.policy_summary_short, "Document privacy row.");
+  assert.equal(rows.find((row) => row.page_type === "terms_of_service")?.policy_summary_short, "Fallback terms row.");
 });

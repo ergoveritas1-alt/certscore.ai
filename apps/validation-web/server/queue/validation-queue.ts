@@ -1,7 +1,7 @@
 "use server";
 
 import { Queue, type ConnectionOptions } from "bullmq";
-import { NANO_DOC_RETRIEVAL_JOB, NANO_SIGNAL_ENRICHMENT_JOB, QUEUE_NAMES, VALIDATION_COLLECT_JOB } from "@website-signal-risk-scanner/shared";
+import { NANO_DOC_RETRIEVAL_JOB, QUEUE_NAMES, VALIDATION_COLLECT_JOB } from "@website-signal-risk-scanner/shared";
 import { getWebServerEnv } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
@@ -100,22 +100,12 @@ export async function enqueueValidationCollectJob(validationRunId: string) {
 }
 
 export async function enqueueNanoSignalEnrichmentJob(scanId: string) {
-  await Promise.all([
-    getNanoDocQueue().add(
-      NANO_DOC_RETRIEVAL_JOB,
-      { pollCount: 0, scanId },
-      {
-        attempts: 2,
-        jobId: `${scanId}--nano-doc-retrieval--initial`
-      }
-    ),
-    getNanoSignalQueue().add(
-      NANO_SIGNAL_ENRICHMENT_JOB,
-      { pollCount: 0, scanId },
-      {
-        attempts: 2,
-        jobId: `${scanId}--nano-doc-signals--initial`
-      }
-    )
-  ]);
+  await getNanoDocQueue().add(
+    NANO_DOC_RETRIEVAL_JOB,
+    { pollCount: 0, scanId },
+    {
+      attempts: 2,
+      jobId: `${scanId}--nano-doc-retrieval--initial`
+    }
+  );
 }

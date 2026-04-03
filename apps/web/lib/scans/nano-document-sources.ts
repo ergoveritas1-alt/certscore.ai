@@ -34,6 +34,10 @@ function getDocumentUrl(row: Record<string, unknown>, extracted: Record<string, 
   );
 }
 
+function getPolicyInputPageType(row: Record<string, unknown>) {
+  return getString(row.page_type) ?? getString(row.pageType) ?? getString(row.source_document_type);
+}
+
 export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   function hasSemanticPayload(extracted: Record<string, unknown>) {
     return [
@@ -91,6 +95,29 @@ export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<
   }
 
   return rows;
+}
+
+export function mergeNanoPolicyInputsWithFallback(input: {
+  documentSources: Array<Record<string, unknown>>;
+  fallbackRows: Array<Record<string, unknown>>;
+}) {
+  const documentRows = buildNanoPolicyInputsFromDocumentSources(input.documentSources);
+  const coveredPageTypes = new Set(
+    documentRows
+      .map((row) => getPolicyInputPageType(row))
+      .filter((value): value is string => typeof value === "string")
+  );
+
+  const fallbackRows = input.fallbackRows.filter((row) => {
+    const pageType = getPolicyInputPageType(row);
+    if (!pageType) {
+      return true;
+    }
+
+    return !coveredPageTypes.has(pageType);
+  });
+
+  return [...documentRows, ...fallbackRows];
 }
 
 export function shouldPreferNanoDocumentSources(documentSources: Array<Record<string, unknown>>) {

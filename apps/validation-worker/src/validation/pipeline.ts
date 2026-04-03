@@ -24,7 +24,6 @@ import {
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
-  appendScanDocumentSources,
   persistDerivedNanoPolicySignals,
   replaceScanDocumentSources,
   replaceValidationRunFindings,
@@ -46,11 +45,11 @@ import {
 } from "../queue/queues";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
-const NANO_DOC_RETRIEVAL_POLL_MS = 15_000;
+const NANO_DOC_RETRIEVAL_POLL_MS = 5_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
-const NANO_SIGNAL_ENRICHMENT_POLL_MS = 15_000;
+const NANO_SIGNAL_ENRICHMENT_POLL_MS = 5_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
-const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 3;
+const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -1499,7 +1498,7 @@ async function fetchNanoDocumentSource(input: {
     const response = await fetch(input.url, {
       headers: request.headers,
       redirect: "follow",
-      signal: AbortSignal.timeout(15_000)
+      signal: AbortSignal.timeout(10_000)
     });
     const fetchedUrl = response.url || input.url;
     const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
@@ -1640,6 +1639,18 @@ function getNanoDocumentSourceDedupKey(row: Record<string, unknown>) {
   return `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? ""}`;
 }
 
+function getNanoDocumentCandidateDedupKey(candidate: { documentType: string; url: string }) {
+  return `${candidate.documentType}::${normalizeDocUrl(candidate.url) ?? candidate.url}`;
+}
+
+function hasReadyNanoDocumentOfType(rows: Array<Record<string, unknown>>, documentType: string) {
+  return rows.some((row) => {
+    const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+    const rowDocumentType = getString(row.document_type) ?? getString(row.documentType);
+    return sourceStatus === "ready" && rowDocumentType === documentType;
+  });
+}
+
 function getNanoDocumentSourceStatusRank(row: Record<string, unknown>) {
   const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
   const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus) ?? "pending";
@@ -1744,6 +1755,56 @@ export function prioritizePendingNanoDocumentSources(rows: Array<Record<string, 
   });
 }
 
+function hasRuntimeCookieEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybrid =
+    runtimeArtifacts && typeof runtimeArtifacts === "object"
+      ? (((runtimeArtifacts.hybrid_runtime_evidence ?? runtimeArtifacts.hybridRuntimeEvidence) as Record<string, unknown> | null) ?? null)
+      : null;
+  const cookieWriteObservations = Array.isArray(hybrid?.cookieWriteObservations)
+    ? hybrid.cookieWriteObservations.filter((value) => Boolean(value) && typeof value === "object")
+    : [];
+
+  if (cookieWriteObservations.length > 0) {
+    return true;
+  }
+
+  const initialCookieNames = Array.isArray(runtimeArtifacts?.initial_cookie_names)
+    ? runtimeArtifacts.initial_cookie_names
+    : Array.isArray(runtimeArtifacts?.initialCookieNames)
+      ? runtimeArtifacts.initialCookieNames
+      : [];
+
+  return initialCookieNames.length > 0;
+}
+
+export function selectPendingNanoDocumentSourcesForExtraction(input: {
+  policyEnrichments: Array<Record<string, unknown>>;
+  rows: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null | undefined;
+}) {
+  const fallbackPageTypes = new Set(
+    input.policyEnrichments
+      .map((row) => getString(row.page_type) ?? getString(row.pageType))
+      .filter((value): value is string => typeof value === "string")
+  );
+  const shouldExtractCookiePolicy = hasRuntimeCookieEvidence(input.runtimeArtifacts) || !fallbackPageTypes.has("cookie_policy");
+  const shouldExtractTerms = !fallbackPageTypes.has("terms_of_service");
+
+  return input.rows.filter((row) => {
+    const documentType = getString(row.document_type) ?? getString(row.documentType);
+    if (documentType === "privacy_policy") {
+      return true;
+    }
+    if (documentType === "cookie_policy") {
+      return shouldExtractCookiePolicy;
+    }
+    if (documentType === "terms_of_service") {
+      return shouldExtractTerms;
+    }
+    return true;
+  });
+}
+
 function chunkRows<T>(rows: T[], size: number) {
   if (size <= 0) {
     return [rows];
@@ -1817,13 +1878,6 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     }).catch(() => undefined);
   }
 
-  if (artifacts.pages.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
-    if (pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
-      await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
-      return;
-    }
-  }
-
   if (scanStatus === "failed") {
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.nanoDocRetrievalFailed,
@@ -1842,44 +1896,62 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     domainHostname: artifacts.domainHostname,
     pages: artifacts.pages
   });
-  const candidateWaves = splitNanoDocCandidatesByPriority(candidates);
-  await replaceScanDocumentSources({
-    rows: [],
-    scanId
-  });
+  const existingAttemptKeys = new Set(artifacts.existingDocumentSources.map((row) => getNanoDocumentSourceDedupKey(row)));
+  const pendingCandidates = candidates.filter((candidate) => !existingAttemptKeys.has(getNanoDocumentCandidateDedupKey(candidate)));
+  const hasScannerDiscoveryInputs = artifacts.pages.length > 0 || artifacts.discoveryCandidates.length > 0;
+  const shouldReenqueueForDiscovery = !hasScannerDiscoveryInputs && scanStatus !== "completed" && scanStatus !== "failed";
 
+  const hasExistingReadyPrivacyPolicy = hasReadyNanoDocumentOfType(artifacts.existingDocumentSources, "privacy_policy");
+
+  if (pendingCandidates.length === 0) {
+    if (shouldReenqueueForDiscovery && !hasExistingReadyPrivacyPolicy && pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
+      await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
+      return;
+    }
+  }
+  const candidateWaves = splitNanoDocCandidatesByPriority(pendingCandidates);
+  const existingReadyKeys = new Set(
+    artifacts.existingDocumentSources
+      .filter((row) => (getString(row.source_status) ?? "ready") === "ready")
+      .map((row) => getNanoDocumentSourceDedupKey(row))
+  );
+
+  const secondaryFetchPromise =
+    candidateWaves.secondary.length > 0
+      ? Promise.all(candidateWaves.secondary.map((candidate) => fetchNanoDocumentSource(candidate)))
+      : Promise.resolve([] as Array<{ outcome: "ready" | "insufficient" | "non_ok" | "intermediary" | "error"; row: Record<string, unknown> | null }>);
   const priorityFetchedResults = await Promise.all(candidateWaves.priority.map((candidate) => fetchNanoDocumentSource(candidate)));
-  const priorityRows = dedupeNanoDocumentSources(priorityFetchedResults.flatMap((result) => (result.row ? [result.row] : [])));
+  const priorityRows = dedupeNanoDocumentSources([
+    ...artifacts.existingDocumentSources,
+    ...priorityFetchedResults.flatMap((result) => (result.row ? [result.row] : []))
+  ]);
   const priorityReadyRows = priorityRows.filter((row) => (getString(row.source_status) ?? "ready") === "ready");
+  const newPriorityReadyRows = priorityReadyRows.filter((row) => !existingReadyKeys.has(getNanoDocumentSourceDedupKey(row)));
 
   if (priorityRows.length > 0) {
     await replaceScanDocumentSources({
       rows: priorityRows,
       scanId
     });
-    if (priorityReadyRows.length > 0) {
+    if (newPriorityReadyRows.length > 0) {
       await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
     }
   }
 
-  const secondaryFetchedResults =
-    candidateWaves.secondary.length > 0
-      ? await Promise.all(candidateWaves.secondary.map((candidate) => fetchNanoDocumentSource(candidate)))
-      : [];
+  const secondaryFetchedResults = await secondaryFetchPromise;
   const combinedRows = dedupeNanoDocumentSources([
     ...priorityRows,
     ...secondaryFetchedResults.flatMap((result) => (result.row ? [result.row] : []))
   ]);
-  const existingKeys = new Set(priorityRows.map((row) => getNanoDocumentSourceDedupKey(row)));
-  const appendedRows = combinedRows.filter((row) => !existingKeys.has(getNanoDocumentSourceDedupKey(row)));
-  const appendedReadyRows = appendedRows.filter((row) => (getString(row.source_status) ?? "ready") === "ready");
+  const combinedReadyRows = combinedRows.filter((row) => (getString(row.source_status) ?? "ready") === "ready");
+  const newCombinedReadyRows = combinedReadyRows.filter((row) => !existingReadyKeys.has(getNanoDocumentSourceDedupKey(row)));
 
-  if (appendedRows.length > 0) {
-    await appendScanDocumentSources({
-      rows: appendedRows,
+  if (combinedRows.length !== priorityRows.length) {
+    await replaceScanDocumentSources({
+      rows: combinedRows,
       scanId
     });
-    if (appendedReadyRows.length > 0) {
+    if (newCombinedReadyRows.length > newPriorityReadyRows.length) {
       await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
     }
   }
@@ -1900,6 +1972,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
       insufficientCount: retrievalSummary.insufficientCount,
       intermediaryCount: retrievalSummary.intermediaryCount,
       nonOkCount: retrievalSummary.nonOkCount,
+      pendingCandidateCount: pendingCandidates.length,
       rejectedCount: retrievalSummary.rejectedCount,
       priorityCandidateCount: candidateWaves.priority.length,
       priorityDocumentSourceCount: priorityReadyRows.length,
@@ -1907,6 +1980,10 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     },
     scanId
   }).catch(() => undefined);
+
+  if (shouldReenqueueForDiscovery && !hasReadyNanoDocumentOfType(combinedRows, "privacy_policy") && pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
+    await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
+  }
 }
 
 export async function processNanoSignalEnrichmentJob(input: { pollCount?: number; scanId: string }) {
@@ -1937,16 +2014,51 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     }).catch(() => undefined);
   }
 
-  const pendingDocumentSources = prioritizePendingNanoDocumentSources(artifacts.documentSources.filter((row) => {
-    const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
-    const documentText = getString(row.document_text) ?? getString(row.documentText);
-    return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
-  }));
+  const pendingDocumentSources = prioritizePendingNanoDocumentSources(
+    artifacts.documentSources.filter((row) => {
+      const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+      const documentText = getString(row.document_text) ?? getString(row.documentText);
+      return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
+    })
+  );
+  const selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
+    policyEnrichments: artifacts.policyEnrichments,
+    rows: pendingDocumentSources,
+    runtimeArtifacts: artifacts.runtimeArtifacts
+  });
+  const selectedPendingIds = new Set(selectedPendingDocumentSources.map((row) => String(row.id ?? "")));
+  const skippedPendingDocumentSources = pendingDocumentSources.filter((row) => !selectedPendingIds.has(String(row.id ?? "")));
 
-  if (pendingDocumentSources.length > 0) {
+  if (skippedPendingDocumentSources.length > 0) {
+    await updateScanDocumentSourceExtractions({
+      rows: skippedPendingDocumentSources.map((row) => ({
+        extractedFields:
+          (typeof row.extracted_fields_json === "object" && row.extracted_fields_json !== null && !Array.isArray(row.extracted_fields_json)
+            ? (row.extracted_fields_json as Record<string, unknown>)
+            : {}),
+        extractionStatus: "insufficient",
+        id: String(row.id),
+        metadata: {
+          ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+            ? (row.metadata_json as Record<string, unknown>)
+            : {}),
+          extraction_skip_reason: "fallback_policy_semantics_available"
+        },
+        semanticConfidence:
+          typeof row.semantic_confidence === "number"
+            ? row.semantic_confidence
+            : typeof row.semanticConfidence === "number"
+              ? row.semanticConfidence
+              : null
+      }))
+    });
+    artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  }
+
+  if (selectedPendingDocumentSources.length > 0) {
     let partialSignalsPersisted = false;
 
-    for (const batch of chunkRows(pendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
+    for (const batch of chunkRows(selectedPendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
       const extractionRows = await Promise.all(
         batch.map(async (row) => {
           const result = await extractNanoDocumentSourceWithLlm(row);
