@@ -1336,7 +1336,7 @@ async function enqueueValidationVerdict(runId: string) {
   );
 }
 
-function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages: Array<Record<string, unknown>> }) {
+export function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages: Array<Record<string, unknown>> }) {
   const urls = new Map<string, string>();
   const seedPaths = [
     ["/privacy", "privacy_policy"],
@@ -1371,6 +1371,55 @@ function buildNanoDocCandidateUrls(input: { domainHostname: string | null; pages
   return [...urls.entries()].map(([url, documentType]) => ({ documentType, url }));
 }
 
+export function normalizeDocUrl(url: string | null) {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+
+    const paramsToDrop = ["next", "redirect", "return_to", "returnTo"];
+    for (const key of paramsToDrop) {
+      parsed.searchParams.delete(key);
+    }
+
+    const search = parsed.searchParams.toString();
+    parsed.search = search.length > 0 ? `?${search}` : "";
+
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; title: string | null; text: string | null }) {
+  const title = input.title?.toLowerCase() ?? "";
+  const text = input.text?.toLowerCase() ?? "";
+  const url = input.canonicalUrl.toLowerCase();
+
+  const blockedTitleMarkers = ["login", "sign in", "routing to checkout", "hang tight"];
+  const blockedTextMarkers = [
+    "log in",
+    "sign in",
+    "routing to checkout",
+    "checking your browser",
+    "verify you are human",
+    "access denied"
+  ];
+
+  if (blockedTitleMarkers.some((marker) => title.includes(marker))) {
+    return true;
+  }
+
+  if (blockedTextMarkers.some((marker) => text.includes(marker))) {
+    return true;
+  }
+
+  return url.includes("/login");
+}
+
 async function fetchNanoDocumentSource(input: { documentType: string; url: string }) {
   const request = buildValidationWorkerCrawlerHeaders(input.url);
   const response = await fetch(input.url, {
@@ -1386,16 +1435,22 @@ async function fetchNanoDocumentSource(input: { documentType: string; url: strin
   const html = await response.text();
   const text = stripHtmlToText(html);
   const title = extractTitle(html);
+  const fetchedUrl = response.url || input.url;
+  const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
+
+  if (looksLikeIntermediaryOrBlockPage({ canonicalUrl, text, title })) {
+    return null;
+  }
 
   return {
-    canonical_url: response.url || input.url,
+    canonical_url: canonicalUrl,
     document_text: text.length > 20 ? text.slice(0, 50_000) : null,
     document_type: input.documentType,
     extraction_status: text.length > 20 ? "pending" : "insufficient",
-    evidence_refs: [response.url || input.url],
+    evidence_refs: [canonicalUrl],
     extracted_fields_json: {
       page_type: input.documentType,
-      page_url: response.url || input.url
+      page_url: canonicalUrl
     },
     metadata_json: {
       http_status: response.status,
@@ -1406,6 +1461,37 @@ async function fetchNanoDocumentSource(input: { documentType: string; url: strin
     source_url: input.url,
     title
   } satisfies Record<string, unknown>;
+}
+
+export function dedupeNanoDocumentSources(rows: Array<Record<string, unknown>>) {
+  const byKey = new Map<string, Record<string, unknown>>();
+
+  for (const row of rows) {
+    const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
+    const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
+    const key = `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? crypto.randomUUID()}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, row);
+      continue;
+    }
+
+    const existingSourceUrl = getString(existing.source_url) ?? "";
+    const nextSourceUrl = getString(row.source_url) ?? "";
+    const existingLooksCanonical = existingSourceUrl === canonicalUrl;
+    const nextLooksCanonical = nextSourceUrl === canonicalUrl;
+
+    if (!existingLooksCanonical && nextLooksCanonical) {
+      byKey.set(key, row);
+      continue;
+    }
+
+    if (existingLooksCanonical === nextLooksCanonical && nextSourceUrl.length < existingSourceUrl.length) {
+      byKey.set(key, row);
+    }
+  }
+
+  return [...byKey.values()];
 }
 
 export async function processNanoDocRetrievalJob(input: { pollCount?: number; scanId: string }) {
@@ -1459,7 +1545,9 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
       fetchNanoDocumentSource(candidate).catch(() => null)
     )
   );
-  const rows = retrievedRows.filter((row): row is NonNullable<(typeof retrievedRows)[number]> => row !== null);
+  const rows = dedupeNanoDocumentSources(
+    retrievedRows.filter((row): row is NonNullable<(typeof retrievedRows)[number]> => row !== null)
+  );
 
   await replaceScanDocumentSources({
     rows,

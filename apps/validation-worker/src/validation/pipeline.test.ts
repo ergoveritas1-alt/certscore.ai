@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveValidationFindings, determineValidationCollectAction } from "./pipeline";
+import {
+  dedupeNanoDocumentSources,
+  deriveValidationFindings,
+  determineValidationCollectAction,
+  looksLikeIntermediaryOrBlockPage
+} from "./pipeline";
 
 function buildArtifacts(overrides?: {
   documentSources?: Array<Record<string, unknown>>;
@@ -73,6 +78,71 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout interstitial pages", () => {
+  assert.equal(
+    looksLikeIntermediaryOrBlockPage({
+      canonicalUrl: "https://vercel.com/login?next=%2Fprivacy-policy",
+      text: "Log in to continue to Vercel.",
+      title: "Login - Vercel"
+    }),
+    true
+  );
+
+  assert.equal(
+    looksLikeIntermediaryOrBlockPage({
+      canonicalUrl: "https://www.patagonia.com/privacy-policy",
+      text: "Hang Tight! Routing to checkout...",
+      title: "Hang Tight! Routing to checkout..."
+    }),
+    true
+  );
+
+  assert.equal(
+    looksLikeIntermediaryOrBlockPage({
+      canonicalUrl: "https://stripe.com/privacy",
+      text: "This Privacy Policy describes how we handle personal data.",
+      title: "Privacy Policy"
+    }),
+    false
+  );
+});
+
+test("dedupeNanoDocumentSources keeps one row per canonical url and document type", () => {
+  const rows = dedupeNanoDocumentSources([
+    {
+      canonical_url: "https://www.target.com/c/target-privacy-policy/-/N-4sr7p",
+      document_type: "privacy_policy",
+      source_url: "https://target.com/privacy"
+    },
+    {
+      canonical_url: "https://www.target.com/c/target-privacy-policy/-/N-4sr7p",
+      document_type: "privacy_policy",
+      source_url: "https://target.com/privacy-policy"
+    },
+    {
+      canonical_url: "https://www.target.com/c/terms-conditions/-/N-4sr7l",
+      document_type: "terms_of_service",
+      source_url: "https://target.com/terms"
+    }
+  ]);
+
+  assert.equal(rows.length, 2);
+  assert.ok(
+    rows.some(
+      (row) =>
+        row.canonical_url === "https://www.target.com/c/target-privacy-policy/-/N-4sr7p" &&
+        row.document_type === "privacy_policy"
+    )
+  );
+  assert.ok(
+    rows.some(
+      (row) =>
+        row.canonical_url === "https://www.target.com/c/terms-conditions/-/N-4sr7l" &&
+        row.document_type === "terms_of_service"
+    )
+  );
 });
 
 test("deriveValidationFindings emits pilot financial review rows from retained signal evidence", () => {
