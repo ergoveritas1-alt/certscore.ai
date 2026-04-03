@@ -193,7 +193,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   return (
     <details className="group mt-4 rounded-xl border border-slate-200 bg-slate-50/85 px-4 py-3">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-slate-800">
-        <span>{input.finding.shortSummary}</span>
+        <span>Why this matters and how to fix</span>
         <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
       </summary>
       <div className="mt-4 space-y-4">
