@@ -1565,6 +1565,35 @@ export async function replaceScanDocumentSources(input: {
   return input.rows;
 }
 
+export async function updateScanDocumentSourceExtractions(input: {
+  rows: Array<{
+    extractedFields: Record<string, unknown>;
+    extractionStatus: "ready" | "insufficient" | "failed";
+    id: string;
+    metadata?: Record<string, unknown>;
+    semanticConfidence: number | null;
+  }>;
+}) {
+  const supabase = createAdminClient();
+
+  for (const row of input.rows) {
+    const { error } = await supabase
+      .from("scan_document_sources")
+      .update({
+        extracted_fields_json: row.extractedFields,
+        extraction_status: row.extractionStatus,
+        metadata_json: row.metadata ?? {},
+        semantic_confidence: row.semanticConfidence,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", row.id);
+
+    if (error) {
+      throw new Error(`Failed to update document source extraction ${row.id}: ${error.message}`);
+    }
+  }
+}
+
 export async function persistDerivedNanoPolicySignals(input: {
   policyEnrichments: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;

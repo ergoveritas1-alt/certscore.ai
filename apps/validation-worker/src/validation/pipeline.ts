@@ -28,10 +28,12 @@ import {
   replaceScanDocumentSources,
   replaceValidationRunFindings,
   syncTrancoTargets,
+  updateScanDocumentSourceExtractions,
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
+import { extractNanoDocumentSourceWithLlm } from "./nano-document-extraction";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
 import {
@@ -1459,7 +1461,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
 
   const scanId = input.scanId;
   const pollCount = input.pollCount ?? 0;
-  const artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  let artifacts = await loadNanoSignalEnrichmentInputs(scanId);
   const scanStatus = typeof artifacts.scan?.status === "string" ? artifacts.scan.status : null;
   const startedAt =
     typeof artifacts.scan?.started_at === "string"
@@ -1477,6 +1479,38 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       },
       scanId
     }).catch(() => undefined);
+  }
+
+  const pendingDocumentSources = artifacts.documentSources.filter((row) => {
+    const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+    const documentText = getString(row.document_text) ?? getString(row.documentText);
+    return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
+  });
+
+  if (pendingDocumentSources.length > 0) {
+    const extractionRows = await Promise.all(
+      pendingDocumentSources.map(async (row) => {
+        const result = await extractNanoDocumentSourceWithLlm(row);
+        return {
+          extractedFields: result.extractedFields,
+          extractionStatus: result.extractionStatus,
+          id: String(row.id),
+          metadata: {
+            ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+              ? (row.metadata_json as Record<string, unknown>)
+              : {}),
+            ...result.metadata
+          },
+          semanticConfidence: result.semanticConfidence
+        };
+      })
+    );
+
+    await updateScanDocumentSourceExtractions({
+      rows: extractionRows
+    });
+
+    artifacts = await loadNanoSignalEnrichmentInputs(scanId);
   }
 
   if (artifacts.policySignalInputs.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
