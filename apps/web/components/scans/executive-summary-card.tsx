@@ -60,6 +60,95 @@ function DetailDisclosure(input: {
   );
 }
 
+function getFindingReferenceLink(finding: CertScoreFinding) {
+  if (finding.id === "third_party_tracking_pre_consent") {
+    return {
+      href: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/",
+      label: "ICO guidance on cookies and similar technologies"
+    };
+  }
+
+  if (finding.id === "session_recording_services_detected") {
+    if (/microsoft clarity/i.test(finding.shortSummary)) {
+      return {
+        href: "https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-masking",
+        label: "Microsoft Clarity data masking guidance"
+      };
+    }
+
+    return {
+      href: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/online-tracking/guidance-for-consumer-internet-of-things-products-and-services/how-do-we-ensure-our-use-of-online-tracking-is-fair/",
+      label: "ICO fairness guidance for online tracking"
+    };
+  }
+
+  if (finding.id === "asymmetric_consent_ui") {
+    return {
+      href: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/online-tracking/how-do-we-comply-with-the-rules-on-storing-information-and-gaining-access-to-information/",
+      label: "ICO guidance on consent choice presentation"
+    };
+  }
+
+  return null;
+}
+
+function getFindingFixText(finding: CertScoreFinding) {
+  if (finding.id === "third_party_tracking_pre_consent") {
+    return "Move non-essential analytics, adtech, and session-replay tags behind a consent gate. Load them only after an explicit accept signal and verify that the default page path produces zero third-party tracking requests before consent.";
+  }
+
+  if (finding.id === "session_recording_services_detected") {
+    return "Either remove session replay from the public path or gate it behind consent. If it remains, enable masking for form fields, auth flows, and user-generated content, and add a plain-language disclosure naming the replay vendor and purpose.";
+  }
+
+  if (finding.id === "asymmetric_consent_ui") {
+    return "Bring reject and settings up to the first layer, match the visual weight of accept, and avoid button color, size, or placement patterns that steer users toward one choice. Re-test the live banner after the CSS change, not just the design mock.";
+  }
+
+  return finding.remediation;
+}
+
+function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
+  const reference = getFindingReferenceLink(input.finding);
+  const jsonPayload = JSON.stringify(input.finding, null, 2);
+
+  return (
+    <details className="group mt-4 rounded-xl border border-slate-200 bg-slate-50/85 px-4 py-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-slate-800">
+        <span>More detail</span>
+        <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="mt-4 space-y-4">
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this matters</p>
+          <p className="text-sm leading-6 text-slate-700">{input.finding.whyItMatters}</p>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">How to fix</p>
+          <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
+          {reference ? (
+            <a
+              href={reference.href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+            >
+              {reference.label}
+            </a>
+          ) : null}
+        </div>
+        <details className="group/json rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <span>{"{}"} JSON evidence</span>
+            <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
+          </summary>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-950 px-3 py-3 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
+        </details>
+      </div>
+    </details>
+  );
+}
+
 export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
   finalHost: string | null;
@@ -165,6 +254,7 @@ export function ExecutiveSummaryCard(input: {
                 </div>
                 <p className="mt-3 text-[15px] font-semibold tracking-tight text-slate-950">{finding.label}</p>
                 <p className="mt-1.5 text-sm leading-6 text-slate-700">{finding.shortSummary}</p>
+                <FindingDetailDisclosure finding={finding} />
               </div>
             ))}
           </div>
