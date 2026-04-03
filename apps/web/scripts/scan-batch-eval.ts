@@ -1,7 +1,9 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { Queue, type ConnectionOptions } from "bullmq";
 import { parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
+import { getConfiguredValidationRedisUrl } from "../lib/env";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 
 type ScanRow = {
@@ -31,10 +33,95 @@ const DEFAULT_ORG_ID = "2f2ef2a2-d86b-4993-8bd5-de912e7de905";
 const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_TIMEOUT_MS = 8 * 60_000;
 const POLL_INTERVAL_MS = 5_000;
+const NANO_DOC_RETRIEVAL_QUEUE = "nano_doc_retrieval";
+const NANO_SIGNAL_ENRICHMENT_QUEUE = "nano_signal_enrichment";
+const NANO_DOC_RETRIEVAL_JOB = "nano_doc_retrieval";
+const NANO_SIGNAL_ENRICHMENT_JOB = "nano_signal_enrichment";
+
+let nanoDocQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
+let nanoSignalQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
+function createRedisConnection(redisUrl: string): ConnectionOptions {
+  const url = new URL(redisUrl);
+  const username = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
+
+  return {
+    enableReadyCheck: false,
+    host: url.hostname,
+    maxRetriesPerRequest: null,
+    password: password.length > 0 ? password : undefined,
+    port: Number(url.port || 6379),
+    tls: url.protocol === "rediss:" ? {} : undefined,
+    username: username.length > 0 ? username : undefined
+  };
+}
+
+function getRedisConnection() {
+  const redisUrl = getConfiguredValidationRedisUrl();
+  if (!redisUrl) {
+    throw new Error("Validation Redis is not configured.");
+  }
+
+  return createRedisConnection(redisUrl);
+}
+
+function getNanoDocQueue() {
+  if (nanoDocQueue) {
+    return nanoDocQueue;
+  }
+
+  nanoDocQueue = new Queue<{ pollCount?: number; scanId: string }>(NANO_DOC_RETRIEVAL_QUEUE, {
+    connection: getRedisConnection(),
+    defaultJobOptions: {
+      removeOnComplete: 100,
+      removeOnFail: 100
+    }
+  });
+
+  return nanoDocQueue;
+}
+
+function getNanoSignalQueue() {
+  if (nanoSignalQueue) {
+    return nanoSignalQueue;
+  }
+
+  nanoSignalQueue = new Queue<{ pollCount?: number; scanId: string }>(NANO_SIGNAL_ENRICHMENT_QUEUE, {
+    connection: getRedisConnection(),
+    defaultJobOptions: {
+      removeOnComplete: 100,
+      removeOnFail: 100
+    }
+  });
+
+  return nanoSignalQueue;
+}
+
+async function enqueueNanoSignalEnrichment(scanId: string) {
+  await Promise.all([
+    getNanoDocQueue().add(
+      NANO_DOC_RETRIEVAL_JOB,
+      { pollCount: 0, scanId },
+      {
+        attempts: 2,
+        jobId: `${scanId}--nano-doc-retrieval--initial`
+      }
+    ),
+    getNanoSignalQueue().add(
+      NANO_SIGNAL_ENRICHMENT_JOB,
+      { pollCount: 0, scanId },
+      {
+        attempts: 2,
+        jobId: `${scanId}--nano-doc-signals--initial`
+      }
+    )
+  ]);
 }
 
 function sleep(ms: number) {
@@ -133,6 +220,13 @@ async function queueScan(input: {
   if (inserted.error || !inserted.data) {
     throw new Error(`Failed to queue scan for ${input.domain.hostname}: ${inserted.error?.message ?? "Unknown error"}`);
   }
+
+  await enqueueNanoSignalEnrichment(inserted.data.id).catch((error) => {
+    console.error("[scan-batch-eval] nano signal enrichment handoff failed", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId: inserted.data.id
+    });
+  });
 
   return inserted.data as ScanRow;
 }
