@@ -60,6 +60,60 @@ function getNestedRecord(record: Record<string, unknown> | null | undefined, key
   return null;
 }
 
+function normalizeContradictionEvidenceRecord(
+  record: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  if (!record) {
+    return {};
+  }
+
+  const normalized: Record<string, unknown> = { ...record };
+  const assignCanonicalField = (canonicalKey: string, legacyKeys: string[]) => {
+    if (normalized[canonicalKey] !== undefined) {
+      return;
+    }
+
+    for (const legacyKey of legacyKeys) {
+      if (record[legacyKey] !== undefined) {
+        normalized[canonicalKey] = record[legacyKey];
+        return;
+      }
+    }
+  };
+
+  assignCanonicalField("claimType", ["claim_type", "policyClaimType", "policy_claim_type"]);
+  assignCanonicalField("normalizedClaim", ["normalized_claim"]);
+  assignCanonicalField("policySnippet", ["policy_snippet"]);
+  assignCanonicalField("policySnippets", ["policy_snippets"]);
+  assignCanonicalField("supportingSignals", ["supporting_signals"]);
+  assignCanonicalField("observationType", ["observation_type", "runtimeObservationType", "runtime_observation_type"]);
+  assignCanonicalField("runtimeSummary", ["runtime_summary", "observedBehavior", "observed_behavior"]);
+  assignCanonicalField("runtimeEvidenceArtifacts", ["runtime_evidence_artifacts", "runtimeEvidence", "runtime_evidence"]);
+  assignCanonicalField("phase", ["runtimePhase", "runtime_phase", "consentPhase", "consent_phase"]);
+  assignCanonicalField("contradictionBasis", ["contradiction_basis", "conflictBasis", "conflict_basis", "mismatchReason", "mismatch_reason"]);
+  assignCanonicalField("sourceUrl", ["source_url"]);
+  assignCanonicalField("policySourceUrl", ["policy_source_url", "pageUrl", "page_url"]);
+  assignCanonicalField("policySummaryShort", ["policy_summary_short", "policySummary", "policy_summary"]);
+  assignCanonicalField("runtimeVendors", ["runtime_vendors"]);
+  assignCanonicalField("relatedVendors", ["related_vendors"]);
+  assignCanonicalField("sourceUrls", ["source_urls"]);
+  assignCanonicalField("requestUrls", ["request_urls", "runtimeEvidenceUrls"]);
+  assignCanonicalField("cookieNames", ["cookie_names"]);
+  assignCanonicalField("storageArtifacts", ["storage_artifacts", "localStorageKeys", "sessionStorageKeys"]);
+  assignCanonicalField("confidence", ["policyConfidence", "policy_confidence", "runtimeConfidence", "runtime_confidence"]);
+  assignCanonicalField("extractionStatus", ["extraction_status", "policyExtractionStatus", "policy_extraction_status"]);
+  assignCanonicalField("conflictType", ["conflict_type"]);
+  assignCanonicalField("bridgeReasoning", ["bridge_reasoning", "reasoning", "explanation"]);
+  assignCanonicalField("supportsPromotion", ["supports_promotion"]);
+  assignCanonicalField("reviewStatus", ["review_status", "status"]);
+  assignCanonicalField("policyAnchorPresent", ["policy_anchor_present"]);
+  assignCanonicalField("runtimeAnchorPresent", ["runtime_anchor_present"]);
+  assignCanonicalField("conflictBridgePresent", ["conflict_bridge_present"]);
+  assignCanonicalField("promotionEligible", ["promotion_eligible"]);
+
+  return normalized;
+}
+
 export type PolicyBehaviorConflictClaimType =
   | "gpc_honored"
   | "no_sale_share_without_opt_out_or_consent"
@@ -256,18 +310,19 @@ function normalizeEvidenceStatus(value: string | null): ContradictionEvidenceSta
 }
 
 function inferClaimType(source: Record<string, unknown> | null | undefined): PolicyBehaviorConflictClaimType | null {
+  const normalizedSource = normalizeContradictionEvidenceRecord(source);
   const explicit = normalizeClaimType(
-    getFirstString(source, ["claimType", "claim_type", "policyClaimType", "policy_claim_type"])
+    getFirstString(normalizedSource, ["claimType"])
   );
   if (explicit) {
     return explicit;
   }
 
   const haystack = [
-    getFirstString(source, ["normalizedClaim", "normalized_claim", "claim"]),
-    getFirstString(source, ["policySnippet", "policy_snippet"]),
-    ...getStringArray(source, ["policySnippets", "policy_snippets"]),
-    ...getStringArray(source, ["supportingSignals", "supporting_signals"])
+    getFirstString(normalizedSource, ["normalizedClaim", "claim"]),
+    getFirstString(normalizedSource, ["policySnippet"]),
+    ...getStringArray(normalizedSource, ["policySnippets"]),
+    ...getStringArray(normalizedSource, ["supportingSignals"])
   ]
     .filter(Boolean)
     .join(" ")
@@ -299,17 +354,18 @@ function inferClaimType(source: Record<string, unknown> | null | undefined): Pol
 }
 
 function inferObservationType(source: Record<string, unknown> | null | undefined): PolicyBehaviorRuntimeObservationType | null {
+  const normalizedSource = normalizeContradictionEvidenceRecord(source);
   const explicit = normalizeRuntimeObservationType(
-    getFirstString(source, ["observationType", "observation_type", "runtimeObservationType", "runtime_observation_type"])
+    getFirstString(normalizedSource, ["observationType"])
   );
   if (explicit) {
     return explicit;
   }
 
   const haystack = [
-    getFirstString(source, ["runtimeSummary", "runtime_summary", "observedBehavior", "observed_behavior"]),
-    ...getStringArray(source, ["runtimeEvidenceArtifacts", "runtime_evidence_artifacts", "runtimeEvidence", "runtime_evidence"]),
-    ...getStringArray(source, ["supportingSignals", "supporting_signals"])
+    getFirstString(normalizedSource, ["runtimeSummary"]),
+    ...getStringArray(normalizedSource, ["runtimeEvidenceArtifacts"]),
+    ...getStringArray(normalizedSource, ["supportingSignals"])
   ]
     .filter(Boolean)
     .join(" ")
@@ -341,17 +397,18 @@ function inferObservationType(source: Record<string, unknown> | null | undefined
 }
 
 function inferPhase(source: Record<string, unknown> | null | undefined): RuntimeObservationPhase {
+  const normalizedSource = normalizeContradictionEvidenceRecord(source);
   const explicit = normalizePhase(
-    getFirstString(source, ["phase", "runtimePhase", "runtime_phase", "consentPhase", "consent_phase"])
+    getFirstString(normalizedSource, ["phase"])
   );
   if (explicit !== "unknown") {
     return explicit;
   }
 
   const haystack = [
-    getFirstString(source, ["runtimeSummary", "runtime_summary", "observedBehavior", "observed_behavior"]),
-    ...getStringArray(source, ["runtimeEvidenceArtifacts", "runtime_evidence_artifacts", "runtimeEvidence", "runtime_evidence"]),
-    ...getStringArray(source, ["supportingSignals", "supporting_signals"])
+    getFirstString(normalizedSource, ["runtimeSummary"]),
+    ...getStringArray(normalizedSource, ["runtimeEvidenceArtifacts"]),
+    ...getStringArray(normalizedSource, ["supportingSignals"])
   ]
     .filter(Boolean)
     .join(" ")
@@ -392,49 +449,38 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     return null;
   }
 
+  const normalizedRecord = normalizeContradictionEvidenceRecord(record);
   const nested =
-    record.contradictionEvidence && typeof record.contradictionEvidence === "object"
-      ? (record.contradictionEvidence as Record<string, unknown>)
+    normalizedRecord.contradictionEvidence && typeof normalizedRecord.contradictionEvidence === "object"
+      ? normalizeContradictionEvidenceRecord(normalizedRecord.contradictionEvidence as Record<string, unknown>)
       : null;
-  const source = nested ?? record;
-  const policyAnchorSource = getNestedRecord(source, ["policyAnchor", "policy_anchor"]) ?? source;
-  const runtimeAnchorSource = getNestedRecord(source, ["runtimeAnchor", "runtime_anchor"]) ?? source;
-  const conflictBridgeSource = getNestedRecord(source, ["conflictBridge", "conflict_bridge"]) ?? source;
-  const sufficiencySource = getNestedRecord(source, ["evidenceSufficiency", "evidence_sufficiency"]) ?? source;
+  const source = nested ?? normalizedRecord;
+  const policyAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["policyAnchor", "policy_anchor"]) ?? source);
+  const runtimeAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["runtimeAnchor", "runtime_anchor"]) ?? source);
+  const conflictBridgeSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["conflictBridge", "conflict_bridge"]) ?? source);
+  const sufficiencySource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["evidenceSufficiency", "evidence_sufficiency"]) ?? source);
 
   const claim = getFirstString(source, ["claim"]);
-  const contradictionBasis = getFirstString(source, [
-    "contradictionBasis",
-    "contradiction_basis",
-    "conflictBasis",
-    "conflict_basis",
-    "mismatchReason",
-    "mismatch_reason"
-  ]);
+  const contradictionBasis = getFirstString(source, ["contradictionBasis"]);
   const explicitPolicySnippet =
     getFirstString(policyAnchorSource, ["snippet"]) ??
-    getStringArray(source, ["policySnippets", "policy_snippets"])[0] ??
-    getFirstString(source, ["policySnippet", "policy_snippet"]);
+    getStringArray(source, ["policySnippets"])[0] ??
+    getFirstString(source, ["policySnippet"]);
   const policySnippet =
-    getFirstString(policyAnchorSource, ["snippet", "policySnippet", "policy_snippet"]) ??
+    getFirstString(policyAnchorSource, ["snippet", "policySnippet"]) ??
     explicitPolicySnippet ??
     claim;
   const policySourceUrl =
-    getFirstString(policyAnchorSource, ["sourceUrl", "source_url"]) ??
-    getFirstString(source, ["policySourceUrl", "policy_source_url", "pageUrl", "page_url", "sourceUrl", "source_url"]);
-  const policySummaryShort = getFirstString(source, ["policySummaryShort", "policy_summary_short", "policySummary", "policy_summary"]);
-  const runtimeSummary = getFirstString(source, ["runtimeSummary", "runtime_summary", "observedBehavior", "observed_behavior"]);
-  const runtimeEvidenceArtifacts = getStringArray(source, [
-    "runtimeEvidenceArtifacts",
-    "runtime_evidence_artifacts",
-    "runtimeEvidence",
-    "runtime_evidence"
-  ]);
-  const runtimeVendors = getStringArray(source, ["runtimeVendors", "runtime_vendors"]);
-  const relatedVendors = getStringArray(source, ["relatedVendors", "related_vendors"]);
-  const supportingSignals = getStringArray(source, ["supportingSignals", "supporting_signals"]);
+    getFirstString(policyAnchorSource, ["sourceUrl"]) ??
+    getFirstString(source, ["policySourceUrl", "sourceUrl"]);
+  const policySummaryShort = getFirstString(source, ["policySummaryShort"]);
+  const runtimeSummary = getFirstString(source, ["runtimeSummary"]);
+  const runtimeEvidenceArtifacts = getStringArray(source, ["runtimeEvidenceArtifacts"]);
+  const runtimeVendors = getStringArray(source, ["runtimeVendors"]);
+  const relatedVendors = getStringArray(source, ["relatedVendors"]);
+  const supportingSignals = getStringArray(source, ["supportingSignals"]);
   const sourceUrls = uniqueStrings([
-    ...getStringArray(source, ["sourceUrls", "source_urls"]),
+    ...getStringArray(source, ["sourceUrls"]),
     policySourceUrl
   ]);
 
@@ -442,42 +488,37 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
   const runtimeObservationType = inferObservationType(runtimeAnchorSource);
   const inferredConflictType = getAllowedConflictType(policyClaimType, runtimeObservationType);
   const runtimeRequests = uniqueStrings([
-    ...getStringArray(runtimeAnchorSource, ["requests", "requestUrls", "request_urls", "runtimeEvidenceUrls"]),
-    ...getStringArray(source, ["requestUrls", "request_urls", "runtimeEvidenceUrls"]),
+    ...getStringArray(runtimeAnchorSource, ["requests", "requestUrls"]),
+    ...getStringArray(source, ["requestUrls"]),
     ...getSanitizedNetworkEvidenceRequestUrls(record, {
       runtimePhase: inferPhase(runtimeAnchorSource)
     })
   ]);
-  const runtimeCookies = getStringArray(runtimeAnchorSource, ["cookies", "cookieNames", "cookie_names"]);
-  const storageArtifacts = getStringArray(runtimeAnchorSource, [
-    "storageArtifacts",
-    "storage_artifacts",
-    "localStorageKeys",
-    "sessionStorageKeys"
-  ]);
+  const runtimeCookies = getStringArray(runtimeAnchorSource, ["cookies", "cookieNames"]);
+  const storageArtifacts = getStringArray(runtimeAnchorSource, ["storageArtifacts"]);
 
   const policyAnchor: ContradictionPolicyAnchor = {
     claimType: policyClaimType,
-    sourceUrl: getFirstString(policyAnchorSource, ["sourceUrl", "source_url"]) ?? policySourceUrl,
+    sourceUrl: getFirstString(policyAnchorSource, ["sourceUrl"]) ?? policySourceUrl,
     snippet: policySnippet,
     normalizedClaim:
-      getFirstString(policyAnchorSource, ["normalizedClaim", "normalized_claim"]) ??
+      getFirstString(policyAnchorSource, ["normalizedClaim"]) ??
       claim ??
       policySnippet,
     confidence:
-      getFirstNumber(policyAnchorSource, ["confidence", "policyConfidence", "policy_confidence"]) ??
-      getFirstNumber(source, ["policySemanticConfidence", "policy_semantic_confidence"]),
+      getFirstNumber(policyAnchorSource, ["confidence"]) ??
+      getFirstNumber(source, ["policySemanticConfidence"]),
     extractionStatus:
-      getFirstString(policyAnchorSource, ["extractionStatus", "extraction_status"]) ??
-      getFirstString(source, ["policyExtractionStatus", "policy_extraction_status"])
+      getFirstString(policyAnchorSource, ["extractionStatus"]) ??
+      getFirstString(source, ["policyExtractionStatus"])
   };
 
   const runtimeAnchor: ContradictionRuntimeAnchor = {
     observationType: runtimeObservationType,
     phase: inferPhase(runtimeAnchorSource),
-    sourceUrl: getFirstString(runtimeAnchorSource, ["sourceUrl", "source_url"]) ?? policySourceUrl,
+    sourceUrl: getFirstString(runtimeAnchorSource, ["sourceUrl"]) ?? policySourceUrl,
     vendors: uniqueStrings([
-      ...getStringArray(runtimeAnchorSource, ["vendors", "runtimeVendors", "runtime_vendors"]),
+      ...getStringArray(runtimeAnchorSource, ["vendors", "runtimeVendors"]),
       ...runtimeVendors,
       ...relatedVendors,
       ...getSanitizedNetworkEvidenceVendors(record, {
@@ -487,19 +528,19 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     requests: runtimeRequests,
     cookies: runtimeCookies,
     storageArtifacts,
-    confidence: getFirstNumber(runtimeAnchorSource, ["confidence", "runtimeConfidence", "runtime_confidence"])
+    confidence: getFirstNumber(runtimeAnchorSource, ["confidence", "runtimeConfidence"])
   };
 
   const conflictBridge: ContradictionConflictBridge = {
     conflictType:
       normalizeConflictType(
-        getFirstString(conflictBridgeSource, ["conflictType", "conflict_type"])
+        getFirstString(conflictBridgeSource, ["conflictType"])
       ) ?? inferredConflictType,
     reasoning:
-      getFirstString(conflictBridgeSource, ["reasoning", "explanation", "bridgeReasoning", "bridge_reasoning"]) ??
+      getFirstString(conflictBridgeSource, ["bridgeReasoning", "reasoning", "explanation"]) ??
       getFirstString(source, ["reasoning", "explanation"]),
     supportsPromotion:
-      getFirstBoolean(conflictBridgeSource, ["supportsPromotion", "supports_promotion"]) ??
+      getFirstBoolean(conflictBridgeSource, ["supportsPromotion"]) ??
       Boolean(inferredConflictType)
   };
 
@@ -526,7 +567,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
   );
   const reviewStatus =
     normalizeEvidenceStatus(
-      getFirstString(sufficiencySource, ["reviewStatus", "review_status", "status"])
+      getFirstString(sufficiencySource, ["reviewStatus"])
     ) ??
     (derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent
       ? "complete"
@@ -534,13 +575,13 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
 
   const evidenceSufficiency: ContradictionEvidenceSufficiency = {
     policyAnchorPresent:
-      getFirstBoolean(sufficiencySource, ["policyAnchorPresent", "policy_anchor_present"]) ?? derivedPolicyAnchorPresent,
+      getFirstBoolean(sufficiencySource, ["policyAnchorPresent"]) ?? derivedPolicyAnchorPresent,
     runtimeAnchorPresent:
-      getFirstBoolean(sufficiencySource, ["runtimeAnchorPresent", "runtime_anchor_present"]) ?? derivedRuntimeAnchorPresent,
+      getFirstBoolean(sufficiencySource, ["runtimeAnchorPresent"]) ?? derivedRuntimeAnchorPresent,
     conflictBridgePresent:
-      getFirstBoolean(sufficiencySource, ["conflictBridgePresent", "conflict_bridge_present"]) ?? derivedConflictBridgePresent,
+      getFirstBoolean(sufficiencySource, ["conflictBridgePresent"]) ?? derivedConflictBridgePresent,
     promotionEligible:
-      getFirstBoolean(sufficiencySource, ["promotionEligible", "promotion_eligible"]) ??
+      getFirstBoolean(sufficiencySource, ["promotionEligible"]) ??
       (derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent),
     reviewStatus
   };

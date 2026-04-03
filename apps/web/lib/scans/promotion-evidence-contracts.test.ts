@@ -20,6 +20,57 @@ test("policy behavior conflict fixtures parse into the structured contradiction 
   assert.equal(bundle?.evidenceSufficiency.promotionEligible, true);
 });
 
+test("contradiction evidence canonicalizes legacy snake_case fields before parsing", () => {
+  const bundle = getContradictionEvidenceBundle({
+    claim: "We only use necessary cookies before consent.",
+    contradiction_basis: "Observed marketing tags before consent.",
+    policy_snippet: "We only use necessary cookies before consent.",
+    policy_source_url: "https://example.com/privacy",
+    policy_summary_short: "We only use necessary cookies before consent.",
+    runtime_evidence_artifacts: ["Marketing vendor fired before consent."],
+    runtime_summary: "Marketing vendor fired before consent.",
+    runtime_vendors: ["ExampleAds"],
+    related_vendors: ["ExampleAds"],
+    source_urls: ["https://example.com/privacy"],
+    supporting_signals: ["policy_runtime_functional_misalignment_detected"],
+    policy_anchor: {
+      claim_type: "only_necessary_cookies_before_choice",
+      source_url: "https://example.com/privacy",
+      snippet: "We only use necessary cookies before consent.",
+      normalized_claim: "We only use necessary cookies before consent.",
+      extraction_status: "complete"
+    },
+    runtime_anchor: {
+      observation_type: "marketing_vendor_fired_pre_consent",
+      runtime_phase: "pre_consent",
+      source_url: "https://example.com/privacy",
+      runtime_vendors: ["ExampleAds"],
+      request_urls: ["https://ads.example.com/pixel"],
+      cookie_names: ["ad_id"],
+      storage_artifacts: ["ad_storage"]
+    },
+    conflict_bridge: {
+      conflict_type: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+      bridge_reasoning: "Observed runtime behavior conflicts with the policy claim.",
+      supports_promotion: true
+    },
+    evidence_sufficiency: {
+      policy_anchor_present: true,
+      runtime_anchor_present: true,
+      conflict_bridge_present: true,
+      promotion_eligible: true,
+      review_status: "complete"
+    }
+  });
+
+  assert.ok(bundle);
+  assert.equal(bundle?.policyAnchor.claimType, "only_necessary_cookies_before_choice");
+  assert.equal(bundle?.runtimeAnchor.observationType, "marketing_vendor_fired_pre_consent");
+  assert.equal(bundle?.policySourceUrl, "https://example.com/privacy");
+  assert.deepEqual(bundle?.runtimeAnchor.requests, ["https://ads.example.com/pixel"]);
+  assert.equal(bundle?.evidenceSufficiency.reviewStatus, "complete");
+});
+
 test("policy behavior conflict contract accepts contradiction-grade positive fixtures", () => {
   const cases = [
     POLICY_BEHAVIOR_CONFLICT_FIXTURES.positiveGpcNotHonored,
