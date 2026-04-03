@@ -220,7 +220,7 @@ function BenchmarkMetricCard(input: {
           rail: "bg-sky-100/90",
           fill: "bg-sky-500/85",
           marker: "bg-cyan-500 shadow-[0_0_0_3px_rgba(236,254,255,0.95)]",
-          value: "text-sky-700",
+          value: "text-slate-950",
           deltaPositive: "text-sky-700",
           deltaNegative: "text-cyan-700"
         }
@@ -230,7 +230,7 @@ function BenchmarkMetricCard(input: {
             rail: "bg-amber-100/90",
             fill: "bg-amber-500/85",
             marker: "bg-orange-500 shadow-[0_0_0_3px_rgba(255,247,237,0.95)]",
-            value: "text-amber-700",
+            value: "text-slate-950",
             deltaPositive: "text-amber-700",
             deltaNegative: "text-orange-700"
           }
@@ -239,7 +239,7 @@ function BenchmarkMetricCard(input: {
             rail: "bg-emerald-100/90",
             fill: "bg-emerald-500/82",
             marker: "bg-lime-500 shadow-[0_0_0_3px_rgba(247,254,231,0.95)]",
-            value: "text-emerald-700",
+            value: "text-slate-950",
             deltaPositive: "text-emerald-700",
             deltaNegative: "text-lime-700"
           };
