@@ -100,7 +100,17 @@ function BenchmarkMetricCard(input: {
   return (
     <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_28%_78%,rgba(153,246,228,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] px-5 py-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+          {input.label === "Overall score" ? (
+            <>
+              Overall
+              <br />
+              score
+            </>
+          ) : (
+            input.label
+          )}
+        </p>
         <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
       </div>
       <div className="mt-5">
