@@ -473,6 +473,11 @@ function dedupeHeadlineFindings(findings: PreviewSampleFinding[]) {
 }
 
 function derivePolicyBehaviorContradictions(input: {
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
   policyEnrichments: Array<Record<string, unknown>>;
   preconsentViolations: Array<{
     evidenceUrls: string[];
@@ -503,12 +508,19 @@ function derivePolicyBehaviorContradictions(input: {
   const preconsentEvidence = [...new Set(input.preconsentViolations.flatMap((row) => row.evidenceUrls))];
   const hasPolicyBehaviorConflict =
     input.snapshot?.policy_behavior_conflict_detected === true || input.snapshot?.policyBehaviorConflictDetected === true;
-  const policyFlags = Array.isArray(getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags"))
-    ? ((getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags") as unknown[]) ?? []).filter(
-        (value): value is string => typeof value === "string"
-      )
-    : [];
-  const policyDoNotSell = String(getPolicyField(privacyEnrichment, "policyDoNotSell", "policy_do_not_sell") ?? "unknown");
+  const mergedPolicyFlags = findMergedSignalValue(input.mergedSignals, "policyActionableFlags");
+  const policyFlags = Array.isArray(mergedPolicyFlags)
+    ? mergedPolicyFlags.filter((value): value is string => typeof value === "string")
+    : Array.isArray(getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags"))
+      ? ((getPolicyField(privacyEnrichment, "policyActionableFlags", "policy_actionable_flags") as unknown[]) ?? []).filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [];
+  const mergedPolicyDoNotSell = findMergedSignalValue(input.mergedSignals, "policyDoNotSell");
+  const policyDoNotSell =
+    typeof mergedPolicyDoNotSell === "string"
+      ? mergedPolicyDoNotSell
+      : String(getPolicyField(privacyEnrichment, "policyDoNotSell", "policy_do_not_sell") ?? "unknown");
   const policyPageUrl =
     typeof (privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url) === "string"
       ? String(privacyEnrichment?.pageUrl ?? privacyEnrichment?.page_url)
@@ -4361,6 +4373,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
       trackerVendors: scanRecord.trackerVendors
     });
     const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
+      mergedSignals: scanRecord.mergedSignals,
       policyEnrichments: scanRecord.policyEnrichment,
       preconsentViolations: preconsentViolationRows,
       runtimeArtifacts,
@@ -5234,6 +5247,7 @@ export function SharedScanDetailView({
       trackerVendors: scanRecord.trackerVendors
     });
     policyBehaviorContradictions = derivePolicyBehaviorContradictions({
+      mergedSignals: scanRecord.mergedSignals,
       policyEnrichments: scanRecord.policyEnrichment,
       preconsentViolations: preconsentViolationRows,
       runtimeArtifacts,
