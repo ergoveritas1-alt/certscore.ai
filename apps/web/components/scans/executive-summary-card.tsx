@@ -101,11 +101,7 @@ function BenchmarkMetricCard(input: {
     <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_28%_78%,rgba(153,246,228,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] px-5 py-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
-        {benchmarkValue !== null ? (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50/92 px-3 py-2 text-right shadow-[0_12px_28px_-24px_rgba(139,92,246,0.65)]">
-            <p className="text-lg font-semibold tracking-tight text-violet-700">{benchmarkValue}</p>
-          </div>
-        ) : null}
+        <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
       </div>
       <div className="mt-5">
         <div className="flex items-end gap-1">
