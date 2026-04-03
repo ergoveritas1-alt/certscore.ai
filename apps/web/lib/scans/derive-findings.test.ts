@@ -1,0 +1,347 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { deriveCertScoreFindings } from "./derive-findings";
+import { selectTopFindings } from "./rank-findings";
+
+test("derives high-signal privacy and consent findings from hybrid runtime evidence", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          totalRequestCount: 48,
+          thirdPartyRequestCount: 124,
+          thirdPartyDomainCount: 6,
+          thirdPartyScriptCount: 5,
+          preConsentRequestCount: 7,
+          preConsentThirdPartyRequestCount: 4,
+          identifierLikeRequestCount: 2,
+          thirdPartyIdentifierLikeRequestCount: 2,
+          collectionEndpointCount: 3,
+          requestBurstScore: "high"
+        },
+        vendorSummary: {
+          normalizedVendors: ["Google Analytics", "Meta Pixel", "Xandr", "TikTok"],
+          rawThirdPartyDomains: ["google-analytics.com", "connect.facebook.net", "ib.adnxs.com"],
+          preConsentVendorCount: 3,
+          vendorCategoryCounts: {
+            advertising: 2,
+            analytics: 1,
+            functional: 2,
+            unknown: 5
+          }
+        },
+        requestObservations: [
+          { domain: "router.infolinks.com", thirdParty: true },
+          { domain: "my.rtmark.net", thirdParty: true }
+        ],
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: false,
+          rejectDepthClass: "absent",
+          pageInteractionBlocked: true,
+          contentObstructed: true
+        },
+        consentVisual: {
+          acceptProminence: "high",
+          rejectProminence: "none",
+          rejectHidden: true,
+          ctaImbalanceDetected: true
+        },
+        storageSummary: {
+          storageWrittenBeforeConsent: true,
+          thirdPartyCookieBeforeConsentCount: 2,
+          cookiesBeforeConsentCount: 4,
+          cookiesSeenCount: 5,
+          localStorageWriteDetected: true,
+          identifierLikeStorageKeyCount: 1
+        },
+        cookieWriteObservations: [
+          { cookieName: "_ga", domain: ".fojik.site" },
+          { cookieName: "uuid2", domain: ".adnxs.com" },
+          { cookieName: "cf_clearance", domain: ".fojik.site" }
+        ],
+        fingerprintSummary: {
+          tier: 3,
+          confidence: "high",
+          summary: "Potential fingerprinting behavior observed based on multi-signal device data collection and transmission",
+          reasons: ["Multiple device attributes collected", "Data transmitted to third-party endpoint"],
+          attributeCategoryCount: 4
+        },
+        navigationSummary: {
+          finalUrl: "https://fojik.site/",
+          redirectHopCount: 2,
+          crossDomainHopCount: 1,
+          affiliateOrTrackerRedirectDetected: true
+        },
+        mediaSummary: {
+          autoplayBeforeConsent: true,
+          autoplayVideoObserved: true
+        },
+        uiSummary: {
+          popupCount: 1,
+          overlayDetected: true,
+          forcedActionRequired: true,
+          interstitialDetected: true
+        }
+      }
+    },
+    snapshot: {
+      certscore_overall: 42,
+      final_url: "https://fojik.site/"
+    },
+    scan: {
+      completedAt: "2026-04-02T10:00:00.000Z",
+      createdAt: "2026-04-02T09:59:00.000Z",
+      domainHostname: "freefunz.site"
+    }
+  });
+
+  assert.equal(summary.posture, "Action Needed");
+  assert.equal(summary.score, 42);
+  assert.equal(summary.fingerprintLabel, "Probable");
+  assert.equal(summary.fingerprintNarrative, "Probable");
+  assert.equal(summary.landedOnDifferentHost, true);
+  assert.equal(summary.finalHost, "fojik.site");
+  assert.equal(summary.thirdPartyRequestCount, 124);
+  assert.match(summary.trackerSummary, /4 vendors across 6 third-party domains/i);
+  assert.equal(summary.vendorCategoryCounts.advertising, 2);
+  assert.equal(summary.vendorCategoryCounts.unknown, 5);
+  assert.ok(summary.rawAdtechHosts.includes("ib.adnxs.com"));
+  assert.ok(summary.rawAdtechHosts.includes("router.infolinks.com"));
+  assert.deepEqual(summary.analyticsCookieNames, ["_ga"]);
+  assert.deepEqual(summary.adtechCookieNames, ["uuid2"]);
+  assert.deepEqual(summary.securityCookieNames, ["cf_clearance"]);
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "router.infolinks.com"));
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.ok(ids.includes("pre_consent_tracking_detected"));
+  assert.ok(ids.includes("third_party_tracking_pre_consent"));
+  assert.ok(ids.includes("analytics_cookie_pre_consent"));
+  assert.ok(ids.includes("adtech_cookie_pre_consent"));
+  assert.ok(ids.includes("telemetry_rich_identification_observed"));
+  assert.ok(ids.includes("reject_option_missing_or_hidden"));
+  assert.ok(ids.includes("probable_fingerprinting"));
+  assert.ok(ids.includes("tracking_redirect_chain"));
+});
+
+test("selectTopFindings keeps the strongest privacy findings at the top", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentRequestCount: 3,
+          preConsentThirdPartyRequestCount: 2,
+          identifierLikeRequestCount: 1,
+          thirdPartyIdentifierLikeRequestCount: 1
+        },
+        vendorSummary: {
+          normalizedVendors: ["Meta Pixel", "Google Analytics"],
+          rawThirdPartyDomains: ["connect.facebook.net", "google-analytics.com"],
+          preConsentVendorCount: 2
+        },
+        fingerprintSummary: {
+          tier: 2,
+          confidence: "medium",
+          reasons: ["Observed access to 4 fingerprint-relevant attribute categories in a short window"],
+          attributeCategoryCount: 4
+        },
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: false,
+          rejectDepthClass: "absent"
+        },
+        consentVisual: {
+          rejectHidden: true
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T10:05:00.000Z",
+      createdAt: "2026-04-02T10:04:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  const topFindings = selectTopFindings(summary.findings, 5);
+
+  assert.equal(topFindings[0]?.id, "pre_consent_tracking_detected");
+  assert.ok(topFindings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(topFindings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
+});
+
+test("uses identity-rich telemetry wording when telemetry is elevated but fingerprinting is not confirmed", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyIdentifierLikeRequestCount: 2,
+          deviceDataLikeRequestCount: 3
+        },
+        requestObservations: [
+          { domain: "static.cloudflareinsights.com", thirdParty: true },
+          { domain: "plausible.io", thirdParty: true }
+        ],
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 1
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T10:06:00.000Z",
+      createdAt: "2026-04-02T10:05:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.equal(summary.fingerprintLabel, "None detected");
+  assert.equal(summary.fingerprintNarrative, "Identity-rich telemetry observed");
+  assert.ok(summary.findings.some((finding) => finding.id === "telemetry_rich_identification_observed"));
+});
+
+test("falls back to snapshot-backed pre-consent tracking and cookie evidence when hybrid counters are zeroed", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentRequestCount: 0,
+          preConsentThirdPartyRequestCount: 0
+        },
+        vendorSummary: {
+          normalizedVendors: ["Google Ads"],
+          preConsentVendorCount: 4,
+          rawThirdPartyDomains: ["googleads.g.doubleclick.net", "analytics.tiktok.com"]
+        },
+        requestToVendorObservations: [
+          { hostname: "googleads.g.doubleclick.net", preConsent: true, vendor: "Google Ads" },
+          { hostname: "analytics.tiktok.com", preConsent: true, vendor: "TikTok Pixel" }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 0,
+          thirdPartyCookieBeforeConsentCount: 0
+        },
+        cookieWriteObservations: [
+          { cookieName: "_ttp", domain: ".tiktok.com", thirdParty: true },
+          { cookieName: "test_cookie", domain: ".doubleclick.net", thirdParty: true }
+        ]
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true,
+      first_party_cookie_set_before_consent: true,
+      third_party_cookie_set_before_consent: true
+    },
+    scan: {
+      completedAt: "2026-04-02T10:06:00.000Z",
+      createdAt: "2026-04-02T10:05:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.ok(summary.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(summary.findings.some((finding) => finding.id === "third_party_tracking_pre_consent"));
+  assert.ok(summary.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"));
+  assert.deepEqual(summary.thirdPartyCookieNamesSeen.sort(), ["_ttp", "test_cookie"]);
+  assert.deepEqual(summary.thirdPartyCookieNamesBeforeConsent.sort(), ["_ttp", "test_cookie"]);
+  assert.deepEqual(summary.preConsentVendorNames.sort(), ["Google Ads", "TikTok Pixel"]);
+});
+
+test("uses snapshot tracker vendor counts when runtime naming is incomplete", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyDomainCount: 12
+        },
+        vendorSummary: {
+          normalizedVendors: ["Google Analytics", "Meta Pixel"]
+        }
+      }
+    },
+    snapshot: {
+      tracker_vendor_count: 5
+    },
+    scan: {
+      completedAt: "2026-04-02T23:10:00.000Z",
+      createdAt: "2026-04-02T23:09:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.equal(summary.vendorCount, 5);
+  assert.match(summary.trackerSummary, /5 vendors observed, 2 named across 12 third-party domains/i);
+});
+
+test("surfaces session recording services from direct runtime replay evidence", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        vendorSummary: {
+          normalizedVendors: ["Google Analytics", "Google Tag Manager", "Microsoft Clarity"],
+          vendorCategoryCounts: {
+            analytics: 2,
+            session_replay: 1
+          }
+        },
+        requestToVendorObservations: [
+          { hostname: "www.clarity.ms", category: "session_replay", preConsent: true, vendor: "Microsoft Clarity" },
+          { hostname: "scripts.clarity.ms", category: "session_replay", preConsent: true, vendor: "Microsoft Clarity" }
+        ],
+        networkSummary: {
+          preConsentRequestCount: 5,
+          preConsentThirdPartyRequestCount: 3
+        }
+      }
+    },
+    snapshot: {
+      session_replay_tool_detected: true,
+      session_replay_tracker_count: 1,
+      session_replay_without_disclosure_detected: true
+    },
+    scan: {
+      completedAt: "2026-04-02T23:15:00.000Z",
+      createdAt: "2026-04-02T23:14:00.000Z",
+      domainHostname: "kbdlab.io"
+    }
+  });
+
+  const finding = summary.findings.find((entry) => entry.id === "session_recording_services_detected");
+  assert.ok(finding);
+  assert.deepEqual(summary.sessionReplayVendorNames, ["Microsoft Clarity"]);
+  assert.match(finding?.shortSummary ?? "", /Microsoft Clarity/i);
+  assert.ok(finding?.evidencePreview.some((entry) => /Microsoft Clarity/i.test(entry)));
+  assert.equal(finding?.severity, "high");
+});
+
+test("surfaces possible pre-submit text capture from typing-probe evidence", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        keyloggingSummary: {
+          inputListenerRegistrationCount: 5,
+          keyloggingRisk: "likely",
+          probeRunCount: 1,
+          requestCountDuringTyping: 3,
+          thirdPartyRequestCountDuringTyping: 2,
+          totalTextInputEventCount: 8,
+          vendorNamesDuringTyping: ["Microsoft Clarity"]
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T23:20:00.000Z",
+      createdAt: "2026-04-02T23:19:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  const finding = summary.findings.find((entry) => entry.id === "pre_submit_text_capture_detected");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "critical");
+  assert.match(finding?.shortSummary ?? "", /before form submission/i);
+});
