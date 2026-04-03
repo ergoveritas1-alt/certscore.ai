@@ -74,6 +74,7 @@ export function PrimaryPillarGroup(input: PrimaryPillarGroupProps) {
 
 type SummaryMetricTileProps = {
   href?: string;
+  icon?: ReactNode;
   label: string;
   showValueText?: boolean;
   value: ReactNode;
@@ -84,6 +85,7 @@ type SummaryMetricTileProps = {
 
 export function SummaryMetricTile({
   href,
+  icon,
   label,
   showValueText = true,
   value,
@@ -115,8 +117,15 @@ export function SummaryMetricTile({
   const tileClassName = className ?? `${METRIC_CARD_CLASS} ${cardToneClass}`.trim();
   const content = (
     <>
-      <div className="flex items-center gap-1.5">
-        <p className="line-clamp-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {icon ? (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm">
+              {icon}
+            </span>
+          ) : null}
+          <p className="line-clamp-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        </div>
         {tooltip ? <InfoTip align="start" text={tooltip} /> : null}
       </div>
       {showValueText ? <p className={valueClassName ?? METRIC_CARD_VALUE_CLASS}>{value}</p> : null}
