@@ -343,27 +343,27 @@ function getFindingFixText(finding: CertScoreFinding) {
 function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
   if (finding.severity === "critical" || isFirst) {
     return {
-      card: "border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.92),rgba(255,255,255,1))]",
-      band: "bg-rose-500",
-      severityBadge: "border-rose-200 bg-rose-50 text-rose-800",
-      confidenceBadge: "border-rose-100 bg-white text-rose-700",
-      summary: "border-rose-200 bg-white/90 text-rose-950"
+      card: "border-rose-200 bg-[linear-gradient(180deg,rgba(255,247,248,0.78),rgba(255,255,255,1))]",
+      band: "bg-rose-300",
+      severityBadge: "border-rose-200 bg-white text-rose-800",
+      confidenceBadge: "border-slate-200 bg-white text-slate-700",
+      summary: "border-slate-200 bg-white text-slate-900"
     };
   }
 
   if (finding.severity === "high") {
     return {
-      card: "border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.9),rgba(255,255,255,1))]",
-      band: "bg-amber-500",
-      severityBadge: "border-amber-200 bg-amber-50 text-amber-800",
-      confidenceBadge: "border-amber-100 bg-white text-amber-700",
-      summary: "border-amber-200 bg-white/90 text-slate-900"
+      card: "border-slate-200 bg-[linear-gradient(180deg,rgba(250,250,249,0.72),rgba(255,255,255,1))]",
+      band: "bg-amber-300",
+      severityBadge: "border-amber-200 bg-white text-amber-800",
+      confidenceBadge: "border-slate-200 bg-white text-slate-700",
+      summary: "border-slate-200 bg-slate-50/65 text-slate-900"
     };
   }
 
   return {
     card: "border-slate-200 bg-white",
-    band: "bg-slate-300",
+    band: "bg-slate-200",
     severityBadge: "border-slate-200 bg-slate-50 text-slate-700",
     confidenceBadge: "border-slate-200 bg-white text-slate-700",
     summary: "border-slate-200 bg-slate-50/85 text-slate-800"
