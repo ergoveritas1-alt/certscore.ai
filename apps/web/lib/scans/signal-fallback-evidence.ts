@@ -274,7 +274,7 @@ function getPolicySnippetCandidates(row: NormalizedPolicyRow | null, snippetKeys
   ]);
 }
 
-function getCookiePolicySnippetCandidates(row: Record<string, unknown> | null) {
+function getCookiePolicySnippetCandidates(row: NormalizedPolicyRow | null) {
   return getPolicySnippetCandidates(row, [
     "cookie_table",
     "cookie_notice",
@@ -357,7 +357,7 @@ function getCookiePolicyFallbackRow(policyEnrichment: Array<Record<string, unkno
         score
       };
     })
-    .filter((entry): entry is { row: Record<string, unknown>; score: number } => Boolean(entry))
+    .filter((entry): entry is { row: NormalizedPolicyRow; score: number } => entry !== null)
     .sort((left, right) => right.score - left.score);
 
   return scoredRows[0]?.row ?? null;
