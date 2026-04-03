@@ -1,4 +1,11 @@
 import { isMeaningfulPolicyText, normalizePolicySnippet } from "../../lib/scans/policy-snippet-normalization";
+import {
+  getPolicyActionableFlags,
+  getPolicyEvidenceSnippets,
+  getPolicyPageType,
+  getPolicyPageUrl,
+  getPolicySummaryText
+} from "../../lib/scans/policy-enrichment-row";
 
 type ScanEventRecordLike = {
   eventType: string;
@@ -242,7 +249,7 @@ function getPolicyRowForTarget(
 
   return (
     policyEnrichment.find((row) => {
-      const pageUrl = typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
+      const pageUrl = getPolicyPageUrl(row);
       return pageUrl === canonicalUrl;
     }) ?? null
   );
@@ -278,31 +285,8 @@ function isWeakPrivacyHubTarget(
   }
 
   const structurallyWeak = policyRow.policy_structurally_weak === true;
-  const actionableFlags = getStringArray(policyRow.policy_actionable_flags);
+  const actionableFlags = getStringArray(getPolicyActionableFlags(policyRow));
   return structurallyWeak || actionableFlags.includes("policy_fetch_insufficient_content");
-}
-
-function getPolicyEvidenceSnippets(row: Record<string, unknown>) {
-  return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
-    ? (row.policyEvidenceSnippets as Record<string, unknown>)
-    : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
-      ? (row.policy_evidence_snippets as Record<string, unknown>)
-      : null;
-}
-
-function getPolicyPageUrl(row: Record<string, unknown>) {
-  return typeof (row.pageUrl ?? row.page_url) === "string" ? String(row.pageUrl ?? row.page_url) : null;
-}
-
-function getPolicySummaryShort(row: Record<string, unknown>) {
-  const value =
-    typeof row.policySummaryShort === "string"
-      ? row.policySummaryShort
-      : typeof row.policy_summary_short === "string"
-        ? row.policy_summary_short
-        : null;
-
-  return isMeaningfulPolicyText(value) ? value : null;
 }
 
 function isMachineReadablePolicyEndpoint(value: string | null) {
@@ -369,7 +353,7 @@ function hasExplicitPrivacyChoicesSignal(input: { url?: string | null; text?: st
 
 function getCookieSnippetCandidates(row: Record<string, unknown>) {
   const snippets = getPolicyEvidenceSnippets(row);
-  const summary = getPolicySummaryShort(row);
+  const summary = getPolicySummaryText(row);
   const values = uniqueStrings([
     typeof snippets?.cookie_notice === "string" ? snippets.cookie_notice : null,
     typeof snippets?.cookie_table === "string" ? snippets.cookie_table : null,
@@ -398,7 +382,7 @@ function getFindingPolicySnippetCandidate(row: Record<string, unknown>, findingI
     return direct[0];
   }
 
-  const summary = getPolicySummaryShort(row);
+  const summary = getPolicySummaryText(row);
   return summary ? normalizePolicySnippet(summary) : null;
 }
 
@@ -409,10 +393,10 @@ function getPolicySurfaceRepairEvidence(
 ) {
   const scoredRows = policyEnrichment
     .map((row) => {
-      const rowPageType = String(row.pageType ?? row.page_type ?? "");
+      const rowPageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
-      const summary = getPolicySummaryShort(row);
-      const actionableFlags = getStringArray(row.policy_actionable_flags);
+      const summary = getPolicySummaryText(row);
+      const actionableFlags = getStringArray(getPolicyActionableFlags(row));
       const structurallyWeak = row.policy_structurally_weak === true;
       if (
         rowPageType !== pageType ||
@@ -457,10 +441,10 @@ function rowMatchesFindingPage(row: Record<string, unknown>, evidenceUrls: strin
 function getCookieRepairEvidence(policyEnrichment: Array<Record<string, unknown>>) {
   const scoredRows = policyEnrichment
     .map((row) => {
-      const pageType = String(row.pageType ?? row.page_type ?? "");
+      const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
       const snippets = getCookieSnippetCandidates(row);
-      const summary = getPolicySummaryShort(row);
+      const summary = getPolicySummaryText(row);
       const combinedText = [...snippets, ...(summary ? [summary] : [])];
 
       if (!pageUrl || isMachineReadablePolicyEndpoint(pageUrl) || isWeakRootLikeUrl(pageUrl) || combinedText.length === 0) {
