@@ -262,7 +262,38 @@ test("buildNanoDocCandidateUrls prefers main terms and privacy docs over special
     candidates.some((candidate) => candidate.url === "https://www.example.com/legal/affiliate-marketing-terms"),
     false
   );
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/job-applicant-privacy-notice"),
+    false
+  );
   assert.equal(candidates[0]?.url, "https://www.example.com/legal/privacy-policy");
+});
+
+test("buildNanoDocCandidateUrls keeps a special-scope privacy doc only when no main privacy doc exists", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [
+      {
+        anchor_text: "Job Applicant Privacy Notice",
+        candidate_score: 0.93,
+        candidate_url: "https://www.example.com/legal/job-applicant-privacy-notice",
+        discovered_from: "homepage_rendered_link"
+      },
+      {
+        anchor_text: "Terms of Service",
+        candidate_score: 0.88,
+        candidate_url: "https://www.example.com/legal/terms-of-service",
+        discovered_from: "homepage_rendered_link"
+      }
+    ],
+    domainHostname: "example.com",
+    pages: []
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/job-applicant-privacy-notice"),
+    true
+  );
+  assert.equal(candidates.some((candidate) => candidate.documentType === "privacy_policy"), true);
 });
 
 test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no discovery evidence exists", () => {

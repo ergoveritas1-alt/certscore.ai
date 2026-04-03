@@ -94,6 +94,20 @@ function getDocumentSpecificityAdjustment(input: { documentType: string | null; 
   return adjustment;
 }
 
+function isSpecialScopeLegalDoc(input: { documentType: string | null; url: string; anchorText?: string | null }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+
+  if (input.documentType === "privacy_policy") {
+    return /\bjob|applicant|employee|candidate|affiliate|supplier|vendor|consumer-health|hipaa|california\b/.test(haystack);
+  }
+
+  if (input.documentType === "terms_of_service") {
+    return /\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace\b/.test(haystack);
+  }
+
+  return false;
+}
+
 function scoreLegalCandidate(input: { anchorText?: string | null; discoveredFrom: string; url: string }) {
   const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
   let score = 0.2;
@@ -324,10 +338,19 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
 }
 
 function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
+  const hasMainDocByType = new Set(
+    candidates
+      .filter((candidate) => !isSpecialScopeLegalDoc(candidate))
+      .map((candidate) => candidate.documentType)
+  );
   const counts = new Map<string, number>();
   const limited: NanoDocCandidate[] = [];
 
   for (const candidate of candidates) {
+    if (hasMainDocByType.has(candidate.documentType) && isSpecialScopeLegalDoc(candidate)) {
+      continue;
+    }
+
     const currentCount = counts.get(candidate.documentType) ?? 0;
     const limit = candidate.documentType === "privacy_policy" ? 2 : 1;
     if (currentCount >= limit) {
