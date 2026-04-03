@@ -524,6 +524,7 @@ function buildExecutiveSupplementalFindings(input: {
 }) {
   const findings: CertScoreFinding[] = [];
   const hasDarkPatternCard = input.certFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
+  const asymmetricConsentFinding = input.certFindings.find((finding) => finding.id === "asymmetric_consent_ui") ?? null;
   const darkPatternFlags = [
     getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_button_prominence") ? "Accept button prominence" : null,
     getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_reject_button_missing") ? "Reject button missing" : null,
@@ -531,8 +532,13 @@ function buildExecutiveSupplementalFindings(input: {
     getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_only_banner") ? "Accept-only banner" : null,
     getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_dismiss_without_reject") ? "Dismiss without reject" : null
   ].filter((value): value is string => Boolean(value));
+  const darkPatternSignals = darkPatternFlags.length > 0
+    ? darkPatternFlags
+    : asymmetricConsentFinding
+      ? [asymmetricConsentFinding.shortSummary]
+      : [];
 
-  if (!hasDarkPatternCard && darkPatternFlags.length > 0) {
+  if (!hasDarkPatternCard && darkPatternSignals.length > 0) {
     findings.push({
       id: "consent_dark_patterns_detected",
       label: "Dark pattern consent signals detected",
@@ -542,12 +548,15 @@ function buildExecutiveSupplementalFindings(input: {
         "Choice architecture that steers users toward acceptance can undermine meaningful consent and create dark-pattern risk.",
       remediation:
         "Expose reject and settings at the first layer, remove accept-only or forced paths, and equalize button prominence and interaction cost across consent choices.",
-      confidence: "strong",
-      directVsInferred: "direct",
-      evidencePreview: darkPatternFlags.slice(0, 4),
+      confidence: darkPatternFlags.length > 0 ? "strong" : "good",
+      directVsInferred: darkPatternFlags.length > 0 ? "direct" : "mixed",
+      evidencePreview: darkPatternSignals.slice(0, 4),
       evidenceRefs: [],
       severity: "high",
-      shortSummary: `Detected consent-interface dark pattern signals: ${darkPatternFlags.join(", ")}.`
+      shortSummary:
+        darkPatternFlags.length > 0
+          ? `Detected consent-interface dark pattern signals: ${darkPatternSignals.join(", ")}.`
+          : asymmetricConsentFinding?.shortSummary ?? "Consent-interface dark pattern risk was detected."
     });
   }
 
@@ -5545,8 +5554,14 @@ export function SharedScanDetailView({
     contradictions: policyBehaviorContradictions,
     snapshot
   });
+  const hasSupplementalDarkPatternFinding = executiveSupplementalFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
   const topExecutiveFindings = selectTopFindings(
-    [...executiveSupplementalFindings, ...certScoreSummary.findings],
+    [
+      ...executiveSupplementalFindings,
+      ...certScoreSummary.findings.filter((finding) =>
+        hasSupplementalDarkPatternFinding ? finding.id !== "asymmetric_consent_ui" : true
+      )
+    ],
     5
   );
   const scanExecutionSummary = deriveScanExecutionSummary({
