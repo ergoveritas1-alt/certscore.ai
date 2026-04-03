@@ -99,10 +99,10 @@ function BenchmarkMetricCard(input: {
   const scaleMax =
     input.maxValue ??
     Math.max(10, Math.ceil((dynamicScaleBase * 1.25) / 5) * 5);
-  const gaugeCx = 80;
-  const gaugeCy = 78;
-  const actualRadius = 58;
-  const benchmarkRadius = 71;
+  const gaugeCx = 110;
+  const gaugeCy = 118;
+  const actualRadius = 88;
+  const benchmarkRadius = 100;
   const actualRatio = Math.max(0, Math.min(1, (actualValue ?? 0) / scaleMax));
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
   const actualArc = describeArc(gaugeCx, gaugeCy, actualRadius, 180, 180 - actualRatio * 180);
@@ -116,38 +116,47 @@ function BenchmarkMetricCard(input: {
           Math.max(180 - benchmarkRatio * 180 + 8, 0)
         )
       : null;
+  const scoreDescriptor =
+    input.maxValue === 100
+      ? actualValue === null
+        ? "Pending"
+        : actualValue >= 75
+          ? "Strong"
+          : actualValue >= 55
+            ? "Medium"
+            : "Weak"
+      : null;
+  const calloutLabel = input.maxValue === 100 ? "Industry avg." : "Expected";
+  const currentLabel = input.maxValue === 100 ? "Current score" : "Current";
 
   return (
-    <div className="rounded-[1.4rem] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.16),_rgba(255,255,255,0)_62%)] px-4 py-4">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
-      <div className="mt-2 flex items-center justify-center">
-        <div className="relative h-[118px] w-[160px]">
-          <svg viewBox="0 0 160 94" className="h-[94px] w-[160px] overflow-visible">
-            <path d={describeArc(gaugeCx, gaugeCy, actualRadius, 180, 0)} fill="none" stroke="rgba(226,232,240,0.95)" strokeWidth="16" strokeLinecap="round" />
-            {benchmarkArc ? (
-              <path d={benchmarkArc} fill="none" stroke="rgba(196,181,253,0.95)" strokeWidth="12" strokeLinecap="round" />
-            ) : null}
-            <path d={actualArc} fill="none" stroke="rgba(96,165,250,0.95)" strokeWidth="16" strokeLinecap="round" />
-          </svg>
-          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center text-center">
-            <span className="text-[2rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
-            {input.maxValue ? (
-              <span className="-mt-1 text-sm text-slate-500">/100</span>
-            ) : null}
-            {benchmarkValue !== null ? (
-              <div className="mt-2 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
-                <span className="inline-block h-2 w-2 rounded-full bg-sky-400" />
-                <span>Current {actualValue ?? "—"}</span>
-                <span className="inline-block h-2 w-2 rounded-full bg-violet-300" />
-                <span>Expected {benchmarkValue}</span>
-              </div>
-            ) : null}
-            {!input.maxValue ? (
-              <span className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                Scale {scaleMax}
-              </span>
-            ) : null}
+    <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_50%_68%,rgba(153,246,228,0.34),rgba(255,255,255,0)_60%),linear-gradient(180deg,rgba(240,249,255,0.95),rgba(255,255,255,1))] px-4 py-4">
+      <p className="relative z-10 text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
+      <div className="relative mt-3 h-[188px] overflow-hidden">
+        <svg viewBox="0 0 220 150" className="absolute inset-x-0 top-0 h-[150px] w-full overflow-visible">
+          <path d={describeArc(gaugeCx, gaugeCy, actualRadius, 180, 0)} fill="none" stroke="rgba(224,247,250,0.98)" strokeWidth="20" strokeLinecap="round" />
+          {benchmarkArc ? (
+            <path d={benchmarkArc} fill="none" stroke="rgba(216,180,254,0.95)" strokeWidth="17" strokeLinecap="round" />
+          ) : null}
+          <path d={actualArc} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth="20" strokeLinecap="round" />
+        </svg>
+        {benchmarkValue !== null ? (
+          <div className="absolute right-0 top-1 z-10 rounded-2xl border border-violet-200 bg-violet-100/92 px-3 py-2 text-right shadow-[0_14px_28px_-20px_rgba(139,92,246,0.55)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-600">{calloutLabel}</p>
+            <p className="text-lg font-semibold tracking-tight text-violet-700">{benchmarkValue}</p>
           </div>
+        ) : null}
+        <div className="absolute inset-x-0 top-[54px] z-10 flex flex-col items-center text-center">
+          <div className="flex items-end gap-1">
+            <span className="text-[2.4rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+            {input.maxValue ? <span className="pb-1 text-[1.7rem] text-slate-500">/100</span> : null}
+          </div>
+          {scoreDescriptor ? (
+            <p className="text-[1.95rem] font-semibold tracking-tight text-slate-950">{scoreDescriptor}</p>
+          ) : null}
+          <p className={`mt-1 text-xs ${scoreDescriptor ? "text-slate-500" : "font-semibold uppercase tracking-[0.14em] text-slate-500"}`}>
+            {scoreDescriptor ? currentLabel : currentLabel}
+          </p>
         </div>
       </div>
     </div>
