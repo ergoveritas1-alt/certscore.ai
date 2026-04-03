@@ -1712,25 +1712,55 @@ export async function loadReusableNanoDocumentExtractions(input: {
       .map((row) => (typeof row.canonical_url === "string" && row.canonical_url.trim().length > 0 ? row.canonical_url.trim() : null))
       .filter((value): value is string => typeof value === "string")
   )];
+  const documentTypes = [...new Set(
+    input.rows
+      .map((row) => (typeof row.document_type === "string" && row.document_type.trim().length > 0 ? row.document_type.trim() : null))
+      .filter((value): value is string => typeof value === "string")
+  )];
 
-  if (canonicalUrls.length === 0) {
+  if (canonicalUrls.length === 0 && documentTypes.length === 0) {
     return [] as Array<Record<string, unknown>>;
   }
 
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("scan_document_sources")
-    .select("*")
-    .in("canonical_url", canonicalUrls)
-    .eq("extraction_status", "ready")
-    .neq("scan_id", input.scanId)
-    .order("updated_at", { ascending: false });
+  const [exactUrlResult, recentTypeResult] = await Promise.all([
+    canonicalUrls.length === 0
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
+      : supabase
+          .from("scan_document_sources")
+          .select("*")
+          .in("canonical_url", canonicalUrls)
+          .eq("extraction_status", "ready")
+          .neq("scan_id", input.scanId)
+          .order("updated_at", { ascending: false }),
+    documentTypes.length === 0
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
+      : supabase
+          .from("scan_document_sources")
+          .select("*")
+          .in("document_type", documentTypes)
+          .eq("extraction_status", "ready")
+          .neq("scan_id", input.scanId)
+          .order("updated_at", { ascending: false })
+          .limit(250)
+  ]);
 
-  if (error && !isMissingOptionalTableError(error)) {
-    throw new Error(`Failed to load reusable document source extractions for scan ${input.scanId}: ${error.message}`);
+  if (exactUrlResult.error && !isMissingOptionalTableError(exactUrlResult.error)) {
+    throw new Error(`Failed to load reusable document source extractions by canonical url for scan ${input.scanId}: ${exactUrlResult.error.message}`);
+  }
+  if (recentTypeResult.error && !isMissingOptionalTableError(recentTypeResult.error)) {
+    throw new Error(`Failed to load reusable document source extractions by document type for scan ${input.scanId}: ${recentTypeResult.error.message}`);
   }
 
-  return ((data ?? []) as Array<Record<string, unknown>>).filter((row) => {
+  const deduped = new Map<string, Record<string, unknown>>();
+  for (const row of ([...(exactUrlResult.data ?? []), ...(recentTypeResult.data ?? [])] as Array<Record<string, unknown>>)) {
+    const id = typeof row.id === "string" ? row.id : null;
+    if (id && !deduped.has(id)) {
+      deduped.set(id, row);
+    }
+  }
+
+  return [...deduped.values()].filter((row) => {
     const metadata = typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
       ? (row.metadata_json as Record<string, unknown>)
       : {};

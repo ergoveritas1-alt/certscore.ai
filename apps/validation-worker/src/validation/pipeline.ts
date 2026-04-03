@@ -1584,30 +1584,44 @@ export function resolveReusableNanoDocumentExtractions(input: {
   priorExtractions: Array<Record<string, unknown>>;
 }) {
   const reusableByCandidateId = new Map<string, Record<string, unknown>>();
-  const priorByKey = new Map<string, Record<string, unknown>>();
+  const priorByCanonicalAndHash = new Map<string, Record<string, unknown>>();
+  const priorByTypeAndHash = new Map<string, Record<string, unknown>>();
 
   for (const row of input.priorExtractions) {
     const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
+    const documentType = getString(row.document_type) ?? getString(row.documentType);
     const contentHash = getDocumentSourceContentHash(row);
-    if (!canonicalUrl || !contentHash) {
+    if (!contentHash) {
       continue;
     }
 
-    const key = `${canonicalUrl}::${contentHash}`;
-    if (!priorByKey.has(key)) {
-      priorByKey.set(key, row);
+    if (canonicalUrl) {
+      const canonicalKey = `${canonicalUrl}::${contentHash}`;
+      if (!priorByCanonicalAndHash.has(canonicalKey)) {
+        priorByCanonicalAndHash.set(canonicalKey, row);
+      }
+    }
+
+    if (documentType) {
+      const typeKey = `${documentType}::${contentHash}`;
+      if (!priorByTypeAndHash.has(typeKey)) {
+        priorByTypeAndHash.set(typeKey, row);
+      }
     }
   }
 
   for (const candidate of input.candidates) {
     const candidateId = getString(candidate.id);
     const canonicalUrl = getString(candidate.canonical_url) ?? getString(candidate.canonicalUrl);
+    const documentType = getString(candidate.document_type) ?? getString(candidate.documentType);
     const contentHash = getDocumentSourceContentHash(candidate);
-    if (!candidateId || !canonicalUrl || !contentHash) {
+    if (!candidateId || !contentHash) {
       continue;
     }
 
-    const match = priorByKey.get(`${canonicalUrl}::${contentHash}`);
+    const match =
+      (canonicalUrl ? priorByCanonicalAndHash.get(`${canonicalUrl}::${contentHash}`) : undefined) ??
+      (documentType ? priorByTypeAndHash.get(`${documentType}::${contentHash}`) : undefined);
     if (match) {
       reusableByCandidateId.set(candidateId, match);
     }

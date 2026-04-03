@@ -364,6 +364,34 @@ test("resolveReusableNanoDocumentExtractions matches prior ready rows by canonic
   assert.equal(reusable.get("doc-current")?.id, "doc-prior");
 });
 
+test("resolveReusableNanoDocumentExtractions falls back to document type plus content hash when canonical urls differ", () => {
+  const contentHash = buildNanoDocumentContentHash("Shared privacy policy text.");
+  const reusable = resolveReusableNanoDocumentExtractions({
+    candidates: [
+      {
+        canonical_url: "https://example.com/legal/privacy",
+        document_type: "privacy_policy",
+        id: "doc-current",
+        metadata_json: {
+          content_hash: contentHash
+        }
+      }
+    ],
+    priorExtractions: [
+      {
+        canonical_url: "https://example.com/privacy-policy",
+        document_type: "privacy_policy",
+        id: "doc-prior",
+        metadata_json: {
+          content_hash: contentHash
+        }
+      }
+    ]
+  });
+
+  assert.equal(reusable.get("doc-current")?.id, "doc-prior");
+});
+
 test("deriveValidationFindings emits pilot financial review rows from retained signal evidence", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
