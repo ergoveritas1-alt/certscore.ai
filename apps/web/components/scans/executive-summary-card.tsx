@@ -94,10 +94,8 @@ function BenchmarkMetricCard(input: {
             ? "Medium"
             : "Weak"
       : null;
-  const calloutLabel = input.maxValue === 100 ? "Industry avg." : "Expected";
   const delta =
     actualValue !== null && benchmarkValue !== null ? actualValue - benchmarkValue : null;
-  const currentLabel = input.maxValue === 100 ? "Current score" : "Current";
 
   return (
     <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_28%_78%,rgba(153,246,228,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] px-5 py-4">
@@ -105,7 +103,6 @@ function BenchmarkMetricCard(input: {
         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
         {benchmarkValue !== null ? (
           <div className="rounded-2xl border border-violet-200 bg-violet-50/92 px-3 py-2 text-right shadow-[0_12px_28px_-24px_rgba(139,92,246,0.65)]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-600">{calloutLabel}</p>
             <p className="text-lg font-semibold tracking-tight text-violet-700">{benchmarkValue}</p>
           </div>
         ) : null}
@@ -115,11 +112,6 @@ function BenchmarkMetricCard(input: {
           <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-sky-700">{actualValue ?? "—"}</span>
           {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
         </div>
-        {scoreDescriptor ? (
-          <p className="mt-2 text-[1.6rem] font-semibold leading-none tracking-tight text-slate-950">{scoreDescriptor}</p>
-        ) : (
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{currentLabel}</p>
-        )}
       </div>
       <div className="mt-5 space-y-2">
         <div className="relative h-3 rounded-full bg-sky-100/80">
@@ -135,7 +127,7 @@ function BenchmarkMetricCard(input: {
           ) : null}
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500">
-          <span>{currentLabel}</span>
+          <span>{scoreDescriptor ? scoreDescriptor : "\u00A0"}</span>
           {delta !== null ? (
             <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
               {delta > 0 ? "+" : ""}
