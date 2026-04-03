@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { getValidationFindingFamily, type SignalEnrichmentWorkflowStageStatus } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { buildUnifiedFindingDisplayPackets } from "../../../web/lib/scans/unified-findings";
+import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
+import { buildValidationFindingLookup, type ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getValidationRunDetail } from "../../server/validation/repository";
 import { getScanById } from "../../server/scans/get-scan-by-id";
 import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
@@ -126,6 +129,21 @@ function getLatestNanoDocRetrievalDiagnostics(events: Array<{ eventType: string;
   };
 }
 
+function getValidationVerdict(value: unknown): ScanValidationFinding["verdict"] {
+  return value === "supported" || value === "inconclusive" || value === "not_supported" ? value : null;
+}
+
+function getUnifiedFindingTone(status: "surface" | "audit_only" | "suppress") {
+  switch (status) {
+    case "surface":
+      return "border-emerald-300/20 bg-emerald-300/10 text-emerald-100";
+    case "audit_only":
+      return "border-slate-300/20 bg-slate-300/10 text-slate-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
 export async function ValidationRunDetailPage(input: {
   scanDetail?: Awaited<ReturnType<typeof getScanById>> | null;
   scanId: string;
@@ -157,6 +175,57 @@ export async function ValidationRunDetailPage(input: {
 
     return left[0].localeCompare(right[0]);
   });
+  const validationFindings: ScanValidationFinding[] = detail.findings.map((finding) => {
+    const verdictRows = Array.isArray(finding.validation_verdicts)
+      ? (finding.validation_verdicts as Array<Record<string, unknown>>)
+      : finding.validation_verdicts
+        ? [finding.validation_verdicts as Record<string, unknown>]
+        : [];
+    const verdict = verdictRows[0];
+
+    return {
+      agreementScore: safeNumber(verdict?.agreement_score),
+      category: safeString(finding.category),
+      description: safeString(finding.description),
+      evidence: (finding.evidence_json ?? null) as Record<string, unknown> | null,
+      findingFamily: safeString(finding.finding_family),
+      findingScope: null,
+      findingSource: null,
+      findingSubject: null,
+      id: String(finding.id),
+      model: safeString(verdict?.model),
+      modelConfidence: safeNumber(verdict?.confidence),
+      pageUrl: safeString(finding.page_url),
+      promptVersion: safeString(verdict?.prompt_version),
+      rationale: safeString(verdict?.rationale),
+      ruleKey: safeString(finding.rule_key) ?? String(finding.id),
+      severity: safeString(finding.severity),
+      subtype: safeString(finding.subtype),
+      systemConfidenceBand: null,
+      systemConfidenceExplanation: null,
+      systemConfidenceScore: null,
+      title: String(finding.title),
+      verdict: getValidationVerdict(verdict?.verdict)
+    };
+  });
+  const repairedScanEvents = input.scanDetail
+    ? repairFindingFamilyPacketEvents({
+        events: input.scanDetail.events,
+        policyEnrichment: input.scanDetail.policyEnrichment ?? []
+      })
+    : [];
+  const unifiedPackets = input.scanDetail
+    ? buildUnifiedFindingDisplayPackets({
+        mergedSignals: input.scanDetail.mergedSignals ?? [],
+        policyEnrichment: input.scanDetail.policyEnrichment ?? [],
+        reviewFindingCandidates: [],
+        scanEvents: repairedScanEvents,
+        validationFindings,
+        validationFindingLookup: buildValidationFindingLookup(validationFindings)
+      })
+    : [];
+  const surfacedUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "surface");
+  const auditOnlyUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "audit_only");
 
   return (
     <div className="space-y-8">
@@ -398,6 +467,54 @@ export async function ValidationRunDetailPage(input: {
           </table>
         </CardContent>
       </Card>
+
+      {input.scanDetail ? (
+        <Card className="border-white/10 bg-white/5 text-slate-100">
+          <CardHeader>
+            <CardTitle>Unified findings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2 text-sm text-slate-300">
+              <Badge className={getUnifiedFindingTone("surface")}>Surfaced {surfacedUnifiedPackets.length}</Badge>
+              <Badge className={getUnifiedFindingTone("audit_only")}>Audit-only {auditOnlyUnifiedPackets.length}</Badge>
+            </div>
+            {surfacedUnifiedPackets.length === 0 && auditOnlyUnifiedPackets.length === 0 ? (
+              <p className="text-sm text-slate-300">No unified findings were surfaced from the merged signal set for this scan.</p>
+            ) : null}
+            {surfacedUnifiedPackets.length > 0 ? (
+              <div className="space-y-3">
+                {surfacedUnifiedPackets.map((packet) => (
+                  <div key={packet.unifiedFindingId} className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={getUnifiedFindingTone(packet.presentationDecision.status)}>{packet.presentationDecision.status}</Badge>
+                      <Badge>{packet.surfacingDecision.decisionState}</Badge>
+                      <Badge>{packet.confidenceBand}</Badge>
+                    </div>
+                    <div className="mt-2 font-medium text-white">{packet.title}</div>
+                    <div className="mt-1 text-sm text-slate-200">{packet.summary}</div>
+                    {packet.primaryPageUrl ? <div className="mt-2 text-xs text-slate-300">Primary URL: {packet.primaryPageUrl}</div> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {auditOnlyUnifiedPackets.length > 0 ? (
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-slate-200">Audit-only support findings</div>
+                {auditOnlyUnifiedPackets.map((packet) => (
+                  <div key={packet.unifiedFindingId} className="rounded-xl border border-white/10 bg-slate-950/30 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={getUnifiedFindingTone(packet.presentationDecision.status)}>{packet.presentationDecision.status}</Badge>
+                      <Badge>{packet.surfacingDecision.decisionState}</Badge>
+                    </div>
+                    <div className="mt-2 font-medium text-white">{packet.title}</div>
+                    <div className="mt-1 text-sm text-slate-300">{packet.summary}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

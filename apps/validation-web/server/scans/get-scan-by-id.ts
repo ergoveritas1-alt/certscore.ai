@@ -1,12 +1,20 @@
 "use server";
 
-import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
+import {
+  buildAgencyMappings,
+  buildRegulatoryRiskAssessment,
+  type AgencyMapping,
+  type MergedSignalRecord,
+  type RegulatoryRiskAssessment
+} from "@website-signal-risk-scanner/shared";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getPrimaryPolicyEnrichmentRow } from "../../lib/scans/policy-enrichment-row";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
+import { loadMergedSignalsByScanId } from "../../../web/server/scans/merged-signal-summary";
 
 export type ScanDetailRecord = {
   id: string;
@@ -22,6 +30,8 @@ export type ScanDetailRecord = {
   completedAt: string | null;
   errorMessage: string | null;
 };
+
+export type ScanMergedSignalRecord = MergedSignalRecord;
 
 export type ScanEventRecord = {
   id: string;
@@ -564,6 +574,10 @@ export async function getScanById(input: { organizationId: string; scanId: strin
           }) satisfies PreconsentChangeRecord
       )
   ].sort((left, right) => left.vendorName.localeCompare(right.vendorName));
+  const normalizedRuntimeArtifacts = runtimeArtifacts
+    ? withHybridRuntimeArtifactFallbacks(stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)) ??
+      stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
+    : null;
   const rawSignalRows = (signals ?? []) as SignalRow[];
   const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
     events: ((events ?? []) as ScanEventRow[]).map((event) => ({
@@ -576,7 +590,7 @@ export async function getScanById(input: { organizationId: string; scanId: strin
     policyDocumentCount: normalizedPolicyEnrichment.length,
     scanCompletedAt: scanRow.completed_at,
     scanStatus: scanRow.status,
-    scannerSignalCount: rawSignalRows.filter((signal) => (signal.population_source ?? "scanner") === "scanner").length
+    scannerSignalCount: rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner").length
   });
 
   return {
@@ -595,8 +609,8 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       errorMessage: scanRow.error_message
     } satisfies ScanDetailRecord,
     snapshot: normalizedSnapshot ? (normalizedSnapshot satisfies Exclude<ScanSnapshotRecord, null>) : null,
-    runtimeArtifacts: runtimeArtifacts
-      ? (stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>) satisfies Exclude<ScanRuntimeArtifactRecord, null>)
+    runtimeArtifacts: normalizedRuntimeArtifacts
+      ? (normalizedRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
     preconsentViolations: normalizedPreconsentViolations,
     accessibilityRuleCounts: normalizedAccessibilityRuleCounts,
@@ -610,6 +624,14 @@ export async function getScanById(input: { organizationId: string; scanId: strin
       : null,
     policyEnrichment: normalizedPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    mergedSignals:
+      (
+        await loadMergedSignalsByScanId({
+          observedAtByScanId: new Map([[scanRow.id, scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at]]),
+          scanIds: [scanRow.id],
+          supabase
+        })
+      ).get(scanRow.id) ?? ([] satisfies ScanMergedSignalRecord[]),
     signalEnrichmentWorkflow,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot
