@@ -291,6 +291,39 @@ test("high-value privacy disclosures surface when page-attributed policy evidenc
   assert.ok(tracking?.appliedRules.includes("evidence.positive_surface.review_high_value_privacy_disclosure"));
 });
 
+test("strong document-semantic policy clarity evidence surfaces in the main lane", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("policy_clarity_risk", {
+        confidenceInputs: {
+          ...makePacket("policy_clarity_risk").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        details: {
+          family: "policy_extraction",
+          kind: "policy_clarity_risk",
+          ambiguityScore: 78
+        },
+        evidence: {
+          ...makePacket("policy_clarity_risk").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: [
+            "Our privacy notice describes collection, sharing, and rights, but omits concrete retention, contact, and implementation details."
+          ]
+        }
+      })
+    ]
+  });
+
+  const clarity = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "policy_clarity_risk");
+
+  assert.equal(clarity?.decisionState, "review");
+  assert.equal(clarity?.reportLane, "main");
+  assert.ok(clarity?.appliedRules.includes("evidence.policy_extraction.review_policy_fitness"));
+});
+
 test("unresolved low-confidence absence still surfaces in confidence and coverage", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

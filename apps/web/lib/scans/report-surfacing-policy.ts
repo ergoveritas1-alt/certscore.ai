@@ -1028,6 +1028,7 @@ function overrideDecision(
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
   const negativeFlags = getNegativeEvidenceFlags(packet);
+  const policyExtractionDetails = packet.details?.family === "policy_extraction" ? packet.details : null;
 
   if (packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "suppress")) {
     overrideDecision(decision, {
@@ -1172,14 +1173,23 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       packet.unifiedFindingId === "policy_clarity_risk" &&
       packet.confidenceInputs.hasPageAttribution &&
       hasReadableSnippet(packet) &&
-      (packet.evidence?.flags?.includes("policy_boilerplate_signals_retained") ||
-        ((packet.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2))
+      (
+        packet.evidence?.flags?.includes("policy_boilerplate_signals_retained") ||
+        ((packet.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2) ||
+        (
+          packet.confidenceInputs.hasPolicyTextEvidence &&
+          hasConcreteHumanFacingUrl(packet.evidence?.pageUrls) &&
+          typeof policyExtractionDetails?.ambiguityScore === "number" &&
+          policyExtractionDetails.ambiguityScore >= 70
+        )
+      )
     ) {
       overrideDecision(decision, {
         state: "review",
         lane: "main",
         tier: "section",
-        reason: "A page-attributed policy-fitness issue with multiple retained boilerplate signals is substantive enough to surface in the main review lane.",
+        reason:
+          "A page-attributed policy-fitness issue with strong retained clarity evidence is substantive enough to surface in the main review lane.",
         ruleId: "evidence.policy_extraction.review_policy_fitness"
       });
       return;
