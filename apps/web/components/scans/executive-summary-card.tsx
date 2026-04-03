@@ -70,23 +70,6 @@ function DetailDisclosure(input: {
   );
 }
 
-function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-
-  return {
-    x: cx + radius * Math.cos(angleInRadians),
-    y: cy + radius * Math.sin(angleInRadians)
-  };
-}
-
-function describeArc(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
-  const start = polarToCartesian(cx, cy, radius, endAngle);
-  const end = polarToCartesian(cx, cy, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
-}
-
 function BenchmarkMetricCard(input: {
   actualValue: number | null;
   benchmarkValue: number | null;
@@ -99,23 +82,8 @@ function BenchmarkMetricCard(input: {
   const scaleMax =
     input.maxValue ??
     Math.max(10, Math.ceil((dynamicScaleBase * 1.25) / 5) * 5);
-  const gaugeCx = 110;
-  const gaugeCy = 118;
-  const actualRadius = 88;
-  const benchmarkRadius = 100;
   const actualRatio = Math.max(0, Math.min(1, (actualValue ?? 0) / scaleMax));
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
-  const actualArc = describeArc(gaugeCx, gaugeCy, actualRadius, 180, 180 - actualRatio * 180);
-  const benchmarkArc =
-    benchmarkRatio !== null
-      ? describeArc(
-          gaugeCx,
-          gaugeCy,
-          benchmarkRadius,
-          Math.max(180 - benchmarkRatio * 180 - 8, 0),
-          Math.max(180 - benchmarkRatio * 180 + 8, 0)
-        )
-      : null;
   const scoreDescriptor =
     input.maxValue === 100
       ? actualValue === null
@@ -127,36 +95,55 @@ function BenchmarkMetricCard(input: {
             : "Weak"
       : null;
   const calloutLabel = input.maxValue === 100 ? "Industry avg." : "Expected";
+  const delta =
+    actualValue !== null && benchmarkValue !== null ? actualValue - benchmarkValue : null;
   const currentLabel = input.maxValue === 100 ? "Current score" : "Current";
 
   return (
-    <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_50%_68%,rgba(153,246,228,0.34),rgba(255,255,255,0)_60%),linear-gradient(180deg,rgba(240,249,255,0.95),rgba(255,255,255,1))] px-4 py-4">
-      <p className="relative z-10 text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
-      <div className="relative mt-3 h-[188px] overflow-hidden">
-        <svg viewBox="0 0 220 150" className="absolute inset-x-0 top-0 h-[150px] w-full overflow-visible">
-          <path d={describeArc(gaugeCx, gaugeCy, actualRadius, 180, 0)} fill="none" stroke="rgba(224,247,250,0.98)" strokeWidth="20" strokeLinecap="round" />
-          {benchmarkArc ? (
-            <path d={benchmarkArc} fill="none" stroke="rgba(216,180,254,0.95)" strokeWidth="17" strokeLinecap="round" />
-          ) : null}
-          <path d={actualArc} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth="20" strokeLinecap="round" />
-        </svg>
+    <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-[radial-gradient(circle_at_28%_78%,rgba(153,246,228,0.24),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
         {benchmarkValue !== null ? (
-          <div className="absolute right-0 top-1 z-10 rounded-2xl border border-violet-200 bg-violet-100/92 px-3 py-2 text-right shadow-[0_14px_28px_-20px_rgba(139,92,246,0.55)]">
+          <div className="rounded-2xl border border-violet-200 bg-violet-50/92 px-3 py-2 text-right shadow-[0_12px_28px_-24px_rgba(139,92,246,0.65)]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-600">{calloutLabel}</p>
             <p className="text-lg font-semibold tracking-tight text-violet-700">{benchmarkValue}</p>
           </div>
         ) : null}
-        <div className="absolute inset-x-0 top-[54px] z-10 flex flex-col items-center text-center">
-          <div className="flex items-end gap-1">
-            <span className="text-[2.4rem] font-semibold tracking-tight text-sky-700">{actualValue ?? "—"}</span>
-            {input.maxValue ? <span className="pb-1 text-[1.7rem] text-slate-500">/100</span> : null}
-          </div>
-          {scoreDescriptor ? (
-            <p className="text-[1.95rem] font-semibold tracking-tight text-slate-950">{scoreDescriptor}</p>
+      </div>
+      <div className="mt-5">
+        <div className="flex items-end gap-1">
+          <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+          {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
+        </div>
+        {scoreDescriptor ? (
+          <p className="mt-2 text-[1.6rem] font-semibold leading-none tracking-tight text-slate-950">{scoreDescriptor}</p>
+        ) : (
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{currentLabel}</p>
+        )}
+      </div>
+      <div className="mt-5 space-y-2">
+        <div className="relative h-3 rounded-full bg-sky-100/80">
+          <div
+            className="absolute left-0 top-0 h-3 rounded-full bg-sky-500/85"
+            style={{ width: `${Math.max(actualRatio * 100, actualValue === null ? 0 : 6)}%` }}
+          />
+          {benchmarkRatio !== null ? (
+            <div
+              className="absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400 shadow-[0_0_0_3px_rgba(245,243,255,0.95)]"
+              style={{ left: `${benchmarkRatio * 100}%` }}
+            />
           ) : null}
-          <p className={`mt-1 text-xs ${scoreDescriptor ? "text-slate-500" : "font-semibold uppercase tracking-[0.14em] text-slate-500"}`}>
-            {scoreDescriptor ? currentLabel : currentLabel}
-          </p>
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-slate-500">
+          <span>{currentLabel}</span>
+          {delta !== null ? (
+            <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
+              {delta > 0 ? "+" : ""}
+              {delta} vs expected
+            </span>
+          ) : (
+            <span>Expected marker</span>
+          )}
         </div>
       </div>
     </div>
