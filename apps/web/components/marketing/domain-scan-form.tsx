@@ -7,6 +7,7 @@ import { type FormEvent, useState } from "react";
 
 type DomainScanFormProps = {
   buttonLabel?: string;
+  compact?: boolean;
   helperText?: string;
   inputLabel?: string;
   inputPlaceholder?: string;
@@ -15,6 +16,7 @@ type DomainScanFormProps = {
 
 export function DomainScanForm({
   buttonLabel = "Start full scan",
+  compact = false,
   helperText,
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
@@ -68,12 +70,12 @@ export function DomainScanForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+    <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
       <div className="space-y-2">
         <div className="relative">
           <Input
             autoComplete="url"
-            className="h-14 rounded-[1.6rem] pr-20 text-base"
+            className={compact ? "h-12 rounded-[1.2rem] pr-28 text-sm" : "h-14 rounded-[1.6rem] pr-20 text-base"}
             id="domain"
             name="domain"
             onChange={(event) => setDomain(event.target.value)}
@@ -84,28 +86,36 @@ export function DomainScanForm({
           />
           <Button
             aria-label={buttonLabel}
-            className="absolute right-3 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-0 text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
+            className={
+              compact
+                ? "absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full border-0 bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
+                : "absolute right-3 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-0 text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
+            }
             disabled={isSubmitting}
             type="submit"
           >
             {isSubmitting ? (
               <span className="text-xs">...</span>
             ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-                <path
-                  d="M5 12h14M13 6l6 6-6 6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              compact ? (
+                <span>Scan</span>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+                  <path
+                    d="M5 12h14M13 6l6 6-6 6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )
             )}
           </Button>
         </div>
       </div>
-      {helperText ? (
+      {helperText && !compact ? (
         <div className="flex justify-start sm:justify-end">
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
         </div>

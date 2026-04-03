@@ -1,4 +1,5 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { PreviewScanState } from "../../../../components/marketing/preview-scan-state";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
@@ -49,6 +50,17 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
           ) : loginHref && fullScanRecord ? (
             <SharedScanDetailView
               createAccountHref={loginHref}
+              headerActions={
+                <div className="w-full max-w-[21rem]">
+                  <DomainScanForm
+                    buttonLabel="Scan"
+                    compact
+                    inputLabel="Scan another website"
+                    inputPlaceholder="Enter another site"
+                    mode="preview"
+                  />
+                </div>
+              }
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
