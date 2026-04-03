@@ -73,9 +73,31 @@ function looksLikeLegalHub(input: { anchorText?: string | null; url: string }) {
   return /legal center|legal hub|legal\b|policies\b|privacy center|your privacy choices/.test(haystack);
 }
 
+function getDocumentSpecificityAdjustment(input: { documentType: string | null; url: string; anchorText?: string | null }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+  let adjustment = 0;
+
+  if (input.documentType === "privacy_policy") {
+    if (/\bprivacy policy\b|\/privacy-policy\b|\/privacy\b/.test(haystack)) adjustment += 0.18;
+    if (/\bjob|applicant|employee|candidate|affiliate|supplier|vendor|consumer-health|hipaa|california\b/.test(haystack)) adjustment -= 0.28;
+  }
+
+  if (input.documentType === "terms_of_service") {
+    if (/\bterms of service\b|\bterms and conditions\b|\/terms\b|\/terms-of-service\b/.test(haystack)) adjustment += 0.16;
+    if (/\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace\b/.test(haystack)) adjustment -= 0.26;
+  }
+
+  if (input.documentType === "cookie_policy") {
+    if (/\bcookie policy\b|\/cookie-policy\b|\/cookies\b/.test(haystack)) adjustment += 0.12;
+  }
+
+  return adjustment;
+}
+
 function scoreLegalCandidate(input: { anchorText?: string | null; discoveredFrom: string; url: string }) {
   const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
   let score = 0.2;
+  const guessedType = guessDocumentType({ anchorText: input.anchorText, url: input.url });
 
   if (/privacy policy|privacy notice/.test(haystack)) score += 0.55;
   else if (/cookie policy|cookie notice/.test(haystack)) score += 0.5;
@@ -84,8 +106,13 @@ function scoreLegalCandidate(input: { anchorText?: string | null; discoveredFrom
 
   if (/footer_link|homepage_rendered_link|legal_hub_link/.test(input.discoveredFrom)) score += 0.15;
   if (/legal|privacy|terms|cookies|policy/.test(new URL(input.url).pathname.toLowerCase())) score += 0.1;
+  score += getDocumentSpecificityAdjustment({
+    anchorText: input.anchorText,
+    documentType: guessedType,
+    url: input.url
+  });
 
-  return Math.min(1, score);
+  return Math.max(0, Math.min(1, score));
 }
 
 function isLikelyLegalHref(href: string) {
@@ -252,13 +279,25 @@ function buildEvidenceCandidates(input: {
       getNumber(candidate.candidate_score) ??
       getNumber(candidate.candidateScore) ??
       0;
+    const adjustedScore = Math.max(
+      0,
+      Math.min(
+        1,
+        score +
+          getDocumentSpecificityAdjustment({
+            anchorText: getString(candidate.anchor_text) ?? getString(candidate.anchorText),
+            documentType,
+            url
+          })
+      )
+    );
 
     const nextCandidate: DiscoveryInputCandidate = {
       anchorText: getString(candidate.anchor_text) ?? getString(candidate.anchorText),
-      candidateScore: score,
+      candidateScore: adjustedScore,
       discoveredFrom: getString(candidate.discovered_from) ?? getString(candidate.discoveredFrom),
       documentType,
-      score,
+      score: adjustedScore,
       sourceUrl: getString(candidate.source_url) ?? getString(candidate.sourceUrl),
       url
     };

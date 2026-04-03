@@ -201,11 +201,15 @@ test("buildNanoDocCandidateUrls prefers scanner and discovery evidence over slug
     ]
   });
 
-  assert.deepEqual(candidates[0], {
-    documentType: "privacy_policy",
-    priorityTier: "priority",
-    url: "https://www.example.com/privacy-center"
-  });
+  assert.equal(candidates[0]?.documentType, "privacy_policy");
+  assert.equal(candidates[0]?.priorityTier, "priority");
+  assert.ok(
+    candidates.some(
+      (candidate) =>
+        candidate.url === "https://www.example.com/privacy-center" &&
+        candidate.priorityTier === "priority"
+    )
+  );
   assert.ok(
     candidates.some(
       (candidate) =>
@@ -216,6 +220,49 @@ test("buildNanoDocCandidateUrls prefers scanner and discovery evidence over slug
   assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/privacy"), false);
   assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/privacy-policy"), false);
   assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
+});
+
+test("buildNanoDocCandidateUrls prefers main terms and privacy docs over special-scope variants", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [
+      {
+        anchor_text: "Affiliate Marketing Terms",
+        candidate_score: 0.92,
+        candidate_url: "https://www.example.com/legal/affiliate-marketing-terms",
+        discovered_from: "homepage_rendered_link"
+      },
+      {
+        anchor_text: "Terms of Service",
+        candidate_score: 0.88,
+        candidate_url: "https://www.example.com/legal/terms-of-service",
+        discovered_from: "homepage_rendered_link"
+      },
+      {
+        anchor_text: "Job Applicant Privacy Notice",
+        candidate_score: 0.93,
+        candidate_url: "https://www.example.com/legal/job-applicant-privacy-notice",
+        discovered_from: "homepage_rendered_link"
+      },
+      {
+        anchor_text: "Privacy Policy",
+        candidate_score: 0.87,
+        candidate_url: "https://www.example.com/legal/privacy-policy",
+        discovered_from: "homepage_rendered_link"
+      }
+    ],
+    domainHostname: "example.com",
+    pages: []
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/terms-of-service"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/affiliate-marketing-terms"),
+    false
+  );
+  assert.equal(candidates[0]?.url, "https://www.example.com/legal/privacy-policy");
 });
 
 test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no discovery evidence exists", () => {
