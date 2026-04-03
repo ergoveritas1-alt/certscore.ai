@@ -1359,6 +1359,7 @@ async function loadScanRecordForFindingCount(input: {
     { data: accessibilityRuleCounts },
     { data: accessibilityRuleExamples },
     { data: policyEnrichment },
+    { data: documentSources },
     { data: policyReviewQueue },
     { data: signals },
     { data: events },
@@ -1371,6 +1372,7 @@ async function loadScanRecordForFindingCount(input: {
     input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
     input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
     input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase
       .from("scan_signals")
@@ -1389,6 +1391,20 @@ async function loadScanRecordForFindingCount(input: {
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
+  const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const policySemanticRows = preferDocumentSources
+    ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
+    : ((policyEnrichment ?? []) as Array<Record<string, unknown>>);
+  const normalizedPolicyRows = policySemanticRows.map((row, index) => {
+    const next = { ...row };
+    if (typeof next.id !== "string") {
+      next.id = typeof row.source_document_id === "string" ? row.source_document_id : `document-semantic-${index + 1}`;
+    }
+    delete next.created_at;
+    delete next.updated_at;
+    return next;
+  });
   const normalizedSignals = scannerSignalRows.map((signal) => {
     const category = String(signal.category ?? "");
     const key = String(signal.signal_key ?? "");
@@ -1420,12 +1436,7 @@ async function loadScanRecordForFindingCount(input: {
       metadataJson: (event.metadata_json as Record<string, unknown> | null) ?? undefined,
       createdAt: String(event.created_at ?? "")
     })),
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
-      const next = { ...row };
-      delete next.created_at;
-      delete next.updated_at;
-      return next;
-    })
+    policyEnrichment: normalizedPolicyRows
   });
 
   const validationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[]).map((row) => {
@@ -1466,12 +1477,7 @@ async function loadScanRecordForFindingCount(input: {
     accessibilityRuleCounts: (accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>,
     accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as Array<Record<string, unknown>>,
     events: repairedEvents,
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
-      const next = { ...row };
-      delete next.created_at;
-      delete next.updated_at;
-      return next;
-    }),
+    policyEnrichment: normalizedPolicyRows,
     policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => {
       const next = { ...row };
       delete next.created_at;
