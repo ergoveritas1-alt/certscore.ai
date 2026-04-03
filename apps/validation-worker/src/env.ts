@@ -51,7 +51,16 @@ const workerEnvSchema = z.object({
   SCANNER_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   WORKER_CONCURRENCY: z.preprocess(emptyStringToUndefined, z.coerce.number().int().min(1).max(10).default(2)),
-  PLAYWRIGHT_BROWSERS_PATH: z.preprocess(emptyStringToUndefined, z.string().min(1).optional())
+  PLAYWRIGHT_BROWSERS_PATH: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+  WORKER_BROWSER_REAPER_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value !== "0"),
+  WORKER_BROWSER_REAPER_INTERVAL_MINUTES: z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int().min(1).max(60).default(5)
+  ),
+  WORKER_BROWSER_REAPER_STALE_MINUTES: z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int().min(5).max(240).default(20)
+  )
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema> & SupabaseAdminEnv;

@@ -18,10 +18,20 @@ type PreviewScanPageProps = {
 export default async function PreviewScanPage({ params }: PreviewScanPageProps) {
   const { scanId } = await params;
   const scan = await getPreviewScan(scanId);
-  const fullScanRecord =
-    scan && scan.status !== "queued" && scan.status !== "running"
-      ? await getAnonymousScanById(scan.scanId)
-      : null;
+  let fullScanRecord = null;
+  let detailLoadError = false;
+
+  if (scan && scan.status !== "queued" && scan.status !== "running") {
+    try {
+      fullScanRecord = await getAnonymousScanById(scan.scanId);
+    } catch (error) {
+      detailLoadError = true;
+      console.error("[preview-scan] failed to load anonymous scan detail", {
+        error: error instanceof Error ? error.message : String(error),
+        previewScanId: scan.scanId
+      });
+    }
+  }
   const loginHref = scan
     ? `/login?${new URLSearchParams({
         domain: scan.hostname,
@@ -54,6 +64,20 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
+          ) : detailLoadError ? (
+            <Card className="border-slate-200 bg-white">
+              <CardHeader>
+                <CardTitle>Preview findings are still loading</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-600">
+                <p>
+                  The homepage preview scan completed, but the detailed findings view could not be assembled from the retained scan record yet.
+                </p>
+                <p>
+                  Refresh this page in a moment or start a new preview scan. The raw preview scan record is still available.
+                </p>
+              </CardContent>
+            </Card>
           ) : null
         ) : (
           <div className="space-y-6">

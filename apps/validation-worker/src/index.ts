@@ -1,5 +1,6 @@
 import { QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
 import { hostname as getHostname } from "node:os";
+import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getConfiguredValidationRedisUrl, getWorkerEnv } from "./env";
 import { createValidationWorkers } from "./validation/workers";
 import { recordValidationWorkerHeartbeat } from "./validation/repository";
@@ -17,6 +18,14 @@ function bootstrapValidationWorker() {
   const startedAt = new Date();
   const host = getHostname();
   const workers = createValidationWorkers();
+  const browserCleanup =
+    env.WORKER_BROWSER_REAPER_ENABLED
+      ? createBrowserCleanupScheduler({
+          intervalMs: env.WORKER_BROWSER_REAPER_INTERVAL_MINUTES * 60 * 1000,
+          logger: console,
+          staleAgeMs: env.WORKER_BROWSER_REAPER_STALE_MINUTES * 60 * 1000
+        })
+      : null;
 
   workers.forEach((worker) => {
     worker.on("completed", (job) => {
@@ -25,6 +34,7 @@ function bootstrapValidationWorker() {
         jobName: job.name,
         validationRunId: "validationRunId" in job.data ? job.data.validationRunId : null
       });
+      void browserCleanup?.schedule("job_completed");
     });
 
     worker.on("failed", (job, error) => {
@@ -34,6 +44,7 @@ function bootstrapValidationWorker() {
         jobName: job?.name ?? null,
         validationRunId: job && "validationRunId" in job.data ? job.data.validationRunId : null
       });
+      void browserCleanup?.schedule("job_failed");
     });
   });
 
@@ -52,6 +63,8 @@ function bootstrapValidationWorker() {
     });
   });
 
+  void browserCleanup?.runNow("worker_startup");
+
   const interval = setInterval(() => {
     void recordValidationWorkerHeartbeat({
       host
@@ -60,6 +73,7 @@ function bootstrapValidationWorker() {
         error: error instanceof Error ? error.message : String(error)
       });
     });
+    void browserCleanup?.schedule("heartbeat");
   }, HEARTBEAT_INTERVAL_MS);
 
   interval.unref();
