@@ -108,13 +108,13 @@ function BenchmarkMetricCard(input: {
             deltaNegative: "text-orange-700"
           }
         : {
-            card: "bg-[radial-gradient(circle_at_28%_78%,rgba(244,114,182,0.16),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(253,242,248,0.98),rgba(255,255,255,1))]",
-            rail: "bg-pink-100/90",
-            fill: "bg-fuchsia-500/82",
-            marker: "bg-violet-500 shadow-[0_0_0_3px_rgba(250,245,255,0.95)]",
-            value: "text-fuchsia-700",
-            deltaPositive: "text-fuchsia-700",
-            deltaNegative: "text-violet-700"
+            card: "bg-[radial-gradient(circle_at_28%_78%,rgba(74,222,128,0.18),rgba(255,255,255,0)_52%),linear-gradient(180deg,rgba(240,253,244,0.98),rgba(255,255,255,1))]",
+            rail: "bg-emerald-100/90",
+            fill: "bg-emerald-500/82",
+            marker: "bg-lime-500 shadow-[0_0_0_3px_rgba(247,254,231,0.95)]",
+            value: "text-emerald-700",
+            deltaPositive: "text-emerald-700",
+            deltaNegative: "text-lime-700"
           };
 
   return (
