@@ -248,6 +248,49 @@ test("privacy rights and contact paths surface when page-attributed policy evide
   assert.ok(contactPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
 });
 
+test("high-value privacy disclosures surface when page-attributed policy evidence is strong", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("gpc_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("gpc_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("gpc_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["We honor Global Privacy Control browser signals where required by law."]
+        }
+      }),
+      makePacket("tracking_technologies_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("tracking_technologies_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("tracking_technologies_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["We use cookies and similar tracking technologies for analytics and service functionality."]
+        }
+      })
+    ]
+  });
+
+  const gpc = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "gpc_disclosure_present");
+  const tracking = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "tracking_technologies_disclosure_present");
+
+  assert.equal(gpc?.decisionState, "review");
+  assert.equal(gpc?.reportLane, "main");
+  assert.ok(gpc?.appliedRules.includes("evidence.positive_surface.review_high_value_privacy_disclosure"));
+  assert.equal(tracking?.decisionState, "review");
+  assert.equal(tracking?.reportLane, "main");
+  assert.ok(tracking?.appliedRules.includes("evidence.positive_surface.review_high_value_privacy_disclosure"));
+});
+
 test("unresolved low-confidence absence still surfaces in confidence and coverage", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

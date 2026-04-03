@@ -37,6 +37,7 @@ export type SurfacingPolicyRuleId =
   | "family.accessibility.default"
   | "evidence.positive_surface.support_only"
   | "evidence.positive_surface.review_high_value_policy_path"
+  | "evidence.positive_surface.review_high_value_privacy_disclosure"
   | "evidence.coverage_gap.keep_review"
   | "evidence.coverage_gap.confirmed_key_page_surface_missing"
   | "evidence.coverage_gap.review_key_page_fetch_failed"
@@ -1040,6 +1041,28 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "positive_surface") {
+    if (
+      [
+        "gpc_disclosure_present",
+        "tracking_technologies_disclosure_present",
+        "targeted_advertising_disclosure_present",
+        "third_party_advertising_disclosure_present"
+      ].includes(packet.unifiedFindingId) &&
+      packet.confidenceInputs.hasPolicyTextEvidence &&
+      hasReadableSnippet(packet) &&
+      hasConcreteHumanFacingUrl(packet.evidence?.pageUrls)
+    ) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason:
+          "A retained, page-attributed high-value privacy disclosure is strong enough to surface in the main findings as review-level positive evidence instead of remaining hidden as support-only context.",
+        ruleId: "evidence.positive_surface.review_high_value_privacy_disclosure"
+      });
+      return;
+    }
+
     if (
       (packet.unifiedFindingId === "privacy_rights_path_present" || packet.unifiedFindingId === "privacy_contact_path_present") &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
