@@ -4,6 +4,7 @@ import {
   getPrimaryCategoryLabel,
   mapSignalKeyToTaxonomy
 } from "@website-signal-risk-scanner/shared";
+import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../../web/lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../../web/lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../web/lib/scans/validation-review-linking";
@@ -94,6 +95,7 @@ async function loadScanRecordForFindingCount(input: {
     { data: accessibilityRuleCounts, error: accessibilityRuleCountsError },
     { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError },
     { data: policyEnrichment, error: policyEnrichmentError },
+    { data: documentSources, error: documentSourcesError },
     { data: policyReviewQueue, error: policyReviewQueueError },
     { data: signals, error: signalsError },
     { data: events, error: eventsError },
@@ -106,6 +108,7 @@ async function loadScanRecordForFindingCount(input: {
     input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
     input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
     input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase
       .from("scan_signals")
@@ -147,6 +150,9 @@ async function loadScanRecordForFindingCount(input: {
   if (policyEnrichmentError) {
     throw new Error(`Failed to load policy enrichment for ${input.scanId}: ${policyEnrichmentError.message}`);
   }
+  if (documentSourcesError) {
+    throw new Error(`Failed to load document sources for ${input.scanId}: ${documentSourcesError.message}`);
+  }
   if (policyReviewQueueError) {
     throw new Error(`Failed to load policy review queue for ${input.scanId}: ${policyReviewQueueError.message}`);
   }
@@ -185,8 +191,16 @@ async function loadScanRecordForFindingCount(input: {
       };
     });
 
-  const normalizedPolicyEnrichment = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
+  const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const policySemanticRows = preferDocumentSources
+    ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
+    : ((policyEnrichment ?? []) as Array<Record<string, unknown>>);
+  const normalizedPolicyEnrichment = policySemanticRows.map((row, index) => {
     const next = { ...row };
+    if (typeof next.id !== "string") {
+      next.id = typeof row.source_document_id === "string" ? row.source_document_id : `document-semantic-${index + 1}`;
+    }
     delete next.created_at;
     delete next.updated_at;
     return next;
