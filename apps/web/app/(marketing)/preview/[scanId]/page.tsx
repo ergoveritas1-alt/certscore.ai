@@ -26,7 +26,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
       fullScanRecord = await getAnonymousScanById(scan.scanId);
     } catch (error) {
       detailLoadError = true;
-      console.error("[preview-scan] failed to load anonymous scan detail", {
+      console.warn("[preview-scan] failed to load anonymous scan detail", {
         error: error instanceof Error ? error.message : String(error),
         previewScanId: scan.scanId
       });
