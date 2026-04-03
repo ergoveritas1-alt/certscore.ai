@@ -1,4 +1,5 @@
 import { getWorkerEnv } from "../env";
+import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -16,6 +17,10 @@ type DiscoveryInputCandidate = {
   score?: number | null;
   sourceUrl?: string | null;
   url: string;
+};
+
+type HomepageDiscoveryResult = {
+  candidates: DiscoveryInputCandidate[];
 };
 
 function getString(value: unknown) {
@@ -47,8 +52,160 @@ function isSupportedDocumentType(value: string | null): value is "privacy_policy
   return value === "privacy_policy" || value === "terms_of_service" || value === "cookie_policy";
 }
 
+function guessDocumentType(input: { anchorText?: string | null; url: string }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+
+  if (/cookie policy|cookie notice|cookies\b/.test(haystack)) {
+    return "cookie_policy" as const;
+  }
+  if (/terms of service|terms and conditions|\bterms\b|\blegal terms\b/.test(haystack)) {
+    return "terms_of_service" as const;
+  }
+  if (/privacy policy|privacy notice|\bprivacy\b|your privacy choices|data privacy/.test(haystack)) {
+    return "privacy_policy" as const;
+  }
+
+  return null;
+}
+
+function looksLikeLegalHub(input: { anchorText?: string | null; url: string }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+  return /legal center|legal hub|legal\b|policies\b|privacy center|your privacy choices/.test(haystack);
+}
+
+function scoreLegalCandidate(input: { anchorText?: string | null; discoveredFrom: string; url: string }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+  let score = 0.2;
+
+  if (/privacy policy|privacy notice/.test(haystack)) score += 0.55;
+  else if (/cookie policy|cookie notice/.test(haystack)) score += 0.5;
+  else if (/terms of service|terms and conditions/.test(haystack)) score += 0.45;
+  else if (/\bprivacy\b|\bcookies\b|\bterms\b/.test(haystack)) score += 0.3;
+
+  if (/footer_link|homepage_rendered_link|legal_hub_link/.test(input.discoveredFrom)) score += 0.15;
+  if (/legal|privacy|terms|cookies|policy/.test(new URL(input.url).pathname.toLowerCase())) score += 0.1;
+
+  return Math.min(1, score);
+}
+
+function isLikelyLegalHref(href: string) {
+  const value = href.toLowerCase();
+  return /privacy|terms|legal|cookie|policy|your-privacy-choices|data-privacy/.test(value);
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function stripHtmlToText(html: string) {
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+}
+
+function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: string; pageUrl: string }) {
+  const baseUrl = new URL(input.pageUrl);
+  const matches = [...input.html.matchAll(/<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi)];
+  const byUrl = new Map<string, DiscoveryInputCandidate>();
+
+  for (const match of matches) {
+    const rawHref = match[2] ?? "";
+    const rawText = stripHtmlToText(match[3] ?? "");
+    if (!rawHref || (!isLikelyLegalHref(rawHref) && !isLikelyLegalHref(rawText))) {
+      continue;
+    }
+
+    try {
+      const absoluteUrl = normalizeDocUrl(new URL(rawHref, baseUrl).toString());
+      if (!absoluteUrl) {
+        continue;
+      }
+      const anchorText = rawText.length > 0 ? rawText.slice(0, 160) : null;
+      const documentType = guessDocumentType({ anchorText, url: absoluteUrl });
+      const candidate: DiscoveryInputCandidate = {
+        anchorText,
+        candidateScore: scoreLegalCandidate({
+          anchorText,
+          discoveredFrom: input.discoveredFrom,
+          url: absoluteUrl
+        }),
+        discoveredFrom: input.discoveredFrom,
+        documentType,
+        sourceUrl: input.pageUrl,
+        url: absoluteUrl
+      };
+      const existing = byUrl.get(absoluteUrl);
+      if (!existing || (candidate.candidateScore ?? 0) > (existing.candidateScore ?? 0)) {
+        byUrl.set(absoluteUrl, candidate);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [...byUrl.values()];
+}
+
+async function fetchRenderedLegalCandidates(url: string, discoveredFrom: string) {
+  try {
+    const request = buildValidationWorkerCrawlerHeaders(url);
+    const response = await fetch(url, {
+      headers: request.headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) {
+      return [] as DiscoveryInputCandidate[];
+    }
+
+    const html = await response.text();
+    const finalUrl = response.url || url;
+    return extractRenderedLegalCandidates({
+      discoveredFrom,
+      html,
+      pageUrl: finalUrl
+    });
+  } catch {
+    return [] as DiscoveryInputCandidate[];
+  }
+}
+
+async function buildHomepageDiscoveryCandidates(input: { domainHostname: string | null }) : Promise<HomepageDiscoveryResult> {
+  if (!input.domainHostname) {
+    return { candidates: [] };
+  }
+
+  const homepageUrl = normalizeDocUrl(`https://${input.domainHostname}/`) ?? `https://${input.domainHostname}/`;
+  const homepageCandidates = await fetchRenderedLegalCandidates(homepageUrl, "homepage_rendered_link");
+  const legalHubCandidates = homepageCandidates.filter((candidate) => looksLikeLegalHub({
+    anchorText: candidate.anchorText,
+    url: candidate.url
+  }));
+
+  const secondHopCandidates = legalHubCandidates.length > 0
+    ? await fetchRenderedLegalCandidates(legalHubCandidates[0]!.url, "legal_hub_link")
+    : [];
+
+  const merged = new Map<string, DiscoveryInputCandidate>();
+  for (const candidate of [...homepageCandidates, ...secondHopCandidates]) {
+    const existing = merged.get(candidate.url);
+    if (!existing || (candidate.candidateScore ?? 0) > (existing.candidateScore ?? 0)) {
+      merged.set(candidate.url, candidate);
+    }
+  }
+
+  return {
+    candidates: [...merged.values()]
+  };
+}
+
 function buildEvidenceCandidates(input: {
   discoveryCandidates?: Array<Record<string, unknown>>;
+  homepageDiscoveryCandidates?: Array<DiscoveryInputCandidate>;
   pages: Array<Record<string, unknown>>;
 }) {
   const candidates = new Map<string, DiscoveryInputCandidate>();
@@ -68,10 +225,26 @@ function buildEvidenceCandidates(input: {
     });
   }
 
+  for (const candidate of input.homepageDiscoveryCandidates ?? []) {
+    const existing = candidates.get(candidate.url);
+    if (!existing || (candidate.candidateScore ?? 0) > (existing.candidateScore ?? 0)) {
+      candidates.set(candidate.url, candidate);
+    }
+  }
+
   for (const candidate of input.discoveryCandidates ?? []) {
     const url = normalizeDocUrl(getString(candidate.candidate_url) ?? getString(candidate.candidateUrl));
-    const documentType = getString(candidate.page_type) ?? getString(candidate.pageType);
-    if (!url || !isSupportedDocumentType(documentType)) {
+    const documentType =
+      getString(candidate.page_type) ??
+      getString(candidate.pageType) ??
+      guessDocumentType({
+        anchorText: getString(candidate.anchor_text) ?? getString(candidate.anchorText),
+        url: url ?? ""
+      });
+    if (!url || (!documentType && !looksLikeLegalHub({
+      anchorText: getString(candidate.anchor_text) ?? getString(candidate.anchorText),
+      url
+    }))) {
       continue;
     }
 
@@ -111,16 +284,36 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
   ] satisfies NanoDocCandidate[];
 }
 
+function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
+  const counts = new Map<string, number>();
+  const limited: NanoDocCandidate[] = [];
+
+  for (const candidate of candidates) {
+    const currentCount = counts.get(candidate.documentType) ?? 0;
+    const limit = candidate.documentType === "privacy_policy" ? 2 : 1;
+    if (currentCount >= limit) {
+      continue;
+    }
+
+    counts.set(candidate.documentType, currentCount + 1);
+    limited.push(candidate);
+  }
+
+  return limited;
+}
+
 export function buildNanoDocCandidateUrls(input: {
   discoveryCandidates?: Array<Record<string, unknown>>;
   domainHostname: string | null;
+  homepageDiscoveryCandidates?: Array<DiscoveryInputCandidate>;
   pages: Array<Record<string, unknown>>;
 }) {
   const evidenceCandidates = buildEvidenceCandidates(input);
   const orderedEvidence = evidenceCandidates
+    .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
     .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.url.localeCompare(right.url))
     .map((candidate) => ({
-      documentType: candidate.documentType ?? "privacy_policy",
+      documentType: candidate.documentType!,
       priorityTier:
         candidate.discoveredFrom === "scanner_page" ||
         candidate.discoveredFrom === "footer_link" ||
@@ -133,7 +326,7 @@ export function buildNanoDocCandidateUrls(input: {
     } satisfies NanoDocCandidate));
 
   if (orderedEvidence.length > 0) {
-    return orderedEvidence;
+    return limitNanoDocCandidates(orderedEvidence);
   }
 
   return buildSeedFallbackCandidates(input.domainHostname);
@@ -195,12 +388,13 @@ function normalizeSelectedCandidates(input: {
     });
   }
 
-  return normalized;
+  return limitNanoDocCandidates(normalized);
 }
 
 export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
   discoveryCandidates?: Array<Record<string, unknown>>;
   domainHostname: string | null;
+  homepageDiscoveryCandidates?: Array<DiscoveryInputCandidate>;
   pages: Array<Record<string, unknown>>;
 }) {
   const available = buildEvidenceCandidates(input);
@@ -270,11 +464,19 @@ export async function selectNanoDocCandidates(input: {
   domainHostname: string | null;
   pages: Array<Record<string, unknown>>;
 }) {
-  const llmSelected = await rankNanoDocDiscoveryCandidatesWithLlm(input).catch(() => [] as NanoDocCandidate[]);
+  const homepageDiscovery = await buildHomepageDiscoveryCandidates({
+    domainHostname: input.domainHostname
+  }).catch(() => ({ candidates: [] as DiscoveryInputCandidate[] }));
+  const llmSelected = await rankNanoDocDiscoveryCandidatesWithLlm({
+    ...input,
+    homepageDiscoveryCandidates: homepageDiscovery.candidates
+  }).catch(() => [] as NanoDocCandidate[]);
   if (llmSelected.length > 0) {
     return llmSelected;
   }
 
-  return buildNanoDocCandidateUrls(input);
+  return buildNanoDocCandidateUrls({
+    ...input,
+    homepageDiscoveryCandidates: homepageDiscovery.candidates
+  });
 }
-
