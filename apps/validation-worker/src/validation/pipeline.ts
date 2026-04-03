@@ -1303,8 +1303,10 @@ export async function processValidationRankJob(validationRunId: string) {
     const artifacts = await loadCompletedScanArtifacts(run.scan_id);
     await persistDerivedNanoPolicySignals({
       policyEnrichments: artifacts.policyEnrichments,
+      policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
-      scanId: run.scan_id
+      scanId: run.scan_id,
+      snapshot: artifacts.snapshot
     }).catch((error) => {
       console.error("[validation-worker] nano policy signal persistence failed", {
         error: error instanceof Error ? error.message : String(error),

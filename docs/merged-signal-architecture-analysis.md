@@ -147,3 +147,4 @@ The current producer-side bootstrap writes these rows from existing `policy_enri
 - low-confidence policy extraction signal population
 - elevated policy ambiguity signal population
 - rights-path and children-context policy support signals
+- policy/runtime bridge signals for conflict candidates, cookie disclosure gaps, functional misalignment, missing technical disclosure, and disclosure obstruction

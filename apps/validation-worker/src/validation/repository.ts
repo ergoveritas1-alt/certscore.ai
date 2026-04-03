@@ -19,7 +19,7 @@ import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limita
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
 import { getHybridNanoSignalPopulations } from "../../../web/lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
-import { buildNanoPolicySignalRows } from "../../../web/lib/scans/nano-policy-signals";
+import { buildNanoPolicySignalRows, mergeManagedNanoPolicySignalRows } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
@@ -1279,15 +1279,29 @@ export async function markValidationSchedule(input: {
 
 export async function persistDerivedNanoPolicySignals(input: {
   policyEnrichments: Array<Record<string, unknown>>;
+  policyReviewQueue?: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   scanId: string;
+  snapshot?: Record<string, unknown> | null;
 }) {
   const supabase = createAdminClient();
   const hybridRuntimeEvidence = getRecord(
     input.runtimeArtifacts?.hybrid_runtime_evidence ?? input.runtimeArtifacts?.hybridRuntimeEvidence
   ) ?? { };
-  const nanoSignalRows = buildNanoPolicySignalRows({
-    policyEnrichments: input.policyEnrichments
+  const nextManagedRows = buildNanoPolicySignalRows({
+    policyEnrichments: input.policyEnrichments,
+    policyReviewQueue: input.policyReviewQueue,
+    runtimeArtifacts: input.runtimeArtifacts,
+    snapshot: input.snapshot
+  });
+  const existingNanoRows = Array.isArray(hybridRuntimeEvidence.nano_signals)
+    ? hybridRuntimeEvidence.nano_signals.filter(
+        (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+      )
+    : [];
+  const nanoSignalRows = mergeManagedNanoPolicySignalRows({
+    existingRows: existingNanoRows,
+    nextRows: nextManagedRows
   });
   const nextHybridRuntimeEvidence = {
     ...hybridRuntimeEvidence,
