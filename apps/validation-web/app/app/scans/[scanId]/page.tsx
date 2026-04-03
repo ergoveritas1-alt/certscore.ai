@@ -1,3 +1,5 @@
+import { getDashboardContext } from "../../../../server/auth";
+import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import { ValidationRunDetailPage } from "../../../../components/validation/run-detail-page";
 
 export const dynamic = "force-dynamic";
@@ -11,5 +13,11 @@ type ScanDetailPageProps = {
 
 export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   const { scanId } = await params;
-  return <ValidationRunDetailPage scanId={scanId} />;
+  const { organization } = await getDashboardContext();
+  const scanDetail = await getScanById({
+    organizationId: organization.id,
+    scanId
+  });
+
+  return <ValidationRunDetailPage scanDetail={scanDetail} scanId={scanId} />;
 }

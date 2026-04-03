@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { getValidationFindingFamily } from "@website-signal-risk-scanner/shared";
+import { getValidationFindingFamily, type SignalEnrichmentWorkflowStageStatus } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getValidationRunDetail } from "../../server/validation/repository";
+import { getScanById } from "../../server/scans/get-scan-by-id";
 import { ValidationRunsAutoRefresh } from "./validation-runs-auto-refresh";
 
 function formatDateTime(value: string | null | undefined) {
@@ -38,7 +39,38 @@ function safeNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function getWorkflowStageTone(status: SignalEnrichmentWorkflowStageStatus) {
+  switch (status) {
+    case "completed":
+      return "border-emerald-300/20 bg-emerald-300/10 text-emerald-100";
+    case "running":
+      return "border-sky-300/20 bg-sky-300/10 text-sky-100";
+    case "failed":
+      return "border-rose-300/20 bg-rose-300/10 text-rose-100";
+    case "blocked":
+      return "border-amber-300/20 bg-amber-300/10 text-amber-100";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function formatWorkflowStageStatus(status: SignalEnrichmentWorkflowStageStatus) {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "running":
+      return "Running";
+    case "failed":
+      return "Failed";
+    case "blocked":
+      return "Blocked";
+    default:
+      return "Queued";
+  }
+}
+
 export async function ValidationRunDetailPage(input: {
+  scanDetail?: Awaited<ReturnType<typeof getScanById>> | null;
   scanId: string;
 }) {
   const detail = await getValidationRunDetail(input.scanId);
@@ -125,6 +157,53 @@ export async function ValidationRunDetailPage(input: {
             <CardTitle>Run failure</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-rose-100">{String(detail.run.error_message)}</CardContent>
+        </Card>
+      ) : null}
+
+      {input.scanDetail?.signalEnrichmentWorkflow ? (
+        <Card className="border-white/10 bg-white/5 text-slate-100">
+          <CardHeader>
+            <CardTitle>Signal enrichment workflow</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Scanner, nano, merge, and unified-finding derivation status for this scan.
+            </p>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Preferred mode</div>
+                <div>{input.scanDetail.signalEnrichmentWorkflow.preferredMode === "parallel_evidence_collection" ? "Parallel" : input.scanDetail.signalEnrichmentWorkflow.preferredMode}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Actual mode</div>
+                <div>{input.scanDetail.signalEnrichmentWorkflow.actualMode === "parallelized" ? "Parallelized" : "Serial bridge"}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Merged signals</div>
+                <div>{input.scanDetail.signalEnrichmentWorkflow.mergedSignalsReady ? "Ready" : "Pending"}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Findings</div>
+                <div>{input.scanDetail.signalEnrichmentWorkflow.findingsReady ? "Ready" : "Pending"}</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {input.scanDetail.signalEnrichmentWorkflow.stages.map((stage) => (
+                <div key={stage.id} className="rounded-xl border border-white/10 bg-slate-950/30 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-medium text-white">{stage.label}</div>
+                    <Badge className={getWorkflowStageTone(stage.status)}>{formatWorkflowStageStatus(stage.status)}</Badge>
+                  </div>
+                  <div className="mt-2 text-sm text-slate-300">{stage.description}</div>
+                  <div className="mt-2 grid gap-2 text-xs text-slate-400 md:grid-cols-3">
+                    <div>Items: {typeof stage.itemCount === "number" ? stage.itemCount : "—"}</div>
+                    <div>Started: {formatDateTime(stage.startedAt)}</div>
+                    <div>Completed: {formatDateTime(stage.completedAt)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
         </Card>
       ) : null}
 
