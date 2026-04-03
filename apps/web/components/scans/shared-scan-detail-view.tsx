@@ -8,7 +8,8 @@ import {
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForValidationRule,
   type PreviewSampleFinding,
-  type ReportSignalDefinition
+  type ReportSignalDefinition,
+  type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { CookieStoragePanel } from "./cookie-storage-panel";
@@ -4804,6 +4805,91 @@ function getResultStatusTone(status: string) {
   }
 }
 
+function getWorkflowStageTone(status: SignalEnrichmentWorkflowStageStatus) {
+  switch (status) {
+    case "completed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "running":
+      return "border-sky-200 bg-sky-50 text-sky-700";
+    case "failed":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "blocked":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function formatWorkflowStageStatus(status: SignalEnrichmentWorkflowStageStatus) {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "running":
+      return "Running";
+    case "failed":
+      return "Failed";
+    case "blocked":
+      return "Blocked";
+    default:
+      return "Queued";
+  }
+}
+
+function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse }) {
+  const workflow = input.scanRecord.signalEnrichmentWorkflow;
+  const counts = {
+    stagesCompleted: workflow.stages.filter((stage) => stage.status === "completed").length,
+    totalStages: workflow.stages.length
+  };
+
+  return (
+    <CollapsibleSectionCard
+      title="Signal enrichment workflow"
+      defaultOpen={input.scanRecord.scan.status !== "completed"}
+    >
+      <div className="space-y-4">
+        <p className="text-sm leading-6 text-slate-600">
+          Scanner, nano, merge, and finding-derivation status for this scan.
+        </p>
+        <div className="grid gap-3 md:grid-cols-4">
+          <SummaryMetricTile label="Preferred mode" value={workflow.preferredMode === "parallel_evidence_collection" ? "Parallel" : workflow.preferredMode} />
+          <SummaryMetricTile label="Actual mode" value={workflow.actualMode === "parallelized" ? "Parallelized" : "Serial bridge"} />
+          <SummaryMetricTile label="Merged signals" value={workflow.mergedSignalsReady ? "Ready" : "Pending"} />
+          <SummaryMetricTile label="Findings" value={workflow.findingsReady ? "Ready" : "Pending"} />
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
+            {counts.stagesCompleted} of {counts.totalStages} stages completed
+          </div>
+          <div className="divide-y divide-slate-200">
+            {workflow.stages.map((stage) => (
+              <div key={stage.id} className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-slate-900">{stage.label}</p>
+                    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", getWorkflowStageTone(stage.status))}>
+                      {formatWorkflowStageStatus(stage.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{stage.description}</p>
+                  {stage.dependsOn.length > 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">Depends on: {stage.dependsOn.join(", ")}</p>
+                  ) : null}
+                </div>
+                <div className="shrink-0 text-sm text-slate-600 md:text-right">
+                  <div>Items: {typeof stage.itemCount === "number" ? stage.itemCount : "—"}</div>
+                  <div>Started: {stage.startedAt ? formatDateTime(stage.startedAt) : "—"}</div>
+                  <div>Completed: {stage.completedAt ? formatDateTime(stage.completedAt) : "—"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </CollapsibleSectionCard>
+  );
+}
+
 function buildResultHeroHighlights(input: {
   findingPackets: UnifiedFindingDisplayPacket[];
   hybridRuntimeSummaryRows: Array<{ label: string; value: unknown }> | null;
@@ -5323,6 +5409,7 @@ export function SharedScanDetailView({
           status={scanRecord.scan.status}
         />
       ) : null}
+      <SignalEnrichmentWorkflowCard scanRecord={scanRecord} />
       <ExecutiveSummaryCard
         beforeConsentCookieCount={cookiesBeforeConsentCount}
         finalHost={certScoreSummary.finalHost}
