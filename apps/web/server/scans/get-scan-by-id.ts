@@ -1170,6 +1170,14 @@ async function loadScanDetailRecord(input: {
   const latestUnifiedFindingsCompletedEvent = [...normalizedEvents]
     .reverse()
     .find((event) => event.eventType === SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted);
+  const latestNanoDocRetrievalCompletedEvent = [...normalizedEvents]
+    .reverse()
+    .find((event) => event.eventType === SCAN_EVENT_TYPES.nanoDocRetrievalCompleted);
+  const workflowDocumentSourceCount =
+    typeof (latestNanoDocRetrievalCompletedEvent?.metadataJson as { documentSourceCount?: unknown } | undefined)?.documentSourceCount === "number" &&
+    Number.isFinite((latestNanoDocRetrievalCompletedEvent?.metadataJson as { documentSourceCount?: number } | undefined)?.documentSourceCount)
+      ? (latestNanoDocRetrievalCompletedEvent?.metadataJson as { documentSourceCount: number }).documentSourceCount
+      : undefined;
   const workflowFindingCount =
     validationFindings.length > 0
       ? validationFindings.length
@@ -1178,6 +1186,7 @@ async function loadScanDetailRecord(input: {
         ? (latestUnifiedFindingsCompletedEvent?.metadataJson as { findingCount: number }).findingCount
         : 0;
   const signalEnrichmentWorkflow = deriveSignalEnrichmentWorkflowState({
+    documentSourceCount: workflowDocumentSourceCount,
     events: normalizedEvents.map((event) => ({
       createdAt: event.createdAt,
       eventType: event.eventType
