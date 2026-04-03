@@ -1805,6 +1805,22 @@ export async function appendScanWorkflowEvent(input: {
   }
 }
 
+export async function hasValidationRunForScan(scanId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("validation_runs")
+    .select("id")
+    .eq("scan_id", scanId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to check validation run for scan ${scanId}: ${error.message}`);
+  }
+
+  return Boolean(data?.id);
+}
+
 export function normalizeValidationTargetInput(value: string) {
   return normalizeUrl(value);
 }

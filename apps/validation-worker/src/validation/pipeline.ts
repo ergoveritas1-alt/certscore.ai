@@ -18,6 +18,7 @@ import {
   finalizeValidationRun,
   getValidationPipelineState,
   getValidationRun,
+  hasValidationRunForScan,
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
   loadNanoDocRetrievalInputs,
@@ -2139,6 +2140,58 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     },
     scanId
   }).catch(() => undefined);
+
+  const hasValidationRun = await hasValidationRunForScan(scanId).catch((error) => {
+    console.error("[validation-worker] failed to check validation run for scan", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId
+    });
+    return true;
+  });
+
+  if (!hasValidationRun) {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.signalMergeStarted,
+      message: "Merged signal derivation started.",
+      metadataJson: {
+        stage: "signal_merge"
+      },
+      scanId
+    }).catch(() => undefined);
+
+    const refreshedArtifacts = await loadCompletedScanArtifacts(scanId);
+
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
+      message: "Merged signal derivation completed.",
+      metadataJson: {
+        mergedSignalCount: refreshedArtifacts.mergedSignals.length,
+        stage: "signal_merge"
+      },
+      scanId
+    }).catch(() => undefined);
+
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
+      message: "Unified finding derivation started.",
+      metadataJson: {
+        stage: "unified_findings"
+      },
+      scanId
+    }).catch(() => undefined);
+
+    const findings = deriveValidationFindings(refreshedArtifacts);
+
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+      message: "Unified finding derivation completed.",
+      metadataJson: {
+        findingCount: findings.length,
+        stage: "unified_findings"
+      },
+      scanId
+    }).catch(() => undefined);
+  }
 }
 
 export async function processValidationCollectJob(validationRunId: string) {
