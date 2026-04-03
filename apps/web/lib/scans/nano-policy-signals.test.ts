@@ -11,8 +11,11 @@ test("builds persisted nano policy signal rows from policy enrichment", () => {
         policy_actionable_flags: [],
         policy_ambiguity_score: 68,
         policy_children_reference: "children_notice",
+        policy_do_not_sell: "present",
+        policy_dsar_mechanism: "form",
         policy_mentions: [{ topic: "gpc_disclosure" }, { topic: "tracking_technologies_disclosure" }],
         policy_rights_signals: ["access_request", "delete_request"],
+        privacy_contact_channel_type: "email",
         policy_semantic_confidence: 0.82
       },
       {
@@ -29,6 +32,9 @@ test("builds persisted nano policy signal rows from policy enrichment", () => {
   assert.equal(rows.some((row) => row.key === "policyRightsSignals" && Array.isArray(row.value)), true);
   assert.equal(rows.some((row) => row.key === "policyChildrenReference" && row.value === "children_notice"), true);
   assert.equal(rows.some((row) => row.key === "policyAmbiguityScore" && row.value === 68), true);
+  assert.equal(rows.some((row) => row.key === "policyDsarMechanism" && row.value === "form"), true);
+  assert.equal(rows.some((row) => row.key === "privacyContactChannelType" && row.value === "email"), true);
+  assert.equal(rows.some((row) => row.key === "policyDoNotSell" && row.value === "present"), true);
   assert.equal(rows.some((row) => row.key === "commerce.arbitration_clause_present" && row.value === true), true);
 });
 
@@ -45,8 +51,10 @@ test("only emits low-confidence policy semantic confidence when extraction is we
   });
 
   const confidenceRow = rows.find((row) => row.key === "policySemanticConfidence");
+  const actionableFlagsRow = rows.find((row) => row.key === "policyActionableFlags");
   assert.equal(confidenceRow?.value, 0.42);
   assert.equal(confidenceRow?.population_status, "present");
+  assert.deepEqual(actionableFlagsRow?.value, ["low_confidence"]);
 });
 
 test("builds policy-runtime bridge signal rows from review reasons and runtime context", () => {

@@ -14,8 +14,12 @@ export type PersistedNanoSignalRow = {
 
 const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
   ...POLICY_POSITIVE_SIGNAL_SPECS.map((spec) => spec.canonicalSignalKey),
+  "policyActionableFlags",
   "policySemanticConfidence",
   "policyAmbiguityScore",
+  "policyDsarMechanism",
+  "policyDoNotSell",
+  "privacyContactChannelType",
   "policyRightsSignals",
   "policyChildrenReference",
   "policyBehaviorConflictCandidate",
@@ -63,6 +67,10 @@ function getPolicyChildrenReference(row: Record<string, unknown>) {
   return getString(row.policy_children_reference) ?? getString(row.policyChildrenReference);
 }
 
+function getPrivacyContactChannelType(row: Record<string, unknown>) {
+  return getString(row.privacy_contact_channel_type) ?? getString(row.privacyContactChannelType);
+}
+
 function getPolicyCookieDisclosures(row: Record<string, unknown>) {
   return Array.isArray(row.policy_cookie_disclosures) ? row.policy_cookie_disclosures : Array.isArray(row.policyCookieDisclosures) ? row.policyCookieDisclosures : [];
 }
@@ -89,6 +97,14 @@ function getPolicyStructurallyWeak(row: Record<string, unknown>) {
 
 function getPolicyActionableFlags(row: Record<string, unknown>) {
   return getStringArray(row.policy_actionable_flags ?? row.policyActionableFlags);
+}
+
+function getPolicyDsarMechanism(row: Record<string, unknown>) {
+  return getString(row.policy_dsar_mechanism) ?? getString(row.policyDsarMechanism);
+}
+
+function getPolicyDoNotSell(row: Record<string, unknown>) {
+  return getString(row.policy_do_not_sell) ?? getString(row.policyDoNotSell);
 }
 
 function getPolicyRightsSignals(row: Record<string, unknown>) {
@@ -265,6 +281,23 @@ export function buildNanoPolicySignalRows(input: {
 
   const primaryPolicyConfidence = getPolicySemanticConfidence(primaryPolicyRow);
   const primaryPolicyFlags = getPolicyActionableFlags(primaryPolicyRow);
+  const primaryPolicyDsarMechanism = getPolicyDsarMechanism(primaryPolicyRow);
+  const primaryPolicyDoNotSell = getPolicyDoNotSell(primaryPolicyRow);
+  const primaryPrivacyContactChannelType = getPrivacyContactChannelType(primaryPolicyRow);
+
+  if (primaryPolicyFlags.length > 0) {
+    rows.push({
+      confidence: primaryPolicyConfidence,
+      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      key: "policyActionableFlags",
+      label: "Policy actionable flags",
+      population_status: "present",
+      provenance_detail: "policy_enrichment.privacy_policy",
+      report_signal_source: "policy_enrichment_signal",
+      value: primaryPolicyFlags
+    });
+  }
+
   if (
     (typeof primaryPolicyConfidence === "number" && primaryPolicyConfidence < 0.6) ||
     primaryPolicyFlags.includes("low_confidence") ||
@@ -293,6 +326,45 @@ export function buildNanoPolicySignalRows(input: {
       provenance_detail: "policy_enrichment.privacy_policy",
       report_signal_source: "policy_enrichment_signal",
       value: primaryPolicyAmbiguityScore
+    });
+  }
+
+  if (primaryPolicyDsarMechanism) {
+    rows.push({
+      confidence: primaryPolicyConfidence,
+      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      key: "policyDsarMechanism",
+      label: "Policy DSAR mechanism",
+      population_status: "present",
+      provenance_detail: "policy_enrichment.privacy_policy",
+      report_signal_source: "policy_enrichment_signal",
+      value: primaryPolicyDsarMechanism
+    });
+  }
+
+  if (primaryPrivacyContactChannelType) {
+    rows.push({
+      confidence: primaryPolicyConfidence,
+      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      key: "privacyContactChannelType",
+      label: "Privacy contact channel type",
+      population_status: "present",
+      provenance_detail: "policy_enrichment.privacy_policy",
+      report_signal_source: "policy_enrichment_signal",
+      value: primaryPrivacyContactChannelType
+    });
+  }
+
+  if (primaryPolicyDoNotSell) {
+    rows.push({
+      confidence: primaryPolicyConfidence,
+      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      key: "policyDoNotSell",
+      label: "Policy do-not-sell posture",
+      population_status: "present",
+      provenance_detail: "policy_enrichment.privacy_policy",
+      report_signal_source: "policy_enrichment_signal",
+      value: primaryPolicyDoNotSell
     });
   }
 
