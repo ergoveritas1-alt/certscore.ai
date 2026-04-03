@@ -1466,6 +1466,10 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     scanId
   });
 
+  if (rows.length > 0) {
+    await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
+  }
+
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.nanoDocRetrievalCompleted,
     message: "Nano document retrieval completed.",

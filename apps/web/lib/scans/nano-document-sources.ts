@@ -96,6 +96,11 @@ export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<
 export function shouldPreferNanoDocumentSources(documentSources: Array<Record<string, unknown>>) {
   return documentSources.some((row) => {
     const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
-    return sourceStatus === "ready" || sourceStatus === "candidate";
+    const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+    if (sourceStatus !== "ready" && sourceStatus !== "candidate") {
+      return false;
+    }
+
+    return extractionStatus === "ready";
   });
 }
