@@ -137,6 +137,7 @@ type NanoDocRetrievalInput = {
   domainHostname: string | null;
   existingDocumentSources: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
+  recentDomainDocumentCandidates: Array<Record<string, unknown>>;
   scan: {
     completed_at?: string | null;
     created_at?: string | null;
@@ -1023,11 +1024,21 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   }
 
   const domainId = typeof scan?.domain_id === "string" ? scan.domain_id : null;
+  const recentDomainScansPromise = domainId
+    ? supabase
+        .from("scans")
+        .select("id")
+        .eq("domain_id", domainId)
+        .neq("id", scanId)
+        .order("created_at", { ascending: false })
+        .limit(5)
+    : Promise.resolve({ data: [], error: null });
   const [
     { data: domain, error: domainError },
     { data: pages, error: pagesError },
     { data: events, error: eventsError },
-    { data: documentSources, error: documentSourcesError }
+    { data: documentSources, error: documentSourcesError },
+    { data: recentDomainScans, error: recentDomainScansError }
   ] = await Promise.all([
     domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     supabase.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
@@ -1037,7 +1048,8 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
       .eq("scan_id", scanId)
       .eq("event_type", "runtime.build_phase_diagnostic")
       .order("created_at", { ascending: true }),
-    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    recentDomainScansPromise
   ]);
 
   if (domainError && !isMissingOptionalTableError(domainError)) {
@@ -1052,6 +1064,24 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
   }
+  if (recentDomainScansError) {
+    throw new Error(`Failed to load recent domain scans for nano doc retrieval ${scanId}: ${recentDomainScansError.message}`);
+  }
+
+  const recentDomainScanIds = ((recentDomainScans ?? []) as Array<Record<string, unknown>>)
+    .map((row) => (typeof row.id === "string" ? row.id : null))
+    .filter((value): value is string => typeof value === "string");
+  const recentDomainDocumentCandidates =
+    recentDomainScanIds.length > 0
+      ? (
+          await supabase
+            .from("scan_document_sources")
+            .select("canonical_url, source_url, document_type, title, semantic_confidence, created_at")
+            .in("scan_id", recentDomainScanIds)
+            .eq("source_status", "ready")
+            .order("created_at", { ascending: false })
+        ).data ?? []
+      : [];
 
   const discoveryCandidates = ((events ?? []) as Array<Record<string, unknown>>).flatMap((event) => {
     const metadata =
@@ -1091,6 +1121,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
     domainHostname: (domain?.hostname as string | null) ?? null,
     existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
+    recentDomainDocumentCandidates: (recentDomainDocumentCandidates ?? []) as Array<Record<string, unknown>>,
     scan:
       (scan as {
         completed_at?: string | null;

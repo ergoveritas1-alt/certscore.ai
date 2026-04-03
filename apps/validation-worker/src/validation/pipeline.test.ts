@@ -322,6 +322,46 @@ test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no
   ]);
 });
 
+test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery fallback", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "example.com",
+    pages: [],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://www.example.com/legal/privacy-policy",
+        document_type: "privacy_policy"
+      },
+      {
+        canonical_url: "https://www.example.com/legal/cookie-policy",
+        document_type: "cookie_policy"
+      },
+      {
+        canonical_url: "https://www.example.com/legal/terms",
+        document_type: "terms_of_service"
+      }
+    ]
+  });
+
+  assert.deepEqual(candidates, [
+    {
+      documentType: "privacy_policy",
+      priorityTier: "priority",
+      url: "https://www.example.com/legal/privacy-policy"
+    },
+    {
+      documentType: "cookie_policy",
+      priorityTier: "priority",
+      url: "https://www.example.com/legal/cookie-policy"
+    },
+    {
+      documentType: "terms_of_service",
+      priorityTier: "priority",
+      url: "https://www.example.com/legal/terms"
+    }
+  ]);
+});
+
 test("prioritizePendingNanoDocumentSources prefers priority privacy docs before secondary terms docs", () => {
   const prioritized = prioritizePendingNanoDocumentSources([
     {

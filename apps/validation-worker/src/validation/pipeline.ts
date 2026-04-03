@@ -2026,7 +2026,8 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   const candidates = await selectNanoDocCandidates({
     discoveryCandidates: artifacts.discoveryCandidates,
     domainHostname: artifacts.domainHostname,
-    pages: artifacts.pages
+    pages: artifacts.pages,
+    recentDomainDocumentCandidates: artifacts.recentDomainDocumentCandidates
   });
   const existingAttemptKeys = new Set(artifacts.existingDocumentSources.map((row) => getNanoDocumentSourceDedupKey(row)));
   const pendingCandidates = candidates.filter((candidate) => !existingAttemptKeys.has(getNanoDocumentCandidateDedupKey(candidate)));

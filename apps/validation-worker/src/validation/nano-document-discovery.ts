@@ -369,7 +369,28 @@ export function buildNanoDocCandidateUrls(input: {
   domainHostname: string | null;
   homepageDiscoveryCandidates?: Array<DiscoveryInputCandidate>;
   pages: Array<Record<string, unknown>>;
+  recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
+  const recentDomainCandidates = (input.recentDomainDocumentCandidates ?? [])
+    .map((candidate): NanoDocCandidate | null => {
+      const url = normalizeDocUrl(getString(candidate.canonical_url) ?? getString(candidate.source_url));
+      const documentType = getString(candidate.document_type);
+      if (!url || !isSupportedDocumentType(documentType)) {
+        return null;
+      }
+
+      return {
+        documentType,
+        priorityTier: "priority" as const,
+        url,
+      };
+    })
+    .filter((candidate): candidate is NanoDocCandidate => candidate !== null);
+
+  if (recentDomainCandidates.length > 0) {
+    return limitNanoDocCandidates(recentDomainCandidates);
+  }
+
   const evidenceCandidates = buildEvidenceCandidates(input);
   const orderedEvidence = evidenceCandidates
     .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
@@ -458,7 +479,19 @@ export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
   domainHostname: string | null;
   homepageDiscoveryCandidates?: Array<DiscoveryInputCandidate>;
   pages: Array<Record<string, unknown>>;
+  recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
+  const recentDomainCandidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: input.domainHostname,
+    homepageDiscoveryCandidates: [],
+    pages: [],
+    recentDomainDocumentCandidates: input.recentDomainDocumentCandidates
+  });
+  if (recentDomainCandidates.length > 0) {
+    return recentDomainCandidates;
+  }
+
   const available = buildEvidenceCandidates(input);
   if (available.length === 0) {
     return [] as NanoDocCandidate[];
@@ -525,7 +558,19 @@ export async function selectNanoDocCandidates(input: {
   discoveryCandidates?: Array<Record<string, unknown>>;
   domainHostname: string | null;
   pages: Array<Record<string, unknown>>;
+  recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
+  const recentDomainCandidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: input.domainHostname,
+    homepageDiscoveryCandidates: [],
+    pages: [],
+    recentDomainDocumentCandidates: input.recentDomainDocumentCandidates
+  });
+  if (recentDomainCandidates.length > 0) {
+    return recentDomainCandidates;
+  }
+
   const homepageDiscovery = await buildHomepageDiscoveryCandidates({
     domainHostname: input.domainHostname
   }).catch(() => ({ candidates: [] as DiscoveryInputCandidate[] }));
