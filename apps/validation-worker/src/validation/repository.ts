@@ -13,13 +13,15 @@ import {
   getCrawlerPublicUrl,
   getPlanDefinition,
   normalizeUrl,
-  type FinancialValidationEvidence
+  type FinancialValidationEvidence,
+  type PopulatedSignalRecord,
+  type SignalPopulationStatus
 } from "@website-signal-risk-scanner/shared";
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
 import { getHybridNanoSignalPopulations } from "../../../web/lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
-import { buildNanoPolicySignalRows, mergeManagedNanoPolicySignalRows } from "../../../web/lib/scans/nano-policy-signals";
+import { buildNanoPolicySignalRows, MANAGED_NANO_POLICY_SIGNAL_KEYS } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
@@ -112,6 +114,20 @@ type ValidationRunFindingWithVerdictRow = {
     | null;
 };
 
+type SignalPopulationRow = {
+  category: string | null;
+  confidence?: number | null;
+  evidence_refs?: string[] | null;
+  observed_at?: string | null;
+  population_source?: string | null;
+  population_status?: string | null;
+  provenance_json?: unknown;
+  signal_key: string;
+  signal_label: string;
+  signal_value_json: boolean | number | string | string[];
+  value_type: string;
+};
+
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 
@@ -167,6 +183,55 @@ function isMissingColumnError(error: { code?: string | null; message?: string | 
 
 function getRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function buildStoredSignalPopulationRecords(input: {
+  observedAt: string | null;
+  rows: SignalPopulationRow[];
+  source: "nano" | "validation";
+}): PopulatedSignalRecord[] {
+  return input.rows.map((row) => ({
+    confidence: typeof row.confidence === "number" ? row.confidence : null,
+    evidenceRefs: Array.isArray(row.evidence_refs) ? row.evidence_refs.filter((value): value is string => typeof value === "string") : [],
+    key: row.signal_key,
+    label: row.signal_label,
+    observedAt: row.observed_at ?? input.observedAt,
+    populationStatus: (
+      row.population_status === "present" ||
+      row.population_status === "missing" ||
+      row.population_status === "conflicting" ||
+      row.population_status === "insufficient"
+        ? row.population_status
+        : "present"
+    ) as SignalPopulationStatus,
+    provenance: Array.isArray(row.provenance_json)
+      ? row.provenance_json.filter(
+          (
+            value
+          ): value is { detail: string; kind: "document" | "runtime" | "signal" | "validation" } =>
+            Boolean(value) &&
+            typeof value === "object" &&
+            typeof (value as { detail?: unknown }).detail === "string" &&
+            ((value as { kind?: unknown }).kind === "document" ||
+              (value as { kind?: unknown }).kind === "runtime" ||
+              (value as { kind?: unknown }).kind === "signal" ||
+              (value as { kind?: unknown }).kind === "validation")
+        )
+      : [],
+    reportSignalSource: "policy_enrichment_signal" as const,
+    source: input.source,
+    value: row.signal_value_json,
+    valueType:
+      row.value_type === "boolean" || row.value_type === "number" || row.value_type === "text" || row.value_type === "string_array"
+        ? row.value_type
+        : Array.isArray(row.signal_value_json)
+          ? "string_array"
+          : typeof row.signal_value_json === "boolean"
+            ? "boolean"
+            : typeof row.signal_value_json === "number"
+              ? "number"
+              : "text"
+  }));
 }
 
 function rankBandForRank(rank: number | null) {
@@ -1114,7 +1179,10 @@ async function loadScanRecordForFindingCount(input: {
     input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
     input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("scan_signals").select("category, signal_key, signal_label, signal_value_json, value_type").eq("scan_id", input.scanId),
+    input.supabase
+      .from("scan_signals")
+      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
+      .eq("scan_id", input.scanId),
     input.supabase.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase
       .from("validation_run_findings")
@@ -1124,7 +1192,11 @@ async function loadScanRecordForFindingCount(input: {
       .eq("validation_run_id", input.runId)
   ]);
 
-  const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>).map((signal) => {
+  const rawSignalRows = (signals ?? []) as SignalPopulationRow[];
+  const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
+  const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
+  const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
+  const normalizedSignals = scannerSignalRows.map((signal) => {
     const category = String(signal.category ?? "");
     const key = String(signal.signal_key ?? "");
     const label = String(signal.signal_label ?? key);
@@ -1216,7 +1288,19 @@ async function loadScanRecordForFindingCount(input: {
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     mergedSignals: buildMergedSignalRecords({
-      nanoSignals: getHybridNanoSignalPopulations((runtimeArtifacts as Record<string, unknown> | null) ?? null)
+      nanoSignals:
+        storedNanoSignalRows.length > 0
+          ? buildStoredSignalPopulationRecords({
+              observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
+              rows: storedNanoSignalRows,
+              source: "nano"
+            })
+          : getHybridNanoSignalPopulations((runtimeArtifacts as Record<string, unknown> | null) ?? null),
+      validationSignals: buildStoredSignalPopulationRecords({
+        observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
+        rows: storedValidationSignalRows,
+        source: "validation"
+      })
     }),
     signals: normalizedSignals,
     snapshot: (snapshot as Record<string, unknown> | null) ?? null,
@@ -1285,46 +1369,77 @@ export async function persistDerivedNanoPolicySignals(input: {
   snapshot?: Record<string, unknown> | null;
 }) {
   const supabase = createAdminClient();
-  const hybridRuntimeEvidence = getRecord(
-    input.runtimeArtifacts?.hybrid_runtime_evidence ?? input.runtimeArtifacts?.hybridRuntimeEvidence
-  ) ?? { };
-  const nextManagedRows = buildNanoPolicySignalRows({
+  const nextRows = buildNanoPolicySignalRows({
     policyEnrichments: input.policyEnrichments,
     policyReviewQueue: input.policyReviewQueue,
     runtimeArtifacts: input.runtimeArtifacts,
     snapshot: input.snapshot
   });
-  const existingNanoRows = Array.isArray(hybridRuntimeEvidence.nano_signals)
-    ? hybridRuntimeEvidence.nano_signals.filter(
-        (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
-      )
-    : [];
-  const nanoSignalRows = mergeManagedNanoPolicySignalRows({
-    existingRows: existingNanoRows,
-    nextRows: nextManagedRows
-  });
-  const nextHybridRuntimeEvidence = {
-    ...hybridRuntimeEvidence,
-    nano_signals: nanoSignalRows
-  };
+  const { data: scanRow, error: scanError } = await supabase
+    .from("scans")
+    .select("organization_id, domain_id")
+    .eq("id", input.scanId)
+    .maybeSingle();
 
-  if (JSON.stringify(hybridRuntimeEvidence.nano_signals ?? null) === JSON.stringify(nanoSignalRows)) {
-    return nanoSignalRows;
+  if (scanError || !scanRow?.organization_id || !scanRow?.domain_id) {
+    throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: ${scanError?.message ?? "missing scan"}`);
   }
 
-  const { error } = await supabase
-    .from("scan_runtime_artifacts")
-    .update({
-      hybrid_runtime_evidence: nextHybridRuntimeEvidence,
-      updated_at: new Date().toISOString()
-    })
-    .eq("scan_id", input.scanId);
+  const nextKeys = new Set(nextRows.map((row) => row.key));
+  const managedKeysToDelete = [...MANAGED_NANO_POLICY_SIGNAL_KEYS].filter((key) => !nextKeys.has(key));
+  if (managedKeysToDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("scan_signals")
+      .delete()
+      .eq("scan_id", input.scanId)
+      .eq("population_source", "nano")
+      .in("signal_key", managedKeysToDelete);
+
+    if (deleteError) {
+      throw new Error(`Failed to clear stale nano signal rows for scan ${input.scanId}: ${deleteError.message}`);
+    }
+  }
+
+  if (nextRows.length === 0) {
+    return nextRows;
+  }
+
+  const { error } = await supabase.from("scan_signals").upsert(
+    nextRows.map((row) => ({
+      category:
+        row.key.startsWith("commerce.") ? "commerce" :
+        row.key.startsWith("disclosure.") ? "disclosure" :
+        row.key.startsWith("accessibility.") ? "accessibility" :
+        "privacy",
+      confidence: row.confidence,
+      domain_id: scanRow.domain_id,
+      evidence_refs: row.evidence_refs,
+      observed_at: new Date().toISOString(),
+      organization_id: scanRow.organization_id,
+      population_source: "nano",
+      population_status: row.population_status,
+      provenance_json: [
+        {
+          detail: row.provenance_detail,
+          kind: "document"
+        }
+      ],
+      scan_id: input.scanId,
+      signal_key: row.key,
+      signal_label: row.label,
+      signal_value_json: row.value,
+      value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
+    })),
+    {
+      onConflict: "scan_id,signal_key,population_source"
+    }
+  );
 
   if (error) {
     throw new Error(`Failed to persist nano policy signals for scan ${input.scanId}: ${error.message}`);
   }
 
-  return nanoSignalRows;
+  return nextRows;
 }
 
 export function normalizeValidationTargetInput(value: string) {

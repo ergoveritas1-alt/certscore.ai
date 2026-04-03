@@ -82,6 +82,7 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
       ? supabase
           .from("scan_signals")
           .select("scan_id, category, signal_key, signal_label, signal_value_json")
+          .eq("population_source", "scanner")
           .in("scan_id", latestScanIds)
           .order("category", { ascending: true })
           .order("signal_key", { ascending: true })

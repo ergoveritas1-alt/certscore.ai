@@ -219,6 +219,60 @@ function getStringRecordValue(record: Record<string, unknown> | null | undefined
   return null;
 }
 
+function buildStoredSignalPopulationRecords(input: {
+  observedAt: string | null;
+  rows: SignalRow[];
+  source: "nano" | "validation";
+}) {
+  return input.rows.flatMap((row) => {
+    const populationStatus =
+      row.population_status === "present" ||
+      row.population_status === "missing" ||
+      row.population_status === "conflicting" ||
+      row.population_status === "insufficient"
+        ? row.population_status
+        : "present";
+
+    return [
+      {
+        confidence: typeof row.confidence === "number" ? row.confidence : null,
+        evidenceRefs: Array.isArray(row.evidence_refs) ? row.evidence_refs.filter((value): value is string => typeof value === "string") : [],
+        key: row.signal_key,
+        label: row.signal_label,
+        observedAt: row.observed_at ?? input.observedAt,
+        populationStatus,
+        provenance: Array.isArray(row.provenance_json)
+          ? row.provenance_json.filter(
+              (
+                value
+              ): value is { detail: string; kind: "document" | "runtime" | "signal" | "validation" } =>
+                Boolean(value) &&
+                typeof value === "object" &&
+                typeof (value as { detail?: unknown }).detail === "string" &&
+                ((value as { kind?: unknown }).kind === "document" ||
+                  (value as { kind?: unknown }).kind === "runtime" ||
+                  (value as { kind?: unknown }).kind === "signal" ||
+                  (value as { kind?: unknown }).kind === "validation")
+            )
+          : [],
+        reportSignalSource: "policy_enrichment_signal",
+        source: input.source,
+        value: row.signal_value_json,
+        valueType:
+          row.value_type === "boolean" || row.value_type === "number" || row.value_type === "text" || row.value_type === "string_array"
+            ? row.value_type
+            : Array.isArray(row.signal_value_json)
+              ? "string_array"
+              : typeof row.signal_value_json === "boolean"
+                ? "boolean"
+                : typeof row.signal_value_json === "number"
+                  ? "number"
+                  : "text"
+      } satisfies PopulatedSignalRecord
+    ];
+  });
+}
+
 function deriveHostnameFromScanConfig(value: Record<string, unknown> | null | undefined) {
   const directUrl = deriveHostnameFromTargetUrl(
     getStringRecordValue(value, ["targetUrl", "startUrl", "homepageUrl", "normalizedUrl", "url"])
@@ -258,6 +312,12 @@ function deriveHostnameFromScanConfig(value: Record<string, unknown> | null | un
 
 type SignalRow = {
   category: string;
+  confidence?: number | null;
+  evidence_refs?: string[] | null;
+  observed_at?: string | null;
+  population_source?: string | null;
+  population_status?: string | null;
+  provenance_json?: unknown;
   signal_key: string;
   signal_label: string;
   signal_value_json: boolean | number | string | string[];
@@ -556,7 +616,7 @@ async function loadScanDetailRecord(input: {
       .maybeSingle(),
     supabase
       .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type")
+      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
       .eq("scan_id", input.scanId)
       .order("category", { ascending: true })
       .order("signal_key", { ascending: true }),
@@ -754,7 +814,11 @@ async function loadScanDetailRecord(input: {
   const normalizedRelatedPreviewSnapshot = relatedPreviewSnapshot
     ? stripSnapshotRecord(relatedPreviewSnapshot as Record<string, unknown>)
     : null;
-  const normalizedSignals = ((signals ?? []) as SignalRow[]).map(
+  const rawSignalRows = ((signals ?? []) as SignalRow[]);
+  const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
+  const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
+  const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
+  const normalizedSignals = scannerSignalRows.map(
     (signal) => {
       const taxonomy = mapSignalKeyToTaxonomy({
         category: signal.category,
@@ -1090,8 +1154,20 @@ async function loadScanDetailRecord(input: {
       stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
     : null;
   const mergedSignals = buildMergedSignalRecords({
-    nanoSignals: getHybridNanoSignalPopulations(normalizedRuntimeArtifacts),
-    scannerSignals: scannerSignalPopulations
+    nanoSignals:
+      storedNanoSignalRows.length > 0
+        ? buildStoredSignalPopulationRecords({
+            observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+            rows: storedNanoSignalRows,
+            source: "nano"
+          })
+        : getHybridNanoSignalPopulations(normalizedRuntimeArtifacts),
+    scannerSignals: scannerSignalPopulations,
+    validationSignals: buildStoredSignalPopulationRecords({
+      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+      rows: storedValidationSignalRows,
+      source: "validation"
+    })
   });
 
   return {

@@ -12,7 +12,7 @@ export type PersistedNanoSignalRow = {
   value: boolean | number | string | string[];
 };
 
-const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
+export const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
   ...POLICY_POSITIVE_SIGNAL_SPECS.map((spec) => spec.canonicalSignalKey),
   "policyActionableFlags",
   "policySemanticConfidence",

@@ -9,6 +9,7 @@ import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
+import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import {
@@ -132,6 +133,7 @@ type RuntimeArtifactRow = {
   consent_reject_interaction_succeeded: boolean | null;
   consent_reject_reduced_third_party_cookies: boolean | null;
   consent_reject_reduced_tracking: boolean | null;
+  hybrid_runtime_evidence?: Record<string, unknown> | null;
   scan_id: string;
 };
 
@@ -564,7 +566,7 @@ async function loadOrganizationScans(
     ? supabase
         .from("scan_runtime_artifacts")
         .select(
-          "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies"
+          "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
         )
         .in("scan_id", summaryScanIds)
     : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null as SupabaseQueryError });
@@ -666,7 +668,10 @@ async function loadOrganizationScans(
       return totalSignals === null || totalSignals === 0;
     });
   const runtimeArtifactMap = new Map(
-    ((runtimeArtifacts ?? []) as RuntimeArtifactRow[]).map((artifact) => [artifact.scan_id, artifact])
+    ((runtimeArtifacts ?? []) as RuntimeArtifactRow[]).map((artifact) => [
+      artifact.scan_id,
+      withHybridRuntimeArtifactFallbacks(artifact as Record<string, unknown>) as RuntimeArtifactRow
+    ])
   );
   const signalCountMap = new Map<string, number>();
   if (zeroSignalScanIds.length) {
@@ -674,6 +679,7 @@ async function loadOrganizationScans(
       const { data: signalCountRows, error: signalCountError } = await supabase
         .from("scan_signals")
         .select("scan_id")
+        .eq("population_source", "scanner")
         .in("scan_id", scanIdBatch);
 
       if (signalCountError) {
@@ -989,7 +995,9 @@ async function loadOrganizationScans(
         ),
         cookieBannerPresent: snapshot?.cookie_banner_present ?? null,
         cmpVendorName: snapshot?.cmp_vendor_name ?? null,
-        consentAuditCompleted: runtimeArtifactMap.get(scan.id)?.consent_audit_completed ?? null,
+        consentAuditCompleted:
+          runtimeArtifactMap.get(scan.id)?.consent_audit_completed ??
+          getHybridConsentAuditCompleted(runtimeArtifactMap.get(scan.id) as Record<string, unknown> | null),
         consentRejectInteractionSucceeded:
           runtimeArtifactMap.get(scan.id)?.consent_reject_interaction_succeeded ?? null,
         consentRejectReducedTracking: runtimeArtifactMap.get(scan.id)?.consent_reject_reduced_tracking ?? null,

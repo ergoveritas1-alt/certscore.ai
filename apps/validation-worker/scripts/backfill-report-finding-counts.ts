@@ -109,7 +109,7 @@ async function loadScanRecordForFindingCount(input: {
     input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
     input.supabase
       .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type")
+      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source")
       .eq("scan_id", input.scanId),
     input.supabase
       .from("scan_events")
@@ -160,7 +160,9 @@ async function loadScanRecordForFindingCount(input: {
     throw new Error(`Failed to load validation findings for ${input.scanId}: ${validationFindingsError.message}`);
   }
 
-  const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>).map((signal) => {
+  const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>)
+    .filter((signal) => !signal.population_source || signal.population_source === "scanner")
+    .map((signal) => {
     const category = String(signal.category ?? "");
     const key = String(signal.signal_key ?? "");
     const label = String(signal.signal_label ?? key);
@@ -170,18 +172,18 @@ async function loadScanRecordForFindingCount(input: {
       label
     });
 
-    return {
-      category,
-      key,
-      label,
-      primaryCategory: taxonomy.primaryCategory,
-      primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
-      primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
-      subcategory: taxonomy.subcategory ?? null,
-      value: signal.signal_value_json,
-      valueType: String(signal.value_type ?? "unknown")
-    };
-  });
+      return {
+        category,
+        key,
+        label,
+        primaryCategory: taxonomy.primaryCategory,
+        primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+        primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+        subcategory: taxonomy.subcategory ?? null,
+        value: signal.signal_value_json,
+        valueType: String(signal.value_type ?? "unknown")
+      };
+    });
 
   const normalizedPolicyEnrichment = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => {
     const next = { ...row };
@@ -262,10 +264,41 @@ async function getBuildScanReportUnifiedFindings() {
   if (!buildScanReportUnifiedFindingsPromise) {
     const detailViewModulePath = "../../web/components/scans/shared-scan-detail-view";
     buildScanReportUnifiedFindingsPromise = import(detailViewModulePath).then(
-      (module) =>
-        (module as {
-          buildScanReportUnifiedFindings: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
-        }).buildScanReportUnifiedFindings
+      (module) => {
+        const resolvedModule = (
+          module as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+            buildScanReportUnifiedFindings?: unknown;
+          }
+        ).buildScanReportUnifiedFindings
+          ? (module as Record<string, unknown>)
+          : (
+              module as {
+                default?: Record<string, unknown>;
+                "module.exports"?: Record<string, unknown>;
+              }
+            ).default ??
+            (
+              module as {
+                default?: Record<string, unknown>;
+                "module.exports"?: Record<string, unknown>;
+              }
+            )["module.exports"] ??
+            (module as Record<string, unknown>);
+
+        const buildScanReportUnifiedFindings = (
+          resolvedModule as {
+            buildScanReportUnifiedFindings?: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
+          }
+        ).buildScanReportUnifiedFindings;
+
+        if (typeof buildScanReportUnifiedFindings !== "function") {
+          throw new Error("shared-scan-detail-view did not export buildScanReportUnifiedFindings");
+        }
+
+        return buildScanReportUnifiedFindings;
+      }
     );
   }
 
