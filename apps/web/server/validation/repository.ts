@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
+  buildSharedFullScanConfig,
   SCAN_EVENT_TYPES,
   VALIDATION_DEFAULT_INTERVAL_MINUTES,
   VALIDATION_DEFAULT_RUN_MODE,
@@ -18,6 +19,12 @@ import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidat
 import { getWebServerEnv } from "../../lib/env";
 import { requireValidationAdminContext } from "./auth";
 import { shouldSurfaceSupplementalPolicyReviewFinding } from "../../lib/scans/supplemental-policy-review-gates";
+import {
+  getHybridConsentAuditCompleted,
+  getHybridPreconsentTrackerEvidenceUrls,
+  getHybridPreconsentViolationCount
+} from "../../lib/scans/hybrid-runtime-evidence";
+import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
@@ -1275,14 +1282,14 @@ async function createValidationScan(input: {
 }) {
   const supabase = createAdminClient();
   const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
-  const scanConfig = {
+  const scanConfig = buildSharedFullScanConfig({
     hostname: input.hostname,
     maxPages: pagesRequested,
     normalizedUrl: input.normalizedUrl,
     processor: "agentic-validation-v1",
     profile: "agentic-validation-v1",
     source: "validation-manual"
-  };
+  });
 
   const { data, error } = await supabase
     .from("scans")
@@ -1625,7 +1632,7 @@ export async function getValidationRunDetail(validationRunId: string) {
     (run as ValidationRunRow).scan_id
       ? supabase
           .from("scan_runtime_artifacts")
-          .select("consent_audit_completed, consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls, key_page_discovery_summary")
+          .select("consent_audit_completed, consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls, key_page_discovery_summary, hybrid_runtime_evidence")
           .eq("scan_id", (run as ValidationRunRow).scan_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -1644,6 +1651,9 @@ export async function getValidationRunDetail(validationRunId: string) {
         .eq("scan_id", (run as ValidationRunRow).scan_id)
         .order("created_at", { ascending: true })
     : { data: [] as ScanEventRow[] };
+  const { data: policyEnrichmentRows } = (run as ValidationRunRow).scan_id
+    ? await supabase.from("policy_enrichment").select("*").eq("scan_id", (run as ValidationRunRow).scan_id).order("created_at", { ascending: true })
+    : { data: [] as Record<string, unknown>[] };
 
   const { data: findings, error: findingsError } = await supabase
     .from("validation_run_findings")
@@ -1664,13 +1674,32 @@ export async function getValidationRunDetail(validationRunId: string) {
     scanStatus,
     status: (run as ValidationRunRow).status
   });
+  const runScanId = (run as ValidationRunRow).scan_id;
   const supplementalFindings = shouldLoadSupplementalFindingsForRunStatus(effectiveStatus)
     ? await loadSupplementalValidationFindings({
         existingFindings: normalizedFindings,
-        scanId: (run as ValidationRunRow).scan_id
+        scanId: runScanId
       })
     : [];
   normalizedFindings = [...normalizedFindings, ...supplementalFindings];
+  const mergedSignalsByScanId = runScanId
+    ? await loadMergedSignalsByScanId({
+        observedAtByScanId: new Map<string, string | null>([
+          [
+            runScanId,
+            (scanRow && typeof (scanRow as { completed_at?: unknown }).completed_at === "string"
+              ? String((scanRow as { completed_at: string }).completed_at)
+              : null) ??
+              (scanRow && typeof (scanRow as { started_at?: unknown }).started_at === "string"
+                ? String((scanRow as { started_at: string }).started_at)
+                : null) ??
+              (run as ValidationRunRow).created_at
+          ]
+        ]),
+        scanIds: [runScanId],
+        supabase
+      })
+    : new Map();
 
   return {
     averageAgreementScore: (run as ValidationRunRow).average_agreement_score,
@@ -1703,11 +1732,11 @@ export async function getValidationRunDetail(validationRunId: string) {
       consentAuditCompleted:
         runtimeArtifacts && typeof (runtimeArtifacts as { consent_audit_completed?: unknown }).consent_audit_completed === "boolean"
           ? Boolean((runtimeArtifacts as { consent_audit_completed: boolean }).consent_audit_completed)
-          : null,
+          : getHybridConsentAuditCompleted((runtimeArtifacts as Record<string, unknown> | null) ?? null),
       consentPreconsentViolationCount:
         runtimeArtifacts && typeof (runtimeArtifacts as { consent_preconsent_violation_count?: unknown }).consent_preconsent_violation_count === "number"
           ? Number((runtimeArtifacts as { consent_preconsent_violation_count: number }).consent_preconsent_violation_count)
-          : null,
+          : getHybridPreconsentViolationCount((runtimeArtifacts as Record<string, unknown> | null) ?? null),
       keyPageDiscoverySummary:
         runtimeArtifacts && typeof (runtimeArtifacts as { key_page_discovery_summary?: unknown }).key_page_discovery_summary === "object"
           ? ((runtimeArtifacts as { key_page_discovery_summary: unknown }).key_page_discovery_summary ?? null)
@@ -1736,7 +1765,7 @@ export async function getValidationRunDetail(validationRunId: string) {
         runtimeArtifacts &&
         Array.isArray((runtimeArtifacts as { consent_baseline_tracker_evidence_urls?: unknown }).consent_baseline_tracker_evidence_urls)
           ? ((runtimeArtifacts as { consent_baseline_tracker_evidence_urls: unknown[] }).consent_baseline_tracker_evidence_urls).length
-          : 0,
+          : getHybridPreconsentTrackerEvidenceUrls((runtimeArtifacts as Record<string, unknown> | null) ?? null).length,
       trackingBeforeConsentDetected:
         scanSnapshot && typeof (scanSnapshot as { tracking_before_consent_detected?: unknown }).tracking_before_consent_detected === "boolean"
           ? Boolean((scanSnapshot as { tracking_before_consent_detected: boolean }).tracking_before_consent_detected)
@@ -1753,6 +1782,8 @@ export async function getValidationRunDetail(validationRunId: string) {
       message: event.message,
       metadataJson: event.metadata_json
     })),
+    policyEnrichment: ((policyEnrichmentRows ?? []) as Record<string, unknown>[]).map((row) => ({ ...row })),
+    mergedSignals: runScanId ? mergedSignalsByScanId.get(runScanId) ?? [] : [],
     status: effectiveStatus,
     trancoRank: (run as ValidationRunRow).tranco_rank,
     triggerMode: (run as ValidationRunRow).trigger_mode,

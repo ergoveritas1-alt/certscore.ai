@@ -10,6 +10,7 @@ import {
   buildUnifiedFindingDisplayPackets,
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
+import { repairFindingFamilyPacketEvents } from "../../server/scans/family-packet-event-repair";
 import {
   buildValidationFindingLookup,
   type ScanValidationFinding
@@ -55,6 +56,30 @@ function getPresentationStatusTone(status: UnifiedFindingDisplayPacket["presenta
   }
 }
 
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+function getRunTone(status: string | null | undefined) {
+  switch (status) {
+    case "completed":
+      return {
+        badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
+        panel: "from-emerald-100 via-white to-sky-100"
+      };
+    case "failed":
+      return {
+        badge: "border-rose-200 bg-rose-50 text-rose-800",
+        panel: "from-rose-100 via-white to-orange-100"
+      };
+    default:
+      return {
+        badge: "border-sky-200 bg-sky-50 text-sky-800",
+        panel: "from-sky-100 via-white to-cyan-100"
+      };
+  }
+}
+
 export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPageProps) {
   const detail = await getValidationRunDetail(runId);
   if (!detail) {
@@ -92,35 +117,83 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
     title: row.automatedFinding.title,
     verdict: null
   }));
+  const repairedScanEvents = repairFindingFamilyPacketEvents({
+    events: detail.scanEvents,
+    policyEnrichment: detail.policyEnrichment ?? []
+  });
   const unifiedPackets = buildUnifiedFindingDisplayPackets({
+    mergedSignals: detail.mergedSignals ?? [],
+    policyEnrichment: detail.policyEnrichment ?? [],
     reviewFindingCandidates: [],
+    scanEvents: repairedScanEvents,
     validationFindings,
     validationFindingLookup: buildValidationFindingLookup(validationFindings)
   });
   const surfacedUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "surface");
   const auditOnlyUnifiedPackets = unifiedPackets.filter((packet) => packet.presentationDecision.status === "audit_only");
+  const tone = getRunTone(detail.status);
 
   return (
     <div className="space-y-8">
       <ValidationRunsAutoRefresh enabled={shouldAutoRefresh} />
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">{detail.hostname}</h1>
-          <p className="font-mono text-xs text-slate-500">scan_id {detail.scanId ?? "—"}</p>
-          <p className="text-slate-600">
-            Validation {detail.status} · Scan {detail.scanStatus ?? "—"} · {detail.triggerMode} · Rank {detail.trancoRank ?? "—"} · {detail.rankBand ?? "—"}
-          </p>
-          <p className="text-sm text-slate-500">
-            Validation created <ViewerTimestamp value={detail.createdAt} /> · Validation completed <ViewerTimestamp value={detail.completedAt} fallback="In progress" />
-          </p>
-          <p className="text-sm text-slate-500">
-            Scan started <ViewerTimestamp value={detail.scanStartedAt} fallback="Not started" /> · Scan completed <ViewerTimestamp value={detail.scanCompletedAt} fallback="In progress" />
-          </p>
+      <section
+        className={cx(
+          "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] md:p-7",
+          tone.panel
+        )}
+      >
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.12),transparent_52%)]" />
+        <div className="relative grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cx("rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", tone.badge)}>
+                Validation {detail.status}
+              </span>
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-xs font-medium text-slate-700">
+                Scan {detail.scanStatus ?? "—"}
+              </span>
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-xs font-medium text-slate-700">
+                {detail.triggerMode}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-[2.1rem]">{detail.hostname}</h1>
+              <p className="font-mono text-xs text-slate-500">scan_id {detail.scanId ?? "—"}</p>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-[15px]">
+                Rank {detail.trancoRank ?? "—"} · {detail.rankBand ?? "—"} · {surfacedUnifiedPackets.length} surfaced unified finding{surfacedUnifiedPackets.length === 1 ? "" : "s"} from {detail.rows.length} automated validation row{detail.rows.length === 1 ? "" : "s"}.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1.5">
+                Validation created <ViewerTimestamp value={detail.createdAt} />
+              </span>
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1.5">
+                Completed <ViewerTimestamp value={detail.completedAt} fallback="In progress" />
+              </span>
+              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1.5">
+                Scan started <ViewerTimestamp value={detail.scanStartedAt} fallback="Not started" />
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            {[
+              { label: "Surfaced findings", value: surfacedUnifiedPackets.length },
+              { label: "Audit-only packets", value: auditOnlyUnifiedPackets.length },
+              { label: "Automated rows", value: detail.rows.length }
+            ].map((tile) => (
+              <div
+                key={tile.label}
+                className="rounded-[1.4rem] border border-slate-200/80 bg-white/78 p-4 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur"
+              >
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{tile.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{tile.value}</p>
+              </div>
+            ))}
+            {detail.domainId ? <ValidationRescanForm domainId={detail.domainId} /> : null}
+          </div>
         </div>
-        {detail.domainId ? (
-          <ValidationRescanForm domainId={detail.domainId} />
-        ) : null}
-      </div>
+      </section>
 
       {scanExecutionSummary ? (
         <Card
@@ -163,7 +236,7 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
         </Card>
       ) : null}
 
-      <Card className="border-slate-200 bg-white">
+      <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
         <CardHeader>
           <CardTitle>Unified findings</CardTitle>
         </CardHeader>
@@ -204,7 +277,10 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
               );
 
               return (
-                <div key={packet.unifiedFindingId} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                <div
+                  key={packet.unifiedFindingId}
+                  className="rounded-[1.45rem] border border-slate-200/80 bg-slate-50/55 p-5 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.3)]"
+                >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -267,7 +343,10 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
                   </p>
                 </div>
                 {auditOnlyUnifiedPackets.map((packet) => (
-                  <div key={`${packet.unifiedFindingId}-audit-only`} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                  <div
+                    key={`${packet.unifiedFindingId}-audit-only`}
+                    className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/50 p-4"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-slate-900">{packet.presentation.findingName}</p>
                       <span
@@ -289,14 +368,17 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200 bg-white">
+      <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
         <CardHeader>
           <CardTitle>Automated findings</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {detail.rows.map((row) => (
-              <div key={`${row.automatedFinding.ruleKey}-${row.automatedFinding.rank}`} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
+              <div
+                key={`${row.automatedFinding.ruleKey}-${row.automatedFinding.rank}`}
+                className="rounded-[1.45rem] border border-slate-200/80 bg-slate-50/50 p-5 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.3)]"
+              >
                 {(() => {
                   const siblingFindingKeysOrTitles = detail.rows
                     .filter((candidate) => candidate.automatedFinding.pageUrl === row.automatedFinding.pageUrl)
