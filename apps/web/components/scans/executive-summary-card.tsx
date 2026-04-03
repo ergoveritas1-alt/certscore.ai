@@ -334,12 +334,6 @@ export function ExecutiveSummaryCard(input: {
               benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
             />
           </div>
-          {input.domainBenchmark ? (
-            <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">Expected baseline:</span> {input.domainBenchmark.rationale}
-            </div>
-          ) : null}
-
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
