@@ -15,6 +15,7 @@ import {
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
+import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 
 export type DomainHistoryItem = {
   completedAt: string | null;
@@ -589,6 +590,14 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     });
     validationFindingsByRunId.set(row.validation_run_id, existing);
   }
+  const observedAtByScanId = new Map(
+    scanRows.map((scan) => [scan.id, scan.completed_at ?? scan.started_at ?? scan.created_at] as const)
+  );
+  const mergedSignalsByScanId = await loadMergedSignalsByScanId({
+    observedAtByScanId,
+    scanIds: scanRows.map((scan) => scan.id),
+    supabase
+  });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
     const scanEvents = diagnosticEventMap.get(scan.id) ?? [];
@@ -606,6 +615,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     const validationFindings = validationRunId ? validationFindingsByRunId.get(validationRunId) ?? [] : [];
     const validationFindingLookup = new Map(validationFindings.map((finding) => [finding.ruleKey, finding] as const));
     const displayPackets = buildUnifiedFindingDisplayPackets({
+      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
       policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
       reviewFindingCandidates: [],
       scanEvents: repairedEvents,

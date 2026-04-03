@@ -6,6 +6,7 @@ import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
+import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -378,6 +379,14 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     });
     validationFindingsByRunId.set(row.validation_run_id, existing);
   }
+  const observedAtByScanId = new Map(
+    scanRows.map((scan) => [scan.id, scan.completed_at ?? scan.created_at] as const)
+  );
+  const mergedSignalsByScanId = await loadMergedSignalsByScanId({
+    observedAtByScanId,
+    scanIds: scanRows.map((scan) => scan.id),
+    supabase
+  });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
     const scanEvents = diagnosticEventMap.get(scan.id) ?? [];
@@ -395,6 +404,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     const validationFindings = validationRunId ? validationFindingsByRunId.get(validationRunId) ?? [] : [];
     const validationFindingLookup = new Map(validationFindings.map((finding) => [finding.ruleKey, finding] as const));
     const displayPackets = buildUnifiedFindingDisplayPackets({
+      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
       policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
       reviewFindingCandidates: [],
       scanEvents: repairedEvents,

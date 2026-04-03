@@ -5,6 +5,7 @@ import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSourc
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { getConfiguredValidationRedisUrl } from "../lib/env";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
+import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
 import { deriveSignalEnrichmentWorkflowState } from "../../../packages/shared/src/utils/scan-signal-workflow";
 
 type ScanRow = {
@@ -455,6 +456,12 @@ async function summarizeScan(input: {
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
+  const observedAtByScanId = new Map([[input.scanId, scanRow?.completed_at ?? scanRow?.started_at ?? scanRow?.created_at ?? null]]);
+  const mergedSignalsByScanId = await loadMergedSignalsByScanId({
+    observedAtByScanId,
+    scanIds: [input.scanId],
+    supabase: input.supabase
+  });
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
     ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
@@ -481,6 +488,7 @@ async function summarizeScan(input: {
   });
 
   const displayPackets = buildUnifiedFindingDisplayPackets({
+    mergedSignals: mergedSignalsByScanId.get(input.scanId) ?? [],
     policyEnrichment: normalizedPolicyRows,
     reviewFindingCandidates: [],
     scanEvents: repairedEvents,

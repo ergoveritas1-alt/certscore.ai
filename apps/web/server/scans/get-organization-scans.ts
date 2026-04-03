@@ -19,6 +19,7 @@ import {
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
+import { loadMergedSignalsByScanId } from "./merged-signal-summary";
 
 export type OrganizationScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -719,6 +720,9 @@ async function loadOrganizationScans(
       latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
     }
   }
+  const observedAtByScanId = new Map(
+    scanRows.map((scan) => [scan.id, scan.completed_at ?? scan.started_at ?? scan.created_at] as const)
+  );
   const diagnosticEvents: ScanDiagnosticEventRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
@@ -735,6 +739,11 @@ async function loadOrganizationScans(
       diagnosticEvents.push(...((diagnosticEventRows ?? []) as ScanDiagnosticEventRow[]));
     }
   }
+  const mergedSignalsByScanId = await loadMergedSignalsByScanId({
+    observedAtByScanId,
+    scanIds: summaryScanIds,
+    supabase
+  });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
@@ -845,6 +854,7 @@ async function loadOrganizationScans(
     const validationFindings = validationRunId ? validationFindingsByRunId.get(validationRunId) ?? [] : [];
     const validationFindingLookup = new Map(validationFindings.map((finding) => [finding.ruleKey, finding] as const));
     const displayPackets = buildUnifiedFindingDisplayPackets({
+      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
       policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
       reviewFindingCandidates: [],
       scanEvents: repairedEvents,
