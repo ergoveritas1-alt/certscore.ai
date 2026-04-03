@@ -173,8 +173,22 @@ function diffMs(start: string | null | undefined, end: string | null | undefined
   return Math.max(0, endMs - startMs);
 }
 
-function getScanConfig(pagesRequested: number) {
+function getScanConfig(input: {
+  maxPages: number;
+  maxRequestedTier?: string | null;
+  processor: string;
+  profile: string;
+  runtimeFast?: boolean;
+}) {
   return {
+    ...(input.runtimeFast
+      ? {
+          execution: {
+            scanPlanProfileOverride: "runtime_fast"
+          }
+        }
+      : {}),
+    ...(input.maxRequestedTier ? { maxRequestedTier: input.maxRequestedTier } : {}),
     post403Policy: {
       maxHomepageRetriesAfter403: 0,
       maxPassiveVerificationFetchesAfter403: 4,
@@ -182,9 +196,9 @@ function getScanConfig(pagesRequested: number) {
       stopOnHomepage403: true,
       verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
     },
-    processor: "queued-full-scan-v1",
-    profile: "standard",
-    maxPages: pagesRequested,
+    processor: input.processor,
+    profile: input.profile,
+    maxPages: input.maxPages,
     source: "codex-scan-batch-eval"
   };
 }
@@ -230,10 +244,15 @@ async function ensureDomain(input: {
 
 async function queueScan(input: {
   domain: DomainRow;
+  maxRequestedTier?: string | null;
   organizationId: string;
+  processor: string;
+  profile: string;
+  runtimeFast?: boolean;
   supabase: ReturnType<typeof createAdminClient>;
+  pagesRequestedOverride?: number | null;
 }) {
-  const pagesRequested = input.domain.max_pages_override ?? DEFAULT_MAX_PAGES;
+  const pagesRequested = Math.max(1, input.pagesRequestedOverride ?? input.domain.max_pages_override ?? DEFAULT_MAX_PAGES);
   const inserted = await input.supabase
     .from("scans")
     .insert({
@@ -244,7 +263,13 @@ async function queueScan(input: {
       status: "queued",
       pages_requested: pagesRequested,
       pages_scanned: 0,
-      scan_config_json: getScanConfig(pagesRequested)
+      scan_config_json: getScanConfig({
+        maxPages: pagesRequested,
+        maxRequestedTier: input.maxRequestedTier,
+        processor: input.processor,
+        profile: input.profile,
+        runtimeFast: input.runtimeFast
+      })
     })
     .select("id, status, created_at, completed_at, error_message")
     .single();
@@ -516,6 +541,11 @@ async function main() {
   const orgId = getArgValue("--org") ?? DEFAULT_ORG_ID;
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
   const enrichmentTimeoutMs = Number(getArgValue("--enrichment-timeout-ms") ?? DEFAULT_ENRICHMENT_TIMEOUT_MS);
+  const pagesRequestedOverride = getArgValue("--pages");
+  const processor = getArgValue("--processor") ?? "queued-full-scan-v1";
+  const profile = getArgValue("--profile") ?? "standard";
+  const maxRequestedTier = getArgValue("--max-tier");
+  const runtimeFast = hasFlag("--runtime-fast");
   const onlySummarize = hasFlag("--summarize-only");
   const queueOnly = hasFlag("--queue-only");
   const aggregateTimings = hasFlag("--aggregate-timings");
@@ -528,7 +558,16 @@ async function main() {
       continue;
     }
 
-    if (token === "--org" || token === "--timeout-ms" || token === "--domains") {
+    if (
+      token === "--org" ||
+      token === "--timeout-ms" ||
+      token === "--enrichment-timeout-ms" ||
+      token === "--domains" ||
+      token === "--pages" ||
+      token === "--processor" ||
+      token === "--profile" ||
+      token === "--max-tier"
+    ) {
       index += 1;
       continue;
     }
@@ -593,7 +632,12 @@ async function main() {
     } else if (queueOnly) {
       const queued = await queueScan({
         domain,
+        maxRequestedTier,
         organizationId: orgId,
+        pagesRequestedOverride: pagesRequestedOverride ? Number(pagesRequestedOverride) : null,
+        processor,
+        profile,
+        runtimeFast,
         supabase
       });
 
@@ -608,7 +652,12 @@ async function main() {
     } else {
       const queued = await queueScan({
         domain,
+        maxRequestedTier,
         organizationId: orgId,
+        pagesRequestedOverride: pagesRequestedOverride ? Number(pagesRequestedOverride) : null,
+        processor,
+        profile,
+        runtimeFast,
         supabase
       });
 
