@@ -311,8 +311,7 @@ export function ExecutiveSummaryCard(input: {
           </div>
           {input.domainBenchmark ? (
             <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">Benchmark estimate for {input.domainBenchmark.industry}.</span>{" "}
-              Expected ranges below are a nano best-guess for this type of domain, used only as lightweight context.
+              <span className="font-medium text-slate-900">Benchmark estimate for {input.domainBenchmark.industry}.</span>
             </div>
           ) : null}
 
