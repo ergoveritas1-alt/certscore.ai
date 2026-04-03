@@ -150,6 +150,29 @@ function getMedian(values: number[]) {
   return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
 
+function getAverage(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+
+function diffMs(start: string | null | undefined, end: string | null | undefined) {
+  if (!start || !end) {
+    return null;
+  }
+
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return null;
+  }
+
+  return Math.max(0, endMs - startMs);
+}
+
 function getScanConfig(pagesRequested: number) {
   return {
     post403Policy: {
@@ -477,6 +500,12 @@ async function summarizeScan(input: {
       scannerSignals: scannerSignalCount,
       totalSignals: signalRows.length
     },
+    scan: {
+      completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
+      createdAt: typeof scanRow?.created_at === "string" ? scanRow.created_at : null,
+      startedAt: typeof scanRow?.started_at === "string" ? scanRow.started_at : null,
+      status: typeof scanRow?.status === "string" ? scanRow.status : null
+    },
     snapshot,
     surfaced,
     workflow
@@ -608,6 +637,14 @@ async function main() {
       counts: summary.counts,
       domain: domain.hostname,
       scanId,
+      scan: {
+        completedAt: summary.scan.completedAt,
+        createdAt: summary.scan.createdAt,
+        endToEndDurationMs: diffMs(summary.scan.createdAt, summary.scan.completedAt),
+        runDurationMs: diffMs(summary.scan.startedAt ?? summary.scan.createdAt, summary.scan.completedAt),
+        startedAt: summary.scan.startedAt,
+        status: summary.scan.status
+      },
       scanOutcome: (summary.snapshot as Record<string, unknown> | null)?.scan_outcome ?? null,
       stopReason: (summary.snapshot as Record<string, unknown> | null)?.stop_reason_code ?? null,
       homepageStatus: (summary.snapshot as Record<string, unknown> | null)?.homepage_fetch_http_status ?? null,
@@ -647,14 +684,30 @@ async function main() {
         return typeof timings?.nanoDocSignalsDurationMs === "number" ? timings.nanoDocSignalsDurationMs : null;
       })
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const endToEndValues = results
+      .map((row) => {
+        const scan = row.scan as { endToEndDurationMs?: unknown } | undefined;
+        return typeof scan?.endToEndDurationMs === "number" ? scan.endToEndDurationMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const runValues = results
+      .map((row) => {
+        const scan = row.scan as { runDurationMs?: unknown } | undefined;
+        return typeof scan?.runDurationMs === "number" ? scan.runDurationMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
 
     console.log(
       JSON.stringify(
         {
           aggregateTimingSummary: {
+            averageEndToEndDurationMs: getAverage(endToEndValues),
+            averageRunDurationMs: getAverage(runValues),
             domains: results.length,
+            medianEndToEndDurationMs: getMedian(endToEndValues),
             medianNanoDocRetrievalDurationMs: getMedian(retrievalValues),
             medianNanoDocSignalsDurationMs: getMedian(signalValues),
+            medianRunDurationMs: getMedian(runValues),
             medianTimeToFindingsMs: getMedian(findingsValues),
             medianTimeToMergedSignalsMs: getMedian(mergedValues)
           },
