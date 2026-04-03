@@ -299,14 +299,6 @@ export function ExecutiveSummaryCard(input: {
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
                   Industry {input.domainBenchmark.industry}
                 </span>
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
-                  Best-guess rank {input.domainBenchmark.estimatedRankLabel}
-                </span>
-                <span
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getConfidenceTone(input.domainBenchmark.confidence)}`}
-                >
-                  Estimate confidence {input.domainBenchmark.confidence}
-                </span>
               </>
             ) : null}
           </div>
