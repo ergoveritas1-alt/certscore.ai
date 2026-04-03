@@ -50,6 +50,7 @@ const NANO_DOC_RETRIEVAL_POLL_MS = 15_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 15_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
+const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 3;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -1429,7 +1430,11 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
   return url.includes("/login");
 }
 
-async function fetchNanoDocumentSource(input: { documentType: string; url: string }) {
+async function fetchNanoDocumentSource(input: {
+  documentType: string;
+  priorityTier?: "priority" | "secondary";
+  url: string;
+}) {
   try {
   const request = buildValidationWorkerCrawlerHeaders(input.url);
   const response = await fetch(input.url, {
@@ -1472,6 +1477,7 @@ async function fetchNanoDocumentSource(input: { documentType: string; url: strin
       },
       metadata_json: {
         http_status: response.status,
+        priority_tier: input.priorityTier ?? "secondary",
         retrieval_mode: "nano_doc_retrieval"
       },
       source: "nano_doc_retrieval",
@@ -1534,6 +1540,51 @@ function splitNanoDocCandidatesByPriority(
     priority: priority.length > 0 ? priority : candidates,
     secondary: priority.length > 0 ? secondary : []
   };
+}
+
+function getNanoDocumentPriorityScore(row: Record<string, unknown>) {
+  const metadata =
+    typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+      ? (row.metadata_json as Record<string, unknown>)
+      : null;
+  const priorityTier = getString(metadata?.priority_tier) ?? "secondary";
+  const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
+
+  let score = priorityTier === "priority" ? 100 : 0;
+  if (documentType === "privacy_policy") {
+    score += 30;
+  } else if (documentType === "cookie_policy") {
+    score += 20;
+  } else if (documentType === "terms_of_service") {
+    score += 10;
+  }
+
+  return score;
+}
+
+export function prioritizePendingNanoDocumentSources(rows: Array<Record<string, unknown>>) {
+  return [...rows].sort((left, right) => {
+    const scoreDelta = getNanoDocumentPriorityScore(right) - getNanoDocumentPriorityScore(left);
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    const leftUrl = getString(left.canonical_url) ?? getString(left.source_url) ?? "";
+    const rightUrl = getString(right.canonical_url) ?? getString(right.source_url) ?? "";
+    return leftUrl.localeCompare(rightUrl);
+  });
+}
+
+function chunkRows<T>(rows: T[], size: number) {
+  if (size <= 0) {
+    return [rows];
+  }
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function summarizeNanoDocRetrievalResults(input: {
@@ -1702,36 +1753,51 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     }).catch(() => undefined);
   }
 
-  const pendingDocumentSources = artifacts.documentSources.filter((row) => {
+  const pendingDocumentSources = prioritizePendingNanoDocumentSources(artifacts.documentSources.filter((row) => {
     const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
     const documentText = getString(row.document_text) ?? getString(row.documentText);
     return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
-  });
+  }));
 
   if (pendingDocumentSources.length > 0) {
-    const extractionRows = await Promise.all(
-      pendingDocumentSources.map(async (row) => {
-        const result = await extractNanoDocumentSourceWithLlm(row);
-        return {
-          extractedFields: result.extractedFields,
-          extractionStatus: result.extractionStatus,
-          id: String(row.id),
-          metadata: {
-            ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
-              ? (row.metadata_json as Record<string, unknown>)
-              : {}),
-            ...result.metadata
-          },
-          semanticConfidence: result.semanticConfidence
-        };
-      })
-    );
+    let partialSignalsPersisted = false;
 
-    await updateScanDocumentSourceExtractions({
-      rows: extractionRows
-    });
+    for (const batch of chunkRows(pendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
+      const extractionRows = await Promise.all(
+        batch.map(async (row) => {
+          const result = await extractNanoDocumentSourceWithLlm(row);
+          return {
+            extractedFields: result.extractedFields,
+            extractionStatus: result.extractionStatus,
+            id: String(row.id),
+            metadata: {
+              ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+                ? (row.metadata_json as Record<string, unknown>)
+                : {}),
+              ...result.metadata
+            },
+            semanticConfidence: result.semanticConfidence
+          };
+        })
+      );
 
-    artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+      await updateScanDocumentSourceExtractions({
+        rows: extractionRows
+      });
+
+      artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+
+      if (!partialSignalsPersisted && artifacts.policySemanticRows.length > 0) {
+        await persistDerivedNanoPolicySignals({
+          policySemanticRows: artifacts.policySemanticRows,
+          policyReviewQueue: artifacts.policyReviewQueue,
+          runtimeArtifacts: artifacts.runtimeArtifacts,
+          scanId,
+          snapshot: artifacts.snapshot
+        });
+        partialSignalsPersisted = true;
+      }
+    }
   }
 
   if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {

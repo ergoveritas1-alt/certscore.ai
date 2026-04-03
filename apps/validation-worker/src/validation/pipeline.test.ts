@@ -5,7 +5,8 @@ import {
   dedupeNanoDocumentSources,
   deriveValidationFindings,
   determineValidationCollectAction,
-  looksLikeIntermediaryOrBlockPage
+  looksLikeIntermediaryOrBlockPage,
+  prioritizePendingNanoDocumentSources
 } from "./pipeline";
 
 function buildArtifacts(overrides?: {
@@ -182,6 +183,35 @@ test("buildNanoDocCandidateUrls prioritizes discovered and canonical seed legal 
         candidate.url === "https://example.com/cookie-policy" &&
         candidate.priorityTier === "priority"
     )
+  );
+});
+
+test("prioritizePendingNanoDocumentSources prefers priority privacy docs before secondary terms docs", () => {
+  const prioritized = prioritizePendingNanoDocumentSources([
+    {
+      canonical_url: "https://example.com/terms",
+      document_type: "terms_of_service",
+      metadata_json: { priority_tier: "secondary" }
+    },
+    {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      metadata_json: { priority_tier: "priority" }
+    },
+    {
+      canonical_url: "https://example.com/cookies",
+      document_type: "cookie_policy",
+      metadata_json: { priority_tier: "priority" }
+    }
+  ]);
+
+  assert.deepEqual(
+    prioritized.map((row) => row.canonical_url),
+    [
+      "https://example.com/privacy",
+      "https://example.com/cookies",
+      "https://example.com/terms"
+    ]
   );
 });
 
