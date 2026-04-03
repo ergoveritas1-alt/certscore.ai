@@ -103,13 +103,35 @@ function BenchmarkMetricCard(input: {
         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
         <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
       </div>
-      <div className="mt-5">
-        <div className="flex items-end gap-1">
-          <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-sky-700">{actualValue ?? "—"}</span>
-          {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
+      <div className="mt-4 grid min-h-[8.75rem] grid-rows-[auto_1fr_auto]">
+        <div className="text-right">
+          {benchmarkValue !== null ? (
+            <p className="text-sm font-medium tracking-tight text-violet-700">Expected {benchmarkValue}</p>
+          ) : (
+            <p className="text-sm text-transparent">Expected</p>
+          )}
+        </div>
+        <div className="flex flex-col justify-center">
+          <div className="flex items-end gap-1">
+            <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-sky-700">{actualValue ?? "—"}</span>
+            {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
+          </div>
+          <p className="mt-2 text-[1.6rem] font-semibold leading-none tracking-tight text-slate-950">
+            {scoreDescriptor ?? "\u00A0"}
+          </p>
+        </div>
+        <div className="text-right">
+          {delta !== null ? (
+            <span className={delta > 0 ? "text-[11px] text-sky-700" : delta < 0 ? "text-[11px] text-violet-700" : "text-[11px] text-slate-500"}>
+              {delta > 0 ? "+" : ""}
+              {delta} vs expected
+            </span>
+          ) : (
+            <span className="text-[11px] text-transparent">delta</span>
+          )}
         </div>
       </div>
-      <div className="mt-5 space-y-2">
+      <div className="mt-4 space-y-2">
         <div className="relative h-3 rounded-full bg-sky-100/80">
           <div
             className="absolute left-0 top-0 h-3 rounded-full bg-sky-500/85"
@@ -123,15 +145,8 @@ function BenchmarkMetricCard(input: {
           ) : null}
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500">
-          <span>{scoreDescriptor ? scoreDescriptor : "\u00A0"}</span>
-          {delta !== null ? (
-            <span className={delta > 0 ? "text-sky-700" : delta < 0 ? "text-violet-700" : "text-slate-500"}>
-              {delta > 0 ? "+" : ""}
-              {delta} vs expected
-            </span>
-          ) : (
-            <span>Expected marker</span>
-          )}
+          <span>Current</span>
+          <span>Expected</span>
         </div>
       </div>
     </div>
