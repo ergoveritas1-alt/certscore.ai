@@ -41,7 +41,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
     : null;
 
   return (
-    <main className="min-h-screen bg-sand">
+    <main className="min-h-screen bg-white">
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         {scan ? (
