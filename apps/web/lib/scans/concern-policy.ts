@@ -27,6 +27,10 @@ import {
 import {
   hasConcreteSanitizedNetworkEvidence
 } from "./sanitized-network-evidence";
+import {
+  derivePolicyPageTypeFromEvidence,
+  derivePolicyPrimarySourceFromEvidence
+} from "./policy-evidence-metadata";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -747,26 +751,25 @@ function isCanonicalPolicyPageType(value: NormalizedConcernPolicyPageType) {
   return value === "privacy_policy" || value === "cookie_policy" || value === "terms_of_service";
 }
 
+function normalizeConcernPolicyPageType(value: unknown): NormalizedConcernPolicyPageType {
+  switch (value) {
+    case "privacy_policy":
+    case "cookie_policy":
+    case "terms_of_service":
+    case "accessibility_statement":
+    case "contact_page":
+    case "non_policy":
+      return value;
+    default:
+      return null;
+  }
+}
+
 function getConcernPolicyPrimarySource(
   concern: Pick<NormalizedConcern, "policyIsPrimarySource">,
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
-  const explicit =
-    typeof rawEvidence?.normalizedConcernPolicyIsPrimarySource === "boolean"
-      ? rawEvidence.normalizedConcernPolicyIsPrimarySource
-      : typeof rawEvidence?.policyIsPrimarySource === "boolean"
-        ? rawEvidence.policyIsPrimarySource
-        : typeof rawEvidence?.policy_is_primary_source === "boolean"
-          ? rawEvidence.policy_is_primary_source
-          : typeof rawEvidence?.isPrimaryPolicy === "boolean"
-            ? rawEvidence.isPrimaryPolicy
-            : typeof rawEvidence?.is_primary_policy === "boolean"
-              ? rawEvidence.is_primary_policy
-              : typeof rawEvidence?.isPrimaryPolicyEnrichment === "boolean"
-                ? rawEvidence.isPrimaryPolicyEnrichment
-                : typeof rawEvidence?.is_primary_policy_enrichment === "boolean"
-                  ? rawEvidence.is_primary_policy_enrichment
-                  : null;
+  const explicit = derivePolicyPrimarySourceFromEvidence(rawEvidence);
 
   return explicit ?? concern.policyIsPrimarySource ?? null;
 }
@@ -775,18 +778,7 @@ function getConcernPolicyPageType(
   concern: Pick<NormalizedConcern, "policyPageType">,
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
-  const explicit =
-    (typeof rawEvidence?.normalizedConcernPolicyPageType === "string"
-      ? rawEvidence.normalizedConcernPolicyPageType
-      : typeof rawEvidence?.policyPageType === "string"
-        ? rawEvidence.policyPageType
-        : typeof rawEvidence?.policy_page_type === "string"
-          ? rawEvidence.policy_page_type
-          : typeof rawEvidence?.pageType === "string"
-            ? rawEvidence.pageType
-            : typeof rawEvidence?.page_type === "string"
-              ? rawEvidence.page_type
-              : null) as NormalizedConcernPolicyPageType;
+  const explicit = normalizeConcernPolicyPageType(derivePolicyPageTypeFromEvidence(rawEvidence));
 
   return explicit ?? concern.policyPageType ?? null;
 }

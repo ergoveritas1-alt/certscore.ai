@@ -9,6 +9,10 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteSensitivePayloadArtifact
 } from "./promotion-evidence-contracts";
+import {
+  derivePolicyPageTypeFromEvidence,
+  derivePolicyPrimarySourceFromEvidence
+} from "./policy-evidence-metadata";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -713,6 +717,10 @@ function mergeConcernEvidenceBundles(
   right: ReturnType<typeof extractEvidenceFromValidationFinding>,
   candidateEvidence?: string[]
 ): NormalizedConcernEvidenceBundle {
+  const normalizedCandidateEvidence = (candidateEvidence ?? []).filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+  );
+
   return {
     counts: { ...left.counts, ...right.counts },
     entities: { ...left.entities, ...right.entities },
@@ -721,14 +729,14 @@ function mergeConcernEvidenceBundles(
     pageUrls: uniqueStrings([
       ...left.pageUrls,
       ...right.pageUrls,
-      ...(candidateEvidence ?? []).filter((entry) => /^https?:\/\//i.test(entry.trim()))
+      ...normalizedCandidateEvidence.filter((entry) => /^https?:\/\//i.test(entry.trim()))
     ]),
     policyIsPrimarySource: left.policyIsPrimarySource ?? right.policyIsPrimarySource,
     policyPageType: left.policyPageType ?? right.policyPageType,
     policySnippets: uniqueStrings([
       ...left.policySnippets,
       ...right.policySnippets,
-      ...(candidateEvidence ?? []).filter((entry) => !/^https?:\/\//i.test(entry.trim())).slice(0, 3)
+      ...normalizedCandidateEvidence.filter((entry) => !/^https?:\/\//i.test(entry.trim())).slice(0, 3)
     ]),
     rawEvidence: left === right ? null : null,
     runtimeArtifacts: uniqueStrings([...left.runtimeArtifacts, ...right.runtimeArtifacts]),
@@ -802,10 +810,7 @@ function derivePolicyPageType(input: {
   rawEvidence: Record<string, unknown>;
   sourceUrls: string[];
 }): NormalizedConcernPolicyPageType {
-  const explicitType =
-    normalizePolicyPageType(input.rawEvidence.policyPageType) ??
-    normalizePolicyPageType(input.rawEvidence.pageType) ??
-    normalizePolicyPageType(input.rawEvidence.normalizedConcernPolicyPageType);
+  const explicitType = normalizePolicyPageType(derivePolicyPageTypeFromEvidence(input.rawEvidence));
 
   if (explicitType) {
     return explicitType;
@@ -820,24 +825,10 @@ function derivePolicyPageType(input: {
 }
 
 function derivePolicyPrimarySource(rawEvidence: Record<string, unknown>) {
-  const explicit =
-    getBooleanValue(rawEvidence.policyIsPrimarySource) ??
-    getBooleanValue(rawEvidence.isPrimaryPolicy) ??
-    getBooleanValue(rawEvidence.isPrimaryPolicyEnrichment);
+  const explicit = derivePolicyPrimarySourceFromEvidence(rawEvidence);
 
   if (explicit !== null) {
     return explicit;
-  }
-
-  const sourceRole =
-    getStringValue(rawEvidence.policySourceRole) ??
-    getStringValue(rawEvidence.normalizedConcernPolicySourceRole);
-
-  if (sourceRole === "primary_policy") {
-    return true;
-  }
-  if (sourceRole === "secondary_policy" || sourceRole === "non_policy") {
-    return false;
   }
 
   return null;
