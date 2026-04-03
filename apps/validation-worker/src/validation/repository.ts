@@ -7,6 +7,7 @@ import {
   type ValidationRunMode
 } from "@website-signal-risk-scanner/validation-shared";
 import {
+  buildSharedFullScanConfig,
   extractHostname,
   getCrawlerProductToken,
   getCrawlerPublicUrl,
@@ -16,6 +17,9 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
+import { getHybridNanoSignalPopulations } from "../../../web/lib/scans/hybrid-runtime-evidence";
+import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
+import { buildNanoPolicySignalRows } from "../../../web/lib/scans/nano-policy-signals";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
@@ -159,6 +163,10 @@ export function extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArti
 function isMissingColumnError(error: { code?: string | null; message?: string | null } | null | undefined, column: string) {
   const message = error?.message ?? "";
   return message.includes(`Could not find the '${column}' column`) || message.includes(`column "${column}"`);
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function rankBandForRank(rank: number | null) {
@@ -623,17 +631,17 @@ export async function createScanForValidationRun(runId: string) {
       status: "queued",
       pages_requested: teamPlan.maxPagesPerScan,
       pages_scanned: 0,
-      scan_config_json: {
-        processor: "queued-full-scan-v1",
-        profile: teamPlan.scanProfile,
-        maxPages: teamPlan.maxPagesPerScan,
-        source: "validation-canary",
-        triggerMode: run.trigger_mode,
+      scan_config_json: buildSharedFullScanConfig({
         crawlerIdentity: {
           productToken: getCrawlerProductToken(),
           publicUrl: getCrawlerPublicUrl()
-        }
-      }
+        },
+        maxPages: teamPlan.maxPagesPerScan,
+        processor: "queued-full-scan-v1",
+        profile: teamPlan.scanProfile,
+        source: "validation-canary",
+        triggerMode: run.trigger_mode
+      })
     })
     .select("id")
     .single();
@@ -700,7 +708,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       .order("page_type", { ascending: true }),
     supabase
       .from("policy_enrichment")
-      .select("id, page_type, page_url, policy_summary_short, policy_actionable_flags, policy_evidence_snippets, policy_mentions, policy_semantic_confidence, policy_ambiguity_score, policy_dsar_mechanism, policy_transfer_mechanisms, policy_retention_periods, policy_do_not_sell, policy_cookie_disclosures, policy_effective_date, policy_governing_law, policy_arbitration_present, policy_notice_contact_present, policy_termination_or_suspension_present, policy_cancellation_or_refund_present, policy_field_coverage, policy_coverage_ratio, policy_snippet_count, policy_structurally_weak")
+      .select("id, page_type, page_url, policy_summary_short, policy_actionable_flags, policy_evidence_snippets, policy_mentions, policy_semantic_confidence, policy_ambiguity_score, policy_dsar_mechanism, policy_rights_signals, policy_children_reference, policy_transfer_mechanisms, policy_retention_periods, policy_do_not_sell, policy_cookie_disclosures, policy_effective_date, policy_governing_law, policy_arbitration_present, policy_notice_contact_present, policy_termination_or_suspension_present, policy_cancellation_or_refund_present, policy_field_coverage, policy_coverage_ratio, policy_snippet_count, policy_structurally_weak")
       .eq("scan_id", scanId),
     supabase
       .from("policy_review_queue")
@@ -1014,11 +1022,38 @@ async function persistValidationRunReportFindingCount(input: {
 }) {
   try {
     const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
-    const [{ buildScanReportUnifiedFindings }] = await Promise.all([
-      import(detailViewModulePath) as Promise<{
-        buildScanReportUnifiedFindings: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
-      }>
-    ]);
+    const [detailViewModule] = await Promise.all([import(detailViewModulePath)]);
+    const resolvedDetailViewModule = (
+      detailViewModule as {
+        default?: Record<string, unknown>;
+        "module.exports"?: Record<string, unknown>;
+        buildScanReportUnifiedFindings?: unknown;
+      }
+    ).buildScanReportUnifiedFindings
+      ? (detailViewModule as Record<string, unknown>)
+      : (
+          detailViewModule as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          detailViewModule as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (detailViewModule as Record<string, unknown>);
+    const buildScanReportUnifiedFindings = (
+      resolvedDetailViewModule as {
+        buildScanReportUnifiedFindings?: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
+      }
+    ).buildScanReportUnifiedFindings;
+
+    if (typeof buildScanReportUnifiedFindings !== "function") {
+      throw new Error("shared-scan-detail-view did not export buildScanReportUnifiedFindings");
+    }
+
     const scanRecord = await loadScanRecordForFindingCount({
       runId: input.runId,
       scanId: input.scanId,
@@ -1180,6 +1215,9 @@ async function loadScanRecordForFindingCount(input: {
     }),
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    mergedSignals: buildMergedSignalRecords({
+      nanoSignals: getHybridNanoSignalPopulations((runtimeArtifacts as Record<string, unknown> | null) ?? null)
+    }),
     signals: normalizedSignals,
     snapshot: (snapshot as Record<string, unknown> | null) ?? null,
     trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>,
@@ -1237,6 +1275,42 @@ export async function markValidationSchedule(input: {
   if (error) {
     throw new Error(`Failed to update validation scheduler state: ${error.message}`);
   }
+}
+
+export async function persistDerivedNanoPolicySignals(input: {
+  policyEnrichments: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  scanId: string;
+}) {
+  const supabase = createAdminClient();
+  const hybridRuntimeEvidence = getRecord(
+    input.runtimeArtifacts?.hybrid_runtime_evidence ?? input.runtimeArtifacts?.hybridRuntimeEvidence
+  ) ?? { };
+  const nanoSignalRows = buildNanoPolicySignalRows({
+    policyEnrichments: input.policyEnrichments
+  });
+  const nextHybridRuntimeEvidence = {
+    ...hybridRuntimeEvidence,
+    nano_signals: nanoSignalRows
+  };
+
+  if (JSON.stringify(hybridRuntimeEvidence.nano_signals ?? null) === JSON.stringify(nanoSignalRows)) {
+    return nanoSignalRows;
+  }
+
+  const { error } = await supabase
+    .from("scan_runtime_artifacts")
+    .update({
+      hybrid_runtime_evidence: nextHybridRuntimeEvidence,
+      updated_at: new Date().toISOString()
+    })
+    .eq("scan_id", input.scanId);
+
+  if (error) {
+    throw new Error(`Failed to persist nano policy signals for scan ${input.scanId}: ${error.message}`);
+  }
+
+  return nanoSignalRows;
 }
 
 export function normalizeValidationTargetInput(value: string) {

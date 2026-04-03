@@ -19,12 +19,14 @@ import {
   loadCompletedScanArtifacts,
   loadValidationRunFindings,
   markValidationSchedule,
+  persistDerivedNanoPolicySignals,
   replaceValidationRunFindings,
   syncTrancoTargets,
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
+import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { createValidationCollectQueue, createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
@@ -484,11 +486,34 @@ function deriveCookieRuntimeFindings(input: {
 
   const pageUrl = typeof cookiePolicyEnrichment.page_url === "string" ? cookiePolicyEnrichment.page_url : null;
   const pageType = typeof cookiePolicyEnrichment.page_type === "string" ? cookiePolicyEnrichment.page_type : "cookie_policy";
-  const runtimeCookies = Array.isArray(input.runtimeArtifacts?.initial_cookie_names)
-    ? normalizeCookieTokenList(
-        (input.runtimeArtifacts?.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
-      )
-    : [];
+  const runtimeCookies = normalizeCookieTokenList(
+    (() => {
+      const hybrid =
+        input.runtimeArtifacts &&
+        typeof input.runtimeArtifacts.hybrid_runtime_evidence === "object" &&
+        input.runtimeArtifacts.hybrid_runtime_evidence !== null &&
+        !Array.isArray(input.runtimeArtifacts.hybrid_runtime_evidence)
+          ? (input.runtimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
+          : null;
+      const cookieWriteObservations =
+        hybrid && Array.isArray(hybrid.cookieWriteObservations)
+          ? hybrid.cookieWriteObservations.filter(
+              (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+            )
+          : [];
+      const hybridCookieNames = cookieWriteObservations
+        .map((row) => row.cookieName)
+        .filter((value): value is string => typeof value === "string");
+
+      if (hybridCookieNames.length > 0) {
+        return hybridCookieNames;
+      }
+
+      return Array.isArray(input.runtimeArtifacts?.initial_cookie_names)
+        ? (input.runtimeArtifacts.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
+        : [];
+    })()
+  );
   const disclosures = Array.isArray(cookiePolicyEnrichment.policy_cookie_disclosures)
     ? ((cookiePolicyEnrichment.policy_cookie_disclosures as unknown[]) ?? []).flatMap((value) => {
         if (typeof value !== "object" || value === null) {
@@ -1265,7 +1290,27 @@ export async function processValidationRankJob(validationRunId: string) {
       throw new Error("Validation run is missing a scan.");
     }
 
+    await enrichUnknownScanVendors({
+      hostname: run.hostname,
+      scanId: run.scan_id
+    }).catch((error) => {
+      console.error("[validation-worker] vendor enrichment failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId: run.scan_id
+      });
+    });
+
     const artifacts = await loadCompletedScanArtifacts(run.scan_id);
+    await persistDerivedNanoPolicySignals({
+      policyEnrichments: artifacts.policyEnrichments,
+      runtimeArtifacts: artifacts.runtimeArtifacts,
+      scanId: run.scan_id
+    }).catch((error) => {
+      console.error("[validation-worker] nano policy signal persistence failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId: run.scan_id
+      });
+    });
     const findings = deriveValidationFindings(artifacts);
     await replaceValidationRunFindings(validationRunId, findings);
 

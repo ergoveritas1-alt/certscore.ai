@@ -140,3 +140,10 @@ Expected row fields:
 - optional provenance detail via `provenance_detail`, `provenanceDetail`, or `provenance`
 
 These rows are normalized into `source: "nano"` signal-population records and merged with scanner-owned populations before any downstream finding derivation.
+
+The current producer-side bootstrap writes these rows from existing `policy_enrichment` records during validation ranking. That persisted set currently covers:
+
+- canonical positive policy/disclosure signals from the policy signal contract
+- low-confidence policy extraction signal population
+- elevated policy ambiguity signal population
+- rights-path and children-context policy support signals
