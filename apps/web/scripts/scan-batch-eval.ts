@@ -5,6 +5,7 @@ import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSourc
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { getConfiguredValidationRedisUrl } from "../lib/env";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
+import { deriveSignalEnrichmentWorkflowState } from "../../../packages/shared/src/utils/scan-signal-workflow";
 
 type ScanRow = {
   id: string;
@@ -20,6 +21,11 @@ type ScanEventRow = {
   id: string;
   message: string;
   metadata_json: unknown;
+};
+
+type ScanSignalRow = {
+  population_source: string | null;
+  signal_key: string;
 };
 
 type DomainRow = {
@@ -139,6 +145,30 @@ function getArgValue(flag: string) {
 
 function hasFlag(flag: string) {
   return process.argv.includes(flag);
+}
+
+function isMissingColumnError(error: { code?: string | null; message?: string | null } | null | undefined, column: string) {
+  const message = error?.message ?? "";
+  return (
+    message.includes(`Could not find the '${column}' column`) ||
+    message.includes(`column "${column}"`) ||
+    message.includes(`column ${column} does not exist`) ||
+    (message.includes(column) && message.includes("does not exist"))
+  );
+}
+
+function getMedian(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[mid] ?? null;
+  }
+
+  return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
 
 function getScanConfig(pagesRequested: number) {
@@ -270,7 +300,10 @@ async function summarizeScan(input: {
     { data: snapshot, error: snapshotError },
     { data: events, error: eventsError },
     { data: policyEnrichment, error: policyError },
-    { data: documentSources, error: documentSourcesError }
+    { data: documentSources, error: documentSourcesError },
+    signalResult,
+    findingsResult,
+    { data: scanRow, error: scanError }
   ] =
     await Promise.all([
       input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
@@ -280,7 +313,10 @@ async function summarizeScan(input: {
         .eq("scan_id", input.scanId)
         .order("created_at", { ascending: true }),
       input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-      input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true })
+      input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+      input.supabase.from("scan_signals").select("signal_key, population_source").eq("scan_id", input.scanId).order("signal_key", { ascending: true }),
+      input.supabase.from("validation_run_findings").select("id").eq("scan_id", input.scanId),
+      input.supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", input.scanId).maybeSingle()
     ]);
 
   if (snapshotError) {
@@ -295,8 +331,56 @@ async function summarizeScan(input: {
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources for ${input.hostname}: ${documentSourcesError.message}`);
   }
+  if (scanError) {
+    throw new Error(`Failed to load scan row for ${input.hostname}: ${scanError.message}`);
+  }
+
+  let signals = signalResult.data;
+  let signalsError = signalResult.error;
+  if (signalsError && isMissingColumnError(signalsError, "population_source")) {
+    const fallback = await input.supabase
+      .from("scan_signals")
+      .select("signal_key")
+      .eq("scan_id", input.scanId)
+      .order("signal_key", { ascending: true });
+    signals = (fallback.data ?? []).map((row) => ({
+      ...row,
+      population_source: null
+    }));
+    signalsError = fallback.error;
+  }
+  if (signalsError) {
+    throw new Error(`Failed to load signals for ${input.hostname}: ${signalsError.message}`);
+  }
+
+  let findings = findingsResult.data;
+  let findingsError = findingsResult.error;
+  if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
+    const { data: runs, error: runsError } = await input.supabase.from("validation_runs").select("id").eq("scan_id", input.scanId);
+    if (runsError) {
+      throw new Error(`Failed to load validation runs for ${input.hostname}: ${runsError.message}`);
+    }
+
+    const runIds = (runs ?? [])
+      .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
+      .filter((value): value is string => typeof value === "string");
+
+    if (runIds.length === 0) {
+      findings = [];
+      findingsError = null;
+    } else {
+      const fallback = await input.supabase.from("validation_run_findings").select("id").in("validation_run_id", runIds);
+      findings = fallback.data;
+      findingsError = fallback.error;
+    }
+  }
+  if (findingsError) {
+    throw new Error(`Failed to load validation findings for ${input.hostname}: ${findingsError.message}`);
+  }
 
   const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const signalRows = (signals ?? []) as ScanSignalRow[];
+  const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
     ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
@@ -340,9 +424,34 @@ async function summarizeScan(input: {
       summary: packet.summary
     }));
 
+  const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
+  const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    documentSourceCount: normalizedDocumentSources.length,
+    events: ((events ?? []) as ScanEventRow[]).map((event) => ({
+      createdAt: event.created_at,
+      eventType: event.event_type
+    })),
+    findingsCount: findingRows.length,
+    mergedSignalCount: signalRows.length,
+    nanoSignalCount,
+    policyDocumentCount: policySemanticRows.length,
+    scanCompletedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
+    scanStatus: typeof scanRow?.status === "string" ? scanRow.status : null,
+    scannerSignalCount
+  });
+
   return {
+    counts: {
+      documentSources: normalizedDocumentSources.length,
+      findings: findingRows.length,
+      nanoSignals: nanoSignalCount,
+      scannerSignals: scannerSignalCount,
+      totalSignals: signalRows.length
+    },
     snapshot,
-    surfaced
+    surfaced,
+    workflow
   };
 }
 
@@ -351,6 +460,7 @@ async function main() {
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
   const onlySummarize = hasFlag("--summarize-only");
   const queueOnly = hasFlag("--queue-only");
+  const aggregateTimings = hasFlag("--aggregate-timings");
   const argv = process.argv.slice(2);
   const positionalDomains: string[] = [];
 
@@ -460,14 +570,66 @@ async function main() {
     });
 
     results.push({
+      counts: summary.counts,
       domain: domain.hostname,
       scanId,
       scanOutcome: (summary.snapshot as Record<string, unknown> | null)?.scan_outcome ?? null,
       stopReason: (summary.snapshot as Record<string, unknown> | null)?.stop_reason_code ?? null,
       homepageStatus: (summary.snapshot as Record<string, unknown> | null)?.homepage_fetch_http_status ?? null,
       blocked: (summary.snapshot as Record<string, unknown> | null)?.blocked_flag ?? null,
+      workflow: {
+        actualMode: summary.workflow.actualMode,
+        findingsReady: summary.workflow.findingsReady,
+        mergedSignalsReady: summary.workflow.mergedSignalsReady,
+        timings: summary.workflow.timings
+      },
       surfaced: summary.surfaced
     });
+  }
+
+  if (aggregateTimings) {
+    const mergedValues = results
+      .map((row) => {
+        const timings = (row.workflow as { timings?: { timeToMergedSignalsMs?: unknown } } | undefined)?.timings;
+        return typeof timings?.timeToMergedSignalsMs === "number" ? timings.timeToMergedSignalsMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const findingsValues = results
+      .map((row) => {
+        const timings = (row.workflow as { timings?: { timeToFindingsMs?: unknown } } | undefined)?.timings;
+        return typeof timings?.timeToFindingsMs === "number" ? timings.timeToFindingsMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const retrievalValues = results
+      .map((row) => {
+        const timings = (row.workflow as { timings?: { nanoDocRetrievalDurationMs?: unknown } } | undefined)?.timings;
+        return typeof timings?.nanoDocRetrievalDurationMs === "number" ? timings.nanoDocRetrievalDurationMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const signalValues = results
+      .map((row) => {
+        const timings = (row.workflow as { timings?: { nanoDocSignalsDurationMs?: unknown } } | undefined)?.timings;
+        return typeof timings?.nanoDocSignalsDurationMs === "number" ? timings.nanoDocSignalsDurationMs : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+    console.log(
+      JSON.stringify(
+        {
+          aggregateTimingSummary: {
+            domains: results.length,
+            medianNanoDocRetrievalDurationMs: getMedian(retrievalValues),
+            medianNanoDocSignalsDurationMs: getMedian(signalValues),
+            medianTimeToFindingsMs: getMedian(findingsValues),
+            medianTimeToMergedSignalsMs: getMedian(mergedValues)
+          },
+          results
+        },
+        null,
+        2
+      )
+    );
+    return;
   }
 
   console.log(JSON.stringify(results, null, 2));
