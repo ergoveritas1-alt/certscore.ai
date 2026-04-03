@@ -5,6 +5,7 @@ import {
   normalizePolicySnippetList
 } from "./policy-snippet-normalization";
 import {
+  getFirstPolicyRowByPageTypes,
   getPolicyEvidenceSnippets as getSharedPolicyEvidenceSnippets,
   getPolicyPageType as getSharedPolicyPageType,
   getPolicyPageUrl as getSharedPolicyPageUrl,
@@ -236,11 +237,8 @@ function getStopReasons(summaryRows: Array<Record<string, unknown>>) {
 }
 
 function getPolicyRowByPageTypes(policyEnrichment: Array<Record<string, unknown>>, pageTypes: string[]) {
-  const wantedTypes = new Set(pageTypes);
-  return (
-    policyEnrichment.map(normalizePolicyRow).find((row) => wantedTypes.has(String(row.pageType ?? ""))) ??
-    null
-  );
+  const row = getFirstPolicyRowByPageTypes(policyEnrichment, pageTypes);
+  return row ? normalizePolicyRow(row) : null;
 }
 
 function getPolicySnippetCandidates(row: NormalizedPolicyRow | null, snippetKeys: string[]) {

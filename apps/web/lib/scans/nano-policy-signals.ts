@@ -1,6 +1,7 @@
 import { POLICY_POSITIVE_SIGNAL_SPECS } from "./policy-positive-signal-contract";
 import { derivePositivePolicySignalMap } from "../../server/scans/policy-enrichment-normalization";
 import {
+  getFirstPolicyRowByPageTypes,
   getPolicyActionableFlags,
   getPolicyAmbiguityScore,
   getPolicyChildrenReference,
@@ -11,11 +12,14 @@ import {
   getPolicyMentions,
   getPolicyPageType,
   getPolicyPageUrl,
+  getPolicyRowEvidenceRefs,
+  getPolicyRowsForPageType,
   getPolicyRightsSignals,
   getPolicySemanticConfidence,
   getPolicySnippetCount,
   getPolicyStructurallyWeak,
   getPolicySummaryText,
+  getPrimaryPolicyEnrichmentRow,
   getPrivacyContactChannelType
 } from "./policy-enrichment-row";
 
@@ -58,10 +62,6 @@ function getStringArray(value: unknown) {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function uniqueStrings(values: Array<string | null | undefined>) {
-  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
 function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -180,18 +180,6 @@ function matchRuntimeCookie(input: { cookieName: string; disclosures: Array<Reco
   });
 }
 
-function getPrimaryPolicyRow(rows: Array<Record<string, unknown>>) {
-  return rows.find((row) => getPolicyPageType(row) === "privacy_policy") ?? rows[0] ?? null;
-}
-
-function getRowsForPageType(rows: Array<Record<string, unknown>>, pageType: string) {
-  return rows.filter((row) => getPolicyPageType(row) === pageType);
-}
-
-function buildPolicyRowEvidenceRefs(rows: Array<Record<string, unknown>>) {
-  return uniqueStrings(rows.map(getPolicyPageUrl));
-}
-
 function buildPolicyRowConfidence(rows: Array<Record<string, unknown>>) {
   const values = rows.map(getPolicySemanticConfidence).filter((value): value is number => typeof value === "number");
   return values.length > 0 ? Math.max(...values) : null;
@@ -203,7 +191,7 @@ export function buildNanoPolicySignalRows(input: {
   runtimeArtifacts?: Record<string, unknown> | null;
   snapshot?: Record<string, unknown> | null;
 }) {
-  const primaryPolicyRow = getPrimaryPolicyRow(input.policyEnrichments);
+  const primaryPolicyRow = getPrimaryPolicyEnrichmentRow(input.policyEnrichments);
   if (!primaryPolicyRow) {
     return [] as PersistedNanoSignalRow[];
   }
@@ -219,10 +207,10 @@ export function buildNanoPolicySignalRows(input: {
       continue;
     }
 
-    const sourceRows = getRowsForPageType(input.policyEnrichments, spec.pageType);
+    const sourceRows = getPolicyRowsForPageType(input.policyEnrichments, spec.pageType);
     rows.push({
       confidence: buildPolicyRowConfidence(sourceRows),
-      evidence_refs: buildPolicyRowEvidenceRefs(sourceRows),
+      evidence_refs: getPolicyRowEvidenceRefs(sourceRows),
       key: spec.canonicalSignalKey,
       label: spec.label,
       population_status: "present",
@@ -241,7 +229,7 @@ export function buildNanoPolicySignalRows(input: {
   if (primaryPolicyFlags.length > 0) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyActionableFlags",
       label: "Policy actionable flags",
       population_status: "present",
@@ -258,7 +246,7 @@ export function buildNanoPolicySignalRows(input: {
   ) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policySemanticConfidence",
       label: "Policy semantic confidence",
       population_status: "present",
@@ -272,7 +260,7 @@ export function buildNanoPolicySignalRows(input: {
   if (typeof primaryPolicyAmbiguityScore === "number" && primaryPolicyAmbiguityScore >= 50) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyAmbiguityScore",
       label: "Policy ambiguity score",
       population_status: "present",
@@ -285,7 +273,7 @@ export function buildNanoPolicySignalRows(input: {
   if (primaryPolicyDsarMechanism) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyDsarMechanism",
       label: "Policy DSAR mechanism",
       population_status: "present",
@@ -298,7 +286,7 @@ export function buildNanoPolicySignalRows(input: {
   if (primaryPrivacyContactChannelType) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "privacyContactChannelType",
       label: "Privacy contact channel type",
       population_status: "present",
@@ -311,7 +299,7 @@ export function buildNanoPolicySignalRows(input: {
   if (primaryPolicyDoNotSell) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyDoNotSell",
       label: "Policy do-not-sell posture",
       population_status: "present",
@@ -325,7 +313,7 @@ export function buildNanoPolicySignalRows(input: {
   if (policyRightsSignals.length > 0) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyRightsSignals",
       label: "Policy rights signals",
       population_status: "present",
@@ -339,7 +327,7 @@ export function buildNanoPolicySignalRows(input: {
   if (policyChildrenReference && !["none", "unknown"].includes(policyChildrenReference.toLowerCase())) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs([primaryPolicyRow]),
+      evidence_refs: getPolicyRowEvidenceRefs([primaryPolicyRow]),
       key: "policyChildrenReference",
       label: "Policy children reference",
       population_status: "present",
@@ -357,7 +345,7 @@ export function buildNanoPolicySignalRows(input: {
   if (policyReviewReasons.has("policy_behavior_conflict_candidate")) {
     rows.push({
       confidence: primaryPolicyConfidence,
-      evidence_refs: buildPolicyRowEvidenceRefs(input.policyEnrichments),
+      evidence_refs: getPolicyRowEvidenceRefs(input.policyEnrichments),
       key: "policyBehaviorConflictCandidate",
       label: "Policy behavior conflict candidate",
       population_status: "present",
@@ -367,7 +355,7 @@ export function buildNanoPolicySignalRows(input: {
     });
   }
 
-  const cookiePolicyRow = input.policyEnrichments.find((row) => getPolicyPageType(row) === "cookie_policy") ?? null;
+  const cookiePolicyRow = getFirstPolicyRowByPageTypes(input.policyEnrichments, ["cookie_policy"]);
   const runtimeCookieNames = getRuntimeCookieNames(input.runtimeArtifacts);
   if (cookiePolicyRow && runtimeCookieNames.length > 0) {
     const cookieDisclosures = getPolicyCookieDisclosures(cookiePolicyRow).filter(
@@ -384,7 +372,7 @@ export function buildNanoPolicySignalRows(input: {
     if (cookieStructurallyWeak) {
       rows.push({
         confidence: cookieConfidence,
-        evidence_refs: buildPolicyRowEvidenceRefs([cookiePolicyRow]),
+        evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
         key: "disclosure.cookie_policy_structurally_obstructed",
         label: "Cookie policy structurally obstructed",
         population_status: "present",
@@ -397,7 +385,7 @@ export function buildNanoPolicySignalRows(input: {
       if (unmatchedCookieNames.length > 0) {
         rows.push({
           confidence: cookieConfidence,
-          evidence_refs: buildPolicyRowEvidenceRefs([cookiePolicyRow]),
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
           key: "privacy.cookie_runtime_disclosure_gap_detected",
           label: "Cookie runtime disclosure gap detected",
           population_status: "present",
@@ -421,7 +409,7 @@ export function buildNanoPolicySignalRows(input: {
 
   for (const row of lowConfidenceRows) {
     const confidence = getPolicySemanticConfidence(row);
-    const evidenceRefs = buildPolicyRowEvidenceRefs([row]);
+    const evidenceRefs = getPolicyRowEvidenceRefs([row]);
     const flags = getPolicyActionableFlags(row);
     const mentions = getPolicyMentions(row);
     const coverageRatio = getPolicyCoverageRatio(row);

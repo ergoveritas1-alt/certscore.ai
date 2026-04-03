@@ -2,6 +2,10 @@ import { isMeaningfulPolicyText } from "./policy-snippet-normalization";
 
 export type PolicyEnrichmentRow = Record<string, unknown>;
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
 export function getPolicyEvidenceSnippets(row: PolicyEnrichmentRow) {
   return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
     ? (row.policyEvidenceSnippets as Record<string, unknown>)
@@ -137,4 +141,21 @@ export function getPolicyDoNotSell(row: PolicyEnrichmentRow) {
     : isMeaningfulPolicyText(row.policy_do_not_sell)
       ? row.policy_do_not_sell
       : null;
+}
+
+export function getPrimaryPolicyEnrichmentRow(rows: PolicyEnrichmentRow[]) {
+  return rows.find((row) => getPolicyPageType(row) === "privacy_policy") ?? rows[0] ?? null;
+}
+
+export function getPolicyRowsForPageType(rows: PolicyEnrichmentRow[], pageType: string) {
+  return rows.filter((row) => getPolicyPageType(row) === pageType);
+}
+
+export function getFirstPolicyRowByPageTypes(rows: PolicyEnrichmentRow[], pageTypes: string[]) {
+  const wantedTypes = new Set(pageTypes);
+  return rows.find((row) => wantedTypes.has(String(getPolicyPageType(row) ?? ""))) ?? null;
+}
+
+export function getPolicyRowEvidenceRefs(rows: PolicyEnrichmentRow[]) {
+  return uniqueStrings(rows.map(getPolicyPageUrl));
 }
