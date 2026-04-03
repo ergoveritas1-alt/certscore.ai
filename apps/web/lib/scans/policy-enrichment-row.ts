@@ -75,3 +75,66 @@ export function getPolicyActionableFlags(row: PolicyEnrichmentRow) {
       ? row.policy_actionable_flags
       : [];
 }
+
+export function getPolicySemanticConfidence(row: PolicyEnrichmentRow) {
+  const value =
+    typeof row.policySemanticConfidence === "number" && Number.isFinite(row.policySemanticConfidence)
+      ? row.policySemanticConfidence
+      : typeof row.policy_semantic_confidence === "number" && Number.isFinite(row.policy_semantic_confidence)
+        ? row.policy_semantic_confidence
+        : null;
+
+  return typeof value === "number" ? Math.max(0, Math.min(1, value)) : null;
+}
+
+export function getPolicyAmbiguityScore(row: PolicyEnrichmentRow) {
+  return typeof row.policyAmbiguityScore === "number" && Number.isFinite(row.policyAmbiguityScore)
+    ? row.policyAmbiguityScore
+    : typeof row.policy_ambiguity_score === "number" && Number.isFinite(row.policy_ambiguity_score)
+      ? row.policy_ambiguity_score
+      : null;
+}
+
+export function getPolicyCookieDisclosures(row: PolicyEnrichmentRow) {
+  return Array.isArray(row.policyCookieDisclosures)
+    ? row.policyCookieDisclosures
+    : Array.isArray(row.policy_cookie_disclosures)
+      ? row.policy_cookie_disclosures
+      : [];
+}
+
+export function getPolicyCoverageRatio(row: PolicyEnrichmentRow) {
+  return typeof row.policyCoverageRatio === "number" && Number.isFinite(row.policyCoverageRatio)
+    ? row.policyCoverageRatio
+    : typeof row.policy_coverage_ratio === "number" && Number.isFinite(row.policy_coverage_ratio)
+      ? row.policy_coverage_ratio
+      : null;
+}
+
+export function getPolicySnippetCount(row: PolicyEnrichmentRow) {
+  return typeof row.policySnippetCount === "number" && Number.isFinite(row.policySnippetCount)
+    ? row.policySnippetCount
+    : typeof row.policy_snippet_count === "number" && Number.isFinite(row.policy_snippet_count)
+      ? row.policy_snippet_count
+      : null;
+}
+
+export function getPolicyStructurallyWeak(row: PolicyEnrichmentRow) {
+  return row.policyStructurallyWeak === true || row.policy_structurally_weak === true;
+}
+
+export function getPolicyDsarMechanism(row: PolicyEnrichmentRow) {
+  return isMeaningfulPolicyText(row.policyDsarMechanism)
+    ? row.policyDsarMechanism
+    : isMeaningfulPolicyText(row.policy_dsar_mechanism)
+      ? row.policy_dsar_mechanism
+      : null;
+}
+
+export function getPolicyDoNotSell(row: PolicyEnrichmentRow) {
+  return isMeaningfulPolicyText(row.policyDoNotSell)
+    ? row.policyDoNotSell
+    : isMeaningfulPolicyText(row.policy_do_not_sell)
+      ? row.policy_do_not_sell
+      : null;
+}

@@ -1,5 +1,23 @@
 import { POLICY_POSITIVE_SIGNAL_SPECS } from "./policy-positive-signal-contract";
 import { derivePositivePolicySignalMap } from "../../server/scans/policy-enrichment-normalization";
+import {
+  getPolicyActionableFlags,
+  getPolicyAmbiguityScore,
+  getPolicyChildrenReference,
+  getPolicyCookieDisclosures,
+  getPolicyCoverageRatio,
+  getPolicyDsarMechanism,
+  getPolicyDoNotSell,
+  getPolicyMentions,
+  getPolicyPageType,
+  getPolicyPageUrl,
+  getPolicyRightsSignals,
+  getPolicySemanticConfidence,
+  getPolicySnippetCount,
+  getPolicyStructurallyWeak,
+  getPolicySummaryText,
+  getPrivacyContactChannelType
+} from "./policy-enrichment-row";
 
 export type PersistedNanoSignalRow = {
   confidence: number | null;
@@ -44,71 +62,6 @@ function getNumber(value: unknown) {
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
-}
-
-function getPageType(row: Record<string, unknown>) {
-  return getString(row.page_type) ?? getString(row.pageType);
-}
-
-function getPageUrl(row: Record<string, unknown>) {
-  return getString(row.page_url) ?? getString(row.pageUrl);
-}
-
-function getPolicySemanticConfidence(row: Record<string, unknown>) {
-  const value = getNumber(row.policy_semantic_confidence) ?? getNumber(row.policySemanticConfidence);
-  return typeof value === "number" ? Math.max(0, Math.min(1, value)) : null;
-}
-
-function getPolicyAmbiguityScore(row: Record<string, unknown>) {
-  return getNumber(row.policy_ambiguity_score) ?? getNumber(row.policyAmbiguityScore);
-}
-
-function getPolicyChildrenReference(row: Record<string, unknown>) {
-  return getString(row.policy_children_reference) ?? getString(row.policyChildrenReference);
-}
-
-function getPrivacyContactChannelType(row: Record<string, unknown>) {
-  return getString(row.privacy_contact_channel_type) ?? getString(row.privacyContactChannelType);
-}
-
-function getPolicyCookieDisclosures(row: Record<string, unknown>) {
-  return Array.isArray(row.policy_cookie_disclosures) ? row.policy_cookie_disclosures : Array.isArray(row.policyCookieDisclosures) ? row.policyCookieDisclosures : [];
-}
-
-function getPolicyCoverageRatio(row: Record<string, unknown>) {
-  return getNumber(row.policy_coverage_ratio) ?? getNumber(row.policyCoverageRatio);
-}
-
-function getPolicySnippetCount(row: Record<string, unknown>) {
-  return getNumber(row.policy_snippet_count) ?? getNumber(row.policySnippetCount);
-}
-
-function getPolicySummaryShort(row: Record<string, unknown>) {
-  return getString(row.policy_summary_short) ?? getString(row.policySummaryShort);
-}
-
-function getPolicyMentions(row: Record<string, unknown>) {
-  return Array.isArray(row.policy_mentions) ? row.policy_mentions : Array.isArray(row.policyMentions) ? row.policyMentions : [];
-}
-
-function getPolicyStructurallyWeak(row: Record<string, unknown>) {
-  return row.policy_structurally_weak === true || row.policyStructurallyWeak === true;
-}
-
-function getPolicyActionableFlags(row: Record<string, unknown>) {
-  return getStringArray(row.policy_actionable_flags ?? row.policyActionableFlags);
-}
-
-function getPolicyDsarMechanism(row: Record<string, unknown>) {
-  return getString(row.policy_dsar_mechanism) ?? getString(row.policyDsarMechanism);
-}
-
-function getPolicyDoNotSell(row: Record<string, unknown>) {
-  return getString(row.policy_do_not_sell) ?? getString(row.policyDoNotSell);
-}
-
-function getPolicyRightsSignals(row: Record<string, unknown>) {
-  return getStringArray(row.policy_rights_signals ?? row.policyRightsSignals);
 }
 
 function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -228,15 +181,15 @@ function matchRuntimeCookie(input: { cookieName: string; disclosures: Array<Reco
 }
 
 function getPrimaryPolicyRow(rows: Array<Record<string, unknown>>) {
-  return rows.find((row) => getPageType(row) === "privacy_policy") ?? rows[0] ?? null;
+  return rows.find((row) => getPolicyPageType(row) === "privacy_policy") ?? rows[0] ?? null;
 }
 
 function getRowsForPageType(rows: Array<Record<string, unknown>>, pageType: string) {
-  return rows.filter((row) => getPageType(row) === pageType);
+  return rows.filter((row) => getPolicyPageType(row) === pageType);
 }
 
 function buildPolicyRowEvidenceRefs(rows: Array<Record<string, unknown>>) {
-  return uniqueStrings(rows.map(getPageUrl));
+  return uniqueStrings(rows.map(getPolicyPageUrl));
 }
 
 function buildPolicyRowConfidence(rows: Array<Record<string, unknown>>) {
@@ -414,7 +367,7 @@ export function buildNanoPolicySignalRows(input: {
     });
   }
 
-  const cookiePolicyRow = input.policyEnrichments.find((row) => getPageType(row) === "cookie_policy") ?? null;
+  const cookiePolicyRow = input.policyEnrichments.find((row) => getPolicyPageType(row) === "cookie_policy") ?? null;
   const runtimeCookieNames = getRuntimeCookieNames(input.runtimeArtifacts);
   if (cookiePolicyRow && runtimeCookieNames.length > 0) {
     const cookieDisclosures = getPolicyCookieDisclosures(cookiePolicyRow).filter(
@@ -474,7 +427,7 @@ export function buildNanoPolicySignalRows(input: {
     const coverageRatio = getPolicyCoverageRatio(row);
     const snippetCount = getPolicySnippetCount(row);
     const structurallyWeak = getPolicyStructurallyWeak(row);
-    const summaryShort = getPolicySummaryShort(row);
+    const summaryShort = getPolicySummaryText(row);
 
     if (typeof rightsFrictionScore === "number" && rightsFrictionScore >= 100) {
       rows.push({
