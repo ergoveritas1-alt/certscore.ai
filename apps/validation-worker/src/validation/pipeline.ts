@@ -1774,8 +1774,84 @@ function hasRuntimeCookieEvidence(runtimeArtifacts: Record<string, unknown> | nu
   return initialCookieNames.length > 0;
 }
 
+function getPrivacyDocumentSpecificityScore(row: Record<string, unknown>) {
+  const canonicalUrl = (getString(row.canonical_url) ?? getString(row.canonicalUrl) ?? getString(row.source_url) ?? "").toLowerCase();
+  const title = (getString(row.title) ?? "").toLowerCase();
+  const haystack = `${canonicalUrl}\n${title}`;
+
+  let score = getNanoDocumentPriorityScore(row);
+
+  if (/\bprivacy-policy\b|\/privacy\b|privacy notice\b/.test(haystack)) {
+    score += 20;
+  }
+  if (/\bjob|applicant|employee|candidate|affiliate|supplier|vendor|consumer-health|hipaa|california\b/.test(haystack)) {
+    score -= 25;
+  }
+  if (/\blegal\/privacy-policy\b|\/privacy-policy\b/.test(haystack)) {
+    score += 10;
+  }
+
+  return score;
+}
+
+function hasStrongReadyPrivacyDocument(rows: Array<Record<string, unknown>>) {
+  return rows.some((row) => {
+    const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+    const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus) ?? "pending";
+    const documentType = getString(row.document_type) ?? getString(row.documentType);
+    if (sourceStatus !== "ready" || extractionStatus !== "ready" || documentType !== "privacy_policy") {
+      return false;
+    }
+
+    const extracted =
+      (row.extracted_fields_json && typeof row.extracted_fields_json === "object" && !Array.isArray(row.extracted_fields_json)
+        ? (row.extracted_fields_json as Record<string, unknown>)
+        : null) ??
+      (row.extractedFieldsJson && typeof row.extractedFieldsJson === "object" && !Array.isArray(row.extractedFieldsJson)
+        ? (row.extractedFieldsJson as Record<string, unknown>)
+        : null) ??
+      {};
+    const semanticConfidence =
+      typeof row.semantic_confidence === "number"
+        ? row.semantic_confidence
+        : typeof row.semanticConfidence === "number"
+          ? row.semanticConfidence
+          : typeof extracted.policy_semantic_confidence === "number"
+            ? extracted.policy_semantic_confidence
+            : typeof extracted.policySemanticConfidence === "number"
+              ? extracted.policySemanticConfidence
+              : null;
+    const rightsSignalValue = extracted.policy_rights_signals ?? extracted.policyRightsSignals;
+    const rightsSignals = Array.isArray(rightsSignalValue)
+      ? (rightsSignalValue as unknown[]).filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : [];
+    const policyMentions = Array.isArray(extracted.policy_mentions)
+      ? extracted.policy_mentions
+      : Array.isArray(extracted.policyMentions)
+        ? extracted.policyMentions
+        : [];
+    const contactChannel =
+      getString(extracted.privacy_contact_channel_type) ?? getString(extracted.privacyContactChannelType) ?? "none";
+    const structurallyWeak = extracted.policy_structurally_weak === true || extracted.policyStructurallyWeak === true;
+    const ambiguity =
+      typeof extracted.policy_ambiguity_score === "number"
+        ? extracted.policy_ambiguity_score
+        : typeof extracted.policyAmbiguityScore === "number"
+          ? extracted.policyAmbiguityScore
+          : null;
+    const summary = getString(extracted.policy_summary_short) ?? getString(extracted.policySummaryShort);
+
+    return Boolean(summary) &&
+      !structurallyWeak &&
+      (semanticConfidence === null || semanticConfidence >= 0.65) &&
+      (ambiguity === null || ambiguity <= 65) &&
+      (rightsSignals.length > 0 || contactChannel !== "none" || policyMentions.length > 0);
+  });
+}
+
 export function selectPendingNanoDocumentSourcesForExtraction(input: {
   policyEnrichments: Array<Record<string, unknown>>;
+  existingDocumentSources?: Array<Record<string, unknown>>;
   rows: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null | undefined;
 }) {
@@ -1786,11 +1862,19 @@ export function selectPendingNanoDocumentSourcesForExtraction(input: {
   );
   const shouldExtractCookiePolicy = hasRuntimeCookieEvidence(input.runtimeArtifacts) || !fallbackPageTypes.has("cookie_policy");
   const shouldExtractTerms = !fallbackPageTypes.has("terms_of_service");
+  const strongReadyPrivacyExists = hasStrongReadyPrivacyDocument(input.existingDocumentSources ?? []);
+  const pendingPrivacyRows = input.rows.filter((row) => (getString(row.document_type) ?? getString(row.documentType)) === "privacy_policy");
+  const selectedPrimaryPrivacyId = strongReadyPrivacyExists || pendingPrivacyRows.length === 0
+    ? null
+    : [...pendingPrivacyRows].sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0]?.id;
 
   return input.rows.filter((row) => {
     const documentType = getString(row.document_type) ?? getString(row.documentType);
     if (documentType === "privacy_policy") {
-      return true;
+      if (strongReadyPrivacyExists) {
+        return false;
+      }
+      return String(row.id ?? "") === String(selectedPrimaryPrivacyId ?? "");
     }
     if (documentType === "cookie_policy") {
       return shouldExtractCookiePolicy;
@@ -2019,6 +2103,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     })
   );
   const selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: artifacts.documentSources,
     policyEnrichments: artifacts.policyEnrichments,
     rows: pendingDocumentSources,
     runtimeArtifacts: artifacts.runtimeArtifacts

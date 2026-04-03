@@ -328,6 +328,62 @@ test("selectPendingNanoDocumentSourcesForExtraction keeps cookie docs when runti
   );
 });
 
+test("selectPendingNanoDocumentSourcesForExtraction keeps only the strongest pending privacy doc on first pass", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [],
+    policyEnrichments: [],
+    rows: [
+      {
+        canonical_url: "https://example.com/legal/job-applicant-privacy-notice",
+        document_type: "privacy_policy",
+        id: "doc-applicant",
+        title: "Job Applicant Privacy Notice"
+      },
+      {
+        canonical_url: "https://example.com/legal/privacy-policy",
+        document_type: "privacy_policy",
+        id: "doc-main",
+        title: "Privacy Policy"
+      }
+    ],
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["doc-main"]);
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction skips pending privacy docs when a strong ready privacy doc already exists", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [
+      {
+        document_type: "privacy_policy",
+        extraction_status: "ready",
+        source_status: "ready",
+        extracted_fields_json: {
+          policy_rights_signals: ["access_request"],
+          policy_structurally_weak: false,
+          policy_summary_short: "Main privacy policy",
+          privacy_contact_channel_type: "email",
+          policy_ambiguity_score: 32
+        },
+        semantic_confidence: 0.82
+      }
+    ],
+    policyEnrichments: [],
+    rows: [
+      {
+        canonical_url: "https://example.com/legal/job-applicant-privacy-notice",
+        document_type: "privacy_policy",
+        id: "doc-applicant",
+        title: "Job Applicant Privacy Notice"
+      }
+    ],
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), []);
+});
+
 test("buildNanoDocumentContentHash normalizes whitespace before hashing", () => {
   const left = buildNanoDocumentContentHash("Privacy policy   text\nwith spacing.");
   const right = buildNanoDocumentContentHash("Privacy policy text with spacing.");
