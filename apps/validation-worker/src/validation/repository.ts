@@ -800,7 +800,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       .order("page_type", { ascending: true }),
     supabase
       .from("policy_enrichment")
-      .select("id, page_type, page_url, policy_summary_short, policy_actionable_flags, policy_evidence_snippets, policy_mentions, policy_semantic_confidence, policy_ambiguity_score, policy_dsar_mechanism, policy_rights_signals, policy_children_reference, policy_transfer_mechanisms, policy_retention_periods, policy_do_not_sell, policy_cookie_disclosures, policy_effective_date, policy_governing_law, policy_arbitration_present, policy_notice_contact_present, policy_termination_or_suspension_present, policy_cancellation_or_refund_present, policy_field_coverage, policy_coverage_ratio, policy_snippet_count, policy_structurally_weak")
+      .select("*")
       .eq("scan_id", scanId),
     supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
     supabase
@@ -1723,7 +1723,7 @@ export async function persistDerivedNanoPolicySignals(input: {
     .eq("id", input.scanId)
     .maybeSingle();
 
-  if (scanError || !scanRow?.organization_id || !scanRow?.domain_id) {
+  if (scanError || !scanRow?.domain_id) {
     throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: ${scanError?.message ?? "missing scan"}`);
   }
 
