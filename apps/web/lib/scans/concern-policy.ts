@@ -222,6 +222,29 @@ function hasBlockedOrInterstitialEvidence(rawEvidence: Record<string, unknown> |
   );
 }
 
+function hasPolicySideEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[]
+) {
+  return (
+    evidenceStrengthFlags.includes("policy_text") ||
+    getEvidenceTextCandidates(rawEvidence).some((value) => typeof value === "string" && value.trim().length > 0)
+  );
+}
+
+function hasBehaviorSideEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[]
+) {
+  return (
+    evidenceStrengthFlags.includes("direct_runtime") ||
+    evidenceStrengthFlags.includes("concrete_payload") ||
+    hasTruthyArrayValue(rawEvidence?.runtimeEvidence) ||
+    hasTruthyArrayValue(rawEvidence?.runtimeEvidenceArtifacts) ||
+    hasTruthyArrayValue(rawEvidence?.runtime_evidence_artifacts)
+  );
+}
+
 function hasHumanFacingUrl(rawEvidence: Record<string, unknown> | null | undefined) {
   return getEvidenceUrlCandidates(rawEvidence).some((value) => /^https?:\/\//i.test(value));
 }
@@ -1354,18 +1377,8 @@ export function deriveConcernPolicy(input: {
       }
     }
 
-    const hasPolicyEvidence =
-      input.evidenceStrengthFlags.includes("policy_text") ||
-      typeof input.rawEvidence?.claim === "string" ||
-      typeof input.rawEvidence?.policySummary === "string" ||
-      typeof input.rawEvidence?.policySummaryShort === "string" ||
-      typeof input.rawEvidence?.policy_summary_short === "string";
-    const hasBehaviorEvidence =
-      input.evidenceStrengthFlags.includes("direct_runtime") ||
-      input.evidenceStrengthFlags.includes("concrete_payload") ||
-      hasTruthyArrayValue(input.rawEvidence?.runtimeEvidence) ||
-      hasTruthyArrayValue(input.rawEvidence?.runtimeEvidenceArtifacts) ||
-      hasTruthyArrayValue(input.rawEvidence?.runtime_evidence_artifacts);
+    const hasPolicyEvidence = hasPolicySideEvidence(input.rawEvidence, input.evidenceStrengthFlags);
+    const hasBehaviorEvidence = hasBehaviorSideEvidence(input.rawEvidence, input.evidenceStrengthFlags);
 
     if (!hasPolicyEvidence) {
       negativeEvidenceFlags.add("missing_policy_side_evidence");

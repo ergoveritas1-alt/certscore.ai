@@ -932,6 +932,25 @@ test("deriveConcernPolicy keeps generic policy-behavior conflicts internal when 
   });
 });
 
+test("deriveConcernPolicy recognizes legacy contradiction evidence fields when checking missing sides", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.policy_runtime_functional_misalignment_detected",
+      suggestedUnifiedFindingId: "privacy_cookie_policy_conflict",
+      title: "Policy/runtime misalignment detected"
+    }),
+    evidenceStrengthFlags: ["fallback_only"],
+    rawEvidence: {
+      policy_summary_short: "We describe advertising, pixels, and related privacy controls in the privacy policy.",
+      runtime_evidence_artifacts: ["Google Ads"],
+      supportingSignals: ["policy_behavior_conflict_candidate"]
+    }
+  });
+
+  assert.ok(!policy.negativeEvidenceFlags.includes("missing_policy_side_evidence"));
+  assert.ok(!policy.negativeEvidenceFlags.includes("missing_behavior_side_evidence"));
+});
+
 test("deriveConcernPolicy promotes contradiction-grade policy behavior conflicts only with structured anchors and mapping", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
