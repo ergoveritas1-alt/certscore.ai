@@ -1,6 +1,16 @@
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { SummaryMetricTile } from "./report-primitives";
 
+type DomainBenchmarkCardData = {
+  confidence: "low" | "medium" | "high";
+  estimatedRankLabel: string;
+  expectedCookiesBeforeConsent: number;
+  expectedOverallScore: number;
+  expectedThirdPartyRequests: number;
+  industry: string;
+  rationale: string;
+} | null;
+
 function formatFreshness(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -57,6 +67,62 @@ function DetailDisclosure(input: {
         </div>
       </div>
     </details>
+  );
+}
+
+function getConfidenceTone(confidence: "low" | "medium" | "high") {
+  if (confidence === "high") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  if (confidence === "medium") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function BenchmarkMetricCard(input: {
+  actualValue: number | null;
+  benchmarkValue: number | null;
+  label: string;
+  maxValue?: number;
+}) {
+  const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
+  const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
+  const scaleMax = Math.max(input.maxValue ?? 0, actualValue ?? 0, benchmarkValue ?? 0, 1);
+
+  return (
+    <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
+      <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{actualValue ?? "—"}</p>
+      {benchmarkValue !== null ? (
+        <div className="mt-3 space-y-2">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-slate-600">
+              <span>Current</span>
+              <span>{actualValue ?? "—"}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-slate-900"
+                style={{ width: `${Math.max(4, ((actualValue ?? 0) / scaleMax) * 100)}%` }}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-slate-600">
+              <span>Expected</span>
+              <span>{benchmarkValue}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-sky-400"
+                style={{ width: `${Math.max(4, (benchmarkValue / scaleMax) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -153,6 +219,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 
 export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
+  domainBenchmark: DomainBenchmarkCardData;
   finalHost: string | null;
   fingerprintReasons: string[];
   fingerprintLabel: string;
@@ -204,25 +271,46 @@ export function ExecutiveSummaryCard(input: {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
               Scanned {formatFreshness(input.lastScannedAt)}
             </span>
+            {input.domainBenchmark ? (
+              <>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                  Industry {input.domainBenchmark.industry}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
+                  Best-guess rank {input.domainBenchmark.estimatedRankLabel}
+                </span>
+                <span
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getConfidenceTone(input.domainBenchmark.confidence)}`}
+                >
+                  Estimate confidence {input.domainBenchmark.confidence}
+                </span>
+              </>
+            ) : null}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <SummaryMetricTile
+            <BenchmarkMetricCard
               label="Overall score"
-              value={input.score !== null ? String(input.score) : "—"}
-              className="rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4"
+              actualValue={input.score}
+              benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
+              maxValue={100}
             />
-            <SummaryMetricTile
+            <BenchmarkMetricCard
               label="Third-party requests"
-              value={String(input.thirdPartyRequestCount)}
-              className="rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4"
+              actualValue={input.thirdPartyRequestCount}
+              benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
             />
-            <SummaryMetricTile
+            <BenchmarkMetricCard
               label="Cookies before consent"
-              value={String(input.beforeConsentCookieCount)}
-              className="rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4"
+              actualValue={input.beforeConsentCookieCount}
+              benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
             />
           </div>
+          {input.domainBenchmark ? (
+            <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+              <span className="font-medium text-slate-900">Expected baseline:</span> {input.domainBenchmark.rationale}
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">

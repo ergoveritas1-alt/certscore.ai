@@ -39,6 +39,12 @@ import {
   dereferencePolicyEvidenceSnippets
 } from "./policy-enrichment-normalization";
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
+import {
+  DOMAIN_BENCHMARK_EVENT_TYPE,
+  generateDomainBenchmarkEstimate,
+  normalizeDomainBenchmarkEstimate,
+  type DomainBenchmarkEstimate
+} from "./domain-benchmark-estimate";
 
 export type ScanDetailRecord = {
   id: string;
@@ -190,6 +196,61 @@ type ScanEventRow = {
   message: string;
   metadata_json: unknown;
 };
+
+async function resolveDomainBenchmarkEstimate(input: {
+  currentEvents: ScanEventRecord[];
+  domainHostname: string | null;
+  domainId: string | null;
+  organizationId: string | null;
+  scanId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}): Promise<DomainBenchmarkEstimate | null> {
+  const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
+  const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);
+  if (currentEstimate) {
+    return currentEstimate;
+  }
+
+  if (input.domainId) {
+    const { data: recentDomainEvent } = await input.supabase
+      .from("scan_events")
+      .select("metadata_json")
+      .eq("domain_id", input.domainId)
+      .eq("event_type", DOMAIN_BENCHMARK_EVENT_TYPE)
+      .neq("scan_id", input.scanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const cachedEstimate = normalizeDomainBenchmarkEstimate((recentDomainEvent as { metadata_json?: unknown } | null)?.metadata_json);
+    if (cachedEstimate) {
+      return cachedEstimate;
+    }
+  }
+
+  if (!input.domainHostname) {
+    return null;
+  }
+
+  const generatedEstimate = await generateDomainBenchmarkEstimate({
+    domainHostname: input.domainHostname
+  });
+
+  if (!generatedEstimate) {
+    return null;
+  }
+
+  await input.supabase.from("scan_events").insert({
+    scan_id: input.scanId,
+    domain_id: input.domainId,
+    organization_id: input.organizationId,
+    event_type: DOMAIN_BENCHMARK_EVENT_TYPE,
+    message: "Estimated domain benchmark for executive summary.",
+    metadata_json: generatedEstimate
+  });
+
+  return generatedEstimate;
+}
 
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
   return getPrimaryPolicyEnrichmentRow(rows);
@@ -1250,6 +1311,14 @@ async function loadScanDetailRecord(input: {
     scanStatus: scanRow.status,
     scannerSignalCount: scannerSignalPopulations.length
   });
+  const domainBenchmark = await resolveDomainBenchmarkEstimate({
+    currentEvents: normalizedEvents,
+    domainHostname,
+    domainId: scanRow.domain_id,
+    organizationId: scanOrganizationId,
+    scanId: input.scanId,
+    supabase
+  });
 
   return {
     accessPostureSummary: {
@@ -1319,6 +1388,7 @@ async function loadScanDetailRecord(input: {
     primaryPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
     signalEnrichmentWorkflow,
+    domainBenchmark,
     validationFindings,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot

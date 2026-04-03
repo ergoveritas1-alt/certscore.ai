@@ -5514,6 +5514,7 @@ export function SharedScanDetailView({
       ) : null}
       <ExecutiveSummaryCard
         beforeConsentCookieCount={cookiesBeforeConsentCount}
+        domainBenchmark={scanRecord.domainBenchmark}
         finalHost={certScoreSummary.finalHost}
         fingerprintReasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
         fingerprintLabel={certScoreSummary.fingerprintLabel}
