@@ -13,22 +13,6 @@ type ValidationScansPageProps = {
   status?: string | null;
 };
 
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
-
-function getRunStateTone(hasActiveRuns: boolean) {
-  return hasActiveRuns
-    ? {
-        badge: "border-sky-200 bg-sky-50 text-sky-800",
-        panel: "from-sky-100 via-white to-cyan-100"
-      }
-    : {
-        badge: "border-slate-200 bg-slate-50 text-slate-700",
-        panel: "from-slate-100 via-white to-slate-50"
-      };
-}
-
 export async function ValidationScansPage({ page = 1, rankBand = null, status = null }: ValidationScansPageProps) {
   const result = await listValidationRuns({
     page,
@@ -38,61 +22,16 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
   const hasActiveRuns = result.items.some((run) =>
     ["waiting_for_scan", "queued", "collecting", "ranking", "validating"].includes(run.status ?? "")
   );
-  const tone = getRunStateTone(hasActiveRuns);
-  const completedRuns = result.items.filter((run) => run.status === "completed").length;
-  const flaggedFindings = result.items.reduce((sum, run) => sum + (run.findingCount ?? 0), 0);
 
   return (
     <div className="space-y-8">
       <ValidationRunsAutoRefresh enabled={hasActiveRuns} />
-      <section
-        className={cx(
-          "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] md:p-7",
-          tone.panel
-        )}
-      >
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.12),transparent_52%)]" />
-        <div className="relative grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={cx("rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", tone.badge)}>
-                Validation history
-              </span>
-              {hasActiveRuns ? (
-                <span className="rounded-full border border-sky-200 bg-sky-50/90 px-3 py-1 text-xs font-medium text-sky-800">
-                  Active runs in progress
-                </span>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-[2.1rem]">
-                All validation scans
-              </h1>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-[15px]">
-                Review persisted validation history, filter by status or rank band, and jump straight into run-level results.
-              </p>
-            </div>
-          </div>
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">All validation scans</h1>
+        <p className="max-w-3xl text-slate-600">Most recent runs first, showing persisted automated CertScore findings.</p>
+      </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            {[
-              { label: "Visible runs", value: result.items.length },
-              { label: "Completed", value: completedRuns },
-              { label: "Flagged findings", value: flaggedFindings }
-            ].map((tile) => (
-              <div
-                key={tile.label}
-                className="rounded-[1.4rem] border border-slate-200/80 bg-white/78 p-4 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur"
-              >
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{tile.label}</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{tile.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
+      <Card className="border-slate-200 bg-white">
         <CardHeader>
           <CardTitle>Run history</CardTitle>
         </CardHeader>
@@ -131,59 +70,58 @@ export async function ValidationScansPage({ page = 1, rankBand = null, status = 
             </div>
           </form>
 
-          <div className="grid gap-4">
-            {result.items.map((run) => (
-              <div
-                key={run.id}
-                className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/55 p-4 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.3)]"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold tracking-tight text-slate-950">{run.hostname}</p>
-                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-700">
-                        {run.status}
-                      </span>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  <th className="pb-3 pr-4 font-medium">Run time</th>
+                  <th className="pb-3 pr-4 font-medium">Domain</th>
+                  <th className="pb-3 pr-4 font-medium">Scan ID</th>
+                  <th className="pb-3 pr-4 font-medium">Rank</th>
+                  <th className="pb-3 pr-4 font-medium">Status</th>
+                  <th className="pb-3 pr-4 font-medium">Findings</th>
+                  <th className="pb-3 font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {result.items.map((run) => (
+                  <tr key={run.id}>
+                    <td className="py-4 pr-4 text-slate-600">
+                      <ViewerTimestamp value={run.createdAt} />
+                    </td>
+                    <td className="py-4 pr-4 text-slate-900">
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Run time</p>
-                        <p className="mt-1 text-sm text-slate-800">
-                          <ViewerTimestamp value={run.createdAt} />
-                        </p>
+                        <p className="font-medium">{run.hostname}</p>
+                        <p className="text-xs text-slate-500">{run.triggerMode}</p>
                       </div>
+                    </td>
+                    <td className="py-4 pr-4 text-slate-600">
+                      <span className="font-mono text-xs text-slate-700">{run.scanId ?? "—"}</span>
+                    </td>
+                    <td className="py-4 pr-4 text-slate-600">
+                      {run.trancoRank ?? "—"} · {run.rankBand ?? "—"}
+                    </td>
+                    <td className="py-4 pr-4 text-slate-600">
                       <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Scan ID</p>
-                        <p className="mt-1 font-mono text-xs text-slate-700">{run.scanId ?? "—"}</p>
+                        <p>Validation: {run.status}</p>
+                        <p className="text-xs text-slate-500">Scan: {run.scanStatus ?? "—"}</p>
                       </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Rank</p>
-                        <p className="mt-1 text-sm text-slate-800">
-                          {run.trancoRank ?? "—"} · {run.rankBand ?? "—"}
-                        </p>
+                    </td>
+                    <td className="py-4 pr-4 text-slate-600">
+                      {run.findingCount} flagged
+                    </td>
+                    <td className="py-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <ValidationViewLink href={`/app/validation/scans/${run.id}`} idleLabel="View results" />
+                        {run.domainId ? (
+                          <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
+                        ) : null}
                       </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Findings</p>
-                        <p className="mt-1 text-sm text-slate-800">{run.findingCount} flagged</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {run.triggerMode} · Scan status {run.scanStatus ?? "—"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <ValidationViewLink href={`/app/validation/scans/${run.id}`} idleLabel="View results" />
-                    {run.domainId ? (
-                      <ValidationRescanForm
-                        buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4"
-                        domainId={run.domainId}
-                        showIcon={false}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="flex items-center justify-between text-sm text-slate-600">

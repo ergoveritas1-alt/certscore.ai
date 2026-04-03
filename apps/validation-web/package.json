@@ -1,0 +1,35 @@
+{
+  "name": "@website-signal-risk-scanner/validation-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "sh -c 'ENV_FILE=${VALIDATION_WEB_ENV_FILE:-../web/.env.local}; if [ -f \"$ENV_FILE\" ]; then TMP_ENV=$(mktemp); grep -v \"^NODE_ENV=\" \"$ENV_FILE\" > \"$TMP_ENV\"; VALIDATION_WEB_SKIP_RUNTIME_HEALTHCHECK=1 node --env-file=\"$TMP_ENV\" --enable-source-maps --import tsx ./scripts/check-runtime.ts && node --env-file=\"$TMP_ENV\" ./node_modules/next/dist/bin/next build; STATUS=$?; rm -f \"$TMP_ENV\"; exit $STATUS; else VALIDATION_WEB_SKIP_RUNTIME_HEALTHCHECK=1 node --enable-source-maps --import tsx ./scripts/check-runtime.ts && node ./node_modules/next/dist/bin/next build; fi'",
+    "check-env": "node --enable-source-maps ./scripts/check-validation-env.ts",
+    "check-runtime": "sh -c 'ENV_FILE=${VALIDATION_WEB_ENV_FILE:-../web/.env.local}; if [ -f \"$ENV_FILE\" ]; then TMP_ENV=$(mktemp); grep -v \"^NODE_ENV=\" \"$ENV_FILE\" > \"$TMP_ENV\"; node --env-file=\"$TMP_ENV\" --enable-source-maps --import tsx ./scripts/check-runtime.ts; STATUS=$?; rm -f \"$TMP_ENV\"; exit $STATUS; else node --enable-source-maps --import tsx ./scripts/check-runtime.ts; fi'",
+    "check-runtime:build": "sh -c 'ENV_FILE=${VALIDATION_WEB_ENV_FILE:-../web/.env.local}; if [ -f \"$ENV_FILE\" ]; then TMP_ENV=$(mktemp); grep -v \"^NODE_ENV=\" \"$ENV_FILE\" > \"$TMP_ENV\"; node --env-file=\"$TMP_ENV\" --enable-source-maps --import tsx ./scripts/check-runtime.ts; STATUS=$?; rm -f \"$TMP_ENV\"; exit $STATUS; else node --enable-source-maps --import tsx ./scripts/check-runtime.ts; fi'",
+    "dev": "sh -c 'ENV_FILE=${VALIDATION_WEB_ENV_FILE:-../web/.env.local}; if [ -f \"$ENV_FILE\" ]; then TMP_ENV=$(mktemp); grep -v \"^NODE_ENV=\" \"$ENV_FILE\" > \"$TMP_ENV\"; node --env-file=\"$TMP_ENV\" ./node_modules/next/dist/bin/next dev --port 3001; STATUS=$?; rm -f \"$TMP_ENV\"; exit $STATUS; else node ./node_modules/next/dist/bin/next dev --port 3001; fi'",
+    "typecheck": "next typegen . && tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "@website-signal-risk-scanner/db": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*",
+    "@website-signal-risk-scanner/ui": "workspace:*",
+    "@website-signal-risk-scanner/web-bot-auth": "workspace:*",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.43.0",
+    "next": "^15.2.0",
+    "nodemailer": "^6.10.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17"
+  }
+}

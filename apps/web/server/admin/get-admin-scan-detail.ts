@@ -14,7 +14,6 @@ import {
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
-import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -338,9 +337,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
         verdict_overridden_by_scope_guardrail: resolvedVerdict.verdictOverriddenByScopeGuardrail
       };
     }),
-    runtimeArtifacts: runtimeArtifacts
-      ? withHybridRuntimeArtifactFallbacks(stripRecord(runtimeArtifacts as Record<string, unknown>))
-      : null,
+    runtimeArtifacts: runtimeArtifacts ? stripRecord(runtimeArtifacts as Record<string, unknown>) : null,
     trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>).map((tracker) => ({
       vendorName: String(tracker.vendor_name),
       vendorCategory: String(tracker.vendor_category),

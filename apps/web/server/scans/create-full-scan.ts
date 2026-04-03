@@ -1,13 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
-import {
-  FULL_SCAN_EVENT_TYPES,
-  USAGE_METRIC_KEYS,
-  buildSharedFullScanConfig,
-  getPlanDefinition,
-  type PlanCode
-} from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
@@ -190,12 +184,21 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
-  const scanConfig = buildSharedFullScanConfig({
-    maxPages: pagesRequested,
+  const scanConfig = {
+    freshBrowserRequired: true,
+    maxRequestedTier: "tier5_full_scan",
+    post403Policy: {
+      maxHomepageRetriesAfter403: 0,
+      maxPassiveVerificationFetchesAfter403: 4,
+      passiveOnlyAfter403: true,
+      stopOnHomepage403: true,
+      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
+    },
     processor: "queued-full-scan-v1",
     profile: planLimits.scanProfile,
+    maxPages: pagesRequested,
     source: input.source ?? "manual-dashboard"
-  });
+  };
 
   const { data: scan, error } = await supabase
     .from("scans")

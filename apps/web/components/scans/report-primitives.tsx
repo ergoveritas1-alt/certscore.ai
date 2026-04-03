@@ -2,13 +2,11 @@ import type { ReactNode } from "react";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
 
-export const METRIC_GRID_CLASS = "grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
-export const METRIC_CARD_CLASS =
-  "rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-3.5 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.35)] backdrop-blur";
-export const METRIC_CARD_VALUE_CLASS = "mt-2 text-base font-semibold tracking-tight text-slate-950";
-export const EMPHASIS_METRIC_CARD_CLASS =
-  "rounded-2xl border border-amber-200/80 bg-amber-50/85 px-4 py-3.5 shadow-[0_10px_30px_-18px_rgba(180,83,9,0.28)] backdrop-blur";
-export const EMPHASIS_METRIC_CARD_VALUE_CLASS = "mt-2 text-base font-semibold tracking-tight text-amber-950";
+export const METRIC_GRID_CLASS = "grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
+export const METRIC_CARD_CLASS = "rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5";
+export const METRIC_CARD_VALUE_CLASS = "mt-1 text-sm font-semibold text-slate-950";
+export const EMPHASIS_METRIC_CARD_CLASS = "rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2.5";
+export const EMPHASIS_METRIC_CARD_VALUE_CLASS = "mt-1 text-sm font-semibold text-amber-950";
 
 type SectionSubsectionProps = {
   title: string;
@@ -45,7 +43,7 @@ type StaticSubsectionProps = {
 
 export function StaticSubsection(input: StaticSubsectionProps) {
   return (
-    <div className="space-y-4 rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-5 shadow-[0_14px_40px_-24px_rgba(15,23,42,0.3)] backdrop-blur">
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
       <div className="space-y-1">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-slate-900">{input.title}</p>
@@ -67,7 +65,7 @@ export function PrimaryPillarGroup(input: PrimaryPillarGroupProps) {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-950">{input.title}</h2>
+        <h2 className="text-lg font-semibold text-slate-950">{input.title}</h2>
       </div>
       <div className="space-y-4">{input.children}</div>
     </section>
@@ -118,7 +116,7 @@ export function SummaryMetricTile({
   const content = (
     <>
       <div className="flex items-center gap-1.5">
-        <p className="line-clamp-2 text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
+        <p className="line-clamp-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
         {tooltip ? <InfoTip align="start" text={tooltip} /> : null}
       </div>
       {showValueText ? <p className={valueClassName ?? METRIC_CARD_VALUE_CLASS}>{value}</p> : null}
@@ -129,7 +127,7 @@ export function SummaryMetricTile({
             return (
               <span
                 key={`${label}-segment-${index}`}
-                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200/80"
+                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200"
               >
                 <span
                   className={`absolute inset-y-0 left-0 rounded-full ${segmentToneClass}`}
@@ -147,7 +145,7 @@ export function SummaryMetricTile({
     return (
       <a
         href={href}
-        className={`${tileClassName} block transition-[transform,border-color,background-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-[0_18px_45px_-24px_rgba(15,23,42,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40`}
+        className={`${tileClassName} block transition-colors hover:border-slate-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40`}
       >
         {content}
       </a>

@@ -28,10 +28,6 @@ function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
-
 function getStatusBadgeTone(status: string): "neutral" | "warning" | "success" {
   if (status === "completed") {
     return "success";
@@ -134,48 +130,44 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
   return (
     <div className="space-y-6 pb-6">
       <ScanHistoryLiveRefresh enabled={hasActiveScans} />
-      <section
-        className={cx(
-          "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br px-5 py-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] sm:px-6",
-          hasActiveScans ? "from-emerald-100 via-white to-sky-100" : "from-slate-100 via-white to-slate-50"
-        )}
-      >
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.12),transparent_52%)]" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-panel sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">Scan History</h1>
-              <Badge className="bg-white/75 text-slate-700 ring-1 ring-slate-200/80">Workspace</Badge>
-              {hasActiveScans ? (
-                <Badge className="bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">Live refresh on</Badge>
-              ) : null}
+              <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">Workspace</Badge>
             </div>
-            <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-[15px]">
-              Review recent scans, compare what changed, and jump straight into anything running or ready for review.
+            <p className="text-sm text-slate-600">
+              Review recent scans and jump straight into anything running or ready for review.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2 text-sm text-slate-600 lg:justify-end">
-            <div className="rounded-full bg-white/75 px-3 py-1.5 ring-1 ring-slate-200/80">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
               <span className="font-semibold text-slate-900">{result.totalCount}</span> scans
             </div>
-            <div className="rounded-full bg-white/75 px-3 py-1.5 ring-1 ring-slate-200/80">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
               <span className="font-semibold text-slate-900">{totalSignals}</span> signals on page
             </div>
-            <div className="rounded-full bg-white/75 px-3 py-1.5 ring-1 ring-slate-200/80">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
               <span className="font-semibold text-slate-900">{completedCount}</span> completed on page
             </div>
-            <div className="rounded-full bg-white/75 px-3 py-1.5 ring-1 ring-slate-200/80">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
               <span className="font-semibold text-slate-900">{runningCount}</span> running on page
             </div>
-            <div className="rounded-full bg-white/75 px-3 py-1.5 ring-1 ring-slate-200/80">
+            <div className="rounded-full bg-slate-50 px-3 py-1.5 ring-1 ring-slate-200">
               <span className="font-semibold text-slate-900">{queuedCount}</span> queued on page
             </div>
+            {hasActiveScans ? (
+              <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-100">
+                Live refresh on
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
 
-      <Card className="overflow-hidden border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
+      <Card className="border border-slate-200 bg-white">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">

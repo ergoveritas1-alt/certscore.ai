@@ -17,35 +17,6 @@ function formatStateLabel(value: string) {
   return value.replace(/_/g, " ");
 }
 
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
-
-function getPipelineTone(input: {
-  enabled: boolean;
-  hasActiveRuns: boolean;
-  workerHealthy: boolean;
-}) {
-  if (!input.workerHealthy && input.hasActiveRuns) {
-    return {
-      badge: "border-rose-200 bg-rose-50 text-rose-800",
-      panel: "from-rose-100 via-white to-orange-100"
-    };
-  }
-
-  if (input.enabled) {
-    return {
-      badge: "border-emerald-200 bg-emerald-50 text-emerald-800",
-      panel: "from-emerald-100 via-white to-sky-100"
-    };
-  }
-
-  return {
-    badge: "border-amber-200 bg-amber-50 text-amber-800",
-    panel: "from-amber-100 via-white to-slate-100"
-  };
-}
-
 export async function ValidationOverviewPage() {
   const [settings, targets, recentRuns, queueAvailability] = await Promise.all([
     getValidationSettings(),
@@ -62,101 +33,16 @@ export async function ValidationOverviewPage() {
   const hasActiveRuns = recentRuns.items.some((run) =>
     ["waiting_for_scan", "queued", "collecting", "ranking", "validating"].includes(run.status ?? "")
   );
-  const tone = getPipelineTone({
-    enabled: settings.pipelineState === "running",
-    hasActiveRuns,
-    workerHealthy: settings.workerHealthy
-  });
-  const metricTiles = [
-    {
-      label: "Recent runs",
-      value: recentRuns.items.length
-    },
-    {
-      label: "Active validation jobs",
-      value: queuedOrActiveValidationJobs
-    },
-    {
-      label: "Tracked targets",
-      value: targets.length
-    },
-    {
-      label: "Pipeline mode",
-      value: formatStateLabel(settings.pipelineState)
-    }
-  ];
 
   return (
     <div className="space-y-8">
       <ValidationRunsAutoRefresh enabled={hasActiveRuns} />
-      <section
-        className={cx(
-          "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] md:p-7",
-          tone.panel
-        )}
-      >
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.12),transparent_52%)]" />
-        <div className="relative grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={cx("rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", tone.badge)}>
-                Validation control
-              </span>
-              <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1 text-xs font-medium text-slate-700">
-                {formatStateLabel(settings.pipelineState)}
-              </span>
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-[2.1rem]">
-                Validation control center
-              </h1>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-[15px]">
-                Monitor validation throughput, queue health, and the latest automated review runs from one place.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {settings.workerHealthy ? (
-                <span className="rounded-full border border-emerald-200 bg-emerald-50/90 px-3 py-1.5 text-xs font-medium text-emerald-800">
-                  Worker heartbeat healthy
-                </span>
-              ) : (
-                <span className="rounded-full border border-rose-200 bg-rose-50/90 px-3 py-1.5 text-xs font-medium text-rose-800">
-                  Worker heartbeat stale
-                </span>
-              )}
-              {queueAvailability.enabled ? (
-                <span className="rounded-full border border-sky-200 bg-sky-50/90 px-3 py-1.5 text-xs font-medium text-sky-800">
-                  Queue accepting runs
-                </span>
-              ) : (
-                <span className="rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1.5 text-xs font-medium text-amber-800">
-                  Queue unavailable
-                </span>
-              )}
-              {hasActiveRuns ? (
-                <span className="rounded-full border border-slate-200/80 bg-white/75 px-3 py-1.5 text-xs font-medium text-slate-700">
-                  Auto-refresh active
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            {metricTiles.map((tile) => (
-              <div
-                key={tile.label}
-                className="rounded-[1.4rem] border border-slate-200/80 bg-white/78 p-4 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur"
-              >
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{tile.label}</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{tile.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Validation control center</h1>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
+        <Card className="border-slate-200 bg-white">
           <CardHeader>
             <CardTitle>Controls</CardTitle>
           </CardHeader>
@@ -264,59 +150,54 @@ export async function ValidationOverviewPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
+          <Card className="border-slate-200 bg-white">
             <CardHeader>
               <CardTitle>Recent validation runs</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {recentRuns.items.slice(0, 4).map((run) => (
-                  <div
-                    key={run.id}
-                    className="rounded-[1.35rem] border border-slate-200/80 bg-slate-50/55 p-4 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.3)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-semibold tracking-tight text-slate-950">{run.hostname}</p>
-                        <p className="font-mono text-[11px] text-slate-500">{run.scanId ?? "—"}</p>
-                      </div>
-                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-700">
-                        {run.status}
-                      </span>
-                    </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Mode</p>
-                        <p className="mt-1 text-sm text-slate-800">{run.triggerMode}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Findings</p>
-                        <p className="mt-1 text-sm text-slate-800">{run.findingCount ?? "—"}</p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Created</p>
-                        <p className="mt-1 text-sm text-slate-800">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500">
+                      <th className="pb-3 pr-4 font-medium">Domain</th>
+                      <th className="pb-3 pr-4 font-medium">Scan ID</th>
+                      <th className="pb-3 pr-4 font-medium">Mode</th>
+                      <th className="pb-3 pr-4 font-medium">Status</th>
+                      <th className="pb-3 pr-4 font-medium">Findings</th>
+                      <th className="pb-3 pr-4 font-medium">Created</th>
+                      <th className="pb-3 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {recentRuns.items.slice(0, 4).map((run) => (
+                      <tr key={run.id}>
+                        <td className="py-3 pr-4 text-slate-900">{run.hostname}</td>
+                        <td className="py-3 pr-4 text-slate-600">
+                          <span className="font-mono text-xs text-slate-700">{run.scanId ?? "—"}</span>
+                        </td>
+                        <td className="py-3 pr-4 text-slate-600">{run.triggerMode}</td>
+                        <td className="py-3 pr-4 text-slate-600">{run.status}</td>
+                        <td className="py-3 pr-4 text-slate-600">{run.findingCount ?? "—"}</td>
+                        <td className="py-3 pr-4 text-slate-600">
                           <ViewerTimestamp value={run.createdAt} />
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <ValidationViewLink href={`/app/validation/scans/${run.id}`} />
-                      {run.domainId ? (
-                        <ValidationRescanForm
-                          buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4"
-                          domainId={run.domainId}
-                          showIcon={false}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <ValidationViewLink href={`/app/validation/scans/${run.id}`} />
+                            {run.domainId ? (
+                              <ValidationRescanForm buttonClassName="text-sm font-medium text-slate-900 underline underline-offset-4" domainId={run.domainId} showIcon={false} />
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-slate-200/80 bg-white/90 shadow-[0_18px_55px_-32px_rgba(15,23,42,0.28)]">
+          <Card className="border-slate-200 bg-white">
             <CardHeader>
               <CardTitle>Target queue</CardTitle>
             </CardHeader>

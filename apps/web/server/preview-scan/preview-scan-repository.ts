@@ -1,6 +1,5 @@
 import {
   buildAgencyMappings,
-  buildSharedFullScanConfig,
   getScannerExecutionSummary,
   PREVIEW_SCAN_EVENT_TYPES,
   type AgencyMapping,
@@ -18,7 +17,6 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createHash } from "node:crypto";
 import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
-import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 
 type DomainRow = {
   id: string;
@@ -152,8 +150,6 @@ type RuntimeArtifactsRow = {
   build_phase_summaries?: Array<Record<string, unknown>> | null;
 } | null;
 
-const PREVIEW_MODE_LABEL = "mode=preview";
-
 function getRecordValue(record: unknown, key: string) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     return null;
@@ -276,11 +272,11 @@ function buildLiveEarlyResults(input: {
 
 function getStatusMessage(status: ScanStatus) {
   if (status === "queued") {
-    return "Queued for a homepage preview scan.";
+    return "Queued for a lightweight live preview.";
   }
 
   if (status === "running") {
-    return "Running the homepage preview scan and assembling findings.";
+    return "Scanning a lightweight site surface and assembling preview findings.";
   }
 
   if (status === "completed") {
@@ -303,7 +299,7 @@ function buildActivityTailParts(scan: ScanRow, latestEvent: ScanEventRow | null)
   const fragments: string[] = [];
 
   if (scan.status === "queued") {
-    fragments.push(PREVIEW_MODE_LABEL);
+    fragments.push("mode=lightweight-preview");
     const requestedPages = formatCount(scan.pages_requested, "page");
     if (requestedPages) {
       fragments.push(`target=${requestedPages}`);
@@ -385,7 +381,7 @@ function buildActivityLine(scan: ScanRow, latestEvent: ScanEventRow | null) {
   }
 
   if (scan.status === "queued") {
-    return `Waiting for a worker to pick up this homepage preview scan. · ${PREVIEW_MODE_LABEL} · target=1 page`;
+    return "Waiting for a worker to pick up this lightweight live preview. · mode=lightweight-preview · target=1 page";
   }
 
   if (scan.status === "running") {
@@ -412,7 +408,7 @@ function buildActivityDetails(scan: ScanRow, latestEvent: ScanEventRow | null) {
       lines.push(details.slice(index, index + 3).join(" · "));
     }
   } else if (scan.status === "queued") {
-    lines.push(`${PREVIEW_MODE_LABEL} · target=1 page`);
+    lines.push("mode=lightweight-preview · target=1 page");
   } else if (scan.status === "running") {
     lines.push("live-checks=active · evidence=collecting");
   } else if (scan.status === "completed") {
@@ -437,7 +433,7 @@ function buildActivityFeed(scan: ScanRow, events: ScanEventRow[]) {
     })),
     fallbackLines:
       scan.status === "queued"
-        ? ["step[1/3] event> Preview scan queued.", `data> evt=preview_scan.queued · ${PREVIEW_MODE_LABEL}`]
+        ? ["step[1/3] event> Preview scan queued.", "data> evt=preview_scan.queued · mode=lightweight-preview"]
         : ["step[2/3] event> Preview activity feed is initializing.", "data> evt=preview.feed.pending"],
     latestLabel: stepLabel,
     maxEvents: 16
@@ -498,18 +494,18 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
 
 export async function createPreviewScanRecord(input: { domainId: string; hostname: string; normalizedUrl: string }) {
   const supabase = createAdminClient();
-  const initialConfig: ScanConfig = buildSharedFullScanConfig({
-    execution: {
-      scanPlanProfileOverride: "runtime_fast"
-    },
+  const initialConfig: ScanConfig = {
     hostname: input.hostname,
-    maxPages: 1,
-    maxRequestedTier: "tier2_browser_surface",
     normalizedUrl: input.normalizedUrl,
-    processor: "queued-full-scan-v1",
-    profile: "homepage",
-    source: "marketing-preview"
-  });
+    post403Policy: {
+      maxHomepageRetriesAfter403: 0,
+      maxPassiveVerificationFetchesAfter403: 4,
+      passiveOnlyAfter403: true,
+      stopOnHomepage403: true,
+      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
+    },
+    processor: "live-preview-v1"
+  };
 
   const { data: scan, error } = await supabase
     .from("scans")
@@ -860,7 +856,7 @@ export async function getPreviewRuntimeArtifacts(scanId: string): Promise<Runtim
     throw new Error(`Failed to load preview scan runtime artifacts: ${error.message}`);
   }
 
-  return (withHybridRuntimeArtifactFallbacks((data as Record<string, unknown> | null) ?? null) as RuntimeArtifactsRow) ?? null;
+  return (data as RuntimeArtifactsRow) ?? null;
 }
 
 function serializePreviewEvents(events: ScanEventRow[]): PreviewScanEvent[] {
