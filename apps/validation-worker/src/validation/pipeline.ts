@@ -1849,6 +1849,41 @@ function hasStrongReadyPrivacyDocument(rows: Array<Record<string, unknown>>) {
   });
 }
 
+function shouldExtractTermsDocument(input: {
+  existingDocumentSources?: Array<Record<string, unknown>>;
+  fallbackPageTypes: Set<string>;
+}) {
+  return !input.fallbackPageTypes.has("terms_of_service") && !hasStrongReadyPrivacyDocument(input.existingDocumentSources ?? []);
+}
+
+function getNanoDocumentExtractionSkipReason(input: {
+  existingDocumentSources?: Array<Record<string, unknown>>;
+  fallbackPageTypes: Set<string>;
+  row: Record<string, unknown>;
+  runtimeArtifacts: Record<string, unknown> | null | undefined;
+}) {
+  const documentType = getString(input.row.document_type) ?? getString(input.row.documentType);
+  if (documentType === "privacy_policy") {
+    return hasStrongReadyPrivacyDocument(input.existingDocumentSources ?? [])
+      ? "secondary_privacy_not_required"
+      : "privacy_policy_not_selected";
+  }
+  if (documentType === "cookie_policy") {
+    return hasRuntimeCookieEvidence(input.runtimeArtifacts) || !input.fallbackPageTypes.has("cookie_policy")
+      ? "cookie_policy_not_selected"
+      : "fallback_policy_semantics_available";
+  }
+  if (documentType === "terms_of_service") {
+    return shouldExtractTermsDocument({
+      existingDocumentSources: input.existingDocumentSources,
+      fallbackPageTypes: input.fallbackPageTypes
+    })
+      ? "terms_not_selected"
+      : "terms_extraction_not_required";
+  }
+  return "fallback_policy_semantics_available";
+}
+
 export function selectPendingNanoDocumentSourcesForExtraction(input: {
   policyEnrichments: Array<Record<string, unknown>>;
   existingDocumentSources?: Array<Record<string, unknown>>;
@@ -1861,8 +1896,11 @@ export function selectPendingNanoDocumentSourcesForExtraction(input: {
       .filter((value): value is string => typeof value === "string")
   );
   const shouldExtractCookiePolicy = hasRuntimeCookieEvidence(input.runtimeArtifacts) || !fallbackPageTypes.has("cookie_policy");
-  const shouldExtractTerms = !fallbackPageTypes.has("terms_of_service");
   const strongReadyPrivacyExists = hasStrongReadyPrivacyDocument(input.existingDocumentSources ?? []);
+  const shouldExtractTerms = shouldExtractTermsDocument({
+    existingDocumentSources: input.existingDocumentSources,
+    fallbackPageTypes
+  });
   const pendingPrivacyRows = input.rows.filter((row) => (getString(row.document_type) ?? getString(row.documentType)) === "privacy_policy");
   const selectedPrimaryPrivacyId = strongReadyPrivacyExists || pendingPrivacyRows.length === 0
     ? null
@@ -2095,14 +2133,19 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     }).catch(() => undefined);
   }
 
-  const pendingDocumentSources = prioritizePendingNanoDocumentSources(
-    artifacts.documentSources.filter((row) => {
-      const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
-      const documentText = getString(row.document_text) ?? getString(row.documentText);
-      return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
-    })
-  );
-  const selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
+  const getPendingDocumentSources = (rows: Array<Record<string, unknown>>) =>
+    prioritizePendingNanoDocumentSources(
+      rows.filter((row) => {
+        const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+        const documentText = getString(row.document_text) ?? getString(row.documentText);
+        return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
+      })
+    );
+  const getFallbackPageTypes = (rows: Array<Record<string, unknown>>) =>
+    new Set(rows.map((row) => getString(row.page_type) ?? getString(row.pageType)).filter((value): value is string => typeof value === "string"));
+
+  let pendingDocumentSources = getPendingDocumentSources(artifacts.documentSources);
+  let selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
     existingDocumentSources: artifacts.documentSources,
     policyEnrichments: artifacts.policyEnrichments,
     rows: pendingDocumentSources,
@@ -2155,16 +2198,16 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       rows: reusableExtractionUpdates
     });
     artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+    pendingDocumentSources = getPendingDocumentSources(artifacts.documentSources);
+    selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
+      existingDocumentSources: artifacts.documentSources,
+      policyEnrichments: artifacts.policyEnrichments,
+      rows: pendingDocumentSources,
+      runtimeArtifacts: artifacts.runtimeArtifacts
+    });
   }
 
-  const remainingPendingDocumentSources = selectedPendingDocumentSources.filter((row) => {
-    const id = getString(row.id);
-    return !id || !reusableExtractions.has(id);
-  });
-  const selectedPendingIds = new Set([...remainingPendingDocumentSources, ...selectedPendingDocumentSources.filter((row) => {
-    const id = getString(row.id);
-    return id ? reusableExtractions.has(id) : false;
-  })].map((row) => String(row.id ?? "")));
+  const selectedPendingIds = new Set(selectedPendingDocumentSources.map((row) => String(row.id ?? "")));
   const skippedPendingDocumentSources = pendingDocumentSources.filter((row) => !selectedPendingIds.has(String(row.id ?? "")));
 
   if (skippedPendingDocumentSources.length > 0) {
@@ -2180,7 +2223,12 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
           ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
             ? (row.metadata_json as Record<string, unknown>)
             : {}),
-          extraction_skip_reason: "fallback_policy_semantics_available"
+          extraction_skip_reason: getNanoDocumentExtractionSkipReason({
+            existingDocumentSources: artifacts.documentSources,
+            fallbackPageTypes: getFallbackPageTypes(artifacts.policyEnrichments),
+            row,
+            runtimeArtifacts: artifacts.runtimeArtifacts
+          })
         },
         semanticConfidence:
           typeof row.semantic_confidence === "number"
@@ -2191,6 +2239,13 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       }))
     });
     artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+    pendingDocumentSources = getPendingDocumentSources(artifacts.documentSources);
+    selectedPendingDocumentSources = selectPendingNanoDocumentSourcesForExtraction({
+      existingDocumentSources: artifacts.documentSources,
+      policyEnrichments: artifacts.policyEnrichments,
+      rows: pendingDocumentSources,
+      runtimeArtifacts: artifacts.runtimeArtifacts
+    });
   }
 
   if (artifacts.policySemanticRows.length > 0) {
@@ -2203,43 +2258,91 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     });
   }
 
-  if (remainingPendingDocumentSources.length > 0) {
+  if (selectedPendingDocumentSources.length > 0) {
+    const immediatePendingDocumentSources = selectedPendingDocumentSources.filter(
+      (row) => (getString(row.document_type) ?? getString(row.documentType)) !== "terms_of_service"
+    );
+    const deferredTermsDocumentSources = selectedPendingDocumentSources.filter(
+      (row) => (getString(row.document_type) ?? getString(row.documentType)) === "terms_of_service"
+    );
     let partialSignalsPersisted = false;
 
-    for (const batch of chunkRows(remainingPendingDocumentSources, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
-      const extractionRows = await Promise.all(
-        batch.map(async (row) => {
-          const result = await extractNanoDocumentSourceWithLlm(row);
-          return {
-            extractedFields: result.extractedFields,
-            extractionStatus: result.extractionStatus,
+    const extractPendingBatches = async (rows: Array<Record<string, unknown>>) => {
+      for (const batch of chunkRows(rows, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
+        const extractionRows = await Promise.all(
+          batch.map(async (row) => {
+            const result = await extractNanoDocumentSourceWithLlm(row);
+            return {
+              extractedFields: result.extractedFields,
+              extractionStatus: result.extractionStatus,
+              id: String(row.id),
+              metadata: {
+                ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
+                  ? (row.metadata_json as Record<string, unknown>)
+                  : {}),
+                ...result.metadata
+              },
+              semanticConfidence: result.semanticConfidence
+            };
+          })
+        );
+
+        await updateScanDocumentSourceExtractions({
+          rows: extractionRows
+        });
+
+        artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+
+        if (!partialSignalsPersisted && artifacts.policySemanticRows.length > 0) {
+          await persistDerivedNanoPolicySignals({
+            policySemanticRows: artifacts.policySemanticRows,
+            policyReviewQueue: artifacts.policyReviewQueue,
+            runtimeArtifacts: artifacts.runtimeArtifacts,
+            scanId,
+            snapshot: artifacts.snapshot
+          });
+          partialSignalsPersisted = true;
+        }
+      }
+    };
+
+    if (immediatePendingDocumentSources.length > 0) {
+      await extractPendingBatches(immediatePendingDocumentSources);
+    }
+
+    if (deferredTermsDocumentSources.length > 0) {
+      artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+      const shouldExtractDeferredTerms = shouldExtractTermsDocument({
+        existingDocumentSources: artifacts.documentSources,
+        fallbackPageTypes: getFallbackPageTypes(artifacts.policyEnrichments)
+      });
+
+      if (shouldExtractDeferredTerms) {
+        await extractPendingBatches(deferredTermsDocumentSources);
+      } else {
+        await updateScanDocumentSourceExtractions({
+          rows: deferredTermsDocumentSources.map((row) => ({
+            extractedFields:
+              (typeof row.extracted_fields_json === "object" && row.extracted_fields_json !== null && !Array.isArray(row.extracted_fields_json)
+                ? (row.extracted_fields_json as Record<string, unknown>)
+                : {}),
+            extractionStatus: "insufficient",
             id: String(row.id),
             metadata: {
               ...(typeof row.metadata_json === "object" && row.metadata_json !== null && !Array.isArray(row.metadata_json)
                 ? (row.metadata_json as Record<string, unknown>)
                 : {}),
-              ...result.metadata
+              extraction_skip_reason: "terms_extraction_not_required"
             },
-            semanticConfidence: result.semanticConfidence
-          };
-        })
-      );
-
-      await updateScanDocumentSourceExtractions({
-        rows: extractionRows
-      });
-
-      artifacts = await loadNanoSignalEnrichmentInputs(scanId);
-
-      if (!partialSignalsPersisted && artifacts.policySemanticRows.length > 0) {
-        await persistDerivedNanoPolicySignals({
-          policySemanticRows: artifacts.policySemanticRows,
-          policyReviewQueue: artifacts.policyReviewQueue,
-          runtimeArtifacts: artifacts.runtimeArtifacts,
-          scanId,
-          snapshot: artifacts.snapshot
+            semanticConfidence:
+              typeof row.semantic_confidence === "number"
+                ? row.semantic_confidence
+                : typeof row.semanticConfidence === "number"
+                  ? row.semanticConfidence
+                  : null
+          }))
         });
-        partialSignalsPersisted = true;
+        artifacts = await loadNanoSignalEnrichmentInputs(scanId);
       }
     }
   }
