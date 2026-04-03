@@ -32,6 +32,11 @@ const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_TIMEOUT_MS = 8 * 60_000;
 const POLL_INTERVAL_MS = 5_000;
 
+function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -193,11 +198,11 @@ async function summarizeScan(input: {
   if (policyError) {
     throw new Error(`Failed to load policy enrichment for ${input.hostname}: ${policyError.message}`);
   }
-  if (documentSourcesError) {
+  if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources for ${input.hostname}: ${documentSourcesError.message}`);
   }
 
-  const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
     ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)

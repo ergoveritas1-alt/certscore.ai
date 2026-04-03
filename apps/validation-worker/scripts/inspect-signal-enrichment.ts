@@ -14,6 +14,21 @@ type ScanSignalRow = {
   signal_key: string;
 };
 
+function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
+function isMissingColumnError(error: { code?: string | null; message?: string | null } | null | undefined, column: string) {
+  const message = error?.message ?? "";
+  return (
+    message.includes(`Could not find the '${column}' column`) ||
+    message.includes(`column "${column}"`) ||
+    message.includes(`column ${column} does not exist`) ||
+    (message.includes(column) && message.includes("does not exist"))
+  );
+}
+
 function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
   if (index === -1) {
@@ -55,8 +70,8 @@ async function main() {
     { data: scan, error: scanError },
     { data: events, error: eventsError },
     { data: documentSources, error: documentSourcesError },
-    { data: signals, error: signalsError },
-    { data: findings, error: findingsError }
+    signalResult,
+    findingsResult
   ] = await Promise.all([
     supabase
       .from("scans")
@@ -90,12 +105,55 @@ async function main() {
   if (eventsError) {
     throw new Error(`Failed to load scan events ${scanId}: ${eventsError.message}`);
   }
-  if (documentSourcesError) {
+  if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
   }
+  let signals = signalResult.data;
+  let signalsError = signalResult.error;
+  if (signalsError && isMissingColumnError(signalsError, "population_source")) {
+    const fallback = await supabase
+      .from("scan_signals")
+      .select("signal_key")
+      .eq("scan_id", scanId)
+      .order("signal_key", { ascending: true });
+    signals = (fallback.data ?? []).map((row) => ({
+      ...row,
+      population_source: null
+    }));
+    signalsError = fallback.error;
+  }
+
   if (signalsError) {
     throw new Error(`Failed to load signals ${scanId}: ${signalsError.message}`);
   }
+  let findings = findingsResult.data;
+  let findingsError = findingsResult.error;
+  if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
+    const { data: runs, error: runsError } = await supabase
+      .from("validation_runs")
+      .select("id")
+      .eq("scan_id", scanId);
+    if (runsError) {
+      throw new Error(`Failed to load validation runs ${scanId}: ${runsError.message}`);
+    }
+
+    const runIds = (runs ?? [])
+      .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
+      .filter((value): value is string => typeof value === "string");
+
+    if (runIds.length === 0) {
+      findings = [];
+      findingsError = null;
+    } else {
+      const fallback = await supabase
+        .from("validation_run_findings")
+        .select("id")
+        .in("validation_run_id", runIds);
+      findings = fallback.data;
+      findingsError = fallback.error;
+    }
+  }
+
   if (findingsError) {
     throw new Error(`Failed to load validation findings ${scanId}: ${findingsError.message}`);
   }
@@ -105,7 +163,7 @@ async function main() {
     eventType: event.event_type
   }));
   const signalRows = (signals ?? []) as ScanSignalRow[];
-  const documentRows = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const documentRows = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
 
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
@@ -134,6 +192,8 @@ async function main() {
     },
     workflow,
     counts: {
+      documentSourcesAvailable: !documentSourcesError,
+      signalSourceColumnAvailable: !(signalResult.error && isMissingColumnError(signalResult.error, "population_source")),
       documentSources: documentRows.length,
       findings: findingRows.length,
       nanoSignals: nanoSignalCount,
@@ -173,6 +233,11 @@ async function main() {
 
   printHeader("Counts");
   console.log(JSON.stringify(payload.counts, null, 2));
+
+  if (documentSourcesError) {
+    printHeader("Document Sources");
+    console.log("scan_document_sources is unavailable in this environment; counts are reported as 0.");
+  }
 
   printHeader("Document Sources By Type");
   console.log(JSON.stringify(payload.documentSourcesByType, null, 2));
