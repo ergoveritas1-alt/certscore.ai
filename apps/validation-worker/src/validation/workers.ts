@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import {
+  NANO_SIGNAL_ENRICHMENT_JOB,
   QUEUE_NAMES,
   VALIDATION_COLLECT_JOB,
   VALIDATION_RANK_JOB,
@@ -8,6 +9,7 @@ import {
 import { getWorkerEnv } from "../env";
 import { getValidationRedisConnection } from "../queue/connection";
 import {
+  processNanoSignalEnrichmentJob,
   processValidationCollectJob,
   processValidationRankJob,
   processValidationVerdictJob
@@ -24,6 +26,21 @@ export function createValidationWorkers() {
       }
 
       await processValidationCollectJob(job.data.validationRunId);
+    },
+    {
+      connection: getValidationRedisConnection(),
+      concurrency: 1
+    }
+  );
+
+  const nanoSignalWorker = new Worker<{ pollCount?: number; scanId: string }>(
+    QUEUE_NAMES.nanoSignalEnrichment,
+    async (job) => {
+      if (job.name !== NANO_SIGNAL_ENRICHMENT_JOB) {
+        throw new Error(`Unsupported nano signal enrichment job: ${job.name}`);
+      }
+
+      await processNanoSignalEnrichmentJob(job.data);
     },
     {
       connection: getValidationRedisConnection(),
@@ -61,5 +78,5 @@ export function createValidationWorkers() {
     }
   );
 
-  return [collectWorker, rankWorker, verdictWorker];
+  return [collectWorker, nanoSignalWorker, rankWorker, verdictWorker];
 }

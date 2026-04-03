@@ -9,6 +9,7 @@ import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
+import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -254,6 +255,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   try {
+    await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {
+      console.error("[web] nano signal enrichment handoff failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId: scan.id
+      });
+    });
     await ensureValidationRunForManualScan({
       domainId: domainRecord.domain.id,
       hostname: domainRecord.domain.hostname,

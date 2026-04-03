@@ -902,6 +902,54 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   };
 }
 
+export async function loadNanoSignalEnrichmentInputs(scanId: string) {
+  const supabase = createAdminClient();
+  const [
+    { data: scan, error: scanError },
+    { data: snapshot, error: snapshotError },
+    { data: runtimeArtifacts, error: runtimeArtifactsError },
+    { data: policyEnrichments, error: policyEnrichmentError },
+    { data: policyReviewQueue, error: policyReviewQueueError }
+  ] = await Promise.all([
+    supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
+    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+  ]);
+
+  if (scanError) {
+    throw new Error(`Failed to load scan for nano signal enrichment ${scanId}: ${scanError.message}`);
+  }
+  if (snapshotError) {
+    throw new Error(`Failed to load snapshot for nano signal enrichment ${scanId}: ${snapshotError.message}`);
+  }
+  if (runtimeArtifactsError) {
+    throw new Error(`Failed to load runtime artifacts for nano signal enrichment ${scanId}: ${runtimeArtifactsError.message}`);
+  }
+  if (policyEnrichmentError) {
+    throw new Error(`Failed to load policy enrichment for nano signal enrichment ${scanId}: ${policyEnrichmentError.message}`);
+  }
+  if (policyReviewQueueError) {
+    throw new Error(`Failed to load policy review queue for nano signal enrichment ${scanId}: ${policyReviewQueueError.message}`);
+  }
+
+  return {
+    policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    scan: (scan as {
+      completed_at?: string | null;
+      created_at?: string | null;
+      error_message?: string | null;
+      id?: string;
+      started_at?: string | null;
+      status?: string | null;
+    } | null) ?? null,
+    snapshot: (snapshot as Record<string, unknown> | null) ?? null
+  };
+}
+
 export async function replaceValidationRunFindings(
   runId: string,
   findings: Array<{

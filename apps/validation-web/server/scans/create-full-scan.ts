@@ -7,6 +7,7 @@ import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../../../web/server/queue/full-scan-queue";
+import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 
 export type CreateFullScanActionState = {
@@ -233,6 +234,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       scanId: null
     };
   }
+
+  await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {
+    console.error("[validation-web] nano signal enrichment handoff failed", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId: scan.id
+    });
+  });
 
   return {
     error: null,

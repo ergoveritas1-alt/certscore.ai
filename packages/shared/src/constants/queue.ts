@@ -4,6 +4,7 @@ export const SCAN_JOB_TYPES = {
   previewScan: "preview_scan",
   fullScan: "full_scan",
   scheduledScan: "scheduled_scan",
+  nanoSignalEnrichment: "nano_signal_enrichment",
   validationCollect: "validation_collect",
   validationRank: "validation_rank",
   validationVerdict: "validation_verdict"
@@ -13,6 +14,7 @@ export const QUEUE_NAMES = {
   previewScan: SCAN_JOB_TYPES.previewScan,
   fullScan: SCAN_JOB_TYPES.fullScan,
   scheduledScan: SCAN_JOB_TYPES.scheduledScan,
+  nanoSignalEnrichment: SCAN_JOB_TYPES.nanoSignalEnrichment,
   validationCollect: SCAN_JOB_TYPES.validationCollect,
   validationRank: SCAN_JOB_TYPES.validationRank,
   validationVerdict: SCAN_JOB_TYPES.validationVerdict
@@ -21,6 +23,7 @@ export const QUEUE_NAMES = {
 export const PREVIEW_SCAN_JOB = SCAN_JOB_TYPES.previewScan;
 export const FULL_SCAN_JOB = SCAN_JOB_TYPES.fullScan;
 export const SCHEDULED_SCAN_JOB = SCAN_JOB_TYPES.scheduledScan;
+export const NANO_SIGNAL_ENRICHMENT_JOB = SCAN_JOB_TYPES.nanoSignalEnrichment;
 export const VALIDATION_COLLECT_JOB = SCAN_JOB_TYPES.validationCollect;
 export const VALIDATION_RANK_JOB = SCAN_JOB_TYPES.validationRank;
 export const VALIDATION_VERDICT_JOB = SCAN_JOB_TYPES.validationVerdict;

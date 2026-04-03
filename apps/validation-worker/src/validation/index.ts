@@ -30,7 +30,7 @@ function bootstrapValidationWorker() {
   });
 
   console.info("[validation-worker] started", {
-    jobs: [QUEUE_NAMES.validationCollect, QUEUE_NAMES.validationRank, QUEUE_NAMES.validationVerdict],
+    jobs: [QUEUE_NAMES.validationCollect, QUEUE_NAMES.nanoSignalEnrichment, QUEUE_NAMES.validationRank, QUEUE_NAMES.validationVerdict],
     redisHost: new URL(redisUrl).host
   });
 }

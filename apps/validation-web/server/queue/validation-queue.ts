@@ -1,11 +1,12 @@
 "use server";
 
 import { Queue, type ConnectionOptions } from "bullmq";
-import { QUEUE_NAMES, VALIDATION_COLLECT_JOB } from "@website-signal-risk-scanner/shared";
+import { NANO_SIGNAL_ENRICHMENT_JOB, QUEUE_NAMES, VALIDATION_COLLECT_JOB } from "@website-signal-risk-scanner/shared";
 import { getWebServerEnv } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
 let collectQueue: Queue<{ validationRunId: string }> | null = null;
+let nanoSignalQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
 
 function createRedisConnection(redisUrl: string): ConnectionOptions {
   const url = new URL(redisUrl);
@@ -55,12 +56,39 @@ function getValidationCollectQueue() {
   return collectQueue;
 }
 
+function getNanoSignalQueue() {
+  if (nanoSignalQueue) {
+    return nanoSignalQueue;
+  }
+
+  nanoSignalQueue = new Queue<{ pollCount?: number; scanId: string }>(QUEUE_NAMES.nanoSignalEnrichment, {
+    connection: getValidationRedisConnection(),
+    defaultJobOptions: {
+      removeOnComplete: 100,
+      removeOnFail: 100
+    }
+  });
+
+  return nanoSignalQueue;
+}
+
 export async function enqueueValidationCollectJob(validationRunId: string) {
   await getValidationCollectQueue().add(
     VALIDATION_COLLECT_JOB,
     { validationRunId },
     {
       attempts: 2
+    }
+  );
+}
+
+export async function enqueueNanoSignalEnrichmentJob(scanId: string) {
+  await getNanoSignalQueue().add(
+    NANO_SIGNAL_ENRICHMENT_JOB,
+    { pollCount: 0, scanId },
+    {
+      attempts: 2,
+      jobId: `${scanId}--nano-doc-signals--initial`
     }
   );
 }

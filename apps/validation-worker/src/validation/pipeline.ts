@@ -1,4 +1,5 @@
 import {
+  NANO_SIGNAL_ENRICHMENT_JOB,
   SCAN_EVENT_TYPES,
   VALIDATION_COLLECT_JOB,
   VALIDATION_RANK_JOB,
@@ -18,6 +19,7 @@ import {
   getValidationRun,
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
+  loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
   persistDerivedNanoPolicySignals,
@@ -28,9 +30,16 @@ import {
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
-import { createValidationCollectQueue, createValidationRankQueue, createValidationVerdictQueue } from "../queue/queues";
+import {
+  createNanoSignalEnrichmentQueue,
+  createValidationCollectQueue,
+  createValidationRankQueue,
+  createValidationVerdictQueue
+} from "../queue/queues";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
+const NANO_SIGNAL_ENRICHMENT_POLL_MS = 15_000;
+const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 
 export function determineValidationCollectAction(scanStatus: string | null | undefined) {
   if (scanStatus === "queued") {
@@ -1199,6 +1208,19 @@ export async function enqueueValidationCollect(runId: string) {
   await enqueueValidationCollectWithDelay(runId, 0);
 }
 
+export async function enqueueNanoSignalEnrichment(scanId: string, pollCount = 0, delayMs = 0) {
+  await createNanoSignalEnrichmentQueue().add(
+    NANO_SIGNAL_ENRICHMENT_JOB,
+    { pollCount, scanId },
+    {
+      attempts: 2,
+      delay: delayMs,
+      removeOnComplete: 50,
+      removeOnFail: 50
+    }
+  );
+}
+
 async function enqueueValidationCollectWithDelay(runId: string, delayMs: number) {
   await createValidationCollectQueue().add(
     VALIDATION_COLLECT_JOB,
@@ -1234,6 +1256,75 @@ async function enqueueValidationVerdict(runId: string) {
       removeOnFail: 50
     }
   );
+}
+
+export async function processNanoSignalEnrichmentJob(input: { pollCount?: number; scanId: string }) {
+  const { state } = await getValidationPipelineState();
+  if (state !== "running") {
+    return;
+  }
+
+  const scanId = input.scanId;
+  const pollCount = input.pollCount ?? 0;
+  const artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  const scanStatus = typeof artifacts.scan?.status === "string" ? artifacts.scan.status : null;
+  const startedAt =
+    typeof artifacts.scan?.started_at === "string"
+      ? artifacts.scan.started_at
+      : typeof artifacts.scan?.created_at === "string"
+        ? artifacts.scan.created_at
+        : null;
+
+  if (pollCount === 0) {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
+      message: "Nano document signal enrichment started.",
+      metadataJson: {
+        stage: "nano_doc_signals"
+      },
+      scanId
+    }).catch(() => undefined);
+  }
+
+  if (artifacts.policyEnrichments.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
+    if (pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS) {
+      await enqueueNanoSignalEnrichment(scanId, pollCount + 1, NANO_SIGNAL_ENRICHMENT_POLL_MS);
+      return;
+    }
+  }
+
+  if (scanStatus === "failed") {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+      message: "Nano document signal enrichment failed because the scan failed.",
+      metadataJson: {
+        error: typeof artifacts.scan?.error_message === "string" ? artifacts.scan.error_message : "scan_failed",
+        stage: "nano_doc_signals"
+      },
+      scanId
+    }).catch(() => undefined);
+    return;
+  }
+
+  const nanoSignalRows = await persistDerivedNanoPolicySignals({
+    policyEnrichments: artifacts.policyEnrichments,
+    policyReviewQueue: artifacts.policyReviewQueue,
+    runtimeArtifacts: artifacts.runtimeArtifacts,
+    scanId,
+    snapshot: artifacts.snapshot
+  });
+
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+    message: "Nano document signal enrichment completed.",
+    metadataJson: {
+      nanoSignalCount: nanoSignalRows.length,
+      policyDocumentCount: artifacts.policyEnrichments.length,
+      scanStartedAt: startedAt,
+      stage: "nano_doc_signals"
+    },
+    scanId
+  }).catch(() => undefined);
 }
 
 export async function processValidationCollectJob(validationRunId: string) {
@@ -1316,30 +1407,13 @@ export async function processValidationRankJob(validationRunId: string) {
     });
 
     const artifacts = await loadCompletedScanArtifacts(scanId);
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
-      message: "Nano document signal enrichment started.",
-      metadataJson: {
-        stage: "nano_doc_signals"
-      },
-      scanId
-    }).catch(() => undefined);
-    const nanoSignalRows = await persistDerivedNanoPolicySignals({
+    await persistDerivedNanoPolicySignals({
       policyEnrichments: artifacts.policyEnrichments,
       policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
       scanId,
       snapshot: artifacts.snapshot
     }).catch((error) => {
-      void appendScanWorkflowEvent({
-        eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-        message: "Nano document signal enrichment failed.",
-        metadataJson: {
-          error: error instanceof Error ? error.message : String(error),
-          stage: "nano_doc_signals"
-        },
-        scanId
-      }).catch(() => undefined);
       console.error("[validation-worker] nano policy signal persistence failed", {
         error: error instanceof Error ? error.message : String(error),
         scanId
@@ -1347,16 +1421,6 @@ export async function processValidationRankJob(validationRunId: string) {
 
       return [];
     });
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
-      message: "Nano document signal enrichment completed.",
-      metadataJson: {
-        nanoSignalCount: nanoSignalRows.length,
-        policyDocumentCount: artifacts.policyEnrichments.length,
-        stage: "nano_doc_signals"
-      },
-      scanId
-    }).catch(() => undefined);
 
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.signalMergeStarted,
