@@ -314,11 +314,13 @@ type ValidationArtifactBundle = {
   documentSources?: Array<Record<string, unknown>>;
   pageEvidence: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
-  policyEnrichments: Array<Record<string, unknown>>;
+  policyEnrichments?: Array<Record<string, unknown>>;
+  policySemanticRows?: Array<Record<string, unknown>>;
   policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   preferDocumentSources?: boolean;
   preconsentViolations: Array<Record<string, unknown>>;
+  rawPolicyEnrichmentRows?: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   scan: Record<string, unknown> | null;
   signalHits: Array<Record<string, unknown>>;
@@ -540,11 +542,11 @@ function matchRuntimeCookie(input: { cookieName: string; disclosures: CookieDisc
 }
 
 function deriveCookieRuntimeFindings(input: {
-  policyEnrichments: Array<Record<string, unknown>>;
+  policySemanticRows: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
 }) {
   const cookiePolicyEnrichment =
-    input.policyEnrichments.find((row) => (row.page_type ?? row.pageType) === "cookie_policy") ?? null;
+    input.policySemanticRows.find((row) => (row.page_type ?? row.pageType) === "cookie_policy") ?? null;
 
   if (!cookiePolicyEnrichment) {
     return [] as Array<ReturnType<typeof buildPolicyRuntimeFinding>>;
@@ -714,8 +716,7 @@ function buildSectionIssueFinding(input: {
 }
 
 function derivePolicySectionFindings(input: {
-  policyEnrichments: Array<Record<string, unknown>>;
-  policySemanticInputs?: Array<Record<string, unknown>>;
+  policySemanticRows: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown> | null;
 }) {
@@ -743,9 +744,7 @@ function derivePolicySectionFindings(input: {
     getRecordBoolean(input.snapshot, "session_replay_without_disclosure_detected") ||
     getRecordBoolean(input.snapshot, "session_replay_detected_without_disclosure");
 
-  const semanticRows = input.policySemanticInputs ?? input.policyEnrichments;
-
-  for (const enrichment of semanticRows) {
+  for (const enrichment of input.policySemanticRows) {
     const enrichmentId = String(enrichment.id ?? "");
     const pageType = typeof enrichment.page_type === "string" ? enrichment.page_type : null;
     const pageUrl = typeof enrichment.page_url === "string" ? enrichment.page_url : null;
@@ -1158,10 +1157,11 @@ function deriveAccessibilitySectionFindings(input: { snapshot: Record<string, un
 }
 
 export function deriveValidationFindings(input: ValidationArtifactBundle) {
+  const rawPolicyEnrichmentRows = input.rawPolicyEnrichmentRows ?? input.policyEnrichments ?? [];
+  const policySemanticRows = input.policySemanticRows ?? input.policySemanticInputs ?? input.policyEnrichments ?? [];
   const policyEnrichmentsById = new Map(
-    input.policyEnrichments.map((row) => [String(row.id ?? ""), row])
+    rawPolicyEnrichmentRows.map((row) => [String(row.id ?? ""), row])
   );
-  const semanticRows = input.policySemanticInputs ?? input.policyEnrichments;
   const findings: Array<{
     category: "scan_report_review";
     description: string;
@@ -1188,7 +1188,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     }
 
     return (
-      semanticRows.find((row) => {
+      policySemanticRows.find((row) => {
         const rowUrl = typeof row.page_url === "string" ? row.page_url : null;
         const rowType = typeof row.page_type === "string" ? row.page_type : null;
         return rowUrl === enrichmentPageUrl || (rowType !== null && rowType === enrichmentPageType);
@@ -1242,12 +1242,11 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
   findings.push(
     ...deriveFinancialValidationFindings(input),
     ...deriveCookieRuntimeFindings({
-      policyEnrichments: input.policyEnrichments,
+      policySemanticRows,
       runtimeArtifacts: input.runtimeArtifacts
     }),
     ...derivePolicySectionFindings({
-      policyEnrichments: input.policyEnrichments,
-      policySemanticInputs: input.policySemanticInputs,
+      policySemanticRows,
       policyReviewQueue: input.policyReviewQueue,
       snapshot: input.snapshot
     }),
@@ -1539,7 +1538,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     artifacts = await loadNanoSignalEnrichmentInputs(scanId);
   }
 
-  if (artifacts.policySignalInputs.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
+  if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
     if (pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS) {
       await enqueueNanoSignalEnrichment(scanId, pollCount + 1, NANO_SIGNAL_ENRICHMENT_POLL_MS);
       return;
@@ -1560,7 +1559,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
   }
 
   const nanoSignalRows = await persistDerivedNanoPolicySignals({
-    policyEnrichments: artifacts.policySignalInputs,
+    policySemanticRows: artifacts.policySemanticRows,
     policyReviewQueue: artifacts.policyReviewQueue,
     runtimeArtifacts: artifacts.runtimeArtifacts,
     scanId,
@@ -1573,8 +1572,8 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     metadataJson: {
       documentSourceCount: artifacts.documentSources.length,
       nanoSignalCount: nanoSignalRows.length,
-      policyDocumentCount: artifacts.policySignalInputs.length,
-      policyEnrichmentCount: artifacts.policyEnrichments.length,
+      policyDocumentCount: artifacts.policySemanticRows.length,
+      policyEnrichmentCount: artifacts.rawPolicyEnrichmentRows.length,
       preferDocumentSources: artifacts.preferDocumentSources === true,
       scanStartedAt: startedAt,
       stage: "nano_doc_signals",
@@ -1665,7 +1664,7 @@ export async function processValidationRankJob(validationRunId: string) {
 
     const artifacts = await loadCompletedScanArtifacts(scanId);
     await persistDerivedNanoPolicySignals({
-      policyEnrichments: artifacts.policyEnrichments,
+      policySemanticRows: artifacts.policySemanticRows ?? artifacts.policySemanticInputs ?? artifacts.policyEnrichments ?? [],
       policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
       scanId,

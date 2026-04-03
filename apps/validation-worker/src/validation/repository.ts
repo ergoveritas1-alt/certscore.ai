@@ -918,10 +918,12 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
+    policySemanticRows: policySemanticInputs,
     policySemanticInputs,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
     preferDocumentSources,
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    rawPolicyEnrichmentRows: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: runtimeArtifactsRecord,
     scan: (scan as Record<string, unknown> | null) ?? null,
     signalHits: loadedSignalHits.length > 0 ? loadedSignalHits : fallbackFinancialEvidence.signalHits,
@@ -976,10 +978,12 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   return {
     documentSources: normalizedDocumentSources,
+    policySemanticRows: preferDocumentSources ? documentBackedPolicyInputs : ((policyEnrichments ?? []) as Array<Record<string, unknown>>),
     policySignalInputs: preferDocumentSources ? documentBackedPolicyInputs : ((policyEnrichments ?? []) as Array<Record<string, unknown>>),
     policyEnrichments: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
     preferDocumentSources,
+    rawPolicyEnrichmentRows: (policyEnrichments ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     scan: (scan as {
       completed_at?: string | null;
@@ -1616,7 +1620,7 @@ export async function updateScanDocumentSourceExtractions(input: {
 }
 
 export async function persistDerivedNanoPolicySignals(input: {
-  policyEnrichments: Array<Record<string, unknown>>;
+  policySemanticRows: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   scanId: string;
@@ -1624,7 +1628,7 @@ export async function persistDerivedNanoPolicySignals(input: {
 }) {
   const supabase = createAdminClient();
   const nextRows = buildNanoPolicySignalRows({
-    policyEnrichments: input.policyEnrichments,
+    policyEnrichments: input.policySemanticRows,
     policyReviewQueue: input.policyReviewQueue,
     runtimeArtifacts: input.runtimeArtifacts,
     snapshot: input.snapshot
