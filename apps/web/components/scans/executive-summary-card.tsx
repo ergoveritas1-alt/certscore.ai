@@ -88,16 +88,15 @@ export function ExecutiveSummaryCard(input: {
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const primaryFindings = input.topFindings.slice(0, 3);
-  const secondaryFindings = input.topFindings.slice(3, 6);
+  const secondaryFindings = input.topFindings
+    .filter((finding) => finding.id !== "multi_vendor_tracking_detected" && finding.id !== "large_third_party_footprint")
+    .slice(3, 6);
   const namedVendors = input.resolvedVendorNames.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
   const vendorMixDetails = input.topObservedEntities
     .slice(0, 6)
     .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
-  const fingerprintEvidence = [
-    input.fingerprintLabel,
-    ...input.fingerprintReasons
-  ].filter(Boolean);
+  const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const vendorEvidence = [
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
