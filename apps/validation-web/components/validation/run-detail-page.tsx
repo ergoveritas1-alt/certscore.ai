@@ -21,6 +21,34 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  if (value < 1000) {
+    return `${value}ms`;
+  }
+
+  const totalSeconds = Math.round(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join(" ");
+}
+
 function verdictTone(verdict: string | null | undefined) {
   if (verdict === "supported") {
     return "border-emerald-300/20 bg-emerald-300/10 text-emerald-100";
@@ -234,6 +262,24 @@ export async function ValidationRunDetailPage(input: {
                 <div>{input.scanDetail.signalEnrichmentWorkflow.findingsReady ? "Ready" : "Pending"}</div>
               </div>
             </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Time to merged signals</div>
+                <div>{formatDurationMs(input.scanDetail.signalEnrichmentWorkflow.timings.timeToMergedSignalsMs)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Time to findings</div>
+                <div>{formatDurationMs(input.scanDetail.signalEnrichmentWorkflow.timings.timeToFindingsMs)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Nano retrieval</div>
+                <div>{formatDurationMs(input.scanDetail.signalEnrichmentWorkflow.timings.nanoDocRetrievalDurationMs)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Nano signal pass</div>
+                <div>{formatDurationMs(input.scanDetail.signalEnrichmentWorkflow.timings.nanoDocSignalsDurationMs)}</div>
+              </div>
+            </div>
             <div className="space-y-3">
               {input.scanDetail.signalEnrichmentWorkflow.stages.map((stage) => (
                 <div key={stage.id} className="rounded-xl border border-white/10 bg-slate-950/30 p-4">
@@ -244,6 +290,7 @@ export async function ValidationRunDetailPage(input: {
                   <div className="mt-2 text-sm text-slate-300">{stage.description}</div>
                   <div className="mt-2 grid gap-2 text-xs text-slate-400 md:grid-cols-3">
                     <div>Items: {typeof stage.itemCount === "number" ? stage.itemCount : "—"}</div>
+                    <div>Duration: {formatDurationMs(stage.durationMs)}</div>
                     <div>Started: {formatDateTime(stage.startedAt)}</div>
                     <div>Completed: {formatDateTime(stage.completedAt)}</div>
                   </div>

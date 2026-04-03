@@ -28,14 +28,23 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
   assert.equal(workflow.actualMode, "serial_bridge");
   assert.equal(workflow.mergedSignalsReady, true);
   assert.equal(workflow.findingsReady, true);
+  assert.deepEqual(workflow.timings, {
+    scannerDurationMs: 5 * 60 * 1000,
+    nanoDocRetrievalDurationMs: null,
+    nanoDocSignalsDurationMs: 60 * 1000,
+    signalMergeDurationMs: 60 * 1000,
+    unifiedFindingsDurationMs: 60 * 1000,
+    timeToMergedSignalsMs: 9 * 60 * 1000,
+    timeToFindingsMs: 11 * 60 * 1000
+  });
   assert.deepEqual(
-    workflow.stages.map((stage) => [stage.id, stage.status]),
+    workflow.stages.map((stage) => [stage.id, stage.status, stage.durationMs]),
     [
-      ["scanner", "completed"],
-      ["nano_doc_retrieval", "queued"],
-      ["nano_doc_signals", "completed"],
-      ["signal_merge", "completed"],
-      ["unified_findings", "completed"]
+      ["scanner", "completed", 5 * 60 * 1000],
+      ["nano_doc_retrieval", "queued", null],
+      ["nano_doc_signals", "completed", 60 * 1000],
+      ["signal_merge", "completed", 60 * 1000],
+      ["unified_findings", "completed", 60 * 1000]
     ]
   );
 });
@@ -60,4 +69,8 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_retrieval")?.status, "running");
   assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "blocked");
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.status, "blocked");
+  assert.equal(workflow.timings.scannerDurationMs, 5 * 60 * 1000);
+  assert.equal(workflow.timings.nanoDocRetrievalDurationMs, null);
+  assert.equal(workflow.timings.timeToMergedSignalsMs, null);
+  assert.equal(workflow.timings.timeToFindingsMs, null);
 });

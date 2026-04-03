@@ -18,6 +18,7 @@ export type SignalEnrichmentWorkflowStage = {
   completedAt: string | null;
   dependsOn: SignalEnrichmentWorkflowStageId[];
   description: string;
+  durationMs: number | null;
   id: SignalEnrichmentWorkflowStageId;
   itemCount: number | null;
   label: string;
@@ -29,6 +30,15 @@ export type SignalEnrichmentWorkflowState = {
   actualMode: SignalEnrichmentWorkflowMode;
   findingsReady: boolean;
   mergedSignalsReady: boolean;
+  timings: {
+    scannerDurationMs: number | null;
+    nanoDocRetrievalDurationMs: number | null;
+    nanoDocSignalsDurationMs: number | null;
+    signalMergeDurationMs: number | null;
+    unifiedFindingsDurationMs: number | null;
+    timeToMergedSignalsMs: number | null;
+    timeToFindingsMs: number | null;
+  };
   preferredMode: "parallel_evidence_collection";
   stages: SignalEnrichmentWorkflowStage[];
 };

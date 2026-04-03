@@ -57,6 +57,34 @@ function printHeader(label: string) {
   console.log(`\n${label}`);
 }
 
+function formatDurationMs(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  if (value < 1000) {
+    return `${value}ms`;
+  }
+
+  const totalSeconds = Math.round(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join(" ");
+}
+
 function getRecordNumber(record: unknown, key: string) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     return null;
@@ -249,9 +277,15 @@ async function main() {
   console.log(`actualMode: ${payload.workflow.actualMode}`);
   console.log(`mergedSignalsReady: ${payload.workflow.mergedSignalsReady}`);
   console.log(`findingsReady: ${payload.workflow.findingsReady}`);
+  console.log(
+    `timings: scanner=${formatDurationMs(payload.workflow.timings.scannerDurationMs)} | docRetrieval=${formatDurationMs(payload.workflow.timings.nanoDocRetrievalDurationMs)} | docSignals=${formatDurationMs(payload.workflow.timings.nanoDocSignalsDurationMs)} | merge=${formatDurationMs(payload.workflow.timings.signalMergeDurationMs)} | findings=${formatDurationMs(payload.workflow.timings.unifiedFindingsDurationMs)}`
+  );
+  console.log(
+    `timeToReady: mergedSignals=${formatDurationMs(payload.workflow.timings.timeToMergedSignalsMs)} | findings=${formatDurationMs(payload.workflow.timings.timeToFindingsMs)}`
+  );
   for (const stage of payload.workflow.stages) {
     console.log(
-      `- ${stage.id}: ${stage.status} | items=${stage.itemCount} | startedAt=${stage.startedAt ?? "null"} | completedAt=${stage.completedAt ?? "null"}`
+      `- ${stage.id}: ${stage.status} | items=${stage.itemCount} | duration=${formatDurationMs(stage.durationMs)} | startedAt=${stage.startedAt ?? "null"} | completedAt=${stage.completedAt ?? "null"}`
     );
   }
 

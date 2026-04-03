@@ -15,6 +15,20 @@ type WorkflowTimestampMap = {
   startedAt: string | null;
 };
 
+function diffMs(startedAt: string | null, completedAt: string | null) {
+  if (!startedAt || !completedAt) {
+    return null;
+  }
+
+  const start = Date.parse(startedAt);
+  const end = Date.parse(completedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return null;
+  }
+
+  return end - start;
+}
+
 function getLatestEventTimestamp(events: WorkflowEventRecord[], eventTypes: string[]) {
   const matches = events
     .filter((event) => eventTypes.includes(event.eventType))
@@ -158,6 +172,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       completedAt: scannerStatus === "completed" ? scannerCompletedAt : null,
       dependsOn: [],
       description: "WS01 scanner evidence collection and direct scanner-owned signal population.",
+      durationMs: diffMs(scannerStartedAt, scannerStatus === "completed" ? scannerCompletedAt : null),
       id: "scanner",
       itemCount: input.scannerSignalCount,
       label: "Scanner",
@@ -168,6 +183,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       completedAt: docRetrievalTimestamps.completedAt,
       dependsOn: [],
       description: "Nano-owned legal document retrieval and raw document persistence.",
+      durationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),
       id: "nano_doc_retrieval",
       itemCount: input.documentSourceCount ?? input.policyDocumentCount,
       label: "Nano Doc Retrieval",
@@ -178,6 +194,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       completedAt: nanoTimestamps.completedAt,
       dependsOn: ["nano_doc_retrieval"],
       description: "Nano-owned document and disclosure signal enrichment.",
+      durationMs: diffMs(nanoTimestamps.startedAt, nanoTimestamps.completedAt),
       id: "nano_doc_signals",
       itemCount: input.nanoSignalCount > 0 ? input.nanoSignalCount : input.policyDocumentCount,
       label: "Nano Doc Signals",
@@ -188,6 +205,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       completedAt: mergeTimestamps.completedAt,
       dependsOn: ["scanner", "nano_doc_signals"],
       description: "Canonical merge of scanner, nano, and validation populations into merged signals.",
+      durationMs: diffMs(mergeTimestamps.startedAt, mergeTimestamps.completedAt),
       id: "signal_merge",
       itemCount: input.mergedSignalCount,
       label: "Merged Signals",
@@ -198,6 +216,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       completedAt: findingsTimestamps.completedAt,
       dependsOn: ["signal_merge"],
       description: "Concern and unified-finding derivation from the merged signal set.",
+      durationMs: diffMs(findingsTimestamps.startedAt, findingsTimestamps.completedAt),
       id: "unified_findings",
       itemCount: input.findingsCount,
       label: "Unified Findings",
@@ -210,6 +229,15 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     actualMode,
     findingsReady: findingsStatus === "completed" || input.findingsCount > 0,
     mergedSignalsReady: mergeStatus === "completed" || input.mergedSignalCount > 0,
+    timings: {
+      scannerDurationMs: diffMs(scannerStartedAt, scannerCompletedAt),
+      nanoDocRetrievalDurationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),
+      nanoDocSignalsDurationMs: diffMs(nanoTimestamps.startedAt, nanoTimestamps.completedAt),
+      signalMergeDurationMs: diffMs(mergeTimestamps.startedAt, mergeTimestamps.completedAt),
+      unifiedFindingsDurationMs: diffMs(findingsTimestamps.startedAt, findingsTimestamps.completedAt),
+      timeToMergedSignalsMs: diffMs(scannerStartedAt, mergeTimestamps.completedAt),
+      timeToFindingsMs: diffMs(scannerStartedAt, findingsTimestamps.completedAt)
+    },
     preferredMode: "parallel_evidence_collection",
     stages
   };

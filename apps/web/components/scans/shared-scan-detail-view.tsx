@@ -168,6 +168,34 @@ function formatCompactValue(value: unknown) {
   return String(value);
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "—";
+  }
+
+  if (value < 1000) {
+    return `${value}ms`;
+  }
+
+  const totalSeconds = Math.round(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join(" ");
+}
+
 function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -4877,6 +4905,12 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
           <SummaryMetricTile label="Merged signals" value={workflow.mergedSignalsReady ? "Ready" : "Pending"} />
           <SummaryMetricTile label="Findings" value={workflow.findingsReady ? "Ready" : "Pending"} />
         </div>
+        <div className="grid gap-3 md:grid-cols-4">
+          <SummaryMetricTile label="Time to merged signals" value={formatDurationMs(workflow.timings.timeToMergedSignalsMs)} />
+          <SummaryMetricTile label="Time to findings" value={formatDurationMs(workflow.timings.timeToFindingsMs)} />
+          <SummaryMetricTile label="Nano retrieval" value={formatDurationMs(workflow.timings.nanoDocRetrievalDurationMs)} />
+          <SummaryMetricTile label="Nano signal pass" value={formatDurationMs(workflow.timings.nanoDocSignalsDurationMs)} />
+        </div>
         <div className="rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600">
             {counts.stagesCompleted} of {counts.totalStages} stages completed
@@ -4914,6 +4948,7 @@ function SignalEnrichmentWorkflowCard(input: { scanRecord: ScanDetailResponse })
                 </div>
                 <div className="shrink-0 text-sm text-slate-600 md:text-right">
                   <div>Items: {typeof stage.itemCount === "number" ? stage.itemCount : "—"}</div>
+                  <div>Duration: {formatDurationMs(stage.durationMs)}</div>
                   <div>Started: {stage.startedAt ? formatDateTime(stage.startedAt) : "—"}</div>
                   <div>Completed: {stage.completedAt ? formatDateTime(stage.completedAt) : "—"}</div>
                 </div>
