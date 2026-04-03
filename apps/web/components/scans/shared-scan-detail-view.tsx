@@ -5555,14 +5555,13 @@ export function SharedScanDetailView({
     snapshot
   });
   const hasSupplementalDarkPatternFinding = executiveSupplementalFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
+  const filteredCertFindings = certScoreSummary.findings.filter((finding) =>
+    hasSupplementalDarkPatternFinding ? finding.id !== "asymmetric_consent_ui" : true
+  );
+  const baseExecutiveFindings = selectTopFindings(filteredCertFindings, 5);
   const topExecutiveFindings = selectTopFindings(
-    [
-      ...executiveSupplementalFindings,
-      ...certScoreSummary.findings.filter((finding) =>
-        hasSupplementalDarkPatternFinding ? finding.id !== "asymmetric_consent_ui" : true
-      )
-    ],
-    5
+    [...executiveSupplementalFindings, ...baseExecutiveFindings],
+    Math.min(6, 5 + executiveSupplementalFindings.length)
   );
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
