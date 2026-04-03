@@ -485,6 +485,7 @@ function derivePolicyBehaviorContradictions(input: {
     value: boolean | number | string | string[] | null;
     selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
   }>;
+  primaryPolicyEnrichment?: Record<string, unknown> | null;
   policyEnrichments: Array<Record<string, unknown>>;
   preconsentViolations: Array<{
     evidenceUrls: string[];
@@ -500,7 +501,8 @@ function derivePolicyBehaviorContradictions(input: {
   }>;
 }) {
   const privacyEnrichment =
-    input.policyEnrichments.find((row) => (row.pageType ?? row.page_type) === "privacy_policy") ??
+    input.primaryPolicyEnrichment ??
+    input.policyEnrichments.find((row) => getPolicyPageType(row) === "privacy_policy") ??
     input.policyEnrichments[0] ??
     null;
   const contradictions: PolicyBehaviorContradiction[] = [];
@@ -4312,6 +4314,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
     });
     const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
       mergedSignals: scanRecord.mergedSignals,
+      primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment,
       policyEnrichments: scanRecord.policyEnrichment,
       preconsentViolations: preconsentViolationRows,
       runtimeArtifacts,
@@ -5186,6 +5189,7 @@ export function SharedScanDetailView({
     });
     policyBehaviorContradictions = derivePolicyBehaviorContradictions({
       mergedSignals: scanRecord.mergedSignals,
+      primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment,
       policyEnrichments: scanRecord.policyEnrichment,
       preconsentViolations: preconsentViolationRows,
       runtimeArtifacts,

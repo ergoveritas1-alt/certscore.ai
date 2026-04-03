@@ -3,6 +3,7 @@
 import { buildAgencyMappings, buildRegulatoryRiskAssessment, type AgencyMapping, type RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { getPrimaryPolicyEnrichmentRow } from "../../lib/scans/policy-enrichment-row";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "../../lib/scans/signal-taxonomy";
 
@@ -153,7 +154,7 @@ type ScanEventRow = {
 };
 
 function getPrimaryPolicyEnrichment(rows: Array<Record<string, unknown>>) {
-  return rows.find((row) => row.page_type === "privacy_policy" || row.pageType === "privacy_policy") ?? rows[0] ?? null;
+  return getPrimaryPolicyEnrichmentRow(rows);
 }
 
 type SignalRow = {

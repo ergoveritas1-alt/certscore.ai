@@ -1231,6 +1231,7 @@ async function loadScanDetailRecord(input: {
       ? (normalizedRelatedPreviewSnapshot satisfies Exclude<RelatedPreviewSnapshotRecord, null>)
       : null,
     policyEnrichment: normalizedPolicyEnrichment,
+    primaryPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
     validationFindings,
     regulatoryRisk,
