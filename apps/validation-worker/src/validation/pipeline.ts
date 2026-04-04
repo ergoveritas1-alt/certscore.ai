@@ -48,7 +48,7 @@ import {
   createValidationVerdictQueue
 } from "../queue/queues";
 
-export { buildNanoDocCandidateUrls } from "./nano-document-discovery";
+export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 5_000;

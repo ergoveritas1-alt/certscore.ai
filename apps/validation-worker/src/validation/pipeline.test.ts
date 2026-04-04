@@ -9,6 +9,7 @@ import {
   looksLikeIntermediaryOrBlockPage,
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
+  selectNanoDocCandidates,
   selectPendingNanoDocumentSourcesForExtraction
 } from "./pipeline";
 
@@ -422,6 +423,77 @@ test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery
       url: "https://www.example.com/legal/terms"
     }
   ]);
+});
+
+test("buildNanoDocCandidateUrls prefers current scan legal pages over recent domain history", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "example.com",
+    pages: [
+      {
+        fetch_status: "ok",
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/legal/privacy-notice"
+      },
+      {
+        fetch_status: "ok",
+        page_type: "cookie_policy",
+        page_url: "https://www.example.com/legal/cookie-policy"
+      }
+    ],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://old.example.com/privacy",
+        document_type: "privacy_policy"
+      },
+      {
+        canonical_url: "https://old.example.com/cookies",
+        document_type: "cookie_policy"
+      },
+      {
+        canonical_url: "https://old.example.com/terms",
+        document_type: "terms_of_service"
+      }
+    ]
+  });
+
+  assert.equal(candidates[0]?.url, "https://www.example.com/legal/privacy-notice");
+  assert.equal(candidates[1]?.url, "https://www.example.com/legal/cookie-policy");
+  assert.equal(candidates.some((candidate) => candidate.url === "https://old.example.com/privacy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://old.example.com/cookies"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://old.example.com/terms"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/legal/terms-of-service"), false);
+});
+
+test("selectNanoDocCandidates prefers current ws01 legal coverage over recent domain history", async () => {
+  const candidates = await selectNanoDocCandidates({
+    discoveryCandidates: [],
+    domainHostname: "example.com",
+    pages: [
+      {
+        fetch_status: "ok",
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/legal/privacy-notice"
+      },
+      {
+        fetch_status: "ok",
+        page_type: "terms_of_service",
+        page_url: "https://www.example.com/legal/terms-of-service"
+      }
+    ],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://old.example.com/privacy",
+        document_type: "privacy_policy"
+      }
+    ]
+  });
+
+  assert.equal(candidates.some((candidate) => candidate.url === "https://www.example.com/legal/privacy-notice"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://www.example.com/legal/terms-of-service"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://old.example.com/privacy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
 });
 
 test("buildNanoDocCandidateUrls supplements recent domain docs when a document type is missing", () => {

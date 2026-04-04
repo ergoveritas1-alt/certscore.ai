@@ -427,6 +427,11 @@ export function buildNanoDocCandidateUrls(input: {
     .filter((candidate): candidate is NanoDocCandidate => candidate !== null);
 
   const evidenceCandidates = buildEvidenceCandidates(input);
+  const evidenceTypes = new Set<string>(
+    evidenceCandidates
+      .map((candidate) => candidate.documentType)
+      .filter((candidate): candidate is "privacy_policy" | "terms_of_service" | "cookie_policy" => isSupportedDocumentType(candidate ?? null))
+  );
   const orderedEvidence = evidenceCandidates
     .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
     .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.url.localeCompare(right.url))
@@ -444,16 +449,35 @@ export function buildNanoDocCandidateUrls(input: {
     } satisfies NanoDocCandidate));
 
   const fallbackCandidates = buildSeedFallbackCandidates(input.domainHostname);
-  return limitNanoDocCandidates(
-    recentDomainCandidates.length > 0
-      ? [
-          ...recentDomainCandidates,
-          ...(orderedEvidence.length > 0 ? orderedEvidence : fallbackCandidates)
-        ]
-      : orderedEvidence.length > 0
-        ? orderedEvidence
-        : fallbackCandidates
-  );
+
+  if (orderedEvidence.length > 0) {
+    const supplementalRecentCandidates = recentDomainCandidates.filter((candidate) => !evidenceTypes.has(candidate.documentType));
+    const coveredTypes = new Set<string>([
+      ...orderedEvidence.map((candidate) => candidate.documentType),
+      ...supplementalRecentCandidates.map((candidate) => candidate.documentType)
+    ]);
+    const filteredFallbackCandidates = fallbackCandidates.filter((candidate) => !coveredTypes.has(candidate.documentType));
+    return limitNanoDocCandidates([...orderedEvidence, ...supplementalRecentCandidates, ...filteredFallbackCandidates]);
+  }
+
+  if (recentDomainCandidates.length > 0) {
+    const coveredTypes = new Set<string>(recentDomainCandidates.map((candidate) => candidate.documentType));
+    const filteredFallbackCandidates = fallbackCandidates.filter((candidate) => !coveredTypes.has(candidate.documentType));
+    return limitNanoDocCandidates([...recentDomainCandidates, ...filteredFallbackCandidates]);
+  }
+
+  return fallbackCandidates;
+}
+
+function hasCurrentScanLegalDiscoveryEvidence(input: {
+  discoveryCandidates?: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+}) {
+  return buildEvidenceCandidates({
+    discoveryCandidates: input.discoveryCandidates,
+    homepageDiscoveryCandidates: [],
+    pages: input.pages
+  }).some((candidate) => isSupportedDocumentType(candidate.documentType ?? null));
 }
 
 function extractJson(raw: string) {
@@ -601,15 +625,11 @@ export async function selectNanoDocCandidates(input: {
   pages: Array<Record<string, unknown>>;
   recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
-  const recentDomainCandidates = buildNanoDocCandidateUrls({
-    discoveryCandidates: [],
-    domainHostname: input.domainHostname,
-    homepageDiscoveryCandidates: [],
-    pages: [],
-    recentDomainDocumentCandidates: input.recentDomainDocumentCandidates
-  });
-  if (recentDomainCandidates.length > 0) {
-    return recentDomainCandidates;
+  if (hasCurrentScanLegalDiscoveryEvidence(input)) {
+    return buildNanoDocCandidateUrls({
+      ...input,
+      homepageDiscoveryCandidates: []
+    });
   }
 
   const homepageDiscovery = await buildHomepageDiscoveryCandidates({
