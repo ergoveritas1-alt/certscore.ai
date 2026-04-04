@@ -533,7 +533,9 @@ function deriveAccessFindings(input: {
   const blockedFlag = getRecordBoolean(snapshot, "blocked_flag");
   const partialScan = getRecordBoolean(snapshot, "partial_scan");
   const authWallDetected = getRecordBoolean(snapshot, "auth_wall_detected");
+  const captchaFlag = getRecordBoolean(snapshot, "captcha_flag");
   const homepageFetchStatus = getStringValue(snapshot, "homepage_fetch_status");
+  const stopReasonCode = getStringValue(snapshot, "stop_reason_code");
   const stopReasonLabel = getStringValue(snapshot, "stop_reason_label");
   const stopReasonDetail = getStringValue(snapshot, "stop_reason_detail");
   const stopReasonHttpStatus =
@@ -546,9 +548,14 @@ function deriveAccessFindings(input: {
       ? snapshot.verified_public_surfaces_count
       : 0;
   const readyDocumentCount = (input.documentSources ?? []).filter((row) => row.source_status === "ready").length;
-  const hasForbiddenHomepage = homepageFetchStatus === "forbidden" || stopReasonHttpStatus === 403;
+  const accessLimitedByProtection =
+    homepageFetchStatus === "forbidden" ||
+    stopReasonHttpStatus === 403 ||
+    captchaFlag ||
+    stopReasonCode === "reachability_blocked_captcha" ||
+    stopReasonCode === "reachability_blocked_auth_wall";
 
-  if (!partialScan || !blockedFlag || !hasForbiddenHomepage) {
+  if (!partialScan || !accessLimitedByProtection) {
     return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
   }
 
@@ -569,9 +576,11 @@ function deriveAccessFindings(input: {
         access_posture_class: getStringValue(snapshot, "access_posture_class"),
         auth_wall_detected: authWallDetected,
         blocked_flag: blockedFlag,
+        captcha_flag: captchaFlag,
         coverage_level: coverageLevel,
         homepage_fetch_status: homepageFetchStatus,
         partial_scan: partialScan,
+        stop_reason_code: stopReasonCode,
         stop_reason_http_status: stopReasonHttpStatus,
         stop_reason_label: stopReasonLabel,
         verified_public_surfaces_count: verifiedSurfaceCount
@@ -579,7 +588,7 @@ function deriveAccessFindings(input: {
       pageType: "homepage",
       pageUrl,
       ruleKey: "access_review.public_access_blocked",
-      severity: authWallDetected ? "high" : "medium",
+      severity: authWallDetected || captchaFlag ? "high" : "medium",
       title: "Public access blocked during scan"
     })
   ];

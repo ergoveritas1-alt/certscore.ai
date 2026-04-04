@@ -144,6 +144,35 @@ test("does not emit blocked-access finding when preflight verified legal surface
   assert.equal(findings.some((item) => item.ruleKey === "access_review.public_access_blocked"), false);
 });
 
+test("emits blocked-access finding for captcha-limited partial scans without verified surfaces", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [{ page_type: "homepage", page_url: "https://www.example.com/", fetch_status: "redirected" }],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      snapshot: {
+        access_posture_class: "early_loss",
+        blocked_flag: false,
+        captcha_flag: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_status: "redirected",
+        partial_scan: true,
+        stop_reason_code: "reachability_blocked_captcha",
+        stop_reason_detail: "Homepage appeared to present a captcha challenge.",
+        stop_reason_http_status: 200,
+        stop_reason_label: "Access limited by site protections",
+        verified_public_surfaces_count: 0
+      }
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "access_review.public_access_blocked");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.pageUrl, "https://www.example.com/");
+});
+
 test("lookout-style bundle only surfaces runtime tracking and retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
@@ -316,6 +345,57 @@ test("adidas-style blocked bundle only surfaces blocked-access finding", () => {
   );
 
   assert.deepEqual(findings.map((finding) => finding.ruleKey), ["access_review.public_access_blocked"]);
+});
+
+test("hobbylobby-style captcha bundle surfaces blocked access plus runtime tracking", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [{ page_type: "homepage", page_url: "https://www.hobbylobby.com/", fetch_status: "redirected" }],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Google Tag Manager", collection_endpoint_type: "request" },
+        { vendor_name: "Imperva", collection_endpoint_type: "cookie" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: ["incap_ses_189_792568"],
+        third_party_request_count: 7,
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 12
+          }
+        }
+      },
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_status: "redirected",
+        partial_scan: true,
+        preconsent_tracking_detected: true,
+        stop_reason_code: "reachability_blocked_captcha",
+        stop_reason_detail: "Homepage appeared to present a captcha challenge.",
+        stop_reason_http_status: 200,
+        third_party_cookie_count: 6,
+        tracker_count_total: 1,
+        tracker_vendor_count: 1,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Tag Manager"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), [
+    "access_review.public_access_blocked",
+    "runtime_privacy.preconsent_tracking_observed"
+  ]);
 });
 
 test("deriveValidationFindings does not emit transfer-mechanism finding when one is disclosed", () => {
