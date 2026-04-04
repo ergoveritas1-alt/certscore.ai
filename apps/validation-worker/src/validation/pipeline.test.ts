@@ -2152,6 +2152,72 @@ test("undisclosed runtime cookie triggers cookie disclosure gap", () => {
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });
 
+test("infrastructure load-balancer cookies do not trigger a disclosure gap on their own", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.92,
+          policy_cookie_disclosures: [
+            {
+              confidence: 0.93,
+              cookie_name: "_ga",
+              provider: "Google Analytics",
+              purpose: "Analytics",
+              duration: "2 years",
+              snippet_hash: "hash-1"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["AWSALBCORS"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap"));
+});
+
+test("cookie disclosure gap ignores infrastructure cookies and keeps substantive unmatched cookies", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.92,
+          policy_cookie_disclosures: [
+            {
+              vendor: "google.com",
+              cookies: ["_ga"],
+              cookie_type: "measurement_performance"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["AWSALBCORS", "_mkto_trk"]
+      } as Record<string, unknown>
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
+  assert.ok(finding);
+  assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_mkto_trk"]);
+  assert.deepEqual(finding?.evidence.ignored_runtime_cookie_names, ["awsalbcors"]);
+});
+
 test("cookie runtime matching understands vendor-and-cookies disclosure rows", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

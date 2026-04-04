@@ -825,6 +825,15 @@ function normalizeCookieTokenList(values: string[]) {
   return [...new Set(values.map((value) => normalizeCookieName(value)).filter((value): value is string => Boolean(value)))];
 }
 
+function isInfrastructureRuntimeCookie(cookieName: string) {
+  const normalized = normalizeCookieName(cookieName);
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized === "awsalb" || normalized === "awsalbcors";
+}
+
 function inferCookieProvider(cookieName: string) {
   const normalized = normalizeCookieName(cookieName);
   if (!normalized) {
@@ -969,11 +978,18 @@ function deriveCookieRuntimeFindings(input: {
     return [];
   }
 
-  const matched = runtimeCookies.flatMap((cookieName) => {
+  const relevantRuntimeCookies = runtimeCookies.filter((cookieName) => !isInfrastructureRuntimeCookie(cookieName));
+  const ignoredRuntimeCookies = runtimeCookies.filter((cookieName) => isInfrastructureRuntimeCookie(cookieName));
+
+  if (relevantRuntimeCookies.length === 0) {
+    return [];
+  }
+
+  const matched = relevantRuntimeCookies.flatMap((cookieName) => {
     const match = matchRuntimeCookie({ cookieName, disclosures });
     return match ? [{ cookieName, ...match }] : [];
   });
-  const unmatched = runtimeCookies.filter((cookieName) => !matched.some((entry) => entry.cookieName === cookieName));
+  const unmatched = relevantRuntimeCookies.filter((cookieName) => !matched.some((entry) => entry.cookieName === cookieName));
   const findings: Array<ReturnType<typeof buildPolicyRuntimeFinding>> = [];
 
   const structurallyWeak =
@@ -990,9 +1006,10 @@ function deriveCookieRuntimeFindings(input: {
         evidence: {
           cookie_policy_url: pageUrl,
           extracted_cookie_row_count: disclosures.length,
+          ignored_runtime_cookie_names: ignoredRuntimeCookies,
           policy_actionable_flags: flags,
           policy_semantic_confidence: semanticConfidence,
-          runtime_cookie_names: runtimeCookies
+          runtime_cookie_names: relevantRuntimeCookies
         },
         pageType,
         pageUrl,
@@ -1023,7 +1040,8 @@ function deriveCookieRuntimeFindings(input: {
             matchedCookieName: row.disclosure.cookieName,
             method: row.method
           })),
-          runtime_cookie_names: runtimeCookies,
+          ignored_runtime_cookie_names: ignoredRuntimeCookies,
+          runtime_cookie_names: relevantRuntimeCookies,
           unmatched_cookie_names: unmatched
         },
         pageType,
