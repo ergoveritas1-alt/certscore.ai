@@ -3016,6 +3016,11 @@ export async function processValidationCollectJob(validationRunId: string) {
     if (!run?.scan_id) {
       throw new Error("Validation run scan was not created.");
     }
+    if (!run.started_at) {
+      await updateValidationRun(validationRunId, {
+        started_at: new Date().toISOString()
+      });
+    }
 
     const artifacts = await loadCompletedScanArtifacts(run.scan_id);
     const scanStatus = String(artifacts.scan?.status ?? "");
@@ -3070,6 +3075,11 @@ export async function processValidationRankJob(validationRunId: string) {
     const run = await getValidationRun(validationRunId);
     if (!run?.scan_id) {
       throw new Error("Validation run is missing a scan.");
+    }
+    if (!run.started_at) {
+      await updateValidationRun(validationRunId, {
+        started_at: new Date().toISOString()
+      });
     }
     const scanId = run.scan_id;
 
@@ -3163,6 +3173,11 @@ export async function processValidationVerdictJob(validationRunId: string) {
     const run = await getValidationRun(validationRunId);
     if (!run?.scan_id) {
       throw new Error("Validation run is missing a scan.");
+    }
+    if (!run.started_at) {
+      await updateValidationRun(validationRunId, {
+        started_at: new Date().toISOString()
+      });
     }
 
     const findings = await loadValidationRunFindings(validationRunId);

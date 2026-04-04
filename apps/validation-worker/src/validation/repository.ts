@@ -73,6 +73,7 @@ type ValidationRunRow = {
   normalized_url: string;
   rank_band: string | null;
   scan_id: string | null;
+  started_at: string | null;
   status: "queued" | "waiting_for_scan" | "collecting" | "ranking" | "validating" | "completed" | "failed";
   tranco_rank: number | null;
   trigger_mode: ValidationRunMode;
@@ -618,7 +619,7 @@ export async function createValidationRun(input: {
       validation_target_id: input.targetId ?? null
     })
     .select(
-      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, status, tranco_rank, trigger_mode, validation_target_id"
+      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
     )
     .single();
 
@@ -644,7 +645,7 @@ export async function getValidationRun(runId: string) {
   const { data, error } = await supabase
     .from("validation_runs")
     .select(
-      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, status, tranco_rank, trigger_mode, validation_target_id"
+      "created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
     )
     .eq("id", runId)
     .maybeSingle();
