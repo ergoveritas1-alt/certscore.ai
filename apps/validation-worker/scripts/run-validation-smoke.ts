@@ -331,6 +331,28 @@ function printHuman(results: SmokeResult[]) {
   }
 }
 
+function summarizeFindings(result: SmokeResult) {
+  if (result.findings.length === 0) {
+    return "none";
+  }
+
+  return result.findings.map((finding) => `${finding.ruleKey} (${finding.severity})`).join(", ");
+}
+
+function printMarkdown(results: SmokeResult[]) {
+  console.log("| Label | Hostname | Shape | Validation Budget | Validation | Scan | Findings |");
+  console.log("| --- | --- | --- | --- | --- | --- | --- |");
+
+  for (const result of results) {
+    const shape = result.shapeMatchesExpectation === null ? "n/a" : result.shapeMatchesExpectation ? "match" : "mismatch";
+    const budget =
+      result.timingWithinBudget === null ? "n/a" : result.timingWithinBudget ? "within" : "exceeded";
+    console.log(
+      `| ${result.label} | ${result.hostname} | ${shape} | ${budget} | ${formatDurationMs(result.timings.validationMs)} | ${formatDurationMs(result.timings.scanProcessingMs)} | ${summarizeFindings(result)} |`
+    );
+  }
+}
+
 async function main() {
   const { state } = await getValidationPipelineState();
   if (state !== "running") {
@@ -341,6 +363,7 @@ async function main() {
   const allowMismatch = hasFlag("--allow-mismatch");
   const allowTimingRegression = hasFlag("--allow-timing-regression");
   const json = hasFlag("--json");
+  const markdown = hasFlag("--markdown");
   const targets =
     requestedScanIds.length > 0
       ? requestedScanIds.map((scanId, index) => ({
@@ -372,7 +395,11 @@ async function main() {
     return;
   }
 
-  printHuman(results);
+  if (markdown) {
+    printMarkdown(results);
+  } else {
+    printHuman(results);
+  }
 
   if (mismatches.length > 0) {
     console.error(
