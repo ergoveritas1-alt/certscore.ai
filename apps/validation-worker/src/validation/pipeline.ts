@@ -1102,6 +1102,86 @@ function deriveRuntimePrivacyFindings(input: {
   ];
 }
 
+function deriveConsentInterfaceFindings(input: {
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+}) {
+  const hybrid =
+    input.runtimeArtifacts &&
+    typeof input.runtimeArtifacts.hybrid_runtime_evidence === "object" &&
+    input.runtimeArtifacts.hybrid_runtime_evidence !== null &&
+    !Array.isArray(input.runtimeArtifacts.hybrid_runtime_evidence)
+      ? (input.runtimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
+      : null;
+  const consentSummary =
+    hybrid &&
+    typeof hybrid.consentSummary === "object" &&
+    hybrid.consentSummary !== null &&
+    !Array.isArray(hybrid.consentSummary)
+      ? (hybrid.consentSummary as Record<string, unknown>)
+      : null;
+  const consentVisual =
+    hybrid &&
+    typeof hybrid.consentVisual === "object" &&
+    hybrid.consentVisual !== null &&
+    !Array.isArray(hybrid.consentVisual)
+      ? (hybrid.consentVisual as Record<string, unknown>)
+      : null;
+
+  if (!consentSummary) {
+    return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
+  }
+
+  const cmpDetected = consentSummary.cmpDetected === true;
+  const contentObstructed = consentSummary.contentObstructed === true;
+  const cookieWallDetected = consentSummary.cookieWallDetected === true;
+  const rejectPresent = consentSummary.rejectPresent === true;
+  const rejectRequiresMoreClicks = consentSummary.rejectRequiresMoreClicks === true;
+  const rejectDepthClass =
+    typeof consentSummary.rejectDepthClass === "string" ? consentSummary.rejectDepthClass : null;
+  const managePresent = consentSummary.managePresent === true;
+  const surfaceType = typeof consentSummary.surfaceType === "string" ? consentSummary.surfaceType : null;
+  const rejectHidden = consentVisual?.rejectHidden === true;
+
+  if (!cmpDetected) {
+    return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
+  }
+
+  const obstructive =
+    cookieWallDetected ||
+    contentObstructed ||
+    rejectHidden ||
+    (!rejectPresent && managePresent) ||
+    rejectRequiresMoreClicks ||
+    rejectDepthClass === "deeper_layer";
+
+  if (!obstructive) {
+    return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
+  }
+
+  return [
+    buildRuntimePrivacyFinding({
+      description:
+        "The consent interface appears to obstruct or delay a reject path by gating content, hiding the reject option, or requiring extra navigation before a user can refuse tracking.",
+      evidence: {
+        cmp_detected: cmpDetected,
+        content_obstructed: contentObstructed,
+        cookie_wall_detected: cookieWallDetected,
+        manage_present: managePresent,
+        reject_depth_class: rejectDepthClass,
+        reject_hidden: rejectHidden,
+        reject_present: rejectPresent,
+        reject_requires_more_clicks: rejectRequiresMoreClicks,
+        surface_type: surfaceType
+      },
+      pageUrl: null,
+      ruleKey: "runtime_privacy.consent_interface_obstructive",
+      severity: cookieWallDetected || rejectHidden ? "high" : "medium",
+      title: "Consent interface appears obstructive"
+    })
+  ];
+}
+
 function buildSectionIssueFinding(input: {
   description: string;
   evidence: Record<string, unknown>;
@@ -1700,6 +1780,10 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ...deriveAccessFindings({
       documentSources: input.documentSources,
       pages: input.pages,
+      snapshot: input.snapshot
+    }),
+    ...deriveConsentInterfaceFindings({
+      runtimeArtifacts: input.runtimeArtifacts,
       snapshot: input.snapshot
     }),
     ...deriveFinancialValidationFindings(input),

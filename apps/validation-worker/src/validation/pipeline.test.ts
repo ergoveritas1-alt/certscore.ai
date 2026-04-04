@@ -1638,6 +1638,78 @@ test("does not promote a pre-consent runtime finding without third-party evidenc
   assert.equal(findings.some((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed"), false);
 });
 
+test("promotes obstructive consent interface findings when reject path is hidden behind a cookie wall", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true,
+            contentObstructed: true,
+            cookieWallDetected: true,
+            managePresent: true,
+            rejectDepthClass: "deeper_layer",
+            rejectPresent: false,
+            rejectRequiresMoreClicks: true,
+            surfaceType: "modal"
+          },
+          consentVisual: {
+            rejectHidden: true
+          }
+        }
+      },
+      snapshot: {}
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.consent_interface_obstructive");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+});
+
+test("fujifilm-style consent-wall bundle surfaces obstructive consent finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        third_party_request_count: 29,
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true,
+            contentObstructed: true,
+            cookieWallDetected: true,
+            managePresent: true,
+            rejectDepthClass: "deeper_layer",
+            rejectPresent: false,
+            rejectRequiresMoreClicks: true,
+            surfaceType: "modal"
+          },
+          consentVisual: {
+            rejectHidden: true
+          }
+        }
+      },
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        homepage_fetch_status: "redirected",
+        partial_scan: true,
+        preconsent_tracking_detected: true,
+        tracker_count_total: 1,
+        tracker_vendor_count: 1,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: []
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["runtime_privacy.consent_interface_obstructive"]);
+});
+
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
