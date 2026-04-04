@@ -23,6 +23,10 @@ function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()))];
+}
+
 function inferMentionTopics(documentText: string | null, title: string | null) {
   const haystack = `${title ?? ""}\n${documentText ?? ""}`.toLowerCase();
   const topics = new Set<string>();
@@ -66,6 +70,122 @@ function inferContactChannelType(documentText: string | null, parsedValue: strin
   }
 
   return parsedValue ?? "none";
+}
+
+function inferRightsSignals(documentText: string | null, parsedSignals: string[]) {
+  const text = (documentText ?? "").toLowerCase();
+  const inferred = new Set(parsedSignals);
+
+  if (/\bright to request\b|\baccess\b/.test(text)) {
+    inferred.add("access_request");
+  }
+  if (/\bdeletion\b|\berasure\b|\bdelete\b/.test(text)) {
+    inferred.add("delete_request");
+  }
+  if (/\brectification\b|\bcorrection\b|\bcorrect\b/.test(text)) {
+    inferred.add("correction_request");
+  }
+  if (/\bportability\b|machine-readable format/.test(text)) {
+    inferred.add("portability_request");
+  }
+  if (/\bopt-?out\b|do not sell or share|global privacy control|opt-out preference signal/.test(text)) {
+    inferred.add("opt_out_request");
+  }
+  if (/\bappeal\b/.test(text)) {
+    inferred.add("appeal_request");
+  }
+
+  return [...inferred];
+}
+
+function inferTransferMechanisms(documentText: string | null, parsedMechanisms: string[]) {
+  const text = (documentText ?? "").toLowerCase();
+  const inferred = new Set(parsedMechanisms);
+
+  if (/data privacy framework/.test(text)) {
+    inferred.add("dpf");
+  }
+  if (/standard contractual clauses|\bsccs?\b/.test(text)) {
+    inferred.add("scc");
+  }
+  if (/binding corporate rules|\bbcrs?\b/.test(text)) {
+    inferred.add("bcr");
+  }
+  if (/adequacy decision/.test(text)) {
+    inferred.add("adequacy");
+  }
+
+  return [...inferred];
+}
+
+function inferDoNotSell(documentText: string | null, parsedValue: string | null) {
+  if (parsedValue && parsedValue !== "unknown") {
+    return parsedValue;
+  }
+
+  const text = (documentText ?? "").toLowerCase();
+  if (/do not sell or share my personal information/.test(text)) {
+    return "present_text";
+  }
+
+  return parsedValue ?? "unknown";
+}
+
+function inferChildrenReference(documentText: string | null, parsedValue: string | null) {
+  if (parsedValue && parsedValue !== "unknown") {
+    return parsedValue;
+  }
+
+  const text = (documentText ?? "").toLowerCase();
+  if (/under the age of 16|under 16/.test(text)) {
+    return "under_16";
+  }
+  if (/under the age of 13|under 13/.test(text)) {
+    return "under_13";
+  }
+  if (/\bchildren\b|\bminor\b/.test(text)) {
+    return "none";
+  }
+
+  return parsedValue ?? "unknown";
+}
+
+function inferRetentionPeriods(documentText: string | null, parsedPeriods: unknown[]) {
+  if (parsedPeriods.length > 0) {
+    return parsedPeriods;
+  }
+
+  return parsedPeriods;
+}
+
+function inferCookieDisclosures(documentText: string | null, parsedDisclosures: unknown[]) {
+  if (Array.isArray(parsedDisclosures) && parsedDisclosures.length > 0) {
+    return parsedDisclosures;
+  }
+
+  const text = documentText ?? "";
+  const matches = [...text.matchAll(/([a-z0-9.-]+\.[a-z]{2,})\s+([A-Za-z0-9_.`,-\s]{2,220}?)\s+(First Party|Third Party)/g)];
+  const inferred = matches
+    .map((match) => {
+      const provider = match[1]?.trim() ?? null;
+      const rawCookies = match[2]
+        ?.replace(/`/g, "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => /^[A-Za-z0-9_.-]{2,}$/.test(value)) ?? [];
+
+      return rawCookies.map((cookieName) => ({
+        confidence: 0.65,
+        cookie_name: cookieName,
+        provider,
+        purpose: null,
+        duration: null,
+        snippet_hash: provider ? `${provider}:${cookieName}` : cookieName
+      }));
+    })
+    .flat();
+
+  return inferred;
 }
 
 function extractJson(raw: string) {
@@ -116,6 +236,27 @@ export function normalizeNanoDocumentExtraction(input: {
     getNumber(input.parsed.semantic_confidence) ??
     getNumber(input.parsed.semanticConfidence) ??
     getNumber(input.parsed.confidence);
+  const parsedRightsSignals = getStringArray(input.parsed.policy_rights_signals ?? input.parsed.policyRightsSignals);
+  const parsedTransferMechanisms = Array.isArray(input.parsed.policy_transfer_mechanisms)
+    ? input.parsed.policy_transfer_mechanisms
+    : Array.isArray(input.parsed.policyTransferMechanisms)
+      ? input.parsed.policyTransferMechanisms
+      : [];
+  const parsedRetentionPeriods = Array.isArray(input.parsed.policy_retention_periods)
+    ? input.parsed.policy_retention_periods
+    : Array.isArray(input.parsed.policyRetentionPeriods)
+      ? input.parsed.policyRetentionPeriods
+      : [];
+  const parsedCookieDisclosures = Array.isArray(input.parsed.policy_cookie_disclosures)
+    ? input.parsed.policy_cookie_disclosures
+    : Array.isArray(input.parsed.policyCookieDisclosures)
+      ? input.parsed.policyCookieDisclosures
+      : [];
+  const inferredRightsSignals = inferRightsSignals(input.documentText, parsedRightsSignals);
+  const inferredTransferMechanisms = inferTransferMechanisms(
+    input.documentText,
+    uniqueStrings(parsedTransferMechanisms.map((value) => (typeof value === "string" ? value : null)))
+  );
 
   const extractedFields: Record<string, unknown> = {
     page_type: documentType,
@@ -126,27 +267,22 @@ export function normalizeNanoDocumentExtraction(input: {
       getNumber(input.parsed.policyAmbiguityScore),
     policy_arbitration_present: input.parsed.policy_arbitration_present === true || input.parsed.policyArbitrationPresent === true,
     policy_children_reference:
-      getString(input.parsed.policy_children_reference) ??
-      getString(input.parsed.policyChildrenReference) ??
-      "unknown",
-    policy_cookie_disclosures: Array.isArray(input.parsed.policy_cookie_disclosures)
-      ? input.parsed.policy_cookie_disclosures
-      : Array.isArray(input.parsed.policyCookieDisclosures)
-        ? input.parsed.policyCookieDisclosures
-        : [],
+      inferChildrenReference(
+        input.documentText,
+        getString(input.parsed.policy_children_reference) ?? getString(input.parsed.policyChildrenReference)
+      ) ?? "unknown",
+    policy_cookie_disclosures: inferCookieDisclosures(input.documentText, parsedCookieDisclosures),
     policy_coverage_ratio:
       getNumber(input.parsed.policy_coverage_ratio) ??
       getNumber(input.parsed.policyCoverageRatio),
     policy_do_not_sell:
-      getString(input.parsed.policy_do_not_sell) ??
-      getString(input.parsed.policyDoNotSell) ??
-      "unknown",
+      inferDoNotSell(input.documentText, getString(input.parsed.policy_do_not_sell) ?? getString(input.parsed.policyDoNotSell)) ?? "unknown",
     policy_dsar_mechanism:
       getString(input.parsed.policy_dsar_mechanism) ??
       getString(input.parsed.policyDsarMechanism) ??
       "unknown",
     policy_mentions: mergedPolicyMentions,
-    policy_rights_signals: getStringArray(input.parsed.policy_rights_signals ?? input.parsed.policyRightsSignals),
+    policy_rights_signals: inferredRightsSignals,
     policy_semantic_confidence: semanticConfidence,
     policy_snippet_count:
       getNumber(input.parsed.policy_snippet_count) ??
@@ -157,16 +293,8 @@ export function normalizeNanoDocumentExtraction(input: {
       getString(input.parsed.policy_summary_short) ??
       getString(input.parsed.policySummaryShort) ??
       (input.documentText ? input.documentText.slice(0, 280) : null),
-    policy_transfer_mechanisms: Array.isArray(input.parsed.policy_transfer_mechanisms)
-      ? input.parsed.policy_transfer_mechanisms
-      : Array.isArray(input.parsed.policyTransferMechanisms)
-        ? input.parsed.policyTransferMechanisms
-        : [],
-    policy_retention_periods: Array.isArray(input.parsed.policy_retention_periods)
-      ? input.parsed.policy_retention_periods
-      : Array.isArray(input.parsed.policyRetentionPeriods)
-        ? input.parsed.policyRetentionPeriods
-        : [],
+    policy_transfer_mechanisms: inferredTransferMechanisms,
+    policy_retention_periods: inferRetentionPeriods(input.documentText, parsedRetentionPeriods),
     privacy_contact_channel_type: inferContactChannelType(
       input.documentText,
       getString(input.parsed.privacy_contact_channel_type) ?? getString(input.parsed.privacyContactChannelType)
@@ -177,7 +305,9 @@ export function normalizeNanoDocumentExtraction(input: {
     Boolean(getString(extractedFields.policy_summary_short)) ||
     getStringArray(extractedFields.policy_rights_signals).length > 0 ||
     getStringArray(extractedFields.policy_actionable_flags).length > 0 ||
-    mergedPolicyMentions.length > 0;
+    mergedPolicyMentions.length > 0 ||
+    (Array.isArray(extractedFields.policy_transfer_mechanisms) && extractedFields.policy_transfer_mechanisms.length > 0) ||
+    (Array.isArray(extractedFields.policy_cookie_disclosures) && extractedFields.policy_cookie_disclosures.length > 0);
 
   return {
     extractedFields,
@@ -217,7 +347,7 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
         {
           role: "system",
           content:
-            "You extract structured legal-document semantics from website legal pages. Return JSON only. Use these enums exactly when applicable: policy_dsar_mechanism = present|partial|absent|unknown, policy_do_not_sell = present_link|present_text|absent|unknown, policy_children_reference = under_13|under_16|none|unknown, privacy_contact_channel_type = email|form|portal|none. policy_rights_signals must be a string array of short tokens like access_request, delete_request, correction_request, portability_request, opt_out_request, appeal_request. policy_mentions must be an array of objects with topic. Allowed topics include gpc_disclosure, tracking_technologies_disclosure, targeted_advertising_disclosure, third_party_advertising_disclosure, children, session_replay_disclosure. Also return numeric policy_ambiguity_score (0-100), numeric policy_coverage_ratio (0-1), numeric policy_snippet_count, boolean policy_structurally_weak, and arrays for policy_transfer_mechanisms and policy_retention_periods when clearly disclosed. Keep policy_summary_short under 280 chars. If uncertain, prefer unknown, empty arrays, and low confidence."
+            "You extract structured legal-document semantics from website legal pages. Return JSON only. Use these enums exactly when applicable: policy_dsar_mechanism = present|partial|absent|unknown, policy_do_not_sell = present_link|present_text|absent|unknown, policy_children_reference = under_13|under_16|none|unknown, privacy_contact_channel_type = email|form|portal|none. policy_rights_signals must be a string array of short tokens like access_request, delete_request, correction_request, portability_request, opt_out_request, appeal_request. policy_mentions must be an array of objects with topic. Allowed topics include gpc_disclosure, tracking_technologies_disclosure, targeted_advertising_disclosure, third_party_advertising_disclosure, children, session_replay_disclosure. Also return numeric policy_ambiguity_score (0-100), numeric policy_coverage_ratio (0-1), numeric policy_snippet_count, boolean policy_structurally_weak, and arrays for policy_transfer_mechanisms and policy_retention_periods when clearly disclosed. Treat Data Privacy Framework as a transfer mechanism. When a cookie notice contains a vendor/cookie table, populate policy_cookie_disclosures from it. Keep policy_summary_short under 280 chars. If uncertain, prefer unknown, empty arrays, and low confidence."
         },
         {
           role: "user",

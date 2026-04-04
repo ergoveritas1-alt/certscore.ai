@@ -7,6 +7,7 @@ import {
   deriveValidationFindings,
   determineValidationCollectAction,
   getNanoDocumentSourceDedupKeys,
+  isolateLikelyLegalDocumentText,
   looksLikeIntermediaryOrBlockPage,
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
@@ -87,6 +88,31 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
 });
 
+test("deriveValidationFindings does not emit transfer-mechanism finding when one is disclosed", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "policy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: [],
+          policy_dsar_mechanism: "present",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: ["dpf"],
+          policy_ambiguity_score: 20,
+          policy_semantic_confidence: 0.9,
+          policy_summary_short: "Privacy policy discloses DPF transfers and rights."
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {}
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"), false);
+});
+
 test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout interstitial pages", () => {
   assert.equal(
     looksLikeIntermediaryOrBlockPage({
@@ -123,6 +149,34 @@ test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout inters
     }),
     false
   );
+});
+
+test("isolateLikelyLegalDocumentText trims legal page chrome around the main legal content", () => {
+  const text = isolateLikelyLegalDocumentText({
+    html: `
+      <html>
+        <head><title>Example Privacy Notice | Example Legal</title></head>
+        <body>
+          <nav>Homepage Products Pricing Contact</nav>
+          <div>Example Privacy Notice | Example Legal</div>
+          <main>
+            <a href="/legal">Back to Legal Home</a>
+            <h1>Example Privacy Notice</h1>
+            <p>We honor Global Privacy Control (GPC).</p>
+            <p>We transfer personal data under the Data Privacy Framework.</p>
+            <p>Contact privacy@example.com.</p>
+          </main>
+          <footer>Why Example Partners Contact Us</footer>
+        </body>
+      </html>
+    `,
+    title: "Example Privacy Notice | Example Legal"
+  });
+
+  assert.equal(text.includes("Homepage Products Pricing Contact"), false);
+  assert.equal(text.includes("Why Example Partners Contact Us"), false);
+  assert.equal(text.includes("We honor Global Privacy Control (GPC)."), true);
+  assert.equal(text.includes("Data Privacy Framework"), true);
 });
 
 test("dedupeNanoDocumentSources keeps one row per canonical url and document type", () => {
@@ -1314,6 +1368,37 @@ test("undisclosed runtime cookie triggers cookie disclosure gap", () => {
   assert.equal(finding?.findingFamily, "cookie_runtime_review");
   assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_ga"]);
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
+});
+
+test("cookie runtime matching understands vendor-and-cookies disclosure rows", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.92,
+          policy_cookie_disclosures: [
+            {
+              vendor: "example.com",
+              cookies: ["_mkto_trk", "_ga"],
+              cookie_type: "marketing_targeting"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["_mkto_trk"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"), false);
 });
 
 test("weak cookie policy structure triggers cookie policy obstructed instead of a disclosure gap", () => {

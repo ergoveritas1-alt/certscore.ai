@@ -1683,19 +1683,24 @@ export async function replaceScanDocumentSources(input: {
     throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${deleteError.message}`);
   }
 
-  if (input.rows.length === 0) {
+  const nanoOwnedRows = input.rows.filter((row) => {
+    const source = typeof row.source === "string" ? row.source : typeof row.sourceSource === "string" ? row.sourceSource : null;
+    return source === "nano_doc_retrieval";
+  });
+
+  if (nanoOwnedRows.length === 0) {
     return [];
   }
 
   const { error: insertError } = await supabase.from("scan_document_sources").insert(
-    prepareScanDocumentSourceRows(input.rows, input.scanId)
+    prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId)
   );
 
   if (insertError) {
     throw new Error(`Failed to persist document sources for scan ${input.scanId}: ${insertError.message}`);
   }
 
-  return input.rows;
+  return nanoOwnedRows;
 }
 
 export async function appendScanDocumentSources(input: {

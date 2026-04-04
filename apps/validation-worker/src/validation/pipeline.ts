@@ -56,6 +56,7 @@ const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 5_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
+const VALIDATION_VERDICT_BATCH_SIZE = 3;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -85,6 +86,65 @@ function stripHtmlToText(html: string) {
       .replace(/\s+/g, " ")
       .trim()
   );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractLegalTitleHeading(title: string | null) {
+  if (!title) {
+    return null;
+  }
+
+  const primary = title.split("|")[0]?.trim() ?? title.trim();
+  return primary.length > 0 ? primary : null;
+}
+
+function findDocumentStartIndex(text: string, heading: string | null) {
+  if (!heading) {
+    return 0;
+  }
+
+  const escapedHeading = escapeRegExp(heading);
+  const matches = [...text.matchAll(new RegExp(escapedHeading, "gi"))];
+  if (matches.length >= 2) {
+    return matches[1]?.index ?? matches[0]?.index ?? 0;
+  }
+
+  return matches[0]?.index ?? 0;
+}
+
+export function isolateLikelyLegalDocumentText(input: { html: string; title: string | null }) {
+  const fullText = stripHtmlToText(input.html);
+  if (fullText.length === 0) {
+    return fullText;
+  }
+
+  const titleHeading = extractLegalTitleHeading(input.title);
+  const startIndex = findDocumentStartIndex(fullText, titleHeading);
+  let candidate = startIndex > 0 ? fullText.slice(startIndex).trim() : fullText;
+
+  const footerMarkers = [
+    "Table of Contents",
+    "Back to Legal Home",
+    "© ",
+    "Why Lookout",
+    "Partners Partner Programs",
+    "Company About Us",
+    "Support Enterprise Support Login",
+    "Contact Us"
+  ];
+
+  for (const marker of footerMarkers) {
+    const index = candidate.indexOf(marker);
+    if (index >= 500) {
+      candidate = candidate.slice(0, index).trim();
+      break;
+    }
+  }
+
+  return candidate.length > 0 ? candidate : fullText;
 }
 
 function extractTitle(html: string) {
@@ -605,6 +665,30 @@ function deriveCookieRuntimeFindings(input: {
         }
 
         const record = value as Record<string, unknown>;
+        const vendor = typeof record.vendor === "string" ? record.vendor : typeof record.provider === "string" ? record.provider : null;
+        const cookieType = typeof record.cookie_type === "string" ? record.cookie_type : null;
+        const cookieNames = Array.isArray(record.cookies)
+          ? record.cookies.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          : [];
+
+        if (cookieNames.length > 0) {
+          return cookieNames.map((cookieName) => ({
+            confidence: typeof record.confidence === "number" ? record.confidence : 0.65,
+            cookieName,
+            duration: typeof record.duration === "string" ? record.duration : null,
+            provider: vendor,
+            purpose: cookieType,
+            snippetHash:
+              typeof record.snippet_hash === "string"
+                ? record.snippet_hash
+                : typeof record.snippetHash === "string"
+                  ? record.snippetHash
+                  : vendor && cookieName
+                    ? `${vendor}:${cookieName}`
+                    : cookieName
+          } satisfies CookieDisclosureRow));
+        }
+
         return [
           {
             confidence: typeof record.confidence === "number" ? record.confidence : 0,
@@ -1474,8 +1558,8 @@ async function fetchNanoDocumentSource(input: {
     }
 
     const html = await response.text();
-    const text = stripHtmlToText(html);
     const title = extractTitle(html);
+    const text = isolateLikelyLegalDocumentText({ html, title });
 
     if (looksLikeIntermediaryOrBlockPage({ canonicalUrl, text, title })) {
       return {
@@ -2725,91 +2809,95 @@ export async function processValidationVerdictJob(validationRunId: string) {
     const findings = await loadValidationRunFindings(validationRunId);
     const scanArtifacts = await loadCompletedScanArtifacts(run.scan_id);
 
-    for (const finding of findings) {
-      const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
-      const ruleKey = typeof finding.rule_key === "string" ? finding.rule_key : "";
-      const verdict =
-        ruleKey.startsWith("financial_review.") && typeof rawEvidence.unifiedFindingId === "string"
-          ? await validateFinancialFindingWithLlm({
-              candidateFindingId: rawEvidence.unifiedFindingId as
-                | "fee_disclosure_present"
-                | "apr_or_interest_rate_disclosure_present"
-                | "past_performance_disclaimer_present",
-              evidence: {
-                exactMatchTerm: typeof rawEvidence.matchedPhrase === "string" ? rawEvidence.matchedPhrase : null,
-                matchedPhrases:
-                  Array.isArray(rawEvidence.matchedPhrases)
-                    ? (rawEvidence.matchedPhrases as unknown[]).filter((value): value is string => typeof value === "string")
-                    : typeof rawEvidence.matchedPhrase === "string"
-                      ? [rawEvidence.matchedPhrase]
-                      : [],
-                pageClassification:
-                  rawEvidence.pageClassification === "financial_offer" ||
-                  rawEvidence.pageClassification === "quasi_financial_offer" ||
-                  rawEvidence.pageClassification === "pricing_or_fees" ||
-                  rawEvidence.pageClassification === "disclosure_or_legal" ||
-                  rawEvidence.pageClassification === "identity_or_contact"
-                    ? rawEvidence.pageClassification
-                    : "unknown",
-                pageUrl: typeof rawEvidence.pageUrl === "string" ? rawEvidence.pageUrl : null,
-                signalKeys: Array.isArray(rawEvidence.supportingSignals)
-                  ? (rawEvidence.supportingSignals as unknown[]).filter((value): value is string => typeof value === "string")
-                  : typeof rawEvidence.signalKey === "string"
-                    ? [rawEvidence.signalKey]
+    for (const batch of chunkRows(findings, VALIDATION_VERDICT_BATCH_SIZE)) {
+      await Promise.all(
+        batch.map(async (finding) => {
+          const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
+          const ruleKey = typeof finding.rule_key === "string" ? finding.rule_key : "";
+          const verdict =
+            ruleKey.startsWith("financial_review.") && typeof rawEvidence.unifiedFindingId === "string"
+              ? await validateFinancialFindingWithLlm({
+                  candidateFindingId: rawEvidence.unifiedFindingId as
+                    | "fee_disclosure_present"
+                    | "apr_or_interest_rate_disclosure_present"
+                    | "past_performance_disclaimer_present",
+                  evidence: {
+                    exactMatchTerm: typeof rawEvidence.matchedPhrase === "string" ? rawEvidence.matchedPhrase : null,
+                    matchedPhrases:
+                      Array.isArray(rawEvidence.matchedPhrases)
+                        ? (rawEvidence.matchedPhrases as unknown[]).filter((value): value is string => typeof value === "string")
+                        : typeof rawEvidence.matchedPhrase === "string"
+                          ? [rawEvidence.matchedPhrase]
+                          : [],
+                    pageClassification:
+                      rawEvidence.pageClassification === "financial_offer" ||
+                      rawEvidence.pageClassification === "quasi_financial_offer" ||
+                      rawEvidence.pageClassification === "pricing_or_fees" ||
+                      rawEvidence.pageClassification === "disclosure_or_legal" ||
+                      rawEvidence.pageClassification === "identity_or_contact"
+                        ? rawEvidence.pageClassification
+                        : "unknown",
+                    pageUrl: typeof rawEvidence.pageUrl === "string" ? rawEvidence.pageUrl : null,
+                    signalKeys: Array.isArray(rawEvidence.supportingSignals)
+                      ? (rawEvidence.supportingSignals as unknown[]).filter((value): value is string => typeof value === "string")
+                      : typeof rawEvidence.signalKey === "string"
+                        ? [rawEvidence.signalKey]
+                        : [],
+                    snippets: Array.isArray(rawEvidence.policySnippets)
+                      ? (rawEvidence.policySnippets as unknown[]).filter((value): value is string => typeof value === "string")
+                      : typeof rawEvidence.matchedSnippet === "string"
+                        ? [rawEvidence.matchedSnippet]
+                        : [],
+                    sourceUrls: Array.isArray(rawEvidence.sourceUrls)
+                      ? (rawEvidence.sourceUrls as unknown[]).filter((value): value is string => typeof value === "string")
+                      : typeof rawEvidence.pageUrl === "string"
+                        ? [rawEvidence.pageUrl]
+                        : [],
+                    supportingHeadings: Array.isArray(rawEvidence.supportingHeadings)
+                      ? (rawEvidence.supportingHeadings as unknown[]).filter((value): value is string => typeof value === "string")
+                      : []
+                  },
+                  negativeEvidenceFlags: Array.isArray(rawEvidence.negativeEvidenceFlags)
+                    ? (rawEvidence.negativeEvidenceFlags as unknown[]).filter((value): value is string => typeof value === "string")
                     : [],
-                snippets: Array.isArray(rawEvidence.policySnippets)
-                  ? (rawEvidence.policySnippets as unknown[]).filter((value): value is string => typeof value === "string")
-                  : typeof rawEvidence.matchedSnippet === "string"
-                    ? [rawEvidence.matchedSnippet]
-                    : [],
-                sourceUrls: Array.isArray(rawEvidence.sourceUrls)
-                  ? (rawEvidence.sourceUrls as unknown[]).filter((value): value is string => typeof value === "string")
-                  : typeof rawEvidence.pageUrl === "string"
-                    ? [rawEvidence.pageUrl]
-                    : [],
-                supportingHeadings: Array.isArray(rawEvidence.supportingHeadings)
-                  ? (rawEvidence.supportingHeadings as unknown[]).filter((value): value is string => typeof value === "string")
-                  : []
-              },
-              negativeEvidenceFlags: Array.isArray(rawEvidence.negativeEvidenceFlags)
-                ? (rawEvidence.negativeEvidenceFlags as unknown[]).filter((value): value is string => typeof value === "string")
-                : [],
-              scanContext: {
-                domain: run.hostname,
-                pageType: typeof rawEvidence.pageType === "string" ? rawEvidence.pageType : null
-              }
-            })
-          : await validateFindingWithLlm({
-              domain: run.hostname,
-              finding: {
-                category: finding.category,
-                description: finding.description,
-                evidence: rawEvidence,
-                pageUrl: finding.page_url ?? null,
-                ruleKey,
-                severity: finding.severity,
-                title: finding.title
-              },
-              scanEvidence: {
-                pages: scanArtifacts.pages,
-                policyEnrichments: scanArtifacts.policyEnrichments,
-                preconsentViolations: scanArtifacts.preconsentViolations,
-                runtimeArtifacts: scanArtifacts.runtimeArtifacts,
-                snapshot: scanArtifacts.snapshot,
-                trackerVendors: scanArtifacts.trackerVendors
-              }
-            });
+                  scanContext: {
+                    domain: run.hostname,
+                    pageType: typeof rawEvidence.pageType === "string" ? rawEvidence.pageType : null
+                  }
+                })
+              : await validateFindingWithLlm({
+                  domain: run.hostname,
+                  finding: {
+                    category: finding.category,
+                    description: finding.description,
+                    evidence: rawEvidence,
+                    pageUrl: finding.page_url ?? null,
+                    ruleKey,
+                    severity: finding.severity,
+                    title: finding.title
+                  },
+                  scanEvidence: {
+                    pages: scanArtifacts.pages,
+                    policyEnrichments: scanArtifacts.policyEnrichments,
+                    preconsentViolations: scanArtifacts.preconsentViolations,
+                    runtimeArtifacts: scanArtifacts.runtimeArtifacts,
+                    snapshot: scanArtifacts.snapshot,
+                    trackerVendors: scanArtifacts.trackerVendors
+                  }
+                });
 
-      await upsertValidationVerdict({
-        agreementScore: verdict.agreementScore,
-        confidence: verdict.confidence,
-        evidence: verdict.evidence,
-        model: verdict.model,
-        promptVersion: verdict.promptVersion,
-        rationale: verdict.rationale,
-        validationRunFindingId: String(finding.id),
-        verdict: verdict.verdict
-      });
+          await upsertValidationVerdict({
+            agreementScore: verdict.agreementScore,
+            confidence: verdict.confidence,
+            evidence: verdict.evidence,
+            model: verdict.model,
+            promptVersion: verdict.promptVersion,
+            rationale: verdict.rationale,
+            validationRunFindingId: String(finding.id),
+            verdict: verdict.verdict
+          });
+        })
+      );
     }
 
     await finalizeValidationRun(validationRunId);
