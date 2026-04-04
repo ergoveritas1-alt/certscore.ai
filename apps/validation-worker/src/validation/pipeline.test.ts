@@ -2127,6 +2127,55 @@ test("dnb-style timeout bundle surfaces legal coverage gap and pre-consent track
   ]);
 });
 
+test("kurier-style error bundle only surfaces legal coverage gap", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          document_type: "privacy_policy",
+          extraction_status: "failed",
+          source_status: "rejected"
+        },
+        {
+          document_type: "cookie_policy",
+          extraction_status: "failed",
+          source_status: "rejected"
+        },
+        {
+          document_type: "terms_of_service",
+          extraction_status: "failed",
+          source_status: "rejected"
+        }
+      ],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      preconsentViolations: [],
+      runtimeArtifacts: {
+        initial_cookie_names: []
+      } as Record<string, unknown>,
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        cookie_policy_present: false,
+        cookie_count_total: 0,
+        homepage_fetch_status: "error",
+        partial_scan: true,
+        preconsent_tracking_detected: false,
+        privacy_policy_present: false,
+        terms_of_service_present: false,
+        third_party_cookie_count: 0,
+        tracker_count_total: 0,
+        tracker_vendor_count: 0,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: []
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["access_review.legal_coverage_unverified"]);
+});
+
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
