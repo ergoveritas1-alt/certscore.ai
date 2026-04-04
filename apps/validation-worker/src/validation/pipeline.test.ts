@@ -144,6 +144,52 @@ test("does not emit blocked-access finding when preflight verified legal surface
   assert.equal(findings.some((item) => item.ruleKey === "access_review.public_access_blocked"), false);
 });
 
+test("emits legal-coverage finding for partial non-blocked scans with no verified legal surfaces", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        cookie_policy_present: false,
+        partial_scan: true,
+        privacy_policy_present: false,
+        terms_of_service_present: false,
+        verified_public_surfaces_count: 0
+      }
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "access_review.legal_coverage_unverified");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "medium");
+});
+
+test("does not emit legal-coverage finding for blocked or captcha-limited scans", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: true,
+        cookie_policy_present: false,
+        partial_scan: true,
+        privacy_policy_present: false,
+        terms_of_service_present: false,
+        verified_public_surfaces_count: 0
+      }
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "access_review.legal_coverage_unverified"), false);
+});
+
 test("emits blocked-access finding for captcha-limited partial scans without verified surfaces", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
@@ -1708,6 +1754,70 @@ test("fujifilm-style consent-wall bundle surfaces obstructive consent finding", 
   );
 
   assert.deepEqual(findings.map((finding) => finding.ruleKey), ["runtime_privacy.consent_interface_obstructive"]);
+});
+
+test("alz-style bundle surfaces legal coverage gap alongside runtime privacy issues", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Meta", collection_endpoint_type: "request" },
+        { vendor_name: "Google Analytics", collection_endpoint_type: "request" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: ["_fbp", "_ga"],
+        third_party_request_count: 50,
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true,
+            contentObstructed: true,
+            cookieWallDetected: false,
+            managePresent: true,
+            rejectDepthClass: "deeper_layer",
+            rejectPresent: false,
+            rejectRequiresMoreClicks: true,
+            surfaceType: "modal"
+          },
+          consentVisual: {
+            rejectHidden: false
+          },
+          networkSummary: {
+            totalRequestCount: 60
+          }
+        }
+      },
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        cookie_policy_present: false,
+        cookie_count_total: 60,
+        partial_scan: true,
+        preconsent_tracking_detected: true,
+        privacy_policy_present: false,
+        terms_of_service_present: false,
+        third_party_cookie_count: 54,
+        tracker_count_total: 6,
+        tracker_vendor_count: 6,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Meta"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), [
+    "access_review.legal_coverage_unverified",
+    "runtime_privacy.preconsent_tracking_observed",
+    "runtime_privacy.consent_interface_obstructive"
+  ]);
 });
 
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {

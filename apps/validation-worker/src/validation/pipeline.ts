@@ -594,6 +594,62 @@ function deriveAccessFindings(input: {
   ];
 }
 
+function deriveLegalCoverageFindings(input: {
+  documentSources?: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown> | null;
+}) {
+  const snapshot = input.snapshot;
+  if (!snapshot) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  const blockedFlag = getRecordBoolean(snapshot, "blocked_flag");
+  const captchaFlag = getRecordBoolean(snapshot, "captcha_flag");
+  const partialScan = getRecordBoolean(snapshot, "partial_scan");
+  const privacyPolicyPresent = getRecordBoolean(snapshot, "privacy_policy_present");
+  const termsPresent = getRecordBoolean(snapshot, "terms_of_service_present");
+  const cookiePolicyPresent = getRecordBoolean(snapshot, "cookie_policy_present");
+  const verifiedSurfaceCount =
+    typeof snapshot.verified_public_surfaces_count === "number" && Number.isFinite(snapshot.verified_public_surfaces_count)
+      ? snapshot.verified_public_surfaces_count
+      : 0;
+  const readyDocumentCount = (input.documentSources ?? []).filter((row) => row.source_status === "ready").length;
+
+  if (!partialScan || blockedFlag || captchaFlag) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  if (verifiedSurfaceCount > 0 || readyDocumentCount > 0) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  if (privacyPolicyPresent || termsPresent || cookiePolicyPresent) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  return [
+    buildSectionIssueFinding({
+      description:
+        "The scan completed only partially and could not verify public privacy, cookie, or terms documents, so policy-side validation remains incomplete.",
+      evidence: {
+        blocked_flag: blockedFlag,
+        captcha_flag: captchaFlag,
+        coverage_level: getStringValue(snapshot, "coverage_level"),
+        partial_scan: partialScan,
+        privacy_policy_present: privacyPolicyPresent,
+        terms_of_service_present: termsPresent,
+        cookie_policy_present: cookiePolicyPresent,
+        verified_public_surfaces_count: verifiedSurfaceCount
+      },
+      pageType: null,
+      pageUrl: null,
+      ruleKey: "access_review.legal_coverage_unverified",
+      severity: "medium",
+      title: "Legal coverage could not be verified"
+    })
+  ];
+}
+
 function getStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   return Array.isArray(record?.[key])
     ? (record?.[key] as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -1780,6 +1836,10 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ...deriveAccessFindings({
       documentSources: input.documentSources,
       pages: input.pages,
+      snapshot: input.snapshot
+    }),
+    ...deriveLegalCoverageFindings({
+      documentSources: input.documentSources,
       snapshot: input.snapshot
     }),
     ...deriveConsentInterfaceFindings({
