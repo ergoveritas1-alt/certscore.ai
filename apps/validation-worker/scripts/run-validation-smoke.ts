@@ -15,6 +15,7 @@ type RepresentativeTarget = {
   }>;
   hostname: string;
   label: string;
+  maxValidationMs?: number;
   scanId: string;
 };
 
@@ -34,6 +35,7 @@ type SmokeResult = {
   runStatus: string;
   scanId: string;
   shapeMatchesExpectation: boolean | null;
+  timingWithinBudget: boolean | null;
   timings: {
     queueToFinalMs: number | null;
     scanProcessingMs: number | null;
@@ -45,6 +47,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "lookout.com",
     label: "lookout",
+    maxValidationMs: 15_000,
     scanId: "8ff70326-b21a-42c4-84f5-6e0f5c4e45ab",
     expectedFindings: [
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
@@ -55,12 +58,14 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "adidas.com",
     label: "adidas",
+    maxValidationMs: 15_000,
     scanId: "eca7ea56-cf60-43dd-86af-71d2f71f776b",
     expectedFindings: [{ ruleKey: "access_review.public_access_blocked", severity: "high" }]
   },
   {
     hostname: "fujifilm.com",
     label: "fujifilm",
+    maxValidationMs: 15_000,
     scanId: "50b237ba-33d6-41c6-8bea-7b535a0c6729",
     expectedFindings: [
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
@@ -70,6 +75,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "hobbylobby.com",
     label: "hobbylobby",
+    maxValidationMs: 15_000,
     scanId: "97cd1278-0756-4e2b-9838-598c49e1498a",
     expectedFindings: [
       { ruleKey: "access_review.public_access_blocked", severity: "high" },
@@ -80,6 +86,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "dnb.com",
     label: "dnb",
+    maxValidationMs: 15_000,
     scanId: "4f46389b-ab47-453b-bd8a-5555596ab099",
     expectedFindings: [
       { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" },
@@ -89,12 +96,14 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "alz.org",
     label: "alz",
+    maxValidationMs: 20_000,
     scanId: "22214ea0-f5cc-480e-8275-ac0c635a55e8",
     expectedFindings: [{ ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }]
   },
   {
     hostname: "kurier.at",
     label: "kurier",
+    maxValidationMs: 15_000,
     scanId: "bd98b16e-76cd-489a-ba75-81ebe7a8d242",
     expectedFindings: [{ ruleKey: "access_review.legal_coverage_unverified", severity: "medium" }]
   }
@@ -141,6 +150,18 @@ function findingShapeMatches(
   }
 
   return normalizedActual.every((value, index) => value === normalizedExpected[index]);
+}
+
+function timingWithinBudget(validationMs: number | null, maxValidationMs: number | null | undefined) {
+  if (maxValidationMs == null) {
+    return null;
+  }
+
+  if (validationMs == null) {
+    return false;
+  }
+
+  return validationMs <= maxValidationMs;
 }
 
 function formatDurationMs(value: number | null) {
@@ -200,6 +221,7 @@ async function loadScanContext(scanId: string) {
 async function runSmokeForScan(input: {
   expectedFindings?: Array<{ ruleKey: string; severity: string }>;
   label: string;
+  maxValidationMs?: number;
   scanId: string;
 }) {
   const scan = await loadScanContext(input.scanId);
@@ -237,6 +259,11 @@ async function runSmokeForScan(input: {
   }
 
   const findings = await loadValidationRunFindings(run.id);
+  const validationMs = (() => {
+    const start = parseIsoMs(refreshedRun.started_at);
+    const end = parseIsoMs(refreshedRun.completed_at);
+    return start !== null && end !== null ? end - start : null;
+  })();
   const result: SmokeResult = {
     expectedFindings: input.expectedFindings ?? null,
     findings: findings.map((finding) => ({
@@ -256,6 +283,7 @@ async function runSmokeForScan(input: {
       })),
       input.expectedFindings
     ),
+    timingWithinBudget: timingWithinBudget(validationMs, input.maxValidationMs),
     timings: {
       queueToFinalMs: (() => {
         const start = parseIsoMs(scan.createdAt);
@@ -268,9 +296,7 @@ async function runSmokeForScan(input: {
         return start !== null && end !== null ? end - start : null;
       })(),
       validationMs: (() => {
-        const start = parseIsoMs(refreshedRun.started_at);
-        const end = parseIsoMs(refreshedRun.completed_at);
-        return start !== null && end !== null ? end - start : null;
+        return validationMs;
       })()
     }
   };
@@ -288,6 +314,9 @@ function printHuman(results: SmokeResult[]) {
     );
     if (result.shapeMatchesExpectation !== null) {
       console.log(`expected_shape ${result.shapeMatchesExpectation ? "match" : "mismatch"}`);
+    }
+    if (result.timingWithinBudget !== null) {
+      console.log(`validation_budget ${result.timingWithinBudget ? "within" : "exceeded"}`);
     }
 
     if (result.findings.length === 0) {
@@ -310,15 +339,22 @@ async function main() {
 
   const requestedScanIds = getArgValues("--scan-id");
   const allowMismatch = hasFlag("--allow-mismatch");
+  const allowTimingRegression = hasFlag("--allow-timing-regression");
   const json = hasFlag("--json");
   const targets =
     requestedScanIds.length > 0
       ? requestedScanIds.map((scanId, index) => ({
           expectedFindings: undefined,
           label: `scan-${index + 1}`,
+          maxValidationMs: undefined,
           scanId
         }))
-      : REPRESENTATIVE_TARGETS.map(({ expectedFindings, label, scanId }) => ({ expectedFindings, label, scanId }));
+      : REPRESENTATIVE_TARGETS.map(({ expectedFindings, label, maxValidationMs, scanId }) => ({
+          expectedFindings,
+          label,
+          maxValidationMs,
+          scanId
+        }));
 
   const results: SmokeResult[] = [];
   for (const target of targets) {
@@ -326,10 +362,11 @@ async function main() {
   }
 
   const mismatches = results.filter((result) => result.shapeMatchesExpectation === false);
+  const timingRegressions = results.filter((result) => result.timingWithinBudget === false);
 
   if (json) {
     console.log(JSON.stringify(results, null, 2));
-    if (mismatches.length > 0 && !allowMismatch) {
+    if ((mismatches.length > 0 && !allowMismatch) || (timingRegressions.length > 0 && !allowTimingRegression)) {
       process.exitCode = 1;
     }
     return;
@@ -342,6 +379,17 @@ async function main() {
       `\nSmoke expectation mismatches: ${mismatches.map((result) => result.label).join(", ")}`
     );
     if (!allowMismatch) {
+      process.exitCode = 1;
+    }
+  }
+
+  if (timingRegressions.length > 0) {
+    console.error(
+      `\nSmoke timing regressions: ${timingRegressions
+        .map((result) => `${result.label}=${formatDurationMs(result.timings.validationMs)}`)
+        .join(", ")}`
+    );
+    if (!allowTimingRegression) {
       process.exitCode = 1;
     }
   }
