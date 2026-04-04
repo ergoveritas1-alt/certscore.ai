@@ -1877,7 +1877,7 @@ test("promotes obstructive consent interface findings when reject path is hidden
   assert.equal(finding?.severity, "high");
 });
 
-test("fujifilm-style consent-wall bundle surfaces obstructive consent finding", () => {
+test("fujifilm-style consent-wall bundle surfaces obstructive consent plus legal coverage gap", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [],
@@ -1916,7 +1916,10 @@ test("fujifilm-style consent-wall bundle surfaces obstructive consent finding", 
     })
   );
 
-  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["runtime_privacy.consent_interface_obstructive"]);
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), [
+    "runtime_privacy.consent_interface_obstructive",
+    "access_review.legal_coverage_unverified"
+  ]);
 });
 
 test("alz-style bundle surfaces legal coverage gap alongside runtime privacy issues", () => {
