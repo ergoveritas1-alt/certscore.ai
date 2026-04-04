@@ -296,6 +296,48 @@ test("buildNanoDocCandidateUrls keeps a special-scope privacy doc only when no m
   assert.equal(candidates.some((candidate) => candidate.documentType === "privacy_policy"), true);
 });
 
+test("buildNanoDocCandidateUrls recognizes agreement-based legal-hub terms docs", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [
+      {
+        anchor_text: "EN",
+        candidate_score: 0.82,
+        candidate_url: "https://www.example.com/legal/lookout-mes-service-license-agreement",
+        discovered_from: "legal_hub_link"
+      },
+      {
+        anchor_text: "EN",
+        candidate_score: 0.85,
+        candidate_url: "https://www.example.com/legal/enterprise-end-user-agreement",
+        discovered_from: "legal_hub_link"
+      },
+      {
+        anchor_text: "Lookout Privacy Notice",
+        candidate_score: 0.88,
+        candidate_url: "https://www.example.com/legal/privacy-notice",
+        discovered_from: "legal_hub_link"
+      },
+      {
+        anchor_text: "View our Cookie Notice",
+        candidate_score: 0.84,
+        candidate_url: "https://www.example.com/legal/cookie-policy",
+        discovered_from: "legal_hub_link"
+      }
+    ],
+    domainHostname: "example.com",
+    pages: []
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/enterprise-end-user-agreement"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/lookout-mes-service-license-agreement"),
+    false
+  );
+});
+
 test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when no discovery evidence exists", () => {
   const candidates = buildNanoDocCandidateUrls({
     discoveryCandidates: [],
@@ -323,6 +365,11 @@ test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when n
       documentType: "terms_of_service",
       priorityTier: "secondary",
       url: "https://example.com/legal/terms-of-service"
+    },
+    {
+      documentType: "terms_of_service",
+      priorityTier: "secondary",
+      url: "https://example.com/legal/enterprise-end-user-agreement"
     },
     {
       documentType: "cookie_policy",
@@ -375,6 +422,37 @@ test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery
       url: "https://www.example.com/legal/terms"
     }
   ]);
+});
+
+test("buildNanoDocCandidateUrls supplements recent domain docs when a document type is missing", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "example.com",
+    pages: [],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://www.example.com/legal/privacy-policy",
+        document_type: "privacy_policy"
+      },
+      {
+        canonical_url: "https://www.example.com/legal/cookie-policy",
+        document_type: "cookie_policy"
+      }
+    ]
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/privacy-policy"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.example.com/legal/cookie-policy"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://example.com/legal/enterprise-end-user-agreement"),
+    true
+  );
 });
 
 test("prioritizePendingNanoDocumentSources prefers priority privacy docs before secondary terms docs", () => {

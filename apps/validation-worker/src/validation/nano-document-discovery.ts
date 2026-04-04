@@ -58,7 +58,11 @@ function guessDocumentType(input: { anchorText?: string | null; url: string }) {
   if (/cookie policy|cookie notice|cookies\b/.test(haystack)) {
     return "cookie_policy" as const;
   }
-  if (/terms of service|terms and conditions|\bterms\b|\blegal terms\b/.test(haystack)) {
+  if (
+    /terms of service|terms and conditions|\bterms\b|\blegal terms\b|end user agreement|license agreement|service license agreement|\beula\b/.test(
+      haystack
+    )
+  ) {
     return "terms_of_service" as const;
   }
   if (/privacy policy|privacy notice|\bprivacy\b|your privacy choices|data privacy/.test(haystack)) {
@@ -83,7 +87,13 @@ function getDocumentSpecificityAdjustment(input: { documentType: string | null; 
   }
 
   if (input.documentType === "terms_of_service") {
-    if (/\bterms of service\b|\bterms and conditions\b|\/terms\b|\/terms-of-service\b/.test(haystack)) adjustment += 0.16;
+    if (
+      /\bterms of service\b|\bterms and conditions\b|\/terms\b|\/terms-of-service\b|end-user-agreement|service-license-agreement|license agreement|eula/.test(
+        haystack
+      )
+    ) {
+      adjustment += 0.16;
+    }
     if (/\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace\b/.test(haystack)) adjustment -= 0.26;
   }
 
@@ -148,6 +158,12 @@ function stripHtmlToText(html: string) {
   return decodeHtmlEntities(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
 }
 
+function extractAnchorContextText(input: { html: string; matchIndex: number }) {
+  const start = Math.max(0, input.matchIndex - 280);
+  const end = Math.min(input.html.length, input.matchIndex + 280);
+  return stripHtmlToText(input.html.slice(start, end)).slice(0, 220);
+}
+
 function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: string; pageUrl: string }) {
   const baseUrl = new URL(input.pageUrl);
   const matches = [...input.html.matchAll(/<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi)];
@@ -156,6 +172,11 @@ function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: s
   for (const match of matches) {
     const rawHref = match[2] ?? "";
     const rawText = stripHtmlToText(match[3] ?? "");
+    const contextText = extractAnchorContextText({
+      html: input.html,
+      matchIndex: match.index ?? 0
+    });
+    const candidateText = rawText.length > 3 ? rawText : contextText;
     if (!rawHref || (!isLikelyLegalHref(rawHref) && !isLikelyLegalHref(rawText))) {
       continue;
     }
@@ -165,7 +186,7 @@ function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: s
       if (!absoluteUrl) {
         continue;
       }
-      const anchorText = rawText.length > 0 ? rawText.slice(0, 160) : null;
+      const anchorText = candidateText.length > 0 ? candidateText.slice(0, 160) : null;
       const documentType = guessDocumentType({ anchorText, url: absoluteUrl });
       const candidate: DiscoveryInputCandidate = {
         anchorText,
@@ -221,15 +242,23 @@ async function buildHomepageDiscoveryCandidates(input: { domainHostname: string 
   }
 
   const homepageUrl = normalizeDocUrl(`https://${input.domainHostname}/`) ?? `https://${input.domainHostname}/`;
+  const legalHubUrl = normalizeDocUrl(`https://${input.domainHostname}/legal`) ?? `https://${input.domainHostname}/legal`;
   const homepageCandidates = await fetchRenderedLegalCandidates(homepageUrl, "homepage_rendered_link");
   const legalHubCandidates = homepageCandidates.filter((candidate) => looksLikeLegalHub({
     anchorText: candidate.anchorText,
     url: candidate.url
   }));
 
-  const secondHopCandidates = legalHubCandidates.length > 0
-    ? await fetchRenderedLegalCandidates(legalHubCandidates[0]!.url, "legal_hub_link")
-    : [];
+  const legalHubTargets = new Set<string>(
+    [
+      legalHubUrl,
+      ...legalHubCandidates.map((candidate) => candidate.url)
+    ].map((candidate) => normalizeDocUrl(candidate) ?? candidate)
+  );
+  const secondHopCandidateGroups = await Promise.all(
+    [...legalHubTargets].map((targetUrl) => fetchRenderedLegalCandidates(targetUrl, "legal_hub_link"))
+  );
+  const secondHopCandidates = secondHopCandidateGroups.flat();
 
   const merged = new Map<string, DiscoveryInputCandidate>();
   for (const candidate of [...homepageCandidates, ...secondHopCandidates]) {
@@ -336,6 +365,7 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
@@ -358,7 +388,10 @@ function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
     }
 
     const currentCount = counts.get(candidate.documentType) ?? 0;
-    const limit = 2;
+    const limit =
+      candidate.documentType === "terms_of_service"
+        ? 3
+        : 2;
     if (currentCount >= limit) {
       continue;
     }
@@ -393,10 +426,6 @@ export function buildNanoDocCandidateUrls(input: {
     })
     .filter((candidate): candidate is NanoDocCandidate => candidate !== null);
 
-  if (recentDomainCandidates.length > 0) {
-    return limitNanoDocCandidates(recentDomainCandidates);
-  }
-
   const evidenceCandidates = buildEvidenceCandidates(input);
   const orderedEvidence = evidenceCandidates
     .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
@@ -414,11 +443,17 @@ export function buildNanoDocCandidateUrls(input: {
       url: candidate.url
     } satisfies NanoDocCandidate));
 
-  if (orderedEvidence.length > 0) {
-    return limitNanoDocCandidates(orderedEvidence);
-  }
-
-  return buildSeedFallbackCandidates(input.domainHostname);
+  const fallbackCandidates = buildSeedFallbackCandidates(input.domainHostname);
+  return limitNanoDocCandidates(
+    recentDomainCandidates.length > 0
+      ? [
+          ...recentDomainCandidates,
+          ...(orderedEvidence.length > 0 ? orderedEvidence : fallbackCandidates)
+        ]
+      : orderedEvidence.length > 0
+        ? orderedEvidence
+        : fallbackCandidates
+  );
 }
 
 function extractJson(raw: string) {
