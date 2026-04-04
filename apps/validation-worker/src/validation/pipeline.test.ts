@@ -6,6 +6,7 @@ import {
   dedupeNanoDocumentSources,
   deriveValidationFindings,
   determineValidationCollectAction,
+  getNanoDocumentSourceDedupKeys,
   looksLikeIntermediaryOrBlockPage,
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
@@ -494,6 +495,20 @@ test("selectNanoDocCandidates prefers current ws01 legal coverage over recent do
   assert.equal(candidates.some((candidate) => candidate.url === "https://www.example.com/legal/terms-of-service"), true);
   assert.equal(candidates.some((candidate) => candidate.url === "https://old.example.com/privacy"), false);
   assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
+});
+
+test("getNanoDocumentSourceDedupKeys covers both ws01 source and redirected canonical urls", () => {
+  const keys = getNanoDocumentSourceDedupKeys({
+    canonical_url: "https://www.example.com/legal/enterprise-end-user-agreement",
+    document_type: "terms_of_service",
+    source: "ws01_preflight",
+    source_url: "https://example.com/legal/enterprise-end-user-agreement"
+  });
+
+  assert.deepEqual(keys.sort(), [
+    "terms_of_service::https://example.com/legal/enterprise-end-user-agreement",
+    "terms_of_service::https://www.example.com/legal/enterprise-end-user-agreement"
+  ]);
 });
 
 test("buildNanoDocCandidateUrls supplements recent domain docs when a document type is missing", () => {

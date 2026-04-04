@@ -1692,6 +1692,26 @@ function getNanoDocumentSourceDedupKey(row: Record<string, unknown>) {
   return `${documentType}::${canonicalUrl ?? getString(row.source_url) ?? ""}`;
 }
 
+export function getNanoDocumentSourceDedupKeys(row: Record<string, unknown>) {
+  const documentType = getString(row.document_type) ?? getString(row.documentType) ?? "unknown";
+  const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
+  const sourceUrl = getString(row.source_url) ?? getString(row.sourceUrl);
+  const keys = new Set<string>();
+
+  if (canonicalUrl) {
+    keys.add(`${documentType}::${canonicalUrl}`);
+  }
+  if (sourceUrl) {
+    keys.add(`${documentType}::${normalizeDocUrl(sourceUrl) ?? sourceUrl}`);
+  }
+
+  if (keys.size === 0) {
+    keys.add(`${documentType}::`);
+  }
+
+  return [...keys];
+}
+
 function getNanoDocumentCandidateDedupKey(candidate: { documentType: string; url: string }) {
   return `${candidate.documentType}::${normalizeDocUrl(candidate.url) ?? candidate.url}`;
 }
@@ -2085,7 +2105,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     pages: artifacts.pages,
     recentDomainDocumentCandidates: artifacts.recentDomainDocumentCandidates
   });
-  const existingAttemptKeys = new Set(artifacts.existingDocumentSources.map((row) => getNanoDocumentSourceDedupKey(row)));
+  const existingAttemptKeys = new Set(artifacts.existingDocumentSources.flatMap((row) => getNanoDocumentSourceDedupKeys(row)));
   const pendingCandidates = candidates.filter((candidate) => !existingAttemptKeys.has(getNanoDocumentCandidateDedupKey(candidate)));
   const hasScannerDiscoveryInputs = artifacts.pages.length > 0 || artifacts.discoveryCandidates.length > 0;
   const shouldReenqueueForDiscovery = !hasScannerDiscoveryInputs && scanStatus !== "completed" && scanStatus !== "failed";
@@ -2102,7 +2122,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   const existingReadyKeys = new Set(
     artifacts.existingDocumentSources
       .filter((row) => (getString(row.source_status) ?? "ready") === "ready")
-      .map((row) => getNanoDocumentSourceDedupKey(row))
+      .flatMap((row) => getNanoDocumentSourceDedupKeys(row))
   );
 
   const secondaryFetchPromise =
