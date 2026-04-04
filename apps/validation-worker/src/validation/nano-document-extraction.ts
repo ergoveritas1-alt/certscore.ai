@@ -188,6 +188,51 @@ function inferCookieDisclosures(documentText: string | null, parsedDisclosures: 
   return inferred;
 }
 
+function inferTermsActionableFlags(documentText: string | null, parsedFlags: string[]) {
+  const text = (documentText ?? "").toLowerCase();
+  const inferred = new Set(parsedFlags);
+
+  if (/warranty|guarantee/.test(text)) {
+    inferred.add("warranty_disclaimer_present");
+  }
+
+  if (/waive all rights to sue|limitation of liability|liable for any matter arising from or related to your use|assume all associated risks/.test(text)) {
+    inferred.add("liability_waiver_present");
+  }
+
+  if (/copyright|reprint|reuse of information|dmca/.test(text)) {
+    inferred.add("content_use_restrictions_present");
+  }
+
+  return [...inferred];
+}
+
+function inferPolicySummaryShort(input: {
+  documentText: string | null;
+  documentType: string;
+  parsedSummary: string | null;
+}) {
+  if (input.parsedSummary) {
+    return input.parsedSummary;
+  }
+
+  const text = (input.documentText ?? "").replace(/\s+/g, " ").trim();
+  if (text.length === 0) {
+    return null;
+  }
+
+  if (input.documentType === "terms_of_service") {
+    const match = text.match(
+      /((?:we make no representation, warranty or guarantee|visitors are encouraged to confirm[^.]+|by accessing [^.]+ you are agreeing to the foregoing[^.]+|to the fullest extent allowed by law waive all rights to sue[^.]+|the .* retains copyright on the content of this site[^.]+)[^.]*\.)/i
+    );
+    if (match?.[1]) {
+      return match[1].slice(0, 280);
+    }
+  }
+
+  return text.slice(0, 280);
+}
+
 function extractJson(raw: string) {
   const trimmed = raw.trim();
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -237,6 +282,7 @@ export function normalizeNanoDocumentExtraction(input: {
     getNumber(input.parsed.semanticConfidence) ??
     getNumber(input.parsed.confidence);
   const parsedRightsSignals = getStringArray(input.parsed.policy_rights_signals ?? input.parsed.policyRightsSignals);
+  const parsedActionableFlags = getStringArray(input.parsed.policy_actionable_flags ?? input.parsed.policyActionableFlags);
   const parsedTransferMechanisms = Array.isArray(input.parsed.policy_transfer_mechanisms)
     ? input.parsed.policy_transfer_mechanisms
     : Array.isArray(input.parsed.policyTransferMechanisms)
@@ -253,6 +299,10 @@ export function normalizeNanoDocumentExtraction(input: {
       ? input.parsed.policyCookieDisclosures
       : [];
   const inferredRightsSignals = inferRightsSignals(input.documentText, parsedRightsSignals);
+  const inferredActionableFlags =
+    documentType === "terms_of_service"
+      ? inferTermsActionableFlags(input.documentText, parsedActionableFlags)
+      : parsedActionableFlags;
   const inferredTransferMechanisms = inferTransferMechanisms(
     input.documentText,
     uniqueStrings(parsedTransferMechanisms.map((value) => (typeof value === "string" ? value : null)))
@@ -261,7 +311,7 @@ export function normalizeNanoDocumentExtraction(input: {
   const extractedFields: Record<string, unknown> = {
     page_type: documentType,
     page_url: pageUrl,
-    policy_actionable_flags: getStringArray(input.parsed.policy_actionable_flags ?? input.parsed.policyActionableFlags),
+    policy_actionable_flags: inferredActionableFlags,
     policy_ambiguity_score:
       getNumber(input.parsed.policy_ambiguity_score) ??
       getNumber(input.parsed.policyAmbiguityScore),
@@ -289,10 +339,11 @@ export function normalizeNanoDocumentExtraction(input: {
       getNumber(input.parsed.policySnippetCount),
     policy_structurally_weak:
       input.parsed.policy_structurally_weak === true || input.parsed.policyStructurallyWeak === true,
-    policy_summary_short:
-      getString(input.parsed.policy_summary_short) ??
-      getString(input.parsed.policySummaryShort) ??
-      (input.documentText ? input.documentText.slice(0, 280) : null),
+    policy_summary_short: inferPolicySummaryShort({
+      documentText: input.documentText,
+      documentType,
+      parsedSummary: getString(input.parsed.policy_summary_short) ?? getString(input.parsed.policySummaryShort)
+    }),
     policy_transfer_mechanisms: inferredTransferMechanisms,
     policy_retention_periods: inferRetentionPeriods(input.documentText, parsedRetentionPeriods),
     privacy_contact_channel_type: inferContactChannelType(

@@ -105,3 +105,30 @@ test("normalizeNanoDocumentExtraction infers transfer, rights, do-not-sell, and 
   assert.equal(Array.isArray(result.extractedFields.policy_cookie_disclosures), true);
   assert.equal((result.extractedFields.policy_cookie_disclosures as unknown[]).length >= 2, true);
 });
+
+test("normalizeNanoDocumentExtraction treats substantive terms disclaimers as ready semantics", () => {
+  const result = normalizeNanoDocumentExtraction({
+    documentText: `
+      Terms of Use. Laws vary by state and are constantly changing. As a result, we make no representation, warranty or guarantee as to the accuracy, applicability or reliability of the information on this site.
+      By accessing alz.org, you are agreeing to the foregoing, and assume all associated risks, and, to the fullest extent allowed by law waive all rights to sue or seek to hold the Alzheimer's Association liable for any matter arising from or related to your use of alz.org.
+      The Alzheimer's Association retains copyright on the content of this site unless otherwise noted.
+    `,
+    parsed: {},
+    row: {
+      canonical_url: "https://www.alz.org/about/terms-of-use",
+      document_type: "terms_of_service",
+      title: "Terms of Use"
+    }
+  });
+
+  assert.equal(result.extractionStatus, "ready");
+  assert.deepEqual(result.extractedFields.policy_actionable_flags, [
+    "warranty_disclaimer_present",
+    "liability_waiver_present",
+    "content_use_restrictions_present"
+  ]);
+  assert.match(
+    String(result.extractedFields.policy_summary_short),
+    /warranty|waive all rights to sue|copyright/i
+  );
+});

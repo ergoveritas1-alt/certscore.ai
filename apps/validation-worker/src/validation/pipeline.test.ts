@@ -12,7 +12,8 @@ import {
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
   selectNanoDocCandidates,
-  selectPendingNanoDocumentSourcesForExtraction
+  selectPendingNanoDocumentSourcesForExtraction,
+  shouldQueueNanoDocumentSourceForExtraction
 } from "./pipeline";
 
 function buildArtifacts(overrides?: {
@@ -1013,6 +1014,30 @@ test("selectPendingNanoDocumentSourcesForExtraction skips optional terms when fa
   );
 });
 
+test("shouldQueueNanoDocumentSourceForExtraction refreshes ready-but-insufficient terms docs", () => {
+  assert.equal(
+    shouldQueueNanoDocumentSourceForExtraction({
+      document_text: "Terms of Use. We make no representation, warranty or guarantee.",
+      document_type: "terms_of_service",
+      extraction_status: "insufficient",
+      id: "terms-1",
+      source_status: "ready"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldQueueNanoDocumentSourceForExtraction({
+      document_text: "Privacy policy text.",
+      document_type: "privacy_policy",
+      extraction_status: "insufficient",
+      id: "privacy-1",
+      source_status: "ready"
+    }),
+    false
+  );
+});
+
 test("selectPendingNanoDocumentSourcesForExtraction skips terms without terms-specific runtime need", () => {
   const rows = selectPendingNanoDocumentSourcesForExtraction({
     existingDocumentSources: [],
@@ -1034,6 +1059,34 @@ test("selectPendingNanoDocumentSourcesForExtraction skips terms without terms-sp
   });
 
   assert.deepEqual(rows.map((row) => row.id), ["doc-privacy"]);
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction keeps ready-but-insufficient terms docs for refresh", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [
+      {
+        document_text: "Terms of Use. We make no representation, warranty or guarantee.",
+        document_type: "terms_of_service",
+        extraction_status: "insufficient",
+        id: "terms-1",
+        source_status: "ready"
+      }
+    ],
+    policyEnrichments: [],
+    rows: [
+      {
+        document_text: "Terms of Use. We make no representation, warranty or guarantee.",
+        document_type: "terms_of_service",
+        extraction_status: "insufficient",
+        id: "terms-1",
+        source_status: "ready"
+      }
+    ],
+    snapshot: {},
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["terms-1"]);
 });
 
 test("selectPendingNanoDocumentSourcesForExtraction keeps terms when session replay disclosure needs review", () => {
@@ -1612,6 +1665,37 @@ test("cookie policy with rich disclosure semantics does not emit obstruction-onl
   assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"), false);
+});
+
+test("rich terms semantics suppress rule-only and clarity-noise findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "terms-1",
+          page_type: "terms_of_service",
+          page_url: "https://www.example.com/terms",
+          policy_actionable_flags: [
+            "warranty_disclaimer_present",
+            "liability_waiver_present",
+            "content_use_restrictions_present"
+          ],
+          policy_mentions: [],
+          policy_ambiguity_score: 78,
+          policy_coverage_ratio: 0.25,
+          policy_snippet_count: 6,
+          policy_structurally_weak: true,
+          policy_semantic_confidence: null,
+          policy_summary_short: "Terms of Use covers warranty disclaimers, liability waiver language, and copyright restrictions."
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {}
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.rule_only_row_present"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_78"), false);
 });
 
 test("promotes pre-consent runtime evidence into a runtime privacy finding", () => {

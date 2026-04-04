@@ -1558,7 +1558,7 @@ function derivePolicySectionFindings(input: {
       }
     }
 
-    if (pageType === "terms_of_service" && mentions.length === 0) {
+    if (pageType === "terms_of_service" && mentions.length === 0 && !hasRichSemantics) {
       findings.push(
         buildSectionIssueFinding({
           description: "This policy row was derived from rule-based extraction only and did not include richer semantic topic coverage.",
@@ -1644,7 +1644,11 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (ambiguity !== null && (ambiguity >= 75 || (!hasRichSemantics && ambiguity >= 60))) {
+    if (
+      ambiguity !== null &&
+      (ambiguity >= 75 || (!hasRichSemantics && ambiguity >= 60)) &&
+      !(pageType === "terms_of_service" && hasRichSemantics)
+    ) {
       findings.push(
         buildSectionIssueFinding({
           description: `${typeLabel} was flagged as part of the section score review because of policy clarity risk ${ambiguity}.`,
@@ -2454,6 +2458,33 @@ function hasTermsSpecificRuntimeNeed(snapshot: Record<string, unknown> | null | 
   );
 }
 
+function hasReadyTermsDocumentNeedingExtraction(rows: Array<Record<string, unknown>> | undefined) {
+  return (rows ?? []).some((row) => {
+    const documentType = getString(row.document_type) ?? getString(row.documentType);
+    const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+    const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus) ?? "pending";
+    const documentText = getString(row.document_text) ?? getString(row.documentText);
+    return documentType === "terms_of_service" && sourceStatus === "ready" && Boolean(documentText) && extractionStatus !== "ready";
+  });
+}
+
+export function shouldQueueNanoDocumentSourceForExtraction(row: Record<string, unknown>) {
+  const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+  const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+  const documentType = getString(row.document_type) ?? getString(row.documentType);
+  const documentText = getString(row.document_text) ?? getString(row.documentText);
+
+  if (!getString(row.id) || !documentText) {
+    return false;
+  }
+
+  if (!extractionStatus || extractionStatus === "pending") {
+    return true;
+  }
+
+  return sourceStatus === "ready" && extractionStatus === "insufficient" && documentType === "terms_of_service";
+}
+
 function getPrivacyDocumentSpecificityScore(row: Record<string, unknown>) {
   const canonicalUrl = (getString(row.canonical_url) ?? getString(row.canonicalUrl) ?? getString(row.source_url) ?? "").toLowerCase();
   const title = (getString(row.title) ?? "").toLowerCase();
@@ -2534,6 +2565,10 @@ function shouldExtractTermsDocument(input: {
   fallbackPageTypes: Set<string>;
   snapshot: Record<string, unknown> | null | undefined;
 }) {
+  if (hasReadyTermsDocumentNeedingExtraction(input.existingDocumentSources)) {
+    return true;
+  }
+
   return hasTermsSpecificRuntimeNeed(input.snapshot) && !input.fallbackPageTypes.has("terms_of_service");
 }
 
@@ -2843,11 +2878,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
 
   const getPendingDocumentSources = (rows: Array<Record<string, unknown>>) =>
     prioritizePendingNanoDocumentSources(
-      rows.filter((row) => {
-        const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
-        const documentText = getString(row.document_text) ?? getString(row.documentText);
-        return Boolean(getString(row.id)) && Boolean(documentText) && (!extractionStatus || extractionStatus === "pending");
-      })
+      rows.filter((row) => shouldQueueNanoDocumentSourceForExtraction(row))
     );
   const getFallbackPageTypes = (rows: Array<Record<string, unknown>>) =>
     new Set(rows.map((row) => getString(row.page_type) ?? getString(row.pageType)).filter((value): value is string => typeof value === "string"));
