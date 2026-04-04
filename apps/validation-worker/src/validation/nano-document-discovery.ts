@@ -1,5 +1,5 @@
 import { getWorkerEnv } from "../env";
-import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
+import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -193,7 +193,7 @@ function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: s
 
 async function fetchRenderedLegalCandidates(url: string, discoveredFrom: string) {
   try {
-    const request = buildValidationWorkerCrawlerHeaders(url);
+    const request = buildValidationWorkerDocumentHeaders({ url });
     const response = await fetch(url, {
       headers: request.headers,
       redirect: "follow",
@@ -330,11 +330,17 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
     return [] as NanoDocCandidate[];
   }
 
-  return [
+  return limitNanoDocCandidates([
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
-    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` }
-  ] satisfies NanoDocCandidate[];
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` }
+  ] satisfies NanoDocCandidate[]);
 }
 
 function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
@@ -352,7 +358,7 @@ function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
     }
 
     const currentCount = counts.get(candidate.documentType) ?? 0;
-    const limit = candidate.documentType === "privacy_policy" ? 2 : 1;
+    const limit = 2;
     if (currentCount >= limit) {
       continue;
     }

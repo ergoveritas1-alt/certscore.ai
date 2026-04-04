@@ -296,7 +296,7 @@ test("buildNanoDocCandidateUrls keeps a special-scope privacy doc only when no m
   assert.equal(candidates.some((candidate) => candidate.documentType === "privacy_policy"), true);
 });
 
-test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no discovery evidence exists", () => {
+test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when no discovery evidence exists", () => {
   const candidates = buildNanoDocCandidateUrls({
     discoveryCandidates: [],
     domainHostname: "example.com",
@@ -310,9 +310,24 @@ test("buildNanoDocCandidateUrls falls back to narrow canonical seed urls when no
       url: "https://example.com/privacy"
     },
     {
+      documentType: "privacy_policy",
+      priorityTier: "secondary",
+      url: "https://example.com/legal/privacy-policy"
+    },
+    {
       documentType: "terms_of_service",
       priorityTier: "secondary",
       url: "https://example.com/terms"
+    },
+    {
+      documentType: "terms_of_service",
+      priorityTier: "secondary",
+      url: "https://example.com/legal/terms-of-service"
+    },
+    {
+      documentType: "cookie_policy",
+      priorityTier: "secondary",
+      url: "https://example.com/legal/cookie-policy"
     },
     {
       documentType: "cookie_policy",

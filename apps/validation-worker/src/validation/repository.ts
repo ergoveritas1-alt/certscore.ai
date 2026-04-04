@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
@@ -138,6 +139,7 @@ type NanoDocRetrievalInput = {
   existingDocumentSources: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
   recentDomainDocumentCandidates: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
   scan: {
     completed_at?: string | null;
     created_at?: string | null;
@@ -154,6 +156,17 @@ const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
+function prepareScanDocumentSourceRows(rows: Array<Record<string, unknown>>, scanId: string) {
+  const now = new Date().toISOString();
+  return rows.map((row) => ({
+    ...row,
+    created_at: typeof row.created_at === "string" ? row.created_at : now,
+    id: typeof row.id === "string" && row.id.length > 0 ? row.id : randomUUID(),
+    scan_id: scanId,
+    updated_at: now
+  }));
 }
 
 export function extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -1038,6 +1051,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
     { data: pages, error: pagesError },
     { data: events, error: eventsError },
     { data: documentSources, error: documentSourcesError },
+    { data: runtimeArtifacts, error: runtimeArtifactsError },
     { data: recentDomainScans, error: recentDomainScansError }
   ] = await Promise.all([
     domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
@@ -1049,6 +1063,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
       .eq("event_type", "runtime.build_phase_diagnostic")
       .order("created_at", { ascending: true }),
     supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
     recentDomainScansPromise
   ]);
 
@@ -1063,6 +1078,9 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   }
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
+  }
+  if (runtimeArtifactsError) {
+    throw new Error(`Failed to load runtime artifacts for nano doc retrieval ${scanId}: ${runtimeArtifactsError.message}`);
   }
   if (recentDomainScansError) {
     throw new Error(`Failed to load recent domain scans for nano doc retrieval ${scanId}: ${recentDomainScansError.message}`);
@@ -1122,6 +1140,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
     existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
     recentDomainDocumentCandidates: (recentDomainDocumentCandidates ?? []) as Array<Record<string, unknown>>,
+    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     scan:
       (scan as {
         completed_at?: string | null;
@@ -1669,10 +1688,7 @@ export async function replaceScanDocumentSources(input: {
   }
 
   const { error: insertError } = await supabase.from("scan_document_sources").insert(
-    input.rows.map((row) => ({
-      ...row,
-      scan_id: input.scanId
-    }))
+    prepareScanDocumentSourceRows(input.rows, input.scanId)
   );
 
   if (insertError) {
@@ -1692,10 +1708,7 @@ export async function appendScanDocumentSources(input: {
 
   const supabase = createAdminClient();
   const { error } = await supabase.from("scan_document_sources").insert(
-    input.rows.map((row) => ({
-      ...row,
-      scan_id: input.scanId
-    }))
+    prepareScanDocumentSourceRows(input.rows, input.scanId)
   );
 
   if (error) {

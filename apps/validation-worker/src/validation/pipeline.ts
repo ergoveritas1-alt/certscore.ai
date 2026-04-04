@@ -39,7 +39,7 @@ import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-c
 import { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 import { extractNanoDocumentSourceWithLlm } from "./nano-document-extraction";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
-import { buildValidationWorkerCrawlerHeaders } from "../web-bot-auth";
+import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import {
   createNanoDocRetrievalQueue,
   createNanoSignalEnrichmentQueue,
@@ -59,6 +59,10 @@ const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function decodeHtmlEntities(value: string) {
@@ -1420,15 +1424,20 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
 async function fetchNanoDocumentSource(input: {
   documentType: string;
   priorityTier?: "priority" | "secondary";
+  referer?: string | null;
   url: string;
 }) {
   const baseMetadata = {
     priority_tier: input.priorityTier ?? "secondary",
+    request_profile: "browser_document_navigation",
     retrieval_mode: "nano_doc_retrieval"
   } satisfies Record<string, unknown>;
 
   try {
-    const request = buildValidationWorkerCrawlerHeaders(input.url);
+    const request = buildValidationWorkerDocumentHeaders({
+      referer: input.referer,
+      url: input.url
+    });
     const response = await fetch(input.url, {
       headers: request.headers,
       redirect: "follow",
@@ -1453,6 +1462,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             http_status: response.status,
+            request_referer: request.metadata.referer,
             rejection_reason: "non_ok_http_status"
           },
           source: "nano_doc_retrieval",
@@ -1483,6 +1493,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             http_status: response.status,
+            request_referer: request.metadata.referer,
             rejection_reason: "intermediary_or_block_page"
           },
           source: "nano_doc_retrieval",
@@ -1509,6 +1520,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             http_status: response.status,
+            request_referer: request.metadata.referer,
             rejection_reason: "insufficient_document_text"
           },
           source: "nano_doc_retrieval",
@@ -1534,7 +1546,8 @@ async function fetchNanoDocumentSource(input: {
         metadata_json: {
           ...baseMetadata,
           content_hash: buildNanoDocumentContentHash(text),
-          http_status: response.status
+          http_status: response.status,
+          request_referer: request.metadata.referer
         },
         source: "nano_doc_retrieval",
         source_status: "ready",
@@ -1557,6 +1570,7 @@ async function fetchNanoDocumentSource(input: {
         },
         metadata_json: {
           ...baseMetadata,
+          request_referer: input.referer ?? null,
           rejection_reason: "fetch_runtime_error"
         },
         source: "nano_doc_retrieval",
@@ -1566,6 +1580,48 @@ async function fetchNanoDocumentSource(input: {
       } satisfies Record<string, unknown>
     };
   }
+}
+
+function getNanoDocumentFetchReferer(input: {
+  domainHostname: string | null;
+  runtimeArtifacts: Record<string, unknown> | null | undefined;
+  url: string;
+}) {
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(input.url);
+  } catch {
+    return null;
+  }
+
+  const hybridRuntimeEvidence = getRecord(
+    input.runtimeArtifacts?.hybrid_runtime_evidence ?? input.runtimeArtifacts?.hybridRuntimeEvidence
+  );
+  const navigationSummary = getRecord(
+    hybridRuntimeEvidence?.navigationSummary ?? hybridRuntimeEvidence?.navigation_summary
+  );
+  const candidateReferers = [
+    getString(navigationSummary?.finalUrl ?? navigationSummary?.final_url),
+    getString(navigationSummary?.initialUrl ?? navigationSummary?.initial_url),
+    input.domainHostname ? `https://${input.domainHostname}/` : null
+  ];
+
+  for (const candidateReferer of candidateReferers) {
+    if (!candidateReferer) {
+      continue;
+    }
+
+    try {
+      const refererUrl = new URL(candidateReferer);
+      if (refererUrl.origin === targetUrl.origin) {
+        return refererUrl.toString();
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }
 
 function getDocumentSourceMetadata(row: Record<string, unknown>) {
@@ -2051,9 +2107,31 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
 
   const secondaryFetchPromise =
     candidateWaves.secondary.length > 0
-      ? Promise.all(candidateWaves.secondary.map((candidate) => fetchNanoDocumentSource(candidate)))
+      ? Promise.all(
+          candidateWaves.secondary.map((candidate) =>
+            fetchNanoDocumentSource({
+              ...candidate,
+              referer: getNanoDocumentFetchReferer({
+                domainHostname: artifacts.domainHostname,
+                runtimeArtifacts: artifacts.runtimeArtifacts,
+                url: candidate.url
+              })
+            })
+          )
+        )
       : Promise.resolve([] as Array<{ outcome: "ready" | "insufficient" | "non_ok" | "intermediary" | "error"; row: Record<string, unknown> | null }>);
-  const priorityFetchedResults = await Promise.all(candidateWaves.priority.map((candidate) => fetchNanoDocumentSource(candidate)));
+  const priorityFetchedResults = await Promise.all(
+    candidateWaves.priority.map((candidate) =>
+      fetchNanoDocumentSource({
+        ...candidate,
+        referer: getNanoDocumentFetchReferer({
+          domainHostname: artifacts.domainHostname,
+          runtimeArtifacts: artifacts.runtimeArtifacts,
+          url: candidate.url
+        })
+      })
+    )
+  );
   const priorityRows = dedupeNanoDocumentSources([
     ...artifacts.existingDocumentSources,
     ...priorityFetchedResults.flatMap((result) => (result.row ? [result.row] : []))
