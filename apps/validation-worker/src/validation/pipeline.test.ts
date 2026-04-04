@@ -399,6 +399,91 @@ test("adidas-style blocked bundle only surfaces blocked-access finding", () => {
   assert.deepEqual(findings.map((finding) => finding.ruleKey), ["access_review.public_access_blocked"]);
 });
 
+test("alz doc-ready bundle only surfaces retention finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          source_status: "ready",
+          extraction_status: "ready",
+          canonical_url: "https://www.alz.org/security-and-privacy-policy",
+          document_type: "privacy_policy"
+        },
+        {
+          source_status: "ready",
+          extraction_status: "ready",
+          canonical_url: "https://www.alz.org/about/terms-of-use",
+          document_type: "terms_of_service"
+        }
+      ],
+      pages: [
+        {
+          page_type: "privacy_policy",
+          page_url: "https://www.alz.org/security-and-privacy-policy",
+          fetch_status: "ok"
+        },
+        {
+          page_type: "terms_of_service",
+          page_url: "https://www.alz.org/about/terms-of-use",
+          fetch_status: "ok"
+        }
+      ],
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.alz.org/security-and-privacy-policy",
+          policy_actionable_flags: [],
+          policy_dsar_mechanism: "present",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: [],
+          policy_mentions: [
+            { topic: "tracking_technologies_disclosure" }
+          ],
+          policy_rights_signals: ["access_request", "delete_request"],
+          policy_ambiguity_score: 55,
+          policy_semantic_confidence: 0.8,
+          policy_structurally_weak: false,
+          policy_snippet_count: 5,
+          policy_summary_short: "Privacy policy describes collection, use, sharing, security, and rights choices but does not provide concrete retention periods."
+        },
+        {
+          id: "terms-1",
+          page_type: "terms_of_service",
+          page_url: "https://www.alz.org/about/terms-of-use",
+          policy_actionable_flags: [
+            "warranty_disclaimer_present",
+            "liability_waiver_present",
+            "content_use_restrictions_present"
+          ],
+          policy_mentions: [],
+          policy_ambiguity_score: 78,
+          policy_coverage_ratio: 0.25,
+          policy_snippet_count: 6,
+          policy_structurally_weak: true,
+          policy_semantic_confidence: null,
+          policy_summary_short: "Terms of Use covers warranty disclaimers, liability waiver language, and copyright restrictions."
+        }
+      ],
+      policyReviewQueue: [],
+      preconsentViolations: [],
+      runtimeArtifacts: null,
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        cookie_policy_present: false,
+        partial_scan: false,
+        preconsent_tracking_detected: false,
+        privacy_policy_present: true,
+        terms_of_service_present: true,
+        verified_public_surfaces_count: 2
+      }
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["section_review.no_retention_periods_noted"]);
+});
+
 test("hobbylobby-style captcha bundle surfaces blocked access plus runtime tracking", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
