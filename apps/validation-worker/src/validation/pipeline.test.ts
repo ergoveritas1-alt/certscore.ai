@@ -2207,15 +2207,58 @@ test("cookie disclosure gap ignores infrastructure cookies and keeps substantive
       policyReviewQueue: [],
       snapshot: {},
       runtimeArtifacts: {
-        initial_cookie_names: ["AWSALBCORS", "_mkto_trk"]
+        initial_cookie_names: ["AWSALBCORS", "_mkto_trk"],
+        hybrid_runtime_evidence: {
+          cookieWriteObservations: [
+            { cookieName: "AWSALBCORS", thirdParty: true },
+            { cookieName: "_mkto_trk", thirdParty: false }
+          ]
+        }
       } as Record<string, unknown>
     })
   );
 
   const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
   assert.ok(finding);
+  assert.equal(finding?.severity, "medium");
   assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_mkto_trk"]);
   assert.deepEqual(finding?.evidence.ignored_runtime_cookie_names, ["awsalbcors"]);
+  assert.equal(finding?.evidence.unmatched_third_party_cookie_count, 0);
+});
+
+test("undisclosed third-party runtime cookie keeps high cookie disclosure gap severity", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.92,
+          policy_cookie_disclosures: [
+            {
+              vendor: "google.com",
+              cookies: ["_ga"],
+              cookie_type: "measurement_performance"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          cookieWriteObservations: [{ cookieName: "_fbp", thirdParty: true }]
+        }
+      } as Record<string, unknown>
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidence.unmatched_third_party_cookie_count, 1);
 });
 
 test("cookie runtime matching understands vendor-and-cookies disclosure rows", () => {
