@@ -144,6 +144,180 @@ test("does not emit blocked-access finding when preflight verified legal surface
   assert.equal(findings.some((item) => item.ruleKey === "access_review.public_access_blocked"), false);
 });
 
+test("lookout-style bundle only surfaces runtime tracking and retention findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          source_status: "ready",
+          canonical_url: "https://lookout.com/legal/privacy-notice",
+          document_type: "privacy_policy"
+        },
+        {
+          source_status: "ready",
+          canonical_url: "https://lookout.com/legal/cookie-policy",
+          document_type: "cookie_policy"
+        },
+        {
+          source_status: "ready",
+          canonical_url: "https://lookout.com/legal/enterprise-end-user-agreement",
+          document_type: "terms_of_service"
+        }
+      ],
+      pages: [
+        {
+          page_type: "privacy_policy",
+          page_url: "https://lookout.com/legal/privacy-notice",
+          fetch_status: "ok"
+        },
+        {
+          page_type: "cookie_policy",
+          page_url: "https://lookout.com/legal/cookie-policy",
+          fetch_status: "ok"
+        },
+        {
+          page_type: "terms_of_service",
+          page_url: "https://lookout.com/legal/enterprise-end-user-agreement",
+          fetch_status: "ok"
+        }
+      ],
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://lookout.com/legal/privacy-notice",
+          policy_actionable_flags: ["low_confidence"],
+          policy_dsar_mechanism: "present",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: ["dpf"],
+          policy_mentions: [
+            { topic: "gpc_disclosure" },
+            { topic: "children" },
+            { topic: "targeted_advertising_disclosure" }
+          ],
+          policy_rights_signals: ["access", "delete"],
+          policy_ambiguity_score: 68,
+          policy_semantic_confidence: 0.78,
+          policy_structurally_weak: true,
+          policy_snippet_count: 1,
+          policy_summary_short: "Privacy notice explains GPC, children's privacy, DPF transfers, and targeted advertising choices."
+        },
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://lookout.com/legal/cookie-policy",
+          policy_actionable_flags: ["low_confidence"],
+          policy_semantic_confidence: 0.58,
+          policy_ambiguity_score: 68,
+          policy_mentions: [
+            { topic: "targeted_advertising_disclosure" },
+            { topic: "third_party_advertising_disclosure" }
+          ],
+          policy_summary_short:
+            "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+          policy_cookie_disclosures: []
+        },
+        {
+          id: "terms-1",
+          page_type: "terms_of_service",
+          page_url: "https://lookout.com/legal/enterprise-end-user-agreement",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.82,
+          policy_ambiguity_score: 68,
+          policy_summary_short: "Terms document."
+        }
+      ],
+      policyReviewQueue: [
+        {
+          id: "review-1",
+          policy_enrichment_id: "cookie-1",
+          reason: "low_confidence_critical_fields",
+          review_status: "pending"
+        }
+      ],
+      preconsentViolations: [
+        { vendor_name: "Google Analytics", collection_endpoint_type: "request" },
+        { vendor_name: "Google Tag Manager", collection_endpoint_type: "request" },
+        { vendor_name: "Hushly", collection_endpoint_type: "cookie" },
+        { vendor_name: "Lookout Website", collection_endpoint_type: "cname" },
+        { vendor_name: "Marketo", collection_endpoint_type: "request" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: ["AWSALBCORS", "_mkto_trk"],
+        third_party_request_count: 121,
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 122
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 2,
+        third_party_cookie_count: 1,
+        preconsent_tracking_detected: true,
+        tracker_count_total: 3,
+        tracker_vendor_count: 3
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Analytics"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Marketo"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(
+    findings.map((finding) => finding.ruleKey),
+    ["runtime_privacy.preconsent_tracking_observed", "section_review.no_retention_periods_noted"]
+  );
+});
+
+test("adidas-style blocked bundle only surfaces blocked-access finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [{ page_type: "homepage", page_url: "https://adidas.com/", fetch_status: "forbidden" }],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        initial_cookie_count: 0,
+        third_party_request_count: 0,
+        passive_public_verification_attempted_urls: [
+          "https://adidas.com/legal/privacy-notice"
+        ]
+      },
+      snapshot: {
+        auth_wall_detected: true,
+        blocked_flag: true,
+        coverage_level: "limited_none",
+        homepage_fetch_status: "forbidden",
+        partial_scan: true,
+        stop_reason_detail:
+          "Homepage appeared to require account authentication before public content could be verified.",
+        stop_reason_http_status: 403,
+        stop_reason_label: "Access limited by site protections",
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: [
+        {
+          before_consent: false,
+          first_party_or_third_party: "first_party",
+          vendor_name: "adidas Web Platform"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["access_review.public_access_blocked"]);
+});
+
 test("deriveValidationFindings does not emit transfer-mechanism finding when one is disclosed", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
