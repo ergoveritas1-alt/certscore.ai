@@ -450,6 +450,80 @@ test("hobbylobby-style captcha bundle surfaces blocked access plus runtime track
   ]);
 });
 
+test("hobbylobby live shape surfaces blocked access, obstructive consent, and runtime tracking", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Google Tag Manager", collection_endpoint_type: "request" },
+        { vendor_name: "Emarsys Scarab Research", collection_endpoint_type: "cookie" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: [
+          "AWSALB",
+          "AWSALBCORS",
+          "JSESSIONID",
+          "hl-anon-id",
+          "hl-id-token",
+          "incap_ses_189_792568"
+        ],
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true,
+            contentObstructed: true,
+            cookieWallDetected: null,
+            managePresent: true,
+            rejectDepthClass: "absent",
+            rejectPresent: false,
+            rejectRequiresMoreClicks: true,
+            surfaceType: "modal"
+          },
+          consentVisual: {
+            rejectHidden: true
+          }
+        },
+        third_party_request_count: 12
+      } as Record<string, unknown>,
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_status: "redirected",
+        partial_scan: true,
+        preconsent_tracking_detected: true,
+        stop_reason_code: "reachability_blocked_captcha",
+        stop_reason_detail: "Homepage appeared to present a captcha challenge.",
+        stop_reason_http_status: 200,
+        third_party_cookie_count: 6,
+        tracker_count_total: 1,
+        tracker_vendor_count: 1,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Tag Manager"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Emarsys Scarab Research"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), [
+    "access_review.public_access_blocked",
+    "runtime_privacy.consent_interface_obstructive",
+    "runtime_privacy.preconsent_tracking_observed"
+  ]);
+});
+
 test("deriveValidationFindings does not emit transfer-mechanism finding when one is disclosed", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
