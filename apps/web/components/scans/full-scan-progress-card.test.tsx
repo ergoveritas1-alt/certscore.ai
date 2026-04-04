@@ -87,15 +87,12 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
 
   assert.match(html, /Full scan in progress/);
   assert.match(html, /style="width:\d+(\.\d+)?%"/);
-  assert.match(html, /live · evt=runtime\.build_phase_diagnostic/);
-  assert.match(html, /Status/);
-  assert.match(html, /Stage/);
-  assert.match(html, /Live update/);
+  assert.match(html, /Live scan · 3\/7 milestones complete/);
+  assert.match(html, /Current milestone:/);
+  assert.match(html, /Recent milestone updates/);
   assert.match(html, /Progress updates automatically while the scan is queued or running\./);
-  assert.doesNotMatch(html, /Step 1/);
-  assert.doesNotMatch(html, /Step 2/);
-  assert.doesNotMatch(html, /Step 3/);
-  assert.doesNotMatch(html, /Message and metadata/);
+  assert.doesNotMatch(html, /Status<\/p>/);
+  assert.doesNotMatch(html, /Live update/);
 });
 
 test("surfaces early tier results while a scan is still running", () => {

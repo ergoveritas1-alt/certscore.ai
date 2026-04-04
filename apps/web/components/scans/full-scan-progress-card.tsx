@@ -6,7 +6,7 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { Badge } from "@website-signal-risk-scanner/ui";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { formatMetadataPreview } from "../../lib/scans/activity-feed";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
@@ -175,6 +175,39 @@ function getBadgeTone(state: DashboardRow["state"]): "neutral" | "success" | "wa
   }
 }
 
+function getProgressBarClassName(input: {
+  executionSummary: ScannerExecutionSummary | null;
+  status: string;
+}) {
+  if (input.status === "failed") {
+    return "bg-rose-500";
+  }
+
+  if (input.status === "completed") {
+    return "bg-emerald-500";
+  }
+
+  const completedStages = new Set(input.executionSummary?.stages.map((stage) => stage.stage) ?? []);
+
+  if (completedStages.has("persistence_diff_finalization")) {
+    return "bg-emerald-500";
+  }
+
+  if (completedStages.has("signal_derivation")) {
+    return "bg-indigo-500";
+  }
+
+  if (completedStages.has("runtime_snapshot_capture")) {
+    return "bg-sky-500";
+  }
+
+  if (completedStages.has("crawl_discovery")) {
+    return "bg-cyan-500";
+  }
+
+  return "bg-amber-500";
+}
+
 function getLatestEventForStage(events: ScanEventRow[], stageKey: string) {
   const matches = STAGE_EVENT_MATCHERS[stageKey];
   if (!matches) {
@@ -185,30 +218,54 @@ function getLatestEventForStage(events: ScanEventRow[], stageKey: string) {
   return matchingEvents.at(-1) ?? null;
 }
 
-function buildLatestActivityLine(input: { createdAt: string; events: ScanEventRow[]; status: string }) {
+function buildLatestActivityLine(input: {
+  createdAt: string;
+  events: ScanEventRow[];
+  executionSummary: ScannerExecutionSummary | null;
+  status: string;
+}) {
+  const completedStageCount = input.executionSummary?.stages.length ?? 0;
+  const totalStageCount = SCAN_EXECUTION_STAGES.length + 1;
+
   if (input.events.length === 0) {
     return input.status === "queued"
-      ? "queue · Scan queued and awaiting worker pickup."
-      : "live · Waiting for the first worker event.";
+      ? `Queued for worker pickup · 0/${totalStageCount} milestones complete.`
+      : `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
   }
 
   const latestEvent = input.events.at(-1);
   if (!latestEvent) {
-    return "live · Waiting for the first worker event.";
+    return `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
   }
 
   const metadata = formatMetadataPreview(latestEvent.metadataJson).join(" · ");
+  const prefix =
+    input.status === "queued"
+      ? `Queued · ${completedStageCount}/${totalStageCount} milestones complete`
+      : input.status === "completed"
+        ? "Scan complete"
+        : input.status === "failed"
+          ? "Scan failed"
+          : `Live scan · ${completedStageCount}/${totalStageCount} milestones complete`;
   return metadata.length > 0
-    ? `live · evt=${latestEvent.eventType} · ${latestEvent.message} · ${metadata}`
-    : `live · evt=${latestEvent.eventType} · ${latestEvent.message}`;
+    ? `${prefix} · ${latestEvent.message} · ${metadata}`
+    : `${prefix} · ${latestEvent.message}`;
 }
 
 function getProgressValue(input: {
+  buildPhaseSummaries: BuildPhaseSummary[];
   executionSummary: ScannerExecutionSummary | null;
   status: string;
 }) {
+  const milestoneStops = [8, 18, 30, 48, 72, 88, 97];
+
   if (input.status === "completed") {
     return 100;
+  }
+
+  if (input.status === "failed") {
+    const completedCount = input.executionSummary?.stages.length ?? 0;
+    return milestoneStops[Math.min(completedCount, milestoneStops.length - 1)] ?? 12;
   }
 
   if (input.status === "queued") {
@@ -216,8 +273,24 @@ function getProgressValue(input: {
   }
 
   const completedCount = input.executionSummary?.stages.length ?? 0;
-  const totalCount = SCAN_EXECUTION_STAGES.length + 1;
-  return Math.min(96, Math.max(12, (completedCount / totalCount) * 100));
+  const pendingStageIndex = getPendingStageIndex(input.executionSummary);
+  const base = milestoneStops[Math.min(completedCount, milestoneStops.length - 1)] ?? 12;
+
+  if (pendingStageIndex <= 0) {
+    return base;
+  }
+
+  const activeStageKey = SCAN_EXECUTION_STAGES[pendingStageIndex] ?? null;
+  const nextStop = milestoneStops[Math.min(pendingStageIndex + 1, milestoneStops.length - 1)] ?? 96;
+
+  if (activeStageKey === "runtime_snapshot_capture") {
+    const runtimeCompleted = input.buildPhaseSummaries.filter((phase) => phase.completedAt).length;
+    const runtimeTotal = Math.max(input.buildPhaseSummaries.length, 4);
+    const ratio = Math.min(1, runtimeCompleted / runtimeTotal);
+    return Math.round(base + (nextStop - base) * ratio);
+  }
+
+  return Math.round(base + (nextStop - base) * 0.35);
 }
 
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {
@@ -497,7 +570,6 @@ export function FullScanProgressCard({
 }: FullScanProgressCardProps) {
   const initialNowMs = Date.parse(events.at(-1)?.createdAt ?? createdAt);
   const [nowMs, setNowMs] = useState(initialNowMs);
-  const tableScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (status !== "queued" && status !== "running") {
@@ -513,7 +585,16 @@ export function FullScanProgressCard({
     };
   }, [status]);
 
-  const latestActivityLine = useMemo(() => buildLatestActivityLine({ createdAt, events, status }), [createdAt, events, status]);
+  const latestActivityLine = useMemo(
+    () =>
+      buildLatestActivityLine({
+        createdAt,
+        events,
+        executionSummary,
+        status
+      }),
+    [createdAt, events, executionSummary, status]
+  );
   const earlyResultItems = useMemo(
     () =>
       buildEarlyResultItems({
@@ -525,6 +606,15 @@ export function FullScanProgressCard({
   const progressValue = useMemo(
     () =>
       getProgressValue({
+        buildPhaseSummaries,
+        executionSummary,
+        status
+      }),
+    [buildPhaseSummaries, executionSummary, status]
+  );
+  const progressBarClassName = useMemo(
+    () =>
+      getProgressBarClassName({
         executionSummary,
         status
       }),
@@ -547,28 +637,12 @@ export function FullScanProgressCard({
     ],
     [buildPhaseSummaries, createdAt, events, executionSummary, status]
   );
-
-  useEffect(() => {
-    if (status !== "queued" && status !== "running") {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      const container = tableScrollRef.current;
-      if (!container) {
-        return;
-      }
-
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "smooth"
-      });
-    }, 2_000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [dashboardRows.length, status]);
+  const activeRow = dashboardRows.find((row) => row.state === "active") ?? null;
+  const completedRows = dashboardRows.filter((row) => row.state === "success" || row.state === "warning");
+  const recentRows = [...dashboardRows]
+    .filter((row) => row.latestEvent || row.state === "active" || row.state === "failed")
+    .slice(-4)
+    .reverse();
 
   return (
     <CollapsibleSectionCard
@@ -584,7 +658,7 @@ export function FullScanProgressCard({
     >
       <div className="h-5 overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-amber-500 transition-[width] duration-500"
+          className={`h-full rounded-full transition-[width,background-color] duration-500 ${progressBarClassName}`}
           style={{ width: `${progressValue}%` }}
         />
       </div>
@@ -612,50 +686,65 @@ export function FullScanProgressCard({
         </div>
       ) : null}
 
-      <div ref={tableScrollRef} className="max-h-[56.25vh] overflow-auto rounded-2xl border border-slate-200 bg-white">
-        <div className="grid grid-cols-[140px_170px_170px_130px_minmax(320px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-          <p>Status</p>
-          <p>Stage</p>
-          <p>Start</p>
-          <p>End</p>
-          <p>Live update</p>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 rounded-full ${getStatusDotClassName(activeRow?.state ?? "pending")}`} />
+            <p className="text-sm font-semibold text-slate-950">
+              {activeRow ? `Current milestone: ${activeRow.label}` : "Current milestone"}
+            </p>
+          </div>
+          <div className="space-y-2.5">
+            <p className="text-sm text-slate-700">{activeRow?.message ?? "Waiting for the next milestone update."}</p>
+            <p className="text-xs text-slate-500">
+              {activeRow
+                ? `${activeRow.statusLabel} · ${formatDurationMs(
+                    activeRow.durationMs,
+                    activeRow.state === "active" ? nowMs : undefined,
+                    activeRow.startedAt
+                  )}`
+                : `${completedRows.length}/${dashboardRows.length} milestones completed`}
+            </p>
+            {activeRow?.latestEvent ? (
+              <p className="font-mono text-[12px] text-slate-500">evt={activeRow.latestEvent.eventType}</p>
+            ) : null}
+            {(activeRow?.sublines ?? []).slice(0, 4).map((line) => (
+              <p key={`active-${line}`} className="text-xs text-slate-500">
+                {line}
+              </p>
+            ))}
+          </div>
         </div>
-        <div className="divide-y divide-slate-100">
-          {dashboardRows.map((row) => (
-            <div
-              key={row.key}
-              className="grid grid-cols-[140px_170px_170px_130px_minmax(320px,1fr)] gap-3 px-4 py-3 text-sm text-slate-700"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex h-2.5 w-2.5 rounded-full ${getStatusDotClassName(row.state)}`} />
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-950">Recent milestone updates</p>
+            <Badge tone="neutral">{completedRows.length}/{dashboardRows.length} complete</Badge>
+          </div>
+          <div className="space-y-3">
+            {recentRows.map((row) => (
+              <div key={row.key} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex h-2.5 w-2.5 rounded-full ${getStatusDotClassName(row.state)}`} />
+                      <p className="truncate text-sm font-medium text-slate-900">{row.label}</p>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-700">{row.message}</p>
+                  </div>
                   <Badge tone={getBadgeTone(row.state)}>{row.statusLabel}</Badge>
                 </div>
-                {row.attempts && row.attempts > 1 ? (
-                  <p className="text-xs text-slate-500">{formatAttemptLabel(row.attempts)}</p>
-                ) : null}
-              </div>
-              <div>
-                <p className="font-medium text-slate-900">{row.label}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {formatDurationMs(row.durationMs, row.state === "active" ? nowMs : undefined, row.startedAt)}
-                </p>
-              </div>
-              <p className="text-slate-500">{formatDateTime(row.startedAt)}</p>
-              <p className="text-slate-500">{row.state === "active" ? "In progress" : formatDateTime(row.completedAt)}</p>
-              <div className="space-y-1.5">
-                <p className="text-slate-800">{row.message}</p>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span>{formatDurationMs(row.durationMs, row.state === "active" ? nowMs : undefined, row.startedAt)}</span>
+                  {row.startedAt ? <span>started {formatDateTime(row.startedAt)}</span> : null}
+                  {row.completedAt && row.state !== "active" ? <span>ended {formatDateTime(row.completedAt)}</span> : null}
+                </div>
                 {row.latestEvent ? (
-                  <p className="font-mono text-[12px] text-slate-500">evt={row.latestEvent.eventType}</p>
+                  <p className="mt-2 font-mono text-[12px] text-slate-500">evt={row.latestEvent.eventType}</p>
                 ) : null}
-                {row.sublines.map((line) => (
-                  <p key={`${row.key}-${line}`} className="text-xs text-slate-500">
-                    {line}
-                  </p>
-                ))}
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
