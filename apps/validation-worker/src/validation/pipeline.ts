@@ -520,6 +520,71 @@ type ValidationArtifactBundle = {
   trackerVendors: Array<Record<string, unknown>>;
 };
 
+function deriveAccessFindings(input: {
+  documentSources?: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown> | null;
+}) {
+  const snapshot = input.snapshot;
+  if (!snapshot) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  const blockedFlag = getRecordBoolean(snapshot, "blocked_flag");
+  const partialScan = getRecordBoolean(snapshot, "partial_scan");
+  const authWallDetected = getRecordBoolean(snapshot, "auth_wall_detected");
+  const homepageFetchStatus = getStringValue(snapshot, "homepage_fetch_status");
+  const stopReasonLabel = getStringValue(snapshot, "stop_reason_label");
+  const stopReasonDetail = getStringValue(snapshot, "stop_reason_detail");
+  const stopReasonHttpStatus =
+    typeof snapshot.stop_reason_http_status === "number" && Number.isFinite(snapshot.stop_reason_http_status)
+      ? snapshot.stop_reason_http_status
+      : null;
+  const coverageLevel = getStringValue(snapshot, "coverage_level");
+  const verifiedSurfaceCount =
+    typeof snapshot.verified_public_surfaces_count === "number" && Number.isFinite(snapshot.verified_public_surfaces_count)
+      ? snapshot.verified_public_surfaces_count
+      : 0;
+  const readyDocumentCount = (input.documentSources ?? []).filter((row) => row.source_status === "ready").length;
+  const hasForbiddenHomepage = homepageFetchStatus === "forbidden" || stopReasonHttpStatus === 403;
+
+  if (!partialScan || !blockedFlag || !hasForbiddenHomepage) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  if (readyDocumentCount > 0 || verifiedSurfaceCount > 0) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  const homepageRow =
+    input.pages.find((row) => getStringValue(row, "page_type") === "homepage") ?? null;
+  const pageUrl = getStringValue(homepageRow, "page_url");
+
+  return [
+    buildSectionIssueFinding({
+      description:
+        stopReasonDetail ??
+        "The scan could not verify public-facing legal or homepage content because site protections blocked access early in the run.",
+      evidence: {
+        access_posture_class: getStringValue(snapshot, "access_posture_class"),
+        auth_wall_detected: authWallDetected,
+        blocked_flag: blockedFlag,
+        coverage_level: coverageLevel,
+        homepage_fetch_status: homepageFetchStatus,
+        partial_scan: partialScan,
+        stop_reason_http_status: stopReasonHttpStatus,
+        stop_reason_label: stopReasonLabel,
+        verified_public_surfaces_count: verifiedSurfaceCount
+      },
+      pageType: "homepage",
+      pageUrl,
+      ruleKey: "access_review.public_access_blocked",
+      severity: authWallDetected ? "high" : "medium",
+      title: "Public access blocked during scan"
+    })
+  ];
+}
+
 function getStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   return Array.isArray(record?.[key])
     ? (record?.[key] as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -1623,6 +1688,11 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
   }
 
   findings.push(
+    ...deriveAccessFindings({
+      documentSources: input.documentSources,
+      pages: input.pages,
+      snapshot: input.snapshot
+    }),
     ...deriveFinancialValidationFindings(input),
     ...deriveRuntimePrivacyFindings({
       preconsentViolations: input.preconsentViolations,

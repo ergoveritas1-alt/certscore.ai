@@ -18,6 +18,7 @@ import {
 function buildArtifacts(overrides?: {
   documentSources?: Array<Record<string, unknown>>;
   pageEvidence?: Array<Record<string, unknown>>;
+  pages?: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
   policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
@@ -31,7 +32,7 @@ function buildArtifacts(overrides?: {
   return {
     documentSources: overrides?.documentSources ?? [],
     pageEvidence: overrides?.pageEvidence ?? [],
-    pages: [{ page_type: "privacy_policy", page_url: "https://www.example.com/privacy", fetch_status: "ok" }],
+    pages: overrides?.pages ?? [{ page_type: "privacy_policy", page_url: "https://www.example.com/privacy", fetch_status: "ok" }],
     policyEnrichments: overrides?.policyEnrichments ?? [
       {
         id: "policy-1",
@@ -88,6 +89,59 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("emits a blocked-access finding when the public scan is cut short before any verified surfaces", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pageEvidence: [],
+      pages: [{ page_type: "homepage", page_url: "https://www.example.com/", fetch_status: "forbidden" }],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      snapshot: {
+        access_posture_class: "early_loss",
+        auth_wall_detected: true,
+        blocked_flag: true,
+        coverage_level: "limited_none",
+        homepage_fetch_status: "forbidden",
+        partial_scan: true,
+        stop_reason_detail: "Homepage appeared to require account authentication before public content could be verified.",
+        stop_reason_http_status: 403,
+        stop_reason_label: "Access limited by site protections",
+        verified_public_surfaces_count: 0
+      }
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "access_review.public_access_blocked");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.pageUrl, "https://www.example.com/");
+});
+
+test("does not emit blocked-access finding when preflight verified legal surfaces exist", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          source_status: "ready",
+          canonical_url: "https://www.example.com/privacy",
+          document_type: "privacy_policy"
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {
+        blocked_flag: true,
+        homepage_fetch_status: "forbidden",
+        partial_scan: true,
+        stop_reason_http_status: 403,
+        verified_public_surfaces_count: 1
+      }
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "access_review.public_access_blocked"), false);
 });
 
 test("deriveValidationFindings does not emit transfer-mechanism finding when one is disclosed", () => {
