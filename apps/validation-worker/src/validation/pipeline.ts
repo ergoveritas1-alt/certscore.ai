@@ -908,6 +908,126 @@ function deriveCookieRuntimeFindings(input: {
   return findings;
 }
 
+function buildRuntimePrivacyFinding(input: {
+  description: string;
+  evidence: Record<string, unknown>;
+  pageUrl: string | null;
+  ruleKey: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+}) {
+  const taxonomy = deriveValidationFindingTaxonomy({
+    category: "scan_report_review",
+    ruleKey: input.ruleKey,
+    subtype: "runtime_privacy_review"
+  });
+
+  return {
+    category: "scan_report_review" as const,
+    description: input.description,
+    evidence: input.evidence,
+    findingFamily: taxonomy.familyId,
+    findingScope: taxonomy.scope,
+    findingSource: taxonomy.source,
+    findingSubject: taxonomy.subject,
+    pageUrl: input.pageUrl,
+    rank: 0,
+    ruleKey: input.ruleKey,
+    severity: input.severity,
+    subtype: "runtime_privacy_review" as const,
+    title: input.title
+  };
+}
+
+function deriveRuntimePrivacyFindings(input: {
+  preconsentViolations: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+  trackerVendors: Array<Record<string, unknown>>;
+}) {
+  const snapshot = input.snapshot;
+  const runtime = input.runtimeArtifacts;
+  const preconsentTrackingDetected =
+    getRecordBoolean(snapshot, "preconsent_tracking_detected") ||
+    getRecordBoolean(snapshot, "tracking_before_consent_detected");
+  const thirdPartyCookieCount = getSnapshotNumber(snapshot, "third_party_cookie_count");
+  const totalCookieCount = getSnapshotNumber(snapshot, "cookie_count_total");
+  const totalTrackerCount = getSnapshotNumber(snapshot, "tracker_count_total");
+  const totalVendorCount = getSnapshotNumber(snapshot, "tracker_vendor_count");
+  const totalRequestCount =
+    runtime &&
+    typeof runtime.hybrid_runtime_evidence === "object" &&
+    runtime.hybrid_runtime_evidence !== null &&
+    !Array.isArray(runtime.hybrid_runtime_evidence) &&
+    typeof (runtime.hybrid_runtime_evidence as Record<string, unknown>).networkSummary === "object" &&
+    (runtime.hybrid_runtime_evidence as Record<string, unknown>).networkSummary !== null
+      ? Number((((runtime.hybrid_runtime_evidence as Record<string, unknown>).networkSummary as Record<string, unknown>).totalRequestCount) ?? 0)
+      : 0;
+  const thirdPartyRequestCount =
+    runtime && typeof runtime.third_party_request_count === "number" && Number.isFinite(runtime.third_party_request_count)
+      ? runtime.third_party_request_count
+      : 0;
+  const initialCookieNames = Array.isArray(runtime?.initial_cookie_names)
+    ? (runtime.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
+    : [];
+  const thirdPartyVendorsBeforeConsent = [
+    ...new Set(
+      input.trackerVendors
+        .filter((row) => row.before_consent === true && row.first_party_or_third_party === "third_party")
+        .map((row) => (typeof row.vendor_name === "string" ? row.vendor_name : null))
+        .filter((value): value is string => Boolean(value))
+    )
+  ];
+  const preconsentViolationVendors = [
+    ...new Set(
+      input.preconsentViolations
+        .map((row) => (typeof row.vendor_name === "string" ? row.vendor_name : null))
+        .filter((value): value is string => Boolean(value))
+    )
+  ];
+
+  if (!preconsentTrackingDetected) {
+    return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
+  }
+
+  if (
+    thirdPartyCookieCount <= 0 &&
+    thirdPartyVendorsBeforeConsent.length === 0 &&
+    preconsentViolationVendors.length === 0
+  ) {
+    return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
+  }
+
+  const severity: "high" | "medium" =
+    thirdPartyCookieCount > 0 || thirdPartyVendorsBeforeConsent.length >= 2 || preconsentViolationVendors.length >= 3
+      ? "high"
+      : "medium";
+
+  return [
+    buildRuntimePrivacyFinding({
+      description:
+        "The scan observed cookies or tracking vendors before any consent interaction, indicating that tracking activity likely starts before the user can express a privacy choice.",
+      evidence: {
+        initial_cookie_names: initialCookieNames,
+        preconsent_tracking_detected: preconsentTrackingDetected,
+        preconsent_violation_count: input.preconsentViolations.length,
+        preconsent_violation_vendors: preconsentViolationVendors,
+        third_party_cookie_count: thirdPartyCookieCount,
+        third_party_request_count: thirdPartyRequestCount,
+        third_party_vendors_before_consent: thirdPartyVendorsBeforeConsent,
+        total_cookie_count: totalCookieCount,
+        total_request_count: Number.isFinite(totalRequestCount) ? totalRequestCount : 0,
+        total_tracker_count: totalTrackerCount,
+        total_vendor_count: totalVendorCount
+      },
+      pageUrl: null,
+      ruleKey: "runtime_privacy.preconsent_tracking_observed",
+      severity,
+      title: "Tracking observed before consent"
+    })
+  ];
+}
+
 function buildSectionIssueFinding(input: {
   description: string;
   evidence: Record<string, unknown>;
@@ -1504,6 +1624,12 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
 
   findings.push(
     ...deriveFinancialValidationFindings(input),
+    ...deriveRuntimePrivacyFindings({
+      preconsentViolations: input.preconsentViolations,
+      runtimeArtifacts: input.runtimeArtifacts,
+      snapshot: input.snapshot,
+      trackerVendors: input.trackerVendors
+    }),
     ...deriveCookieRuntimeFindings({
       policySemanticRows,
       runtimeArtifacts: input.runtimeArtifacts

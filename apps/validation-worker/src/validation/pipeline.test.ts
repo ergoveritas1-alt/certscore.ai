@@ -21,10 +21,12 @@ function buildArtifacts(overrides?: {
   policyEnrichments?: Array<Record<string, unknown>>;
   policySemanticInputs?: Array<Record<string, unknown>>;
   policyReviewQueue?: Array<Record<string, unknown>>;
+  preconsentViolations?: Array<Record<string, unknown>>;
   preferDocumentSources?: boolean;
   runtimeArtifacts?: Record<string, unknown> | null;
   signalHits?: Array<Record<string, unknown>>;
   snapshot?: Record<string, unknown>;
+  trackerVendors?: Array<Record<string, unknown>>;
 }) {
   return {
     documentSources: overrides?.documentSources ?? [],
@@ -56,7 +58,7 @@ function buildArtifacts(overrides?: {
         reviewed_at: null
       }
     ],
-    preconsentViolations: [],
+    preconsentViolations: overrides?.preconsentViolations ?? [],
     preferDocumentSources: overrides?.preferDocumentSources ?? false,
     runtimeArtifacts: overrides?.runtimeArtifacts ?? null,
     scan: { id: "scan_123" },
@@ -66,7 +68,7 @@ function buildArtifacts(overrides?: {
       eu_exposure_likely: true,
       wcag_contrast_failures_count: 1
     },
-    trackerVendors: []
+    trackerVendors: overrides?.trackerVendors ?? []
   };
 }
 
@@ -1256,6 +1258,76 @@ test("cookie policy with rich disclosure semantics does not emit obstruction-onl
   assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"), false);
+});
+
+test("promotes pre-consent runtime evidence into a runtime privacy finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Google Analytics", collection_endpoint_type: "request" },
+        { vendor_name: "Marketo", collection_endpoint_type: "request" },
+        { vendor_name: "Hushly", collection_endpoint_type: "cookie" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: ["AWSALBCORS", "_mkto_trk"],
+        third_party_request_count: 121,
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 122
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 2,
+        third_party_cookie_count: 1,
+        preconsent_tracking_detected: true,
+        tracker_count_total: 3,
+        tracker_vendor_count: 3
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Analytics"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Marketo"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.pageUrl, null);
+});
+
+test("does not promote a pre-consent runtime finding without third-party evidence", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      snapshot: {
+        cookie_count_total: 1,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 0,
+        tracker_count_total: 1,
+        tracker_vendor_count: 1
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "first_party",
+          vendor_name: "Example Site"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed"), false);
 });
 
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {
