@@ -220,7 +220,7 @@ test("emits blocked-access finding for captcha-limited partial scans without ver
   assert.equal(finding?.pageUrl, "https://www.example.com/");
 });
 
-test("lookout-style bundle only surfaces runtime tracking and retention findings", () => {
+test("lookout-style bundle surfaces runtime tracking, cookie gap, and retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [
@@ -351,8 +351,13 @@ test("lookout-style bundle only surfaces runtime tracking and retention findings
 
   assert.deepEqual(
     findings.map((finding) => finding.ruleKey),
-    ["runtime_privacy.preconsent_tracking_observed", "section_review.no_retention_periods_noted"]
+    [
+      "runtime_privacy.preconsent_tracking_observed",
+      "cookie_runtime.disclosure_gap",
+      "section_review.no_retention_periods_noted"
+    ]
   );
+  assert.equal(findings.find((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap")?.severity, "medium");
 });
 
 test("adidas-style blocked bundle only surfaces blocked-access finding", () => {
