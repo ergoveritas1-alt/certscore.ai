@@ -1820,6 +1820,62 @@ test("alz-style bundle surfaces legal coverage gap alongside runtime privacy iss
   ]);
 });
 
+test("dnb-style timeout bundle surfaces legal coverage gap and pre-consent tracking", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Google Tag Manager", collection_endpoint_type: "request" },
+        { vendor_name: "LinkedIn", collection_endpoint_type: "request" }
+      ],
+      runtimeArtifacts: {
+        initial_cookie_names: [],
+        third_party_request_count: 12,
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 20
+          }
+        }
+      },
+      snapshot: {
+        blocked_flag: false,
+        captcha_flag: false,
+        cookie_policy_present: false,
+        cookie_count_total: 0,
+        homepage_fetch_status: "timeout",
+        partial_scan: true,
+        preconsent_tracking_detected: true,
+        privacy_policy_present: false,
+        terms_of_service_present: false,
+        third_party_cookie_count: 0,
+        tracker_count_total: 2,
+        tracker_vendor_count: 2,
+        verified_public_surfaces_count: 0
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Tag Manager"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "LinkedIn"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), [
+    "access_review.legal_coverage_unverified",
+    "runtime_privacy.preconsent_tracking_observed"
+  ]);
+});
+
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
