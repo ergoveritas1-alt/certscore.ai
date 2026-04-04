@@ -73,7 +73,7 @@ function buildArtifacts(overrides?: {
 test("deriveValidationFindings emits queue issues plus section review rows", () => {
   const findings = deriveValidationFindings(buildArtifacts());
 
-  assert.equal(findings.length, 8);
+  assert.equal(findings.length, 5);
   assert.equal(findings[0]?.ruleKey, "scan_report_review.policy_behavior_conflict_candidate");
   assert.equal(findings[0]?.category, "scan_report_review");
   assert.equal(findings[0]?.findingFamily, "policy_review_queue");
@@ -82,9 +82,9 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_dsar_mechanism"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.missing_dsar_high_exposure"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
 });
 
@@ -1102,7 +1102,7 @@ test("deriveValidationFindings keeps low-confidence privacy DSAR gaps audit-only
 
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_dsar_mechanism"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.session_replay_detected_without_disclosure"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.confidence_66"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_66"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.session_replay_may_be_undisclosed"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.policy_extraction_provider_error"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.low_extraction_confidence"));
@@ -1172,10 +1172,90 @@ test("low confidence policy extraction alone does not synthesize stronger runtim
     })
   );
 
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "policy_runtime.functional_misalignment"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "policy_runtime.missing_technical_disclosure"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"));
+});
+
+test("rich semantics suppress extraction-noise findings while preserving substantive negatives", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "policy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: ["low_confidence"],
+          policy_dsar_mechanism: "present",
+          policy_transfer_mechanisms: [],
+          policy_retention_periods: [],
+          policy_mentions: [
+            { topic: "gpc_disclosure" },
+            { topic: "children" },
+            { topic: "targeted_advertising_disclosure" }
+          ],
+          policy_children_reference: "under_16",
+          privacy_contact_channel_type: "email",
+          policy_ambiguity_score: 68,
+          policy_semantic_confidence: 0.58,
+          policy_snippet_count: 1,
+          policy_structurally_weak: true,
+          policy_summary_short: "Privacy policy explains GPC, children's privacy, and targeted advertising choices."
+        }
+      ],
+      policyReviewQueue: [
+        {
+          id: "review-1",
+          policy_enrichment_id: "policy-1",
+          reason: "low_confidence_critical_fields",
+          review_status: "pending"
+        }
+      ],
+      snapshot: {}
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "scan_report_review.low_confidence_critical_fields"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_68"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_58"));
+  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"));
+});
+
+test("cookie policy with rich disclosure semantics does not emit obstruction-only findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: ["low_confidence"],
+          policy_semantic_confidence: 0.58,
+          policy_ambiguity_score: 68,
+          policy_mentions: [
+            { topic: "targeted_advertising_disclosure" },
+            { topic: "third_party_advertising_disclosure" }
+          ],
+          policy_summary_short:
+            "Cookie notice explains cookie settings, third-party cookies, and marketing/targeting categories.",
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["_ga"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"), false);
 });
 
 test("low confidence extraction plus friction score 100 synthesizes functional misalignment", () => {
@@ -1296,7 +1376,7 @@ test("low confidence extraction with multiple triggers synthesizes distinct runt
 
   assert.equal(findings.filter((item) => item.ruleKey === "policy_runtime.functional_misalignment").length, 1);
   assert.equal(findings.filter((item) => item.ruleKey === "policy_runtime.missing_technical_disclosure").length, 1);
-  assert.equal(findings.filter((item) => item.ruleKey === "policy_runtime.disclosure_likely_obstructed").length, 1);
+  assert.equal(findings.filter((item) => item.ruleKey === "policy_runtime.disclosure_likely_obstructed").length, 0);
 });
 
 test("cookie runtime exact match does not trigger a disclosure gap", () => {

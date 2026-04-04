@@ -328,6 +328,122 @@ function getPolicyRightsSignals(enrichment: Record<string, unknown>) {
   return candidates.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
+function getPolicyMentions(enrichment: Record<string, unknown>) {
+  return Array.isArray(enrichment.policy_mentions)
+    ? enrichment.policy_mentions.filter(
+        (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+      )
+    : [];
+}
+
+function getPolicyMentionTopics(enrichment: Record<string, unknown>) {
+  return [...new Set(
+    getPolicyMentions(enrichment)
+      .map((mention) => (typeof mention.topic === "string" ? mention.topic.trim() : ""))
+      .filter((value) => value.length > 0)
+  )];
+}
+
+function getPolicyCookieDisclosures(enrichment: Record<string, unknown>) {
+  return Array.isArray(enrichment.policy_cookie_disclosures)
+    ? enrichment.policy_cookie_disclosures.filter(
+        (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+      )
+    : [];
+}
+
+function stringIncludesTransferCue(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return false;
+  }
+
+  return /data privacy framework|\bdpf\b|standard contractual clauses|\bsccs?\b|binding corporate rules|adequacy decision|cross-border transfer|international transfer/i.test(
+    value
+  );
+}
+
+function hasSubstantivePolicySemantics(input: {
+  dsarMechanism: string | null;
+  enrichment: Record<string, unknown>;
+  pageType: string | null;
+  policyRightsSignals: string[];
+  retentionPeriods: unknown[];
+  summaryShort: unknown;
+  transferMechanisms: unknown[];
+}) {
+  const mentionTopics = getPolicyMentionTopics(input.enrichment);
+  const cookieDisclosures = getPolicyCookieDisclosures(input.enrichment);
+  const policyDoNotSell =
+    typeof input.enrichment.policy_do_not_sell === "string" ? input.enrichment.policy_do_not_sell : null;
+  const privacyContactChannelType =
+    typeof input.enrichment.privacy_contact_channel_type === "string"
+      ? input.enrichment.privacy_contact_channel_type
+      : null;
+  const policyChildrenReference =
+    typeof input.enrichment.policy_children_reference === "string" ? input.enrichment.policy_children_reference : null;
+
+  if (input.dsarMechanism === "present" || input.dsarMechanism === "partial") {
+    return true;
+  }
+
+  if (input.policyRightsSignals.length > 0) {
+    return true;
+  }
+
+  if (Array.isArray(input.transferMechanisms) && input.transferMechanisms.length > 0) {
+    return true;
+  }
+
+  if (Array.isArray(input.retentionPeriods) && input.retentionPeriods.length > 0) {
+    return true;
+  }
+
+  if (cookieDisclosures.length > 0) {
+    return true;
+  }
+
+  if (mentionTopics.length >= 2) {
+    return true;
+  }
+
+  if (policyDoNotSell === "present_link" || policyDoNotSell === "present_text") {
+    return true;
+  }
+
+  if (privacyContactChannelType && privacyContactChannelType !== "none") {
+    return true;
+  }
+
+  if (policyChildrenReference && policyChildrenReference !== "unknown" && policyChildrenReference !== "none") {
+    return true;
+  }
+
+  if (stringIncludesTransferCue(input.summaryShort)) {
+    return true;
+  }
+
+  if (
+    input.pageType === "cookie_policy" &&
+    typeof input.summaryShort === "string" &&
+    /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
+      input.summaryShort
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    input.pageType === "terms_of_service" &&
+    (input.enrichment.policy_arbitration_present === true ||
+      (typeof input.summaryShort === "string" &&
+        /arbitration|binding contract|class action|governing law|limitation of liability/i.test(input.summaryShort)))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function hasConcreteSessionReplayEvidence(flags: string[]) {
   return flags.includes("session_replay_vendor_artifact_present");
 }
@@ -704,11 +820,20 @@ function deriveCookieRuntimeFindings(input: {
   const flags = Array.isArray(cookiePolicyEnrichment.policy_actionable_flags)
     ? cookiePolicyEnrichment.policy_actionable_flags.filter((value): value is string => typeof value === "string")
     : [];
+  const mentionTopics = getPolicyMentionTopics(cookiePolicyEnrichment);
   const semanticConfidence =
     typeof cookiePolicyEnrichment.policy_semantic_confidence === "number" &&
     Number.isFinite(cookiePolicyEnrichment.policy_semantic_confidence)
       ? cookiePolicyEnrichment.policy_semantic_confidence
       : null;
+  const summaryShort = cookiePolicyEnrichment.policy_summary_short ?? null;
+  const hasRichCookieSemantics =
+    disclosures.length > 0 ||
+    mentionTopics.length >= 2 ||
+    (typeof summaryShort === "string" &&
+      /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
+        summaryShort
+      ));
 
   if (runtimeCookies.length === 0) {
     return [];
@@ -722,12 +847,12 @@ function deriveCookieRuntimeFindings(input: {
   const findings: Array<ReturnType<typeof buildPolicyRuntimeFinding>> = [];
 
   const structurallyWeak =
-    disclosures.length === 0 ||
+    (!hasRichCookieSemantics && disclosures.length === 0) ||
     (semanticConfidence !== null && semanticConfidence < 0.6) ||
     flags.includes("low_confidence") ||
     flags.includes("llm_provider_error");
 
-  if (structurallyWeak) {
+  if (structurallyWeak && !hasRichCookieSemantics) {
     findings.push(
       buildPolicyRuntimeFinding({
         description:
@@ -852,7 +977,7 @@ function derivePolicySectionFindings(input: {
     const flags = Array.isArray(enrichment.policy_actionable_flags)
       ? enrichment.policy_actionable_flags.filter((value): value is string => typeof value === "string")
       : [];
-    const mentions = Array.isArray(enrichment.policy_mentions) ? enrichment.policy_mentions : [];
+    const mentions = getPolicyMentions(enrichment);
     const retentionPeriods = Array.isArray(enrichment.policy_retention_periods) ? enrichment.policy_retention_periods : [];
     const transferMechanisms = Array.isArray(enrichment.policy_transfer_mechanisms) ? enrichment.policy_transfer_mechanisms : [];
     const confidence =
@@ -875,6 +1000,15 @@ function derivePolicySectionFindings(input: {
     const policyStructurallyWeak = enrichment.policy_structurally_weak === true;
     const summaryShort = enrichment.policy_summary_short ?? null;
     const policyRightsSignals = getPolicyRightsSignals(enrichment);
+    const hasRichSemantics = hasSubstantivePolicySemantics({
+      dsarMechanism,
+      enrichment,
+      pageType,
+      policyRightsSignals,
+      retentionPeriods,
+      summaryShort,
+      transferMechanisms
+    });
     const policyExtractionStatus = derivePolicyExtractionStatus({
       confidence,
       flags,
@@ -986,17 +1120,19 @@ function derivePolicySectionFindings(input: {
     }
 
     if (reasons.has("low_confidence_critical_fields")) {
-      findings.push(
-        buildSectionIssueFinding({
-          description: "Key policy fields could not be extracted with enough confidence, usually because the page content is sparse, ambiguous, or difficult to parse reliably.",
-          evidence: baseEvidence,
-          pageType,
-          pageUrl,
-          ruleKey: "section_review.low_confidence_critical_fields",
-          severity: "medium",
-          title: "Low confidence on critical policy fields"
-        })
-      );
+      if (!hasRichSemantics) {
+        findings.push(
+          buildSectionIssueFinding({
+            description: "Key policy fields could not be extracted with enough confidence, usually because the page content is sparse, ambiguous, or difficult to parse reliably.",
+            evidence: baseEvidence,
+            pageType,
+            pageUrl,
+            ruleKey: "section_review.low_confidence_critical_fields",
+            severity: "medium",
+            title: "Low confidence on critical policy fields"
+          })
+        );
+      }
 
       const synthesisEvidence = {
         ...baseEvidence,
@@ -1053,6 +1189,7 @@ function derivePolicySectionFindings(input: {
       }
 
       if (
+        !hasRichSemantics &&
         hasSparsePolicyExtraction({
           confidence,
           coverageRatio: policyCoverageRatio,
@@ -1108,7 +1245,7 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (pageType === "terms_of_service" && flags.includes("llm_provider_error")) {
+    if (pageType === "terms_of_service" && flags.includes("llm_provider_error") && !hasRichSemantics) {
       findings.push(
         buildSectionIssueFinding({
           description: "The semantic extraction provider failed during policy analysis, so weaker fallback extraction was used.",
@@ -1122,7 +1259,7 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (pageType === "terms_of_service" && flags.includes("low_confidence")) {
+    if (pageType === "terms_of_service" && flags.includes("low_confidence") && !hasRichSemantics) {
       findings.push(
         buildSectionIssueFinding({
           description: "The extracted policy signals were too uncertain to treat as fully reliable without follow-up review.",
@@ -1153,7 +1290,14 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (pageType === "privacy_policy" && transferMechanisms.length === 0) {
+    if (
+      pageType === "privacy_policy" &&
+      transferMechanisms.length === 0 &&
+      !stringIncludesTransferCue(summaryShort) &&
+      policyExtractionStatus === "fetched" &&
+      (confidence ?? 0) >= 0.85 &&
+      (policySnippetCount ?? 0) >= 2
+    ) {
       findings.push(
         buildSectionIssueFinding({
           description: "The privacy policy did not disclose any transfer mechanism for cross-border or third-country data transfers.",
@@ -1170,7 +1314,7 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (ambiguity !== null && ambiguity > 0) {
+    if (ambiguity !== null && (ambiguity >= 75 || (!hasRichSemantics && ambiguity >= 60))) {
       findings.push(
         buildSectionIssueFinding({
           description: `${typeLabel} was flagged as part of the section score review because of policy clarity risk ${ambiguity}.`,
@@ -1184,7 +1328,7 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (pageType !== null && confidence !== null) {
+    if (pageType !== null && confidence !== null && confidence < 0.6 && !hasRichSemantics) {
       findings.push(
         buildSectionIssueFinding({
           description: `${typeLabel} was flagged as part of the section score review because semantic extraction confidence was ${formatPercent(confidence)}.`,
@@ -1305,38 +1449,57 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     const enrichment = findSemanticRowForReview(reviewItem);
     const definition = reviewIssueDefinition(reason);
     const pageUrl = typeof enrichment?.page_url === "string" ? enrichment.page_url : null;
+    const shouldSuppressReviewFinding =
+      reason === "low_confidence_critical_fields" &&
+      enrichment !== null &&
+      hasSubstantivePolicySemantics({
+        dsarMechanism:
+          typeof enrichment.policy_dsar_mechanism === "string" ? enrichment.policy_dsar_mechanism : null,
+        enrichment,
+        pageType: typeof enrichment.page_type === "string" ? enrichment.page_type : null,
+        policyRightsSignals: Array.isArray(enrichment.policy_rights_signals)
+          ? enrichment.policy_rights_signals.filter((value): value is string => typeof value === "string")
+          : [],
+        retentionPeriods: Array.isArray(enrichment.policy_retention_periods) ? enrichment.policy_retention_periods : [],
+        summaryShort: enrichment.policy_summary_short,
+        transferMechanisms: Array.isArray(enrichment.policy_transfer_mechanisms)
+          ? enrichment.policy_transfer_mechanisms
+          : []
+      });
     const taxonomy = deriveValidationFindingTaxonomy({
       category: "scan_report_review",
       ruleKey: `scan_report_review.${reason}`,
       subtype: "policy_review_queue"
     });
 
-    findings.push({
-      category: "scan_report_review",
-      description: definition.description,
-      evidence: {
-        policy_actionable_flags: enrichment?.policy_actionable_flags ?? [],
-        policy_ambiguity_score: enrichment?.policy_ambiguity_score ?? null,
-        policy_page_type: enrichment?.page_type ?? null,
-        policy_review_reason: reason,
-        policy_semantic_confidence: enrichment?.policy_semantic_confidence ?? null,
-        policy_summary_short: enrichment?.policy_summary_short ?? null,
-        review_status: reviewItem.review_status ?? null,
-        review_verdict: reviewItem.review_verdict ?? null,
-        reviewed_at: reviewItem.reviewed_at ?? null,
-        reviewer_notes: reviewItem.reviewer_notes ?? null
-      },
-      findingFamily: taxonomy.familyId,
-      findingScope: taxonomy.scope,
-      findingSource: taxonomy.source,
-      findingSubject: taxonomy.subject,
-      pageUrl,
-      rank: 0,
-      ruleKey: `scan_report_review.${reason}`,
-      severity: definition.severity,
-      subtype: "policy_review_queue",
-      title: definition.title
-    });
+    if (!shouldSuppressReviewFinding) {
+      findings.push({
+        category: "scan_report_review",
+        description: definition.description,
+        evidence: {
+          policy_actionable_flags: enrichment?.policy_actionable_flags ?? [],
+          policy_ambiguity_score: enrichment?.policy_ambiguity_score ?? null,
+          policy_page_type: enrichment?.page_type ?? null,
+          policy_review_reason: reason,
+          policy_semantic_confidence: enrichment?.policy_semantic_confidence ?? null,
+          policy_summary_short: enrichment?.policy_summary_short ?? null,
+          review_status: reviewItem.review_status ?? null,
+          review_verdict: reviewItem.review_verdict ?? null,
+          reviewed_at: reviewItem.reviewed_at ?? null,
+          reviewer_notes: reviewItem.reviewer_notes ?? null
+        },
+        findingFamily: taxonomy.familyId,
+        findingScope: taxonomy.scope,
+        findingSource: taxonomy.source,
+        findingSubject: taxonomy.subject,
+        pageUrl,
+        rank: 0,
+        ruleKey: `scan_report_review.${reason}`,
+        severity: definition.severity,
+        subtype: "policy_review_queue",
+        title: definition.title
+      });
+    }
   }
 
   findings.push(
