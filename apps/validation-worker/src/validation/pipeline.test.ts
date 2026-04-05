@@ -2961,6 +2961,33 @@ test("weak cookie policy structure triggers cookie policy obstructed instead of 
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
 });
 
+test("rich category-based cookie semantics without parsed rows do not trigger a disclosure gap", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.88,
+          policy_summary_short:
+            "Cookie settings explain third-party cookies, targeting cookies, and measurement/performance categories.",
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["session-id", "ubid-main"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
+});
+
 test("duplicate runtime cookies and prefix overlaps do not create duplicate cookie disclosure findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

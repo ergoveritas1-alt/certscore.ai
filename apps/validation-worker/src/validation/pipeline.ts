@@ -1183,7 +1183,7 @@ function deriveCookieRuntimeFindings(input: {
     );
   }
 
-  if (!structurallyWeak && unmatched.length > 0) {
+  if (!structurallyWeak && disclosures.length > 0 && unmatched.length > 0) {
     const unmatchedThirdPartyCount = unmatchedObservations.filter((row) => row.thirdParty).length;
     const severity: "high" | "medium" = unmatchedThirdPartyCount > 0 || unmatched.length > 1 ? "high" : "medium";
     findings.push(
