@@ -1,7 +1,7 @@
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-export const NANO_DOCUMENT_NORMALIZATION_VERSION = 2;
+export const NANO_DOCUMENT_NORMALIZATION_VERSION = 3;
 
 type NanoDocumentSourceRow = Record<string, unknown>;
 
