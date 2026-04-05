@@ -1,6 +1,7 @@
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+export const NANO_DOCUMENT_NORMALIZATION_VERSION = 2;
 
 type NanoDocumentSourceRow = Record<string, unknown>;
 
@@ -150,12 +151,62 @@ function inferChildrenReference(documentText: string | null, parsedValue: string
   return parsedValue ?? "unknown";
 }
 
+export function hasRetentionInferenceCue(documentText: string | null) {
+  const text = documentText ?? "";
+  return /retain|retention|deleted within|stored for approximately|as long as reasonably necessary/i.test(text);
+}
+
 function inferRetentionPeriods(documentText: string | null, parsedPeriods: unknown[]) {
   if (parsedPeriods.length > 0) {
     return parsedPeriods;
   }
 
-  return parsedPeriods;
+  const text = documentText ?? "";
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0 || !hasRetentionInferenceCue(normalized)) {
+    return parsedPeriods;
+  }
+
+  const inferred: Array<string | Record<string, unknown>> = [];
+  const lower = normalized.toLowerCase();
+
+  const explicitPeriodMatches = [
+    ...normalized.matchAll(
+      /\b(?:within|for|approximately|about|up to|no longer than)?\s*(\d+\s+(?:day|days|month|months|year|years))\b/gi
+    )
+  ];
+  for (const match of explicitPeriodMatches) {
+    const period = match[1]?.trim();
+    if (period) {
+      inferred.push(period);
+    }
+  }
+
+  if (/retain your personal information for as long as reasonably necessary/.test(lower)) {
+    inferred.push({
+      basis: "criteria_based",
+      summary: "Retained as long as reasonably necessary for disclosed purposes or legal requirements."
+    });
+  }
+
+  if (/retention period varies based on/i.test(normalized)) {
+    const bulletMatches = [
+      ...normalized.matchAll(
+        /retention period varies based on[^:]*:\s*(.+?)(?:at the end of the retention period|biometric retention schedule:|$)/gi
+      )
+    ];
+    for (const match of bulletMatches) {
+      const summary = match[1]?.trim();
+      if (summary) {
+        inferred.push({
+          basis: "criteria_based",
+          summary: summary.slice(0, 500)
+        });
+      }
+    }
+  }
+
+  return inferred.length > 0 ? inferred : parsedPeriods;
 }
 
 function inferCookieDisclosures(documentText: string | null, parsedDisclosures: unknown[]) {
@@ -364,7 +415,8 @@ export function normalizeNanoDocumentExtraction(input: {
     extractedFields,
     extractionStatus: hasMeaningfulSemanticField ? "ready" : "insufficient",
     metadata: {
-      normalizedAt: new Date().toISOString()
+      normalizedAt: new Date().toISOString(),
+      normalization_version: NANO_DOCUMENT_NORMALIZATION_VERSION
     },
     semanticConfidence
   };

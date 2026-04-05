@@ -1331,6 +1331,44 @@ test("shouldQueueNanoDocumentSourceForExtraction refreshes ready-but-insufficien
   );
 });
 
+test("shouldQueueNanoDocumentSourceForExtraction refreshes stale ready privacy docs with retention cues", () => {
+  assert.equal(
+    shouldQueueNanoDocumentSourceForExtraction({
+      document_text:
+        "How is Your Personal Information Retained? We retain your personal information for as long as reasonably necessary. Biometric information will be deleted within 3 years.",
+      document_type: "privacy_policy",
+      extracted_fields_json: {
+        policy_retention_periods: []
+      },
+      extraction_status: "ready",
+      id: "privacy-1",
+      metadata_json: {
+        normalization_version: 1
+      },
+      source_status: "ready"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldQueueNanoDocumentSourceForExtraction({
+      document_text:
+        "How is Your Personal Information Retained? We retain your personal information for as long as reasonably necessary. Biometric information will be deleted within 3 years.",
+      document_type: "privacy_policy",
+      extracted_fields_json: {
+        policy_retention_periods: []
+      },
+      extraction_status: "ready",
+      id: "privacy-2",
+      metadata_json: {
+        normalization_version: 2
+      },
+      source_status: "ready"
+    }),
+    false
+  );
+});
+
 test("selectPendingNanoDocumentSourcesForExtraction skips terms without terms-specific runtime need", () => {
   const rows = selectPendingNanoDocumentSourcesForExtraction({
     existingDocumentSources: [],

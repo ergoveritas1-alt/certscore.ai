@@ -132,3 +132,34 @@ test("normalizeNanoDocumentExtraction treats substantive terms disclaimers as re
     /warranty|waive all rights to sue|copyright/i
   );
 });
+
+test("normalizeNanoDocumentExtraction infers retention disclosure from criteria-based retention language and explicit periods", () => {
+  const result = normalizeNanoDocumentExtraction({
+    documentText:
+      "How Is Your Personal Information Retained? We retain your personal information for as long as reasonably necessary to fulfill the purposes described in this Privacy Policy or for the period legally permitted or required. The retention period varies based on a number of factors, including Guest needs, business needs, legal obligations, potential risks of harm, and information type. Biometric information will be deleted within 3 years of your last interaction with us. ALPR information is stored for approximately 30 days before it is permanently deleted.",
+    parsed: {},
+    row: {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      title: "Privacy Policy"
+    }
+  });
+
+  const retention = Array.isArray(result.extractedFields.policy_retention_periods)
+    ? result.extractedFields.policy_retention_periods
+    : [];
+
+  assert.equal(retention.length > 0, true);
+  assert.equal(retention.some((entry) => typeof entry === "string" && entry.includes("3 years")), true);
+  assert.equal(retention.some((entry) => typeof entry === "string" && entry.includes("30 days")), true);
+  assert.equal(
+    retention.some(
+      (entry) =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        (entry as Record<string, unknown>).basis === "criteria_based"
+    ),
+    true
+  );
+});

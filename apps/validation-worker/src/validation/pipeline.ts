@@ -37,7 +37,11 @@ import {
 } from "./repository";
 import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
 import { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
-import { extractNanoDocumentSourceWithLlm } from "./nano-document-extraction";
+import {
+  extractNanoDocumentSourceWithLlm,
+  hasRetentionInferenceCue,
+  NANO_DOCUMENT_NORMALIZATION_VERSION
+} from "./nano-document-extraction";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import {
@@ -2618,7 +2622,37 @@ export function shouldQueueNanoDocumentSourceForExtraction(row: Record<string, u
     return true;
   }
 
-  return sourceStatus === "ready" && extractionStatus === "insufficient" && documentType === "terms_of_service";
+  if (sourceStatus === "ready" && extractionStatus === "insufficient" && documentType === "terms_of_service") {
+    return true;
+  }
+
+  if (sourceStatus !== "ready" || extractionStatus !== "ready" || documentType !== "privacy_policy") {
+    return false;
+  }
+
+  const metadata =
+    getRecord(row.metadata_json) ??
+    getRecord(row.metadataJson) ??
+    {};
+  const extractedFields =
+    getRecord(row.extracted_fields_json) ??
+    getRecord(row.extractedFieldsJson) ??
+    {};
+  const retentionPeriods = Array.isArray(extractedFields.policy_retention_periods)
+    ? extractedFields.policy_retention_periods
+    : [];
+  const normalizationVersion =
+    typeof metadata.normalization_version === "number"
+      ? metadata.normalization_version
+      : typeof metadata.normalizationVersion === "number"
+        ? metadata.normalizationVersion
+        : 0;
+
+  return (
+    retentionPeriods.length === 0 &&
+    hasRetentionInferenceCue(documentText) &&
+    normalizationVersion < NANO_DOCUMENT_NORMALIZATION_VERSION
+  );
 }
 
 function getPrivacyDocumentSpecificityScore(row: Record<string, unknown>) {
