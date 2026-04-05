@@ -66,6 +66,23 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+const GENERIC_IDENTIFIER_QUERY_KEYS = new Set([
+  "id",
+  "client_id",
+  "container_id",
+  "measurement_id",
+  "gtm",
+  "gtg_health",
+  "cx",
+  "cas",
+  "bs",
+  "has_opted_out_fedcm",
+  "is_itp"
+]);
+
+const STRONG_IDENTIFIER_QUERY_KEY_PATTERN =
+  /(^|_|-)(uid|uuid|guid|visitor|device|fingerprint|session|token|anon|account|property|pixel|cid|sid|distinct|member|customer|subscriber|email|mail|phone|user)(_|-|$)|\b(user_id|visitor_id|device_id|session_id|account_id|member_id|customer_id|subscriber_id|email_hash|phone_hash|distinct_id)\b/i;
+
 function getObjectArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
@@ -204,6 +221,24 @@ function getPosture(findings: CertScoreFinding[]) {
   return "Clear" as const;
 }
 
+function getConcreteIdentifierLikeRequests(requestObservations: Record<string, unknown>[]) {
+  return requestObservations.filter((row) => {
+    if (row.identifierLike !== true) {
+      return false;
+    }
+
+    const queryKeys = getStringArray(row.queryKeysSample);
+    if (queryKeys.length === 0) {
+      return false;
+    }
+
+    return queryKeys.some((key) => {
+      const normalized = key.trim().toLowerCase();
+      return !GENERIC_IDENTIFIER_QUERY_KEYS.has(normalized) && STRONG_IDENTIFIER_QUERY_KEY_PATTERN.test(normalized);
+    });
+  });
+}
+
 export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedPresentationSummary {
   const hybrid = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
   const networkSummary = getRecord(hybrid?.networkSummary);
@@ -219,6 +254,9 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
   const requestObservations = getObjectArray(hybrid?.requestObservations);
   const cookieWriteObservations = getObjectArray(hybrid?.cookieWriteObservations);
+  const sensitivePayloadViolations = getObjectArray(
+    scanRecord.runtimeArtifacts?.sensitive_payload_violations ?? scanRecord.runtimeArtifacts?.sensitivePayloadViolations
+  );
   const domainVendorRegistry = getObjectArray(scanRecord.runtimeArtifacts?.domainVendorRegistry ?? scanRecord.runtimeArtifacts?.domain_vendor_registry);
   const findings: CertScoreFinding[] = [];
   const legacyInitialCookieNames = getStringArray(scanRecord.runtimeArtifacts?.initial_cookie_names ?? scanRecord.runtimeArtifacts?.initialCookieNames);
@@ -245,6 +283,9 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const collectionEndpointCount = getNumber(networkSummary?.collectionEndpointCount) ?? 0;
   const identifierLikeRequestCount = getNumber(networkSummary?.identifierLikeRequestCount) ?? 0;
   const thirdPartyIdentifierLikeRequestCount = getNumber(networkSummary?.thirdPartyIdentifierLikeRequestCount) ?? 0;
+  const concreteIdentifierLikeRequests = getConcreteIdentifierLikeRequests(requestObservations);
+  const concreteThirdPartyIdentifierLikeRequests = concreteIdentifierLikeRequests.filter((row) => row.thirdParty === true);
+  const concreteIdentifierTransmissionEvidenceCount = concreteIdentifierLikeRequests.length + sensitivePayloadViolations.length;
   const deviceDataLikeRequestCount = getNumber(networkSummary?.deviceDataLikeRequestCount) ?? 0;
   const requestBurstScore = getString(networkSummary?.requestBurstScore);
   const fingerprintTier = getNumber(fingerprintSummary?.tier);
@@ -646,17 +687,26 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (identifierLikeRequestCount > 0 || thirdPartyIdentifierLikeRequestCount > 0) {
+  if (concreteIdentifierTransmissionEvidenceCount > 0) {
+    const identifierEvidenceRefs = uniqueStrings([
+      "request_observations",
+      sensitivePayloadViolations.length > 0 ? "sensitive_payload_violations" : null
+    ]);
+    const identifierEvidencePreview = uniqueStrings([
+      `${concreteIdentifierLikeRequests.length} strong identifier-like request${concreteIdentifierLikeRequests.length === 1 ? "" : "s"}`,
+      `${concreteThirdPartyIdentifierLikeRequests.length} third-party strong identifier request${concreteThirdPartyIdentifierLikeRequests.length === 1 ? "" : "s"}`,
+      sensitivePayloadViolations.length > 0
+        ? `${sensitivePayloadViolations.length} sensitive payload violation${sensitivePayloadViolations.length === 1 ? "" : "s"}`
+        : null
+    ]);
+
     findings.push(
       buildFinding("identifier_transmission_detected", {
         confidence: "good",
         directVsInferred: "mixed",
-        evidencePreview: [
-          `${identifierLikeRequestCount} identifier-like request${identifierLikeRequestCount === 1 ? "" : "s"}`,
-          `${thirdPartyIdentifierLikeRequestCount} third-party identifier request${thirdPartyIdentifierLikeRequestCount === 1 ? "" : "s"}`
-        ],
-        evidenceRefs: ["network_summary.identifier_like_request_count", "network_summary.third_party_identifier_like_request_count"],
-        severity: thirdPartyIdentifierLikeRequestCount > 0 ? "high" : "medium",
+        evidencePreview: identifierEvidencePreview,
+        evidenceRefs: identifierEvidenceRefs,
+        severity: concreteThirdPartyIdentifierLikeRequests.length > 0 || sensitivePayloadViolations.length > 0 ? "high" : "medium",
         shortSummary: "Requests included identifier-like fields or values."
       })
     );
@@ -841,22 +891,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  const dedupedFindings = findings.filter((finding) => {
-    if (finding.id !== "pre_consent_tracking_detected") {
-      if (
-        (finding.id === "third_party_cookie_pre_consent" ||
-          finding.id === "analytics_cookie_pre_consent" ||
-          finding.id === "adtech_cookie_pre_consent") &&
-        findings.some((candidate) => candidate.id === "third_party_tracking_pre_consent")
-      ) {
-        return false;
-      }
-
-      return true;
-    }
-
-    return !findings.some((candidate) => candidate.id === "third_party_tracking_pre_consent");
-  });
+  const dedupedFindings = findings;
 
   const groupedEntries = new Map<CertScoreFindingSection, CertScoreFinding[]>();
   for (const finding of dedupedFindings) {

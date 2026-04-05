@@ -202,6 +202,67 @@ test("uses identity-rich telemetry wording when telemetry is elevated but finger
   assert.ok(summary.findings.some((finding) => finding.id === "telemetry_rich_identification_observed"));
 });
 
+test("does not promote identifier transmission from generic bootstrap query keys alone", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          identifierLikeRequestCount: 5,
+          thirdPartyIdentifierLikeRequestCount: 2,
+          deviceDataLikeRequestCount: 0
+        },
+        requestObservations: [
+          { thirdParty: false, identifierLike: true, queryKeysSample: ["id"] },
+          { thirdParty: true, identifierLike: true, queryKeysSample: ["id", "gtg_health"] },
+          { thirdParty: true, identifierLike: true, queryKeysSample: ["client_id", "cas", "is_itp"] }
+        ],
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 0
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T10:06:00.000Z",
+      createdAt: "2026-04-02T10:05:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.equal(summary.findings.some((finding) => finding.id === "identifier_transmission_detected"), false);
+});
+
+test("promotes identifier transmission when stronger identifier keys are observed", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          identifierLikeRequestCount: 2,
+          thirdPartyIdentifierLikeRequestCount: 1
+        },
+        requestObservations: [
+          { thirdParty: true, identifierLike: true, queryKeysSample: ["user_id", "session_id"] }
+        ],
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 0
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T10:06:00.000Z",
+      createdAt: "2026-04-02T10:05:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.equal(summary.findings.some((finding) => finding.id === "identifier_transmission_detected"), true);
+});
+
 test("falls back to snapshot-backed pre-consent tracking and cookie evidence when hybrid counters are zeroed", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {
