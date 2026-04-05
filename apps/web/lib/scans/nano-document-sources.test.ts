@@ -125,3 +125,42 @@ test("mergeNanoPolicyInputsWithFallback keeps stronger fallback privacy rows ove
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.policy_summary_short, "Primary privacy statement explains rights, cookies, and retention.");
 });
+
+test("mergeNanoPolicyInputsWithFallback prefers substantive privacy statements over privacy-preferences pages", () => {
+  const rows = mergeNanoPolicyInputsWithFallback({
+    documentSources: [
+      {
+        canonical_url: "https://www.example.com/privacy-preferences.html",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          page_url: "https://www.example.com/privacy-preferences.html",
+          policy_dsar_mechanism: "present",
+          policy_mentions: [{ topic: "gpc_disclosure" }],
+          policy_rights_signals: ["access_request", "delete_request", "correction_request"],
+          policy_summary_short: "Privacy Request Center for access, deletion, correction, and cookie preferences."
+        },
+        extraction_status: "ready",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ],
+    fallbackRows: [
+      {
+        id: "policy-privacy",
+        page_type: "privacy_policy",
+        page_url: "https://example.com/privacy",
+        policy_field_coverage: {
+          retention: {
+            found: true
+          }
+        },
+        policy_retention_disclosure: "vague",
+        policy_semantic_confidence: 0.66,
+        policy_summary_short: "Privacy statement explains data use, retention criteria, and consumer rights."
+      }
+    ]
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.page_url, "https://example.com/privacy");
+});

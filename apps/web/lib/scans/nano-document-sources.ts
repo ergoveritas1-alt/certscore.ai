@@ -40,15 +40,16 @@ function getPolicyInputPageType(row: Record<string, unknown>) {
 
 function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   const pageType = getPolicyInputPageType(row);
+  const pageUrl = getString(row.page_url) ?? getString(row.pageUrl) ?? getString(row.canonical_url) ?? getString(row.canonicalUrl);
   const summary = getString(row.policy_summary_short) ?? getString(row.policySummaryShort) ?? "";
   const semanticConfidence =
     getNumber(row.policy_semantic_confidence) ??
     getNumber(row.policySemanticConfidence) ??
     0;
-  const ambiguity =
+  const ambiguityValue =
     getNumber(row.policy_ambiguity_score) ??
-    getNumber(row.policyAmbiguityScore) ??
-    100;
+    getNumber(row.policyAmbiguityScore);
+  const ambiguity = ambiguityValue ?? (semanticConfidence > 0 ? 25 : 100);
   const rightsSignals = getStringArray(row.policy_rights_signals ?? row.policyRightsSignals);
   const mentions = Array.isArray(row.policy_mentions)
     ? row.policy_mentions
@@ -83,6 +84,19 @@ function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   }
   if (pageType === "privacy_policy" && /privacy|personal data|personal information|retention|rights|cookies?/i.test(summary)) {
     score += 10;
+  }
+  if (pageType === "privacy_policy" && pageUrl) {
+    try {
+      const pathname = new URL(pageUrl).pathname.toLowerCase();
+      if (pathname === "/privacy" || pathname.endsWith("/privacy") || pathname.includes("/privacy-policy") || pathname.includes("/legal/privacy")) {
+        score += 15;
+      }
+      if (pathname.includes("privacy-preferences") || pathname.includes("privacy-request") || pathname.includes("request-center")) {
+        score -= 20;
+      }
+    } catch {
+      // Ignore malformed URLs and fall back to semantic scoring only.
+    }
   }
   if (structurallyWeak) {
     score -= 30;
