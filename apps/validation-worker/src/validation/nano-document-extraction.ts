@@ -156,6 +156,33 @@ export function hasRetentionInferenceCue(documentText: string | null) {
   return /retain|retention|deleted within|stored for approximately|as long as reasonably necessary/i.test(text);
 }
 
+function collectRetentionInferenceWindows(normalizedText: string) {
+  const cuePattern =
+    /how\s+is\s+your\s+personal\s+information\s+retained|retention period varies based on|retain your personal information|retention|deleted within|stored for approximately|as long as reasonably necessary/gi;
+  const windows: string[] = [];
+  const spans: Array<{ start: number; end: number }> = [];
+
+  for (const match of normalizedText.matchAll(cuePattern)) {
+    const start = Math.max(0, match.index - 24);
+    const end = Math.min(normalizedText.length, match.index + match[0].length + 520);
+    const previous = spans[spans.length - 1];
+    if (previous && start <= previous.end) {
+      previous.end = Math.max(previous.end, end);
+      continue;
+    }
+    spans.push({ start, end });
+  }
+
+  for (const span of spans) {
+    const windowText = normalizedText.slice(span.start, span.end).trim();
+    if (windowText.length > 0) {
+      windows.push(windowText);
+    }
+  }
+
+  return windows;
+}
+
 function inferRetentionPeriods(documentText: string | null, parsedPeriods: unknown[]) {
   if (parsedPeriods.length > 0) {
     return parsedPeriods;
@@ -169,18 +196,23 @@ function inferRetentionPeriods(documentText: string | null, parsedPeriods: unkno
 
   const inferred: Array<string | Record<string, unknown>> = [];
   const lower = normalized.toLowerCase();
+  const retentionWindows = collectRetentionInferenceWindows(normalized);
+  const periodValues = new Set<string>();
 
-  const explicitPeriodMatches = [
-    ...normalized.matchAll(
-      /\b(?:within|for|approximately|about|up to|no longer than)?\s*(\d+\s+(?:day|days|month|months|year|years))\b/gi
-    )
-  ];
-  for (const match of explicitPeriodMatches) {
-    const period = match[1]?.trim();
-    if (period) {
-      inferred.push(period);
+  for (const windowText of retentionWindows) {
+    const explicitPeriodMatches = [
+      ...windowText.matchAll(
+        /\b(?:within|for|approximately|about|up to|no longer than)?\s*(\d+\s+(?:day|days|month|months|year|years))\b/gi
+      )
+    ];
+    for (const match of explicitPeriodMatches) {
+      const period = match[1]?.trim();
+      if (period) {
+        periodValues.add(period.toLowerCase());
+      }
     }
   }
+  inferred.push(...[...periodValues].map((value) => value));
 
   if (/retain your personal information for as long as reasonably necessary/.test(lower)) {
     inferred.push({

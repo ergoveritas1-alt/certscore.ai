@@ -163,3 +163,26 @@ test("normalizeNanoDocumentExtraction infers retention disclosure from criteria-
     true
   );
 });
+
+test("normalizeNanoDocumentExtraction scopes retention periods to retention sections", () => {
+  const result = normalizeNanoDocumentExtraction({
+    documentText:
+      "Promotional offer valid for 12 months. Loyalty points expire after 18 years in this synthetic example. How Is Your Personal Information Retained? We retain your personal information for as long as reasonably necessary to fulfill the purposes described in this Privacy Policy. The retention period varies based on a number of factors, including Guest needs, business needs, legal obligations, potential risks of harm, and information type. Biometric information will be deleted within 3 years of your last interaction with us. ALPR information is stored for approximately 30 days before it is permanently deleted.",
+    parsed: {},
+    row: {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      title: "Privacy Policy"
+    }
+  });
+
+  const retention = Array.isArray(result.extractedFields.policy_retention_periods)
+    ? result.extractedFields.policy_retention_periods
+    : [];
+  const periodStrings = retention.filter((entry): entry is string => typeof entry === "string");
+
+  assert.equal(periodStrings.includes("12 months"), false);
+  assert.equal(periodStrings.includes("18 years"), false);
+  assert.equal(periodStrings.includes("3 years"), true);
+  assert.equal(periodStrings.includes("30 days"), true);
+});
