@@ -1,4 +1,5 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   createScanForValidationRun,
   createValidationRun,
@@ -16,7 +17,9 @@ type RepresentativeTarget = {
   }>;
   hostname: string;
   label: string;
-  maxValidationMs?: number;
+  maxRankMs?: number;
+  maxValidationMsHard?: number;
+  maxVerdictMs?: number;
 };
 
 type FreshSmokeResult = {
@@ -39,8 +42,10 @@ type FreshSmokeResult = {
   timingWithinBudget: boolean | null;
   timings: {
     queueToFinalMs: number | null;
+    rankMs: number | null;
     scanProcessingMs: number | null;
     validationMs: number | null;
+    verdictMs: number | null;
   };
 };
 
@@ -48,7 +53,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "lookout.com",
     label: "lookout",
-    maxValidationMs: 30_000,
+    maxRankMs: 15_000,
+    maxValidationMsHard: 30_000,
+    maxVerdictMs: 20_000,
     expectedFindings: [
       { ruleKey: "cookie_runtime.disclosure_gap", severity: "high" },
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
@@ -59,13 +66,17 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "adidas.com",
     label: "adidas",
-    maxValidationMs: 15_000,
+    maxRankMs: 10_000,
+    maxValidationMsHard: 15_000,
+    maxVerdictMs: 10_000,
     expectedFindings: [{ ruleKey: "access_review.public_access_blocked", severity: "high" }]
   },
   {
     hostname: "fujifilm.com",
     label: "fujifilm",
-    maxValidationMs: 15_000,
+    maxRankMs: 10_000,
+    maxValidationMsHard: 20_000,
+    maxVerdictMs: 10_000,
     expectedFindings: [
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
       { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" }
@@ -74,7 +85,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "hobbylobby.com",
     label: "hobbylobby",
-    maxValidationMs: 20_000,
+    maxRankMs: 12_000,
+    maxValidationMsHard: 25_000,
+    maxVerdictMs: 15_000,
     expectedFindings: [
       { ruleKey: "access_review.public_access_blocked", severity: "high" },
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
@@ -84,7 +97,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "dnb.com",
     label: "dnb",
-    maxValidationMs: 25_000,
+    maxRankMs: 15_000,
+    maxValidationMsHard: 30_000,
+    maxVerdictMs: 15_000,
     expectedFindings: [
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
       { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" },
@@ -94,7 +109,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "alz.org",
     label: "alz",
-    maxValidationMs: 20_000,
+    maxRankMs: 15_000,
+    maxValidationMsHard: 25_000,
+    maxVerdictMs: 15_000,
     expectedFindings: [
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
@@ -104,7 +121,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "kurier.at",
     label: "kurier",
-    maxValidationMs: 25_000,
+    maxRankMs: 15_000,
+    maxValidationMsHard: 30_000,
+    maxVerdictMs: 15_000,
     expectedFindings: [
       { ruleKey: "access_review.public_access_blocked", severity: "high" },
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
@@ -183,6 +202,45 @@ function timingWithinBudget(validationMs: number | null, maxValidationMs: number
   }
 
   return validationMs <= maxValidationMs;
+}
+
+function latestEventMs(
+  events: Array<{ created_at: string; event_type: string }>,
+  eventTypes: string[]
+) {
+  let latest: number | null = null;
+
+  for (const event of events) {
+    if (!eventTypes.includes(event.event_type)) {
+      continue;
+    }
+
+    const timestamp = parseIsoMs(event.created_at);
+    if (timestamp === null) {
+      continue;
+    }
+
+    if (latest === null || timestamp > latest) {
+      latest = timestamp;
+    }
+  }
+
+  return latest;
+}
+
+async function loadScanEvents(scanId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("scan_events")
+    .select("event_type, created_at")
+    .eq("scan_id", scanId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load scan events for ${scanId}: ${error.message}`);
+  }
+
+  return (data ?? []) as Array<{ created_at: string; event_type: string }>;
 }
 
 function formatDurationMs(value: number | null) {
@@ -267,15 +325,15 @@ function summarizeFindings(result: FreshSmokeResult) {
 }
 
 function printMarkdown(results: FreshSmokeResult[]) {
-  console.log("| Label | Hostname | Scan Status | Shape | Validation Budget | Validation | Scan | Findings |");
-  console.log("| --- | --- | --- | --- | --- | --- | --- | --- |");
+  console.log("| Label | Hostname | Scan Status | Shape | Timing | Rank | Verdict | Validation | Scan | Findings |");
+  console.log("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 
   for (const result of results) {
     const shape = result.shapeMatchesExpectation === null ? "n/a" : result.shapeMatchesExpectation ? "match" : "mismatch";
     const budget =
       result.timingWithinBudget === null ? "n/a" : result.timingWithinBudget ? "within" : "exceeded";
     console.log(
-      `| ${result.label} | ${result.hostname} | ${result.scanStatus} | ${shape} | ${budget} | ${formatDurationMs(result.timings.validationMs)} | ${formatDurationMs(result.timings.scanProcessingMs)} | ${summarizeFindings(result)} |`
+      `| ${result.label} | ${result.hostname} | ${result.scanStatus} | ${shape} | ${budget} | ${formatDurationMs(result.timings.rankMs)} | ${formatDurationMs(result.timings.verdictMs)} | ${formatDurationMs(result.timings.validationMs)} | ${formatDurationMs(result.timings.scanProcessingMs)} | ${summarizeFindings(result)} |`
     );
   }
 }
@@ -318,11 +376,36 @@ async function runFreshSmokeForTarget(
   }
 
   const findings = await loadValidationRunFindings(run.id);
+  const scanEvents = await loadScanEvents(scanId);
+  const validationStartedAtMs = parseIsoMs(validationStartedAtIso);
+  const rankCompletedAtMs = latestEventMs(scanEvents, [SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted]);
+  const validationCompletedAtMs = parseIsoMs(refreshedRun.completed_at);
+  const rankMs =
+    validationStartedAtMs !== null && rankCompletedAtMs !== null ? rankCompletedAtMs - validationStartedAtMs : null;
   const validationMs = (() => {
-    const start = parseIsoMs(validationStartedAtIso);
-    const end = parseIsoMs(refreshedRun.completed_at);
-    return start !== null && end !== null ? end - start : null;
+    return validationStartedAtMs !== null && validationCompletedAtMs !== null
+      ? validationCompletedAtMs - validationStartedAtMs
+      : null;
   })();
+  const verdictMs = (() => {
+    if (findings.length === 0 && rankCompletedAtMs !== null && validationCompletedAtMs !== null) {
+      return Math.max(0, validationCompletedAtMs - rankCompletedAtMs);
+    }
+
+    return rankCompletedAtMs !== null && validationCompletedAtMs !== null
+      ? Math.max(0, validationCompletedAtMs - rankCompletedAtMs)
+      : null;
+  })();
+  const rankWithinBudget = timingWithinBudget(rankMs, target.maxRankMs);
+  const verdictWithinBudget = timingWithinBudget(verdictMs, target.maxVerdictMs);
+  const hardMaxWithinBudget = timingWithinBudget(validationMs, target.maxValidationMsHard);
+  const timingWithinPolicy =
+    [rankWithinBudget, verdictWithinBudget, hardMaxWithinBudget].every((value) => value !== false) &&
+    [rankWithinBudget, verdictWithinBudget, hardMaxWithinBudget].some((value) => value !== null)
+      ? true
+      : [rankWithinBudget, verdictWithinBudget, hardMaxWithinBudget].some((value) => value === false)
+        ? false
+        : null;
 
   const result: FreshSmokeResult = {
     expectedFindings: target.expectedFindings ?? null,
@@ -344,19 +427,21 @@ async function runFreshSmokeForTarget(
       })),
       target.expectedFindings
     ),
-    timingWithinBudget: timingWithinBudget(validationMs, target.maxValidationMs),
+    timingWithinBudget: timingWithinPolicy,
     timings: {
       queueToFinalMs: (() => {
         const start = parseIsoMs(completedScan.createdAt);
         const end = parseIsoMs(refreshedRun.completed_at);
         return start !== null && end !== null ? end - start : null;
       })(),
+      rankMs,
       scanProcessingMs: (() => {
         const start = parseIsoMs(completedScan.startedAt);
         const end = parseIsoMs(completedScan.completedAt);
         return start !== null && end !== null ? end - start : null;
       })(),
-      validationMs
+      validationMs,
+      verdictMs
     }
   };
 
