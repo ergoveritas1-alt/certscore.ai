@@ -170,6 +170,51 @@ test("selectTopFindings keeps the strongest privacy findings at the top", () => 
   assert.ok(topFindings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
 });
 
+test("selectTopFindings avoids duplicating overlapping pre-consent tracking cards", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentRequestCount: 7,
+          preConsentThirdPartyRequestCount: 7
+        },
+        vendorSummary: {
+          normalizedVendors: ["Google Analytics", "Meta Pixel", "LinkedIn Insight Tag"],
+          rawThirdPartyDomains: ["google-analytics.com", "connect.facebook.net", "snap.licdn.com"],
+          preConsentVendorCount: 3
+        },
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: false,
+          rejectDepthClass: "absent"
+        },
+        consentVisual: {
+          acceptProminence: "high",
+          rejectProminence: "none",
+          rejectHidden: true,
+          ctaImbalanceDetected: true
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 2
+        },
+        cookieWriteObservations: [{ cookieName: "_ga", domain: ".example.com" }]
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-02T10:05:00.000Z",
+      createdAt: "2026-04-02T10:04:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  const topFindings = selectTopFindings(summary.findings, 5);
+  const topIds = topFindings.map((finding) => finding.id);
+
+  assert.ok(topIds.includes("pre_consent_tracking_detected"));
+  assert.equal(topIds.includes("third_party_tracking_pre_consent"), false);
+});
+
 test("uses identity-rich telemetry wording when telemetry is elevated but fingerprinting is not confirmed", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

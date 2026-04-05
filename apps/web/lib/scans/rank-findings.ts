@@ -41,6 +41,11 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   const ranked = rankFindings(findings);
   const sectionCounts = new Map<string, number>();
   const selected: CertScoreFinding[] = [];
+  const suppressedIds = new Set<string>();
+
+  if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
+    suppressedIds.add("third_party_tracking_pre_consent");
+  }
 
   const forcedIds = new Set<string>();
   if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
@@ -51,6 +56,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   }
 
   for (const finding of ranked) {
+    if (suppressedIds.has(finding.id)) {
+      continue;
+    }
     if (!forcedIds.has(finding.id)) {
       continue;
     }
@@ -63,6 +71,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   }
 
   for (const finding of ranked) {
+    if (suppressedIds.has(finding.id)) {
+      continue;
+    }
     if (selected.some((entry) => entry.id === finding.id)) {
       continue;
     }
