@@ -312,10 +312,7 @@ test("falls back to snapshot-backed pre-consent tracking and cookie evidence whe
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {
       hybrid_runtime_evidence: {
-        networkSummary: {
-          preConsentRequestCount: 0,
-          preConsentThirdPartyRequestCount: 0
-        },
+        networkSummary: {},
         vendorSummary: {
           normalizedVendors: ["Google Ads"],
           preConsentVendorCount: 4,
@@ -325,10 +322,7 @@ test("falls back to snapshot-backed pre-consent tracking and cookie evidence whe
           { hostname: "googleads.g.doubleclick.net", preConsent: true, vendor: "Google Ads" },
           { hostname: "analytics.tiktok.com", preConsent: true, vendor: "TikTok Pixel" }
         ],
-        storageSummary: {
-          cookiesBeforeConsentCount: 0,
-          thirdPartyCookieBeforeConsentCount: 0
-        },
+        storageSummary: {},
         cookieWriteObservations: [
           { cookieName: "_ttp", domain: ".tiktok.com", thirdParty: true },
           { cookieName: "test_cookie", domain: ".doubleclick.net", thirdParty: true }
@@ -354,6 +348,66 @@ test("falls back to snapshot-backed pre-consent tracking and cookie evidence whe
   assert.deepEqual(summary.thirdPartyCookieNamesSeen.sort(), ["_ttp", "test_cookie"]);
   assert.deepEqual(summary.thirdPartyCookieNamesBeforeConsent.sort(), ["_ttp", "test_cookie"]);
   assert.deepEqual(summary.preConsentVendorNames.sort(), ["Google Ads", "TikTok Pixel"]);
+});
+
+test("does not use snapshot pre-consent fallback when runtime timing explicitly says no", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentRequestCount: 0,
+          preConsentThirdPartyRequestCount: 0,
+          thirdPartyRequestCount: 122
+        },
+        vendorSummary: {
+          normalizedVendors: ["Marketo"],
+          preConsentVendorCount: 1,
+          rawThirdPartyDomains: ["business.adobe.com", "www.adobe.com"]
+        },
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: false,
+          rejectDepthClass: "deeper_layer",
+          requestsBeforeAnyConsentAction: false
+        },
+        consentVisual: {
+          rejectHidden: true,
+          rejectProminence: "none"
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 0,
+          thirdPartyCookieBeforeConsentCount: 0
+        },
+        cookieWriteObservations: [
+          { cookieName: "mbox", domain: ".adobe.com", thirdParty: true, beforeConsent: false },
+          { cookieName: "AMCV_9E1005A551ED61CA0A490D45%40AdobeOrg", domain: ".adobe.com", thirdParty: true, beforeConsent: false }
+        ],
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 0
+        }
+      },
+      initial_cookie_count: 14,
+      initial_cookie_names: ["mbox", "AMCV_9E1005A551ED61CA0A490D45%40AdobeOrg"]
+    },
+    snapshot: {
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true,
+      third_party_cookie_set_before_consent: true
+    },
+    scan: {
+      completedAt: "2026-04-05T22:35:00.000Z",
+      createdAt: "2026-04-05T22:33:06.000Z",
+      domainHostname: "marketo.com"
+    }
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.equal(ids.includes("pre_consent_tracking_detected"), false);
+  assert.equal(ids.includes("third_party_tracking_pre_consent"), false);
+  assert.equal(ids.includes("third_party_cookie_pre_consent"), false);
+  assert.equal(ids.includes("analytics_cookie_pre_consent"), false);
 });
 
 test("uses snapshot tracker vendor counts when runtime naming is incomplete", () => {

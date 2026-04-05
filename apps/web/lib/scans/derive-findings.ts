@@ -89,6 +89,10 @@ function getObjectArray(value: unknown) {
     : [];
 }
 
+function hasOwnRecordValue(record: unknown, key: string) {
+  return Boolean(record && typeof record === "object" && !Array.isArray(record) && Object.prototype.hasOwnProperty.call(record, key));
+}
+
 function getTrackerVendorNames(rows: Array<Record<string, unknown>> | null | undefined) {
   return uniqueStrings(
     (rows ?? []).flatMap((row) => {
@@ -272,6 +276,11 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const rawAdtechHosts = uniqueStrings([...rawThirdPartyDomains, ...rawRequestHosts].filter(looksLikeAdtechHost));
   const preConsentRequestCount = getNumber(networkSummary?.preConsentRequestCount) ?? 0;
   const preConsentThirdPartyRequestCount = getNumber(networkSummary?.preConsentThirdPartyRequestCount) ?? 0;
+  const requestsBeforeAnyConsentAction = getBoolean(consentSummary?.requestsBeforeAnyConsentAction);
+  const hasExplicitPreConsentRuntimeEvidence =
+    hasOwnRecordValue(networkSummary, "preConsentRequestCount") ||
+    hasOwnRecordValue(networkSummary, "preConsentThirdPartyRequestCount") ||
+    hasOwnRecordValue(consentSummary, "requestsBeforeAnyConsentAction");
   const requestCount = getNumber(networkSummary?.totalRequestCount) ?? 0;
   const thirdPartyDomainCount = getNumber(networkSummary?.thirdPartyDomainCount) ?? rawThirdPartyDomains.length;
   const thirdPartyRequestCount = getNumber(networkSummary?.thirdPartyRequestCount) ?? 0;
@@ -393,14 +402,20 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const snapshotThirdPartyCookieBeforeConsent = scanRecord.snapshot?.third_party_cookie_set_before_consent === true;
   const explicitPreConsentVendorCount = getNumber(vendorSummary?.preConsentVendorCount) ?? 0;
   const effectivePreConsentVendorCount = Math.max(explicitPreConsentVendorCount, preConsentVendorNames.length);
+  const snapshotPreConsentFallbackCount =
+    !hasExplicitPreConsentRuntimeEvidence && snapshotPreconsentTracking
+      ? effectivePreConsentVendorCount > 0
+        ? effectivePreConsentVendorCount
+        : 1
+      : 0;
   const effectivePreConsentThirdPartyRequestCount = Math.max(
     preConsentThirdPartyRequestCount,
-    snapshotPreconsentTracking ? effectivePreConsentVendorCount : 0
+    snapshotPreconsentTracking && !hasExplicitPreConsentRuntimeEvidence ? effectivePreConsentVendorCount : 0
   );
   const effectivePreConsentRequestCount = Math.max(
     preConsentRequestCount,
     effectivePreConsentThirdPartyRequestCount,
-    snapshotPreconsentTracking ? (effectivePreConsentVendorCount > 0 ? effectivePreConsentVendorCount : 1) : 0
+    snapshotPreConsentFallbackCount
   );
   const cookieNamesSeen = uniqueStrings(
     cookieWriteObservations.flatMap((row) => {
@@ -420,14 +435,20 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   );
   const explicitCookiesBeforeConsentCount = getNumber(storageSummary?.cookiesBeforeConsentCount) ?? 0;
   const explicitThirdPartyCookieBeforeConsentCount = getNumber(storageSummary?.thirdPartyCookieBeforeConsentCount) ?? 0;
+  const hasExplicitCookieTimingEvidence =
+    hasOwnRecordValue(storageSummary, "cookiesBeforeConsentCount") ||
+    hasOwnRecordValue(storageSummary, "thirdPartyCookieBeforeConsentCount") ||
+    cookieWriteObservations.some((row) => typeof row.beforeConsent === "boolean");
   const effectiveThirdPartyCookieBeforeConsentCount = Math.max(
     explicitThirdPartyCookieBeforeConsentCount,
-    snapshotThirdPartyCookieBeforeConsent ? Math.max(thirdPartyCookieNamesSeen.length, 1) : 0
+    snapshotThirdPartyCookieBeforeConsent && !hasExplicitCookieTimingEvidence ? Math.max(thirdPartyCookieNamesSeen.length, 1) : 0
   );
   const effectiveCookiesBeforeConsentCount = Math.max(
     explicitCookiesBeforeConsentCount,
     effectiveThirdPartyCookieBeforeConsentCount,
-    snapshotFirstPartyCookieBeforeConsent || snapshotThirdPartyCookieBeforeConsent ? Math.max(cookieNamesSeen.length, 1) : 0
+    (snapshotFirstPartyCookieBeforeConsent || snapshotThirdPartyCookieBeforeConsent) && !hasExplicitCookieTimingEvidence
+      ? Math.max(cookieNamesSeen.length, 1)
+      : 0
   );
   const cookieNamesBeforeConsent =
     effectiveCookiesBeforeConsentCount > 0 ? uniqueStrings([...cookieNamesSeen, ...legacyInitialCookieNames]) : [];
