@@ -832,6 +832,7 @@ type ValidationArtifactBundle = {
 function deriveAccessFindings(input: {
   documentSources?: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
   snapshot: Record<string, unknown> | null;
 }) {
   const snapshot = input.snapshot;
@@ -843,6 +844,11 @@ function deriveAccessFindings(input: {
   const partialScan = getRecordBoolean(snapshot, "partial_scan");
   const authWallDetected = getRecordBoolean(snapshot, "auth_wall_detected");
   const captchaFlag = getRecordBoolean(snapshot, "captcha_flag");
+  const authWallSuspected = getRecordBoolean(snapshot, "auth_wall_suspected");
+  const challengeSuspected = getRecordBoolean(snapshot, "challenge_suspected");
+  const cookieBannerPresent = getRecordBoolean(snapshot, "cookie_banner_present");
+  const granularPreferencesPresent = getRecordBoolean(snapshot, "granular_preferences_present");
+  const blockPageClassification = getStringValue(snapshot, "block_page_classification");
   const homepageFetchStatus = getStringValue(snapshot, "homepage_fetch_status");
   const stopReasonCode = getStringValue(snapshot, "stop_reason_code");
   const stopReasonLabel = getStringValue(snapshot, "stop_reason_label");
@@ -864,11 +870,30 @@ function deriveAccessFindings(input: {
     stopReasonCode === "reachability_blocked_captcha" ||
     stopReasonCode === "reachability_blocked_auth_wall";
 
+  const hybridRuntimeEvidence = getRecord(input.runtimeArtifacts?.hybrid_runtime_evidence ?? input.runtimeArtifacts?.hybridRuntimeEvidence);
+  const consentSummary = getRecord(hybridRuntimeEvidence?.consentSummary);
+  const browserReachedPublicContent =
+    cookieBannerPresent ||
+    granularPreferencesPresent ||
+    getRecordBoolean(consentSummary, "cmpDetected") ||
+    getRecordBoolean(consentSummary, "managePresent") ||
+    getRecordBoolean(consentSummary, "acceptPresent") ||
+    getRecordBoolean(consentSummary, "rejectPresent");
+  const vendorInterstitialOnly =
+    !blockedFlag &&
+    !captchaFlag &&
+    !authWallSuspected &&
+    (challengeSuspected || blockPageClassification === "vendor_interstitial_probable");
+
   if (!partialScan || !accessLimitedByProtection) {
     return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
   }
 
   if (readyDocumentCount > 0 || verifiedSurfaceCount > 0) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  if (vendorInterstitialOnly && browserReachedPublicContent) {
     return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
   }
 
@@ -884,8 +909,11 @@ function deriveAccessFindings(input: {
       evidence: {
         access_posture_class: getStringValue(snapshot, "access_posture_class"),
         auth_wall_detected: authWallDetected,
+        auth_wall_suspected: authWallSuspected,
         blocked_flag: blockedFlag,
+        block_page_classification: blockPageClassification,
         captcha_flag: captchaFlag,
+        challenge_suspected: challengeSuspected,
         coverage_level: coverageLevel,
         homepage_fetch_status: homepageFetchStatus,
         partial_scan: partialScan,
@@ -2231,6 +2259,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ...deriveAccessFindings({
       documentSources: input.documentSources,
       pages: input.pages,
+      runtimeArtifacts: input.runtimeArtifacts,
       snapshot: input.snapshot
     }),
     ...deriveLegalCoverageFindings({

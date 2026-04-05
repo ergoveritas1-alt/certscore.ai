@@ -220,6 +220,42 @@ test("emits blocked-access finding for captcha-limited partial scans without ver
   assert.equal(finding?.pageUrl, "https://www.example.com/");
 });
 
+test("does not emit blocked-access finding for vendor interstitials when browser evidence shows public access", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [],
+      pages: [{ page_type: "homepage", page_url: "https://www.example.com/", fetch_status: "forbidden" }],
+      policyEnrichments: [],
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            managePresent: true
+          }
+        }
+      },
+      snapshot: {
+        access_posture_class: "early_loss",
+        auth_wall_detected: true,
+        auth_wall_suspected: false,
+        blocked_flag: false,
+        block_page_classification: "vendor_interstitial_probable",
+        captcha_flag: false,
+        challenge_suspected: true,
+        cookie_banner_present: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_status: "forbidden",
+        partial_scan: true,
+        stop_reason_http_status: 403,
+        verified_public_surfaces_count: 0
+      }
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "access_review.public_access_blocked"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "access_review.legal_coverage_unverified"), true);
+});
+
 test("lookout-style bundle surfaces runtime tracking, cookie gap, and retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
