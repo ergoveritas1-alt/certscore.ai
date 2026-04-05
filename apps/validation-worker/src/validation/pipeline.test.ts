@@ -484,6 +484,84 @@ test("alz doc-ready bundle only surfaces retention finding", () => {
   assert.deepEqual(findings.map((finding) => finding.ruleKey), ["section_review.no_retention_periods_noted"]);
 });
 
+test("supplemental policy disclosures suppress the primary-policy retention finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          source_status: "ready",
+          extraction_status: "ready",
+          canonical_url: "https://www.example.com/privacy",
+          document_type: "privacy_policy"
+        },
+        {
+          source_status: "ready",
+          extraction_status: "ready",
+          canonical_url: "https://www.example.com/help/privacy",
+          document_type: "privacy_policy"
+        }
+      ],
+      pages: [
+        {
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          fetch_status: "ok"
+        },
+        {
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/help/privacy",
+          fetch_status: "ok"
+        }
+      ],
+      policyEnrichments: [
+        {
+          id: "privacy-primary",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: [],
+          policy_dsar_mechanism: "present",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: [],
+          policy_mentions: [{ topic: "tracking_technologies_disclosure" }],
+          policy_rights_signals: ["access_request"],
+          policy_ambiguity_score: 45,
+          policy_semantic_confidence: 0.8,
+          policy_structurally_weak: false,
+          policy_snippet_count: 4,
+          policy_summary_short: "Primary privacy policy describes collection and rights."
+        },
+        {
+          id: "privacy-support",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/help/privacy",
+          policy_actionable_flags: [],
+          policy_dsar_mechanism: "present",
+          policy_retention_periods: ["2 years after account inactivity"],
+          policy_transfer_mechanisms: [],
+          policy_mentions: [{ topic: "tracking_technologies_disclosure" }],
+          policy_rights_signals: ["access_request"],
+          policy_ambiguity_score: 22,
+          policy_semantic_confidence: 0.88,
+          policy_structurally_weak: false,
+          policy_snippet_count: 4,
+          policy_summary_short: "Supplemental privacy help page discloses retention windows."
+        }
+      ],
+      policyReviewQueue: [],
+      preconsentViolations: [],
+      runtimeArtifacts: null,
+      snapshot: {
+        blocked_flag: false,
+        partial_scan: false,
+        privacy_policy_present: true,
+        verified_public_surfaces_count: 2
+      }
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+});
+
 test("hobbylobby-style captcha bundle surfaces blocked access plus runtime tracking", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
@@ -1930,6 +2008,44 @@ test("does not promote a pre-consent runtime finding without third-party evidenc
   );
 
   assert.equal(findings.some((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed"), false);
+});
+
+test("pre-consent runtime finding attributes observed third-party vendors in surfaced evidence", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      preconsentViolations: [
+        { vendor_name: "Example first-party web platform", collection_endpoint_type: "request" }
+      ],
+      snapshot: {
+        cookie_count_total: 10,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 3,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Analytics"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Meta Pixel"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
+  assert.ok(finding);
+  assert.deepEqual(finding?.evidence.preconsent_violation_vendors, [
+    "Google Analytics",
+    "Meta Pixel",
+    "Example first-party web platform"
+  ]);
 });
 
 test("promotes obstructive consent interface findings when reject path is hidden behind a cookie wall", () => {

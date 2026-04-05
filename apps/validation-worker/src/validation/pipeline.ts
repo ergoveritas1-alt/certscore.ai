@@ -448,6 +448,67 @@ function hasConcreteSessionReplayEvidence(flags: string[]) {
   return flags.includes("session_replay_vendor_artifact_present");
 }
 
+function buildDomainPolicyCoverageSummary(policySemanticRows: Array<Record<string, unknown>>) {
+  let hasRetentionDisclosure = false;
+  let hasTransferDisclosure = false;
+  let hasRightsDisclosure = false;
+  let hasPrivacyContactDisclosure = false;
+  let hasPrivacyChoiceDisclosure = false;
+
+  for (const enrichment of policySemanticRows) {
+    const retentionPeriods = Array.isArray(enrichment.policy_retention_periods) ? enrichment.policy_retention_periods : [];
+    const transferMechanisms = Array.isArray(enrichment.policy_transfer_mechanisms) ? enrichment.policy_transfer_mechanisms : [];
+    const policyRightsSignals = getPolicyRightsSignals(enrichment);
+    const mentionTopics = getPolicyMentionTopics(enrichment);
+    const dsarMechanism = typeof enrichment.policy_dsar_mechanism === "string" ? enrichment.policy_dsar_mechanism : null;
+    const policyDoNotSell =
+      typeof enrichment.policy_do_not_sell === "string" ? enrichment.policy_do_not_sell : null;
+    const privacyContactChannelType =
+      typeof enrichment.privacy_contact_channel_type === "string"
+        ? enrichment.privacy_contact_channel_type
+        : null;
+    const summaryShort = enrichment.policy_summary_short ?? null;
+
+    if (retentionPeriods.length > 0) {
+      hasRetentionDisclosure = true;
+    }
+
+    if (transferMechanisms.length > 0 || stringIncludesTransferCue(summaryShort)) {
+      hasTransferDisclosure = true;
+    }
+
+    if (
+      dsarMechanism === "present" ||
+      dsarMechanism === "partial" ||
+      policyRightsSignals.length > 0
+    ) {
+      hasRightsDisclosure = true;
+    }
+
+    if (privacyContactChannelType && privacyContactChannelType !== "none" && privacyContactChannelType !== "unknown") {
+      hasPrivacyContactDisclosure = true;
+    }
+
+    if (
+      policyDoNotSell === "present_link" ||
+      policyDoNotSell === "present_text" ||
+      mentionTopics.includes("gpc_disclosure") ||
+      mentionTopics.includes("targeted_advertising_disclosure") ||
+      mentionTopics.includes("third_party_advertising_disclosure")
+    ) {
+      hasPrivacyChoiceDisclosure = true;
+    }
+  }
+
+  return {
+    hasPrivacyChoiceDisclosure,
+    hasPrivacyContactDisclosure,
+    hasRetentionDisclosure,
+    hasRightsDisclosure,
+    hasTransferDisclosure
+  };
+}
+
 function buildPolicyRuntimeFinding(input: {
   description: string;
   evidence: Record<string, unknown>;
@@ -1136,6 +1197,9 @@ function deriveRuntimePrivacyFindings(input: {
         .filter((value): value is string => Boolean(value))
     )
   ];
+  const attributedPreconsentVendors = [
+    ...new Set([...thirdPartyVendorsBeforeConsent, ...preconsentViolationVendors])
+  ];
 
   if (!preconsentTrackingDetected) {
     return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
@@ -1162,7 +1226,7 @@ function deriveRuntimePrivacyFindings(input: {
         initial_cookie_names: initialCookieNames,
         preconsent_tracking_detected: preconsentTrackingDetected,
         preconsent_violation_count: input.preconsentViolations.length,
-        preconsent_violation_vendors: preconsentViolationVendors,
+        preconsent_violation_vendors: attributedPreconsentVendors,
         third_party_cookie_count: thirdPartyCookieCount,
         third_party_request_count: thirdPartyRequestCount,
         third_party_vendors_before_consent: thirdPartyVendorsBeforeConsent,
@@ -1319,6 +1383,7 @@ function derivePolicySectionFindings(input: {
   const sessionReplayWithoutDisclosureDetected =
     getRecordBoolean(input.snapshot, "session_replay_without_disclosure_detected") ||
     getRecordBoolean(input.snapshot, "session_replay_detected_without_disclosure");
+  const domainPolicyCoverage = buildDomainPolicyCoverageSummary(input.policySemanticRows);
 
   for (const enrichment of input.policySemanticRows) {
     const enrichmentId = String(enrichment.id ?? "");
@@ -1624,19 +1689,24 @@ function derivePolicySectionFindings(input: {
       );
     }
 
-    if (pageType === "privacy_policy" && retentionPeriods.length === 0) {
+    if (
+      pageType === "privacy_policy" &&
+      retentionPeriods.length === 0 &&
+      !domainPolicyCoverage.hasRetentionDisclosure
+    ) {
       findings.push(
         buildSectionIssueFinding({
-          description: "The privacy policy did not disclose any concrete retention periods for collected data.",
+          description: "The primary privacy policy did not disclose any concrete retention periods for collected data.",
           evidence: {
             ...baseEvidence,
+            domain_policy_coverage: domainPolicyCoverage,
             policy_retention_periods: retentionPeriods
           },
           pageType,
           pageUrl,
           ruleKey: "section_review.no_retention_periods_noted",
           severity: "medium",
-          title: "No retention periods noted"
+          title: "No retention periods noted in primary privacy policy"
         })
       );
     }
