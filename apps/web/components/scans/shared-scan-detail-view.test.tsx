@@ -248,6 +248,41 @@ async function loadUnverifiedHomepageReview() {
   }).deriveUnverifiedHomepageReview;
 }
 
+async function loadExecutiveAccessLimitationNotice() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveExecutiveAccessLimitationNotice?: unknown })
+      .deriveExecutiveAccessLimitationNotice
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveExecutiveAccessLimitationNotice: (
+      snapshot: Record<string, unknown>,
+      scanEvents?: Array<{ eventType: string; message: string; metadataJson: unknown }>,
+      policyEnrichments?: Array<Record<string, unknown>>
+    ) =>
+      | {
+          summary: string;
+          finding: { label: string; shortSummary: string };
+          review: { coverageLabel: string; reason: string };
+        }
+      | null;
+  }).deriveExecutiveAccessLimitationNotice;
+}
+
 test("buildScanReportUnifiedFindings suppresses standalone privacy-rights paths when they do not support a stronger finding", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 
@@ -532,7 +567,7 @@ test("deriveExecutiveSummaryScanCondition flags blocked homepage scans", async (
     pages_scanned: 0
   });
 
-  assert.match(summary ?? "", /homepage fetch was blocked/i);
+  assert.match(summary ?? "", /site limited automated access/i);
   assert.match(summary ?? "", /Reason:/i);
 });
 
@@ -589,7 +624,54 @@ test("deriveUnverifiedHomepageReview returns a robots-disallowed explanation", a
 
   assert.equal(review?.title, "Access limited by site protections");
   assert.match(review?.reason ?? "", /robots/i);
-  assert.match(review?.message ?? "", /blocked for this scan path by crawler policy/i);
+  assert.match(review?.message ?? "", /public crawler access was restricted/i);
+});
+
+test("deriveExecutiveAccessLimitationNotice suppresses normal findings on blocked scans with no verified public surfaces", async () => {
+  const deriveExecutiveAccessLimitationNotice = await loadExecutiveAccessLimitationNotice();
+
+  const notice = deriveExecutiveAccessLimitationNotice(
+    {
+      blocked_flag: false,
+      coverage_level: "limited_partial",
+      homepage_fetch_http_status: 200,
+      homepage_fetch_status: "ok",
+      pages_scanned: 1,
+      verified_public_surfaces_count: 0
+    },
+    [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Build phase hybrid_auto_decision ok.",
+        metadataJson: {
+          phase: "hybrid_auto_decision",
+          reason: "http_block_status",
+          reasonDetail: "Local main document returned 403.",
+          finalDocumentStatus: 403
+        }
+      }
+    ]
+  );
+
+  assert.equal(notice?.finding.label, "Public site access was limited");
+  assert.match(notice?.summary ?? "", /No reliable privacy or consent findings were retained/i);
+  assert.equal(notice?.review.coverageLabel, "No public verification available");
+  assert.match(notice?.finding.shortSummary ?? "", /No reliable privacy or consent findings were retained/i);
+});
+
+test("deriveExecutiveAccessLimitationNotice stays off when blocked scans still verified public policy surfaces", async () => {
+  const deriveExecutiveAccessLimitationNotice = await loadExecutiveAccessLimitationNotice();
+
+  const notice = deriveExecutiveAccessLimitationNotice({
+    blocked_flag: true,
+    homepage_fetch_http_status: 403,
+    homepage_fetch_status: "forbidden",
+    pages_scanned: 0,
+    privacy_policy_present: true,
+    verified_public_surfaces_count: 1
+  });
+
+  assert.equal(notice, null);
 });
 
 test("deriveUnverifiedHomepageReview carries verified privacy and terms surfaces on blocked runs", async () => {

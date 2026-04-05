@@ -57,6 +57,7 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
       beforeConsentCookieCount: 0,
       domainBenchmark: null,
       finalHost: "www.paypal.com",
@@ -84,4 +85,55 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
   assert.match(html, /Primary concerns:<\/span> No headline issue crossed the executive threshold for this scan\./);
   assert.match(html, /Highest-priority issues/);
   assert.match(html, /Review the supporting evidence below for lower-priority signals and scan context\./);
+});
+
+test("ExecutiveSummaryCard switches to blocked-access language when no reliable findings were retained", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: {
+        coverageLabel: "No public verification available",
+        guidance: ["Retry from a normal browsing session."],
+        headline: "Public site access was limited during this scan",
+        message: "No reliable privacy or consent findings were retained because the scan could not verify a usable public page.",
+        recommendationTitle: "Recommended next step",
+        reason: "Reason: homepage request was blocked with HTTP 403.",
+        title: "Access limited by site protections",
+        whatThisMeans: ["This run does not support trustworthy privacy conclusions."]
+      },
+      beforeConsentCookieCount: 18,
+      domainBenchmark: null,
+      finalHost: "www.adidas.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-05T23:19:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "adidas.com",
+      resolvedVendorNames: [],
+      score: 73,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [
+        makeFinding("access_limited_no_reliable_findings", "Public site access was limited", {
+          section: "Runtime & Diagnostics",
+          severity: "medium",
+          confidence: "strong",
+          shortSummary: "This run could not fully verify public pages because the site limited automated access from the scan environment."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Public site access was limited during this scan/);
+  assert.match(html, /Scan limitation:<\/span> No reliable privacy or consent findings were retained because the scan could not verify a usable public page\./);
+  assert.match(html, /Access limitation/);
+  assert.match(html, /This run was blocked before it established a trustworthy public browsing path/);
+  assert.doesNotMatch(html, /Regulatory findings/);
 });

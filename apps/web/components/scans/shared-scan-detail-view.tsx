@@ -2861,6 +2861,12 @@ type UnverifiedHomepageReview = {
   whatThisMeans: string[];
 };
 
+type ExecutiveAccessLimitationNotice = {
+  finding: CertScoreFinding;
+  review: UnverifiedHomepageReview;
+  summary: string;
+};
+
 type ScanEventSummaryRecord = {
   eventType: string;
   message: string;
@@ -3144,6 +3150,108 @@ export function deriveExecutiveSummaryScanCondition(snapshot: Record<string, unk
   }
 
   return `${review.message} ${review.reason}`;
+}
+
+function deriveBrowserBlockReason(scanEvents: ScanEventSummaryRecord[]) {
+  for (const event of scanEvents) {
+    if (event.eventType !== "runtime.build_phase_diagnostic") {
+      continue;
+    }
+
+    const metadata = getRecord(event.metadataJson);
+    if (!metadata) {
+      continue;
+    }
+
+    const phase = getRecordString(metadata, "phase");
+    const reason = getRecordString(metadata, "reason");
+    const reasonDetail = getRecordString(metadata, "reasonDetail");
+    const finalDocumentStatus = getRecordNumber(metadata, "finalDocumentStatus");
+
+    if ((phase === "hybrid_auto_decision" || phase === "hybrid_auto_browser_bypass") && reason === "http_block_status") {
+      return reasonDetail ?? (typeof finalDocumentStatus === "number" ? `The live browser pass reached a protected page with HTTP ${finalDocumentStatus}.` : null);
+    }
+
+    if (typeof finalDocumentStatus === "number" && finalDocumentStatus >= 400) {
+      return reasonDetail ?? `The live browser pass reached a protected page with HTTP ${finalDocumentStatus}.`;
+    }
+  }
+
+  return null;
+}
+
+export function deriveExecutiveAccessLimitationNotice(
+  snapshot: Record<string, unknown>,
+  scanEvents: ScanEventSummaryRecord[] = [],
+  policyEnrichments: Array<Record<string, unknown>> = []
+): ExecutiveAccessLimitationNotice | null {
+  const review = deriveUnverifiedHomepageReview(snapshot, scanEvents, policyEnrichments);
+  const verifiedSurfaceCount =
+    typeof snapshot.verified_public_surfaces_count === "number"
+      ? snapshot.verified_public_surfaces_count
+      : review?.verifiedSurfaces.length ?? 0;
+  const browserBlockReason = deriveBrowserBlockReason(scanEvents);
+  const verifiedPolicyInsights = review?.verifiedPolicyInsights ?? [];
+  const blockedAccessObserved =
+    snapshot.blocked_flag === true ||
+    snapshot.auth_wall_detected === true ||
+    snapshot.captcha_flag === true ||
+    typeof browserBlockReason === "string" ||
+    getRecordString(snapshot, "homepage_fetch_status") === "forbidden" ||
+    getRecordString(snapshot, "homepage_fetch_status") === "blocked" ||
+    (typeof snapshot.homepage_fetch_http_status === "number" && snapshot.homepage_fetch_http_status >= 400);
+
+  if (!blockedAccessObserved) {
+    return null;
+  }
+
+  if (verifiedSurfaceCount > 0 || verifiedPolicyInsights.length > 0) {
+    return null;
+  }
+
+  const effectiveReview: UnverifiedHomepageReview =
+    review ??
+    {
+      coverageLabel: "No public verification available",
+      guidance: [
+        "Retry from a normal browsing session or allow scanner access to the public homepage before relying on privacy findings.",
+        "Treat this result as an access limitation, not a substantive privacy or consent review."
+      ],
+      message: "The live browser pass hit a protected page before the scan could establish a trustworthy public browsing path.",
+      outcomeTitle: "Access limited during live browser verification",
+      verifiedPolicyInsights: [],
+      verifiedSurfaces: [],
+      recommendationTitle: "Protected-Site Workflow Recommended",
+      reason: browserBlockReason ? `Reason: ${browserBlockReason}` : "Reason: the live browser pass did not yield a trustworthy public page.",
+      title: "Access limited by site protections",
+      whatThisMeans: [
+        "This scan does not support reliable privacy or consent conclusions.",
+        "Any apparent runtime signals from this blocked session should be treated as non-actionable until a normal public page can be verified."
+      ]
+    };
+
+  return {
+    summary:
+      "No reliable privacy or consent findings were retained because the live scan could not verify a trustworthy public page.",
+    review: effectiveReview,
+    finding: {
+      id: "access_limited_no_reliable_findings",
+      label: "Public site access was limited",
+      section: "Runtime & Diagnostics",
+      defaultSurfacePriority: 110,
+      whyItMatters:
+        "When the scanner cannot verify a usable public page, any apparent runtime privacy signals are too thin to treat as trustworthy findings.",
+      remediation:
+        "Retry from a normal browsing environment or allow scanner access to the public homepage and core legal pages before relying on privacy findings.",
+      confidence: "strong",
+      directVsInferred: "direct",
+      evidencePreview: [browserBlockReason ?? effectiveReview.message, effectiveReview.reason],
+      evidenceRefs: [],
+      severity: "medium",
+      shortSummary:
+        "No reliable privacy or consent findings were retained because the live browser pass did not produce a trustworthy public page."
+    }
+  };
 }
 
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
@@ -5393,6 +5501,9 @@ export function SharedScanDetailView({
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
     : null;
+  const executiveAccessLimitationNotice = snapshot
+    ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment)
+    : null;
   const suppressLimitedSurfaceReview =
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
@@ -5558,11 +5669,14 @@ export function SharedScanDetailView({
   const filteredCertFindings = certScoreSummary.findings.filter((finding) =>
     hasSupplementalDarkPatternFinding ? finding.id !== "asymmetric_consent_ui" : true
   );
+  const presentedCertScoreFindings = executiveAccessLimitationNotice ? [] : certScoreSummary.findings;
   const baseExecutiveFindings = selectTopFindings(filteredCertFindings, 5);
-  const topExecutiveFindings = selectTopFindings(
-    [...executiveSupplementalFindings, ...baseExecutiveFindings],
-    Math.min(6, 5 + executiveSupplementalFindings.length)
-  );
+  const topExecutiveFindings = executiveAccessLimitationNotice
+    ? [executiveAccessLimitationNotice.finding]
+    : selectTopFindings(
+        [...executiveSupplementalFindings, ...baseExecutiveFindings],
+        Math.min(6, 5 + executiveSupplementalFindings.length)
+      );
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -5608,6 +5722,20 @@ export function SharedScanDetailView({
         />
       ) : null}
       <ExecutiveSummaryCard
+        accessLimitationNotice={
+          executiveAccessLimitationNotice
+            ? {
+                coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
+                guidance: executiveAccessLimitationNotice.review.guidance,
+                headline: "Public site access was limited during this scan",
+                message: executiveAccessLimitationNotice.finding.shortSummary,
+                recommendationTitle: executiveAccessLimitationNotice.review.recommendationTitle,
+                reason: executiveAccessLimitationNotice.review.reason,
+                title: executiveAccessLimitationNotice.review.title,
+                whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
+              }
+            : null
+        }
         beforeConsentCookieCount={cookiesBeforeConsentCount}
         domainBenchmark={scanRecord.domainBenchmark}
         finalHost={certScoreSummary.finalHost}
@@ -5616,7 +5744,7 @@ export function SharedScanDetailView({
         fingerprintNarrative={certScoreSummary.fingerprintNarrative}
         landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
         lastScannedAt={certScoreSummary.lastScannedAt}
-        posture={certScoreSummary.posture}
+        posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
         preConsentVendorNames={certScoreSummary.preConsentVendorNames}
         requestedHost={certScoreSummary.requestedHost}
         resolvedVendorNames={certScoreSummary.resolvedVendorNames}
@@ -5630,7 +5758,7 @@ export function SharedScanDetailView({
         unresolvedVendorHosts={certScoreSummary.unresolvedVendorHosts}
         vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
       />
-      {certScoreSummary.findings.length > 0 ? (
+      {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">
           <div className="space-y-2.5">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Key risk signals</p>
@@ -5719,6 +5847,8 @@ export function SharedScanDetailView({
               title="Review sections unavailable"
               message={`The live scan loaded, but the structured review sections could not be prepared for this scan. ${reviewSectionError}`}
             />
+          ) : executiveAccessLimitationNotice ? (
+            <LimitedSurfaceReview review={executiveAccessLimitationNotice.review} />
           ) : unverifiedHomepageReview && !suppressLimitedSurfaceReview && !shouldPreferCanonicalReview ? (
             <LimitedSurfaceReview review={unverifiedHomepageReview} />
           ) : (

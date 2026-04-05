@@ -79,6 +79,17 @@ type RegulatoryLens = {
   findings: string[];
 };
 
+type ExecutiveAccessLimitationNotice = {
+  coverageLabel: string;
+  headline: string;
+  message: string;
+  recommendationTitle: string;
+  reason: string;
+  title: string;
+  whatThisMeans: string[];
+  guidance: string[];
+};
+
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
 }
@@ -99,6 +110,38 @@ function formatTopFindingHeadline(findings: CertScoreFinding[]) {
     return "No headline issue crossed the executive threshold for this scan.";
   }
   return labels.join(" • ");
+}
+
+function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/70 px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">Scan coverage</p>
+        <p className="mt-2 text-sm font-semibold text-amber-950">{input.notice.coverageLabel}</p>
+        <DetailDisclosure
+          summary="Exact block reason"
+          title="Retained access note"
+          items={[input.notice.message, input.notice.reason]}
+        />
+      </div>
+      <div className="rounded-[1.2rem] border border-amber-200 bg-white px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">What this means</p>
+        <DetailDisclosure
+          summary={`${input.notice.whatThisMeans.length} interpretation point${input.notice.whatThisMeans.length === 1 ? "" : "s"}`}
+          title="Interpretation guidance"
+          items={input.notice.whatThisMeans}
+        />
+      </div>
+      <div className="rounded-[1.2rem] border border-amber-200 bg-white px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">{input.notice.recommendationTitle}</p>
+        <DetailDisclosure
+          summary={`${input.notice.guidance.length} next step${input.notice.guidance.length === 1 ? "" : "s"}`}
+          title="Recommended follow-up"
+          items={input.notice.guidance}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
@@ -497,6 +540,15 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
+  if (input.finding.id === "access_limited_no_reliable_findings") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <path d="M12 3l7 3v5c0 4.5-2.8 7.8-7 10-4.2-2.2-7-5.5-7-10V6l7-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 12h6M12 9v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 24 24" className={`${common} text-slate-600`} aria-hidden="true">
       <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -549,6 +601,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 }
 
 export function ExecutiveSummaryCard(input: {
+  accessLimitationNotice?: ExecutiveAccessLimitationNotice | null;
   beforeConsentCookieCount: number;
   domainBenchmark: DomainBenchmarkCardData;
   finalHost: string | null;
@@ -596,7 +649,9 @@ export function ExecutiveSummaryCard(input: {
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
   ];
-  const executiveHeadline = formatTopFindingHeadline(primaryFindings);
+  const executiveHeadline = input.accessLimitationNotice
+    ? input.accessLimitationNotice.message
+    : formatTopFindingHeadline(primaryFindings);
   const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
@@ -624,37 +679,44 @@ export function ExecutiveSummaryCard(input: {
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Executive readout</p>
                 <h2 className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]">
-                  {getPostureHeadline(input.posture)}
+                  {input.accessLimitationNotice ? input.accessLimitationNotice.headline : getPostureHeadline(input.posture)}
                 </h2>
               </div>
               <div className="rounded-[1.2rem] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-700">
-                <span className="font-medium text-slate-950">Primary concerns:</span> {executiveHeadline}
+                <span className="font-medium text-slate-950">
+                  {input.accessLimitationNotice ? "Scan limitation:" : "Primary concerns:"}
+                </span>{" "}
+                {executiveHeadline}
               </div>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <BenchmarkMetricCard
-              label="Overall score"
-              actualValue={input.score}
-              benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
-              maxValue={100}
-            />
-            <BenchmarkMetricCard
-              label="Third-party requests"
-              actualValue={input.thirdPartyRequestCount}
-              benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
-            />
-            <BenchmarkMetricCard
-              label="Cookies before consent"
-              actualValue={input.beforeConsentCookieCount}
-              benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
-            />
-          </div>
+          {input.accessLimitationNotice ? null : (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <BenchmarkMetricCard
+                label="Overall score"
+                actualValue={input.score}
+                benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
+                maxValue={100}
+              />
+              <BenchmarkMetricCard
+                label="Third-party requests"
+                actualValue={input.thirdPartyRequestCount}
+                benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
+              />
+              <BenchmarkMetricCard
+                label="Cookies before consent"
+                actualValue={input.beforeConsentCookieCount}
+                benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
+              />
+            </div>
+          )}
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">Highest-priority issues</h2>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
+                  {input.accessLimitationNotice ? "Access limitation" : "Highest-priority issues"}
+                </h2>
               </div>
             </div>
           </div>
@@ -702,87 +764,101 @@ export function ExecutiveSummaryCard(input: {
         </div>
 
         <div className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
-            <p className="text-sm leading-6 text-slate-600">Quick context for vendor footprint, fingerprinting, and regulator-style review.</p>
-          </div>
-          <div className="space-y-3">
-            <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
-              <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
-              <DetailDisclosure
-                summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
-                title="Observed vendors and domains"
-                items={[...vendorEvidence, ...thirdPartyDomains]}
-              />
-            </div>
-            <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
-              <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
-              <DetailDisclosure
-                summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
-                title="Fingerprint evidence"
-                items={fingerprintEvidence}
-              />
-            </div>
-          </div>
-          {categorySummary ? (
-            <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
-              <p className="mt-2 text-sm text-slate-800">{categorySummary}</p>
-              <DetailDisclosure
-                summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
-                title="Category and entity detail"
-                items={[
-                  ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
-                  ...vendorMixDetails,
-                  ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
-                  ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
-                ]}
-              />
-            </div>
-          ) : null}
-          <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
-            <div className="mt-3 space-y-3">
-              {regulatoryLenses.map((lens) => (
-                <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
-                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                          {lens.ratingLabel}
-                        </span>
+          {input.accessLimitationNotice ? (
+            <>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan coverage</p>
+                <p className="text-sm leading-6 text-slate-600">
+                  This run was blocked before it established a trustworthy public browsing path, so normal privacy findings were not retained.
+                </p>
+              </div>
+              <AccessLimitationDetails notice={input.accessLimitationNotice} />
+            </>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
+                <p className="text-sm leading-6 text-slate-600">Quick context for vendor footprint, fingerprinting, and regulator-style review.</p>
+              </div>
+              <div className="space-y-3">
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
+                  <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
+                  <DetailDisclosure
+                    summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
+                    title="Observed vendors and domains"
+                    items={[...vendorEvidence, ...thirdPartyDomains]}
+                  />
+                </div>
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
+                  <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
+                  <DetailDisclosure
+                    summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
+                    title="Fingerprint evidence"
+                    items={fingerprintEvidence}
+                  />
+                </div>
+              </div>
+              {categorySummary ? (
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
+                  <p className="mt-2 text-sm text-slate-800">{categorySummary}</p>
+                  <DetailDisclosure
+                    summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
+                    title="Category and entity detail"
+                    items={[
+                      ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
+                      ...vendorMixDetails,
+                      ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
+                      ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
+                    ]}
+                  />
+                </div>
+              ) : null}
+              <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
+                <div className="mt-3 space-y-3">
+                  {regulatoryLenses.map((lens) => (
+                    <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
+                      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                              {lens.ratingLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
+                          <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                          <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
+                        </div>
+                      </summary>
+                      <div className="mt-3 border-t border-slate-200 pt-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {lens.findings.length > 0 ? (
+                            lens.findings.map((item) => (
+                              <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                                {item}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                              No top-level issue mapped here
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
-                      <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                      <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
-                    </div>
-                  </summary>
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {lens.findings.length > 0 ? (
-                        lens.findings.map((item) => (
-                          <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                            {item}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                          No top-level issue mapped here
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </section>
