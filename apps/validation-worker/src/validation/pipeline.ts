@@ -264,10 +264,75 @@ function isMetaSectionFinding(ruleKey: string | null) {
   }
 
   return (
+    ruleKey === "scan_report_review.low_confidence_critical_fields" ||
+    ruleKey === "section_review.low_confidence_critical_fields" ||
+    ruleKey === "section_review.low_extraction_confidence" ||
     ruleKey.startsWith("section_review.clarity_risk_") ||
     ruleKey.startsWith("section_review.confidence_") ||
     ruleKey === "section_review.rule_only_row_present"
   );
+}
+
+function isLowSignalPolicyNoiseFinding(ruleKey: string | null) {
+  if (!ruleKey) {
+    return false;
+  }
+
+  return (
+    ruleKey === "scan_report_review.low_confidence_critical_fields" ||
+    ruleKey === "section_review.low_confidence_critical_fields" ||
+    ruleKey === "section_review.low_extraction_confidence" ||
+    ruleKey === "policy_runtime.disclosure_likely_obstructed" ||
+    ruleKey === "cookie_runtime.cookie_policy_obstructed" ||
+    ruleKey.startsWith("section_review.clarity_risk_") ||
+    ruleKey.startsWith("section_review.confidence_") ||
+    ruleKey === "section_review.rule_only_row_present"
+  );
+}
+
+function isRuntimePrivacyFinding(ruleKey: string | null) {
+  return typeof ruleKey === "string" && ruleKey.startsWith("runtime_privacy.");
+}
+
+function collapseSingletonRuleFindings<T extends { pageUrl: string | null; ruleKey: string; severity: string }>(findings: T[]) {
+  const singletonRuleKeys = new Set<string>([
+    "section_review.no_retention_periods_noted",
+    "section_review.no_transfer_mechanism_noted",
+    "scan_report_review.low_confidence_critical_fields",
+    "section_review.low_confidence_critical_fields",
+    "section_review.low_extraction_confidence"
+  ]);
+  const collapsed = new Map<string, T>();
+
+  for (const finding of findings) {
+    if (!singletonRuleKeys.has(finding.ruleKey)) {
+      const uniqueKey = `${finding.ruleKey}::${finding.pageUrl ?? ""}::${collapsed.size}`;
+      collapsed.set(uniqueKey, finding);
+      continue;
+    }
+
+    const existing = collapsed.get(finding.ruleKey);
+    if (!existing) {
+      collapsed.set(finding.ruleKey, finding);
+      continue;
+    }
+
+    const existingWeight = severityWeight(existing.severity);
+    const candidateWeight = severityWeight(finding.severity);
+    if (candidateWeight > existingWeight) {
+      collapsed.set(finding.ruleKey, finding);
+      continue;
+    }
+
+    if (
+      candidateWeight === existingWeight &&
+      (existing.pageUrl === null || (finding.pageUrl !== null && finding.pageUrl.length < existing.pageUrl.length))
+    ) {
+      collapsed.set(finding.ruleKey, finding);
+    }
+  }
+
+  return [...collapsed.values()];
 }
 
 function isSupplementalSupportPolicyPage(input: { pageType: string | null; pageUrl: string | null }) {
@@ -2011,11 +2076,16 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     page_url: finding.pageUrl,
     rule_key: finding.ruleKey
   }), finding])).values()];
+  const collapsed = collapseSingletonRuleFindings(deduped);
+  const hasRuntimePrivacySignal = collapsed.some((finding) => isRuntimePrivacyFinding(finding.ruleKey));
 
-  const hasSubstantiveFinding = deduped.some((finding) => !isMetaSectionFinding(finding.ruleKey));
+  const withoutLowSignalNoise = hasRuntimePrivacySignal
+    ? collapsed.filter((finding) => !isLowSignalPolicyNoiseFinding(finding.ruleKey))
+    : collapsed;
+  const hasSubstantiveFinding = withoutLowSignalNoise.some((finding) => !isMetaSectionFinding(finding.ruleKey));
   const filtered = hasSubstantiveFinding
-    ? deduped.filter((finding) => !isMetaSectionFinding(finding.ruleKey))
-    : deduped;
+    ? withoutLowSignalNoise.filter((finding) => !isMetaSectionFinding(finding.ruleKey))
+    : withoutLowSignalNoise;
 
   return filtered
     .sort((left, right) => severityWeight(right.severity) - severityWeight(left.severity) || left.ruleKey.localeCompare(right.ruleKey))

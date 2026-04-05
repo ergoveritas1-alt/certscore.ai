@@ -2103,6 +2103,105 @@ test("rich terms semantics suppress rule-only and clarity-noise findings", () =>
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_78"), false);
 });
 
+test("cnn-style runtime findings suppress low-signal policy noise and collapse duplicate retention findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_actionable_flags: ["low_confidence"],
+          policy_dsar_mechanism: "unknown",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: [],
+          policy_ambiguity_score: 82,
+          policy_semantic_confidence: 0.42,
+          policy_snippet_count: 0,
+          policy_structurally_weak: true,
+          policy_summary_short: ""
+        },
+        {
+          id: "privacy-2",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy-center",
+          policy_actionable_flags: ["low_confidence"],
+          policy_dsar_mechanism: "unknown",
+          policy_retention_periods: [],
+          policy_transfer_mechanisms: [],
+          policy_ambiguity_score: 79,
+          policy_semantic_confidence: 0.41,
+          policy_snippet_count: 0,
+          policy_structurally_weak: true,
+          policy_summary_short: ""
+        },
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: ["low_confidence"],
+          policy_semantic_confidence: 0.39,
+          policy_ambiguity_score: 76,
+          policy_mentions: [],
+          policy_summary_short: "",
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [
+        {
+          id: "review-1",
+          policy_enrichment_id: "privacy-1",
+          reason: "low_confidence_critical_fields",
+          review_status: "pending"
+        },
+        {
+          id: "review-2",
+          policy_enrichment_id: "privacy-2",
+          reason: "low_confidence_critical_fields",
+          review_status: "pending"
+        }
+      ],
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true,
+            contentObstructed: true,
+            cookieWallDetected: false,
+            managePresent: true,
+            rejectPresent: false,
+            rejectRequiresMoreClicks: true,
+            surfaceType: "modal"
+          }
+        },
+        initial_cookie_names: ["_ga"]
+      } as Record<string, unknown>,
+      snapshot: {
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 2,
+        cookie_count_total: 2,
+        tracker_count_total: 2,
+        tracker_vendor_count: 1
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Analytics"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "runtime_privacy.consent_interface_obstructive"), true);
+  assert.equal(findings.some((finding) => finding.ruleKey === "runtime_privacy.preconsent_tracking_observed"), true);
+  assert.equal(findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "scan_report_review.low_confidence_critical_fields"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"), false);
+  assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_extraction_confidence"), false);
+  assert.equal(findings.filter((finding) => finding.ruleKey === "section_review.no_retention_periods_noted").length, 1);
+});
+
 test("promotes pre-consent runtime evidence into a runtime privacy finding", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
