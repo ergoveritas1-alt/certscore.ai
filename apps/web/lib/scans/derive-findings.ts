@@ -289,6 +289,10 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     hasOwnRecordValue(networkSummary, "preConsentRequestCount") ||
     hasOwnRecordValue(networkSummary, "preConsentThirdPartyRequestCount") ||
     hasOwnRecordValue(consentSummary, "requestsBeforeAnyConsentAction");
+  const persistedPreConsentViolationCount =
+    getNumber(
+      scanRecord.runtimeArtifacts?.consent_preconsent_violation_count ?? scanRecord.runtimeArtifacts?.consentPreconsentViolationCount
+    ) ?? 0;
   const requestCount = getNumber(networkSummary?.totalRequestCount) ?? 0;
   const thirdPartyDomainCount = getNumber(networkSummary?.thirdPartyDomainCount) ?? rawThirdPartyDomains.length;
   const thirdPartyRequestCount = getNumber(networkSummary?.thirdPartyRequestCount) ?? 0;
@@ -410,15 +414,27 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const snapshotThirdPartyCookieBeforeConsent = scanRecord.snapshot?.third_party_cookie_set_before_consent === true;
   const explicitPreConsentVendorCount = getNumber(vendorSummary?.preConsentVendorCount) ?? 0;
   const effectivePreConsentVendorCount = Math.max(explicitPreConsentVendorCount, preConsentVendorNames.length);
+  const corroboratedPreConsentVendorCount =
+    preConsentVendorNames.length > 0 ? Math.max(explicitPreConsentVendorCount, preConsentVendorNames.length) : 0;
+  const hasCorroboratedPreConsentRuntimeEvidence =
+    preConsentRequestCount > 0 ||
+    preConsentThirdPartyRequestCount > 0 ||
+    requestsBeforeAnyConsentAction === true ||
+    preConsentVendorNames.length > 0 ||
+    persistedPreConsentViolationCount > 0;
+  const shouldTrustExplicitPreConsentRuntimeNo =
+    hasExplicitPreConsentRuntimeEvidence && !hasCorroboratedPreConsentRuntimeEvidence;
   const snapshotPreConsentFallbackCount =
-    !hasExplicitPreConsentRuntimeEvidence && snapshotPreconsentTracking
+    !shouldTrustExplicitPreConsentRuntimeNo && snapshotPreconsentTracking
       ? effectivePreConsentVendorCount > 0
         ? effectivePreConsentVendorCount
         : 1
       : 0;
   const effectivePreConsentThirdPartyRequestCount = Math.max(
     preConsentThirdPartyRequestCount,
-    snapshotPreconsentTracking && !hasExplicitPreConsentRuntimeEvidence ? effectivePreConsentVendorCount : 0
+    corroboratedPreConsentVendorCount,
+    persistedPreConsentViolationCount,
+    snapshotPreconsentTracking && !shouldTrustExplicitPreConsentRuntimeNo ? effectivePreConsentVendorCount : 0
   );
   const effectivePreConsentRequestCount = Math.max(
     preConsentRequestCount,

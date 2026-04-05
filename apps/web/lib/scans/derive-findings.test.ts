@@ -456,6 +456,44 @@ test("does not use snapshot pre-consent fallback when runtime timing explicitly 
   assert.equal(ids.includes("analytics_cookie_pre_consent"), false);
 });
 
+test("uses corroborating pre-consent vendor evidence even when aggregate timing counters are zero", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      consent_preconsent_violation_count: 1,
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          totalRequestCount: 249,
+          thirdPartyRequestCount: 143,
+          preConsentRequestCount: 0,
+          preConsentThirdPartyRequestCount: 0
+        },
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: true,
+          requestsBeforeAnyConsentAction: false
+        },
+        requestToVendorObservations: [
+          { vendor: "Google Tag Manager", hostname: "www.googletagmanager.com", preConsent: true, category: "cdn_infra" },
+          { vendor: "Hotjar", hostname: "script.hotjar.com", preConsent: true, category: "session_replay" }
+        ]
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true
+    },
+    scan: {
+      completedAt: "2026-04-05T23:15:03.000Z",
+      createdAt: "2026-04-05T23:14:15.000Z",
+      domainHostname: "hubspot.com"
+    }
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.equal(ids.includes("pre_consent_tracking_detected"), true);
+  assert.equal(ids.includes("third_party_tracking_pre_consent"), true);
+});
+
 test("does not overcall overlay, device data, or redirect chain on benign paypal-style runtime evidence", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {
