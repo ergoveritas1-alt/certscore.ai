@@ -95,7 +95,11 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     hostname: "alz.org",
     label: "alz",
     maxValidationMs: 20_000,
-    expectedFindings: [{ ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }]
+    expectedFindings: [
+      { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
+      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
+      { ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }
+    ]
   },
   {
     hostname: "kurier.at",
