@@ -3053,6 +3053,37 @@ test("category-based cookie disclosure with settings and consent language suppre
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
 });
 
+test("semantic cookie-policy topics without parsed rows suppress disclosure gap", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://mailchimp.com/legal/cookies",
+          policy_actionable_flags: ["blocked_homepage_direct_policy_page", "vague_retention"],
+          policy_semantic_confidence: 0.66,
+          policy_mentions: [
+            { topic: "cookie_tracking_technologies_disclosure", confidence: 0.82 },
+            { topic: "cookie_third_party_advertising_disclosure", confidence: 0.82 },
+            { topic: "cookie_data_retention", confidence: 0.82 }
+          ],
+          policy_summary_short: "Mailchimp's Cookie Statement",
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["ak_bmsc", "bm_sz", "_mcid"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
+});
+
 test("primary privacy policy prose retention disclosure suppresses retention finding", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

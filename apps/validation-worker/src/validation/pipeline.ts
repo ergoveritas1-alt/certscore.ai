@@ -723,6 +723,7 @@ function hasMatchingDocumentSourceRetentionCue(input: {
 function hasStrongCookieCategoryDisclosure(input: {
   disclosures: Array<Record<string, unknown>>;
   flags: string[];
+  mentionTopics?: string[];
   summaryShort: unknown;
 }) {
   if (input.disclosures.length > 0) {
@@ -734,11 +735,25 @@ function hasStrongCookieCategoryDisclosure(input: {
   }
 
   if (typeof input.summaryShort !== "string") {
-    return false;
+    return Array.isArray(input.mentionTopics)
+      ? input.mentionTopics.some((topic) =>
+          /cookie_(tracking_technologies_disclosure|third_party_advertising_disclosure|data_retention)|third_party_advertising_disclosure|tracking_technologies_disclosure/i.test(
+            topic
+          )
+        )
+      : false;
   }
 
-  return /cookie preferences|cookie settings|required cookies|functional cookies|advertising cookies|targeting cookies|measurement\/performance|prior consent|manage(?: your)? cookie/i.test(
-    input.summaryShort
+  return (
+    /cookie preferences|cookie settings|required cookies|functional cookies|advertising cookies|targeting cookies|measurement\/performance|prior consent|manage(?: your)? cookie/i.test(
+      input.summaryShort
+    ) ||
+    (Array.isArray(input.mentionTopics) &&
+      input.mentionTopics.some((topic) =>
+        /cookie_(tracking_technologies_disclosure|third_party_advertising_disclosure|data_retention)|third_party_advertising_disclosure|tracking_technologies_disclosure/i.test(
+          topic
+        )
+      ))
   );
 }
 
@@ -1319,7 +1334,11 @@ function deriveCookieRuntimeFindings(input: {
     );
   }
 
-  if (!structurallyWeak && unmatched.length > 0 && !hasStrongCookieCategoryDisclosure({ disclosures, flags, summaryShort })) {
+  if (
+    !structurallyWeak &&
+    unmatched.length > 0 &&
+    !hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort })
+  ) {
     const unmatchedThirdPartyCount = unmatchedObservations.filter((row) => row.thirdParty).length;
     const severity: "high" | "medium" = unmatchedThirdPartyCount > 0 || unmatched.length > 1 ? "high" : "medium";
     findings.push(
@@ -1336,7 +1355,12 @@ function deriveCookieRuntimeFindings(input: {
             purpose: row.purpose,
             snippetHash: row.snippetHash
           })),
-          policy_category_disclosure_present: hasStrongCookieCategoryDisclosure({ disclosures, flags, summaryShort }),
+          policy_category_disclosure_present: hasStrongCookieCategoryDisclosure({
+            disclosures,
+            flags,
+            mentionTopics,
+            summaryShort
+          }),
           matching_methods: matched.map((row) => ({
             cookieName: row.cookieName,
             matchedCookieName: row.disclosure.cookieName,
