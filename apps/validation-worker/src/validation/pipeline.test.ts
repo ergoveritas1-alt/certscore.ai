@@ -2988,6 +2988,85 @@ test("rich category-based cookie semantics without parsed rows do not trigger a 
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });
 
+test("category-based cookie disclosure with settings and consent language suppresses disclosure gap", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.9,
+          policy_summary_short:
+            "Cookie Preferences explain required cookies, functional cookies, advertising cookies, and that prior consent is required for non-essential cookies.",
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["_ga", "_fbp"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
+});
+
+test("primary privacy policy prose retention disclosure suppresses retention finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_retention_periods: [],
+          policy_summary_short:
+            "How long do we keep your Personal Data? We may retain your Personal Data for a period of time consistent with the original purpose of collection and legal obligations, after which it will be deleted."
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {} as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+});
+
+test("matched ready privacy document source retention cue suppresses retention finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      documentSources: [
+        {
+          canonical_url: "https://www.example.com/privacy",
+          document_text:
+            "How long do we keep your Personal Data? We may retain your Personal Data for a period of time consistent with the original purpose of collection or as long as required to fulfill legal obligations.",
+          document_type: "privacy_policy",
+          extraction_status: "insufficient",
+          source_status: "ready"
+        }
+      ],
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy",
+          policy_retention_periods: [],
+          policy_summary_short: "Privacy statement describes collection, use, rights, and sharing."
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {} as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+});
+
 test("duplicate runtime cookies and prefix overlaps do not create duplicate cookie disclosure findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

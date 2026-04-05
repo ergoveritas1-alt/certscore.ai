@@ -87,3 +87,41 @@ test("mergeNanoPolicyInputsWithFallback keeps document-backed rows and falls bac
   assert.equal(rows.find((row) => row.page_type === "privacy_policy")?.policy_summary_short, "Document privacy row.");
   assert.equal(rows.find((row) => row.page_type === "terms_of_service")?.policy_summary_short, "Fallback terms row.");
 });
+
+test("mergeNanoPolicyInputsWithFallback keeps stronger fallback privacy rows over weak document-backed privacy rows", () => {
+  const rows = mergeNanoPolicyInputsWithFallback({
+    documentSources: [
+      {
+        canonical_url: "https://www.example.com/gdpr",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          policy_summary_short: "GDPR capabilities overview.",
+          policy_semantic_confidence: 0.55,
+          policy_structurally_weak: true
+        },
+        extraction_status: "ready",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ],
+    fallbackRows: [
+      {
+        id: "policy-privacy",
+        page_type: "privacy_policy",
+        policy_field_coverage: {
+          retention: {
+            found: true
+          }
+        },
+        policy_retention_disclosure: "vague",
+        policy_rights_signals: ["access_request"],
+        policy_semantic_confidence: 0.72,
+        policy_structurally_weak: false,
+        policy_summary_short: "Primary privacy statement explains rights, cookies, and retention."
+      }
+    ]
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.policy_summary_short, "Primary privacy statement explains rights, cookies, and retention.");
+});

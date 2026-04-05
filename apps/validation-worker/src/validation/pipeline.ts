@@ -566,7 +566,7 @@ function buildDomainPolicyCoverageSummary(policySemanticRows: Array<Record<strin
         : null;
     const summaryShort = enrichment.policy_summary_short ?? null;
 
-    if (retentionPeriods.length > 0) {
+    if (hasRetentionDisclosureEvidence({ enrichment, retentionPeriods, summaryShort })) {
       hasRetentionDisclosure = true;
     }
 
@@ -604,6 +604,103 @@ function buildDomainPolicyCoverageSummary(policySemanticRows: Array<Record<strin
     hasRightsDisclosure,
     hasTransferDisclosure
   };
+}
+
+function stringIncludesRetentionCue(value: unknown) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return /retention|how long do we keep|retain(?:ed)? .* personal data|retain(?:ed)? .* personal information|deleted after|deleted within|as long as reasonably necessary/i.test(
+    value
+  );
+}
+
+function hasRetentionDisclosureEvidence(input: {
+  enrichment: Record<string, unknown>;
+  retentionPeriods: unknown[];
+  summaryShort: unknown;
+}) {
+  if (Array.isArray(input.retentionPeriods) && input.retentionPeriods.length > 0) {
+    return true;
+  }
+
+  if (stringIncludesRetentionCue(input.summaryShort)) {
+    return true;
+  }
+
+  const retentionDisclosure =
+    getString(input.enrichment.policy_retention_disclosure) ?? getString(input.enrichment.policyRetentionDisclosure);
+  if (retentionDisclosure && retentionDisclosure !== "absent" && retentionDisclosure !== "unknown") {
+    return true;
+  }
+
+  const fieldCoverage = getRecord(input.enrichment.policy_field_coverage) ?? getRecord(input.enrichment.policyFieldCoverage);
+  const retentionCoverage = getRecord(fieldCoverage?.retention);
+  return retentionCoverage?.found === true;
+}
+
+function hasMatchingDocumentSourceRetentionCue(input: {
+  documentSources: Array<Record<string, unknown>>;
+  pageType: string | null;
+  pageUrl: string | null;
+}) {
+  if (input.pageType !== "privacy_policy") {
+    return false;
+  }
+
+  const normalizedPageUrl = getString(input.pageUrl);
+  const matchingRows = input.documentSources.filter((row) => {
+    const documentType = getString(row.document_type) ?? getString(row.documentType);
+    const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus) ?? "ready";
+    const documentText = getString(row.document_text) ?? getString(row.documentText);
+
+    if (documentType !== "privacy_policy" || sourceStatus !== "ready" || !documentText) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const exactMatch = matchingRows.find((row) => {
+    const canonicalUrl =
+      getString(row.canonical_url) ?? getString(row.canonicalUrl) ?? getString(row.source_url) ?? getString(row.sourceUrl);
+    return normalizedPageUrl && canonicalUrl === normalizedPageUrl;
+  });
+
+  if (exactMatch) {
+    const documentText = getString(exactMatch.document_text) ?? getString(exactMatch.documentText);
+    if (hasRetentionInferenceCue(documentText)) {
+      return true;
+    }
+  }
+
+  const bestFallback = [...matchingRows]
+    .sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0];
+  const fallbackText = getString(bestFallback?.document_text) ?? getString(bestFallback?.documentText);
+  return hasRetentionInferenceCue(fallbackText);
+}
+
+function hasStrongCookieCategoryDisclosure(input: {
+  disclosures: Array<Record<string, unknown>>;
+  flags: string[];
+  summaryShort: unknown;
+}) {
+  if (input.disclosures.length > 0) {
+    return true;
+  }
+
+  if (input.flags.includes("low_confidence")) {
+    return false;
+  }
+
+  if (typeof input.summaryShort !== "string") {
+    return false;
+  }
+
+  return /cookie preferences|cookie settings|required cookies|functional cookies|advertising cookies|targeting cookies|measurement\/performance|prior consent|manage(?: your)? cookie/i.test(
+    input.summaryShort
+  );
 }
 
 function buildPolicyRuntimeFinding(input: {
@@ -1183,7 +1280,7 @@ function deriveCookieRuntimeFindings(input: {
     );
   }
 
-  if (!structurallyWeak && disclosures.length > 0 && unmatched.length > 0) {
+  if (!structurallyWeak && unmatched.length > 0 && !hasStrongCookieCategoryDisclosure({ disclosures, flags, summaryShort })) {
     const unmatchedThirdPartyCount = unmatchedObservations.filter((row) => row.thirdParty).length;
     const severity: "high" | "medium" = unmatchedThirdPartyCount > 0 || unmatched.length > 1 ? "high" : "medium";
     findings.push(
@@ -1200,6 +1297,7 @@ function deriveCookieRuntimeFindings(input: {
             purpose: row.purpose,
             snippetHash: row.snippetHash
           })),
+          policy_category_disclosure_present: hasStrongCookieCategoryDisclosure({ disclosures, flags, summaryShort }),
           matching_methods: matched.map((row) => ({
             cookieName: row.cookieName,
             matchedCookieName: row.disclosure.cookieName,
@@ -1469,6 +1567,7 @@ function buildSectionIssueFinding(input: {
 }
 
 function derivePolicySectionFindings(input: {
+  documentSources: Array<Record<string, unknown>>;
   policySemanticRows: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown> | null;
@@ -1547,6 +1646,11 @@ function derivePolicySectionFindings(input: {
     });
     const typeLabel = pageTypeLabel(pageType);
     const isSupplementalSupportPage = isSupplementalSupportPolicyPage({
+      pageType,
+      pageUrl
+    });
+    const matchedDocumentSourceHasRetentionCue = hasMatchingDocumentSourceRetentionCue({
+      documentSources: input.documentSources,
       pageType,
       pageUrl
     });
@@ -1808,7 +1912,8 @@ function derivePolicySectionFindings(input: {
 
     if (
       pageType === "privacy_policy" &&
-      retentionPeriods.length === 0 &&
+      !hasRetentionDisclosureEvidence({ enrichment, retentionPeriods, summaryShort }) &&
+      !matchedDocumentSourceHasRetentionCue &&
       !domainPolicyCoverage.hasRetentionDisclosure &&
       !isSupplementalSupportPage
     ) {
@@ -1818,6 +1923,7 @@ function derivePolicySectionFindings(input: {
           evidence: {
             ...baseEvidence,
             domain_policy_coverage: domainPolicyCoverage,
+            matched_document_source_retention_cue: matchedDocumentSourceHasRetentionCue,
             policy_retention_periods: retentionPeriods
           },
           pageType,
@@ -2074,6 +2180,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       runtimeArtifacts: input.runtimeArtifacts
     }),
     ...derivePolicySectionFindings({
+      documentSources: input.documentSources ?? [],
       policySemanticRows,
       policyReviewQueue: input.policyReviewQueue,
       snapshot: input.snapshot

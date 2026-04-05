@@ -153,12 +153,14 @@ function inferChildrenReference(documentText: string | null, parsedValue: string
 
 export function hasRetentionInferenceCue(documentText: string | null) {
   const text = documentText ?? "";
-  return /retain|retention|deleted within|stored for approximately|as long as reasonably necessary/i.test(text);
+  return /how long do we keep|retain(?:ed)?\s+your\s+personal\s+data|retain(?:ed)?\s+your\s+personal\s+information|retention|deleted within|stored for approximately|as long as reasonably necessary/i.test(
+    text
+  );
 }
 
 function collectRetentionInferenceWindows(normalizedText: string) {
   const cuePattern =
-    /how\s+is\s+your\s+personal\s+information\s+retained|retention period varies based on|retain your personal information|retention|deleted within|stored for approximately|as long as reasonably necessary/gi;
+    /how\s+long\s+do\s+we\s+keep\s+your\s+personal\s+data|how\s+is\s+your\s+personal\s+information\s+retained|retention period varies based on|retain(?:ed)?\s+your\s+personal\s+(?:information|data)|retention|deleted within|stored for approximately|as long as reasonably necessary/gi;
   const windows: string[] = [];
   const spans: Array<{ start: number; end: number }> = [];
 
@@ -218,6 +220,13 @@ function inferRetentionPeriods(documentText: string | null, parsedPeriods: unkno
     inferred.push({
       basis: "criteria_based",
       summary: "Retained as long as reasonably necessary for disclosed purposes or legal requirements."
+    });
+  }
+
+  if (/we may retain your personal data for a period of time consistent with the original purpose of collection/.test(lower)) {
+    inferred.push({
+      basis: "criteria_based",
+      summary: "Retention period is based on the original purpose of collection and legal or regulatory obligations."
     });
   }
 

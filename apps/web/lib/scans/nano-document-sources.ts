@@ -38,6 +38,59 @@ function getPolicyInputPageType(row: Record<string, unknown>) {
   return getString(row.page_type) ?? getString(row.pageType) ?? getString(row.source_document_type);
 }
 
+function getPolicyInputStrengthScore(row: Record<string, unknown>) {
+  const pageType = getPolicyInputPageType(row);
+  const summary = getString(row.policy_summary_short) ?? getString(row.policySummaryShort) ?? "";
+  const semanticConfidence =
+    getNumber(row.policy_semantic_confidence) ??
+    getNumber(row.policySemanticConfidence) ??
+    0;
+  const ambiguity =
+    getNumber(row.policy_ambiguity_score) ??
+    getNumber(row.policyAmbiguityScore) ??
+    100;
+  const rightsSignals = getStringArray(row.policy_rights_signals ?? row.policyRightsSignals);
+  const mentions = Array.isArray(row.policy_mentions)
+    ? row.policy_mentions
+    : Array.isArray(row.policyMentions)
+      ? row.policyMentions
+      : [];
+  const contactChannel =
+    getString(row.privacy_contact_channel_type) ?? getString(row.privacyContactChannelType) ?? "none";
+  const structurallyWeak = row.policy_structurally_weak === true || row.policyStructurallyWeak === true;
+  const retentionPeriods = Array.isArray(row.policy_retention_periods) ? row.policy_retention_periods : [];
+  const retentionDisclosure =
+    getString(row.policy_retention_disclosure) ?? getString(row.policyRetentionDisclosure);
+  const fieldCoverage = getRecord(row.policy_field_coverage) ?? getRecord(row.policyFieldCoverage);
+  const retentionCoverage = getRecord(fieldCoverage?.retention);
+
+  let score = semanticConfidence * 100 - ambiguity;
+
+  if (rightsSignals.length > 0) {
+    score += 20;
+  }
+  if (mentions.length > 0) {
+    score += 10;
+  }
+  if (contactChannel !== "none" && contactChannel !== "unknown") {
+    score += 10;
+  }
+  if (summary.length > 0) {
+    score += 5;
+  }
+  if (retentionPeriods.length > 0 || retentionCoverage?.found === true || (retentionDisclosure && retentionDisclosure !== "absent" && retentionDisclosure !== "unknown")) {
+    score += 20;
+  }
+  if (pageType === "privacy_policy" && /privacy|personal data|personal information|retention|rights|cookies?/i.test(summary)) {
+    score += 10;
+  }
+  if (structurallyWeak) {
+    score -= 30;
+  }
+
+  return score;
+}
+
 export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   function hasSemanticPayload(extracted: Record<string, unknown>) {
     return [
@@ -102,22 +155,23 @@ export function mergeNanoPolicyInputsWithFallback(input: {
   fallbackRows: Array<Record<string, unknown>>;
 }) {
   const documentRows = buildNanoPolicyInputsFromDocumentSources(input.documentSources);
-  const coveredPageTypes = new Set(
-    documentRows
-      .map((row) => getPolicyInputPageType(row))
-      .filter((value): value is string => typeof value === "string")
-  );
+  const strongestByPageType = new Map<string, Record<string, unknown>>();
+  const passthroughRows: Array<Record<string, unknown>> = [];
 
-  const fallbackRows = input.fallbackRows.filter((row) => {
+  for (const row of [...documentRows, ...input.fallbackRows]) {
     const pageType = getPolicyInputPageType(row);
     if (!pageType) {
-      return true;
+      passthroughRows.push(row);
+      continue;
     }
 
-    return !coveredPageTypes.has(pageType);
-  });
+    const existing = strongestByPageType.get(pageType);
+    if (!existing || getPolicyInputStrengthScore(row) > getPolicyInputStrengthScore(existing)) {
+      strongestByPageType.set(pageType, row);
+    }
+  }
 
-  return [...documentRows, ...fallbackRows];
+  return [...strongestByPageType.values(), ...passthroughRows];
 }
 
 export function shouldPreferNanoDocumentSources(documentSources: Array<Record<string, unknown>>) {

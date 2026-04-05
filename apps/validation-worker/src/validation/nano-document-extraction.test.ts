@@ -186,3 +186,32 @@ test("normalizeNanoDocumentExtraction scopes retention periods to retention sect
   assert.equal(periodStrings.includes("3 years"), true);
   assert.equal(periodStrings.includes("30 days"), true);
 });
+
+test("normalizeNanoDocumentExtraction infers retention disclosure from 'how long do we keep' prose", () => {
+  const result = normalizeNanoDocumentExtraction({
+    documentText:
+      "How long do we keep your Personal Data? We may retain your Personal Data for a period of time consistent with the original purpose of collection or as long as required to fulfill our legal and regulatory obligations. After expiry of the applicable retention periods, your Personal Data will be deleted.",
+    parsed: {},
+    row: {
+      canonical_url: "https://example.com/privacy",
+      document_type: "privacy_policy",
+      title: "Privacy Statement"
+    }
+  });
+
+  const retention = Array.isArray(result.extractedFields.policy_retention_periods)
+    ? result.extractedFields.policy_retention_periods
+    : [];
+
+  assert.equal(retention.length > 0, true);
+  assert.equal(
+    retention.some(
+      (entry) =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        (entry as Record<string, unknown>).basis === "criteria_based"
+    ),
+    true
+  );
+});
