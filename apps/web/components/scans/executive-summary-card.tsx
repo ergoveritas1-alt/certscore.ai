@@ -100,15 +100,28 @@ function formatTopFindingHeadline(findings: CertScoreFinding[]) {
   return labels.join(" • ");
 }
 
-function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
+export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
   beforeConsentCookieCount: number;
   thirdPartyRequestCount: number;
 }) {
   const findingIds = new Set(findings.map((finding) => finding.id));
-  const trackingFinding = findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
+  const trackingFinding =
+    findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
+    findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
-  const consentFinding = findings.find((finding) => finding.id === "asymmetric_consent_ui");
+  const consentFinding =
+    findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
+    findings.find((finding) => finding.id === "asymmetric_consent_ui") ??
+    findings.find((finding) => finding.id === "reject_option_missing_or_hidden") ??
+    findings.find((finding) => finding.id === "forced_consent_interaction");
   const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
+  const hasTrackingConcern =
+    findingIds.has("pre_consent_tracking_detected") || findingIds.has("third_party_tracking_pre_consent");
+  const hasConsentConcern =
+    findingIds.has("consent_dark_patterns_detected") ||
+    findingIds.has("asymmetric_consent_ui") ||
+    findingIds.has("reject_option_missing_or_hidden") ||
+    findingIds.has("forced_consent_interaction");
 
   const privacyTrackingNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
@@ -132,22 +145,22 @@ function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
 
   const gdprScore = clampScore(
     84 -
-      (findingIds.has("third_party_tracking_pre_consent") ? 32 : 0) -
+      (hasTrackingConcern ? 32 : 0) -
       (counts.beforeConsentCookieCount > 0 ? 14 : 0) -
-      (findingIds.has("asymmetric_consent_ui") ? 16 : 0) -
+      (hasConsentConcern ? 16 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
   const cpraScore = clampScore(
     82 -
-      (findingIds.has("third_party_tracking_pre_consent") ? 24 : 0) -
+      (hasTrackingConcern ? 24 : 0) -
       (counts.beforeConsentCookieCount > 0 ? 12 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0) -
       (findingIds.has("policy_clarity_risk") ? 8 : 0)
   );
   const ftcScore = clampScore(
     80 -
-      (findingIds.has("asymmetric_consent_ui") ? 24 : 0) -
-      (findingIds.has("third_party_tracking_pre_consent") ? 18 : 0) -
+      (hasConsentConcern ? 24 : 0) -
+      (hasTrackingConcern ? 18 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
@@ -172,7 +185,7 @@ function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       findings: privacyTrackingNotes,
       ratingLabel: gdprTone.label,
       score: gdprScore,
-      summary: trackingFinding ? "Consent and pre-consent tracking risk is the main issue." : "No major consent-triggering issue surfaced in the top findings.",
+      summary: hasTrackingConcern ? "Consent and pre-consent tracking risk is the main issue." : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprTone.toneClass
     },
     {
@@ -181,7 +194,7 @@ function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       findings: cpraNotes,
       ratingLabel: cpraTone.label,
       score: cpraScore,
-      summary: replayFinding || trackingFinding ? "Third-party collection and disclosure posture drives this score." : "No strong sale/share-style signal surfaced in the top findings.",
+      summary: replayFinding || hasTrackingConcern ? "Third-party collection and disclosure posture drives this score." : "No strong sale/share-style signal surfaced in the top findings.",
       toneClass: cpraTone.toneClass
     },
     {
@@ -190,7 +203,7 @@ function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       findings: ftcNotes,
       ratingLabel: ftcTone.label,
       score: ftcScore,
-      summary: consentFinding ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
+      summary: hasConsentConcern ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
   ] satisfies RegulatoryLens[];
