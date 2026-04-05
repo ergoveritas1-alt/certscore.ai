@@ -160,10 +160,36 @@ function isMissingOptionalTableError(error: { code?: string | null; message?: st
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
 }
 
-function prepareScanDocumentSourceRows(rows: Array<Record<string, unknown>>, scanId: string) {
+function isRecoverableOptionalLoadError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  return isMissingOptionalTableError(error) || message.includes("TypeError: fetch failed");
+}
+
+export function sanitizeJsonPersistenceValue<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(
+      /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+      "\uFFFD"
+    ) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeJsonPersistenceValue(entry)) as T;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, sanitizeJsonPersistenceValue(entry)])
+    ) as T;
+  }
+
+  return value;
+}
+
+export function prepareScanDocumentSourceRows(rows: Array<Record<string, unknown>>, scanId: string) {
   const now = new Date().toISOString();
   return rows.map((row) => ({
-    ...row,
+    ...sanitizeJsonPersistenceValue(row),
     created_at: typeof row.created_at === "string" ? row.created_at : now,
     id: typeof row.id === "string" && row.id.length > 0 ? row.id : randomUUID(),
     scan_id: scanId,
@@ -870,7 +896,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   if (policyReviewQueueError) {
     throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
   }
-  if (preconsentError) {
+  if (preconsentError && !isRecoverableOptionalLoadError(preconsentError)) {
     throw new Error(`Failed to load pre-consent violations ${scanId}: ${preconsentError.message}`);
   }
   if (signalHitsError && !isMissingOptionalTableError(signalHitsError)) {
@@ -947,7 +973,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     policySemanticInputs,
     policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
     preferDocumentSources,
-    preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    preconsentViolations: (preconsentError ? [] : preconsentViolations ?? []) as Array<Record<string, unknown>>,
     rawPolicyEnrichmentRows: fallbackPolicyRows,
     runtimeArtifacts: runtimeArtifactsRecord,
     scan: (scan as Record<string, unknown> | null) ?? null,
@@ -1740,9 +1766,9 @@ export async function updateScanDocumentSourceExtractions(input: {
     const { error } = await supabase
       .from("scan_document_sources")
       .update({
-        extracted_fields_json: row.extractedFields,
+        extracted_fields_json: sanitizeJsonPersistenceValue(row.extractedFields),
         extraction_status: row.extractionStatus,
-        metadata_json: row.metadata ?? {},
+        metadata_json: sanitizeJsonPersistenceValue(row.metadata ?? {}),
         semantic_confidence: row.semanticConfidence,
         updated_at: new Date().toISOString()
       })

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractFallbackFinancialEvidenceFromRuntimeArtifacts } from "./repository";
+import {
+  extractFallbackFinancialEvidenceFromRuntimeArtifacts,
+  prepareScanDocumentSourceRows,
+  sanitizeJsonPersistenceValue
+} from "./repository";
 
 test("extractFallbackFinancialEvidenceFromRuntimeArtifacts returns embedded financial evidence", () => {
   const result = extractFallbackFinancialEvidenceFromRuntimeArtifacts({
@@ -48,4 +52,39 @@ test("extractFallbackFinancialEvidenceFromRuntimeArtifacts returns empty arrays 
     pageEvidence: [],
     signalHits: []
   });
+});
+
+test("sanitizeJsonPersistenceValue repairs lone surrogates recursively", () => {
+  const sanitized = sanitizeJsonPersistenceValue({
+    content: "\u0000\uD800",
+    nested: {
+      items: ["ok", "\u0000\uD800"]
+    }
+  });
+
+  assert.deepEqual(sanitized, {
+    content: "\uFFFD\uFFFD",
+    nested: {
+      items: ["ok", "\uFFFD\uFFFD"]
+    }
+  });
+});
+
+test("prepareScanDocumentSourceRows sanitizes persisted document source payloads", () => {
+  const [row] = prepareScanDocumentSourceRows(
+    [
+      {
+        canonical_url: "https://example.com/privacy",
+        content_markdown: "\u0000\uD800",
+        metadata_json: {
+          excerpt: "\u0000\uD800"
+        },
+        source: "nano_doc_retrieval"
+      }
+    ],
+    "scan-1"
+  ) as Array<Record<string, unknown>>;
+
+  assert.equal(row?.content_markdown, "\uFFFD\uFFFD");
+  assert.deepEqual(row?.metadata_json, { excerpt: "\uFFFD\uFFFD" });
 });
