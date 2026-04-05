@@ -812,6 +812,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     { data: pages, error: pagesError },
     { data: policyEnrichments, error: policyEnrichmentError },
     { data: documentSources, error: documentSourcesError },
+    { data: macroEnrichment, error: macroEnrichmentError },
     { data: policyReviewQueue, error: policyReviewQueueError },
     { data: preconsentViolations, error: preconsentError },
     { data: signalHits, error: signalHitsError },
@@ -845,6 +846,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       .select("*")
       .eq("scan_id", scanId),
     supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    supabase.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
     supabase
       .from("policy_review_queue")
       .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
@@ -892,6 +894,9 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   }
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
+  }
+  if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
+    throw new Error(`Failed to load scan macro enrichment ${scanId}: ${macroEnrichmentError.message}`);
   }
   if (policyReviewQueueError) {
     throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
@@ -968,6 +973,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
     pages: (pages ?? []) as Array<Record<string, unknown>>,
+    macroEnrichment: (macroEnrichmentError ? null : (macroEnrichment as Record<string, unknown> | null)) ?? null,
     policyEnrichments: fallbackPolicyRows,
     policySemanticRows: policySemanticInputs,
     policySemanticInputs,

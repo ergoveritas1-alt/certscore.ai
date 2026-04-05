@@ -92,6 +92,10 @@ export type ScanRuntimeArtifactRecord = {
   [key: string]: unknown;
 } | null;
 
+export type ScanMacroEnrichmentRecord = {
+  [key: string]: unknown;
+} | null;
+
 export type RelatedPreviewSnapshotRecord = {
   [key: string]: unknown;
 } | null;
@@ -196,6 +200,11 @@ type ScanEventRow = {
   message: string;
   metadata_json: unknown;
 };
+
+function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
 
 async function resolveDomainBenchmarkEstimate(input: {
   currentEvents: ScanEventRecord[];
@@ -666,6 +675,7 @@ async function loadScanDetailRecord(input: {
     { data: policyEnrichment },
     { data: policyReviewQueue },
     { data: documentSources },
+    { data: macroEnrichment, error: macroEnrichmentError },
     { data: previousScan },
     { data: validationRun }
   ] = await Promise.all([
@@ -733,6 +743,11 @@ async function loadScanDetailRecord(input: {
       .select("source_status, extraction_status, metadata_json")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("scan_macro_enrichments")
+      .select("*")
+      .eq("scan_id", input.scanId)
+      .maybeSingle(),
     previousScanPromise,
     supabase
       .from("validation_runs")
@@ -745,6 +760,9 @@ async function loadScanDetailRecord(input: {
 
   if (eventsError) {
     throw new Error(`Failed to load scan events: ${eventsError.message}`);
+  }
+  if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
+    throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentError.message}`);
   }
 
   let validationFindings: ScanValidationFindingRecord[] = [];
@@ -1374,6 +1392,10 @@ async function loadScanDetailRecord(input: {
     runtimeArtifacts: normalizedRuntimeArtifacts
       ? (normalizedRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
+    macroEnrichment:
+      macroEnrichment && !macroEnrichmentError
+        ? (stripTimestampFields(macroEnrichment as Record<string, unknown>) satisfies Exclude<ScanMacroEnrichmentRecord, null>)
+        : null,
     preconsentViolations: normalizedPreconsentViolations,
     accessibilityRuleCounts: normalizedAccessibilityRuleCounts,
     accessibilityRuleExamples: normalizedAccessibilityRuleExamples,
