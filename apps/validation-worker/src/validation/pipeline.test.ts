@@ -2310,6 +2310,53 @@ test("pre-consent runtime finding attributes observed third-party vendors in sur
   ]);
 });
 
+test("pre-consent runtime finding narrows framing when privacy controls are explicitly disclosed", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "privacy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/privacy-center",
+          policy_dsar_mechanism: "present",
+          policy_do_not_sell: "present_link",
+          policy_mentions: ["gpc_disclosure"],
+          policy_retention_periods: ["2 years"],
+          privacy_contact_channel_type: "webform",
+          policy_summary_short: "Privacy Center explains privacy choices, GPC support, request rights, and retention."
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {
+        cookie_count_total: 10,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 3,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Analytics"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
+  assert.ok(finding);
+  assert.equal(finding?.title, "Tracking observed before privacy choice");
+  assert.equal(finding?.evidence.explicit_privacy_controls_disclosed, true);
+  assert.deepEqual(finding?.evidence.domain_policy_coverage, {
+    hasPrivacyChoiceDisclosure: true,
+    hasPrivacyContactDisclosure: true,
+    hasRetentionDisclosure: true,
+    hasRightsDisclosure: true,
+    hasTransferDisclosure: false
+  });
+});
+
 test("promotes obstructive consent interface findings when reject path is hidden behind a cookie wall", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

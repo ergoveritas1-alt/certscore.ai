@@ -1254,6 +1254,7 @@ function buildRuntimePrivacyFinding(input: {
 }
 
 function deriveRuntimePrivacyFindings(input: {
+  policySemanticRows: Array<Record<string, unknown>>;
   preconsentViolations: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
   snapshot: Record<string, unknown> | null;
@@ -1302,6 +1303,7 @@ function deriveRuntimePrivacyFindings(input: {
   const attributedPreconsentVendors = [
     ...new Set([...thirdPartyVendorsBeforeConsent, ...preconsentViolationVendors])
   ];
+  const domainPolicyCoverage = buildDomainPolicyCoverageSummary(input.policySemanticRows);
 
   if (!preconsentTrackingDetected) {
     return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
@@ -1319,12 +1321,21 @@ function deriveRuntimePrivacyFindings(input: {
     thirdPartyCookieCount > 0 || thirdPartyVendorsBeforeConsent.length >= 2 || preconsentViolationVendors.length >= 3
       ? "high"
       : "medium";
+  const explicitPrivacyControlsDisclosed =
+    domainPolicyCoverage.hasPrivacyChoiceDisclosure ||
+    domainPolicyCoverage.hasRightsDisclosure ||
+    domainPolicyCoverage.hasPrivacyContactDisclosure;
+  const description = explicitPrivacyControlsDisclosed
+    ? "The scan observed cookies or tracking vendors before any consent interaction, even though the site also discloses privacy choices or related privacy controls."
+    : "The scan observed cookies or tracking vendors before any consent interaction, indicating that tracking activity likely starts before the user can express a privacy choice.";
+  const title = explicitPrivacyControlsDisclosed ? "Tracking observed before privacy choice" : "Tracking observed before consent";
 
   return [
     buildRuntimePrivacyFinding({
-      description:
-        "The scan observed cookies or tracking vendors before any consent interaction, indicating that tracking activity likely starts before the user can express a privacy choice.",
+      description,
       evidence: {
+        domain_policy_coverage: domainPolicyCoverage,
+        explicit_privacy_controls_disclosed: explicitPrivacyControlsDisclosed,
         initial_cookie_names: initialCookieNames,
         preconsent_tracking_detected: preconsentTrackingDetected,
         preconsent_violation_count: input.preconsentViolations.length,
@@ -1340,7 +1351,7 @@ function deriveRuntimePrivacyFindings(input: {
       pageUrl: null,
       ruleKey: "runtime_privacy.preconsent_tracking_observed",
       severity,
-      title: "Tracking observed before consent"
+      title
     })
   ];
 }
@@ -2052,6 +2063,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     }),
     ...deriveFinancialValidationFindings(input),
     ...deriveRuntimePrivacyFindings({
+      policySemanticRows,
       preconsentViolations: input.preconsentViolations,
       runtimeArtifacts: input.runtimeArtifacts,
       snapshot: input.snapshot,
