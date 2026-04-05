@@ -104,8 +104,12 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "kurier.at",
     label: "kurier",
-    maxValidationMs: 15_000,
-    expectedFindings: [{ ruleKey: "access_review.legal_coverage_unverified", severity: "medium" }]
+    maxValidationMs: 25_000,
+    expectedFindings: [
+      { ruleKey: "access_review.public_access_blocked", severity: "high" },
+      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
+      { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" }
+    ]
   }
 ];
 
