@@ -3288,6 +3288,11 @@ export async function processValidationRankJob(validationRunId: string) {
     }
     const scanId = run.scan_id;
 
+    await processNanoSignalEnrichmentJob({
+      pollCount: 0,
+      scanId
+    });
+
     await enrichUnknownScanVendors({
       hostname: run.hostname,
       scanId
