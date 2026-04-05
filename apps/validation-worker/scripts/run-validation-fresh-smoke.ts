@@ -67,7 +67,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     label: "fujifilm",
     maxValidationMs: 15_000,
     expectedFindings: [
-      { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
+      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
       { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" }
     ]
   },
