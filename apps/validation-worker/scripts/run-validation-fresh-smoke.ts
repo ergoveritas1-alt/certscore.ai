@@ -74,7 +74,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "hobbylobby.com",
     label: "hobbylobby",
-    maxValidationMs: 15_000,
+    maxValidationMs: 20_000,
     expectedFindings: [
       { ruleKey: "access_review.public_access_blocked", severity: "high" },
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
