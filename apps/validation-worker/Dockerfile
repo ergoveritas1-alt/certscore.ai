@@ -10,6 +10,7 @@ RUN corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY apps/web ./apps/web
 COPY apps/validation-worker ./apps/validation-worker
 COPY packages/shared ./packages/shared
 COPY packages/web-bot-auth ./packages/web-bot-auth
