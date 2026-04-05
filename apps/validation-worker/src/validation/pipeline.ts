@@ -606,6 +606,45 @@ function buildDomainPolicyCoverageSummary(policySemanticRows: Array<Record<strin
   };
 }
 
+function hasStrongPrivacyGovernanceCuesForPartialExtraction(input: {
+  domainPolicyCoverage: ReturnType<typeof buildDomainPolicyCoverageSummary>;
+  enrichment: Record<string, unknown>;
+  flags: string[];
+  pageType: string | null;
+  policyExtractionStatus: string;
+  summaryShort: unknown;
+}) {
+  if (input.pageType !== "privacy_policy" || input.policyExtractionStatus !== "llm_partial") {
+    return false;
+  }
+
+  if (!input.flags.includes("llm_budget_exhausted") && !input.flags.includes("blocked_homepage_direct_policy_page")) {
+    return false;
+  }
+
+  const snippets =
+    input.enrichment.policy_evidence_snippets && typeof input.enrichment.policy_evidence_snippets === "object"
+      ? (input.enrichment.policy_evidence_snippets as Record<string, unknown>)
+      : null;
+  const cueCount = [
+    input.domainPolicyCoverage.hasRightsDisclosure,
+    input.domainPolicyCoverage.hasRetentionDisclosure,
+    input.domainPolicyCoverage.hasPrivacyContactDisclosure,
+    input.domainPolicyCoverage.hasPrivacyChoiceDisclosure,
+    typeof input.summaryShort === "string" &&
+      /privacy|security|personal information|personal data|cookies?|your privacy/i.test(input.summaryShort),
+    snippets !== null &&
+      (Array.isArray(snippets.policy_rights_signals) ||
+        "dsar" in snippets ||
+        "notice_contact" in snippets ||
+        "rights_signal:access" in snippets ||
+        "rights_signal:delete" in snippets ||
+        "rights_signal:manage" in snippets)
+  ].filter(Boolean).length;
+
+  return cueCount >= 3;
+}
+
 function stringIncludesRetentionCue(value: unknown) {
   if (typeof value !== "string") {
     return false;
@@ -1806,23 +1845,34 @@ function derivePolicySectionFindings(input: {
           retargetingPixelDetected ? "retargeting_pixel_detected=true" : null,
           sessionReplayWithoutDisclosureDetected ? "session_replay_without_disclosure_detected=true" : null
         ].filter((value): value is string => value !== null);
-        findings.push(
-          buildPolicyRuntimeFinding({
-            description:
-              "Runtime behavior indicates tracking or replay functionality that was not clearly recoverable from the policy text, suggesting a likely missing technical disclosure rather than a purely low-confidence extraction issue.",
-            evidence: {
-              ...synthesisEvidence,
-              retargeting_pixel_detected: retargetingPixelDetected,
-              session_replay_without_disclosure_detected: sessionReplayWithoutDisclosureDetected,
-              synthesis_trigger_summary: [...synthesisEvidence.synthesis_trigger_summary, ...triggerSummary]
-            },
+        if (
+          !hasStrongPrivacyGovernanceCuesForPartialExtraction({
+            domainPolicyCoverage,
+            enrichment,
+            flags,
             pageType,
-            pageUrl,
-            ruleKey: "policy_runtime.missing_technical_disclosure",
-            severity: "high",
-            title: "Missing technical disclosure"
+            policyExtractionStatus,
+            summaryShort
           })
-        );
+        ) {
+          findings.push(
+            buildPolicyRuntimeFinding({
+              description:
+                "Runtime behavior indicates tracking or replay functionality that was not clearly recoverable from the policy text, suggesting a likely missing technical disclosure rather than a purely low-confidence extraction issue.",
+              evidence: {
+                ...synthesisEvidence,
+                retargeting_pixel_detected: retargetingPixelDetected,
+                session_replay_without_disclosure_detected: sessionReplayWithoutDisclosureDetected,
+                synthesis_trigger_summary: [...synthesisEvidence.synthesis_trigger_summary, ...triggerSummary]
+              },
+              pageType,
+              pageUrl,
+              ruleKey: "policy_runtime.missing_technical_disclosure",
+              severity: "high",
+              title: "Missing technical disclosure"
+            })
+          );
+        }
       }
 
       if (

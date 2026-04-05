@@ -164,3 +164,41 @@ test("mergeNanoPolicyInputsWithFallback prefers substantive privacy statements o
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.page_url, "https://example.com/privacy");
 });
+
+test("mergeNanoPolicyInputsWithFallback prefers substantive privacy statements over privacy certification pages", () => {
+  const rows = mergeNanoPolicyInputsWithFallback({
+    documentSources: [
+      {
+        canonical_url: "https://privacy.trustarc.com/privacy-seal/validation?rid=abc123",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          page_url: "https://privacy.trustarc.com/privacy-seal/validation?rid=abc123",
+          policy_semantic_confidence: 0.5,
+          policy_summary_short: "This company is currently a participant in TrustArc's privacy certification program."
+        },
+        extraction_status: "ready",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ],
+    fallbackRows: [
+      {
+        id: "policy-privacy",
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy",
+        policy_field_coverage: {
+          retention: {
+            found: true
+          }
+        },
+        policy_retention_disclosure: "present",
+        policy_rights_signals: ["access_request", "delete_request"],
+        policy_semantic_confidence: 0.66,
+        policy_summary_short: "Privacy statement explains rights, cookies, and retention."
+      }
+    ]
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.page_url, "https://www.example.com/privacy");
+});

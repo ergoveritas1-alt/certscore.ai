@@ -38,6 +38,22 @@ function getPolicyInputPageType(row: Record<string, unknown>) {
   return getString(row.page_type) ?? getString(row.pageType) ?? getString(row.source_document_type);
 }
 
+function isPrivacyCertificationSurfaceUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    const haystack = `${parsed.pathname}${parsed.search}`.toLowerCase();
+
+    if (!/(^|\.)(trustarc|truste)\.com$/.test(hostname)) {
+      return false;
+    }
+
+    return /privacy-seal|privacyseal|\/validation\b|certification|\/seal\b|\/seal\//.test(haystack);
+  } catch {
+    return false;
+  }
+}
+
 function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   const pageType = getPolicyInputPageType(row);
   const pageUrl = getString(row.page_url) ?? getString(row.pageUrl) ?? getString(row.canonical_url) ?? getString(row.canonicalUrl);
@@ -87,12 +103,16 @@ function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   }
   if (pageType === "privacy_policy" && pageUrl) {
     try {
-      const pathname = new URL(pageUrl).pathname.toLowerCase();
+      const parsed = new URL(pageUrl);
+      const pathname = parsed.pathname.toLowerCase();
       if (pathname === "/privacy" || pathname.endsWith("/privacy") || pathname.includes("/privacy-policy") || pathname.includes("/legal/privacy")) {
         score += 15;
       }
       if (pathname.includes("privacy-preferences") || pathname.includes("privacy-request") || pathname.includes("request-center")) {
         score -= 20;
+      }
+      if (isPrivacyCertificationSurfaceUrl(parsed.toString())) {
+        score -= 45;
       }
     } catch {
       // Ignore malformed URLs and fall back to semantic scoring only.
