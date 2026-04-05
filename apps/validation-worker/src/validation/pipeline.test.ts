@@ -2753,6 +2753,45 @@ test("partial privacy extraction with strong governance cues does not synthesize
   assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.missing_technical_disclosure"), false);
 });
 
+test("misrouted marketing page extraction does not synthesize missing technical disclosure", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "policy-1",
+          page_type: "privacy_policy",
+          page_url: "https://www.example.com/legal/privacy",
+          policy_actionable_flags: ["blocked_homepage_direct_policy_page", "missing_dsar", "vague_retention"],
+          policy_dsar_mechanism: "absent",
+          policy_retention_periods: [],
+          policy_mentions: [{ topic: "data_retention" }],
+          policy_ambiguity_score: 68,
+          policy_semantic_confidence: 0.54,
+          policy_summary_short:
+            "Example Product | Experience Cloud Home Products Solutions Pricing Request Demo Marketing Automation",
+          policy_evidence_snippets: {
+            "topic:data_retention": "hash-1",
+            policy_rights_signals: []
+          }
+        }
+      ],
+      policyReviewQueue: [
+        {
+          id: "review-1",
+          policy_enrichment_id: "policy-1",
+          reason: "low_confidence_critical_fields",
+          review_status: "pending"
+        }
+      ],
+      snapshot: {
+        retargeting_pixel_detected: true
+      }
+    })
+  );
+
+  assert.equal(findings.some((finding) => finding.ruleKey === "policy_runtime.missing_technical_disclosure"), false);
+});
+
 test("low confidence extraction with multiple triggers synthesizes distinct runtime findings without duplicates", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

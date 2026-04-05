@@ -645,6 +645,65 @@ function hasStrongPrivacyGovernanceCuesForPartialExtraction(input: {
   return cueCount >= 3;
 }
 
+function isLikelyMisroutedMarketingPageExtraction(input: {
+  dsarMechanism: string | null;
+  flags: string[];
+  mentions: Array<string | { confidence?: unknown; topic?: unknown }>;
+  pageType: string | null;
+  retentionPeriods: unknown[];
+  summaryShort: unknown;
+}) {
+  if (input.pageType !== "privacy_policy") {
+    return false;
+  }
+
+  if (!input.flags.includes("blocked_homepage_direct_policy_page")) {
+    return false;
+  }
+
+  if (input.dsarMechanism && input.dsarMechanism !== "absent" && input.dsarMechanism !== "unknown") {
+    return false;
+  }
+
+  if (Array.isArray(input.retentionPeriods) && input.retentionPeriods.length > 0) {
+    return false;
+  }
+
+  const summary = typeof input.summaryShort === "string" ? input.summaryShort : "";
+  if (summary.trim().length === 0) {
+    return false;
+  }
+
+  const marketingCueMatches =
+    summary.match(
+      /experience cloud|home products|request demo|book a demo|product tour|pricing|solutions|customers|resources|marketing automation|commerce|business\.adobe\.com/gi
+    ) ?? [];
+
+  if (marketingCueMatches.length < 2) {
+    return false;
+  }
+
+  const mentionTopics = input.mentions
+    .map((mention) => {
+      if (typeof mention === "string") {
+        return mention;
+      }
+
+      return typeof mention.topic === "string" ? mention.topic : null;
+    })
+    .filter((value): value is string => value !== null);
+
+  if (
+    mentionTopics.some((topic) =>
+      /privacy_rights|dsar|notice_contact|cookies?|tracking|personal_data|personal_information/i.test(topic)
+    )
+  ) {
+    return false;
+  }
+
+  return mentionTopics.length <= 1;
+}
+
 function stringIncludesRetentionCue(value: unknown) {
   if (typeof value !== "string") {
     return false;
@@ -1898,6 +1957,14 @@ function derivePolicySectionFindings(input: {
           sessionReplayWithoutDisclosureDetected ? "session_replay_without_disclosure_detected=true" : null
         ].filter((value): value is string => value !== null);
         if (
+          !isLikelyMisroutedMarketingPageExtraction({
+            dsarMechanism,
+            flags,
+            mentions,
+            pageType,
+            retentionPeriods,
+            summaryShort
+          }) &&
           !hasStrongPrivacyGovernanceCuesForPartialExtraction({
             domainPolicyCoverage,
             enrichment,
