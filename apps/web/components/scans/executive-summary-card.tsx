@@ -411,6 +411,14 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
 function FindingTitleIcon(input: { finding: CertScoreFinding }) {
   const common = "h-4 w-4";
 
+  if (input.finding.id === "pre_consent_tracking_detected") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
+        <path d="M4 12h4l2-4 4 8 2-4h4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   if (input.finding.id === "third_party_tracking_pre_consent") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
@@ -433,6 +441,58 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M12 3l7 3v6c0 4.2-2.8 7.5-7 9-4.2-1.5-7-4.8-7-9V6l7-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
         <path d="M9 12h6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "reject_option_missing_or_hidden" || input.finding.id === "forced_consent_interaction") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 9l6 6M15 9l-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "identifier_transmission_detected") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M7.5 14.5 14 8a3 3 0 1 1 4.2 4.2l-6.5 6.5a4.5 4.5 0 0 1-6.4-6.4l5.8-5.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "device_data_collection_detected" || input.finding.id === "telemetry_rich_identification_observed") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <rect x="4.5" y="5" width="15" height="10.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10 19h4M12 15.5V19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M8 10h.01M12 10h.01M16 10h.01" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (
+    input.finding.id === "analytics_cookie_pre_consent" ||
+    input.finding.id === "adtech_cookie_pre_consent" ||
+    input.finding.id === "third_party_cookie_pre_consent" ||
+    input.finding.id === "storage_before_consent"
+  ) {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M12 4a8 8 0 1 0 8 8c0-.7-.1-1.4-.3-2.1-.7.6-1.6 1.1-2.6 1.1-2.2 0-4-1.8-4-4 0-1 .4-1.9 1.1-2.6A8.2 8.2 0 0 0 12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        <circle cx="9" cy="10" r="1" fill="currentColor" />
+        <circle cx="15" cy="13" r="1" fill="currentColor" />
+        <circle cx="10.5" cy="15.5" r="1" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (input.finding.id === "probable_fingerprinting") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M12 4c2.6 0 4.8 2.2 4.8 4.8v2.3c0 3.2-1.8 6.2-4.8 8.9-3-2.7-4.8-5.7-4.8-8.9V8.8C7.2 6.2 9.4 4 12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10 11c.6-.9 1.4-1.4 2-1.4 1 0 1.8.8 1.8 1.8 0 1.3-.8 2-1.8 3.1-.8.9-1.2 1.7-1.4 2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
