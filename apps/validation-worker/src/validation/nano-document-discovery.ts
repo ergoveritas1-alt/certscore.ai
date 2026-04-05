@@ -23,6 +23,8 @@ type HomepageDiscoveryResult = {
   candidates: DiscoveryInputCandidate[];
 };
 
+type SupportedDocumentType = "privacy_policy" | "terms_of_service" | "cookie_policy";
+
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -48,8 +50,28 @@ function normalizeDocUrl(url: string | null) {
   }
 }
 
-function isSupportedDocumentType(value: string | null): value is "privacy_policy" | "terms_of_service" | "cookie_policy" {
+function isSupportedDocumentType(value: string | null): value is SupportedDocumentType {
   return value === "privacy_policy" || value === "terms_of_service" || value === "cookie_policy";
+}
+
+function looksLikeMachineLegalEndpoint(url: string) {
+  const haystack = url.toLowerCase();
+  return (
+    /agreementservice|agreementtype=|[?&](country|language|locale)=/.test(haystack) ||
+    /\/api\/|\/graphql\b|\/rest\/|\/v\d+\//.test(haystack)
+  );
+}
+
+function isSupplementalPrivacySurface(input: { anchorText?: string | null; url: string }) {
+  const haystack = `${input.anchorText ?? ""} ${input.url}`.toLowerCase();
+  return (
+    /your privacy choices|do not sell|do not share|privacy choices|privacy settings|cookie settings|privacy center|privacy webform/.test(
+      haystack
+    ) ||
+    /\/help\/privacy\b|\/privacy-center\b|\/your-privacy-choices\b|\/do-not-share-my-data\b|\/guest\/settings\/privacy\b|\/guest\/settings\/do-not-share-my-data\b/.test(
+      haystack
+    )
+  );
 }
 
 function guessDocumentType(input: { anchorText?: string | null; url: string }) {
@@ -83,7 +105,9 @@ function getDocumentSpecificityAdjustment(input: { documentType: string | null; 
 
   if (input.documentType === "privacy_policy") {
     if (/\bprivacy policy\b|\/privacy-policy\b|\/privacy\b/.test(haystack)) adjustment += 0.18;
+    if (isSupplementalPrivacySurface({ anchorText: input.anchorText, url: input.url })) adjustment += 0.12;
     if (/\bjob|applicant|employee|candidate|affiliate|supplier|vendor|consumer-health|hipaa|california\b/.test(haystack)) adjustment -= 0.28;
+    if (looksLikeMachineLegalEndpoint(input.url)) adjustment -= 0.2;
   }
 
   if (input.documentType === "terms_of_service") {
@@ -287,10 +311,23 @@ function buildEvidenceCandidates(input: {
       continue;
     }
 
+    const score = Math.max(
+      0,
+      Math.min(
+        1,
+        0.9 +
+          getDocumentSpecificityAdjustment({
+            documentType,
+            url
+          })
+      )
+    );
+
     candidates.set(url, {
       discoveredFrom: "scanner_page",
       documentType,
-      score: 1,
+      candidateScore: score,
+      score,
       url
     });
   }
@@ -354,15 +391,29 @@ function buildEvidenceCandidates(input: {
   return [...candidates.values()];
 }
 
+function hasSupplementalPrivacyCoverageCandidate(
+  candidates: Array<DiscoveryInputCandidate | NanoDocCandidate>
+) {
+  return candidates.some(
+    (candidate) => candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })
+  );
+}
+
 function buildSeedFallbackCandidates(domainHostname: string | null) {
   if (!domainHostname) {
     return [] as NanoDocCandidate[];
   }
 
-  return limitNanoDocCandidates([
+  return [
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/help/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-center` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/your-privacy-choices` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/do-not-share-my-data` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/do-not-share-my-data` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
@@ -370,7 +421,7 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` }
-  ] satisfies NanoDocCandidate[]);
+  ] satisfies NanoDocCandidate[];
 }
 
 function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
@@ -389,9 +440,11 @@ function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
 
     const currentCount = counts.get(candidate.documentType) ?? 0;
     const limit =
-      candidate.documentType === "terms_of_service"
+      candidate.documentType === "privacy_policy"
         ? 3
-        : 2;
+        : candidate.documentType === "terms_of_service"
+          ? 3
+          : 2;
     if (currentCount >= limit) {
       continue;
     }
@@ -451,12 +504,33 @@ export function buildNanoDocCandidateUrls(input: {
   const fallbackCandidates = buildSeedFallbackCandidates(input.domainHostname);
 
   if (orderedEvidence.length > 0) {
-    const supplementalRecentCandidates = recentDomainCandidates.filter((candidate) => !evidenceTypes.has(candidate.documentType));
+    const evidenceHasSupplementalPrivacyCoverage = orderedEvidence.some(
+      (candidate) => candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })
+    );
+    const supplementalRecentCandidates = recentDomainCandidates.filter((candidate) => {
+      if (!evidenceTypes.has(candidate.documentType)) {
+        return true;
+      }
+
+      return (
+        candidate.documentType === "privacy_policy" &&
+        isSupplementalPrivacySurface({ url: candidate.url }) &&
+        !evidenceHasSupplementalPrivacyCoverage
+      );
+    });
     const coveredTypes = new Set<string>([
       ...orderedEvidence.map((candidate) => candidate.documentType),
       ...supplementalRecentCandidates.map((candidate) => candidate.documentType)
     ]);
-    const filteredFallbackCandidates = fallbackCandidates.filter((candidate) => !coveredTypes.has(candidate.documentType));
+    const hasSupplementalPrivacyCoverage = [...orderedEvidence, ...supplementalRecentCandidates].some(
+      (candidate) => candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })
+    );
+    const filteredFallbackCandidates = fallbackCandidates.filter((candidate) => {
+      if (candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })) {
+        return !hasSupplementalPrivacyCoverage;
+      }
+      return !coveredTypes.has(candidate.documentType);
+    });
     return limitNanoDocCandidates([...orderedEvidence, ...supplementalRecentCandidates, ...filteredFallbackCandidates]);
   }
 
@@ -523,7 +597,7 @@ function normalizeSelectedCandidates(input: {
     }
 
     const currentCount = byDocTypeCount.get(selectedType) ?? 0;
-    const limit = selectedType === "privacy_policy" ? 2 : 1;
+    const limit = selectedType === "privacy_policy" ? 3 : 1;
     if (currentCount >= limit) {
       continue;
     }
@@ -581,7 +655,7 @@ export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
         {
           role: "system",
           content:
-            "You rank public-facing legal-document discovery candidates for a website. Return JSON only. Select only from the provided candidate URLs. Prefer real rendered legal pages over guessed patterns. Focus on privacy_policy first, then cookie_policy, then terms_of_service. Avoid login, app, support, account, marketing, and non-legal destinations. Return at most 2 privacy_policy URLs, 1 cookie_policy URL, and 1 terms_of_service URL in selected_candidates."
+            "You rank public-facing legal-document discovery candidates for a website. Return JSON only. Select only from the provided candidate URLs. Prefer real rendered legal pages over guessed patterns. Focus on privacy_policy first, then cookie_policy, then terms_of_service. Same-brand privacy help, privacy center, and privacy choice/settings pages are acceptable supplemental privacy_policy selections. Avoid login, app, generic support, generic account, marketing, and non-legal destinations. Return at most 3 privacy_policy URLs, 1 cookie_policy URL, and 1 terms_of_service URL in selected_candidates."
         },
         {
           role: "user",
@@ -626,6 +700,21 @@ export async function selectNanoDocCandidates(input: {
   recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
   if (hasCurrentScanLegalDiscoveryEvidence(input)) {
+    const currentEvidenceCandidates = buildEvidenceCandidates({
+      discoveryCandidates: input.discoveryCandidates,
+      homepageDiscoveryCandidates: [],
+      pages: input.pages
+    });
+    if (!hasSupplementalPrivacyCoverageCandidate(currentEvidenceCandidates) && input.domainHostname) {
+      const homepageDiscovery = await buildHomepageDiscoveryCandidates({
+        domainHostname: input.domainHostname
+      }).catch(() => ({ candidates: [] as DiscoveryInputCandidate[] }));
+      return buildNanoDocCandidateUrls({
+        ...input,
+        homepageDiscoveryCandidates: homepageDiscovery.candidates
+      });
+    }
+
     return buildNanoDocCandidateUrls({
       ...input,
       homepageDiscoveryCandidates: []

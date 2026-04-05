@@ -254,6 +254,34 @@ function pageTypeLabel(pageType: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function isMetaSectionFinding(ruleKey: string | null) {
+  if (!ruleKey) {
+    return false;
+  }
+
+  return (
+    ruleKey.startsWith("section_review.clarity_risk_") ||
+    ruleKey.startsWith("section_review.confidence_") ||
+    ruleKey === "section_review.rule_only_row_present"
+  );
+}
+
+function isSupplementalSupportPolicyPage(input: { pageType: string | null; pageUrl: string | null }) {
+  const haystack = `${input.pageType ?? ""}\n${input.pageUrl ?? ""}`.toLowerCase();
+
+  if (input.pageType === "privacy_policy") {
+    return /\/help\/|\/privacy-center\b|\/your-privacy-choices\b|\/do-not-share-my-data\b|\/guest\/settings\/privacy\b|\/guest\/settings\/do-not-share-my-data\b/.test(
+      haystack
+    );
+  }
+
+  if (input.pageType === "terms_of_service") {
+    return /agreementservice|agreementtype=|\/api\/|\/graphql\b|\/rest\/|\/v\d+\//.test(haystack);
+  }
+
+  return false;
+}
+
 function hasSparsePolicyExtraction(input: {
   confidence: number | null;
   coverageRatio?: number | null;
@@ -849,7 +877,12 @@ function deriveFinancialValidationFindings(input: ValidationArtifactBundle) {
     });
   }
 
-  return findings;
+  const hasSubstantiveFinding = findings.some((finding) => !isMetaSectionFinding(finding.ruleKey));
+  if (!hasSubstantiveFinding) {
+    return findings;
+  }
+
+  return findings.filter((finding) => !isMetaSectionFinding(finding.ruleKey));
 }
 
 type CookieDisclosureRow = {
@@ -1433,6 +1466,10 @@ function derivePolicySectionFindings(input: {
       structurallyWeak: policyStructurallyWeak
     });
     const typeLabel = pageTypeLabel(pageType);
+    const isSupplementalSupportPage = isSupplementalSupportPolicyPage({
+      pageType,
+      pageUrl
+    });
     const baseEvidence = {
       policy_extraction_status: policyExtractionStatus,
       page_type: pageType,
@@ -1644,7 +1681,7 @@ function derivePolicySectionFindings(input: {
       }
     }
 
-    if (pageType === "terms_of_service" && mentions.length === 0 && !hasRichSemantics) {
+    if (pageType === "terms_of_service" && mentions.length === 0 && !hasRichSemantics && !isSupplementalSupportPage) {
       findings.push(
         buildSectionIssueFinding({
           description: "This policy row was derived from rule-based extraction only and did not include richer semantic topic coverage.",
@@ -1692,7 +1729,8 @@ function derivePolicySectionFindings(input: {
     if (
       pageType === "privacy_policy" &&
       retentionPeriods.length === 0 &&
-      !domainPolicyCoverage.hasRetentionDisclosure
+      !domainPolicyCoverage.hasRetentionDisclosure &&
+      !isSupplementalSupportPage
     ) {
       findings.push(
         buildSectionIssueFinding({
@@ -1738,7 +1776,9 @@ function derivePolicySectionFindings(input: {
     if (
       ambiguity !== null &&
       (ambiguity >= 75 || (!hasRichSemantics && ambiguity >= 60)) &&
-      !(pageType === "terms_of_service" && hasRichSemantics)
+      !(pageType === "terms_of_service" && hasRichSemantics) &&
+      !(pageType === "privacy_policy" && isSupplementalSupportPage) &&
+      !(pageType === "terms_of_service" && isSupplementalSupportPage)
     ) {
       findings.push(
         buildSectionIssueFinding({
@@ -1968,7 +2008,12 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     rule_key: finding.ruleKey
   }), finding])).values()];
 
-  return deduped
+  const hasSubstantiveFinding = deduped.some((finding) => !isMetaSectionFinding(finding.ruleKey));
+  const filtered = hasSubstantiveFinding
+    ? deduped.filter((finding) => !isMetaSectionFinding(finding.ruleKey))
+    : deduped;
+
+  return filtered
     .sort((left, right) => severityWeight(right.severity) - severityWeight(left.severity) || left.ruleKey.localeCompare(right.ruleKey))
     .map((finding, index) => ({
       ...finding,
@@ -2592,6 +2637,35 @@ function getPrivacyDocumentSpecificityScore(row: Record<string, unknown>) {
   if (/\blegal\/privacy-policy\b|\/privacy-policy\b/.test(haystack)) {
     score += 10;
   }
+  if (/\/help\/privacy\b|\/privacy-center\b|\/your-privacy-choices\b|\/do-not-share-my-data\b|\/guest\/settings\/privacy\b|\/guest\/settings\/do-not-share-my-data\b/.test(haystack)) {
+    score += 8;
+  }
+  if (/agreementservice|agreementtype=|[?&](country|language|locale)=|\/api\/|\/graphql\b|\/rest\/|\/v\d+\//.test(haystack)) {
+    score -= 18;
+  }
+
+  return score;
+}
+
+function getPrivacySupplementalCoverageScore(row: Record<string, unknown>) {
+  const canonicalUrl = (getString(row.canonical_url) ?? getString(row.canonicalUrl) ?? getString(row.source_url) ?? "").toLowerCase();
+  const title = (getString(row.title) ?? "").toLowerCase();
+  const haystack = `${canonicalUrl}\n${title}`;
+
+  let score = 0;
+
+  if (/\/help\/privacy\b/.test(haystack)) {
+    score += 40;
+  }
+  if (/\/privacy-center\b|privacy center\b/.test(haystack)) {
+    score += 35;
+  }
+  if (/your privacy choices|privacy choices|privacy settings|cookie settings/.test(haystack)) {
+    score += 34;
+  }
+  if (/\/guest\/settings\/privacy\b|\/guest\/settings\/do-not-share-my-data\b|\/do-not-share-my-data\b/.test(haystack)) {
+    score += 36;
+  }
 
   return score;
 }
@@ -2713,6 +2787,17 @@ export function selectPendingNanoDocumentSourcesForExtraction(input: {
     snapshot: input.snapshot
   });
   const pendingPrivacyRows = input.rows.filter((row) => (getString(row.document_type) ?? getString(row.documentType)) === "privacy_policy");
+  const selectedSupplementalPrivacyIds = new Set(
+    [...pendingPrivacyRows]
+      .filter((row) => getPrivacySupplementalCoverageScore(row) > 0)
+      .sort(
+        (left, right) =>
+          getPrivacySupplementalCoverageScore(right) - getPrivacySupplementalCoverageScore(left) ||
+          getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left)
+      )
+      .slice(0, 2)
+      .map((row) => String(row.id ?? ""))
+  );
   const selectedPrimaryPrivacyId = strongReadyPrivacyExists || pendingPrivacyRows.length === 0
     ? null
     : [...pendingPrivacyRows].sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0]?.id;
@@ -2720,10 +2805,14 @@ export function selectPendingNanoDocumentSourcesForExtraction(input: {
   return input.rows.filter((row) => {
     const documentType = getString(row.document_type) ?? getString(row.documentType);
     if (documentType === "privacy_policy") {
+      const rowId = String(row.id ?? "");
+      if (selectedSupplementalPrivacyIds.has(rowId)) {
+        return true;
+      }
       if (strongReadyPrivacyExists) {
         return false;
       }
-      return String(row.id ?? "") === String(selectedPrimaryPrivacyId ?? "");
+      return rowId === String(selectedPrimaryPrivacyId ?? "");
     }
     if (documentType === "cookie_policy") {
       return shouldExtractCookiePolicy;
@@ -3357,6 +3446,11 @@ export async function processValidationRankJob(validationRunId: string) {
       });
     }
     const scanId = run.scan_id;
+
+    await processNanoDocRetrievalJob({
+      pollCount: 0,
+      scanId
+    });
 
     await processNanoSignalEnrichmentJob({
       pollCount: 0,

@@ -951,6 +951,57 @@ test("buildNanoDocCandidateUrls keeps a special-scope privacy doc only when no m
   assert.equal(candidates.some((candidate) => candidate.documentType === "privacy_policy"), true);
 });
 
+test("buildNanoDocCandidateUrls adds supplemental privacy support fallbacks alongside a primary privacy doc", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    domainHostname: "example.com",
+    pages: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://legal.example.com/agreementservice?agreementType=privacyPolicy&country=US&language=en"
+      },
+      {
+        page_type: "terms_of_service",
+        page_url: "https://example.com/terms"
+      }
+    ]
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://example.com/help/privacy" && candidate.documentType === "privacy_policy"),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.url === "https://example.com/guest/settings/privacy" && candidate.documentType === "privacy_policy"
+    ),
+    true
+  );
+});
+
+test("buildNanoDocCandidateUrls keeps supplemental recent privacy support docs alongside current privacy evidence", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    domainHostname: "example.com",
+    pages: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://legal.example.com/agreementservice?agreementType=privacyPolicy&country=US&language=en"
+      }
+    ],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://example.com/help/privacy",
+        document_type: "privacy_policy"
+      }
+    ]
+  });
+
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://example.com/help/privacy" && candidate.documentType === "privacy_policy"),
+    true
+  );
+});
+
 test("buildNanoDocCandidateUrls recognizes agreement-based legal-hub terms docs", () => {
   const candidates = buildNanoDocCandidateUrls({
     discoveryCandidates: [
@@ -1406,6 +1457,36 @@ test("selectPendingNanoDocumentSourcesForExtraction keeps only the strongest pen
   assert.deepEqual(rows.map((row) => row.id), ["doc-main"]);
 });
 
+test("selectPendingNanoDocumentSourcesForExtraction keeps supplemental privacy support docs with the primary privacy doc", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [],
+    policyEnrichments: [],
+    rows: [
+      {
+        canonical_url: "https://legal.example.com/agreementservice?agreementType=privacyPolicy&country=US&language=en",
+        document_type: "privacy_policy",
+        id: "doc-primary",
+        title: "Privacy Policy"
+      },
+      {
+        canonical_url: "https://example.com/help/privacy",
+        document_type: "privacy_policy",
+        id: "doc-help",
+        title: "Privacy Webform"
+      },
+      {
+        canonical_url: "https://example.com/guest/settings/do-not-share-my-data",
+        document_type: "privacy_policy",
+        id: "doc-choice",
+        title: "Your Privacy Choices"
+      }
+    ],
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["doc-primary", "doc-help", "doc-choice"]);
+});
+
 test("selectPendingNanoDocumentSourcesForExtraction skips pending privacy docs when a strong ready privacy doc already exists", () => {
   const rows = selectPendingNanoDocumentSourcesForExtraction({
     existingDocumentSources: [
@@ -1436,6 +1517,50 @@ test("selectPendingNanoDocumentSourcesForExtraction skips pending privacy docs w
   });
 
   assert.deepEqual(rows.map((row) => row.id), []);
+});
+
+test("selectPendingNanoDocumentSourcesForExtraction keeps supplemental privacy support docs even when a strong ready privacy doc exists", () => {
+  const rows = selectPendingNanoDocumentSourcesForExtraction({
+    existingDocumentSources: [
+      {
+        document_type: "privacy_policy",
+        extraction_status: "ready",
+        source_status: "ready",
+        extracted_fields_json: {
+          policy_rights_signals: ["access_request"],
+          policy_structurally_weak: false,
+          policy_summary_short: "Main privacy policy",
+          privacy_contact_channel_type: "email",
+          policy_ambiguity_score: 32
+        },
+        semantic_confidence: 0.82
+      }
+    ],
+    policyEnrichments: [],
+    rows: [
+      {
+        canonical_url: "https://example.com/help/privacy",
+        document_type: "privacy_policy",
+        id: "doc-help",
+        title: "Privacy Webform"
+      },
+      {
+        canonical_url: "https://example.com/guest/settings/do-not-share-my-data",
+        document_type: "privacy_policy",
+        id: "doc-choice",
+        title: "Your Privacy Choices"
+      },
+      {
+        canonical_url: "https://example.com/legal/job-applicant-privacy-notice",
+        document_type: "privacy_policy",
+        id: "doc-applicant",
+        title: "Job Applicant Privacy Notice"
+      }
+    ],
+    runtimeArtifacts: null
+  });
+
+  assert.deepEqual(rows.map((row) => row.id), ["doc-help", "doc-choice"]);
 });
 
 test("buildNanoDocumentContentHash normalizes whitespace before hashing", () => {
