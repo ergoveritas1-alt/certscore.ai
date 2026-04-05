@@ -32,7 +32,8 @@ test("derives high-signal privacy and consent findings from hybrid runtime evide
         },
         requestObservations: [
           { domain: "router.infolinks.com", thirdParty: true },
-          { domain: "my.rtmark.net", thirdParty: true }
+          { domain: "my.rtmark.net", thirdParty: true },
+          { domain: "ib.adnxs.com", thirdParty: true, identifierLike: true, queryKeysSample: ["user_id", "session_id"] }
         ],
         consentSummary: {
           bannerPresent: true,
@@ -224,6 +225,7 @@ test("uses identity-rich telemetry wording when telemetry is elevated but finger
           deviceDataLikeRequestCount: 3
         },
         requestObservations: [
+          { domain: "cdn.segment.com", thirdParty: true, identifierLike: true, queryKeysSample: ["anonymous_id", "user_id"] },
           { domain: "static.cloudflareinsights.com", thirdParty: true },
           { domain: "plausible.io", thirdParty: true }
         ],
@@ -277,6 +279,50 @@ test("does not promote identifier transmission from generic bootstrap query keys
   });
 
   assert.equal(summary.findings.some((finding) => finding.id === "identifier_transmission_detected"), false);
+});
+
+test("does not promote telemetry-rich identification from generic third-party sdk keys alone", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyIdentifierLikeRequestCount: 1,
+          deviceDataLikeRequestCount: 0
+        },
+        requestObservations: [
+          {
+            thirdParty: true,
+            domain: "o13855.ingest.sentry.io",
+            identifierLike: true,
+            queryKeysSample: ["sentry_version", "sentry_key", "sentry_client"]
+          },
+          {
+            thirdParty: true,
+            domain: "static.cloudflareinsights.com",
+            identifierLike: false,
+            queryKeysSample: []
+          }
+        ],
+        vendorSummary: {
+          rawThirdPartyDomains: ["o13855.ingest.sentry.io", "static.cloudflareinsights.com"]
+        },
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 0
+        }
+      }
+    },
+    snapshot: null,
+    scan: {
+      completedAt: "2026-04-05T23:03:53.000Z",
+      createdAt: "2026-04-05T23:03:34.000Z",
+      domainHostname: "canva.com"
+    }
+  });
+
+  assert.equal(summary.fingerprintNarrative, "None detected");
+  assert.equal(summary.findings.some((finding) => finding.id === "telemetry_rich_identification_observed"), false);
 });
 
 test("promotes identifier transmission when stronger identifier keys are observed", () => {

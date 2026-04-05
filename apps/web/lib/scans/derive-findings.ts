@@ -168,15 +168,18 @@ function getFingerprintLabel(tier: number | null) {
 
 function getFingerprintNarrative(input: {
   attributeCategoryCount: number;
+  concreteThirdPartyIdentifierLikeRequestCount: number;
   deviceDataLikeRequestCount: number;
   rawAdtechHosts: string[];
-  thirdPartyIdentifierLikeRequestCount: number;
   tier: number | null;
 }) {
   if ((input.tier ?? 0) >= 2) {
     return getFingerprintLabel(input.tier);
   }
-  if (input.thirdPartyIdentifierLikeRequestCount > 0 && (input.deviceDataLikeRequestCount > 0 || input.rawAdtechHosts.length > 0 || input.attributeCategoryCount >= 2)) {
+  if (
+    input.concreteThirdPartyIdentifierLikeRequestCount > 0 &&
+    (input.deviceDataLikeRequestCount > 0 || input.rawAdtechHosts.length > 0 || input.attributeCategoryCount >= 2)
+  ) {
     return "Identity-rich telemetry observed";
   }
   return getFingerprintLabel(input.tier);
@@ -734,7 +737,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   }
 
   if (
-    thirdPartyIdentifierLikeRequestCount > 0 &&
+    concreteThirdPartyIdentifierLikeRequests.length > 0 &&
     (deviceDataLikeRequestCount > 0 || rawAdtechHosts.length > 0 || securityCookieNames.length > 0)
   ) {
     findings.push(
@@ -742,7 +745,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
         confidence: "good",
         directVsInferred: "mixed",
         evidencePreview: uniqueStrings([
-          `${thirdPartyIdentifierLikeRequestCount} third-party identifier-like request${thirdPartyIdentifierLikeRequestCount === 1 ? "" : "s"}`,
+          `${concreteThirdPartyIdentifierLikeRequests.length} third-party strong identifier request${concreteThirdPartyIdentifierLikeRequests.length === 1 ? "" : "s"}`,
           deviceDataLikeRequestCount > 0 ? `${deviceDataLikeRequestCount} device-data-like request${deviceDataLikeRequestCount === 1 ? "" : "s"}` : null,
           ...rawAdtechHosts.slice(0, 2)
         ]),
@@ -956,9 +959,9 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     fingerprintLabel: getFingerprintLabel(fingerprintTier),
     fingerprintNarrative: getFingerprintNarrative({
       attributeCategoryCount,
+      concreteThirdPartyIdentifierLikeRequestCount: concreteThirdPartyIdentifierLikeRequests.length,
       deviceDataLikeRequestCount,
       rawAdtechHosts,
-      thirdPartyIdentifierLikeRequestCount,
       tier: fingerprintTier
     }),
     rawAdtechHosts,
