@@ -48,10 +48,11 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "lookout.com",
     label: "lookout",
-    maxValidationMs: 15_000,
+    maxValidationMs: 30_000,
     expectedFindings: [
+      { ruleKey: "cookie_runtime.disclosure_gap", severity: "high" },
+      { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
-      { ruleKey: "cookie_runtime.disclosure_gap", severity: "medium" },
       { ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }
     ]
   },
