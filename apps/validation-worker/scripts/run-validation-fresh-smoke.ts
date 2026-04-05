@@ -84,8 +84,9 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
   {
     hostname: "dnb.com",
     label: "dnb",
-    maxValidationMs: 15_000,
+    maxValidationMs: 25_000,
     expectedFindings: [
+      { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
       { ruleKey: "access_review.legal_coverage_unverified", severity: "medium" },
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "medium" }
     ]
