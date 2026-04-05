@@ -286,7 +286,9 @@ async function runFreshSmokeForTarget(
     throw new Error(`Fresh smoke scan ${scanId} for ${target.hostname} failed: ${completedScan.errorMessage ?? "Unknown error"}`);
   }
 
+  const validationStartedAtIso = new Date().toISOString();
   await updateValidationRun(run.id, {
+    started_at: validationStartedAtIso,
     status: "ranking"
   });
   await processValidationRankJob(run.id);
@@ -307,7 +309,7 @@ async function runFreshSmokeForTarget(
 
   const findings = await loadValidationRunFindings(run.id);
   const validationMs = (() => {
-    const start = parseIsoMs(refreshedRun.started_at);
+    const start = parseIsoMs(validationStartedAtIso);
     const end = parseIsoMs(refreshedRun.completed_at);
     return start !== null && end !== null ? end - start : null;
   })();
