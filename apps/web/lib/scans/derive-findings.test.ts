@@ -456,6 +456,69 @@ test("does not use snapshot pre-consent fallback when runtime timing explicitly 
   assert.equal(ids.includes("analytics_cookie_pre_consent"), false);
 });
 
+test("does not overcall overlay, device data, or redirect chain on benign paypal-style runtime evidence", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          totalRequestCount: 101,
+          thirdPartyRequestCount: 85,
+          thirdPartyDomainCount: 5,
+          thirdPartyScriptCount: 50,
+          deviceDataLikeRequestCount: 2,
+          preConsentRequestCount: 0,
+          preConsentThirdPartyRequestCount: 0
+        },
+        consentSummary: {
+          bannerPresent: true,
+          rejectPresent: true,
+          rejectDepthClass: "same_layer",
+          requestsBeforeAnyConsentAction: false
+        },
+        consentVisual: {
+          acceptProminence: "medium",
+          rejectProminence: "medium"
+        },
+        uiSummary: {
+          overlayDetected: true,
+          fullScreenTakeover: false,
+          forcedActionRequired: false
+        },
+        navigationSummary: {
+          initialUrl: "https://paypal.com/",
+          finalUrl: "https://www.paypal.com/us/home",
+          redirectHopCount: 2,
+          crossDomainHopCount: 1,
+          affiliateOrTrackerRedirectDetected: false
+        },
+        vendorSummary: {
+          normalizedVendors: ["Google Tag Manager"],
+          rawThirdPartyDomains: ["www.paypalobjects.com", "www.googletagmanager.com"]
+        },
+        fingerprintSummary: {
+          tier: 0,
+          confidence: "low",
+          attributeCategoryCount: 0
+        }
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true
+    },
+    scan: {
+      completedAt: "2026-04-05T23:07:47.000Z",
+      createdAt: "2026-04-05T23:06:46.000Z",
+      domainHostname: "paypal.com"
+    }
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.equal(ids.includes("content_obstructed_by_overlay"), false);
+  assert.equal(ids.includes("device_data_collection_detected"), false);
+  assert.equal(ids.includes("tracking_redirect_chain"), false);
+});
+
 test("uses snapshot tracker vendor counts when runtime naming is incomplete", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

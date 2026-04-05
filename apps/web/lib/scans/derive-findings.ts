@@ -117,6 +117,11 @@ function deriveHostname(value: string | null | undefined) {
   }
 }
 
+function normalizeComparableHost(value: string | null | undefined) {
+  const host = deriveHostname(value);
+  return host ? host.toLowerCase().replace(/^www\./, "") : null;
+}
+
 function looksLikeAdtechHost(host: string) {
   return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|plausible|cloudflareinsights)/i.test(
     host
@@ -621,7 +626,13 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (consentSummary?.contentObstructed === true || uiSummary?.overlayDetected === true || uiSummary?.fullScreenTakeover === true) {
+  const overlayLikelyBlocking =
+    consentSummary?.contentObstructed === true ||
+    uiSummary?.fullScreenTakeover === true ||
+    (uiSummary?.overlayDetected === true &&
+      (consentSummary?.pageInteractionBlocked === true || uiSummary?.forcedActionRequired === true || consentSummary?.cookieWallDetected === true));
+
+  if (overlayLikelyBlocking) {
     findings.push(
       buildFinding("content_obstructed_by_overlay", {
         confidence: "strong",
@@ -760,7 +771,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (deviceDataLikeRequestCount > 0 || attributeCategoryCount >= 2) {
+  if (deviceDataLikeRequestCount >= 3 || attributeCategoryCount >= 2) {
     findings.push(
       buildFinding("device_data_collection_detected", {
         confidence: "good",
@@ -852,7 +863,15 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (navigationSummary?.affiliateOrTrackerRedirectDetected === true || ((getNumber(navigationSummary?.redirectHopCount) ?? 0) >= 2 && (getNumber(navigationSummary?.crossDomainHopCount) ?? 0) > 0)) {
+  const normalizedInitialHost = normalizeComparableHost(getString(navigationSummary?.initialUrl)) ?? normalizeComparableHost(requestedHost);
+  const normalizedFinalHost = normalizeComparableHost(getString(navigationSummary?.finalUrl)) ?? normalizeComparableHost(finalHost);
+  const redirectLooksCrossSite =
+    Boolean(normalizedInitialHost && normalizedFinalHost && normalizedInitialHost !== normalizedFinalHost);
+
+  if (
+    navigationSummary?.affiliateOrTrackerRedirectDetected === true ||
+    (((getNumber(navigationSummary?.redirectHopCount) ?? 0) >= 2 && (getNumber(navigationSummary?.crossDomainHopCount) ?? 0) > 0) && redirectLooksCrossSite)
+  ) {
     const redirectHopCount = getNumber(navigationSummary?.redirectHopCount) ?? 0;
     findings.push(
       buildFinding("tracking_redirect_chain", {

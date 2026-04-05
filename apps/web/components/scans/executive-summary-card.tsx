@@ -1,3 +1,4 @@
+import React from "react";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
@@ -95,7 +96,7 @@ function getPostureHeadline(posture: "Clear" | "Watch" | "Action Needed") {
 function formatTopFindingHeadline(findings: CertScoreFinding[]) {
   const labels = findings.slice(0, 3).map((finding) => finding.label);
   if (labels.length === 0) {
-    return "No headline findings surfaced yet.";
+    return "No headline issue crossed the executive threshold for this scan.";
   }
   return labels.join(" • ");
 }
@@ -599,28 +600,34 @@ export function ExecutiveSummaryCard(input: {
           </div>
 
           <div className="grid gap-3">
-            {primaryFindings.map((finding, index) => (
-              <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
-                <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
-                <div className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
-                    {finding.severity}
-                  </span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
-                    {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
-                  </span>
-                </div>
-                <div className="mt-2.5 flex items-start gap-2.5">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
-                    <FindingTitleIcon finding={finding} />
+            {primaryFindings.length > 0 ? (
+              primaryFindings.map((finding, index) => (
+                <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
+                  <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
+                  <div className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
+                      {finding.severity}
+                    </span>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
+                      {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
+                    </span>
                   </div>
-                  <p className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">{finding.label}</p>
+                  <div className="mt-2.5 flex items-start gap-2.5">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                      <FindingTitleIcon finding={finding} />
+                    </div>
+                    <p className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">{finding.label}</p>
+                  </div>
+                  <FindingDetailDisclosure finding={finding} />
                 </div>
-                <FindingDetailDisclosure finding={finding} />
                 </div>
+              ))
+            ) : (
+              <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
+                No headline issue crossed the executive threshold for this scan. Review the supporting evidence below for lower-priority signals and scan context.
               </div>
-            ))}
+            )}
           </div>
           {secondaryFindings.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-3">
