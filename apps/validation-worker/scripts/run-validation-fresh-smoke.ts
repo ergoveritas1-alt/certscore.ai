@@ -105,6 +105,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
 
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
+const DEFAULT_QUEUED_TIMEOUT_MS = 2 * 60_000;
 
 function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
@@ -219,11 +220,26 @@ async function loadScanState(scanId: string) {
 
 async function waitForScanCompletion(scanId: string, input: { pollMs: number; timeoutMs: number }) {
   const deadline = Date.now() + input.timeoutMs;
+  const queuedDeadline = Date.now() + DEFAULT_QUEUED_TIMEOUT_MS;
+  let lastStatus: string | null = null;
 
   while (Date.now() < deadline) {
     const scan = await loadScanState(scanId);
+    if (scan.status !== lastStatus) {
+      console.error(
+        `[fresh-smoke] scan ${scanId} status=${scan.status} started_at=${scan.startedAt ?? "null"} completed_at=${scan.completedAt ?? "null"}`
+      );
+      lastStatus = scan.status;
+    }
+
     if (scan.status === "completed" || scan.status === "failed") {
       return scan;
+    }
+
+    if (scan.status === "queued" && !scan.startedAt && Date.now() >= queuedDeadline) {
+      throw new Error(
+        `Fresh smoke scan ${scanId} is still queued after ${formatDurationMs(DEFAULT_QUEUED_TIMEOUT_MS)}. WS01 scanner worker may be unavailable.`
+      );
     }
 
     await sleep(input.pollMs);
