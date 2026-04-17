@@ -108,6 +108,11 @@ type ValidationRunFindingRow = {
     | null;
 };
 
+type ValidationFindingConfidenceRow = {
+  confidence: number | null;
+  validation_run_finding_id: string;
+};
+
 type ExistingFindingIdentity = Pick<ValidationRunFindingRow, "rule_key" | "title">;
 
 type ScanSignalRow = {
@@ -1657,7 +1662,7 @@ export async function getValidationRunDetail(validationRunId: string) {
 
   const { data: findings, error: findingsError } = await supabase
     .from("validation_run_findings")
-    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank, validation_verdicts ( confidence )")
+    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
     .eq("validation_run_id", validationRunId)
     .order("finding_rank", { ascending: true });
 
@@ -1665,7 +1670,32 @@ export async function getValidationRunDetail(validationRunId: string) {
     throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
   }
 
-  let normalizedFindings = (findings ?? []) as ValidationRunFindingRow[];
+  const findingRows = (findings ?? []) as ValidationRunFindingRow[];
+  const findingIds = findingRows.map((row) => row.id);
+  const confidenceByFindingId = new Map<string, ValidationFindingConfidenceRow>();
+
+  if (findingIds.length > 0) {
+    const { data: verdictRows, error: verdictsError } = await supabase
+      .from("validation_verdicts")
+      .select("validation_run_finding_id, confidence")
+      .in("validation_run_finding_id", findingIds)
+      .order("created_at", { ascending: false });
+
+    if (verdictsError) {
+      throw new Error(`Failed to load validation verdicts: ${verdictsError.message}`);
+    }
+
+    for (const row of (verdictRows ?? []) as ValidationFindingConfidenceRow[]) {
+      if (!confidenceByFindingId.has(row.validation_run_finding_id)) {
+        confidenceByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
+  }
+
+  let normalizedFindings = findingRows.map((row) => ({
+    ...row,
+    validation_verdicts: confidenceByFindingId.get(row.id) ?? null
+  })) as ValidationRunFindingRow[];
   const scanStatus =
     scanRow && typeof (scanRow as { status?: unknown }).status === "string"
       ? String((scanRow as { status: string }).status)

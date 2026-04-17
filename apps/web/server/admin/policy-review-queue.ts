@@ -44,7 +44,7 @@ export async function updatePolicyReviewVerdict(input: {
   const supabase = createAdminClient();
   const { data: existingQueueItem, error: existingQueueItemError } = await supabase
     .from("policy_review_queue")
-    .select("reason, policy_enrichment(page_type)")
+    .select("reason, policy_enrichment_id")
     .eq("id", input.queueItemId)
     .maybeSingle();
 
@@ -52,12 +52,20 @@ export async function updatePolicyReviewVerdict(input: {
     throw new Error(`Failed to load policy review queue item: ${existingQueueItemError.message}`);
   }
 
-  const pageTypeRecord = Array.isArray(existingQueueItem?.policy_enrichment)
-    ? existingQueueItem.policy_enrichment[0]
-    : existingQueueItem?.policy_enrichment;
+  const { data: policyEnrichmentRow, error: policyEnrichmentError } = existingQueueItem?.policy_enrichment_id
+    ? await supabase
+        .from("policy_enrichment")
+        .select("page_type")
+        .eq("id", existingQueueItem.policy_enrichment_id)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  if (policyEnrichmentError) {
+    throw new Error(`Failed to load policy enrichment for queue item ${input.queueItemId}: ${policyEnrichmentError.message}`);
+  }
 
   const resolvedNotes = resolvePolicyReviewNote({
-    pageType: pageTypeRecord?.page_type ?? null,
+    pageType: policyEnrichmentRow?.page_type ?? null,
     reason: existingQueueItem?.reason ?? null,
     reviewVerdict: input.reviewVerdict,
     reviewerNotes: input.reviewerNotes ?? null

@@ -121,6 +121,19 @@ type ValidationRunFindingWithVerdictRow = {
     | null;
 };
 
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
 type SignalPopulationRow = {
   category: string | null;
   confidence?: number | null;
@@ -1527,10 +1540,34 @@ async function loadScanRecordForFindingCount(input: {
     input.supabase
       .from("validation_run_findings")
       .select(
-        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
       )
       .eq("validation_run_id", input.runId)
   ]);
+
+  const validationFindingBaseRows = (validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[];
+  const validationFindingIds = validationFindingBaseRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    const { data: verdictRows, error: verdictsError } = await input.supabase
+      .from("validation_verdicts")
+      .select(
+        "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation"
+      )
+      .in("validation_run_finding_id", validationFindingIds)
+      .order("created_at", { ascending: false });
+
+    if (verdictsError) {
+      throw new Error(`Failed to load validation verdicts for ${input.scanId}: ${verdictsError.message}`);
+    }
+
+    for (const row of (verdictRows ?? []) as ValidationVerdictRow[]) {
+      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+        verdictByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
+  }
 
   const rawSignalRows = (signals ?? []) as SignalPopulationRow[];
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
@@ -1588,11 +1625,12 @@ async function loadScanRecordForFindingCount(input: {
     policyEnrichment: normalizedPolicyRows
   });
 
-  const validationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[]).map((row) => {
+  const validationFindings: ScanValidationFinding[] = validationFindingBaseRows.map((row) => {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
 

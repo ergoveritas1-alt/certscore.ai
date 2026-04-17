@@ -159,6 +159,21 @@ type ValidationFindingSummaryRow = {
     | null;
 };
 
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  created_at: string | null;
+  evidence_json: Record<string, unknown> | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
 const CHANGE_EVENT_BATCH_SIZE = 50;
 
 function chunkValues<T>(values: T[], size: number) {
@@ -333,7 +348,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       const { data, error: validationFindingsError } = await supabase
         .from("validation_run_findings")
         .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
         )
         .in("validation_run_id", validationRunIdBatch);
 
@@ -344,12 +359,37 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       validationFindingRows.push(...((data ?? []) as ValidationFindingSummaryRow[]));
     }
   }
+  const validationFindingIds = validationFindingRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await supabase
+        .from("validation_verdicts")
+        .select(
+          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
+        )
+        .in("validation_run_finding_id", findingIdBatch)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to load scan verdicts: ${error.message}`);
+      }
+
+      for (const row of (data ?? []) as ValidationVerdictRow[]) {
+        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+          verdictByFindingId.set(row.validation_run_finding_id, row);
+        }
+      }
+    }
+  }
   const validationFindingsByRunId = new Map<string, ScanValidationFinding[]>();
   for (const row of validationFindingRows) {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
     const existing = validationFindingsByRunId.get(row.validation_run_id) ?? [];

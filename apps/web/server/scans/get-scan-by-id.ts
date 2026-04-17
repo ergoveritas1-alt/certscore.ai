@@ -473,6 +473,21 @@ type ValidationRunFindingRow = {
     | null;
 };
 
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  created_at: string | null;
+  evidence_json: Record<string, unknown> | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
   const next = { ...snapshot };
   delete next.id;
@@ -772,7 +787,7 @@ async function loadScanDetailRecord(input: {
     const { data: validationFindingRows, error: validationFindingsError } = await supabase
       .from("validation_run_findings")
       .select(
-        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
       )
       .eq("validation_run_id", validationRunId)
       .order("finding_rank", { ascending: true });
@@ -781,7 +796,34 @@ async function loadScanDetailRecord(input: {
       throw new Error(`Failed to load validation findings for scan ${input.scanId}: ${validationFindingsError.message}`);
     }
 
-    const findingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
+    const baseFindingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
+    const findingIds = baseFindingRows.map((row) => row.id);
+    const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+    if (findingIds.length > 0) {
+      const { data: verdictRows, error: verdictsError } = await supabase
+        .from("validation_verdicts")
+        .select(
+          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
+        )
+        .in("validation_run_finding_id", findingIds)
+        .order("created_at", { ascending: false });
+
+      if (verdictsError) {
+        throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${verdictsError.message}`);
+      }
+
+      for (const row of (verdictRows ?? []) as ValidationVerdictRow[]) {
+        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+          verdictByFindingId.set(row.validation_run_finding_id, row);
+        }
+      }
+    }
+
+    const findingRows = baseFindingRows.map((row) => ({
+      ...row,
+      validation_verdicts: verdictByFindingId.get(row.id) ?? null
+    }));
 
     validationFindings = findingRows.map((row) => {
       const verdictRows = Array.isArray(row.validation_verdicts)
