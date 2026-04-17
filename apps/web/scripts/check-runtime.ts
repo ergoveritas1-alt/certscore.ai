@@ -1,5 +1,6 @@
 import { hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
 import { getDatabaseHealth } from "../server/health/get-database-health";
+import { checkStorageBucketExists, getStorageBucketName } from "../server/storage/s3";
 
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
@@ -16,7 +17,10 @@ async function main() {
     return;
   }
 
-  const health = await getDatabaseHealth();
+  const [health, storageBucketExists] = await Promise.all([
+    getDatabaseHealth(),
+    checkStorageBucketExists()
+  ]);
 
   if (!health.ok) {
     const missingTableMessage =
@@ -29,7 +33,26 @@ async function main() {
     return;
   }
 
+  if (!health.checks.authSchema) {
+    fail(
+      "auth runtime",
+      `Missing required Better Auth tables: ${health.requiredTables.missing.join(", ")}.`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!storageBucketExists) {
+    fail(
+      "storage runtime",
+      `Could not access configured S3 bucket ${getStorageBucketName()}. Check bucket existence, credentials, and endpoint configuration.`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   pass("database runtime", `Connected to the expected schema. Required auth tables present: ${health.requiredTables.present.join(", ")}.`);
+  pass("storage runtime", `Connected to S3-compatible storage bucket ${getStorageBucketName()}.`);
 }
 
 main().catch((error) => {
