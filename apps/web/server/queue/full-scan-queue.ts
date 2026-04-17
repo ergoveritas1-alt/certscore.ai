@@ -119,9 +119,9 @@ export function resolveScannerServiceHeartbeatSnapshot(input: {
 }
 
 export async function getLastScannerServiceHeartbeat(
-  supabase = createAdminClient()
+  db = createAdminClient()
 ): Promise<ScannerServiceHeartbeatSnapshot> {
-  const { data: eventRow, error: eventError } = await supabase
+  const { data: eventRow, error: eventError } = await db
     .from("scan_events")
     .select("created_at, metadata_json")
     .is("scan_id", null)
@@ -147,7 +147,7 @@ export async function getLastScannerServiceHeartbeat(
     });
   }
 
-  const { data: heartbeatRows, error: heartbeatError } = await supabase
+  const { data: heartbeatRows, error: heartbeatError } = await db
     .from("worker_heartbeats")
     .select("worker_type, last_heartbeat_at, host")
     .in("worker_type", [SCANNER_WORKER_TYPE, LEGACY_FULL_SCAN_WORKER_TYPE]);
@@ -170,9 +170,9 @@ export async function getLastScannerServiceHeartbeat(
 
 /** @deprecated Use getLastScannerServiceHeartbeat instead. */
 export async function getLastFullScanWorkerHeartbeat(
-  supabase = createAdminClient()
+  db = createAdminClient()
 ): Promise<ScannerServiceHeartbeatSnapshot> {
-  return getLastScannerServiceHeartbeat(supabase);
+  return getLastScannerServiceHeartbeat(db);
 }
 
 /** @deprecated Use resolveScannerServiceHeartbeatSnapshot instead. */

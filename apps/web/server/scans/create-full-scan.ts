@@ -117,12 +117,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
   if (input.enforceMonthlyUsageLimit) {
     const monthWindow = getCurrentMonthWindow();
     const metricKey = USAGE_METRIC_KEYS.manualFullScans;
-    const { data: usageCounter, error: usageError } = await supabase
+    const { data: usageCounter, error: usageError } = await db
       .from("usage_counters")
       .select("id, value")
       .eq("organization_id", input.organizationId)
@@ -154,7 +154,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     const nextUsageValue = currentUsage + 1;
 
     if (usageCounter) {
-      const { error: updateUsageError } = await supabase
+      const { error: updateUsageError } = await db
         .from("usage_counters")
         .update({ value: nextUsageValue })
         .eq("id", (usageCounter as { id: string }).id);
@@ -166,7 +166,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         };
       }
     } else {
-      const { error: insertUsageError } = await supabase.from("usage_counters").insert({
+      const { error: insertUsageError } = await db.from("usage_counters").insert({
         organization_id: input.organizationId,
         metric_key: metricKey,
         period_start: monthWindow.periodStart,
@@ -200,7 +200,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     source: input.source ?? "manual-dashboard"
   };
 
-  const { data: scan, error } = await supabase
+  const { data: scan, error } = await db
     .from("scans")
     .insert({
       organization_id: input.organizationId,
@@ -222,7 +222,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  const { error: eventError } = await supabase.from("scan_events").insert({
+  const { error: eventError } = await db.from("scan_events").insert({
     scan_id: scan.id,
     domain_id: domainRecord.domain.id,
     organization_id: input.organizationId,
@@ -241,7 +241,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  const { error: latestScanError } = await supabase
+  const { error: latestScanError } = await db
     .from("domains")
     .update({ latest_scan_id: scan.id })
     .eq("id", domainRecord.domain.id)

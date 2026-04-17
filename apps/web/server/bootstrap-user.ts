@@ -87,8 +87,8 @@ function mapOrganizationRow(row: {
 }
 
 export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
-  const supabase = createAdminClient();
-  const { data: existingProfileRow, error: existingProfileError } = await supabase
+  const db = createAdminClient();
+  const { data: existingProfileRow, error: existingProfileError } = await db
     .from("users")
     .select("id, email, full_name, auth_provider, created_at, updated_at")
     .eq("id", user.id)
@@ -101,7 +101,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
   const existingProfile = (existingProfileRow as UserRecord | null) ?? null;
   const mergedProvider = mergeAuthProviders(existingProfile?.auth_provider, user.authProvider);
 
-  const { data: profileRow, error: upsertProfileError } = await supabase
+  const { data: profileRow, error: upsertProfileError } = await db
     .from("users")
     .upsert(
       {
@@ -123,7 +123,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
 
   const profile = profileRow as UserRecord;
 
-  const { data: existingMembershipRow, error: membershipLookupError } = await supabase
+  const { data: existingMembershipRow, error: membershipLookupError } = await db
     .from("organization_members")
     .select("id, organization_id, user_id, role, created_at")
     .eq("user_id", user.id)
@@ -137,7 +137,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
   let organization: OrganizationRecord | null = null;
 
   if (!membership) {
-    const { data: createdOrganizationRow, error: createOrganizationError } = await supabase
+    const { data: createdOrganizationRow, error: createOrganizationError } = await db
       .from("organizations")
       .insert({
         name: getWorkspaceName(user),
@@ -162,7 +162,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
       }
     );
 
-    const { data: createdMembershipRow, error: createMembershipError } = await supabase
+    const { data: createdMembershipRow, error: createMembershipError } = await db
       .from("organization_members")
       .insert({
         organization_id: organization.id,
@@ -181,7 +181,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
     membership = createdMembershipRow as OrganizationMemberRecord;
   }
 
-  const { data: organizationLookupRow, error: organizationLookupError } = await supabase
+  const { data: organizationLookupRow, error: organizationLookupError } = await db
     .from("organizations")
     .select("id, name, slug, plan, plan_status, created_at, updated_at")
     .eq("id", membership.organization_id)
