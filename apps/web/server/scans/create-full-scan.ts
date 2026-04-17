@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { FULL_SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
@@ -117,7 +117,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   if (input.enforceMonthlyUsageLimit) {
     const monthWindow = getCurrentMonthWindow();

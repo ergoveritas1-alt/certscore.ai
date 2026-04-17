@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, ScanFrequency } from "@website-signal-risk-scanner/shared";
 import { getNextScheduledAt, getPlanDefinition, isScheduledScanDue } from "@website-signal-risk-scanner/shared";
 
@@ -86,7 +86,7 @@ function resolveEffectiveFrequency(input: {
 }
 
 export async function getOrganizationDomains(organizationId: string): Promise<DomainListItem[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const domainQueryWithLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, created_at, updated_at")

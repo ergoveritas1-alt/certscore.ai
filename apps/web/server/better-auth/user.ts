@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 type BetterAuthUserRow = {
   email: string;
@@ -12,7 +12,7 @@ type BetterAuthAccountRow = {
 };
 
 export async function getBetterAuthVerificationStatus(userId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("better_auth_users")
     .select("email, email_verified")
@@ -35,7 +35,7 @@ export async function getBetterAuthVerificationStatus(userId: string) {
 }
 
 export async function hasBetterAuthPasswordAccount(email: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const normalizedEmail = email.trim().toLowerCase();
   const { data: userRow, error: userError } = await db
     .from("better_auth_users")

@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -17,7 +17,7 @@ export async function updateCurrentOrganizationPlanFormAction(formData: FormData
     plan: formData.get("plan") as PlanCode
   });
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("organizations")
     .update({

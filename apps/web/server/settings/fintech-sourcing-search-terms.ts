@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { z } from "zod";
 import { getDashboardContext } from "../auth";
 
@@ -24,7 +24,7 @@ function normalizeStoredSearchTerms(value: unknown) {
 
 export async function getFintechSourcingSearchTerms() {
   const { organization } = await getDashboardContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("organization_settings")
     .select("fintech_sourcing_search_terms")
@@ -45,7 +45,7 @@ export async function updateFintechSourcingSearchTerms(nextTerms: string[]) {
     nextTerms.map((term) => term.trim()).filter((term) => term.length > 0)
   );
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("organization_settings")
     .upsert(

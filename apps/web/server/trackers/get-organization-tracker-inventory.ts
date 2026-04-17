@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 type CompletedScanRow = {
   completed_at: string;
@@ -72,7 +72,7 @@ export type OrganizationPreconsentLeaderboardItem = {
 };
 
 export async function getOrganizationTrackerInventory(organizationId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: completedScans, error: scansError } = await db
     .from("scans")
     .select("id, domain_id, completed_at")

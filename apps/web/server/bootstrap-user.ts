@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import type { AuthenticatedAppUser } from "./auth-flows/types";
 
@@ -87,7 +87,7 @@ function mapOrganizationRow(row: {
 }
 
 export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: existingProfileRow, error: existingProfileError } = await db
     .from("users")
     .select("id, email, full_name, auth_provider, created_at, updated_at")

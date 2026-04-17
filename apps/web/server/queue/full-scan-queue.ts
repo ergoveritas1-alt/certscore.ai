@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 
 const SCANNER_WORKER_TYPE = "scanner";
@@ -119,7 +119,7 @@ export function resolveScannerServiceHeartbeatSnapshot(input: {
 }
 
 export async function getLastScannerServiceHeartbeat(
-  db = createAdminClient()
+  db = createDatabaseClient()
 ): Promise<ScannerServiceHeartbeatSnapshot> {
   const { data: eventRow, error: eventError } = await db
     .from("scan_events")
@@ -170,7 +170,7 @@ export async function getLastScannerServiceHeartbeat(
 
 /** @deprecated Use getLastScannerServiceHeartbeat instead. */
 export async function getLastFullScanWorkerHeartbeat(
-  db = createAdminClient()
+  db = createDatabaseClient()
 ): Promise<ScannerServiceHeartbeatSnapshot> {
   return getLastScannerServiceHeartbeat(db);
 }

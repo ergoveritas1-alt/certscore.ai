@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 type ScanRow = {
   completed_at: string | null;
@@ -29,7 +29,7 @@ type SnapshotRow = {
 };
 
 export async function getOrganizationAccessibilityOverview(organizationId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: completedScans, error: scansError } = await db
     .from("scans")
     .select("id, domain_id, completed_at")

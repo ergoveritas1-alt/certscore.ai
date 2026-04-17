@@ -17,7 +17,7 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
@@ -212,7 +212,7 @@ async function resolveDomainBenchmarkEstimate(input: {
   domainId: string | null;
   organizationId: string | null;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }): Promise<DomainBenchmarkEstimate | null> {
   const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
   const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);
@@ -610,7 +610,7 @@ async function loadScanDetailRecord(input: {
   anonymousOnly?: boolean;
   viewerEmail?: string | null;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
   const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
 

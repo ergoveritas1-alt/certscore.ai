@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
@@ -199,7 +199,7 @@ function isMissingTieredSnapshotColumn(error: { message?: string; code?: string 
 
 export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scans, error } = await db
     .from("scans")
     .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned")
@@ -511,7 +511,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   const [
     { count: totalScans, error: totalScansError },
@@ -561,7 +561,7 @@ function incrementCount(map: Map<string, number>, key: string) {
 
 export async function getBlockedRunTelemetry(hours = 72): Promise<BlockedRunTelemetry> {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const { data, error } = await db
     .from("scan_snapshots")

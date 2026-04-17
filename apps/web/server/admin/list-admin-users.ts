@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -72,7 +72,7 @@ type ScanRow = {
 
 export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }, { data: organizations, error: organizationsError }, { data: domains, error: domainsError }, { data: scans, error: scansError }] =
     await Promise.all([

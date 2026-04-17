@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 export type DomainDetailRecord = {
   id: string;
@@ -67,7 +67,7 @@ function isMissingIndustrySchema(error: { message?: string } | null) {
 }
 
 export async function getDomainById(input: { domainId: string; organizationId: string }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const domainQueryWithLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")

@@ -11,7 +11,7 @@ import {
   resolvePolicyReviewVerdict,
   type PolicyReviewVerdict
 } from "@website-signal-risk-scanner/shared";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
@@ -161,7 +161,7 @@ function nullifyEmptySnapshotHashes(snapshot: Record<string, unknown>) {
 
 export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetail | null> {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scan, error } = await db
     .from("scans")
     .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json")

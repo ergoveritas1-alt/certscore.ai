@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
@@ -208,7 +208,7 @@ async function ensureDomain(input: {
   hostname: string;
   normalizedUrl: string;
   organizationId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const existing = await input.db
     .from("domains")
@@ -250,7 +250,7 @@ async function queueScan(input: {
   processor: string;
   profile: string;
   runtimeFast?: boolean;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
   pagesRequestedOverride?: number | null;
 }) {
   const pagesRequested = Math.max(1, input.pagesRequestedOverride ?? input.domain.max_pages_override ?? DEFAULT_MAX_PAGES);
@@ -294,7 +294,7 @@ async function queueScan(input: {
 async function waitForCompletion(input: {
   hostname: string;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
@@ -324,7 +324,7 @@ async function waitForCompletion(input: {
 async function waitForSignalEnrichmentCompletion(input: {
   hostname: string;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
@@ -369,7 +369,7 @@ async function waitForSignalEnrichmentCompletion(input: {
 async function summarizeScan(input: {
   hostname: string;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const [
     { data: snapshot, error: snapshotError },
@@ -596,7 +596,7 @@ async function main() {
     throw new Error("Provide at least one valid domain with --domains.");
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   if (onlySummarize && queueOnly) {
     throw new Error("Use either --summarize-only or --queue-only, not both.");
   }

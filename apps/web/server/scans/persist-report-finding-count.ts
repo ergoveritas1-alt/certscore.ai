@@ -1,13 +1,13 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 export async function persistReportFindingCount(input: {
   count: number;
   scanId: string;
 }) {
   try {
-    const db = createAdminClient();
+    const db = createDatabaseClient();
     const { error } = await db
       .from("scan_snapshots")
       .update({

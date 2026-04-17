@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 type ProfileRow = {
   auth_provider?: string;
@@ -12,7 +12,7 @@ export function normalizeEmail(email: string) {
 }
 
 export async function findAppUserByEmail(email: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const normalizedEmail = normalizeEmail(email);
   const { data, error } = await db
     .from("users")

@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import {
   buildSharedFullScanConfig,
   SCAN_EVENT_TYPES,
@@ -188,7 +188,7 @@ async function failValidationQueueHandoff(input: {
   targetId: string | null;
   validationRunId: string;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   await db
     .from("validation_runs")
     .update({
@@ -969,7 +969,7 @@ async function loadSupplementalValidationFindings(input: {
     return [] as ValidationRunFindingRow[];
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [
     { data: snapshot, error: snapshotError },
     { data: policyQueue, error: policyQueueError },
@@ -1129,7 +1129,7 @@ export async function ensureValidationRunForManualScan(input: {
     return null;
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: settings, error: settingsError } = await db
     .from("validation_settings")
     .select("pipeline_enabled")
@@ -1243,7 +1243,7 @@ async function ensureValidationDomainForOrganization(input: {
   hostname: string;
   normalizedUrl: string;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: existing, error: existingError } = await db
     .from("domains")
     .select("id, hostname, normalized_url")
@@ -1285,7 +1285,7 @@ async function createValidationScan(input: {
   pagesRequested?: number;
   submittedByUserId: string;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
   const scanConfig = buildSharedFullScanConfig({
     hostname: input.hostname,
@@ -1342,7 +1342,7 @@ async function requireAdmin() {
 
 export async function getValidationSettings() {
   const context = await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_settings")
     .upsert(
@@ -1396,7 +1396,7 @@ export async function getValidationSettings() {
 
 export async function listValidationTargets(limit = 25) {
   await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [manualResult, trancoResult] = await Promise.all([
     db
       .from("validation_targets")
@@ -1464,7 +1464,7 @@ export async function listValidationRuns(input?: {
   status?: string | null;
 }) {
   await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * 50;
   const to = from + 49;
@@ -1604,7 +1604,7 @@ export async function listValidationRuns(input?: {
 
 export async function getValidationRunDetail(validationRunId: string) {
   await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: run, error: runError } = await db
     .from("validation_runs")
     .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message")
@@ -1845,7 +1845,7 @@ export async function getValidationRunDetail(validationRunId: string) {
 
 export async function getValidationIssueAnalytics() {
   await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: findings, error: findingsError } = await db
     .from("validation_run_findings")
     .select("id, rule_key, title");
@@ -1926,7 +1926,7 @@ export async function updateValidationSettingsAction(input: {
   runMode?: ValidationRunMode;
 }) {
   const context = await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   if (input.automaticIntervalMinutes !== undefined && !(VALIDATION_INTERVAL_OPTIONS as readonly number[]).includes(input.automaticIntervalMinutes)) {
     throw new Error("Invalid validation interval.");
@@ -1989,7 +1989,7 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
   let resolvedTarget: { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null = null;
 
@@ -2188,7 +2188,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: domain, error: domainError } = await db
     .from("domains")
     .select("id, hostname, normalized_url")
@@ -2304,7 +2304,7 @@ export async function updateValidationTargetStateAction(input: {
   trancoRank?: number;
 }) {
   const context = await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const patch: Record<string, string | boolean | null> = {};
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
 
@@ -2366,7 +2366,7 @@ export async function updateValidationTargetStateAction(input: {
 
 export async function removeValidationTargetAction(input: { targetId: string }) {
   const context = await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   const { data: target, error: loadError } = await db
     .from("validation_targets")
@@ -2402,7 +2402,7 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
 }
 
 async function pickRandomTrancoValidationTarget(
-  db: ReturnType<typeof createAdminClient>,
+  db: ReturnType<typeof createDatabaseClient>,
   excludedHostnames: string[] = []
 ) {
   const targetRank = Math.floor(Math.random() * (50_000 - 1_000 + 1)) + 1_000;
@@ -2458,7 +2458,7 @@ async function addRandomTrancoValidationTarget(params: {
   excludedHostnames?: string[];
   eventType?: string;
   metadata?: Record<string, unknown>;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, db } = params;
   try {
@@ -2556,7 +2556,7 @@ async function addRandomTrancoValidationTarget(params: {
 
 export async function addValidationTargetAction(input: { hostname: string }) {
   const context = await requireAdmin();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const normalizedUrl = normalizeUrl(input.hostname);
   const hostname = extractHostname(normalizedUrl);
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getDashboardContext } from "../auth";
@@ -36,7 +36,7 @@ export async function upsertOrganizationSettingsAction(
   }
 
   const values = parsed.data;
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("organization_settings").upsert(
     {
       organization_id: organization.id,

@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 export type IndustryOption = {
   id: string;
@@ -19,7 +19,7 @@ function isMissingIndustriesTable(error: { message?: string } | null) {
 }
 
 export async function listIndustries(): Promise<IndustryOption[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db.from("industries").select("id, slug, label").order("sort_order", { ascending: true }).order("label", { ascending: true });
 
   if (error) {

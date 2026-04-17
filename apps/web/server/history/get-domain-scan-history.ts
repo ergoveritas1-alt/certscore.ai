@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
@@ -420,7 +420,7 @@ function deriveScanStateExplanation(scan: ScanRow, snapshot: SnapshotRow | null,
 }
 
 export async function getDomainScanHistory(input: { domainId: string; organizationId: string }): Promise<DomainHistoryItem[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scans, error } = await db
     .from("scans")
     .select("id, scan_type, status, created_at, started_at, completed_at, pages_requested, pages_scanned")

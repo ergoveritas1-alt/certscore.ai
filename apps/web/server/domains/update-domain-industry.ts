@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDashboardContext } from "../auth";
@@ -17,7 +17,7 @@ export async function updateDomainIndustryFormAction(formData: FormData): Promis
     industryPrimaryId: formData.get("industryPrimaryId")
   });
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("domains")
     .update({

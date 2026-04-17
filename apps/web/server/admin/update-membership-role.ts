@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -20,7 +20,7 @@ export async function updateMembershipRoleFormAction(formData: FormData): Promis
     role: formData.get("role")
   });
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("organization_members")
     .update({

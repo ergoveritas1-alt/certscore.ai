@@ -13,7 +13,7 @@ import {
   type ScanStatus,
   type ScanType
 } from "@website-signal-risk-scanner/shared";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { createHash } from "node:crypto";
 import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
@@ -462,7 +462,7 @@ function getPreviewPayload(scan: ScanRow): PreviewScanPayload | null {
 }
 
 export async function findOrCreateAnonymousPreviewDomain(hostname: string, normalizedUrl: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   const { data: existingDomain, error: lookupError } = await db
     .from("domains")
@@ -498,7 +498,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
 }
 
 export async function createPreviewScanRecord(input: { domainId: string; hostname: string; normalizedUrl: string }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const initialConfig: ScanConfig = {
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
@@ -551,7 +551,7 @@ export async function insertScanEvent(input: {
   organizationId?: string | null;
   scanId?: string | null;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("scan_events").insert({
     scan_id: input.scanId ?? null,
     domain_id: input.domainId ?? null,
@@ -567,7 +567,7 @@ export async function insertScanEvent(input: {
 }
 
 export async function getPreviewScanRecord(scanId: string): Promise<{ domain: DomainRow | null; scan: ScanRow } | null> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scan } = await db.from("scans").select("*").eq("id", scanId).maybeSingle();
 
   if (!scan) {
@@ -596,7 +596,7 @@ export async function getPreviewScanRecord(scanId: string): Promise<{ domain: Do
 }
 
 export async function updatePreviewScan(scanId: string, patch: Partial<ScanRow>) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scan, error } = await db.from("scans").update(patch).eq("id", scanId).select("*").single();
 
   if (error || !scan) {
@@ -607,7 +607,7 @@ export async function updatePreviewScan(scanId: string, patch: Partial<ScanRow>)
 }
 
 export async function setDomainLatestScan(domainId: string, scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("domains").update({ latest_scan_id: scanId }).eq("id", domainId);
 
   if (error) {
@@ -616,7 +616,7 @@ export async function setDomainLatestScan(domainId: string, scanId: string) {
 }
 
 export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRow | null> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_snapshots")
     .select(
@@ -802,7 +802,7 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
 }
 
 export async function getLatestPreviewScanEvent(scanId: string): Promise<ScanEventRow | null> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
@@ -819,7 +819,7 @@ export async function getLatestPreviewScanEvent(scanId: string): Promise<ScanEve
 }
 
 export async function getRecentPreviewScanEvents(scanId: string): Promise<ScanEventRow[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
@@ -835,7 +835,7 @@ export async function getRecentPreviewScanEvents(scanId: string): Promise<ScanEv
 }
 
 export async function getAllPreviewScanEvents(scanId: string): Promise<ScanEventRow[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
@@ -850,7 +850,7 @@ export async function getAllPreviewScanEvents(scanId: string): Promise<ScanEvent
 }
 
 export async function getPreviewRuntimeArtifacts(scanId: string): Promise<RuntimeArtifactsRow> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_runtime_artifacts")
     .select("*")

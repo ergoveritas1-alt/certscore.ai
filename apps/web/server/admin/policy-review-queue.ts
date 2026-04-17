@@ -1,12 +1,12 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { resolvePolicyReviewNote, type PolicyReviewQueueStatus, type PolicyReviewVerdict } from "@website-signal-risk-scanner/shared";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export async function getPolicyReviewQueue(input?: { reviewStatus?: PolicyReviewQueueStatus }) {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   let query = db.from("policy_review_queue").select("*").order("created_at", { ascending: false });
 
   if (input?.reviewStatus) {
@@ -41,7 +41,7 @@ export async function updatePolicyReviewVerdict(input: {
   reviewerNotes?: string | null;
 }) {
   await requirePlatformAdminContext();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: existingQueueItem, error: existingQueueItemError } = await db
     .from("policy_review_queue")
     .select("reason, policy_enrichment_id")

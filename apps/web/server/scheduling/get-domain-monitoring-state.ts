@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, ScanFrequency } from "@website-signal-risk-scanner/shared";
 import { getNextScheduledAt, getPlanDefinition, isScheduledScanDue } from "@website-signal-risk-scanner/shared";
 
@@ -54,7 +54,7 @@ export type DomainMonitoringState = {
 };
 
 export async function getDomainMonitoringState(input: { domainId: string; organizationId: string }): Promise<DomainMonitoringState | null> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [{ data: domain, error: domainError }, { data: organization, error: organizationError }, { data: settings }] = await Promise.all([
     db.from("domains").select("id, scan_frequency").eq("organization_id", input.organizationId).eq("id", input.domainId).maybeSingle(),
     db.from("organizations").select("id, plan").eq("id", input.organizationId).maybeSingle(),

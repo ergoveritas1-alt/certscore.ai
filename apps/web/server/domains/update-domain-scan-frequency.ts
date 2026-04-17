@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { ScanFrequency } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
@@ -18,7 +18,7 @@ export async function updateDomainScanFrequencyFormAction(formData: FormData): P
     scanFrequency: formData.get("scanFrequency")
   });
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("domains")
     .update({

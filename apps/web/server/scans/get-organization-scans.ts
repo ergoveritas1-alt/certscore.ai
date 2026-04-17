@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
@@ -516,7 +516,7 @@ async function loadOrganizationScans(
     includeCount?: boolean;
   }
 ) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   let query = db
     .from("scans")
     .select("id, domain_id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at", input?.includeCount ? { count: "exact" } : undefined)

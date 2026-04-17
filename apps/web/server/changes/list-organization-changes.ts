@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { LEGACY_CHANGE_EVENT_TYPES, isMissingComplianceChangeEventsTable } from "./legacy-change-events";
 
 export type OrganizationChangeItem = {
@@ -101,7 +101,7 @@ function formatChangeMessage(event: EventRow) {
 }
 
 async function listLegacyOrganizationChanges(organizationId: string, limit: number) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: events, error } = await db
     .from("scan_events")
     .select("id, scan_id, domain_id, event_type, message, metadata_json, created_at")
@@ -140,7 +140,7 @@ async function listLegacyOrganizationChanges(organizationId: string, limit: numb
 }
 
 export async function listOrganizationChanges(organizationId: string, limit = 30): Promise<OrganizationChangeItem[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: events, error } = await db
     .from("compliance_change_events")
     .select("event_id, scan_id_current, domain_id, event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")

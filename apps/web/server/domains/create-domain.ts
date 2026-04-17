@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { createDomainRequestSchema, getPlanDefinition, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
@@ -43,7 +43,7 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [planLimits, organizationSettingsResult, countResult] = await Promise.all([
     getPlanLimits(dashboardContext.organization.plan),
     db

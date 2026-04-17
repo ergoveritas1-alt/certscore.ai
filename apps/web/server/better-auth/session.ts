@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { headers } from "next/headers";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { auth } from "./auth";
@@ -31,7 +31,7 @@ export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser |
     return null;
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("better_auth_accounts")
     .select("provider_id")

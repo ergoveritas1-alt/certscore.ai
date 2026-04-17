@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../lib/scans/signal-taxonomy";
 
 export type DomainSignalOverview = {
@@ -44,7 +44,7 @@ type SignalRow = {
 };
 
 export async function getOrganizationSignalOverview(organizationId: string): Promise<DomainSignalOverview[]> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [{ data: domains, error: domainsError }, { data: scans, error: scansError }] = await Promise.all([
     db.from("domains").select("id, hostname").eq("organization_id", organizationId).order("created_at", { ascending: false }),
     db

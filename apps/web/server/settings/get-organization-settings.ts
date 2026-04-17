@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 
 type SettingsRow = {
   default_scan_frequency: string | null;
@@ -11,7 +11,7 @@ export async function getOrganizationSettings(organizationId: string): Promise<{
   defaultScanFrequency: string | null;
   organizationId: string;
 } | null> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("organization_settings")
     .select("organization_id, default_scan_frequency")
