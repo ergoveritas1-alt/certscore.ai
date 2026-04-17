@@ -1,7 +1,14 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import {
+  loadAdminUsersData,
+  type AdminDomainSummaryRow as DomainRow,
+  type AdminMembershipRow as MembershipRow,
+  type AdminOrganizationScanSummaryRow as ScanRow,
+  type AdminOrganizationSummaryRow as OrganizationRow,
+  type AdminUserRow as UserRow
+} from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminUserListItem = {
@@ -35,82 +42,18 @@ function normalizeMembershipRole(role: string | null) {
   return role;
 }
 
-type UserRow = {
-  auth_provider: string;
-  created_at: string;
-  email: string;
-  full_name: string | null;
-  id: string;
-  updated_at: string;
-};
-
-type MembershipRow = {
-  created_at: string;
-  organization_id: string;
-  role: string;
-  user_id: string;
-};
-
-type OrganizationRow = {
-  id: string;
-  name: string;
-  plan: PlanCode;
-  plan_status: PlanStatus;
-  slug: string;
-};
-
-type DomainRow = {
-  id: string;
-  organization_id: string | null;
-};
-
-type ScanRow = {
-  completed_at: string | null;
-  id: string;
-  organization_id: string | null;
-};
-
 export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   await requirePlatformAdminContext();
-  const db = createDatabaseClient();
+  const { domains, memberships, organizations, scans, users } = await loadAdminUsersData();
 
-  const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }, { data: organizations, error: organizationsError }, { data: domains, error: domainsError }, { data: scans, error: scansError }] =
-    await Promise.all([
-      db.from("users").select("id, email, full_name, auth_provider, created_at, updated_at").order("created_at", { ascending: false }),
-      db.from("organization_members").select("user_id, organization_id, role, created_at"),
-      db.from("organizations").select("id, name, slug, plan, plan_status"),
-      db.from("domains").select("id, organization_id"),
-      db.from("scans").select("id, organization_id, completed_at")
-    ]);
-
-  if (usersError) {
-    throw new Error(`Failed to load users: ${usersError.message}`);
-  }
-
-  if (membershipsError) {
-    throw new Error(`Failed to load memberships: ${membershipsError.message}`);
-  }
-
-  if (organizationsError) {
-    throw new Error(`Failed to load organizations: ${organizationsError.message}`);
-  }
-
-  if (domainsError) {
-    throw new Error(`Failed to load domains: ${domainsError.message}`);
-  }
-
-  if (scansError) {
-    throw new Error(`Failed to load scans: ${scansError.message}`);
-  }
-
-  const membershipMap = new Map(((memberships ?? []) as MembershipRow[]).map((membership) => [membership.user_id, membership]));
-  const organizationMap = new Map(((organizations ?? []) as OrganizationRow[]).map((organization) => [organization.id, organization]));
+  const membershipMap = new Map((memberships as MembershipRow[]).map((membership) => [membership.user_id, membership]));
+  const organizationMap = new Map((organizations as OrganizationRow[]).map((organization) => [organization.id, organization]));
   const domainCounts = new Map<string, number>();
   const totalScans = new Map<string, number>();
   const completedScans = new Map<string, number>();
   const latestCompletedScan = new Map<string, string>();
 
-  for (const domain of (domains ?? []) as DomainRow[]) {
+  for (const domain of domains as DomainRow[]) {
     if (!domain.organization_id) {
       continue;
     }
@@ -118,7 +61,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     domainCounts.set(domain.organization_id, (domainCounts.get(domain.organization_id) ?? 0) + 1);
   }
 
-  for (const scan of (scans ?? []) as ScanRow[]) {
+  for (const scan of scans as ScanRow[]) {
     if (!scan.organization_id) {
       continue;
     }
@@ -135,7 +78,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     }
   }
 
-  return ((users ?? []) as UserRow[]).map((user) => {
+  return (users as UserRow[]).map((user) => {
     const membership = membershipMap.get(user.id) ?? null;
     const organization = membership ? organizationMap.get(membership.organization_id) ?? null : null;
 
@@ -150,8 +93,8 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       organizationName: organization?.name ?? null,
       organizationSlug: organization?.slug ?? null,
       membershipRole: normalizeMembershipRole(membership?.role ?? null),
-      plan: organization?.plan ?? null,
-      planStatus: organization?.plan_status ?? null,
+      plan: (organization?.plan as PlanCode | null | undefined) ?? null,
+      planStatus: (organization?.plan_status as PlanStatus | null | undefined) ?? null,
       domainCount: organization ? domainCounts.get(organization.id) ?? 0 : 0,
       totalScans: organization ? totalScans.get(organization.id) ?? 0 : 0,
       completedScans: organization ? completedScans.get(organization.id) ?? 0 : 0,

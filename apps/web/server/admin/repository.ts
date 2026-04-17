@@ -128,6 +128,54 @@ export type AdminValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+export type AdminUserRow = {
+  auth_provider: string;
+  created_at: string;
+  email: string;
+  full_name: string | null;
+  id: string;
+  updated_at: string;
+};
+
+export type AdminMembershipRow = {
+  created_at: string;
+  organization_id: string;
+  role: string;
+  user_id: string;
+};
+
+export type AdminOrganizationSummaryRow = {
+  id: string;
+  name: string;
+  plan: string | null;
+  plan_status: string | null;
+  slug: string;
+};
+
+export type AdminDomainSummaryRow = {
+  id: string;
+  organization_id: string | null;
+};
+
+export type AdminOrganizationScanSummaryRow = {
+  completed_at: string | null;
+  id: string;
+  organization_id: string | null;
+};
+
+export type AdminPolicyReviewQueueRow = {
+  assigned_to: string | null;
+  created_at: string;
+  id: string;
+  policy_enrichment_id: string | null;
+  reason: string | null;
+  review_status: string | null;
+  review_verdict: string | null;
+  reviewed_at: string | null;
+  reviewer_notes: string | null;
+  scan_id: string | null;
+};
+
 type QueryErrorLike = {
   code?: string;
   details?: string;
@@ -448,4 +496,138 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     snapshot: (snapshot as Record<string, unknown> | null) ?? null,
     trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>)
   };
+}
+
+export async function loadAdminUsersData(): Promise<{
+  domains: AdminDomainSummaryRow[];
+  memberships: AdminMembershipRow[];
+  organizations: AdminOrganizationSummaryRow[];
+  scans: AdminOrganizationScanSummaryRow[];
+  users: AdminUserRow[];
+}> {
+  const db = createDatabaseClient();
+  const [
+    { data: users, error: usersError },
+    { data: memberships, error: membershipsError },
+    { data: organizations, error: organizationsError },
+    { data: domains, error: domainsError },
+    { data: scans, error: scansError }
+  ] = await Promise.all([
+    db.from("users").select("id, email, full_name, auth_provider, created_at, updated_at").order("created_at", { ascending: false }),
+    db.from("organization_members").select("user_id, organization_id, role, created_at"),
+    db.from("organizations").select("id, name, slug, plan, plan_status"),
+    db.from("domains").select("id, organization_id"),
+    db.from("scans").select("id, organization_id, completed_at")
+  ]);
+
+  if (usersError) {
+    throw new Error(`Failed to load users: ${usersError.message}`);
+  }
+
+  if (membershipsError) {
+    throw new Error(`Failed to load memberships: ${membershipsError.message}`);
+  }
+
+  if (organizationsError) {
+    throw new Error(`Failed to load organizations: ${organizationsError.message}`);
+  }
+
+  if (domainsError) {
+    throw new Error(`Failed to load domains: ${domainsError.message}`);
+  }
+
+  if (scansError) {
+    throw new Error(`Failed to load scans: ${scansError.message}`);
+  }
+
+  return {
+    domains: (domains ?? []) as AdminDomainSummaryRow[],
+    memberships: (memberships ?? []) as AdminMembershipRow[],
+    organizations: (organizations ?? []) as AdminOrganizationSummaryRow[],
+    scans: (scans ?? []) as AdminOrganizationScanSummaryRow[],
+    users: (users ?? []) as AdminUserRow[]
+  };
+}
+
+export async function loadPolicyReviewQueueRows(reviewStatus?: string | null): Promise<AdminPolicyReviewQueueRow[]> {
+  const db = createDatabaseClient();
+  let query = db.from("policy_review_queue").select("*").order("created_at", { ascending: false });
+
+  if (reviewStatus) {
+    query = query.eq("review_status", reviewStatus);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to load policy review queue: ${error.message}`);
+  }
+
+  return (data ?? []) as AdminPolicyReviewQueueRow[];
+}
+
+export async function loadPolicyReviewQueueUpdateContext(queueItemId: string): Promise<{
+  pageType: string | null;
+  queueItem: Pick<AdminPolicyReviewQueueRow, "policy_enrichment_id" | "reason"> | null;
+}> {
+  const db = createDatabaseClient();
+  const { data: existingQueueItem, error: existingQueueItemError } = await db
+    .from("policy_review_queue")
+    .select("reason, policy_enrichment_id")
+    .eq("id", queueItemId)
+    .maybeSingle();
+
+  if (existingQueueItemError) {
+    throw new Error(`Failed to load policy review queue item: ${existingQueueItemError.message}`);
+  }
+
+  const { data: policyEnrichmentRow, error: policyEnrichmentError } =
+    existingQueueItem?.policy_enrichment_id
+      ? await db
+          .from("policy_enrichment")
+          .select("page_type")
+          .eq("id", existingQueueItem.policy_enrichment_id)
+          .maybeSingle()
+      : { data: null, error: null };
+
+  if (policyEnrichmentError) {
+    throw new Error(
+      `Failed to load policy enrichment for queue item ${queueItemId}: ${policyEnrichmentError.message}`
+    );
+  }
+
+  return {
+    pageType: typeof policyEnrichmentRow?.page_type === "string" ? policyEnrichmentRow.page_type : null,
+    queueItem:
+      (existingQueueItem as Pick<AdminPolicyReviewQueueRow, "policy_enrichment_id" | "reason"> | null) ?? null
+  };
+}
+
+export async function updatePolicyReviewQueueRow(input: {
+  assignedTo?: string | null;
+  queueItemId: string;
+  reviewStatus: string;
+  reviewVerdict: string | null;
+  reviewedAt: string;
+  reviewerNotes?: string | null;
+}) {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("policy_review_queue")
+    .update({
+      assigned_to: input.assignedTo ?? null,
+      review_status: input.reviewStatus,
+      review_verdict: input.reviewVerdict,
+      reviewed_at: input.reviewedAt,
+      reviewer_notes: input.reviewerNotes ?? null
+    })
+    .eq("id", input.queueItemId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to update policy review verdict: ${error.message}`);
+  }
+
+  return (data as AdminPolicyReviewQueueRow | null) ?? null;
 }
