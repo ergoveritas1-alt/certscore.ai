@@ -38,6 +38,21 @@ import {
   collectPolicyEvidenceHashes,
   dereferencePolicyEvidenceSnippets
 } from "./policy-enrichment-normalization";
+import {
+  loadPolicyEvidenceByHash,
+  loadScanComparisonArtifacts,
+  loadScanCoreRecord,
+  loadScanDetailArtifacts,
+  loadScanValidationFindingRows,
+  type ScanAccessibilityRuleCountRow as AccessibilityRuleCountRow,
+  type ScanAccessibilityRuleExampleRow as AccessibilityRuleExampleRow,
+  type ScanDetailQueryRow as ScanRow,
+  type ScanEventQueryRow as ScanEventRow,
+  type ScanPreconsentViolationRow as PreconsentViolationRow,
+  type ScanSignalQueryRow as SignalRow,
+  type ScanValidationRunFindingRow as ValidationRunFindingRow,
+  type ScanValidationVerdictRow as ValidationVerdictRow
+} from "./repository";
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 import {
   DOMAIN_BENCHMARK_EVENT_TYPE,
@@ -173,33 +188,6 @@ export type AccessibilityRuleExampleRecord = {
 };
 
 export type ScanValidationFindingRecord = ScanValidationFinding;
-
-type ScanRow = {
-  completed_at: string | null;
-  created_at: string;
-  domain_id: string | null;
-  error_message: string | null;
-  id: string;
-  pages_requested: number;
-  pages_scanned: number;
-  scan_config_json: Record<string, unknown> | null;
-  scan_type: string;
-  started_at: string | null;
-  status: string;
-};
-
-type DomainRow = {
-  hostname: string;
-  id: string;
-};
-
-type ScanEventRow = {
-  created_at: string;
-  event_type: string;
-  id: string;
-  message: string;
-  metadata_json: unknown;
-};
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
@@ -383,111 +371,6 @@ function deriveHostnameFromScanConfig(value: Record<string, unknown> | null | un
   return null;
 }
 
-type SignalRow = {
-  category: string;
-  confidence?: number | null;
-  evidence_refs?: string[] | null;
-  observed_at?: string | null;
-  population_source?: string | null;
-  population_status?: string | null;
-  provenance_json?: unknown;
-  signal_key: string;
-  signal_label: string;
-  signal_value_json: boolean | number | string | string[];
-  value_type: string;
-};
-
-type PreconsentViolationRow = {
-  collection_endpoint_type: string;
-  confidence: number | null;
-  detection_source: string;
-  evidence_urls: string[] | null;
-  first_party_or_third_party: string;
-  matched_signature_id: string | null;
-  script_host: string | null;
-  vendor_category: string;
-  vendor_name: string;
-};
-
-type AccessibilityRuleCountRow = {
-  instance_count: number;
-  rule_code: string;
-  rule_group: string;
-  severity: string;
-};
-
-type AccessibilityRuleExampleRow = {
-  description: string;
-  help: string;
-  help_url: string;
-  impact: string | null;
-  node_count: number;
-  page_url: string;
-  representative_selectors: string[] | null;
-  rule_code: string;
-  rule_group: string;
-  severity: string;
-};
-
-type ValidationRunFindingRow = {
-  category: string | null;
-  description: string | null;
-  evidence_json: Record<string, unknown> | null;
-  finding_family: string | null;
-  finding_scope: string | null;
-  finding_source: string | null;
-  finding_subject: string | null;
-  id: string;
-  rule_key: string;
-  severity: string | null;
-  subtype: string | null;
-  title: string;
-  page_url: string | null;
-  validation_verdicts:
-    | {
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }
-    | Array<{
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }>
-    | null;
-};
-
-type ValidationVerdictRow = {
-  agreement_score: number | null;
-  confidence: number | null;
-  created_at: string | null;
-  evidence_json: Record<string, unknown> | null;
-  model: string | null;
-  prompt_version: string | null;
-  rationale: string | null;
-  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-  system_confidence_explanation: string | null;
-  system_confidence_score: number | null;
-  validation_run_finding_id: string;
-  verdict: "supported" | "inconclusive" | "not_supported" | null;
-};
-
 function stripSnapshotRecord(snapshot: Record<string, unknown>) {
   const next = { ...snapshot };
   delete next.id;
@@ -611,219 +494,45 @@ async function loadScanDetailRecord(input: {
   viewerEmail?: string | null;
 }) {
   const db = createDatabaseClient();
-  const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
-  const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
+  const scanCore = await loadScanCoreRecord(input).catch((error) => {
+    if (error instanceof Error && error.message === "Scan not found.") {
+      return null;
+    }
+    throw error;
+  });
 
-  const loadScan = async (organizationId: string | null) => {
-    let query = db
-      .from("scans")
-      .select("id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
-      .eq("id", input.scanId);
-
-    query = organizationId === null ? query.is("organization_id", null) : query.eq("organization_id", organizationId);
-
-    return query.maybeSingle();
-  };
-
-  const primaryOrganizationId = input.anonymousOnly ? null : input.organizationId;
-  const primaryScanResult = await loadScan(primaryOrganizationId);
-  let scan = primaryScanResult.data;
-  let error = primaryScanResult.error;
-
-  if (!scan && !error && !input.anonymousOnly && allowAnonymousAccess) {
-    const anonymousScanResult = await loadScan(null);
-    scan = anonymousScanResult.data;
-    error = anonymousScanResult.error;
-  }
-
-  if (error) {
-    throw new Error(`Failed to load scan: ${error.message}`);
-  }
-
-  if (!scan) {
+  if (!scanCore) {
     return null;
   }
 
-  const scanRow = scan as ScanRow;
-  let domainHostname: string | null = null;
-  const scanOrganizationId = (scanRow as ScanRow & { organization_id?: string | null }).organization_id ?? null;
-
-  if (scanRow.domain_id) {
-    let domainQuery = db.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
-    domainQuery =
-      scanOrganizationId === null && adminCanViewAnonymousScans
-        ? domainQuery.is("organization_id", null)
-        : domainQuery.eq("organization_id", input.organizationId);
-
-    const { data: domain } = await domainQuery.maybeSingle();
-
-    domainHostname = (domain as DomainRow | null)?.hostname ?? null;
-  }
+  const { domainHostname: initialDomainHostname, previousScanId, scan, scanOrganizationId } = scanCore;
+  const scanRow = scan;
+  let domainHostname = initialDomainHostname;
 
   if (!domainHostname) {
     domainHostname = deriveHostnameFromScanConfig(scanRow.scan_config_json ?? null);
   }
 
-  const previousScanPromise =
-    scanRow.domain_id && scanOrganizationId !== null
-      ? db
-          .from("scans")
-          .select("id")
-          .eq("organization_id", scanOrganizationId)
-          .eq("domain_id", scanRow.domain_id)
-          .eq("status", "completed")
-          .lt("created_at", scanRow.created_at)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null });
-
-  const [
-    { data: events, error: eventsError },
-    { data: snapshot },
-    { data: signals },
-    { data: runtimeArtifacts },
-    { data: preconsentViolations },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: accessibilityRuleExamples },
-    { data: policyEnrichment },
-    { data: policyReviewQueue },
-    { data: documentSources },
-    { data: macroEnrichment, error: macroEnrichmentError },
-    { data: previousScan },
-    { data: validationRun }
-  ] = await Promise.all([
-    db
-      .from("scan_events")
-      .select("id, event_type, message, metadata_json, created_at")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_snapshots")
-      .select("*")
-      .eq("scan_id", input.scanId)
-      .maybeSingle(),
-    db
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", input.scanId)
-      .order("category", { ascending: true })
-      .order("signal_key", { ascending: true }),
-    db
-      .from("scan_runtime_artifacts")
-      .select("*")
-      .eq("scan_id", input.scanId)
-      .maybeSingle(),
-    db
-      .from("scan_preconsent_violations")
-      .select(
-        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, script_host, matched_signature_id, evidence_urls"
-      )
-      .eq("scan_id", input.scanId)
-      .order("vendor_category", { ascending: true })
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_tracker_vendors")
-      .select(
-        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
-      )
-      .eq("scan_id", input.scanId)
-      .order("vendor_category", { ascending: true })
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_accessibility_rule_counts")
-      .select("rule_code, rule_group, severity, instance_count")
-      .eq("scan_id", input.scanId)
-      .order("instance_count", { ascending: false })
-      .order("rule_code", { ascending: true }),
-    db
-      .from("scan_accessibility_rule_examples")
-      .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
-      .eq("scan_id", input.scanId)
-      .order("node_count", { ascending: false })
-      .order("rule_code", { ascending: true }),
-    db
-      .from("policy_enrichment")
-      .select("*")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("policy_review_queue")
-      .select("*")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_document_sources")
-      .select("source_status, extraction_status, metadata_json")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_macro_enrichments")
-      .select("*")
-      .eq("scan_id", input.scanId)
-      .maybeSingle(),
-    previousScanPromise,
-    db
-      .from("validation_runs")
-      .select("id")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-  ]);
-
-  if (eventsError) {
-    throw new Error(`Failed to load scan events: ${eventsError.message}`);
-  }
-  if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
-    throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentError.message}`);
-  }
+  const {
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    documentSources,
+    events,
+    macroEnrichment,
+    policyEnrichment,
+    policyReviewQueue,
+    preconsentViolations,
+    runtimeArtifacts,
+    signals,
+    snapshot,
+    trackerVendors,
+    validationRunId
+  } = await loadScanDetailArtifacts(input.scanId);
 
   let validationFindings: ScanValidationFindingRecord[] = [];
-  const validationRunId = (validationRun as { id?: string } | null)?.id ?? null;
 
   if (validationRunId) {
-    const { data: validationFindingRows, error: validationFindingsError } = await db
-      .from("validation_run_findings")
-      .select(
-        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-      )
-      .eq("validation_run_id", validationRunId)
-      .order("finding_rank", { ascending: true });
-
-    if (validationFindingsError) {
-      throw new Error(`Failed to load validation findings for scan ${input.scanId}: ${validationFindingsError.message}`);
-    }
-
-    const baseFindingRows = (validationFindingRows ?? []) as ValidationRunFindingRow[];
-    const findingIds = baseFindingRows.map((row) => row.id);
-    const verdictByFindingId = new Map<string, ValidationVerdictRow>();
-
-    if (findingIds.length > 0) {
-      const { data: verdictRows, error: verdictsError } = await db
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIds)
-        .order("created_at", { ascending: false });
-
-      if (verdictsError) {
-        throw new Error(`Failed to load validation verdicts for scan ${input.scanId}: ${verdictsError.message}`);
-      }
-
-      for (const row of (verdictRows ?? []) as ValidationVerdictRow[]) {
-        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-          verdictByFindingId.set(row.validation_run_finding_id, row);
-        }
-      }
-    }
-
-    const findingRows = baseFindingRows.map((row) => ({
-      ...row,
-      validation_verdicts: verdictByFindingId.get(row.id) ?? null
-    }));
+    const { findings: findingRows } = await loadScanValidationFindingRows(input.scanId, validationRunId);
 
     validationFindings = findingRows.map((row) => {
       const verdictRows = Array.isArray(row.validation_verdicts)
@@ -870,60 +579,15 @@ async function loadScanDetailRecord(input: {
     validationFindings = [...validationFindings, ...supplementalValidationFindings];
   }
 
-  const previousSnapshot = previousScan?.id
-    ? (
-        await db.from("scan_snapshots").select("*").eq("scan_id", previousScan.id).maybeSingle()
-      ).data
-    : null;
-  const previousTrackerRows = previousScan?.id
-    ? (
-        await db
-          .from("scan_tracker_vendors")
-          .select(
-            "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
-          )
-          .eq("scan_id", previousScan.id)
-      ).data ?? []
-    : [];
-  const relatedPreviewSnapshot =
-    snapshot && typeof (snapshot as Record<string, unknown>).domain === "string"
-      ? (
-          await db
-            .from("scan_snapshots")
-            .select("*")
-            .eq("domain", (snapshot as Record<string, unknown>).domain as string)
-            .eq("crawl_source", "preview")
-            .neq("scan_id", input.scanId)
-            .order("scan_timestamp", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        ).data
-      : null;
-  const previousPolicyRows = previousScan?.id
-    ? (
-        await db.from("policy_enrichment").select("*").eq("scan_id", previousScan.id).order("created_at", { ascending: true })
-      ).data ?? []
-    : [];
+  const { previousPolicyRows, previousSnapshot, previousTrackerRows, relatedPreviewSnapshot } =
+    await loadScanComparisonArtifacts({
+      domainField: snapshot && typeof (snapshot as Record<string, unknown>).domain === "string" ? ((snapshot as Record<string, unknown>).domain as string) : null,
+      previousScanId,
+      scanId: input.scanId
+    });
   const rawPolicyEnrichmentRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const policyEvidenceHashes = collectPolicyEvidenceHashes(rawPolicyEnrichmentRows);
-  const policyEvidenceByHash =
-    policyEvidenceHashes.length > 0
-      ? new Map(
-          (
-            (
-              await db
-                .from("policy_evidence")
-                .select("evidence_hash, snippet")
-                .in("evidence_hash", policyEvidenceHashes)
-            ).data ?? []
-          )
-            .filter(
-              (row): row is { evidence_hash: string; snippet: string } =>
-                Boolean(row) && typeof row.evidence_hash === "string" && typeof row.snippet === "string"
-            )
-            .map((row) => [row.evidence_hash, row.snippet] as const)
-        )
-      : new Map<string, string>();
+  const policyEvidenceByHash = await loadPolicyEvidenceByHash(policyEvidenceHashes);
   const normalizedPolicyEnrichment = dereferencePolicyEvidenceSnippets({
     evidenceByHash: policyEvidenceByHash,
     rows: rawPolicyEnrichmentRows
@@ -1151,7 +815,7 @@ async function loadScanDetailRecord(input: {
           ({
             changeType: "added",
             confidence: tracker.confidence,
-            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            previousScanId,
             vendorCategory: tracker.vendorCategory,
             vendorName: tracker.vendorName
           }) satisfies TrackerChangeRecord
@@ -1163,7 +827,7 @@ async function loadScanDetailRecord(input: {
           ({
             changeType: "removed",
             confidence: Number(tracker.confidence ?? 0),
-            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            previousScanId,
             vendorCategory: String(tracker.vendor_category),
             vendorName: String(tracker.vendor_name)
           }) satisfies TrackerChangeRecord
@@ -1177,7 +841,7 @@ async function loadScanDetailRecord(input: {
           ({
             changeType: "new",
             confidence: tracker.confidence,
-            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            previousScanId,
             vendorCategory: tracker.vendorCategory,
             vendorName
           }) satisfies PreconsentChangeRecord
@@ -1189,7 +853,7 @@ async function loadScanDetailRecord(input: {
           ({
             changeType: "resolved",
             confidence: tracker.confidence,
-            previousScanId: (previousScan as { id?: string } | null)?.id ?? null,
+            previousScanId,
             vendorCategory: tracker.vendorCategory,
             vendorName
           }) satisfies PreconsentChangeRecord
@@ -1435,7 +1099,7 @@ async function loadScanDetailRecord(input: {
       ? (normalizedRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
     macroEnrichment:
-      macroEnrichment && !macroEnrichmentError
+      macroEnrichment
         ? (stripTimestampFields(macroEnrichment as Record<string, unknown>) satisfies Exclude<ScanMacroEnrichmentRecord, null>)
         : null,
     preconsentViolations: normalizedPreconsentViolations,
