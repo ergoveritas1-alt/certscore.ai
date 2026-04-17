@@ -24,8 +24,8 @@ function normalizeStoredSearchTerms(value: unknown) {
 
 export async function getFintechSourcingSearchTerms() {
   const { organization } = await getDashboardContext();
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("organization_settings")
     .select("fintech_sourcing_search_terms")
     .eq("organization_id", organization.id)
@@ -45,8 +45,8 @@ export async function updateFintechSourcingSearchTerms(nextTerms: string[]) {
     nextTerms.map((term) => term.trim()).filter((term) => term.length > 0)
   );
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("organization_settings")
     .upsert(
       {

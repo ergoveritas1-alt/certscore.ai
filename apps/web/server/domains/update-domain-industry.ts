@@ -17,8 +17,8 @@ export async function updateDomainIndustryFormAction(formData: FormData): Promis
     industryPrimaryId: formData.get("industryPrimaryId")
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("domains")
     .update({
       industry_primary_id: parsed.industryPrimaryId

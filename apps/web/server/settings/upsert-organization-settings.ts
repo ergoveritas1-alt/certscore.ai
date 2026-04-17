@@ -36,8 +36,8 @@ export async function upsertOrganizationSettingsAction(
   }
 
   const values = parsed.data;
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("organization_settings").upsert(
+  const db = createAdminClient();
+  const { error } = await db.from("organization_settings").upsert(
     {
       organization_id: organization.id,
       default_scan_frequency: values.defaultScanFrequency || null

@@ -7,8 +7,8 @@ export async function persistReportFindingCount(input: {
   scanId: string;
 }) {
   try {
-    const supabase = createAdminClient();
-    const { error } = await supabase
+    const db = createAdminClient();
+    const { error } = await db
       .from("scan_snapshots")
       .update({
         report_finding_count: input.count

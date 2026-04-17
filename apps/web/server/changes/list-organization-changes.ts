@@ -101,8 +101,8 @@ function formatChangeMessage(event: EventRow) {
 }
 
 async function listLegacyOrganizationChanges(organizationId: string, limit: number) {
-  const supabase = createAdminClient();
-  const { data: events, error } = await supabase
+  const db = createAdminClient();
+  const { data: events, error } = await db
     .from("scan_events")
     .select("id, scan_id, domain_id, event_type, message, metadata_json, created_at")
     .eq("organization_id", organizationId)
@@ -118,7 +118,7 @@ async function listLegacyOrganizationChanges(organizationId: string, limit: numb
   let domainMap = new Map<string, DomainRow>();
 
   if (domainIds.length > 0) {
-    const { data: domains } = await supabase
+    const { data: domains } = await db
       .from("domains")
       .select("id, hostname")
       .eq("organization_id", organizationId)
@@ -140,8 +140,8 @@ async function listLegacyOrganizationChanges(organizationId: string, limit: numb
 }
 
 export async function listOrganizationChanges(organizationId: string, limit = 30): Promise<OrganizationChangeItem[]> {
-  const supabase = createAdminClient();
-  const { data: events, error } = await supabase
+  const db = createAdminClient();
+  const { data: events, error } = await db
     .from("compliance_change_events")
     .select("event_id, scan_id_current, domain_id, event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
     .eq("organization_id", organizationId)
@@ -160,7 +160,7 @@ export async function listOrganizationChanges(organizationId: string, limit = 30
   let domainMap = new Map<string, DomainRow>();
 
   if (domainIds.length > 0) {
-    const { data: domains } = await supabase
+    const { data: domains } = await db
       .from("domains")
       .select("id, hostname")
       .eq("organization_id", organizationId)

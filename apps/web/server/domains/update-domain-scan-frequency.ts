@@ -18,8 +18,8 @@ export async function updateDomainScanFrequencyFormAction(formData: FormData): P
     scanFrequency: formData.get("scanFrequency")
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("domains")
     .update({
       scan_frequency: parsed.scanFrequency

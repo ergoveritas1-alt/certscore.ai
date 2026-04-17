@@ -11,8 +11,8 @@ export async function getOrganizationSettings(organizationId: string): Promise<{
   defaultScanFrequency: string | null;
   organizationId: string;
 } | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("organization_settings")
     .select("organization_id, default_scan_frequency")
     .eq("organization_id", organizationId)

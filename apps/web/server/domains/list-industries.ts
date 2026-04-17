@@ -19,8 +19,8 @@ function isMissingIndustriesTable(error: { message?: string } | null) {
 }
 
 export async function listIndustries(): Promise<IndustryOption[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.from("industries").select("id, slug, label").order("sort_order", { ascending: true }).order("label", { ascending: true });
+  const db = createAdminClient();
+  const { data, error } = await db.from("industries").select("id, slug, label").order("sort_order", { ascending: true }).order("label", { ascending: true });
 
   if (error) {
     if (isMissingIndustriesTable(error)) {

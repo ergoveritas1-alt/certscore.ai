@@ -17,8 +17,8 @@ export async function updateCurrentOrganizationPlanFormAction(formData: FormData
     plan: formData.get("plan") as PlanCode
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("organizations")
     .update({
       plan: parsed.plan

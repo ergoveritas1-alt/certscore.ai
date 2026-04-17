@@ -20,8 +20,8 @@ export async function updateMembershipRoleFormAction(formData: FormData): Promis
     role: formData.get("role")
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("organization_members")
     .update({
       role: parsed.role
