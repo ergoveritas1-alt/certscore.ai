@@ -153,7 +153,7 @@ type ValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
-type SupabaseQueryError = {
+type QueryErrorLike = {
   code?: string;
   details?: string;
   hint?: string;
@@ -446,7 +446,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       .in("scan_id", scanIds),
     (async () => {
       const rows: ChangeSummaryRow[] = [];
-      let queryError: SupabaseQueryError = null;
+      let queryError: QueryErrorLike = null;
 
       for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
         const { data, error: batchError } = await supabase
@@ -675,7 +675,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     }
 
     const legacyEvents: LegacyScanEventRow[] = [];
-    let legacyEventsError: SupabaseQueryError = null;
+    let legacyEventsError: QueryErrorLike = null;
 
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
       const { data, error: batchError } = await supabase

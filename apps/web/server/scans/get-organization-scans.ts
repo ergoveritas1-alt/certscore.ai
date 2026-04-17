@@ -226,7 +226,7 @@ type ValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
-type SupabaseQueryError = {
+type QueryErrorLike = {
   code?: string;
   details?: string;
   hint?: string;
@@ -569,7 +569,7 @@ async function loadOrganizationScans(
           "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
         )
         .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null as SupabaseQueryError });
+    : Promise.resolve({ data: [] as SnapshotRow[], error: null as QueryErrorLike });
   const snapshotsFallbackPromise = summaryScanIds.length
     ? supabase
         .from("scan_snapshots")
@@ -577,7 +577,7 @@ async function loadOrganizationScans(
           "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
         )
         .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null as SupabaseQueryError });
+    : Promise.resolve({ data: [] as SnapshotRow[], error: null as QueryErrorLike });
   const runtimeArtifactsPromise = summaryScanIds.length
     ? supabase
         .from("scan_runtime_artifacts")
@@ -585,7 +585,7 @@ async function loadOrganizationScans(
           "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
         )
         .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null as SupabaseQueryError });
+    : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null as QueryErrorLike });
 
   const [{ data: domainsWithLastScannedAt, error: domainsError }, { data: snapshots, error: snapshotsError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] = await Promise.all([
     domainsWithLastScannedAtPromise,
@@ -622,7 +622,7 @@ async function loadOrganizationScans(
     throw new Error(`Failed to load organization scans: ${runtimeArtifactsError.message}`);
   }
   const changeSummaries: ChangeSummaryRow[] = [];
-  let changeSummariesError: SupabaseQueryError = null;
+  let changeSummariesError: QueryErrorLike = null;
 
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
@@ -922,7 +922,7 @@ async function loadOrganizationScans(
     }
 
     const legacyEvents: LegacyScanEventRow[] = [];
-    let legacyEventsError: SupabaseQueryError = null;
+    let legacyEventsError: QueryErrorLike = null;
 
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
       const { data, error } = await supabase
