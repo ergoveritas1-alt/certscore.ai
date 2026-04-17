@@ -43,15 +43,15 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [planLimits, organizationSettingsResult, countResult] = await Promise.all([
     getPlanLimits(dashboardContext.organization.plan),
-    supabase
+    db
       .from("organization_settings")
       .select("default_scan_frequency")
       .eq("organization_id", dashboardContext.organization.id)
       .maybeSingle(),
-    supabase.from("domains").select("id", { count: "exact", head: true }).eq("organization_id", dashboardContext.organization.id)
+    db.from("domains").select("id", { count: "exact", head: true }).eq("organization_id", dashboardContext.organization.id)
   ]);
   const planDefinition = getPlanDefinition(planLimits.planCode);
   const { data: organizationSettings } = organizationSettingsResult;
@@ -66,7 +66,7 @@ export async function createOrQueueDomainScan(input: {
 
   const { hostname, normalizedUrl } = parsedInput.data;
 
-  const { data: existingDomain } = await supabase
+  const { data: existingDomain } = await db
     .from("domains")
     .select("id")
     .eq("organization_id", dashboardContext.organization.id)
@@ -109,7 +109,7 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const { data: domain, error } = await supabase
+  const { data: domain, error } = await db
     .from("domains")
     .insert({
       organization_id: dashboardContext.organization.id,

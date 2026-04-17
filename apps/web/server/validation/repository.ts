@@ -188,8 +188,8 @@ async function failValidationQueueHandoff(input: {
   targetId: string | null;
   validationRunId: string;
 }) {
-  const supabase = createAdminClient();
-  await supabase
+  const db = createAdminClient();
+  await db
     .from("validation_runs")
     .update({
       completed_at: new Date().toISOString(),
@@ -199,7 +199,7 @@ async function failValidationQueueHandoff(input: {
     .eq("id", input.validationRunId);
 
   if (input.targetId) {
-    await supabase
+    await db
       .from("validation_targets")
       .update({
         last_completed_at: new Date().toISOString(),
@@ -209,7 +209,7 @@ async function failValidationQueueHandoff(input: {
       .eq("id", input.targetId);
   }
 
-  await supabase.from("scan_events").insert({
+  await db.from("scan_events").insert({
     scan_id: input.scanId,
     domain_id: null,
     organization_id: null,
@@ -221,7 +221,7 @@ async function failValidationQueueHandoff(input: {
     }
   });
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: input.actorUserId,
     event_type: "validation.manual_run_queue_failed",
     metadata_json: {
@@ -969,23 +969,23 @@ async function loadSupplementalValidationFindings(input: {
     return [] as ValidationRunFindingRow[];
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [
     { data: snapshot, error: snapshotError },
     { data: policyQueue, error: policyQueueError },
     { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
   ] =
     await Promise.all([
-      supabase
+      db
         .from("scan_snapshots")
         .select("retargeting_pixel_detected, accessibility_litigation_risk_score")
         .eq("scan_id", input.scanId)
         .maybeSingle(),
-      supabase
+      db
         .from("policy_review_queue")
         .select("id, policy_enrichment_id, reason, review_status, scan_id")
         .eq("scan_id", input.scanId),
-      supabase
+      db
         .from("scan_accessibility_rule_examples")
         .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
         .eq("scan_id", input.scanId)
@@ -1012,7 +1012,7 @@ async function loadSupplementalValidationFindings(input: {
 
   let policyEnrichmentRows: PolicyEnrichmentLookupRow[] = [];
   if (enrichmentIds.length > 0) {
-    const { data: enrichmentRows, error: enrichmentError } = await supabase
+    const { data: enrichmentRows, error: enrichmentError } = await db
       .from("policy_enrichment")
       .select("id, page_type, page_url, policy_ambiguity_score, policy_arbitration_present, policy_cancellation_or_refund_present, policy_coverage_ratio, policy_effective_date, policy_field_coverage, policy_governing_law, policy_notice_contact_present, policy_semantic_confidence, policy_snippet_count, policy_structurally_weak, policy_summary_short, policy_termination_or_suspension_present")
       .in("id", enrichmentIds);
@@ -1129,8 +1129,8 @@ export async function ensureValidationRunForManualScan(input: {
     return null;
   }
 
-  const supabase = createAdminClient();
-  const { data: settings, error: settingsError } = await supabase
+  const db = createAdminClient();
+  const { data: settings, error: settingsError } = await db
     .from("validation_settings")
     .select("pipeline_enabled")
     .eq("singleton_key", "default")
@@ -1144,7 +1144,7 @@ export async function ensureValidationRunForManualScan(input: {
     return null;
   }
 
-  const { data: existingRun, error: existingRunError } = await supabase
+  const { data: existingRun, error: existingRunError } = await db
     .from("validation_runs")
     .select("id")
     .eq("scan_id", input.scanId)
@@ -1160,7 +1160,7 @@ export async function ensureValidationRunForManualScan(input: {
     return (existingRun as { id: string }).id;
   }
 
-  const { data: previousRun, error: previousRunError } = await supabase
+  const { data: previousRun, error: previousRunError } = await db
     .from("validation_runs")
     .select("tranco_rank, rank_band")
     .eq("domain_id", input.domainId)
@@ -1187,7 +1187,7 @@ export async function ensureValidationRunForManualScan(input: {
   let runError: { message?: string } | null = null;
 
   {
-    const firstAttempt = await supabase
+    const firstAttempt = await db
       .from("validation_runs")
       .insert({
         ...insertBase,
@@ -1206,7 +1206,7 @@ export async function ensureValidationRunForManualScan(input: {
     runError.message.includes("validation_runs_status_check");
 
   if (statusConstraintRejectedWaitingForScan) {
-    const fallbackAttempt = await supabase
+    const fallbackAttempt = await db
       .from("validation_runs")
       .insert({
         ...insertBase,
@@ -1223,7 +1223,7 @@ export async function ensureValidationRunForManualScan(input: {
     throw new Error(`Failed to create validation run for manual scan ${input.scanId}: ${runError?.message ?? "Unknown error"}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: input.submittedByUserId,
     event_type: "validation.manual_run_queued",
     metadata_json: {
@@ -1243,8 +1243,8 @@ async function ensureValidationDomainForOrganization(input: {
   hostname: string;
   normalizedUrl: string;
 }) {
-  const supabase = createAdminClient();
-  const { data: existing, error: existingError } = await supabase
+  const db = createAdminClient();
+  const { data: existing, error: existingError } = await db
     .from("domains")
     .select("id, hostname, normalized_url")
     .eq("organization_id", input.organizationId)
@@ -1259,7 +1259,7 @@ async function ensureValidationDomainForOrganization(input: {
     return existing as { hostname: string; id: string; normalized_url: string };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("domains")
     .insert({
       hostname: input.hostname,
@@ -1285,7 +1285,7 @@ async function createValidationScan(input: {
   pagesRequested?: number;
   submittedByUserId: string;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
   const scanConfig = buildSharedFullScanConfig({
     hostname: input.hostname,
@@ -1296,7 +1296,7 @@ async function createValidationScan(input: {
     source: "validation-manual"
   });
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("scans")
     .insert({
       domain_id: input.domainId,
@@ -1316,7 +1316,7 @@ async function createValidationScan(input: {
   }
 
   const scanId = (data as { id: string }).id;
-  const { error: domainError } = await supabase
+  const { error: domainError } = await db
     .from("domains")
     .update({ latest_scan_id: scanId })
     .eq("id", input.domainId)
@@ -1342,8 +1342,8 @@ async function requireAdmin() {
 
 export async function getValidationSettings() {
   const context = await requireAdmin();
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_settings")
     .upsert(
       {
@@ -1396,9 +1396,9 @@ export async function getValidationSettings() {
 
 export async function listValidationTargets(limit = 25) {
   await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [manualResult, trancoResult] = await Promise.all([
-    supabase
+    db
       .from("validation_targets")
       .select(
         "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
@@ -1406,7 +1406,7 @@ export async function listValidationTargets(limit = 25) {
       .eq("source", "manual")
       .order("updated_at", { ascending: false })
       .limit(limit),
-    supabase
+    db
       .from("validation_targets")
       .select(
         "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
@@ -1464,14 +1464,14 @@ export async function listValidationRuns(input?: {
   status?: string | null;
 }) {
   await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * 50;
   const to = from + 49;
 
   let scanIdsFilter: string[] | null = null;
   if (input?.ruleKey) {
-    const { data: matchingRunIds, error: runIdsError } = await supabase
+    const { data: matchingRunIds, error: runIdsError } = await db
       .from("validation_run_findings")
       .select("validation_run_id")
       .eq("rule_key", input.ruleKey);
@@ -1491,7 +1491,7 @@ export async function listValidationRuns(input?: {
     }
   }
 
-  let query = supabase
+  let query = db
     .from("validation_runs")
     .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message", {
       count: "exact"
@@ -1523,7 +1523,7 @@ export async function listValidationRuns(input?: {
   const scanStatusById = new Map<string, { completed_at: string | null; started_at: string | null; status: string }>();
 
   if (runIds.length > 0) {
-    const { data: findings, error: findingsError } = await supabase
+    const { data: findings, error: findingsError } = await db
       .from("validation_run_findings")
       .select("id, validation_run_id, rule_key, title")
       .in("validation_run_id", runIds);
@@ -1542,7 +1542,7 @@ export async function listValidationRuns(input?: {
   }
 
   if (scanIds.length > 0) {
-    const { data: scans, error: scansError } = await supabase
+    const { data: scans, error: scansError } = await db
       .from("scans")
       .select("id, status, started_at, completed_at")
       .in("id", scanIds);
@@ -1604,8 +1604,8 @@ export async function listValidationRuns(input?: {
 
 export async function getValidationRunDetail(validationRunId: string) {
   await requireAdmin();
-  const supabase = createAdminClient();
-  const { data: run, error: runError } = await supabase
+  const db = createAdminClient();
+  const { data: run, error: runError } = await db
     .from("validation_runs")
     .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message")
     .eq("id", validationRunId)
@@ -1621,28 +1621,28 @@ export async function getValidationRunDetail(validationRunId: string) {
 
   const [{ data: scanRow }, { data: scanSnapshot }, { data: runtimeArtifacts }, { count: accessibilityRuleCountTotal }] = await Promise.all([
     (run as ValidationRunRow).scan_id
-      ? supabase
+      ? db
           .from("scans")
           .select("status, started_at, completed_at")
           .eq("id", (run as ValidationRunRow).scan_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     (run as ValidationRunRow).scan_id
-      ? supabase
+      ? db
           .from("scan_snapshots")
           .select("timeout_flag, render_mode_used, preconsent_tracking_detected, tracking_before_consent_detected, wcag_error_count_total, pages_scanned, pages_requested")
           .eq("scan_id", (run as ValidationRunRow).scan_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     (run as ValidationRunRow).scan_id
-      ? supabase
+      ? db
           .from("scan_runtime_artifacts")
           .select("consent_audit_completed, consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls, key_page_discovery_summary, hybrid_runtime_evidence")
           .eq("scan_id", (run as ValidationRunRow).scan_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     (run as ValidationRunRow).scan_id
-      ? supabase
+      ? db
           .from("scan_accessibility_rule_counts")
           .select("rule_code", { count: "exact", head: true })
           .eq("scan_id", (run as ValidationRunRow).scan_id)
@@ -1650,17 +1650,17 @@ export async function getValidationRunDetail(validationRunId: string) {
   ]);
 
   const { data: scanEvents } = (run as ValidationRunRow).scan_id
-    ? await supabase
+    ? await db
         .from("scan_events")
         .select("id, event_type, message, metadata_json, created_at")
         .eq("scan_id", (run as ValidationRunRow).scan_id)
         .order("created_at", { ascending: true })
     : { data: [] as ScanEventRow[] };
   const { data: policyEnrichmentRows } = (run as ValidationRunRow).scan_id
-    ? await supabase.from("policy_enrichment").select("*").eq("scan_id", (run as ValidationRunRow).scan_id).order("created_at", { ascending: true })
+    ? await db.from("policy_enrichment").select("*").eq("scan_id", (run as ValidationRunRow).scan_id).order("created_at", { ascending: true })
     : { data: [] as Record<string, unknown>[] };
 
-  const { data: findings, error: findingsError } = await supabase
+  const { data: findings, error: findingsError } = await db
     .from("validation_run_findings")
     .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
     .eq("validation_run_id", validationRunId)
@@ -1675,7 +1675,7 @@ export async function getValidationRunDetail(validationRunId: string) {
   const confidenceByFindingId = new Map<string, ValidationFindingConfidenceRow>();
 
   if (findingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await supabase
+    const { data: verdictRows, error: verdictsError } = await db
       .from("validation_verdicts")
       .select("validation_run_finding_id, confidence")
       .in("validation_run_finding_id", findingIds)
@@ -1727,7 +1727,7 @@ export async function getValidationRunDetail(validationRunId: string) {
           ]
         ]),
         scanIds: [runScanId],
-        db: supabase
+        db
       })
     : new Map();
 
@@ -1845,8 +1845,8 @@ export async function getValidationRunDetail(validationRunId: string) {
 
 export async function getValidationIssueAnalytics() {
   await requireAdmin();
-  const supabase = createAdminClient();
-  const { data: findings, error: findingsError } = await supabase
+  const db = createAdminClient();
+  const { data: findings, error: findingsError } = await db
     .from("validation_run_findings")
     .select("id, rule_key, title");
 
@@ -1859,7 +1859,7 @@ export async function getValidationIssueAnalytics() {
   const verdictMap = new Map<string, ValidationVerdict>();
 
   if (findingIds.length > 0) {
-    const { data: verdicts, error: verdictsError } = await supabase
+    const { data: verdicts, error: verdictsError } = await db
       .from("validation_verdicts")
       .select("validation_run_finding_id, verdict")
       .in("validation_run_finding_id", findingIds);
@@ -1926,7 +1926,7 @@ export async function updateValidationSettingsAction(input: {
   runMode?: ValidationRunMode;
 }) {
   const context = await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
   if (input.automaticIntervalMinutes !== undefined && !(VALIDATION_INTERVAL_OPTIONS as readonly number[]).includes(input.automaticIntervalMinutes)) {
     throw new Error("Invalid validation interval.");
@@ -1952,12 +1952,12 @@ export async function updateValidationSettingsAction(input: {
     patch.operator_note = input.operatorNote;
   }
 
-  const { error } = await supabase.from("validation_settings").update(patch).eq("singleton_key", "default");
+  const { error } = await db.from("validation_settings").update(patch).eq("singleton_key", "default");
   if (error) {
     throw new Error(`Failed to update validation settings: ${error.message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type:
       input.pipelineEnabled !== undefined
@@ -1989,12 +1989,12 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
   let resolvedTarget: { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null = null;
 
   if (!isSyntheticPreviewTarget) {
-    const { data: target, error } = await supabase
+    const { data: target, error } = await db
       .from("validation_targets")
       .select("id, hostname, normalized_url, tranco_rank")
       .eq("id", input.targetId)
@@ -2009,7 +2009,7 @@ export async function queueManualValidationRunAction(input: {
 
   if (!resolvedTarget && input.hostname && input.normalizedUrl) {
     const materializedSource = input.source === "tranco" ? "tranco" : "manual";
-    const { data: insertedTarget, error: insertError } = await supabase
+    const { data: insertedTarget, error: insertError } = await db
       .from("validation_targets")
       .upsert(
         {
@@ -2030,7 +2030,7 @@ export async function queueManualValidationRunAction(input: {
       throw new Error(`Failed to materialize validation target: ${insertError?.message ?? "Unknown error"}`);
     }
 
-    await supabase.from("validation_audit_events").insert({
+    await db.from("validation_audit_events").insert({
       actor_user_id: context.user.id,
       event_type: "validation.target_added",
       metadata_json: {
@@ -2048,7 +2048,7 @@ export async function queueManualValidationRunAction(input: {
     throw new Error("Validation target not found.");
   }
 
-  const { data: settings, error: settingsError } = await supabase
+  const { data: settings, error: settingsError } = await db
     .from("validation_settings")
     .select("pipeline_enabled")
     .eq("singleton_key", "default")
@@ -2075,7 +2075,7 @@ export async function queueManualValidationRunAction(input: {
     submittedByUserId: context.user.id
   });
 
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await db
     .from("validation_runs")
     .insert({
       domain_id: domain.id,
@@ -2105,7 +2105,7 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(`Failed to create manual validation run: ${runError?.message ?? "Unknown error"}`);
   }
 
-  const { error: targetError } = await supabase
+  const { error: targetError } = await db
     .from("validation_targets")
     .update({
       last_error: null,
@@ -2134,7 +2134,7 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(`Validation queue handoff failed: ${message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
     metadata_json: {
@@ -2144,12 +2144,12 @@ export async function queueManualValidationRunAction(input: {
     }
   });
 
-  const { error: removeError } = await supabase.from("validation_targets").delete().eq("id", resolvedTarget.id);
+  const { error: removeError } = await db.from("validation_targets").delete().eq("id", resolvedTarget.id);
   if (removeError) {
     throw new Error(`Failed to consume validation target from queue: ${removeError.message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.target_removed",
     metadata_json: {
@@ -2168,7 +2168,7 @@ export async function queueManualValidationRunAction(input: {
       replacedHostname: resolvedTarget.hostname,
       validationRunId: (run as { id: string }).id
     },
-    supabase
+    db
   });
 
   revalidatePath("/app");
@@ -2188,8 +2188,8 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const supabase = createAdminClient();
-  const { data: domain, error: domainError } = await supabase
+  const db = createAdminClient();
+  const { data: domain, error: domainError } = await db
     .from("domains")
     .select("id, hostname, normalized_url")
     .eq("id", input.domainId)
@@ -2204,7 +2204,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error("Validation domain not found.");
   }
 
-  const { data: settings, error: settingsError } = await supabase
+  const { data: settings, error: settingsError } = await db
     .from("validation_settings")
     .select("pipeline_enabled")
     .eq("singleton_key", "default")
@@ -2226,7 +2226,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     submittedByUserId: context.user.id
   });
 
-  const { data: previousRun } = await supabase
+  const { data: previousRun } = await db
     .from("validation_runs")
     .select("tranco_rank, rank_band")
     .eq("domain_id", (domain as { id: string }).id)
@@ -2234,7 +2234,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     .limit(1)
     .maybeSingle();
 
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await db
     .from("validation_runs")
     .insert({
       domain_id: (domain as { id: string }).id,
@@ -2271,7 +2271,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(`Validation queue handoff failed: ${message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.manual_run_queued",
     metadata_json: {
@@ -2304,14 +2304,14 @@ export async function updateValidationTargetStateAction(input: {
   trancoRank?: number;
 }) {
   const context = await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const patch: Record<string, string | boolean | null> = {};
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
 
   let resolvedTargetId = input.targetId;
   if (isSyntheticPreviewTarget && input.hostname && input.normalizedUrl) {
     const materializedSource = input.source === "tranco" ? "tranco" : "manual";
-    const { data: insertedTarget, error: insertError } = await supabase
+    const { data: insertedTarget, error: insertError } = await db
       .from("validation_targets")
       .upsert(
         {
@@ -2346,12 +2346,12 @@ export async function updateValidationTargetStateAction(input: {
     patch.deny_reason = input.denylisted ? input.denyReason ?? "Suppressed by operator." : null;
   }
 
-  const { error } = await supabase.from("validation_targets").update(patch).eq("id", resolvedTargetId);
+  const { error } = await db.from("validation_targets").update(patch).eq("id", resolvedTargetId);
   if (error) {
     throw new Error(`Failed to update validation target: ${error.message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: input.denylisted ? "validation.target_suppressed" : input.clearBackoff ? "validation.target_backoff_cleared" : "validation.target_updated",
     metadata_json: {
@@ -2366,9 +2366,9 @@ export async function updateValidationTargetStateAction(input: {
 
 export async function removeValidationTargetAction(input: { targetId: string }) {
   const context = await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
-  const { data: target, error: loadError } = await supabase
+  const { data: target, error: loadError } = await db
     .from("validation_targets")
     .select("id, hostname")
     .eq("id", input.targetId)
@@ -2382,12 +2382,12 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
     throw new Error("Validation target not found.");
   }
 
-  const { error } = await supabase.from("validation_targets").delete().eq("id", input.targetId);
+  const { error } = await db.from("validation_targets").delete().eq("id", input.targetId);
   if (error) {
     throw new Error(`Failed to remove validation target: ${error.message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.target_removed",
     metadata_json: {
@@ -2402,14 +2402,14 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
 }
 
 async function pickRandomTrancoValidationTarget(
-  supabase: ReturnType<typeof createAdminClient>,
+  db: ReturnType<typeof createAdminClient>,
   excludedHostnames: string[] = []
 ) {
   const targetRank = Math.floor(Math.random() * (50_000 - 1_000 + 1)) + 1_000;
   const excluded = excludedHostnames.filter(Boolean);
 
   const loadCandidate = async (direction: "gte" | "lte") => {
-    let query = supabase
+    let query = db
       .from("validation_targets")
       .select("hostname, normalized_url, tranco_rank")
       .eq("source", "tranco")
@@ -2458,16 +2458,16 @@ async function addRandomTrancoValidationTarget(params: {
   excludedHostnames?: string[];
   eventType?: string;
   metadata?: Record<string, unknown>;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
-  const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, supabase } = params;
+  const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, db } = params;
   try {
-    const { candidate, targetRank } = await pickRandomTrancoValidationTarget(supabase, excludedHostnames);
+    const { candidate, targetRank } = await pickRandomTrancoValidationTarget(db, excludedHostnames);
 
     const hostname = extractHostname(candidate.normalized_url);
     const normalizedUrl = normalizeUrl(candidate.normalized_url);
 
-    const { error } = await supabase.from("validation_targets").upsert(
+    const { error } = await db.from("validation_targets").upsert(
       {
         active: true,
         denylisted: false,
@@ -2484,7 +2484,7 @@ async function addRandomTrancoValidationTarget(params: {
       throw new Error(`Failed to add validation target: ${error.message}`);
     }
 
-    await supabase.from("validation_audit_events").insert({
+    await db.from("validation_audit_events").insert({
       actor_user_id: actorUserId,
       event_type: eventType,
       metadata_json: {
@@ -2515,7 +2515,7 @@ async function addRandomTrancoValidationTarget(params: {
       throw new Error("No Tranco validation target is available.");
     }
 
-    const { error: insertError } = await supabase.from("validation_targets").upsert(
+    const { error: insertError } = await db.from("validation_targets").upsert(
       {
         active: true,
         denylisted: false,
@@ -2532,7 +2532,7 @@ async function addRandomTrancoValidationTarget(params: {
       throw new Error(`Failed to add validation target: ${insertError.message}`);
     }
 
-    await supabase.from("validation_audit_events").insert({
+    await db.from("validation_audit_events").insert({
       actor_user_id: actorUserId,
       event_type: eventType,
       metadata_json: {
@@ -2556,11 +2556,11 @@ async function addRandomTrancoValidationTarget(params: {
 
 export async function addValidationTargetAction(input: { hostname: string }) {
   const context = await requireAdmin();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const normalizedUrl = normalizeUrl(input.hostname);
   const hostname = extractHostname(normalizedUrl);
 
-  const { error } = await supabase.from("validation_targets").upsert(
+  const { error } = await db.from("validation_targets").upsert(
     {
       active: true,
       denylisted: false,
@@ -2575,7 +2575,7 @@ export async function addValidationTargetAction(input: { hostname: string }) {
     throw new Error(`Failed to add validation target: ${error.message}`);
   }
 
-  await supabase.from("validation_audit_events").insert({
+  await db.from("validation_audit_events").insert({
     actor_user_id: context.user.id,
     event_type: "validation.target_added",
     metadata_json: {
