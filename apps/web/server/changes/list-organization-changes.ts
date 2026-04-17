@@ -1,7 +1,13 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
-import { LEGACY_CHANGE_EVENT_TYPES, isMissingComplianceChangeEventsTable } from "./legacy-change-events";
+import {
+  loadLegacyOrganizationChangeEvents,
+  loadOrganizationChangeDomains,
+  loadOrganizationComplianceChangeEvents,
+  type LegacyOrganizationChangeEventRow,
+  type OrganizationChangeDomainRow,
+  type OrganizationChangeEventRow
+} from "./repository";
 
 export type OrganizationChangeItem = {
   id: string;
@@ -12,34 +18,6 @@ export type OrganizationChangeItem = {
   message: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
-};
-
-type EventRow = {
-  domain_id: string | null;
-  event_group: string;
-  event_id: string;
-  event_timestamp: string;
-  event_type: string;
-  field_name: string | null;
-  new_value_text: string | null;
-  old_value_text: string | null;
-  scan_id_current: string | null;
-  severity: string;
-};
-
-type DomainRow = {
-  hostname: string;
-  id: string;
-};
-
-type LegacyEventRow = {
-  created_at: string;
-  domain_id: string | null;
-  event_type: string;
-  id: string;
-  message: string;
-  metadata_json: Record<string, unknown> | null;
-  scan_id: string | null;
 };
 
 function formatFieldLabel(fieldName: string | null) {
@@ -53,7 +31,7 @@ function formatFieldLabel(fieldName: string | null) {
     .replace(/^./, (value) => value.toUpperCase());
 }
 
-function formatChangeMessage(event: EventRow) {
+function formatChangeMessage(event: OrganizationChangeEventRow) {
   switch (event.event_type) {
     case "privacy_policy_added":
       return "Privacy policy detected.";
@@ -101,33 +79,13 @@ function formatChangeMessage(event: EventRow) {
 }
 
 async function listLegacyOrganizationChanges(organizationId: string, limit: number) {
-  const db = createDatabaseClient();
-  const { data: events, error } = await db
-    .from("scan_events")
-    .select("id, scan_id, domain_id, event_type, message, metadata_json, created_at")
-    .eq("organization_id", organizationId)
-    .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES])
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const events = await loadLegacyOrganizationChangeEvents({
+    limit,
+    organizationId
+  });
+  const domainMap = await loadOrganizationChangeDomainMap(organizationId, events);
 
-  if (error) {
-    throw new Error(`Failed to load organization changes: ${error.message}`);
-  }
-
-  const domainIds = [...new Set(((events ?? []) as LegacyEventRow[]).flatMap((event) => (event.domain_id ? [event.domain_id] : [])))];
-  let domainMap = new Map<string, DomainRow>();
-
-  if (domainIds.length > 0) {
-    const { data: domains } = await db
-      .from("domains")
-      .select("id, hostname")
-      .eq("organization_id", organizationId)
-      .in("id", domainIds);
-
-    domainMap = new Map(((domains ?? []) as DomainRow[]).map((domain) => [domain.id, domain]));
-  }
-
-  return ((events ?? []) as LegacyEventRow[]).map((event) => ({
+  return events.map((event) => ({
     id: event.id,
     domainHostname: event.domain_id ? domainMap.get(event.domain_id)?.hostname ?? null : null,
     domainId: event.domain_id,
@@ -139,37 +97,32 @@ async function listLegacyOrganizationChanges(organizationId: string, limit: numb
   }));
 }
 
+async function loadOrganizationChangeDomainMap(
+  organizationId: string,
+  events: Array<Pick<LegacyOrganizationChangeEventRow, "domain_id"> | Pick<OrganizationChangeEventRow, "domain_id">>
+) {
+  const domainIds = [...new Set(events.flatMap((event) => (event.domain_id ? [event.domain_id] : [])))];
+  const domains = await loadOrganizationChangeDomains({
+    domainIds,
+    organizationId
+  });
+
+  return new Map<string, OrganizationChangeDomainRow>(domains.map((domain) => [domain.id, domain]));
+}
+
 export async function listOrganizationChanges(organizationId: string, limit = 30): Promise<OrganizationChangeItem[]> {
-  const db = createDatabaseClient();
-  const { data: events, error } = await db
-    .from("compliance_change_events")
-    .select("event_id, scan_id_current, domain_id, event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
-    .eq("organization_id", organizationId)
-    .order("event_timestamp", { ascending: false })
-    .limit(limit);
+  const { events, missingTable } = await loadOrganizationComplianceChangeEvents({
+    limit,
+    organizationId
+  });
 
-  if (error) {
-    if (isMissingComplianceChangeEventsTable(error)) {
-      return listLegacyOrganizationChanges(organizationId, limit);
-    }
-
-    throw new Error(`Failed to load organization changes: ${error.message}`);
+  if (missingTable) {
+    return listLegacyOrganizationChanges(organizationId, limit);
   }
 
-  const domainIds = [...new Set(((events ?? []) as EventRow[]).flatMap((event) => (event.domain_id ? [event.domain_id] : [])))];
-  let domainMap = new Map<string, DomainRow>();
+  const domainMap = await loadOrganizationChangeDomainMap(organizationId, events);
 
-  if (domainIds.length > 0) {
-    const { data: domains } = await db
-      .from("domains")
-      .select("id, hostname")
-      .eq("organization_id", organizationId)
-      .in("id", domainIds);
-
-    domainMap = new Map(((domains ?? []) as DomainRow[]).map((domain) => [domain.id, domain]));
-  }
-
-  return ((events ?? []) as EventRow[]).map((event) => ({
+  return events.map((event) => ({
     id: event.event_id,
     domainHostname: event.domain_id ? domainMap.get(event.domain_id)?.hostname ?? null : null,
     domainId: event.domain_id,
