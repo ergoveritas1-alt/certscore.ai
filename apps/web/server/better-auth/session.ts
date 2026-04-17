@@ -9,9 +9,14 @@ type BetterAuthAccountRow = {
   provider_id: string;
 };
 
+function normalizeProvider(providerId: string) {
+  return providerId === "credential" ? "password" : providerId;
+}
+
 function normalizeProviderList(rows: BetterAuthAccountRow[]) {
   const providers = rows
     .map((row) => row.provider_id?.trim().toLowerCase())
+    .map((value) => (value ? normalizeProvider(value) : value))
     .filter((value): value is string => Boolean(value));
 
   return providers.length > 0 ? Array.from(new Set(providers)).sort().join(",") : "better-auth";

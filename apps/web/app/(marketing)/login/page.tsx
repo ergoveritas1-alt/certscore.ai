@@ -19,7 +19,7 @@ export default async function LoginPage() {
           <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
           <CardContent className="p-6 pb-0">
             <LoginForm
-              allowCreateAccount={false}
+              allowCreateAccount
               footerMode="default"
               title="Access your workspace"
             />

@@ -1,8 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
+import { auth } from "../better-auth/auth";
+import { getBetterAuthEnv } from "../better-auth/env";
 import { getCurrentUser } from "../auth";
-import { getPasswordAuthVerificationStatus } from "./user";
-import { sendVerificationEmail } from "./verification";
 
 export type ResendVerificationActionState = {
   error: string | null;
@@ -17,33 +18,20 @@ export const initialResendVerificationActionState: ResendVerificationActionState
 export async function resendVerificationEmailAction(): Promise<ResendVerificationActionState> {
   const currentUser = await getCurrentUser();
 
-  if (!currentUser || currentUser.authProvider !== "password") {
+  if (!currentUser || !currentUser.authProvider.split(",").includes("password")) {
     return {
       error: "Verification email is only available for password accounts.",
       success: null
     };
   }
 
-  const verificationStatus = await getPasswordAuthVerificationStatus(currentUser.id);
-
-  if (!verificationStatus) {
-    return {
-      error: "Verification email is unavailable for this account.",
-      success: null
-    };
-  }
-
-  if (verificationStatus.verifiedAt) {
-    return {
-      error: null,
-      success: "Email already verified."
-    };
-  }
-
   try {
-    await sendVerificationEmail({
-      email: verificationStatus.email,
-      userId: currentUser.id
+    await auth.api.sendVerificationEmail({
+      body: {
+        callbackURL: `${getBetterAuthEnv().NEXT_PUBLIC_APP_URL}/login?message=email_verified`,
+        email: currentUser.email
+      },
+      headers: await headers()
     });
   } catch {
     return {

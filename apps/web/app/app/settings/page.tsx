@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { BrandingSettingsForm } from "../../../components/settings/branding-settings-form";
 import { getDashboardContext } from "../../../server/auth";
+import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getSystemHealth } from "../../../server/health/get-system-health";
 import { getPasswordAuthVerificationStatus } from "../../../server/password-auth/user";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
@@ -24,11 +25,18 @@ function formatDateTime(value: string | null) {
 
 export default async function SettingsPage() {
   const { organization, user } = await getDashboardContext();
+  const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
   const [settings, systemHealth, verificationStatus] = await Promise.all([
     getOrganizationSettings(organization.id),
     getSystemHealth(),
-    user.authProvider === "password" ? getPasswordAuthVerificationStatus(user.id) : Promise.resolve(null)
+    userProviders.includes("password")
+      ? getBetterAuthVerificationStatus(user.id).then((result) => result ?? getPasswordAuthVerificationStatus(user.id))
+      : Promise.resolve(null)
   ]);
+  const verificationIsVerified: boolean =
+    verificationStatus && "isVerified" in verificationStatus
+      ? Boolean((verificationStatus as { isVerified?: boolean }).isVerified)
+      : Boolean(verificationStatus?.verifiedAt);
 
   return (
     <div className="space-y-8">
@@ -58,7 +66,11 @@ export default async function SettingsPage() {
             <CardTitle>Email verification</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmailVerificationCard email={verificationStatus.email} verifiedAt={verificationStatus.verifiedAt} />
+            <EmailVerificationCard
+              email={verificationStatus.email}
+              isVerified={verificationIsVerified}
+              verifiedAt={verificationStatus.verifiedAt}
+            />
           </CardContent>
         </Card>
       ) : null}

@@ -3,25 +3,60 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { auth } from "../better-auth/auth";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
-import { verifyPassword } from "./password";
-import { createPasswordSession, revokeCurrentPasswordSession } from "./session";
-import { findPasswordAuthUserByEmail, markPasswordUserLogin, normalizeEmail } from "./user";
+import { findAppUserByEmail, normalizeEmail } from "./user";
 import { credentialsSchema, getAuthMode } from "./validators";
 
-function getClientIp(headerStore: Headers) {
-  const forwardedFor = headerStore.get("x-forwarded-for");
+function deriveDisplayName(email: string) {
+  const localPart = email.split("@")[0]?.trim();
 
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  if (!localPart) {
+    return "CertScore user";
   }
 
-  return headerStore.get("x-real-ip")?.trim() || "unknown";
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
-function mapFriendlyError() {
-  return "Invalid email or password.";
+function getBetterAuthErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const candidate = error as {
+    body?: { code?: string; message?: string };
+    code?: string;
+    message?: string;
+  };
+
+  return candidate.body?.code ?? candidate.code ?? null;
+}
+
+function mapFriendlyError(error: unknown, mode: CredentialsActionState["mode"]) {
+  const code = getBetterAuthErrorCode(error);
+
+  switch (code) {
+    case "EMAIL_NOT_VERIFIED":
+      return "Verify your email before signing in.";
+    case "INVALID_EMAIL_OR_PASSWORD":
+      return "Invalid email or password.";
+    case "PASSWORD_TOO_LONG":
+      return "Password is too long.";
+    case "PASSWORD_TOO_SHORT":
+      return "Password must be at least 8 characters.";
+    case "USER_ALREADY_EXISTS":
+    case "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL":
+      return mode === "create_account"
+        ? "An account already exists for this email. Sign in or reset your password."
+        : "Invalid email or password.";
+    default:
+      return mode === "create_account" ? "Could not create your account right now." : "Invalid email or password.";
+  }
 }
 
 export async function submitCredentialsAction(
@@ -47,57 +82,57 @@ export async function submitCredentialsAction(
 
     const values = parsed.data;
     const normalizedEmail = normalizeEmail(values.email);
-
     const headerStore = await headers();
-    const ipAddress = getClientIp(headerStore);
-    const { enforcePasswordAuthRateLimit } = await import("./rate-limit");
-    const rateLimitMessage = await enforcePasswordAuthRateLimit({
-      email: normalizedEmail,
-      ipAddress,
-      mode
-    });
-
-    if (rateLimitMessage) {
-      return {
-        accountRecovery: null,
-        error: rateLimitMessage,
-        fieldErrors: {},
-        mode
-      };
-    }
 
     if (mode === "create_account") {
-      return {
-        accountRecovery: null,
-        error: "Account creation is disabled. Contact us if you need access.",
-        fieldErrors: {},
-        mode: "sign_in"
-      };
+      const existingAppUser = await findAppUserByEmail(normalizedEmail);
+
+      if (existingAppUser) {
+        return {
+          accountRecovery: {
+            email: normalizedEmail,
+            hint: "An account already exists for this email. Use password reset to set up access.",
+            kind: "create_password"
+          },
+          error: "An account already exists for this email. Use password reset to set up access.",
+          fieldErrors: {},
+          mode
+        };
+      }
+
+      const response = await auth.api.signUpEmail({
+        body: {
+          callbackURL: values.next,
+          email: normalizedEmail,
+          name: deriveDisplayName(normalizedEmail),
+          password: values.password
+        },
+        headers: headerStore
+      });
+
+      await bootstrapAppUserSession({
+        authProvider: "password",
+        email: response.user.email,
+        fullName: response.user.name ?? null,
+        id: response.user.id
+      });
+      redirect(values.next);
     }
 
-    const passwordAccount = await findPasswordAuthUserByEmail(values.email);
-    const isValidPassword = await verifyPassword(values.password, passwordAccount?.password_hash ?? null);
-
-    if (!passwordAccount || !isValidPassword) {
-      return {
-        accountRecovery: null,
-        error: mapFriendlyError(),
-        fieldErrors: {},
-        mode
-      };
-    }
-
-    await createPasswordSession({
-      ipAddress,
-      userAgent: headerStore.get("user-agent"),
-      userId: passwordAccount.id
+    const response = await auth.api.signInEmail({
+      body: {
+        callbackURL: values.next,
+        email: normalizedEmail,
+        password: values.password
+      },
+      headers: headerStore
     });
-    await markPasswordUserLogin(passwordAccount.id);
+
     await bootstrapAppUserSession({
       authProvider: "password",
-      email: passwordAccount.email,
-      fullName: null,
-      id: passwordAccount.id
+      email: response.user.email,
+      fullName: response.user.name ?? null,
+      id: response.user.id
     });
 
     redirect(values.next);
@@ -108,13 +143,14 @@ export async function submitCredentialsAction(
 
     const message = error instanceof Error ? error.message : String(error);
     console.error("submitCredentialsAction failed", {
+      code: getBetterAuthErrorCode(error),
       error: message,
       mode
     });
 
     return {
       accountRecovery: null,
-      error: mode === "create_account" ? `Create account failed: ${message}` : `Sign in failed: ${message}`,
+      error: mapFriendlyError(error, mode),
       fieldErrors: {},
       mode
     };
@@ -122,5 +158,7 @@ export async function submitCredentialsAction(
 }
 
 export async function logoutPasswordSessionAction() {
-  await revokeCurrentPasswordSession();
+  await auth.api.signOut({
+    headers: await headers()
+  });
 }

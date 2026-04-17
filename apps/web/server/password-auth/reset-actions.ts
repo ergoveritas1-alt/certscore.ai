@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { auth } from "../better-auth/auth";
 import { normalizeEmail } from "./user";
 import {
   initialPasswordResetRequestState,
@@ -10,8 +11,6 @@ import {
   type PasswordResetRequestState
 } from "./reset-action-state";
 import { passwordResetRequestSchema, passwordResetSchema } from "./validators";
-import { enforcePasswordResetRequestRateLimit } from "./rate-limit";
-import { resetPasswordWithToken, sendPasswordResetEmail } from "./reset";
 
 function getClientIp(headerStore: Headers) {
   const forwardedFor = headerStore.get("x-forwarded-for");
@@ -40,6 +39,19 @@ function isMissingPasswordUserError(message: string) {
   return normalized.includes("user not found");
 }
 
+function getBetterAuthErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const candidate = error as {
+    body?: { code?: string; message?: string };
+    code?: string;
+  };
+
+  return candidate.body?.code ?? candidate.code ?? null;
+}
+
 export async function requestPasswordResetAction(
   _previousState: PasswordResetRequestState = initialPasswordResetRequestState,
   formData: FormData
@@ -58,30 +70,20 @@ export async function requestPasswordResetAction(
 
   const values = parsed.data;
   const headerStore = await headers();
-  const ipAddress = getClientIp(headerStore);
   const requestOrigin = getRequestOrigin(headerStore);
-  const rateLimitMessage = await enforcePasswordResetRequestRateLimit({
-    email: normalizeEmail(values.email),
-    ipAddress
-  });
-
-  if (rateLimitMessage) {
-    return {
-      error: rateLimitMessage,
-      fieldErrors: {},
-      message: null
-    };
-  }
 
   try {
-    await sendPasswordResetEmail({
-      email: values.email,
-      redirectTo: `${requestOrigin}/reset-password/update`
+    await auth.api.requestPasswordReset({
+      body: {
+        email: values.email,
+        redirectTo: `${requestOrigin}/reset-password/update`
+      },
+      headers: headerStore
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    if (!isMissingPasswordUserError(message)) {
+    if (!isMissingPasswordUserError(message) && getBetterAuthErrorCode(error) !== "USER_NOT_FOUND") {
       console.error("requestPasswordResetAction failed", {
         email: normalizeEmail(values.email),
         error: message
@@ -120,16 +122,22 @@ export async function confirmPasswordResetAction(
   }
 
   try {
-    const updated = await resetPasswordWithToken(parsed.data);
-
-    if (!updated) {
+    await auth.api.resetPassword({
+      body: {
+        newPassword: parsed.data.password,
+        token: parsed.data.token
+      },
+      headers: await headers()
+    });
+  } catch (error) {
+    if (getBetterAuthErrorCode(error) === "INVALID_TOKEN") {
       return {
         error: "This reset link is invalid or expired.",
         fieldErrors: {},
         message: null
       };
     }
-  } catch (error) {
+
     return {
       error: error instanceof Error ? error.message : "Could not reset password right now.",
       fieldErrors: {},

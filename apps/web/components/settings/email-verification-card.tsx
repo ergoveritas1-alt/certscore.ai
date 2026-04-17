@@ -9,11 +9,13 @@ import {
 
 type EmailVerificationCardProps = {
   email: string;
+  isVerified?: boolean;
   verifiedAt: string | null;
 };
 
-export function EmailVerificationCard({ email, verifiedAt }: EmailVerificationCardProps) {
+export function EmailVerificationCard({ email, isVerified, verifiedAt }: EmailVerificationCardProps) {
   const [state, action, isPending] = useActionState(resendVerificationEmailAction, initialResendVerificationActionState);
+  const resolvedIsVerified = isVerified ?? Boolean(verifiedAt);
 
   return (
     <form action={action} className="space-y-4">
@@ -33,6 +35,8 @@ export function EmailVerificationCard({ email, verifiedAt }: EmailVerificationCa
             }).format(new Date(verifiedAt))}
             .
           </p>
+        ) : resolvedIsVerified ? (
+          <p>Email verified.</p>
         ) : (
           <p>Email verification is optional, but recommended for recovery and future security checks.</p>
         )}
@@ -41,7 +45,7 @@ export function EmailVerificationCard({ email, verifiedAt }: EmailVerificationCa
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
       {state.success ? <p className="text-sm text-emerald-700">{state.success}</p> : null}
 
-      {!verifiedAt ? (
+      {!resolvedIsVerified ? (
         <Button disabled={isPending} type="submit" variant="secondary">
           {isPending ? "Sending..." : "Resend verification email"}
         </Button>

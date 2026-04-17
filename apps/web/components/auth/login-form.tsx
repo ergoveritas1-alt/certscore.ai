@@ -38,7 +38,6 @@ export function LoginForm(input?: {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [clientEmailError, setClientEmailError] = useState<string | null>(null);
-  const [createAccountHint, setCreateAccountHint] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(
     initialMessage === "email_verified"
       ? "Email verified."
@@ -81,7 +80,6 @@ export function LoginForm(input?: {
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
     setClientEmailError(null);
-    setCreateAccountHint(null);
     setFlowError(null);
     setStatus(null);
     setPassword("");
@@ -107,7 +105,6 @@ export function LoginForm(input?: {
     }
 
     setClientEmailError(null);
-    setCreateAccountHint("Account creation is currently disabled. Contact us if you need access.");
     setCreateStep(2);
   }
 
@@ -191,7 +188,6 @@ export function LoginForm(input?: {
               onChange={(event) => {
                 setEmail(event.target.value);
                 setClientEmailError(null);
-                setCreateAccountHint(null);
               }}
               placeholder="name@example.com"
               type="email"
@@ -236,7 +232,7 @@ export function LoginForm(input?: {
         ) : null}
 
         {clientEmailError ? <p className="text-sm text-red-600">{clientEmailError}</p> : null}
-        {createAccountHint ? <p className="text-sm text-sky-700">{createAccountHint}</p> : null}
+        {actionState.accountRecovery ? <p className="text-sm text-sky-700">{actionState.accountRecovery.hint}</p> : null}
         {fieldErrors.email ? <p className="text-sm text-red-600">{fieldErrors.email}</p> : null}
         {fieldErrors.password ? <p className="text-sm text-red-600">{fieldErrors.password}</p> : null}
 
