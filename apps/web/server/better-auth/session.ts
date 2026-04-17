@@ -1,8 +1,8 @@
 import "server-only";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { headers } from "next/headers";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
+import { listBetterAuthAccountsByUserId } from "../users/repository";
 import { auth } from "./auth";
 
 type BetterAuthAccountRow = {
@@ -31,15 +31,7 @@ export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser |
     return null;
   }
 
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("better_auth_accounts")
-    .select("provider_id")
-    .eq("user_id", session.user.id);
-
-  if (error) {
-    throw new Error(`Failed to load Better Auth providers: ${error.message}`);
-  }
+  const data = await listBetterAuthAccountsByUserId(session.user.id);
 
   return {
     authProvider: normalizeProviderList((data as BetterAuthAccountRow[] | null) ?? []),
