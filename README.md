@@ -115,9 +115,11 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - Google OAuth if enabled
    - email/password and verification settings as needed
 6. Configure auth redirect URLs:
+   - use the stable callback alias exposed by the app:
    - `http://localhost:3000/auth/callback`
    - `http://127.0.0.1:3000/auth/callback`
    - `https://certscore.ai/auth/callback`
+   - the app forwards that route to Better Auth's internal callback handler
 7. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
    - local database and auth secrets should come from the dev environment
@@ -211,7 +213,7 @@ Common commands:
 - use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
 - configure the web environment variables from the shared list above
 - use only production database, auth, and storage credentials in Vercel
-- ensure Better Auth provider redirects include the production callback on `certscore.ai`
+- ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
 
 ### GCP worker pool
 

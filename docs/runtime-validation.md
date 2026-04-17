@@ -38,7 +38,7 @@ If a check fails:
 ## 2. Auth validation
 
 1. Open `/login`.
-2. Verify the page loads and both login options render.
+2. Verify the page loads and the configured login options render.
 3. Test Google OAuth if enabled.
 4. Test email/password or verification flows as configured.
 5. Confirm first login creates:

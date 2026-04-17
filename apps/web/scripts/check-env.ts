@@ -98,7 +98,7 @@ async function main() {
 
   pass("web env", "All required CertScore web environment variables are present.");
   info("expected services", "PostgreSQL, Redis, and S3-compatible storage should be reachable.");
-  info("better auth", googleEnabled ? "Email/password and Google OAuth env is configured." : "Email/password auth env is configured.");
+  info("better auth", googleEnabled ? "App auth env includes email/password and Google OAuth." : "App auth env includes email/password.");
   info("app url", new URL(values.NEXT_PUBLIC_APP_URL).origin);
   info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);

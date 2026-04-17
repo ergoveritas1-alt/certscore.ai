@@ -74,7 +74,7 @@ The scanner scheduler also lives in `WS01`, not in this repo. `WC01` should trea
 Add the new domain in the Vercel project, apply the DNS records Vercel gives you, then update:
 
 - Better Auth site URL
-- Better Auth redirect URLs such as `https://<domain>/auth/callback`
+- Better Auth redirect URLs using the app callback alias, such as `https://<domain>/auth/callback`
 - Google OAuth redirect settings if Google login is enabled
 
 ## 6. Validate production
