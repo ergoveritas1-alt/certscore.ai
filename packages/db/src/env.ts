@@ -24,19 +24,17 @@ function parseEnvironment<TSchema extends z.ZodTypeAny>(input: {
 
 export const storageBucketEnvSchema = z
   .object({
-    S3_BUCKET: z.string().min(1).optional(),
-    SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
-    SUPABASE_STORAGE_BUCKET_REPORTS: z.string().min(1).optional()
+    S3_BUCKET: z.string().min(1)
   })
   .superRefine((value, context) => {
-    if (value.S3_BUCKET || value.SUPABASE_STORAGE_BUCKET || value.SUPABASE_STORAGE_BUCKET_REPORTS) {
+    if (value.S3_BUCKET) {
       return;
     }
 
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["S3_BUCKET"],
-      message: "S3_BUCKET (or legacy SUPABASE_STORAGE_BUCKET / SUPABASE_STORAGE_BUCKET_REPORTS) is required"
+      message: "S3_BUCKET is required"
     });
   });
 
@@ -69,7 +67,7 @@ export function getStorageBucket(env: NodeJS.ProcessEnv = process.env) {
     scope: "storage-env"
   });
 
-  return values.S3_BUCKET ?? values.SUPABASE_STORAGE_BUCKET ?? values.SUPABASE_STORAGE_BUCKET_REPORTS!;
+  return values.S3_BUCKET;
 }
 
 export function hasDatabaseEnv(env: NodeJS.ProcessEnv = process.env) {
