@@ -45,7 +45,6 @@ export const SCAN_EVENT_TYPES = {
   fullRunning: "full_scan.running",
   fullCompleted: "full_scan.completed",
   fullFailed: "full_scan.failed",
-  fullWorkerHeartbeat: "full_scan.worker_heartbeat",
   crawlStarted: "crawl.started",
   homepageLoaded: "crawl.homepage_loaded",
   pageDiscoveryCompleted: "crawl.page_discovery_completed",

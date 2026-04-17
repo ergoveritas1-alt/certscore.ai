@@ -19,7 +19,8 @@ export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: strin
   if (!workerHealthy) {
     return {
       enabled: false as const,
-      reason: "Scanning is unavailable because no healthy scanner service heartbeat was detected. Ensure the scanner service is running, or run `pnpm dev:scanner` locally."
+      reason:
+        "Scanning is unavailable because no healthy scanner service heartbeat was detected. Ensure the scanner service is running, or run `pnpm dev:scanner:local` locally."
     };
   }
 
