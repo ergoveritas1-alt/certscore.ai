@@ -279,14 +279,16 @@ async function queueScan(input: {
     throw new Error(`Failed to queue scan for ${input.domain.hostname}: ${inserted.error?.message ?? "Unknown error"}`);
   }
 
-  await enqueueNanoSignalEnrichment(inserted.data.id).catch((error) => {
+  const insertedScan = inserted.data as ScanRow;
+
+  await enqueueNanoSignalEnrichment(insertedScan.id).catch((error) => {
     console.error("[scan-batch-eval] nano signal enrichment handoff failed", {
       error: error instanceof Error ? error.message : String(error),
-      scanId: inserted.data.id
+      scanId: insertedScan.id
     });
   });
 
-  return inserted.data as ScanRow;
+  return insertedScan;
 }
 
 async function waitForCompletion(input: {

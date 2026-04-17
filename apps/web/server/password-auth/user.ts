@@ -1,4 +1,4 @@
-import { createAdminClient, type User } from "@website-signal-risk-scanner/db";
+import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedAppUser, PasswordAuthUserRecord } from "./types";
 
@@ -27,37 +27,6 @@ function isUniqueViolation(error: { code?: string; message?: string } | null) {
 
 export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
-}
-
-function extractSupabaseAuthProviders(user: User | null) {
-  if (!user) {
-    return [];
-  }
-
-  const providers = new Set<string>();
-
-  const appMetadataProviders = user.app_metadata?.providers;
-  if (Array.isArray(appMetadataProviders)) {
-    appMetadataProviders.forEach((provider) => {
-      if (typeof provider === "string" && provider.trim().length > 0) {
-        providers.add(provider.trim().toLowerCase());
-      }
-    });
-  }
-
-  if (typeof user.app_metadata?.provider === "string" && user.app_metadata.provider.trim().length > 0) {
-    providers.add(user.app_metadata.provider.trim().toLowerCase());
-  }
-
-  if (Array.isArray(user.identities)) {
-    user.identities.forEach((identity) => {
-      if (typeof identity?.provider === "string" && identity.provider.trim().length > 0) {
-        providers.add(identity.provider.trim().toLowerCase());
-      }
-    });
-  }
-
-  return Array.from(providers);
 }
 
 function mergeAuthProviders(existingProvider: string | null | undefined, nextProvider: string) {
@@ -112,16 +81,35 @@ export async function findPasswordAuthUserByEmail(email: string) {
 
 export async function getSupabaseAuthProvidersByUserId(userId: string) {
   const supabase = createAdminClient();
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.admin.getUserById(userId);
+  const [appUserResult, passwordUserResult] = await Promise.all([
+    supabase.from("users").select("auth_provider").eq("id", userId).maybeSingle(),
+    supabase.from("password_auth_users").select("id").eq("id", userId).maybeSingle()
+  ]);
 
-  if (error) {
-    throw new Error(`Failed to load auth user: ${error.message}`);
+  if (appUserResult.error) {
+    throw new Error(`Failed to load auth user: ${appUserResult.error.message}`);
   }
 
-  return extractSupabaseAuthProviders(user);
+  if (passwordUserResult.error && !isMissingPasswordAuthTableError(passwordUserResult.error.message)) {
+    throw new Error(`Failed to load password auth provider: ${passwordUserResult.error.message}`);
+  }
+
+  const providers = new Set<string>();
+  const authProviderValue = appUserResult.data?.auth_provider;
+
+  if (typeof authProviderValue === "string") {
+    authProviderValue
+      .split(",")
+      .map((provider) => provider.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((provider) => providers.add(provider));
+  }
+
+  if (passwordUserResult.data?.id) {
+    providers.add("password");
+  }
+
+  return Array.from(providers);
 }
 
 export async function createPasswordAuthUser(input: { email: string; passwordHash: string }) {

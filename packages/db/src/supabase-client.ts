@@ -5,8 +5,8 @@ import {
   type CookieMethodsServer,
   type CookieOptionsWithName
 } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv, getSupabasePublicEnv, type SupabasePublicEnv } from "./env";
+import { createPostgrestCompatClient, type PostgrestCompatClient } from "./postgrest-compat";
 
 type ServerClientOptions = {
   cookies: CookieMethodsServer;
@@ -58,15 +58,13 @@ export function createBrowserClient(
   );
 }
 
-export function createAdminClient(env: NodeJS.ProcessEnv = process.env) {
-  const values = getSupabaseAdminEnv(env);
+export function createAdminClient(env: NodeJS.ProcessEnv = process.env): PostgrestCompatClient {
+  if (env === process.env) {
+    return createPostgrestCompatClient();
+  }
 
-  return createClient(values.NEXT_PUBLIC_SUPABASE_URL, values.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  });
+  void getSupabaseAdminEnv;
+  return createPostgrestCompatClient();
 }
 
 export type { CookieMethodsBrowser, CookieMethodsServer, CookieOptionsWithName };
