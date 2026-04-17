@@ -18,17 +18,17 @@ function buildVerificationUrl(token: string) {
 }
 
 export async function issueEmailVerificationToken(userId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-  await supabase
+  await db
     .from("password_auth_verification_tokens")
     .delete()
     .eq("user_id", userId)
     .is("consumed_at", null);
 
-  const { error } = await supabase.from("password_auth_verification_tokens").insert({
+  const { error } = await db.from("password_auth_verification_tokens").insert({
     expires_at: expiresAt.toISOString(),
     token_hash: hashVerificationToken(token),
     user_id: userId
@@ -71,9 +71,9 @@ export async function sendVerificationEmail(input: { email: string; userId: stri
 }
 
 export async function verifyEmailToken(token: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const tokenHash = hashVerificationToken(token);
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("password_auth_verification_tokens")
     .select("id, user_id, expires_at")
     .eq("token_hash", tokenHash)
@@ -96,11 +96,11 @@ export async function verifyEmailToken(token: string) {
 
   const nowIso = new Date().toISOString();
   const [{ error: consumeError }, { error: verifyError }] = await Promise.all([
-    supabase
+    db
       .from("password_auth_verification_tokens")
       .update({ consumed_at: nowIso })
       .eq("id", verificationToken.id),
-    supabase
+    db
       .from("password_auth_users")
       .update({ email_verified_at: nowIso })
       .eq("id", verificationToken.user_id)

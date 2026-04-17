@@ -41,9 +41,9 @@ function mergeAuthProviders(existingProvider: string | null | undefined, nextPro
 }
 
 export async function findAppUserByEmail(email: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const normalizedEmail = normalizeEmail(email);
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("users")
     .select("id, email, full_name, auth_provider")
     .eq("email", normalizedEmail)
@@ -57,9 +57,9 @@ export async function findAppUserByEmail(email: string) {
 }
 
 export async function findPasswordAuthUserByEmail(email: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const normalizedEmail = normalizeEmail(email);
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("password_auth_users")
     .select("id, email, password_hash, email_verified_at, created_at, updated_at, last_login_at")
     .eq("email", normalizedEmail)
@@ -80,10 +80,10 @@ export async function findPasswordAuthUserByEmail(email: string) {
 }
 
 export async function getAuthProvidersByUserId(userId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [appUserResult, passwordUserResult] = await Promise.all([
-    supabase.from("users").select("auth_provider").eq("id", userId).maybeSingle(),
-    supabase.from("password_auth_users").select("id").eq("id", userId).maybeSingle()
+    db.from("users").select("auth_provider").eq("id", userId).maybeSingle(),
+    db.from("password_auth_users").select("id").eq("id", userId).maybeSingle()
   ]);
 
   if (appUserResult.error) {
@@ -113,13 +113,13 @@ export async function getAuthProvidersByUserId(userId: string) {
 }
 
 export async function createPasswordAuthUser(input: { email: string; passwordHash: string }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const normalizedEmail = normalizeEmail(input.email);
   const existingAppUser = await findAppUserByEmail(normalizedEmail);
   const userId = existingAppUser?.id ?? randomUUID();
 
   if (!existingAppUser) {
-    const { error: profileError } = await supabase.from("users").insert({
+    const { error: profileError } = await db.from("users").insert({
       auth_provider: "password",
       email: normalizedEmail,
       full_name: null,
@@ -135,7 +135,7 @@ export async function createPasswordAuthUser(input: { email: string; passwordHas
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("password_auth_users")
     .insert({
       email: normalizedEmail,
@@ -147,7 +147,7 @@ export async function createPasswordAuthUser(input: { email: string; passwordHas
 
   if (error || !data) {
     if (!existingAppUser) {
-      await supabase.from("users").delete().eq("id", userId);
+      await db.from("users").delete().eq("id", userId);
     }
 
     if (isUniqueViolation(error)) {
@@ -159,7 +159,7 @@ export async function createPasswordAuthUser(input: { email: string; passwordHas
 
   if (existingAppUser) {
     const mergedProvider = mergeAuthProviders(existingAppUser.auth_provider, "password");
-    const { error: updateProfileError } = await supabase
+    const { error: updateProfileError } = await db
       .from("users")
       .update({
         auth_provider: mergedProvider
@@ -175,8 +175,8 @@ export async function createPasswordAuthUser(input: { email: string; passwordHas
 }
 
 export async function markPasswordUserLogin(userId: string) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("password_auth_users")
     .update({
       last_login_at: new Date().toISOString()
@@ -189,8 +189,8 @@ export async function markPasswordUserLogin(userId: string) {
 }
 
 export async function updatePasswordAuthUserPassword(input: { passwordHash: string; userId: string }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("password_auth_users")
     .update({
       password_hash: input.passwordHash,
@@ -204,8 +204,8 @@ export async function updatePasswordAuthUserPassword(input: { passwordHash: stri
 }
 
 export async function getAuthenticatedProfile(userId: string): Promise<AuthenticatedAppUser | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.from("users").select("id, email, full_name").eq("id", userId).maybeSingle();
+  const db = createAdminClient();
+  const { data, error } = await db.from("users").select("id, email, full_name").eq("id", userId).maybeSingle();
 
   if (error) {
     throw new Error(`Failed to load authenticated profile: ${error.message}`);
@@ -225,8 +225,8 @@ export async function getAuthenticatedProfile(userId: string): Promise<Authentic
 }
 
 export async function getPasswordAuthVerificationStatus(userId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("password_auth_users")
     .select("email, email_verified_at")
     .eq("id", userId)

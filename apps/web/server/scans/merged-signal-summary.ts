@@ -80,7 +80,7 @@ function buildStoredSignalPopulationRecords(input: {
 export async function loadMergedSignalsByScanId(input: {
   observedAtByScanId: Map<string, string | null>;
   scanIds: string[];
-  supabase: any;
+  db: any;
 }) {
   const mergedSignalsByScanId = new Map<string, ReturnType<typeof buildMergedSignalRecords>>();
   if (input.scanIds.length === 0) {
@@ -89,7 +89,7 @@ export async function loadMergedSignalsByScanId(input: {
 
   const rawRows: SummarySignalRow[] = [];
   for (const scanIdBatch of chunkValues(input.scanIds, 100)) {
-    const { data, error } = await input.supabase
+    const { data, error } = await input.db
       .from("scan_signals")
       .select(
         "scan_id, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at"

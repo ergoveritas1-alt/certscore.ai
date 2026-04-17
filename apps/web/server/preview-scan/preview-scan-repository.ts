@@ -462,9 +462,9 @@ function getPreviewPayload(scan: ScanRow): PreviewScanPayload | null {
 }
 
 export async function findOrCreateAnonymousPreviewDomain(hostname: string, normalizedUrl: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
-  const { data: existingDomain, error: lookupError } = await supabase
+  const { data: existingDomain, error: lookupError } = await db
     .from("domains")
     .select("id, organization_id, hostname, normalized_url, latest_scan_id, created_at, updated_at")
     .is("organization_id", null)
@@ -481,7 +481,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
     return existingDomain as DomainRow;
   }
 
-  const { data: createdDomain, error } = await supabase
+  const { data: createdDomain, error } = await db
     .from("domains")
     .insert({
       hostname,
@@ -498,7 +498,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
 }
 
 export async function createPreviewScanRecord(input: { domainId: string; hostname: string; normalizedUrl: string }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const initialConfig: ScanConfig = {
     hostname: input.hostname,
     normalizedUrl: input.normalizedUrl,
@@ -512,7 +512,7 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
     processor: "live-preview-v1"
   };
 
-  const { data: scan, error } = await supabase
+  const { data: scan, error } = await db
     .from("scans")
     .insert({
       domain_id: input.domainId,
@@ -551,8 +551,8 @@ export async function insertScanEvent(input: {
   organizationId?: string | null;
   scanId?: string | null;
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_events").insert({
+  const db = createAdminClient();
+  const { error } = await db.from("scan_events").insert({
     scan_id: input.scanId ?? null,
     domain_id: input.domainId ?? null,
     organization_id: input.organizationId ?? null,
@@ -567,8 +567,8 @@ export async function insertScanEvent(input: {
 }
 
 export async function getPreviewScanRecord(scanId: string): Promise<{ domain: DomainRow | null; scan: ScanRow } | null> {
-  const supabase = createAdminClient();
-  const { data: scan } = await supabase.from("scans").select("*").eq("id", scanId).maybeSingle();
+  const db = createAdminClient();
+  const { data: scan } = await db.from("scans").select("*").eq("id", scanId).maybeSingle();
 
   if (!scan) {
     return null;
@@ -583,7 +583,7 @@ export async function getPreviewScanRecord(scanId: string): Promise<{ domain: Do
     };
   }
 
-  const { data: domain } = await supabase
+  const { data: domain } = await db
     .from("domains")
     .select("id, organization_id, hostname, normalized_url, latest_scan_id, created_at, updated_at")
     .eq("id", scanRow.domain_id)
@@ -596,8 +596,8 @@ export async function getPreviewScanRecord(scanId: string): Promise<{ domain: Do
 }
 
 export async function updatePreviewScan(scanId: string, patch: Partial<ScanRow>) {
-  const supabase = createAdminClient();
-  const { data: scan, error } = await supabase.from("scans").update(patch).eq("id", scanId).select("*").single();
+  const db = createAdminClient();
+  const { data: scan, error } = await db.from("scans").update(patch).eq("id", scanId).select("*").single();
 
   if (error || !scan) {
     throw new Error(`Failed to update preview scan: ${error?.message ?? "Unknown error"}`);
@@ -607,8 +607,8 @@ export async function updatePreviewScan(scanId: string, patch: Partial<ScanRow>)
 }
 
 export async function setDomainLatestScan(domainId: string, scanId: string) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("domains").update({ latest_scan_id: scanId }).eq("id", domainId);
+  const db = createAdminClient();
+  const { error } = await db.from("domains").update({ latest_scan_id: scanId }).eq("id", domainId);
 
   if (error) {
     throw new Error(`Failed to update domain latest scan: ${error.message}`);
@@ -616,8 +616,8 @@ export async function setDomainLatestScan(domainId: string, scanId: string) {
 }
 
 export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRow | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_snapshots")
     .select(
       [
@@ -802,8 +802,8 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
 }
 
 export async function getLatestPreviewScanEvent(scanId: string): Promise<ScanEventRow | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
     .eq("scan_id", scanId)
@@ -819,8 +819,8 @@ export async function getLatestPreviewScanEvent(scanId: string): Promise<ScanEve
 }
 
 export async function getRecentPreviewScanEvents(scanId: string): Promise<ScanEventRow[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
     .eq("scan_id", scanId)
@@ -835,8 +835,8 @@ export async function getRecentPreviewScanEvents(scanId: string): Promise<ScanEv
 }
 
 export async function getAllPreviewScanEvents(scanId: string): Promise<ScanEventRow[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_events")
     .select("event_type, message, metadata_json, created_at")
     .eq("scan_id", scanId)
@@ -850,8 +850,8 @@ export async function getAllPreviewScanEvents(scanId: string): Promise<ScanEvent
 }
 
 export async function getPreviewRuntimeArtifacts(scanId: string): Promise<RuntimeArtifactsRow> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_runtime_artifacts")
     .select("*")
     .eq("scan_id", scanId)

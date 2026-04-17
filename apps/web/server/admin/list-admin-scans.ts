@@ -425,7 +425,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: scanRows.map((scan) => scan.id),
-    supabase
+    db: supabase
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {

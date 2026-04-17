@@ -79,11 +79,11 @@ export async function clearPasswordSessionCookie() {
 }
 
 export async function createPasswordSession(input: { ipAddress: string | null; userAgent: string | null; userId: string }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = buildSessionExpiryDate();
   const normalizedIpAddress = normalizeIpAddress(input.ipAddress);
-  const primaryInsert = await supabase.from("password_auth_sessions").insert({
+  const primaryInsert = await db.from("password_auth_sessions").insert({
     expires_at: expiresAt.toISOString(),
     ip_address: normalizedIpAddress,
     session_token_hash: hashSessionToken(token),
@@ -100,7 +100,7 @@ export async function createPasswordSession(input: { ipAddress: string | null; u
       userAgentLength: input.userAgent?.length ?? 0
     });
 
-    const fallbackInsert = await supabase.from("password_auth_sessions").insert({
+    const fallbackInsert = await db.from("password_auth_sessions").insert({
       expires_at: expiresAt.toISOString(),
       ip_address: null,
       session_token_hash: hashSessionToken(token),
@@ -121,13 +121,13 @@ export async function revokePasswordSessionToken(token: string | null) {
     return;
   }
 
-  const supabase = createAdminClient();
-  await supabase.from("password_auth_sessions").delete().eq("session_token_hash", hashSessionToken(token));
+  const db = createAdminClient();
+  await db.from("password_auth_sessions").delete().eq("session_token_hash", hashSessionToken(token));
 }
 
 export async function revokeAllPasswordSessionsForUser(userId: string) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("password_auth_sessions").delete().eq("user_id", userId);
+  const db = createAdminClient();
+  const { error } = await db.from("password_auth_sessions").delete().eq("user_id", userId);
 
   if (error) {
     throw new Error(`Failed to revoke password sessions: ${error.message}`);
@@ -142,8 +142,8 @@ export async function getPasswordSessionUser() {
     return null;
   }
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("password_auth_sessions")
     .select("user_id, expires_at")
     .eq("session_token_hash", hashSessionToken(token))
@@ -160,7 +160,7 @@ export async function getPasswordSessionUser() {
   const session = data as SessionRow;
 
   if (new Date(session.expires_at).getTime() <= Date.now()) {
-    await supabase.from("password_auth_sessions").delete().eq("session_token_hash", hashSessionToken(token));
+    await db.from("password_auth_sessions").delete().eq("session_token_hash", hashSessionToken(token));
     return null;
   }
 

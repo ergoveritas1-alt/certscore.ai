@@ -1727,7 +1727,7 @@ export async function getValidationRunDetail(validationRunId: string) {
           ]
         ]),
         scanIds: [runScanId],
-        supabase
+        db: supabase
       })
     : new Map();
 

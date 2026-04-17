@@ -30,9 +30,9 @@ function secondsUntil(input: Date) {
 }
 
 async function applyRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const now = new Date();
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("password_auth_rate_limits")
     .select("id, attempts, window_started_at, blocked_until")
     .eq("action", input.action)
@@ -53,7 +53,7 @@ async function applyRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
   const row = (data as RateLimitRow | null) ?? null;
 
   if (!row) {
-    const { error: insertError } = await supabase.from("password_auth_rate_limits").insert({
+    const { error: insertError } = await db.from("password_auth_rate_limits").insert({
       action: input.action,
       attempts: 1,
       blocked_until: null,
@@ -91,7 +91,7 @@ async function applyRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
   const nextAttempts = withinWindow ? row.attempts + 1 : 1;
   const blockedUntil = nextAttempts > input.maxAttempts ? new Date(now.getTime() + input.blockDurationSeconds * 1000) : null;
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await db
     .from("password_auth_rate_limits")
     .update({
       attempts: nextAttempts,

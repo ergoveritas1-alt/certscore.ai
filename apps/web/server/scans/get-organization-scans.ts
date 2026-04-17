@@ -757,7 +757,7 @@ async function loadOrganizationScans(
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: summaryScanIds,
-    supabase
+    db: supabase
   });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {

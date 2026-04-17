@@ -32,17 +32,17 @@ export async function sendPasswordResetEmail(input: { email: string; redirectTo:
     throw new Error("User not found");
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-  await supabase
+  await db
     .from("password_auth_reset_tokens")
     .delete()
     .eq("user_id", passwordUser.id)
     .is("consumed_at", null);
 
-  const { error } = await supabase.from("password_auth_reset_tokens").insert({
+  const { error } = await db.from("password_auth_reset_tokens").insert({
     expires_at: expiresAt.toISOString(),
     token_hash: hashResetToken(token),
     user_id: passwordUser.id
@@ -71,9 +71,9 @@ export async function sendPasswordResetEmail(input: { email: string; redirectTo:
 }
 
 export async function resetPasswordWithToken(input: { password: string; token: string }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const tokenHash = hashResetToken(input.token);
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("password_auth_reset_tokens")
     .select("id, user_id, expires_at")
     .eq("token_hash", tokenHash)
@@ -101,7 +101,7 @@ export async function resetPasswordWithToken(input: { password: string; token: s
     userId: tokenRow.user_id
   });
 
-  const { error: consumeError } = await supabase
+  const { error: consumeError } = await db
     .from("password_auth_reset_tokens")
     .update({ consumed_at: nowIso })
     .eq("id", tokenRow.id);

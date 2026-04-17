@@ -462,7 +462,7 @@ async function summarizeScan(input: {
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: [input.scanId],
-    supabase: input.supabase
+    db: input.supabase
   });
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
