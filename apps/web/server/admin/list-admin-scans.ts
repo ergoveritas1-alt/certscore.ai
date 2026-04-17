@@ -9,7 +9,10 @@ import type { ScanValidationFinding } from "../../lib/scans/validation-review-li
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
 import {
+  loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
+  loadBlockedRunTelemetryRows,
+  type AdminBlockedRunTelemetryRow,
   type AdminPolicyEnrichmentRow as PolicyEnrichmentRow,
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
   type AdminScanDomainRow as DomainRow,
@@ -241,48 +244,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
-  const db = createDatabaseClient();
-
-  const [
-    { count: totalScans, error: totalScansError },
-    { count: http403Count, error: http403Error },
-    { count: http429Count, error: http429Error },
-    { count: blockedOrCaptchaCount, error: blockedOrCaptchaError },
-  ] = await Promise.all([
-    db.from("scans").select("id", { count: "exact", head: true }),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("homepage_fetch_http_status.eq.403,robots_fetch_http_status.eq.403"),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("homepage_fetch_http_status.eq.429,robots_fetch_http_status.eq.429"),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("blocked_flag.eq.true,captcha_flag.eq.true"),
-  ]);
-
-  if (totalScansError) {
-    throw new Error(`Failed to load scan count: ${totalScansError.message}`);
-  }
-  if (http403Error) {
-    throw new Error(`Failed to load 403 scan count: ${http403Error.message}`);
-  }
-  if (http429Error) {
-    throw new Error(`Failed to load 429 scan count: ${http429Error.message}`);
-  }
-  if (blockedOrCaptchaError) {
-    throw new Error(`Failed to load blocked scan count: ${blockedOrCaptchaError.message}`);
-  }
-
-  return {
-    totalScans: totalScans ?? 0,
-    http403Count: http403Count ?? 0,
-    http429Count: http429Count ?? 0,
-    blockedOrCaptchaCount: blockedOrCaptchaCount ?? 0,
-  };
+  return await loadAdminScanOverviewCounts();
 }
 
 function incrementCount(map: Map<string, number>, key: string) {
@@ -291,21 +253,7 @@ function incrementCount(map: Map<string, number>, key: string) {
 
 export async function getBlockedRunTelemetry(hours = 72): Promise<BlockedRunTelemetry> {
   await requirePlatformAdminContext();
-  const db = createDatabaseClient();
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data, error } = await db
-    .from("scan_snapshots")
-    .select(
-      "scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash"
-    )
-    .gte("scan_timestamp", since)
-    .order("scan_timestamp", { ascending: true });
-
-  if (error) {
-    throw new Error(`Failed to load blocked run telemetry: ${error.message}`);
-  }
-
-  const rows = (data ?? []) as SnapshotRow[];
+  const rows = (await loadBlockedRunTelemetryRows(hours)) as AdminBlockedRunTelemetryRow[];
   const blockedRows = rows.filter((row) => String(row.scan_outcome ?? "").startsWith("reachability_blocked") || row.scan_outcome === "robots_restricted" || row.scan_outcome === "unknown_access_limitation");
   const blockedByHour = new Map<string, number>();
   const blockedByEgress = new Map<string, number>();

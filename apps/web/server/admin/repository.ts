@@ -176,6 +176,25 @@ export type AdminPolicyReviewQueueRow = {
   scan_id: string | null;
 };
 
+export type AdminScanOverviewCounts = {
+  blockedOrCaptchaCount: number;
+  http403Count: number;
+  http429Count: number;
+  totalScans: number;
+};
+
+export type AdminBlockedRunTelemetryRow = {
+  asn?: number | null;
+  block_vendor_guess?: string | null;
+  egress_id?: string | null;
+  egress_type?: string | null;
+  homepage_fetch_http_status: number | null;
+  normalized_body_hash?: string | null;
+  scan_id?: string;
+  scan_outcome?: string | null;
+  scan_timestamp?: string | null;
+};
+
 type QueryErrorLike = {
   code?: string;
   details?: string;
@@ -668,4 +687,66 @@ export async function updateAdminOrganizationPlan(input: {
   if (error) {
     throw new Error(`Failed to update organization plan: ${error.message}`);
   }
+}
+
+export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
+  const db = createDatabaseClient();
+  const [
+    { count: totalScans, error: totalScansError },
+    { count: http403Count, error: http403Error },
+    { count: http429Count, error: http429Error },
+    { count: blockedOrCaptchaCount, error: blockedOrCaptchaError }
+  ] = await Promise.all([
+    db.from("scans").select("id", { count: "exact", head: true }),
+    db
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("homepage_fetch_http_status.eq.403,robots_fetch_http_status.eq.403"),
+    db
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("homepage_fetch_http_status.eq.429,robots_fetch_http_status.eq.429"),
+    db
+      .from("scan_snapshots")
+      .select("scan_id", { count: "exact", head: true })
+      .or("blocked_flag.eq.true,captcha_flag.eq.true")
+  ]);
+
+  if (totalScansError) {
+    throw new Error(`Failed to load scan count: ${totalScansError.message}`);
+  }
+  if (http403Error) {
+    throw new Error(`Failed to load 403 scan count: ${http403Error.message}`);
+  }
+  if (http429Error) {
+    throw new Error(`Failed to load 429 scan count: ${http429Error.message}`);
+  }
+  if (blockedOrCaptchaError) {
+    throw new Error(`Failed to load blocked scan count: ${blockedOrCaptchaError.message}`);
+  }
+
+  return {
+    totalScans: totalScans ?? 0,
+    http403Count: http403Count ?? 0,
+    http429Count: http429Count ?? 0,
+    blockedOrCaptchaCount: blockedOrCaptchaCount ?? 0
+  };
+}
+
+export async function loadBlockedRunTelemetryRows(hours: number): Promise<AdminBlockedRunTelemetryRow[]> {
+  const db = createDatabaseClient();
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db
+    .from("scan_snapshots")
+    .select(
+      "scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash"
+    )
+    .gte("scan_timestamp", since)
+    .order("scan_timestamp", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load blocked run telemetry: ${error.message}`);
+  }
+
+  return (data ?? []) as AdminBlockedRunTelemetryRow[];
 }
