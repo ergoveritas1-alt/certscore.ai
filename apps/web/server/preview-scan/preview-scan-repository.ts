@@ -17,6 +17,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createHash } from "node:crypto";
 import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { buildSupabaseOperationError } from "../supabase/describe-supabase-error";
 
 type DomainRow = {
   id: string;
@@ -463,7 +464,7 @@ function getPreviewPayload(scan: ScanRow): PreviewScanPayload | null {
 export async function findOrCreateAnonymousPreviewDomain(hostname: string, normalizedUrl: string) {
   const supabase = createAdminClient();
 
-  const { data: existingDomain } = await supabase
+  const { data: existingDomain, error: lookupError } = await supabase
     .from("domains")
     .select("id, organization_id, hostname, normalized_url, latest_scan_id, created_at, updated_at")
     .is("organization_id", null)
@@ -471,6 +472,10 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (lookupError) {
+    throw buildSupabaseOperationError("Failed to load preview domain", lookupError);
+  }
 
   if (existingDomain) {
     return existingDomain as DomainRow;
@@ -486,7 +491,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
     .single();
 
   if (error || !createdDomain) {
-    throw new Error(`Failed to create preview domain: ${error?.message ?? "Unknown error"}`);
+    throw buildSupabaseOperationError("Failed to create preview domain", error);
   }
 
   return createdDomain as DomainRow;
@@ -521,7 +526,7 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
     .single();
 
   if (error || !scan) {
-    throw new Error(`Failed to create preview scan: ${error?.message ?? "Unknown error"}`);
+    throw buildSupabaseOperationError("Failed to create preview scan", error);
   }
 
   await insertScanEvent({
@@ -557,7 +562,7 @@ export async function insertScanEvent(input: {
   });
 
   if (error) {
-    throw new Error(`Failed to create scan event: ${error.message}`);
+    throw buildSupabaseOperationError("Failed to create scan event", error);
   }
 }
 

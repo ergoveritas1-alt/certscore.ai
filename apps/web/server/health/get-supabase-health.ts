@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient, hasSupabaseAdminEnv, hasSupabasePublicEnv } from "@website-signal-risk-scanner/db";
+import { describeSupabaseError } from "../supabase/describe-supabase-error";
 
 export type SupabaseHealthStatus = {
   checks: {
@@ -78,7 +79,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
       organizationsError ?? domainsError ?? scansError ?? authTableChecks.find((result) => result.error)?.error ?? null;
 
     if (firstError) {
-      throw new Error(firstError.message);
+      throw new Error(describeSupabaseError(firstError));
     }
 
     const presentTables = REQUIRED_AUTH_TABLES.filter((_, index) => !authTableChecks[index]?.error);
@@ -104,7 +105,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
       }
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown Supabase connectivity error.";
+    const errorMessage = describeSupabaseError(error);
     const missingTables = REQUIRED_AUTH_TABLES.filter((tableName) => errorMessage.includes(tableName));
 
     return {
