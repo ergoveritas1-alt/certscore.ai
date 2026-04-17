@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   createScanForValidationRun,
@@ -229,7 +229,7 @@ function latestEventMs(
 }
 
 async function loadScanEvents(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scan_events")
     .select("event_type, created_at")
@@ -265,7 +265,7 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanState(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, error_message")

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { getHybridNanoSignalPopulations } from "../../web/lib/scans/hybrid-runtime-evidence";
 
 type ScanRuntimeArtifactRow = {
@@ -46,7 +46,7 @@ function deriveSignalCategory(key: string) {
 }
 
 async function main() {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const scanId = getArgValue("--scan-id");
   const limit = Math.max(1, Number.parseInt(getArgValue("--limit") ?? "500", 10) || 500);
   const dryRun = hasFlag("--dry-run");

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -444,7 +444,7 @@ async function inferVendorsWithLlm(input: { candidates: VendorCandidate[]; domai
 
 async function persistRegistryEntries(input: {
   inferredVendors: InferredVendor[];
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   for (const vendor of input.inferredVendors) {
     const { data: registryRow, error: registryError } = await input.db
@@ -494,7 +494,7 @@ async function persistRegistryEntries(input: {
 }
 
 export async function enrichUnknownScanVendors(input: { hostname: string; scanId: string }): Promise<VendorEnrichmentResult> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [
     { data: scan, error: scanError },
     { data: runtimeArtifacts, error: runtimeError },

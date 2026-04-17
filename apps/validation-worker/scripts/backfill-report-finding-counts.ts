@@ -1,4 +1,4 @@
-import { createAdminClient, query } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient, query } from "@website-signal-risk-scanner/db";
 import {
   getPrimaryCategoryDescription,
   getPrimaryCategoryLabel,
@@ -99,7 +99,7 @@ function chunkValues<T>(values: T[], size: number) {
 async function loadScanRecordForFindingCount(input: {
   runId: string | null;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const [
     { data: snapshot, error: snapshotError },
@@ -382,7 +382,7 @@ async function computeReportFindingCount(scanRecord: Awaited<ReturnType<typeof l
 }
 
 async function main() {
-  const db = createAdminClient(process.env);
+  const db = createDatabaseClient(process.env);
   const limit = Number(getArgValue("--limit") ?? "200");
   const dryRun = hasFlag("--dry-run");
   const sinceDays = Number(getArgValue("--since-days") ?? "14");

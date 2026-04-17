@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { buildUnifiedFindingDisplayPackets, getUnifiedFindingCategoryRelation } from "../apps/web/lib/scans/unified-findings";
 import { buildChildContextFallbackEvidence } from "../apps/web/lib/scans/signal-fallback-evidence";
 
@@ -165,7 +165,7 @@ async function main() {
     throw new Error("Usage: verify-canonical-findings-scan.ts <scan-id>");
   }
 
-  const db = createAdminClient(process.env);
+  const db = createDatabaseClient(process.env);
   const { data: snapshotRow, error: snapshotError } = await db
     .from("scan_snapshots")
     .select(

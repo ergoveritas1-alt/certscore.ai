@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
   VALIDATION_INTERVAL_OPTIONS,
@@ -327,7 +327,7 @@ function addDays(base: Date, days: number) {
 
 export async function ensureValidationSettings() {
   const env = getWorkerEnv();
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: existing, error } = await db
     .from("validation_settings")
     .select(
@@ -389,7 +389,7 @@ export async function getValidationPipelineState() {
 }
 
 async function getValidationInternalOrganizationId() {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("organizations")
     .select("id")
@@ -412,7 +412,7 @@ export async function upsertValidationTarget(input: {
   source: string;
   trancoRank?: number | null;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const hostname = extractHostname(input.normalizedUrl);
   const trancoRank = input.trancoRank ?? null;
   const rankBand = rankBandForRank(trancoRank);
@@ -445,7 +445,7 @@ export async function upsertValidationTarget(input: {
 }
 
 export async function listValidationTargets(limit = 50) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_targets")
     .select(
@@ -535,7 +535,7 @@ export async function syncTrancoTargets(force = false) {
     }
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   let insertedCount = 0;
   const batchSize = 500;
 
@@ -581,7 +581,7 @@ function pickWeightedBand() {
 }
 
 export async function claimNextAutomaticTarget(now = new Date()) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const nowIso = now.toISOString();
   const attemptedBands = [pickWeightedBand(), ...VALIDATION_RANK_BANDS.map((band) => band.key)].filter(
     (value, index, values) => values.indexOf(value) === index
@@ -646,7 +646,7 @@ export async function createValidationRun(input: {
   trancoRank?: number | null;
   triggerMode: ValidationRunMode;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_runs")
     .insert({
@@ -681,7 +681,7 @@ export async function createValidationRun(input: {
 }
 
 export async function getValidationRun(runId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_runs")
     .select(
@@ -701,7 +701,7 @@ export async function updateValidationRun(
   runId: string,
   patch: Record<string, unknown>
 ) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("validation_runs").update(patch).eq("id", runId);
   if (error) {
     throw new Error(`Failed to update validation run ${runId}: ${error.message}`);
@@ -709,7 +709,7 @@ export async function updateValidationRun(
 }
 
 export async function createScanForValidationRun(runId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
   const teamPlan = getPlanDefinition("team");
 
@@ -815,7 +815,7 @@ export async function createScanForValidationRun(runId: string) {
 }
 
 export async function loadCompletedScanArtifacts(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [
     { data: scan, error: scanError },
     { data: snapshot, error: snapshotError },
@@ -1003,7 +1003,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
 }
 
 export async function loadNanoSignalEnrichmentInputs(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [
     { data: scan, error: scanError },
     { data: snapshot, error: snapshotError },
@@ -1072,7 +1072,7 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
 }
 
 export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scan, error: scanError } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, error_message, domain_id")
@@ -1218,7 +1218,7 @@ export async function replaceValidationRunFindings(
     evidence: Record<string, unknown>;
   }>
 ) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
   const { error: deleteError } = await db.from("validation_run_findings").delete().eq("validation_run_id", runId);
 
@@ -1290,7 +1290,7 @@ export async function replaceValidationRunFindings(
 }
 
 export async function loadValidationRunFindings(runId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_run_findings")
     .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json")
@@ -1314,7 +1314,7 @@ export async function upsertValidationVerdict(input: {
   validationRunFindingId: string;
   verdict: "supported" | "inconclusive" | "not_supported";
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("validation_verdicts")
     .upsert(
@@ -1339,7 +1339,7 @@ export async function upsertValidationVerdict(input: {
 }
 
 export async function finalizeValidationRun(runId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
 
   if (!run) {
@@ -1434,7 +1434,7 @@ export async function finalizeValidationRun(runId: string) {
 async function persistValidationRunReportFindingCount(input: {
   runId: string;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   try {
     const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
@@ -1507,7 +1507,7 @@ async function persistValidationRunReportFindingCount(input: {
 async function loadScanRecordForFindingCount(input: {
   runId: string;
   scanId: string;
-  db: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const [
     { data: snapshot },
@@ -1693,7 +1693,7 @@ async function loadScanRecordForFindingCount(input: {
 }
 
 export async function failValidationRun(runId: string, message: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
   const failedAt = new Date();
 
@@ -1730,7 +1730,7 @@ export async function markValidationSchedule(input: {
   nextDueAt: Date;
   now: Date;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db
     .from("validation_settings")
     .update({
@@ -1748,7 +1748,7 @@ export async function replaceScanDocumentSources(input: {
   rows: Array<Record<string, unknown>>;
   scanId: string;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error: deleteError } = await db.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
 
   if (deleteError && !isMissingOptionalTableError(deleteError)) {
@@ -1783,7 +1783,7 @@ export async function appendScanDocumentSources(input: {
     return [];
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("scan_document_sources").insert(
     prepareScanDocumentSourceRows(input.rows, input.scanId)
   );
@@ -1804,7 +1804,7 @@ export async function updateScanDocumentSourceExtractions(input: {
     semanticConfidence: number | null;
   }>;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
 
   for (const row of input.rows) {
     const { error } = await db
@@ -1843,7 +1843,7 @@ export async function loadReusableNanoDocumentExtractions(input: {
     return [] as Array<Record<string, unknown>>;
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [exactUrlResult, recentTypeResult] = await Promise.all([
     canonicalUrls.length === 0
       ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
@@ -1897,7 +1897,7 @@ export async function persistDerivedNanoPolicySignals(input: {
   scanId: string;
   snapshot?: Record<string, unknown> | null;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const nextRows = buildNanoPolicySignalRows({
     policyEnrichments: input.policySemanticRows,
     policyReviewQueue: input.policyReviewQueue,
@@ -1977,7 +1977,7 @@ export async function appendScanWorkflowEvent(input: {
   metadataJson?: Record<string, unknown>;
   scanId: string;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { error } = await db.from("scan_events").insert({
     domain_id: null,
     event_type: input.eventType,
@@ -1993,7 +1993,7 @@ export async function appendScanWorkflowEvent(input: {
 }
 
 export async function hasValidationRunForScan(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error } = await db
     .from("validation_runs")
     .select("id")
@@ -2021,7 +2021,7 @@ export async function recordValidationWorkerHeartbeat(input: {
   startedAt?: Date;
   heartbeatAt?: Date;
 }) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const patch: Record<string, string | null> = {
     last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
     last_worker_host: input.host
@@ -2059,7 +2059,7 @@ export async function listRecentValidationRuns(input?: { limit?: number; page?: 
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * limit;
   const to = from + limit - 1;
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data, error, count } = await db
     .from("validation_runs")
     .select(

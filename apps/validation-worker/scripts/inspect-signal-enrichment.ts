@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 
 type ScanEventRow = {
@@ -146,7 +146,7 @@ async function main() {
     throw new Error("Provide --scan-id.");
   }
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const [
     { data: scan, error: scanError },
     { data: events, error: eventsError },

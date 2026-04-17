@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
 import { getLastScannerServiceHeartbeat } from "../apps/web/server/queue/full-scan-queue";
 
@@ -127,7 +127,7 @@ async function main() {
   const findings: string[] = [];
   process.env.DATABASE_URL = databaseUrl;
 
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: validationSettings, error: validationSettingsError } = await db
     .from("validation_settings")
     .select("last_worker_heartbeat_at, last_worker_host, pipeline_enabled")

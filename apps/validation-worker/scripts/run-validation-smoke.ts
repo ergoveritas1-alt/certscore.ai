@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import {
   createValidationRun,
   getValidationPipelineState,
@@ -186,7 +186,7 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanContext(scanId: string) {
-  const db = createAdminClient();
+  const db = createDatabaseClient();
   const { data: scan, error: scanError } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, domain_id")
