@@ -2,13 +2,13 @@ import { lookup } from "node:dns/promises";
 import { z } from "zod";
 
 const webCheckSchema = z.object({
+  DATABASE_URL: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   REDIS_URL: z.string().url(),
-  SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
-  SUPABASE_STORAGE_BUCKET_REPORTS: z.string().min(1).optional()
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1)
 });
 
 function pass(label: string, details: string) {
@@ -24,28 +24,35 @@ function info(label: string, details: string) {
 }
 
 function getStorageBucket(env: NodeJS.ProcessEnv) {
-  return env.SUPABASE_STORAGE_BUCKET ?? env.SUPABASE_STORAGE_BUCKET_REPORTS ?? null;
+  return env.S3_BUCKET ?? null;
 }
 
-async function checkSupabaseHost(url: string) {
-  const { hostname } = new URL(url);
+async function checkDatabaseHost(connectionString: string) {
+  let hostname: string;
+
+  try {
+    hostname = new URL(connectionString).hostname;
+  } catch {
+    fail("database host", "DATABASE_URL is not a valid connection string.");
+    return false;
+  }
 
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-    info("supabase dns", `Skipping DNS lookup for local host ${hostname}.`);
+    info("database dns", `Skipping DNS lookup for local host ${hostname}.`);
     return true;
   }
 
   try {
     await lookup(hostname);
-    pass("supabase dns", `Resolved ${hostname}.`);
+    pass("database dns", `Resolved ${hostname}.`);
     return true;
   } catch (error) {
     fail(
-      "supabase dns",
-      `Could not resolve ${hostname}. Update NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local or resume the configured Supabase dev project.`
+      "database dns",
+      `Could not resolve ${hostname}. Update DATABASE_URL in apps/web/.env.local and point it at a live PostgreSQL instance.`
     );
     if (error instanceof Error && error.message) {
-      info("supabase dns error", error.message);
+      info("database dns error", error.message);
     }
     return false;
   }
@@ -67,20 +74,20 @@ async function main() {
   const storageBucket = getStorageBucket(process.env);
 
   if (!storageBucket) {
-    fail("storage bucket", "Set SUPABASE_STORAGE_BUCKET. Legacy SUPABASE_STORAGE_BUCKET_REPORTS is still accepted.");
+    fail("storage bucket", "Set S3_BUCKET.");
     process.exitCode = 1;
     return;
   }
 
   pass("web env", "All required CertScore web environment variables are present.");
-  info("expected services", "Supabase Auth, Supabase Postgres, Redis, and Supabase Storage should be reachable.");
+  info("expected services", "PostgreSQL, Redis, and S3-compatible storage should be reachable.");
   info("app url", new URL(values.NEXT_PUBLIC_APP_URL).origin);
-  info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
   info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);
+  info("storage region", values.S3_REGION);
 
-  const supabaseReachable = await checkSupabaseHost(values.NEXT_PUBLIC_SUPABASE_URL);
-  if (!supabaseReachable) {
+  const databaseReachable = await checkDatabaseHost(values.DATABASE_URL);
+  if (!databaseReachable) {
     process.exitCode = 1;
   }
 }

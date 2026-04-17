@@ -1,7 +1,6 @@
 "use server";
 
-import { createAdminClient, hasSupabaseAdminEnv, hasSupabasePublicEnv } from "@website-signal-risk-scanner/db";
-import { describeSupabaseError } from "../supabase/describe-supabase-error";
+import { hasDatabaseEnv, query, queryOne } from "@website-signal-risk-scanner/db";
 
 export type SupabaseHealthStatus = {
   checks: {
@@ -33,18 +32,17 @@ const REQUIRED_AUTH_TABLES = [
 ] as const;
 
 export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
-  const publicEnv = hasSupabasePublicEnv();
-  const adminEnv = hasSupabaseAdminEnv();
+  const databaseEnv = hasDatabaseEnv();
   const timestamp = new Date().toISOString();
 
-  if (!publicEnv || !adminEnv) {
+  if (!databaseEnv) {
     return {
       ok: false,
       timestamp,
-      error: "Missing required Supabase environment variables.",
+      error: "Missing required database environment variables.",
       checks: {
-        publicEnv,
-        adminEnv,
+        publicEnv: false,
+        adminEnv: databaseEnv,
         authSchema: false,
         database: false
       },
@@ -61,61 +59,60 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
   }
 
   try {
-    const supabase = createAdminClient();
-    const [
-      { count: organizations, error: organizationsError },
-      { count: domains, error: domainsError },
-      { count: scans, error: scansError },
-      ...authTableChecks
-    ] = await Promise.all([
-        supabase.from("organizations").select("id", { count: "exact", head: true }),
-        supabase.from("domains").select("id", { count: "exact", head: true }),
-        supabase.from("scans").select("id", { count: "exact", head: true })
-          ,
-        ...REQUIRED_AUTH_TABLES.map((tableName) => supabase.from(tableName).select("id", { count: "exact", head: true }))
-      ]);
+    const [organizationCount, domainCount, scanCount, ...tableChecks] = await Promise.all([
+      queryOne<{ count: string }>('select count(*)::text as count from public.organizations', [], { readOnly: true }),
+      queryOne<{ count: string }>('select count(*)::text as count from public.domains', [], { readOnly: true }),
+      queryOne<{ count: string }>('select count(*)::text as count from public.scans', [], { readOnly: true }),
+      ...REQUIRED_AUTH_TABLES.map((tableName) =>
+        queryOne<{ exists: boolean }>(
+          `
+            select exists (
+              select 1
+              from information_schema.tables
+              where table_schema = 'public'
+                and table_name = $1
+            ) as exists
+          `,
+          [tableName],
+          { readOnly: true }
+        )
+      )
+    ]);
 
-    const firstError =
-      organizationsError ?? domainsError ?? scansError ?? authTableChecks.find((result) => result.error)?.error ?? null;
-
-    if (firstError) {
-      throw new Error(describeSupabaseError(firstError));
-    }
-
-    const presentTables = REQUIRED_AUTH_TABLES.filter((_, index) => !authTableChecks[index]?.error);
+    const presentTables = REQUIRED_AUTH_TABLES.filter((_, index) => tableChecks[index]?.exists === true);
+    const missingTables = REQUIRED_AUTH_TABLES.filter((_, index) => tableChecks[index]?.exists !== true);
 
     return {
       ok: true,
       timestamp,
       error: null,
       checks: {
-        publicEnv: true,
+        publicEnv: false,
         adminEnv: true,
-        authSchema: true,
+        authSchema: missingTables.length === 0,
         database: true
       },
       counts: {
-        organizations: organizations ?? 0,
-        domains: domains ?? 0,
-        scans: scans ?? 0
+        organizations: Number(organizationCount?.count ?? 0),
+        domains: Number(domainCount?.count ?? 0),
+        scans: Number(scanCount?.count ?? 0)
       },
       requiredTables: {
-        missing: [],
+        missing: missingTables,
         present: [...presentTables]
       }
     };
   } catch (error) {
-    const errorMessage = describeSupabaseError(error);
-    const missingTables = REQUIRED_AUTH_TABLES.filter((tableName) => errorMessage.includes(tableName));
+    const errorMessage = error instanceof Error ? error.message : "Unknown database runtime error.";
 
     return {
       ok: false,
       timestamp,
       error: errorMessage,
       checks: {
-        publicEnv: true,
+        publicEnv: false,
         adminEnv: true,
-        authSchema: missingTables.length === 0,
+        authSchema: false,
         database: false
       },
       counts: {
@@ -124,8 +121,8 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
         scans: 0
       },
       requiredTables: {
-        missing: missingTables,
-        present: REQUIRED_AUTH_TABLES.filter((tableName) => !missingTables.includes(tableName))
+        missing: [...REQUIRED_AUTH_TABLES],
+        present: []
       }
     };
   }

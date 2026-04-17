@@ -1,18 +1,13 @@
-import { getSupabaseAdminEnv, type SupabaseAdminEnv } from "@website-signal-risk-scanner/db";
+import { getDatabaseEnv, type DatabaseEnv } from "@website-signal-risk-scanner/db";
 import { parseEnvironment } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 
 const webEnvSchema = z.object({
-  NEXT_PUBLIC_APP_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1)
+  NEXT_PUBLIC_APP_URL: z.string().url()
 });
 
 const webServerEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   REDIS_URL: z.string().url().optional(),
   VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_TRANCO_SOURCE_URL: z.string().url().optional(),
@@ -21,7 +16,7 @@ const webServerEnvSchema = z.object({
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;
-export type WebServerEnv = z.infer<typeof webServerEnvSchema> & SupabaseAdminEnv;
+export type WebServerEnv = z.infer<typeof webServerEnvSchema> & DatabaseEnv;
 
 export function getConfiguredRedisUrl(env: NodeJS.ProcessEnv = process.env) {
   return env.REDIS_URL?.trim() || "";
@@ -48,7 +43,7 @@ export function getWebServerEnv(env: NodeJS.ProcessEnv = process.env): WebServer
 
   return {
     ...values,
-    ...getSupabaseAdminEnv(env)
+    ...getDatabaseEnv(env)
   };
 }
 
@@ -60,5 +55,5 @@ export function getQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function isGoogleAuthEnabled(env: NodeJS.ProcessEnv = process.env) {
-  return env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
+  return false;
 }

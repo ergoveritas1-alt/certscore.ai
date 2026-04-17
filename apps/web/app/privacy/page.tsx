@@ -35,7 +35,7 @@ const sections = [
   {
     title: "5. Third-Party Services",
     body:
-      "CertScore.ai uses third-party infrastructure and service providers, including Supabase, Vercel, Redis Cloud, Google Cloud Run Worker Pools, Resend, and Google OAuth where applicable. These providers process data as part of authentication, hosting, job processing, storage, email delivery, and platform operation."
+      "CertScore.ai uses third-party infrastructure and service providers, including PostgreSQL-compatible database hosting, S3-compatible object storage, Vercel, Redis Cloud, Google Cloud Run Worker Pools, and Gmail SMTP where applicable. These providers process data as part of hosting, job processing, storage, email delivery, and platform operation."
   },
   {
     title: "6. Data Retention",

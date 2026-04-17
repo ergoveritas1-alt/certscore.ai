@@ -33,24 +33,45 @@ export const supabaseAdminEnvSchema = supabasePublicEnvSchema.extend({
 
 export const storageBucketEnvSchema = z
   .object({
+    S3_BUCKET: z.string().min(1).optional(),
     SUPABASE_STORAGE_BUCKET: z.string().min(1).optional(),
     SUPABASE_STORAGE_BUCKET_REPORTS: z.string().min(1).optional()
   })
   .superRefine((value, context) => {
-    if (value.SUPABASE_STORAGE_BUCKET || value.SUPABASE_STORAGE_BUCKET_REPORTS) {
+    if (value.S3_BUCKET || value.SUPABASE_STORAGE_BUCKET || value.SUPABASE_STORAGE_BUCKET_REPORTS) {
       return;
     }
 
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["SUPABASE_STORAGE_BUCKET"],
-      message: "SUPABASE_STORAGE_BUCKET (or legacy SUPABASE_STORAGE_BUCKET_REPORTS) is required"
+      path: ["S3_BUCKET"],
+      message: "S3_BUCKET (or legacy SUPABASE_STORAGE_BUCKET / SUPABASE_STORAGE_BUCKET_REPORTS) is required"
     });
   });
+
+export const databaseEnvSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  DATABASE_READ_URL: z.string().min(1).optional(),
+  DATABASE_SSL_MODE: z.enum(["disable", "prefer", "require", "verify-ca", "verify-full"]).optional()
+});
+
+export const s3EnvSchema = z.object({
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_BUCKET: z.string().min(1),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((value) => (value === "true" || value === "1" ? true : value === "false" || value === "0" ? false : undefined)),
+  S3_REGION: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1)
+});
 
 export type SupabasePublicEnv = z.infer<typeof supabasePublicEnvSchema>;
 export type SupabaseAdminEnv = z.infer<typeof supabaseAdminEnvSchema>;
 export type StorageBucketEnv = z.infer<typeof storageBucketEnvSchema>;
+export type DatabaseEnv = z.infer<typeof databaseEnvSchema>;
+export type S3Env = z.infer<typeof s3EnvSchema>;
 
 export function getSupabasePublicEnv(env: NodeJS.ProcessEnv = process.env): SupabasePublicEnv {
   return parseEnvironment({
@@ -83,5 +104,29 @@ export function getStorageBucket(env: NodeJS.ProcessEnv = process.env) {
     scope: "supabase-storage-env"
   });
 
-  return values.SUPABASE_STORAGE_BUCKET ?? values.SUPABASE_STORAGE_BUCKET_REPORTS!;
+  return values.S3_BUCKET ?? values.SUPABASE_STORAGE_BUCKET ?? values.SUPABASE_STORAGE_BUCKET_REPORTS!;
+}
+
+export function hasDatabaseEnv(env: NodeJS.ProcessEnv = process.env) {
+  return databaseEnvSchema.safeParse(env).success;
+}
+
+export function getDatabaseEnv(env: NodeJS.ProcessEnv = process.env): DatabaseEnv {
+  return parseEnvironment({
+    env,
+    schema: databaseEnvSchema,
+    scope: "database-env"
+  });
+}
+
+export function hasS3Env(env: NodeJS.ProcessEnv = process.env) {
+  return s3EnvSchema.safeParse(env).success;
+}
+
+export function getS3Env(env: NodeJS.ProcessEnv = process.env): S3Env {
+  return parseEnvironment({
+    env,
+    schema: s3EnvSchema,
+    scope: "s3-env"
+  });
 }

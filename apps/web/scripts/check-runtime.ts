@@ -1,4 +1,4 @@
-import { hasSupabaseAdminEnv, hasSupabasePublicEnv } from "@website-signal-risk-scanner/db";
+import { hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
 import { getSupabaseHealth } from "../server/health/get-supabase-health";
 
 function pass(label: string, details: string) {
@@ -10,8 +10,8 @@ function fail(label: string, details: string) {
 }
 
 async function main() {
-  if (!hasSupabasePublicEnv() || !hasSupabaseAdminEnv()) {
-    fail("runtime env", "Missing Supabase environment variables required for runtime validation.");
+  if (!hasDatabaseEnv() || !hasS3Env()) {
+    fail("runtime env", "Missing database or S3 environment variables required for runtime validation.");
     process.exitCode = 1;
     return;
   }
@@ -24,15 +24,15 @@ async function main() {
         ? ` Missing required tables: ${health.requiredTables.missing.join(", ")}.`
         : "";
 
-    fail("supabase runtime", `${health.error ?? "Unknown Supabase runtime error."}${missingTableMessage}`);
+    fail("database runtime", `${health.error ?? "Unknown database runtime error."}${missingTableMessage}`);
     process.exitCode = 1;
     return;
   }
 
-  pass("supabase runtime", `Connected to the expected schema. Required auth tables present: ${health.requiredTables.present.join(", ")}.`);
+  pass("database runtime", `Connected to the expected schema. Required auth tables present: ${health.requiredTables.present.join(", ")}.`);
 }
 
 main().catch((error) => {
-  fail("supabase runtime", error instanceof Error ? error.message : "Unknown runtime validation error");
+  fail("database runtime", error instanceof Error ? error.message : "Unknown runtime validation error");
   process.exitCode = 1;
 });

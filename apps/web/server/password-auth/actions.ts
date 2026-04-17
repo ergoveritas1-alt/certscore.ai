@@ -1,14 +1,14 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { createServerSupabaseClient } from "../../lib/supabase/server";
-import { revokeCurrentPasswordSession } from "./session";
-import { findAppUserByEmail, findPasswordAuthUserByEmail, getSupabaseAuthProvidersByUserId, normalizeEmail } from "./user";
-import { credentialsSchema, getAuthMode } from "./validators";
-import { bootstrapUserFromSession } from "../bootstrap-user";
+import { bootstrapAppUserSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
+import { verifyPassword } from "./password";
+import { createPasswordSession, revokeCurrentPasswordSession } from "./session";
+import { findPasswordAuthUserByEmail, markPasswordUserLogin, normalizeEmail } from "./user";
+import { credentialsSchema, getAuthMode } from "./validators";
 
 function getClientIp(headerStore: Headers) {
   const forwardedFor = headerStore.get("x-forwarded-for");
@@ -22,23 +22,6 @@ function getClientIp(headerStore: Headers) {
 
 function mapFriendlyError() {
   return "Invalid email or password.";
-}
-
-async function createSupabasePasswordSessionClient() {
-  const cookieStore = await cookies();
-
-  return createServerSupabaseClient({
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options);
-        });
-      }
-    }
-  });
 }
 
 export async function submitCredentialsAction(
@@ -83,8 +66,6 @@ export async function submitCredentialsAction(
       };
     }
 
-    const supabase = await createSupabasePasswordSessionClient();
-
     if (mode === "create_account") {
       return {
         accountRecovery: null,
@@ -94,34 +75,10 @@ export async function submitCredentialsAction(
       };
     }
 
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password
-    });
+    const passwordAccount = await findPasswordAuthUserByEmail(values.email);
+    const isValidPassword = await verifyPassword(values.password, passwordAccount?.password_hash ?? null);
 
-    if (signInError || !signInData.user) {
-      const [existingAccount, passwordAccount] = await Promise.all([
-        findAppUserByEmail(values.email),
-        findPasswordAuthUserByEmail(values.email)
-      ]);
-
-      const authProviders = existingAccount ? await getSupabaseAuthProvidersByUserId(existingAccount.id) : [];
-      const hasSupabasePasswordProvider =
-        authProviders.includes("email") || authProviders.includes("password");
-
-      if (existingAccount && !passwordAccount && !hasSupabasePasswordProvider) {
-        return {
-          accountRecovery: {
-            email: normalizeEmail(values.email),
-            hint: "This account exists, but email/password sign-in is not set up yet. Create a password to use either sign-in method.",
-            kind: "create_password"
-          },
-          error: "This account does not have a password yet.",
-          fieldErrors: {},
-          mode
-        };
-      }
-
+    if (!passwordAccount || !isValidPassword) {
       return {
         accountRecovery: null,
         error: mapFriendlyError(),
@@ -130,7 +87,19 @@ export async function submitCredentialsAction(
       };
     }
 
-    await bootstrapUserFromSession(signInData.user);
+    await createPasswordSession({
+      ipAddress,
+      userAgent: headerStore.get("user-agent"),
+      userId: passwordAccount.id
+    });
+    await markPasswordUserLogin(passwordAccount.id);
+    await bootstrapAppUserSession({
+      authProvider: "password",
+      email: passwordAccount.email,
+      fullName: null,
+      id: passwordAccount.id
+    });
+
     redirect(values.next);
   } catch (error) {
     if (isRedirectError(error)) {

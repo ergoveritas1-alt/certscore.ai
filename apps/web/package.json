@@ -19,6 +19,8 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1031.0",
+    "@aws-sdk/s3-request-presigner": "^3.1031.0",
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/ui": "workspace:*",

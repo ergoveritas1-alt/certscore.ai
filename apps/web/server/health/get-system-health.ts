@@ -1,8 +1,9 @@
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
-import { createAdminSupabaseClient } from "../../lib/supabase/admin";
+import { hasS3Env, queryOne } from "@website-signal-risk-scanner/db";
 import { isGoogleAuthEnabled } from "../../lib/env";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getSupabaseHealth } from "./get-supabase-health";
+import { checkStorageBucketExists, getStorageBucketName } from "../storage/s3";
 
 type BucketStatus = {
   exists: boolean;
@@ -43,7 +44,7 @@ export async function getSystemHealth(): Promise<SystemHealthStatus> {
   const queue = await getFullScanQueueAvailability();
   const googleEnabled = isGoogleAuthEnabled();
   const bucketNames = {
-    artifacts: process.env.SUPABASE_STORAGE_BUCKET_ARTIFACTS ?? "scan-artifacts"
+    artifacts: process.env.S3_BUCKET?.trim() || "scan-artifacts"
   };
 
   if (!supabase.checks.adminEnv) {
@@ -65,34 +66,32 @@ export async function getSystemHealth(): Promise<SystemHealthStatus> {
     };
   }
 
-  const admin = createAdminSupabaseClient();
-  const [{ data: buckets, error: bucketError }, { data: workerEvent, error: workerError }] = await Promise.all([
-    admin.storage.listBuckets(),
-    admin
-      .from("scan_events")
-      .select("event_type, created_at")
-      .in("event_type", [
+  const [bucketExists, workerEvent] = await Promise.all([
+    hasS3Env() ? checkStorageBucketExists(bucketNames.artifacts) : Promise.resolve(false),
+    queryOne<{ created_at: string | null; event_type: string | null }>(
+      `
+        select event_type, created_at
+        from public.scan_events
+        where event_type = any($1::text[])
+        order by created_at desc
+        limit 1
+      `,
+      [[
         SCAN_EVENT_TYPES.fullStarted,
         SCAN_EVENT_TYPES.fullCompleted,
         SCAN_EVENT_TYPES.signalsPersisted,
         SCAN_EVENT_TYPES.scheduleSweepCompleted
-      ])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      ]],
+      { readOnly: true }
+    ).catch(() => null)
   ]);
 
-  const existingBuckets = new Set((buckets ?? []).map((bucket) => bucket.name));
   const bucketState = {
-    artifacts: { name: bucketNames.artifacts, exists: existingBuckets.has(bucketNames.artifacts) }
+    artifacts: { name: bucketNames.artifacts, exists: bucketExists }
   };
 
-  const lastActivityAt = workerError ? null : ((workerEvent?.created_at as string | null | undefined) ?? null);
-  const lastEventType = workerError ? null : ((workerEvent?.event_type as string | null | undefined) ?? null);
-
-  if (bucketError) {
-    bucketState.artifacts.exists = false;
-  }
+  const lastActivityAt = workerEvent?.created_at ?? null;
+  const lastEventType = workerEvent?.event_type ?? null;
 
   return {
     auth: {

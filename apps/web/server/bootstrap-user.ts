@@ -1,4 +1,4 @@
-import { createAdminClient, type User } from "@website-signal-risk-scanner/db";
+import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import type { AuthenticatedAppUser } from "./password-auth/types";
 
@@ -53,31 +53,6 @@ function getWorkspaceName(user: BootstrapSessionUser) {
 function getWorkspaceSlug(user: BootstrapSessionUser) {
   const emailPart = user.email?.split("@")[0] ?? "workspace";
   return `${slugify(emailPart)}-${user.id.slice(0, 8)}`;
-}
-
-function getFullName(user: User) {
-  const metadataName =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name
-      : typeof user.user_metadata?.name === "string"
-        ? user.user_metadata.name
-        : null;
-
-  return metadataName;
-}
-
-function getAuthProvider(user: User) {
-  const providers = user.app_metadata?.providers;
-
-  if (Array.isArray(providers) && typeof providers[0] === "string") {
-    return providers[0];
-  }
-
-  if (typeof user.app_metadata?.provider === "string") {
-    return user.app_metadata.provider;
-  }
-
-  return "magic_link";
 }
 
 function mergeAuthProviders(existingProvider: string | null | undefined, nextProvider: string) {
@@ -238,15 +213,6 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
   };
 }
 
-export async function bootstrapUserFromSession(user: User): Promise<BootstrapResult> {
-  if (!user.email) {
-    throw new Error("Authenticated user is missing an email address.");
-  }
-
-  return bootstrapAppUserSession({
-    authProvider: getAuthProvider(user),
-    email: user.email,
-    fullName: getFullName(user),
-    id: user.id
-  });
+export async function bootstrapUserFromSession(user: AuthenticatedAppUser): Promise<BootstrapResult> {
+  return bootstrapAppUserSession(user);
 }

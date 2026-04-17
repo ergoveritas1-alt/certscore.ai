@@ -70,7 +70,7 @@ export default async function SettingsPage() {
         <CardContent className="grid gap-6 text-sm text-slate-600 lg:grid-cols-2">
           <div className="space-y-2">
             <p>
-              Supabase auth and database:{" "}
+              App auth and database:{" "}
               <span className={systemHealth.auth.supabaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
                 {systemHealth.auth.supabaseConnected ? "connected" : "connection issue"}
               </span>
