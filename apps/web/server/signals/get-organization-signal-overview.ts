@@ -1,7 +1,12 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../lib/scans/signal-taxonomy";
+import {
+  loadSignalOverviewDomainsAndLatestCompletedScans,
+  loadSignalOverviewSnapshotsAndSignals,
+  type SignalOverviewScanRow,
+  type SignalOverviewSignalRow
+} from "./repository";
 
 export type DomainSignalOverview = {
   domainId: string;
@@ -17,55 +22,12 @@ export type DomainSignalOverview = {
   }>;
 };
 
-type DomainRow = {
-  hostname: string;
-  id: string;
-};
-
-type ScanRow = {
-  completed_at: string | null;
-  created_at: string;
-  domain_id: string | null;
-  id: string;
-  status: string;
-};
-
-type SnapshotRow = {
-  scan_id: string;
-  total_signals: number;
-};
-
-type SignalRow = {
-  category: string;
-  scan_id: string;
-  signal_key: string;
-  signal_label: string;
-  signal_value_json: boolean | number | string | string[];
-};
-
 export async function getOrganizationSignalOverview(organizationId: string): Promise<DomainSignalOverview[]> {
-  const db = createDatabaseClient();
-  const [{ data: domains, error: domainsError }, { data: scans, error: scansError }] = await Promise.all([
-    db.from("domains").select("id, hostname").eq("organization_id", organizationId).order("created_at", { ascending: false }),
-    db
-      .from("scans")
-      .select("id, domain_id, status, created_at, completed_at")
-      .eq("organization_id", organizationId)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-  ]);
+  const { domains, scans } = await loadSignalOverviewDomainsAndLatestCompletedScans(organizationId);
 
-  if (domainsError) {
-    throw new Error(`Failed to load domains for signal overview: ${domainsError.message}`);
-  }
+  const latestScanByDomain = new Map<string, SignalOverviewScanRow>();
 
-  if (scansError) {
-    throw new Error(`Failed to load completed scans for signal overview: ${scansError.message}`);
-  }
-
-  const latestScanByDomain = new Map<string, ScanRow>();
-
-  for (const scan of (scans ?? []) as ScanRow[]) {
+  for (const scan of scans) {
     if (!scan.domain_id || latestScanByDomain.has(scan.domain_id)) {
       continue;
     }
@@ -74,31 +36,18 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
   }
 
   const latestScanIds = [...latestScanByDomain.values()].map((scan) => scan.id);
-  const [{ data: snapshots }, { data: signals }] = await Promise.all([
-    latestScanIds.length
-      ? db.from("scan_snapshots").select("scan_id, total_signals").in("scan_id", latestScanIds)
-      : Promise.resolve({ data: [] as SnapshotRow[] }),
-    latestScanIds.length
-      ? db
-          .from("scan_signals")
-          .select("scan_id, category, signal_key, signal_label, signal_value_json")
-          .eq("population_source", "scanner")
-          .in("scan_id", latestScanIds)
-          .order("category", { ascending: true })
-          .order("signal_key", { ascending: true })
-      : Promise.resolve({ data: [] as SignalRow[] })
-  ]);
+  const { snapshots, signals } = await loadSignalOverviewSnapshotsAndSignals(latestScanIds);
 
-  const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
-  const signalMap = new Map<string, SignalRow[]>();
+  const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.scan_id, snapshot]));
+  const signalMap = new Map<string, SignalOverviewSignalRow[]>();
 
-  for (const signal of (signals ?? []) as SignalRow[]) {
+  for (const signal of signals) {
     const bucket = signalMap.get(signal.scan_id) ?? [];
     bucket.push(signal);
     signalMap.set(signal.scan_id, bucket);
   }
 
-  return ((domains ?? []) as DomainRow[]).map((domain) => {
+  return domains.map((domain) => {
     const latestScan = latestScanByDomain.get(domain.id);
 
     return {

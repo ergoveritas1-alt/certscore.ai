@@ -1,50 +1,16 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
-
-type ScanRow = {
-  completed_at: string | null;
-  domain_id: string | null;
-  id: string;
-};
-
-type DomainRow = {
-  hostname: string;
-  id: string;
-};
-
-type SnapshotRow = {
-  accessibility_claim_mismatch_detected: boolean | null;
-  accessibility_contact_method_present: boolean | null;
-  accessibility_litigation_risk_score: number | null;
-  accessibility_score: number | null;
-  accessibility_statement_present: boolean | null;
-  scan_id: string;
-  vpat_or_accessibility_conformance_doc_present: boolean | null;
-  wcag_aria_error_count: number | null;
-  wcag_contrast_failures_count: number | null;
-  wcag_error_count_total: number | null;
-  wcag_keyboard_navigation_issue_count: number | null;
-  wcag_missing_alt_count: number | null;
-};
+import {
+  loadAccessibilityOverviewCompletedScans,
+  loadAccessibilityOverviewDomainsAndSnapshots,
+  type AccessibilityOverviewScanRow
+} from "./repository";
 
 export async function getOrganizationAccessibilityOverview(organizationId: string) {
-  const db = createDatabaseClient();
-  const { data: completedScans, error: scansError } = await db
-    .from("scans")
-    .select("id, domain_id, completed_at")
-    .eq("organization_id", organizationId)
-    .eq("status", "completed")
-    .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false })
-    .limit(500);
+  const completedScans = await loadAccessibilityOverviewCompletedScans(organizationId);
 
-  if (scansError) {
-    throw new Error(`Failed to load accessibility scans: ${scansError.message}`);
-  }
-
-  const latestByDomain = new Map<string, ScanRow>();
-  for (const scan of (completedScans ?? []) as ScanRow[]) {
+  const latestByDomain = new Map<string, AccessibilityOverviewScanRow>();
+  for (const scan of completedScans) {
     if (!scan.domain_id || latestByDomain.has(scan.domain_id)) {
       continue;
     }
@@ -55,29 +21,14 @@ export async function getOrganizationAccessibilityOverview(organizationId: strin
   const domainIds = latestScans.map((scan) => scan.domain_id).filter((value): value is string => Boolean(value));
   const scanIds = latestScans.map((scan) => scan.id);
 
-  const [{ data: domains, error: domainsError }, { data: snapshots, error: snapshotsError }] = await Promise.all([
-    domainIds.length
-      ? db.from("domains").select("id, hostname").eq("organization_id", organizationId).in("id", domainIds)
-      : Promise.resolve({ data: [] as DomainRow[], error: null }),
-    scanIds.length
-      ? db
-          .from("scan_snapshots")
-          .select(
-            "scan_id, accessibility_score, accessibility_litigation_risk_score, accessibility_statement_present, vpat_or_accessibility_conformance_doc_present, accessibility_contact_method_present, accessibility_claim_mismatch_detected, wcag_error_count_total, wcag_missing_alt_count, wcag_contrast_failures_count, wcag_aria_error_count, wcag_keyboard_navigation_issue_count"
-          )
-          .in("scan_id", scanIds)
-      : Promise.resolve({ data: [] as SnapshotRow[], error: null })
-  ]);
+  const { domains, snapshots } = await loadAccessibilityOverviewDomainsAndSnapshots({
+    domainIds,
+    organizationId,
+    scanIds
+  });
 
-  if (domainsError) {
-    throw new Error(`Failed to load accessibility domains: ${domainsError.message}`);
-  }
-  if (snapshotsError) {
-    throw new Error(`Failed to load accessibility snapshots: ${snapshotsError.message}`);
-  }
-
-  const domainMap = new Map(((domains ?? []) as DomainRow[]).map((domain) => [domain.id, domain.hostname]));
-  const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
+  const domainMap = new Map(domains.map((domain) => [domain.id, domain.hostname]));
+  const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.scan_id, snapshot]));
 
   const rows = latestScans
     .map((scan) => {
