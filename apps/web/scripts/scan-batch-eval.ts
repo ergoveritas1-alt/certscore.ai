@@ -208,9 +208,9 @@ async function ensureDomain(input: {
   hostname: string;
   normalizedUrl: string;
   organizationId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
-  const existing = await input.supabase
+  const existing = await input.db
     .from("domains")
     .select("id, hostname, normalized_url, max_pages_override")
     .eq("organization_id", input.organizationId)
@@ -225,7 +225,7 @@ async function ensureDomain(input: {
     return existing.data as DomainRow;
   }
 
-  const inserted = await input.supabase
+  const inserted = await input.db
     .from("domains")
     .insert({
       organization_id: input.organizationId,
@@ -250,11 +250,11 @@ async function queueScan(input: {
   processor: string;
   profile: string;
   runtimeFast?: boolean;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
   pagesRequestedOverride?: number | null;
 }) {
   const pagesRequested = Math.max(1, input.pagesRequestedOverride ?? input.domain.max_pages_override ?? DEFAULT_MAX_PAGES);
-  const inserted = await input.supabase
+  const inserted = await input.db
     .from("scans")
     .insert({
       organization_id: input.organizationId,
@@ -294,13 +294,13 @@ async function queueScan(input: {
 async function waitForCompletion(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < input.timeoutMs) {
-    const { data, error } = await input.supabase
+    const { data, error } = await input.db
       .from("scans")
       .select("id, status, created_at, completed_at, error_message")
       .eq("id", input.scanId)
@@ -324,13 +324,13 @@ async function waitForCompletion(input: {
 async function waitForSignalEnrichmentCompletion(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < input.timeoutMs) {
-    const { data, error } = await input.supabase
+    const { data, error } = await input.db
       .from("scan_events")
       .select("event_type, created_at")
       .eq("scan_id", input.scanId)
@@ -369,7 +369,7 @@ async function waitForSignalEnrichmentCompletion(input: {
 async function summarizeScan(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
   const [
     { data: snapshot, error: snapshotError },
@@ -381,17 +381,17 @@ async function summarizeScan(input: {
     { data: scanRow, error: scanError }
   ] =
     await Promise.all([
-      input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-      input.supabase
+      input.db.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
+      input.db
         .from("scan_events")
         .select("id, event_type, message, metadata_json, created_at")
         .eq("scan_id", input.scanId)
         .order("created_at", { ascending: true }),
-      input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-      input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-      input.supabase.from("scan_signals").select("signal_key, population_source").eq("scan_id", input.scanId).order("signal_key", { ascending: true }),
-      input.supabase.from("validation_run_findings").select("id").eq("scan_id", input.scanId),
-      input.supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", input.scanId).maybeSingle()
+      input.db.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+      input.db.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+      input.db.from("scan_signals").select("signal_key, population_source").eq("scan_id", input.scanId).order("signal_key", { ascending: true }),
+      input.db.from("validation_run_findings").select("id").eq("scan_id", input.scanId),
+      input.db.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", input.scanId).maybeSingle()
     ]);
 
   if (snapshotError) {
@@ -413,7 +413,7 @@ async function summarizeScan(input: {
   let signals = signalResult.data;
   let signalsError = signalResult.error;
   if (signalsError && isMissingColumnError(signalsError, "population_source")) {
-    const fallback = await input.supabase
+    const fallback = await input.db
       .from("scan_signals")
       .select("signal_key")
       .eq("scan_id", input.scanId)
@@ -431,7 +431,7 @@ async function summarizeScan(input: {
   let findings = findingsResult.data;
   let findingsError = findingsResult.error;
   if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
-    const { data: runs, error: runsError } = await input.supabase.from("validation_runs").select("id").eq("scan_id", input.scanId);
+    const { data: runs, error: runsError } = await input.db.from("validation_runs").select("id").eq("scan_id", input.scanId);
     if (runsError) {
       throw new Error(`Failed to load validation runs for ${input.hostname}: ${runsError.message}`);
     }
@@ -444,7 +444,7 @@ async function summarizeScan(input: {
       findings = [];
       findingsError = null;
     } else {
-      const fallback = await input.supabase.from("validation_run_findings").select("id").in("validation_run_id", runIds);
+      const fallback = await input.db.from("validation_run_findings").select("id").in("validation_run_id", runIds);
       findings = fallback.data;
       findingsError = fallback.error;
     }
@@ -462,7 +462,7 @@ async function summarizeScan(input: {
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: [input.scanId],
-    db: input.supabase
+    db: input.db
   });
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
@@ -596,7 +596,7 @@ async function main() {
     throw new Error("Provide at least one valid domain with --domains.");
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   if (onlySummarize && queueOnly) {
     throw new Error("Use either --summarize-only or --queue-only, not both.");
   }
@@ -608,12 +608,12 @@ async function main() {
       hostname: entry.domain,
       normalizedUrl: `https://${entry.domain}`,
       organizationId: orgId,
-      supabase
+      db
     });
 
     let scanId: string;
     if (onlySummarize) {
-      const latest = await supabase
+      const latest = await db
         .from("scans")
         .select("id, created_at, status")
         .eq("organization_id", orgId)
@@ -648,7 +648,7 @@ async function main() {
         processor,
         profile,
         runtimeFast,
-        supabase
+        db
       });
 
       results.push({
@@ -668,20 +668,20 @@ async function main() {
         processor,
         profile,
         runtimeFast,
-        supabase
+        db
       });
 
       scanId = queued.id;
       await waitForCompletion({
         hostname: domain.hostname,
         scanId,
-        supabase,
+        db,
         timeoutMs
       });
       await waitForSignalEnrichmentCompletion({
         hostname: domain.hostname,
         scanId,
-        supabase,
+        db,
         timeoutMs: enrichmentTimeoutMs
       }).catch(() => undefined);
     }
@@ -689,7 +689,7 @@ async function main() {
     const summary = await summarizeScan({
       hostname: domain.hostname,
       scanId,
-      supabase
+      db
     });
 
     results.push({
