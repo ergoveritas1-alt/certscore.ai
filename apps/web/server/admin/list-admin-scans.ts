@@ -199,8 +199,8 @@ function isMissingTieredSnapshotColumn(error: { message?: string; code?: string 
 
 export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
-  const { data: scans, error } = await supabase
+  const db = createAdminClient();
+  const { data: scans, error } = await db
     .from("scans")
     .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned")
     .order("created_at", { ascending: false })
@@ -216,7 +216,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const scanIds = scanRows.map((scan) => scan.id);
 
   const snapshotsPromise = scanIds.length
-    ? supabase
+    ? db
         .from("scan_snapshots")
         .select(
           "scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
@@ -224,16 +224,16 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
         .in("scan_id", scanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null });
   const snapshotsFallbackPromise = scanIds.length
-    ? supabase
+    ? db
         .from("scan_snapshots")
         .select("scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
         .in("scan_id", scanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null });
 
   const [{ data: domains }, { data: organizations }, { data: snapshots, error: snapshotsError }] = await Promise.all([
-    domainIds.length ? supabase.from("domains").select("id, hostname").in("id", domainIds) : Promise.resolve({ data: [] as DomainRow[] }),
+    domainIds.length ? db.from("domains").select("id, hostname").in("id", domainIds) : Promise.resolve({ data: [] as DomainRow[] }),
     organizationIds.length
-      ? supabase.from("organizations").select("id, name").in("id", organizationIds)
+      ? db.from("organizations").select("id, name").in("id", organizationIds)
       : Promise.resolve({ data: [] as OrganizationRow[] }),
     snapshotsPromise
   ]);
@@ -260,7 +260,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const validationRuns: ValidationRunSummaryRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: validationRunRows, error: validationRunsError } = await supabase
+      const { data: validationRunRows, error: validationRunsError } = await db
         .from("validation_runs")
         .select("id, scan_id, finding_count, created_at")
         .in("scan_id", scanIdBatch)
@@ -288,7 +288,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const diagnosticEvents: ScanDiagnosticEventRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: diagnosticEventRows, error: diagnosticEventsError } = await supabase
+      const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
         .from("scan_events")
         .select("scan_id, event_type, message, metadata_json, created_at")
         .in("scan_id", scanIdBatch)
@@ -310,7 +310,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: policyRows, error: policyRowsError } = await supabase
+      const { data: policyRows, error: policyRowsError } = await db
         .from("policy_enrichment")
         .select("*")
         .in("scan_id", scanIdBatch)
@@ -345,7 +345,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const validationFindingRows: ValidationFindingSummaryRow[] = [];
   if (latestValidationRunIds.length) {
     for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: validationFindingsError } = await supabase
+      const { data, error: validationFindingsError } = await db
         .from("validation_run_findings")
         .select(
           "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -364,7 +364,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
 
   if (validationFindingIds.length > 0) {
     for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("validation_verdicts")
         .select(
           "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -425,7 +425,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: scanRows.map((scan) => scan.id),
-    db: supabase
+    db
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
@@ -511,7 +511,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
   const [
     { count: totalScans, error: totalScansError },
@@ -519,16 +519,16 @@ export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMe
     { count: http429Count, error: http429Error },
     { count: blockedOrCaptchaCount, error: blockedOrCaptchaError },
   ] = await Promise.all([
-    supabase.from("scans").select("id", { count: "exact", head: true }),
-    supabase
+    db.from("scans").select("id", { count: "exact", head: true }),
+    db
       .from("scan_snapshots")
       .select("scan_id", { count: "exact", head: true })
       .or("homepage_fetch_http_status.eq.403,robots_fetch_http_status.eq.403"),
-    supabase
+    db
       .from("scan_snapshots")
       .select("scan_id", { count: "exact", head: true })
       .or("homepage_fetch_http_status.eq.429,robots_fetch_http_status.eq.429"),
-    supabase
+    db
       .from("scan_snapshots")
       .select("scan_id", { count: "exact", head: true })
       .or("blocked_flag.eq.true,captcha_flag.eq.true"),
@@ -561,9 +561,9 @@ function incrementCount(map: Map<string, number>, key: string) {
 
 export async function getBlockedRunTelemetry(hours = 72): Promise<BlockedRunTelemetry> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("scan_snapshots")
     .select(
       "scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash"

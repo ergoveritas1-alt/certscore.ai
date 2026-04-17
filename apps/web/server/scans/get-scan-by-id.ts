@@ -212,7 +212,7 @@ async function resolveDomainBenchmarkEstimate(input: {
   domainId: string | null;
   organizationId: string | null;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }): Promise<DomainBenchmarkEstimate | null> {
   const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
   const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);
@@ -221,7 +221,7 @@ async function resolveDomainBenchmarkEstimate(input: {
   }
 
   if (input.domainId) {
-    const { data: recentDomainEvent } = await input.supabase
+    const { data: recentDomainEvent } = await input.db
       .from("scan_events")
       .select("metadata_json")
       .eq("domain_id", input.domainId)
@@ -249,7 +249,7 @@ async function resolveDomainBenchmarkEstimate(input: {
     return null;
   }
 
-  await input.supabase.from("scan_events").insert({
+  await input.db.from("scan_events").insert({
     scan_id: input.scanId,
     domain_id: input.domainId,
     organization_id: input.organizationId,
@@ -610,12 +610,12 @@ async function loadScanDetailRecord(input: {
   anonymousOnly?: boolean;
   viewerEmail?: string | null;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
   const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
 
   const loadScan = async (organizationId: string | null) => {
-    let query = supabase
+    let query = db
       .from("scans")
       .select("id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
       .eq("id", input.scanId);
@@ -649,7 +649,7 @@ async function loadScanDetailRecord(input: {
   const scanOrganizationId = (scanRow as ScanRow & { organization_id?: string | null }).organization_id ?? null;
 
   if (scanRow.domain_id) {
-    let domainQuery = supabase.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
+    let domainQuery = db.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
     domainQuery =
       scanOrganizationId === null && adminCanViewAnonymousScans
         ? domainQuery.is("organization_id", null)
@@ -666,7 +666,7 @@ async function loadScanDetailRecord(input: {
 
   const previousScanPromise =
     scanRow.domain_id && scanOrganizationId !== null
-      ? supabase
+      ? db
           .from("scans")
           .select("id")
           .eq("organization_id", scanOrganizationId)
@@ -694,28 +694,28 @@ async function loadScanDetailRecord(input: {
     { data: previousScan },
     { data: validationRun }
   ] = await Promise.all([
-    supabase
+    db
       .from("scan_events")
       .select("id, event_type, message, metadata_json, created_at")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_snapshots")
       .select("*")
       .eq("scan_id", input.scanId)
       .maybeSingle(),
-    supabase
+    db
       .from("scan_signals")
       .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
       .eq("scan_id", input.scanId)
       .order("category", { ascending: true })
       .order("signal_key", { ascending: true }),
-    supabase
+    db
       .from("scan_runtime_artifacts")
       .select("*")
       .eq("scan_id", input.scanId)
       .maybeSingle(),
-    supabase
+    db
       .from("scan_preconsent_violations")
       .select(
         "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, script_host, matched_signature_id, evidence_urls"
@@ -723,7 +723,7 @@ async function loadScanDetailRecord(input: {
       .eq("scan_id", input.scanId)
       .order("vendor_category", { ascending: true })
       .order("vendor_name", { ascending: true }),
-    supabase
+    db
       .from("scan_tracker_vendors")
       .select(
         "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
@@ -731,40 +731,40 @@ async function loadScanDetailRecord(input: {
       .eq("scan_id", input.scanId)
       .order("vendor_category", { ascending: true })
       .order("vendor_name", { ascending: true }),
-    supabase
+    db
       .from("scan_accessibility_rule_counts")
       .select("rule_code, rule_group, severity, instance_count")
       .eq("scan_id", input.scanId)
       .order("instance_count", { ascending: false })
       .order("rule_code", { ascending: true }),
-    supabase
+    db
       .from("scan_accessibility_rule_examples")
       .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
       .eq("scan_id", input.scanId)
       .order("node_count", { ascending: false })
       .order("rule_code", { ascending: true }),
-    supabase
+    db
       .from("policy_enrichment")
       .select("*")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("policy_review_queue")
       .select("*")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_document_sources")
       .select("source_status, extraction_status, metadata_json")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_macro_enrichments")
       .select("*")
       .eq("scan_id", input.scanId)
       .maybeSingle(),
     previousScanPromise,
-    supabase
+    db
       .from("validation_runs")
       .select("id")
       .eq("scan_id", input.scanId)
@@ -784,7 +784,7 @@ async function loadScanDetailRecord(input: {
   const validationRunId = (validationRun as { id?: string } | null)?.id ?? null;
 
   if (validationRunId) {
-    const { data: validationFindingRows, error: validationFindingsError } = await supabase
+    const { data: validationFindingRows, error: validationFindingsError } = await db
       .from("validation_run_findings")
       .select(
         "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -801,7 +801,7 @@ async function loadScanDetailRecord(input: {
     const verdictByFindingId = new Map<string, ValidationVerdictRow>();
 
     if (findingIds.length > 0) {
-      const { data: verdictRows, error: verdictsError } = await supabase
+      const { data: verdictRows, error: verdictsError } = await db
         .from("validation_verdicts")
         .select(
           "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -872,12 +872,12 @@ async function loadScanDetailRecord(input: {
 
   const previousSnapshot = previousScan?.id
     ? (
-        await supabase.from("scan_snapshots").select("*").eq("scan_id", previousScan.id).maybeSingle()
+        await db.from("scan_snapshots").select("*").eq("scan_id", previousScan.id).maybeSingle()
       ).data
     : null;
   const previousTrackerRows = previousScan?.id
     ? (
-        await supabase
+        await db
           .from("scan_tracker_vendors")
           .select(
             "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
@@ -888,7 +888,7 @@ async function loadScanDetailRecord(input: {
   const relatedPreviewSnapshot =
     snapshot && typeof (snapshot as Record<string, unknown>).domain === "string"
       ? (
-          await supabase
+          await db
             .from("scan_snapshots")
             .select("*")
             .eq("domain", (snapshot as Record<string, unknown>).domain as string)
@@ -901,7 +901,7 @@ async function loadScanDetailRecord(input: {
       : null;
   const previousPolicyRows = previousScan?.id
     ? (
-        await supabase.from("policy_enrichment").select("*").eq("scan_id", previousScan.id).order("created_at", { ascending: true })
+        await db.from("policy_enrichment").select("*").eq("scan_id", previousScan.id).order("created_at", { ascending: true })
       ).data ?? []
     : [];
   const rawPolicyEnrichmentRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
@@ -911,7 +911,7 @@ async function loadScanDetailRecord(input: {
       ? new Map(
           (
             (
-              await supabase
+              await db
                 .from("policy_evidence")
                 .select("evidence_hash, snippet")
                 .in("evidence_hash", policyEvidenceHashes)
@@ -1377,7 +1377,7 @@ async function loadScanDetailRecord(input: {
     domainId: scanRow.domain_id,
     organizationId: scanOrganizationId,
     scanId: input.scanId,
-    supabase
+    db
   });
 
   return {

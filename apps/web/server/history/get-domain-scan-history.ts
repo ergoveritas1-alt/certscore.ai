@@ -420,8 +420,8 @@ function deriveScanStateExplanation(scan: ScanRow, snapshot: SnapshotRow | null,
 }
 
 export async function getDomainScanHistory(input: { domainId: string; organizationId: string }): Promise<DomainHistoryItem[]> {
-  const supabase = createAdminClient();
-  const { data: scans, error } = await supabase
+  const db = createAdminClient();
+  const { data: scans, error } = await db
     .from("scans")
     .select("id, scan_type, status, created_at, started_at, completed_at, pages_requested, pages_scanned")
     .eq("organization_id", input.organizationId)
@@ -440,7 +440,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   }
 
   const [{ data: snapshots, error: snapshotsError }, changeEventsResult] = await Promise.all([
-    supabase
+    db
       .from("scan_snapshots")
       .select("*")
       .in("scan_id", scanIds),
@@ -449,7 +449,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       let queryError: QueryErrorLike = null;
 
       for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-        const { data, error: batchError } = await supabase
+        const { data, error: batchError } = await db
           .from("compliance_change_events")
           .select("scan_id_current, event_type")
           .eq("organization_id", input.organizationId)
@@ -474,7 +474,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   const changeEventsError = changeEventsResult.error;
   const diagnosticEvents: ScanDiagnosticEventRow[] = [];
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: diagnosticEventRows, error: diagnosticEventsError } = await supabase
+    const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
       .from("scan_events")
       .select("scan_id, event_type, message, metadata_json, created_at")
       .in("scan_id", scanIdBatch)
@@ -496,7 +496,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   }
   const validationRuns: ValidationRunSummaryRow[] = [];
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: validationRunRows, error: validationRunsError } = await supabase
+    const { data: validationRunRows, error: validationRunsError } = await db
       .from("validation_runs")
       .select("id, scan_id, finding_count, created_at")
       .in("scan_id", scanIdBatch)
@@ -522,7 +522,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   }
   const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: policyRows, error: policyRowsError } = await supabase
+    const { data: policyRows, error: policyRowsError } = await db
       .from("policy_enrichment")
       .select("*")
       .in("scan_id", scanIdBatch)
@@ -556,7 +556,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   const validationFindingRows: ValidationFindingSummaryRow[] = [];
   if (latestValidationRunIds.length) {
     for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("validation_run_findings")
         .select(
           "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -575,7 +575,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
 
   if (validationFindingIds.length > 0) {
     for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("validation_verdicts")
         .select(
           "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -636,7 +636,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: scanRows.map((scan) => scan.id),
-    db: supabase
+    db
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
@@ -678,7 +678,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     let legacyEventsError: QueryErrorLike = null;
 
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: batchError } = await supabase
+      const { data, error: batchError } = await db
         .from("scan_events")
         .select("id, scan_id, event_type, message, metadata_json, created_at")
         .eq("organization_id", input.organizationId)

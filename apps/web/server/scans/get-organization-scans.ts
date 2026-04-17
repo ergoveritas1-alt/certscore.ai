@@ -516,8 +516,8 @@ async function loadOrganizationScans(
     includeCount?: boolean;
   }
 ) {
-  const supabase = createAdminClient();
-  let query = supabase
+  const db = createAdminClient();
+  let query = db
     .from("scans")
     .select("id, domain_id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at", input?.includeCount ? { count: "exact" } : undefined)
     .eq("organization_id", organizationId)
@@ -549,21 +549,21 @@ async function loadOrganizationScans(
   );
 
   const domainsWithLastScannedAtPromise = domainIds.length
-    ? supabase
+    ? db
         .from("domains")
         .select("id, hostname, last_scanned_at, latest_scan_id")
         .eq("organization_id", organizationId)
         .in("id", domainIds)
     : Promise.resolve({ data: [] as DomainRow[], error: null });
   const domainsWithoutLastScannedAtPromise = domainIds.length
-    ? supabase
+    ? db
         .from("domains")
         .select("id, hostname, latest_scan_id")
         .eq("organization_id", organizationId)
         .in("id", domainIds)
     : Promise.resolve({ data: [] as DomainRow[], error: null });
   const snapshotsPromise = summaryScanIds.length
-    ? supabase
+    ? db
         .from("scan_snapshots")
         .select(
           "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
@@ -571,7 +571,7 @@ async function loadOrganizationScans(
         .in("scan_id", summaryScanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null as QueryErrorLike });
   const snapshotsFallbackPromise = summaryScanIds.length
-    ? supabase
+    ? db
         .from("scan_snapshots")
         .select(
           "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
@@ -579,7 +579,7 @@ async function loadOrganizationScans(
         .in("scan_id", summaryScanIds)
     : Promise.resolve({ data: [] as SnapshotRow[], error: null as QueryErrorLike });
   const runtimeArtifactsPromise = summaryScanIds.length
-    ? supabase
+    ? db
         .from("scan_runtime_artifacts")
         .select(
           "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
@@ -626,7 +626,7 @@ async function loadOrganizationScans(
 
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("compliance_change_events")
         .select("scan_id_current, event_type")
         .eq("organization_id", organizationId)
@@ -644,7 +644,7 @@ async function loadOrganizationScans(
   const domainRows = (domains ?? []) as DomainRow[];
   const latestDomainScanIds = [...new Set(domainRows.flatMap((domain) => (domain.latest_scan_id ? [domain.latest_scan_id] : [])))];
   const { data: domainCompletedScans, error: domainCompletedScansError } = domainIds.length
-    ? await supabase
+    ? await db
         .from("scans")
         .select("domain_id, completed_at")
         .eq("organization_id", organizationId)
@@ -654,7 +654,7 @@ async function loadOrganizationScans(
         .order("completed_at", { ascending: false })
     : { data: [] as DomainCompletedScanRow[], error: null };
   const { data: latestDomainScans, error: latestDomainScansError } = latestDomainScanIds.length
-    ? await supabase.from("scans").select("id, status").in("id", latestDomainScanIds)
+    ? await db.from("scans").select("id, status").in("id", latestDomainScanIds)
     : { data: [] as LatestDomainScanRow[], error: null };
 
   if (domainCompletedScansError) {
@@ -692,7 +692,7 @@ async function loadOrganizationScans(
   const signalCountMap = new Map<string, number>();
   if (zeroSignalScanIds.length) {
     for (const scanIdBatch of chunkValues(zeroSignalScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: signalCountRows, error: signalCountError } = await supabase
+      const { data: signalCountRows, error: signalCountError } = await db
         .from("scan_signals")
         .select("scan_id")
         .eq("population_source", "scanner")
@@ -710,7 +710,7 @@ async function loadOrganizationScans(
   const validationRuns: ValidationRunSummaryRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: validationRunRows, error: validationRunsError } = await supabase
+      const { data: validationRunRows, error: validationRunsError } = await db
         .from("validation_runs")
         .select("id, scan_id, finding_count, created_at")
         .in("scan_id", scanIdBatch)
@@ -741,7 +741,7 @@ async function loadOrganizationScans(
   const diagnosticEvents: ScanDiagnosticEventRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: diagnosticEventRows, error: diagnosticEventsError } = await supabase
+      const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
         .from("scan_events")
         .select("scan_id, event_type, message, metadata_json, created_at")
         .in("scan_id", scanIdBatch)
@@ -757,7 +757,7 @@ async function loadOrganizationScans(
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: summaryScanIds,
-    db: supabase
+    db
   });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
@@ -768,7 +768,7 @@ async function loadOrganizationScans(
   const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: policyRows, error: policyRowsError } = await supabase
+      const { data: policyRows, error: policyRowsError } = await db
         .from("policy_enrichment")
         .select("*")
         .in("scan_id", scanIdBatch)
@@ -803,7 +803,7 @@ async function loadOrganizationScans(
   const validationFindingRows: ValidationFindingSummaryRow[] = [];
   if (latestValidationRunIds.length) {
     for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("validation_run_findings")
         .select(
           "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -822,7 +822,7 @@ async function loadOrganizationScans(
 
   if (validationFindingIds.length > 0) {
     for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("validation_verdicts")
         .select(
           "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -925,7 +925,7 @@ async function loadOrganizationScans(
     let legacyEventsError: QueryErrorLike = null;
 
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("scan_events")
         .select("id, scan_id, event_type, message, metadata_json, created_at")
         .eq("organization_id", organizationId)
