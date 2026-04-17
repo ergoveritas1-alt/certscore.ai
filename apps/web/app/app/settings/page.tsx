@@ -4,7 +4,6 @@ import { BrandingSettingsForm } from "../../../components/settings/branding-sett
 import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getSystemHealth } from "../../../server/health/get-system-health";
-import { getPasswordAuthVerificationStatus } from "../../../server/password-auth/user";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
@@ -29,14 +28,9 @@ export default async function SettingsPage() {
   const [settings, systemHealth, verificationStatus] = await Promise.all([
     getOrganizationSettings(organization.id),
     getSystemHealth(),
-    userProviders.includes("password")
-      ? getBetterAuthVerificationStatus(user.id).then((result) => result ?? getPasswordAuthVerificationStatus(user.id))
-      : Promise.resolve(null)
+    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.id) : Promise.resolve(null)
   ]);
-  const verificationIsVerified: boolean =
-    verificationStatus && "isVerified" in verificationStatus
-      ? Boolean((verificationStatus as { isVerified?: boolean }).isVerified)
-      : Boolean(verificationStatus?.verifiedAt);
+  const verificationIsVerified = Boolean(verificationStatus?.isVerified);
 
   return (
     <div className="space-y-8">
