@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { LoginForm } from "../../../components/auth/login-form";
 import { SiteHeader } from "../../../components/layout/site-header";
+import { isGoogleAuthEnabled } from "../../../lib/env";
 import { getCurrentUser } from "../../../server/auth";
 
 export default async function LoginPage() {
@@ -10,6 +11,8 @@ export default async function LoginPage() {
   if (user) {
     redirect("/app");
   }
+
+  const allowGoogle = isGoogleAuthEnabled();
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -20,6 +23,7 @@ export default async function LoginPage() {
           <CardContent className="p-6 pb-0">
             <LoginForm
               allowCreateAccount
+              allowGoogle={allowGoogle}
               footerMode="default"
               title="Access your workspace"
             />

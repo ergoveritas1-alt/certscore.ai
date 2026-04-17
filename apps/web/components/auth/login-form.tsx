@@ -52,6 +52,12 @@ export function LoginForm(input?: {
       ? "That verification link is invalid or expired."
       : initialError === "magic_link_disabled" || initialError === "auth_callback_disabled"
         ? "This sign-in method is no longer available."
+        : initialError === "google_sign_in_failed" ||
+            initialError === "oauth_provider_not_found" ||
+            initialError === "invalid_code" ||
+            initialError === "no_callback_url" ||
+            initialError === "unable_to_get_user_info"
+          ? "Google sign-in could not be completed. Try again."
         : initialError
   );
   const [showPassword, setShowPassword] = useState(false);
@@ -253,6 +259,22 @@ export function LoginForm(input?: {
 
         {allowCreateAccount && isCreateAccount ? <p className="text-xs text-slate-500">No credit card required.</p> : null}
       </form>
+
+      {input?.allowGoogle ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Or continue with</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+          <Link
+            className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition hover:border-slate-300 hover:bg-slate-50"
+            href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
+          >
+            Google
+          </Link>
+        </div>
+      ) : null}
 
       {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
 

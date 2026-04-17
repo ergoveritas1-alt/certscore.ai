@@ -2,5 +2,11 @@ import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  return NextResponse.redirect(new URL("/login?error=auth_callback_disabled", requestUrl.origin));
+  const callbackUrl = new URL("/api/auth/callback/google", requestUrl.origin);
+
+  requestUrl.searchParams.forEach((value, key) => {
+    callbackUrl.searchParams.set(key, value);
+  });
+
+  return NextResponse.redirect(callbackUrl);
 }
