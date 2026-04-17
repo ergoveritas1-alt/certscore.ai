@@ -444,10 +444,10 @@ async function inferVendorsWithLlm(input: { candidates: VendorCandidate[]; domai
 
 async function persistRegistryEntries(input: {
   inferredVendors: InferredVendor[];
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
   for (const vendor of input.inferredVendors) {
-    const { data: registryRow, error: registryError } = await input.supabase
+    const { data: registryRow, error: registryError } = await input.db
       .from("vendor_registry")
       .upsert(
         {
@@ -474,7 +474,7 @@ async function persistRegistryEntries(input: {
       throw new Error(`Failed to upsert vendor registry entry ${vendor.canonicalName}: ${registryError?.message ?? "unknown error"}`);
     }
 
-    const { error: patternError } = await input.supabase.from("vendor_domain_patterns").upsert(
+    const { error: patternError } = await input.db.from("vendor_domain_patterns").upsert(
       vendor.domains.map((domain) => ({
         confidence: vendor.confidence,
         domain,
@@ -494,7 +494,7 @@ async function persistRegistryEntries(input: {
 }
 
 export async function enrichUnknownScanVendors(input: { hostname: string; scanId: string }): Promise<VendorEnrichmentResult> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [
     { data: scan, error: scanError },
     { data: runtimeArtifacts, error: runtimeError },
@@ -502,11 +502,11 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
     { data: registryRows, error: registryError },
     { data: patternRows, error: patternError }
   ] = await Promise.all([
-    supabase.from("scans").select("id, organization_id, domain_id").eq("id", input.scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    supabase.from("vendor_registry").select("id, canonical_name, vendor_category, cookie_names, confidence"),
-    supabase.from("vendor_domain_patterns").select("vendor_registry_id, domain")
+    db.from("scans").select("id, organization_id, domain_id").eq("id", input.scanId).maybeSingle(),
+    db.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    db.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    db.from("vendor_registry").select("id, canonical_name, vendor_category, cookie_names, confidence"),
+    db.from("vendor_domain_patterns").select("vendor_registry_id, domain")
   ]);
 
   if (scanError) {
@@ -636,7 +636,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
     if (!registryError && !patternError) {
       await persistRegistryEntries({
         inferredVendors,
-        supabase
+        db
       });
     }
 
@@ -676,10 +676,10 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   }
 
   await Promise.all([
-    supabase.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
-    supabase.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
-    supabase.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"]),
-    supabase.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"])
+    db.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
+    db.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
+    db.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"]),
+    db.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"])
   ]);
 
   const trackerRows = [
@@ -722,7 +722,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   ];
 
   if (trackerRows.length > 0) {
-    const { error: trackerError } = await supabase.from("scan_tracker_vendors").insert(trackerRows);
+    const { error: trackerError } = await db.from("scan_tracker_vendors").insert(trackerRows);
     if (trackerError) {
       throw new Error(`Failed to persist enriched tracker vendors for ${input.scanId}: ${trackerError.message}`);
     }
@@ -783,7 +783,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   }
 
   if (preconsentRows.size > 0) {
-    const { error: preconsentError } = await supabase.from("scan_preconsent_violations").insert([...preconsentRows.values()]);
+    const { error: preconsentError } = await db.from("scan_preconsent_violations").insert([...preconsentRows.values()]);
     if (preconsentError) {
       throw new Error(`Failed to persist enriched pre-consent violations for ${input.scanId}: ${preconsentError.message}`);
     }

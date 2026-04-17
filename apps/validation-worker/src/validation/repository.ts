@@ -327,8 +327,8 @@ function addDays(base: Date, days: number) {
 
 export async function ensureValidationSettings() {
   const env = getWorkerEnv();
-  const supabase = createAdminClient();
-  const { data: existing, error } = await supabase
+  const db = createAdminClient();
+  const { data: existing, error } = await db
     .from("validation_settings")
     .select(
       "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
@@ -344,7 +344,7 @@ export async function ensureValidationSettings() {
     return existing as ValidationSettingsRow;
   }
 
-  const { data: inserted, error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await db
     .from("validation_settings")
     .insert({
       singleton_key: VALIDATION_SETTINGS_KEY,
@@ -389,8 +389,8 @@ export async function getValidationPipelineState() {
 }
 
 async function getValidationInternalOrganizationId() {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("organizations")
     .select("id")
     .eq("slug", VALIDATION_INTERNAL_ORG_SLUG)
@@ -412,12 +412,12 @@ export async function upsertValidationTarget(input: {
   source: string;
   trancoRank?: number | null;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const hostname = extractHostname(input.normalizedUrl);
   const trancoRank = input.trancoRank ?? null;
   const rankBand = rankBandForRank(trancoRank);
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("validation_targets")
     .upsert(
       {
@@ -445,8 +445,8 @@ export async function upsertValidationTarget(input: {
 }
 
 export async function listValidationTargets(limit = 50) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_targets")
     .select(
       "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
@@ -535,13 +535,13 @@ export async function syncTrancoTargets(force = false) {
     }
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   let insertedCount = 0;
   const batchSize = 500;
 
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
-    const { error } = await supabase.from("validation_targets").upsert(batch, {
+    const { error } = await db.from("validation_targets").upsert(batch, {
       onConflict: "hostname"
     });
 
@@ -552,7 +552,7 @@ export async function syncTrancoTargets(force = false) {
     insertedCount += batch.length;
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await db
     .from("validation_settings")
     .update({
       last_tranco_sync_at: now.toISOString()
@@ -581,14 +581,14 @@ function pickWeightedBand() {
 }
 
 export async function claimNextAutomaticTarget(now = new Date()) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const nowIso = now.toISOString();
   const attemptedBands = [pickWeightedBand(), ...VALIDATION_RANK_BANDS.map((band) => band.key)].filter(
     (value, index, values) => values.indexOf(value) === index
   );
 
   for (const rankBand of attemptedBands) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("validation_targets")
       .select(
         "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
@@ -617,7 +617,7 @@ export async function claimNextAutomaticTarget(now = new Date()) {
     const shuffled = [...rows].sort(() => Math.random() - 0.5);
 
     for (const target of shuffled) {
-      const { data: activeRun, error: activeRunError } = await supabase
+      const { data: activeRun, error: activeRunError } = await db
         .from("validation_runs")
         .select("id")
         .eq("validation_target_id", target.id)
@@ -646,8 +646,8 @@ export async function createValidationRun(input: {
   trancoRank?: number | null;
   triggerMode: ValidationRunMode;
 }) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_runs")
     .insert({
       hostname: input.hostname,
@@ -668,7 +668,7 @@ export async function createValidationRun(input: {
   }
 
   if (input.targetId) {
-    await supabase
+    await db
       .from("validation_targets")
       .update({
         last_run_at: new Date().toISOString(),
@@ -681,8 +681,8 @@ export async function createValidationRun(input: {
 }
 
 export async function getValidationRun(runId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_runs")
     .select(
       "completed_at, created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
@@ -701,15 +701,15 @@ export async function updateValidationRun(
   runId: string,
   patch: Record<string, unknown>
 ) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("validation_runs").update(patch).eq("id", runId);
+  const db = createAdminClient();
+  const { error } = await db.from("validation_runs").update(patch).eq("id", runId);
   if (error) {
     throw new Error(`Failed to update validation run ${runId}: ${error.message}`);
   }
 }
 
 export async function createScanForValidationRun(runId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const run = await getValidationRun(runId);
   const teamPlan = getPlanDefinition("team");
 
@@ -724,7 +724,7 @@ export async function createScanForValidationRun(runId: string) {
   const organizationId = await getValidationInternalOrganizationId();
   const normalizedUrl = run.normalized_url;
   const hostname = run.hostname;
-  const { data: domain } = await supabase
+  const { data: domain } = await db
     .from("domains")
     .select("id, max_pages_override")
     .eq("organization_id", organizationId)
@@ -734,7 +734,7 @@ export async function createScanForValidationRun(runId: string) {
   let domainId = (domain as { id: string } | null)?.id ?? null;
 
   if (!domainId) {
-    const { data: insertedDomain, error: domainError } = await supabase
+    const { data: insertedDomain, error: domainError } = await db
       .from("domains")
       .insert({
         organization_id: organizationId,
@@ -751,7 +751,7 @@ export async function createScanForValidationRun(runId: string) {
 
     domainId = insertedDomain.id as string;
   } else {
-    await supabase
+    await db
       .from("domains")
       .update({
         normalized_url: normalizedUrl,
@@ -760,7 +760,7 @@ export async function createScanForValidationRun(runId: string) {
       .eq("id", domainId);
   }
 
-  const { data: scan, error: scanError } = await supabase
+  const { data: scan, error: scanError } = await db
     .from("scans")
     .insert({
       organization_id: organizationId,
@@ -790,8 +790,8 @@ export async function createScanForValidationRun(runId: string) {
   }
 
   await Promise.all([
-    supabase.from("domains").update({ latest_scan_id: scan.id }).eq("id", domainId),
-    supabase
+    db.from("domains").update({ latest_scan_id: scan.id }).eq("id", domainId),
+    db
       .from("validation_runs")
       .update({
         scan_id: scan.id,
@@ -801,7 +801,7 @@ export async function createScanForValidationRun(runId: string) {
       })
       .eq("id", runId),
     run.validation_target_id
-      ? supabase
+      ? db
           .from("validation_targets")
           .update({
             last_run_at: new Date().toISOString(),
@@ -815,7 +815,7 @@ export async function createScanForValidationRun(runId: string) {
 }
 
 export async function loadCompletedScanArtifacts(scanId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [
     { data: scan, error: scanError },
     { data: snapshot, error: snapshotError },
@@ -831,45 +831,45 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     { data: signalHits, error: signalHitsError },
     { data: pageEvidence, error: pageEvidenceError }
   ] = await Promise.all([
-    supabase
+    db
       .from("scans")
       .select("id, status, created_at, completed_at, error_message")
       .eq("id", scanId)
       .maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase
+    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    db
       .from("scan_signals")
       .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
       .eq("scan_id", scanId)
       .order("category", { ascending: true })
       .order("signal_key", { ascending: true }),
-    supabase
+    db
       .from("scan_tracker_vendors")
       .select("vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id")
       .eq("scan_id", scanId)
       .order("vendor_name", { ascending: true }),
-    supabase
+    db
       .from("scan_pages")
       .select("page_type, page_url, fetch_status")
       .eq("scan_id", scanId)
       .order("page_type", { ascending: true }),
-    supabase
+    db
       .from("policy_enrichment")
       .select("*")
       .eq("scan_id", scanId),
-    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase
+    db.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    db.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
+    db
       .from("policy_review_queue")
       .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
       .eq("scan_id", scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_preconsent_violations")
       .select("vendor_name, evidence_urls, collection_endpoint_type")
       .eq("scan_id", scanId),
-    supabase
+    db
       .from("scan_signal_hits")
       .select("id, signal_key, page_url, page_type, page_role, evidence_refs, payload")
       .eq("scan_id", scanId)
@@ -878,7 +878,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
         "financial.apr_or_interest_rate_disclosure_text_present",
         "financial.past_performance_disclaimer_text_present"
       ]),
-    supabase
+    db
       .from("scan_page_evidence")
       .select("evidence_id, page_url, page_type, page_role, matched_text, metadata")
       .eq("scan_id", scanId)
@@ -1003,7 +1003,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
 }
 
 export async function loadNanoSignalEnrichmentInputs(scanId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [
     { data: scan, error: scanError },
     { data: snapshot, error: snapshotError },
@@ -1012,12 +1012,12 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     { data: policyReviewQueue, error: policyReviewQueueError },
     { data: documentSources, error: documentSourcesError }
   ] = await Promise.all([
-    supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase
+    db.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
+    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    db.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    db.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    db
       .from("scan_document_sources")
       .select("*")
       .eq("scan_id", scanId)
@@ -1072,8 +1072,8 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
 }
 
 export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
-  const supabase = createAdminClient();
-  const { data: scan, error: scanError } = await supabase
+  const db = createAdminClient();
+  const { data: scan, error: scanError } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, error_message, domain_id")
     .eq("id", scanId)
@@ -1085,7 +1085,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
 
   const domainId = typeof scan?.domain_id === "string" ? scan.domain_id : null;
   const recentDomainScansPromise = domainId
-    ? supabase
+    ? db
         .from("scans")
         .select("id")
         .eq("domain_id", domainId)
@@ -1101,16 +1101,16 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
     { data: runtimeArtifacts, error: runtimeArtifactsError },
     { data: recentDomainScans, error: recentDomainScansError }
   ] = await Promise.all([
-    domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    supabase.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
-    supabase
+    domainId ? db.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    db.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
+    db
       .from("scan_events")
       .select("event_type, metadata_json, created_at")
       .eq("scan_id", scanId)
       .eq("event_type", "runtime.build_phase_diagnostic")
       .order("created_at", { ascending: true }),
-    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+    db.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
     recentDomainScansPromise
   ]);
 
@@ -1139,7 +1139,7 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   const recentDomainDocumentCandidates =
     recentDomainScanIds.length > 0
       ? (
-          await supabase
+          await db
             .from("scan_document_sources")
             .select("canonical_url, source_url, document_type, title, semantic_confidence, created_at")
             .in("scan_id", recentDomainScanIds)
@@ -1218,9 +1218,9 @@ export async function replaceValidationRunFindings(
     evidence: Record<string, unknown>;
   }>
 ) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const run = await getValidationRun(runId);
-  const { error: deleteError } = await supabase.from("validation_run_findings").delete().eq("validation_run_id", runId);
+  const { error: deleteError } = await db.from("validation_run_findings").delete().eq("validation_run_id", runId);
 
   if (deleteError) {
     throw new Error(`Failed to clear validation findings for run ${runId}: ${deleteError.message}`);
@@ -1235,7 +1235,7 @@ export async function replaceValidationRunFindings(
       await persistValidationRunReportFindingCount({
         runId,
         scanId: run.scan_id,
-        supabase
+        db
       });
     }
     return [];
@@ -1258,13 +1258,13 @@ export async function replaceValidationRunFindings(
     evidence_json: finding.evidence
   }));
 
-  let insertResult = await supabase
+  let insertResult = await db
     .from("validation_run_findings")
     .insert(baseRows.map((row) => ({ ...row, rank: row.finding_rank })))
     .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
 
   if (insertResult.error && isMissingColumnError(insertResult.error, "rank")) {
-    insertResult = await supabase
+    insertResult = await db
       .from("validation_run_findings")
       .insert(baseRows)
       .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
@@ -1282,7 +1282,7 @@ export async function replaceValidationRunFindings(
     await persistValidationRunReportFindingCount({
       runId,
       scanId: run.scan_id,
-      supabase
+      db
     });
   }
 
@@ -1290,8 +1290,8 @@ export async function replaceValidationRunFindings(
 }
 
 export async function loadValidationRunFindings(runId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_run_findings")
     .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json")
     .eq("validation_run_id", runId)
@@ -1314,8 +1314,8 @@ export async function upsertValidationVerdict(input: {
   validationRunFindingId: string;
   verdict: "supported" | "inconclusive" | "not_supported";
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("validation_verdicts")
     .upsert(
       {
@@ -1339,21 +1339,21 @@ export async function upsertValidationVerdict(input: {
 }
 
 export async function finalizeValidationRun(runId: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const run = await getValidationRun(runId);
 
   if (!run) {
     throw new Error(`Validation run ${runId} was not found.`);
   }
 
-  const { data: verdicts, error: verdictError } = await supabase
+  const { data: verdicts, error: verdictError } = await db
     .from("validation_verdicts")
     .select("agreement_score")
     .in(
       "validation_run_finding_id",
       (
         (
-          await supabase
+          await db
             .from("validation_run_findings")
             .select("id")
             .eq("validation_run_id", runId)
@@ -1382,7 +1382,7 @@ export async function finalizeValidationRun(runId: string) {
     await persistValidationRunReportFindingCount({
       runId,
       scanId: run.scan_id,
-      supabase
+      db
     });
   }
 
@@ -1391,7 +1391,7 @@ export async function finalizeValidationRun(runId: string) {
   }
 
   const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
-  const { data: snapshot } = await supabase
+  const { data: snapshot } = await db
     .from("scan_snapshots")
     .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status, challenge_suspected, rate_limit_suspected, scan_outcome, cooldown_hours")
     .eq("scan_id", run.scan_id)
@@ -1417,7 +1417,7 @@ export async function finalizeValidationRun(runId: string) {
       ? snapshot.cooldown_hours
       : retryPolicy.cooldownHours;
 
-  await supabase
+  await db
     .from("validation_targets")
     .update({
       backoff_until: blocked ? addDays(completedAt, 90).toISOString() : null,
@@ -1434,7 +1434,7 @@ export async function finalizeValidationRun(runId: string) {
 async function persistValidationRunReportFindingCount(input: {
   runId: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
   try {
     const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
@@ -1473,7 +1473,7 @@ async function persistValidationRunReportFindingCount(input: {
     const scanRecord = await loadScanRecordForFindingCount({
       runId: input.runId,
       scanId: input.scanId,
-      supabase: input.supabase
+      db: input.db
     });
 
     if (!scanRecord) {
@@ -1481,7 +1481,7 @@ async function persistValidationRunReportFindingCount(input: {
     }
 
     const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
-    const { error: snapshotUpdateError } = await input.supabase
+    const { error: snapshotUpdateError } = await input.db
       .from("scan_snapshots")
       .update({
         report_finding_count: reportFindingCount
@@ -1507,7 +1507,7 @@ async function persistValidationRunReportFindingCount(input: {
 async function loadScanRecordForFindingCount(input: {
   runId: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
   const [
     { data: snapshot },
@@ -1523,21 +1523,21 @@ async function loadScanRecordForFindingCount(input: {
     { data: events },
     { data: validationFindingRows }
   ] = await Promise.all([
-    input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
+    input.db.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.db.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.db.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
+    input.db.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db
       .from("scan_signals")
       .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
       .eq("scan_id", input.scanId),
-    input.supabase.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
+    input.db.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db
       .from("validation_run_findings")
       .select(
         "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -1550,7 +1550,7 @@ async function loadScanRecordForFindingCount(input: {
   const verdictByFindingId = new Map<string, ValidationVerdictRow>();
 
   if (validationFindingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await input.supabase
+    const { data: verdictRows, error: verdictsError } = await input.db
       .from("validation_verdicts")
       .select(
         "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -1693,7 +1693,7 @@ async function loadScanRecordForFindingCount(input: {
 }
 
 export async function failValidationRun(runId: string, message: string) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const run = await getValidationRun(runId);
   const failedAt = new Date();
 
@@ -1707,7 +1707,7 @@ export async function failValidationRun(runId: string, message: string) {
     return;
   }
 
-  const target = await supabase
+  const target = await db
     .from("validation_targets")
     .select("failure_count")
     .eq("id", run.validation_target_id)
@@ -1715,7 +1715,7 @@ export async function failValidationRun(runId: string, message: string) {
   const failureCount = Number(target.data?.failure_count ?? 0) + 1;
   const backoffDays = Math.min(30, 2 ** Math.min(failureCount - 1, 4));
 
-  await supabase
+  await db
     .from("validation_targets")
     .update({
       backoff_until: addDays(failedAt, backoffDays).toISOString(),
@@ -1730,8 +1730,8 @@ export async function markValidationSchedule(input: {
   nextDueAt: Date;
   now: Date;
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const db = createAdminClient();
+  const { error } = await db
     .from("validation_settings")
     .update({
       last_scheduled_at: input.now.toISOString(),
@@ -1748,8 +1748,8 @@ export async function replaceScanDocumentSources(input: {
   rows: Array<Record<string, unknown>>;
   scanId: string;
 }) {
-  const supabase = createAdminClient();
-  const { error: deleteError } = await supabase.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
+  const db = createAdminClient();
+  const { error: deleteError } = await db.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
 
   if (deleteError && !isMissingOptionalTableError(deleteError)) {
     throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${deleteError.message}`);
@@ -1764,7 +1764,7 @@ export async function replaceScanDocumentSources(input: {
     return [];
   }
 
-  const { error: insertError } = await supabase.from("scan_document_sources").insert(
+  const { error: insertError } = await db.from("scan_document_sources").insert(
     prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId)
   );
 
@@ -1783,8 +1783,8 @@ export async function appendScanDocumentSources(input: {
     return [];
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_document_sources").insert(
+  const db = createAdminClient();
+  const { error } = await db.from("scan_document_sources").insert(
     prepareScanDocumentSourceRows(input.rows, input.scanId)
   );
 
@@ -1804,10 +1804,10 @@ export async function updateScanDocumentSourceExtractions(input: {
     semanticConfidence: number | null;
   }>;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
   for (const row of input.rows) {
-    const { error } = await supabase
+    const { error } = await db
       .from("scan_document_sources")
       .update({
         extracted_fields_json: sanitizeJsonPersistenceValue(row.extractedFields),
@@ -1843,11 +1843,11 @@ export async function loadReusableNanoDocumentExtractions(input: {
     return [] as Array<Record<string, unknown>>;
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [exactUrlResult, recentTypeResult] = await Promise.all([
     canonicalUrls.length === 0
       ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : supabase
+      : db
           .from("scan_document_sources")
           .select("*")
           .in("canonical_url", canonicalUrls)
@@ -1856,7 +1856,7 @@ export async function loadReusableNanoDocumentExtractions(input: {
           .order("updated_at", { ascending: false }),
     documentTypes.length === 0
       ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : supabase
+      : db
           .from("scan_document_sources")
           .select("*")
           .in("document_type", documentTypes)
@@ -1897,14 +1897,14 @@ export async function persistDerivedNanoPolicySignals(input: {
   scanId: string;
   snapshot?: Record<string, unknown> | null;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const nextRows = buildNanoPolicySignalRows({
     policyEnrichments: input.policySemanticRows,
     policyReviewQueue: input.policyReviewQueue,
     runtimeArtifacts: input.runtimeArtifacts,
     snapshot: input.snapshot
   });
-  const { data: scanRow, error: scanError } = await supabase
+  const { data: scanRow, error: scanError } = await db
     .from("scans")
     .select("organization_id, domain_id")
     .eq("id", input.scanId)
@@ -1917,7 +1917,7 @@ export async function persistDerivedNanoPolicySignals(input: {
   const nextKeys = new Set(nextRows.map((row) => row.key));
   const managedKeysToDelete = [...MANAGED_NANO_POLICY_SIGNAL_KEYS].filter((key) => !nextKeys.has(key));
   if (managedKeysToDelete.length > 0) {
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
       .from("scan_signals")
       .delete()
       .eq("scan_id", input.scanId)
@@ -1933,7 +1933,7 @@ export async function persistDerivedNanoPolicySignals(input: {
     return nextRows;
   }
 
-  const { error } = await supabase.from("scan_signals").upsert(
+  const { error } = await db.from("scan_signals").upsert(
     nextRows.map((row) => ({
       category:
         row.key.startsWith("commerce.") ? "commerce" :
@@ -1977,8 +1977,8 @@ export async function appendScanWorkflowEvent(input: {
   metadataJson?: Record<string, unknown>;
   scanId: string;
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_events").insert({
+  const db = createAdminClient();
+  const { error } = await db.from("scan_events").insert({
     domain_id: null,
     event_type: input.eventType,
     message: input.message,
@@ -1993,8 +1993,8 @@ export async function appendScanWorkflowEvent(input: {
 }
 
 export async function hasValidationRunForScan(scanId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("validation_runs")
     .select("id")
     .eq("scan_id", scanId)
@@ -2021,7 +2021,7 @@ export async function recordValidationWorkerHeartbeat(input: {
   startedAt?: Date;
   heartbeatAt?: Date;
 }) {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const patch: Record<string, string | null> = {
     last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
     last_worker_host: input.host
@@ -2031,7 +2031,7 @@ export async function recordValidationWorkerHeartbeat(input: {
     patch.last_worker_started_at = input.startedAt.toISOString();
   }
 
-  const { error } = await supabase
+  const { error } = await db
     .from("validation_settings")
     .upsert(
       {
@@ -2059,8 +2059,8 @@ export async function listRecentValidationRuns(input?: { limit?: number; page?: 
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * limit;
   const to = from + limit - 1;
-  const supabase = createAdminClient();
-  const { data, error, count } = await supabase
+  const db = createAdminClient();
+  const { data, error, count } = await db
     .from("validation_runs")
     .select(
       "id, hostname, normalized_url, tranco_rank, rank_band, trigger_mode, status, scan_id, finding_count, reviewed_finding_count, average_agreement_score, error_message, created_at, started_at, completed_at",
