@@ -2,8 +2,12 @@ import { lookup } from "node:dns/promises";
 import { z } from "zod";
 
 const webCheckSchema = z.object({
+  BETTER_AUTH_SECRET: z.string().min(32),
   DATABASE_URL: z.string().min(1),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: z.string().optional(),
   REDIS_URL: z.string().url(),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_BUCKET: z.string().min(1),
@@ -72,6 +76,7 @@ async function main() {
 
   const values = result.data;
   const storageBucket = getStorageBucket(process.env);
+  const googleEnabled = String(process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED ?? "").trim().toLowerCase() === "true";
 
   if (!storageBucket) {
     fail("storage bucket", "Set S3_BUCKET.");
@@ -79,8 +84,21 @@ async function main() {
     return;
   }
 
+  if (googleEnabled && !values.GOOGLE_CLIENT_ID) {
+    fail("google client id", "Set GOOGLE_CLIENT_ID when NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true.");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (googleEnabled && !values.GOOGLE_CLIENT_SECRET) {
+    fail("google client secret", "Set GOOGLE_CLIENT_SECRET when NEXT_PUBLIC_AUTH_GOOGLE_ENABLED=true.");
+    process.exitCode = 1;
+    return;
+  }
+
   pass("web env", "All required CertScore web environment variables are present.");
   info("expected services", "PostgreSQL, Redis, and S3-compatible storage should be reachable.");
+  info("better auth", googleEnabled ? "Email/password and Google OAuth env is configured." : "Email/password auth env is configured.");
   info("app url", new URL(values.NEXT_PUBLIC_APP_URL).origin);
   info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);

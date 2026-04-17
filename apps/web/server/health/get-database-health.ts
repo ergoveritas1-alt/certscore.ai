@@ -1,6 +1,7 @@
 "use server";
 
 import { hasDatabaseEnv, queryOne } from "@website-signal-risk-scanner/db";
+import { BETTER_AUTH_REQUIRED_TABLES } from "../better-auth/constants";
 
 export type DatabaseHealthStatus = {
   checks: {
@@ -22,13 +23,7 @@ export type DatabaseHealthStatus = {
   timestamp: string;
 };
 
-const REQUIRED_AUTH_TABLES = [
-  "password_auth_rate_limits",
-  "password_auth_reset_tokens",
-  "password_auth_sessions",
-  "password_auth_users",
-  "password_auth_verification_tokens"
-] as const;
+const REQUIRED_AUTH_TABLES = BETTER_AUTH_REQUIRED_TABLES;
 
 export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
   const databaseEnv = hasDatabaseEnv();
