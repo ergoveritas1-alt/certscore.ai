@@ -1,4 +1,4 @@
-import { createAdminClient } from "../packages/db/dist/supabase-client.js";
+import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { buildUnifiedFindingDisplayPackets, getUnifiedFindingCategoryRelation } from "../apps/web/lib/scans/unified-findings";
 import { buildChildContextFallbackEvidence } from "../apps/web/lib/scans/signal-fallback-evidence";
 
@@ -165,8 +165,8 @@ async function main() {
     throw new Error("Usage: verify-canonical-findings-scan.ts <scan-id>");
   }
 
-  const supabase = createAdminClient(process.env);
-  const { data: snapshotRow, error: snapshotError } = await supabase
+  const db = createAdminClient(process.env);
+  const { data: snapshotRow, error: snapshotError } = await db
     .from("scan_snapshots")
     .select(
       [
@@ -191,7 +191,7 @@ async function main() {
   }
 
   const snapshot = (snapshotRow ?? null) as Record<string, unknown> | null;
-  const { data: signals, error: signalsError } = await supabase
+  const { data: signals, error: signalsError } = await db
     .from("scan_signals")
     .select("signal_key")
     .eq("scan_id", scanId);
