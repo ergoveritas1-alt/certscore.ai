@@ -299,6 +299,19 @@ export type OrganizationValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+export type UsageCounterRow = {
+  id: string;
+  value: number;
+};
+
+export type QueuedFullScanInsert = {
+  domainId: string;
+  organizationId: string;
+  pagesRequested: number;
+  scanConfigJson: Record<string, unknown>;
+  submittedByUserId: string;
+};
+
 type QueryErrorLike = {
   code?: string;
   details?: string;
@@ -421,6 +434,126 @@ export async function loadScanCoreRecord(input: {
     scan: scanRow,
     scanOrganizationId
   };
+}
+
+export async function loadUsageCounter(input: {
+  metricKey: string;
+  organizationId: string;
+  periodEnd: string;
+  periodStart: string;
+}): Promise<UsageCounterRow | null> {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("usage_counters")
+    .select("id, value")
+    .eq("organization_id", input.organizationId)
+    .eq("metric_key", input.metricKey)
+    .eq("period_start", input.periodStart)
+    .eq("period_end", input.periodEnd)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not verify scan limits: ${error.message}`);
+  }
+
+  return (data as UsageCounterRow | null) ?? null;
+}
+
+export async function upsertUsageCounter(input: {
+  counterId?: string | null;
+  metricKey: string;
+  organizationId: string;
+  periodEnd: string;
+  periodStart: string;
+  value: number;
+}) {
+  const db = createDatabaseClient();
+
+  if (input.counterId) {
+    const { error } = await db.from("usage_counters").update({ value: input.value }).eq("id", input.counterId);
+
+    if (error) {
+      throw new Error(`Scan created but usage tracking failed: ${error.message}`);
+    }
+
+    return;
+  }
+
+  const { error } = await db.from("usage_counters").insert({
+    organization_id: input.organizationId,
+    metric_key: input.metricKey,
+    period_start: input.periodStart,
+    period_end: input.periodEnd,
+    value: input.value
+  });
+
+  if (error) {
+    throw new Error(`Scan created but usage tracking failed: ${error.message}`);
+  }
+}
+
+export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("scans")
+    .insert({
+      organization_id: input.organizationId,
+      domain_id: input.domainId,
+      submitted_by_user_id: input.submittedByUserId,
+      scan_type: "full",
+      status: "queued",
+      pages_requested: input.pagesRequested,
+      pages_scanned: 0,
+      scan_config_json: input.scanConfigJson
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Could not create full scan: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return { id: data.id as string };
+}
+
+export async function insertQueuedFullScanEvent(input: {
+  domainId: string;
+  eventType: string;
+  message: string;
+  metadataJson: Record<string, unknown>;
+  organizationId: string;
+  scanId: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db.from("scan_events").insert({
+    scan_id: input.scanId,
+    domain_id: input.domainId,
+    organization_id: input.organizationId,
+    event_type: input.eventType,
+    message: input.message,
+    metadata_json: input.metadataJson
+  });
+
+  if (error) {
+    throw new Error(`Scan created but event logging failed: ${error.message}`);
+  }
+}
+
+export async function updateDomainLatestScan(input: {
+  domainId: string;
+  organizationId: string;
+  scanId: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db
+    .from("domains")
+    .update({ latest_scan_id: input.scanId })
+    .eq("id", input.domainId)
+    .eq("organization_id", input.organizationId);
+
+  if (error) {
+    throw new Error(`Scan created but latest scan update failed: ${error.message}`);
+  }
 }
 
 export async function loadScanDetailArtifacts(scanId: string): Promise<{
