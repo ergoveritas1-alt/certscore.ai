@@ -71,8 +71,8 @@ export default async function SettingsPage() {
           <div className="space-y-2">
             <p>
               App auth and database:{" "}
-              <span className={systemHealth.auth.supabaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
-                {systemHealth.auth.supabaseConnected ? "connected" : "connection issue"}
+              <span className={systemHealth.auth.databaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
+                {systemHealth.auth.databaseConnected ? "connected" : "connection issue"}
               </span>
             </p>
             <p>
@@ -107,8 +107,8 @@ export default async function SettingsPage() {
               </span>
             </p>
             <p>
-              Live counts: {systemHealth.supabase.counts.organizations} orgs · {systemHealth.supabase.counts.domains} domains ·{" "}
-              {systemHealth.supabase.counts.scans} scans
+              Live counts: {systemHealth.database.counts.organizations} orgs · {systemHealth.database.counts.domains} domains ·{" "}
+              {systemHealth.database.counts.scans} scans
             </p>
           </div>
         </CardContent>

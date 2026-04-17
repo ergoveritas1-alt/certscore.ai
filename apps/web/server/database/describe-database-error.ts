@@ -1,12 +1,12 @@
-type SupabaseErrorLike = {
+type DatabaseErrorLike = {
   code?: string | null;
   details?: string | null;
   hint?: string | null;
   message?: string | null;
 };
 
-function getConfiguredSupabaseHost() {
-  const value = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+function getConfiguredDatabaseHost() {
+  const value = process.env.DATABASE_URL?.trim();
   if (!value) {
     return null;
   }
@@ -37,7 +37,7 @@ function flattenErrorText(error: unknown) {
   }
 
   if (error && typeof error === "object") {
-    const record = error as SupabaseErrorLike;
+    const record = error as DatabaseErrorLike;
     append(record.message);
     append(record.details);
     append(record.hint);
@@ -47,37 +47,37 @@ function flattenErrorText(error: unknown) {
   return values.join("\n");
 }
 
-export function describeSupabaseError(error: unknown) {
+export function describeDatabaseError(error: unknown) {
   const combined = flattenErrorText(error);
-  const configuredHost = getConfiguredSupabaseHost();
+  const configuredHost = getConfiguredDatabaseHost();
 
   if (/ENOTFOUND/i.test(combined)) {
     const hostClause = configuredHost ? ` (${configuredHost})` : "";
-    return `Supabase host could not be resolved${hostClause}. Check NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local and point localhost at a live dev project.`;
+    return `Database host could not be resolved${hostClause}. Check DATABASE_URL and confirm the Postgres host is reachable from this machine.`;
   }
 
   if (/ECONNREFUSED|connection refused/i.test(combined)) {
     const hostClause = configuredHost ? ` (${configuredHost})` : "";
-    return `Supabase refused the connection${hostClause}. Ensure the configured project or local Supabase API is running and reachable.`;
+    return `Database refused the connection${hostClause}. Ensure the configured Postgres instance is running and reachable.`;
   }
 
   if (/ETIMEDOUT|timed out/i.test(combined)) {
     const hostClause = configuredHost ? ` (${configuredHost})` : "";
-    return `Supabase timed out${hostClause}. Confirm network access and that the configured project is reachable from this machine.`;
+    return `Database timed out${hostClause}. Confirm network access and that the configured Postgres instance is reachable from this machine.`;
   }
 
   const fallbackMessage = readErrorPart(
-    error instanceof Error ? error.message : error && typeof error === "object" ? (error as SupabaseErrorLike).message : null
+    error instanceof Error ? error.message : error && typeof error === "object" ? (error as DatabaseErrorLike).message : null
   );
-  const details = readErrorPart(error && typeof error === "object" ? (error as SupabaseErrorLike).details : null);
+  const details = readErrorPart(error && typeof error === "object" ? (error as DatabaseErrorLike).details : null);
 
   if (fallbackMessage && details && details !== fallbackMessage) {
     return `${fallbackMessage} ${details}`;
   }
 
-  return fallbackMessage ?? "Unknown Supabase error.";
+  return fallbackMessage ?? "Unknown database error.";
 }
 
-export function buildSupabaseOperationError(operation: string, error: unknown) {
-  return new Error(`${operation}: ${describeSupabaseError(error)}`);
+export function buildDatabaseOperationError(operation: string, error: unknown) {
+  return new Error(`${operation}: ${describeDatabaseError(error)}`);
 }

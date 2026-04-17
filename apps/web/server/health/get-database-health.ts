@@ -1,13 +1,12 @@
 "use server";
 
-import { hasDatabaseEnv, query, queryOne } from "@website-signal-risk-scanner/db";
+import { hasDatabaseEnv, queryOne } from "@website-signal-risk-scanner/db";
 
-export type SupabaseHealthStatus = {
+export type DatabaseHealthStatus = {
   checks: {
-    adminEnv: boolean;
     authSchema: boolean;
     database: boolean;
-    publicEnv: boolean;
+    env: boolean;
   };
   counts: {
     domains: number;
@@ -31,7 +30,7 @@ const REQUIRED_AUTH_TABLES = [
   "password_auth_verification_tokens"
 ] as const;
 
-export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
+export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
   const databaseEnv = hasDatabaseEnv();
   const timestamp = new Date().toISOString();
 
@@ -41,8 +40,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
       timestamp,
       error: "Missing required database environment variables.",
       checks: {
-        publicEnv: false,
-        adminEnv: databaseEnv,
+        env: false,
         authSchema: false,
         database: false
       },
@@ -60,9 +58,9 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
 
   try {
     const [organizationCount, domainCount, scanCount, ...tableChecks] = await Promise.all([
-      queryOne<{ count: string }>('select count(*)::text as count from public.organizations', [], { readOnly: true }),
-      queryOne<{ count: string }>('select count(*)::text as count from public.domains', [], { readOnly: true }),
-      queryOne<{ count: string }>('select count(*)::text as count from public.scans', [], { readOnly: true }),
+      queryOne<{ count: string }>("select count(*)::text as count from public.organizations", [], { readOnly: true }),
+      queryOne<{ count: string }>("select count(*)::text as count from public.domains", [], { readOnly: true }),
+      queryOne<{ count: string }>("select count(*)::text as count from public.scans", [], { readOnly: true }),
       ...REQUIRED_AUTH_TABLES.map((tableName) =>
         queryOne<{ exists: boolean }>(
           `
@@ -87,8 +85,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
       timestamp,
       error: null,
       checks: {
-        publicEnv: false,
-        adminEnv: true,
+        env: true,
         authSchema: missingTables.length === 0,
         database: true
       },
@@ -110,8 +107,7 @@ export async function getSupabaseHealth(): Promise<SupabaseHealthStatus> {
       timestamp,
       error: errorMessage,
       checks: {
-        publicEnv: false,
-        adminEnv: true,
+        env: true,
         authSchema: false,
         database: false
       },

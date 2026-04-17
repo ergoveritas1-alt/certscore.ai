@@ -17,7 +17,7 @@ import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { createHash } from "node:crypto";
 import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
-import { buildSupabaseOperationError } from "../supabase/describe-supabase-error";
+import { buildDatabaseOperationError } from "../database/describe-database-error";
 
 type DomainRow = {
   id: string;
@@ -474,7 +474,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
     .maybeSingle();
 
   if (lookupError) {
-    throw buildSupabaseOperationError("Failed to load preview domain", lookupError);
+    throw buildDatabaseOperationError("Failed to load preview domain", lookupError);
   }
 
   if (existingDomain) {
@@ -491,7 +491,7 @@ export async function findOrCreateAnonymousPreviewDomain(hostname: string, norma
     .single();
 
   if (error || !createdDomain) {
-    throw buildSupabaseOperationError("Failed to create preview domain", error);
+    throw buildDatabaseOperationError("Failed to create preview domain", error);
   }
 
   return createdDomain as DomainRow;
@@ -526,7 +526,7 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
     .single();
 
   if (error || !scan) {
-    throw buildSupabaseOperationError("Failed to create preview scan", error);
+    throw buildDatabaseOperationError("Failed to create preview scan", error);
   }
 
   await insertScanEvent({
@@ -562,7 +562,7 @@ export async function insertScanEvent(input: {
   });
 
   if (error) {
-    throw buildSupabaseOperationError("Failed to create scan event", error);
+    throw buildDatabaseOperationError("Failed to create scan event", error);
   }
 }
 

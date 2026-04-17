@@ -35,7 +35,7 @@ function getRequestOrigin(headerStore: Headers) {
   return `${protocol}://${host}`;
 }
 
-function isMissingSupabaseUserError(message: string) {
+function isMissingPasswordUserError(message: string) {
   const normalized = message.toLowerCase();
   return normalized.includes("user not found");
 }
@@ -81,7 +81,7 @@ export async function requestPasswordResetAction(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    if (!isMissingSupabaseUserError(message)) {
+    if (!isMissingPasswordUserError(message)) {
       console.error("requestPasswordResetAction failed", {
         email: normalizeEmail(values.email),
         error: message

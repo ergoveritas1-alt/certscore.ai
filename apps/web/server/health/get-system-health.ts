@@ -2,7 +2,7 @@ import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { hasS3Env, queryOne } from "@website-signal-risk-scanner/db";
 import { isGoogleAuthEnabled } from "../../lib/env";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
-import { getSupabaseHealth } from "./get-supabase-health";
+import { getDatabaseHealth } from "./get-database-health";
 import { checkStorageBucketExists, getStorageBucketName } from "../storage/s3";
 
 type BucketStatus = {
@@ -12,8 +12,8 @@ type BucketStatus = {
 
 export type SystemHealthStatus = {
   auth: {
+    databaseConnected: boolean;
     googleEnabled: boolean;
-    supabaseConnected: boolean;
   };
   queue: {
     enabled: boolean;
@@ -22,7 +22,7 @@ export type SystemHealthStatus = {
   storage: {
     artifacts: BucketStatus;
   };
-  supabase: Awaited<ReturnType<typeof getSupabaseHealth>>;
+  database: Awaited<ReturnType<typeof getDatabaseHealth>>;
   worker: {
     lastActivityAt: string | null;
     lastEventType: string | null;
@@ -40,24 +40,24 @@ function isRecent(value: string | null, windowMs = 30 * 60 * 1000) {
 }
 
 export async function getSystemHealth(): Promise<SystemHealthStatus> {
-  const supabase = await getSupabaseHealth();
+  const database = await getDatabaseHealth();
   const queue = await getFullScanQueueAvailability();
   const googleEnabled = isGoogleAuthEnabled();
   const bucketNames = {
     artifacts: process.env.S3_BUCKET?.trim() || "scan-artifacts"
   };
 
-  if (!supabase.checks.adminEnv) {
+  if (!database.checks.env) {
     return {
       auth: {
+        databaseConnected: false,
         googleEnabled,
-        supabaseConnected: false
       },
       queue,
       storage: {
         artifacts: { name: bucketNames.artifacts, exists: false }
       },
-      supabase,
+      database,
       worker: {
         lastActivityAt: null,
         lastEventType: null,
@@ -94,13 +94,13 @@ export async function getSystemHealth(): Promise<SystemHealthStatus> {
   const lastEventType = workerEvent?.event_type ?? null;
 
   return {
-    auth: {
+      auth: {
+      databaseConnected: database.ok,
       googleEnabled,
-      supabaseConnected: supabase.ok
     },
     queue,
     storage: bucketState,
-    supabase,
+    database,
     worker: {
       lastActivityAt,
       lastEventType,

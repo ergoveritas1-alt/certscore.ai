@@ -1,5 +1,5 @@
 import { hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
-import { getSupabaseHealth } from "../server/health/get-supabase-health";
+import { getDatabaseHealth } from "../server/health/get-database-health";
 
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
@@ -16,7 +16,7 @@ async function main() {
     return;
   }
 
-  const health = await getSupabaseHealth();
+  const health = await getDatabaseHealth();
 
   if (!health.ok) {
     const missingTableMessage =

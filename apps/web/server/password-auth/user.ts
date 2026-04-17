@@ -79,7 +79,7 @@ export async function findPasswordAuthUserByEmail(email: string) {
   return (data as PasswordAuthUserRecord | null) ?? null;
 }
 
-export async function getSupabaseAuthProvidersByUserId(userId: string) {
+export async function getAuthProvidersByUserId(userId: string) {
   const supabase = createAdminClient();
   const [appUserResult, passwordUserResult] = await Promise.all([
     supabase.from("users").select("auth_provider").eq("id", userId).maybeSingle(),
