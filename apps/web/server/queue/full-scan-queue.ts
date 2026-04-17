@@ -116,7 +116,7 @@ export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHe
   const eventHost = getLegacyHeartbeatHost(eventRow?.metadata_json);
 
   if (eventHeartbeatAt) {
-    return resolveFullScanWorkerHeartbeatSnapshot({
+    return resolveScannerServiceHeartbeatSnapshot({
       heartbeatErrorMessage: null,
       eventErrorMessage,
       eventHeartbeatAt,
@@ -140,23 +140,6 @@ export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHe
     tableHeartbeatAt,
     tableHost
   });
-}
-
-/** @deprecated Use getLastScannerServiceHeartbeat instead. */
-export async function getLastFullScanWorkerHeartbeat(): Promise<ScannerServiceHeartbeatSnapshot> {
-  return getLastScannerServiceHeartbeat();
-}
-
-/** @deprecated Use resolveScannerServiceHeartbeatSnapshot instead. */
-export function resolveFullScanWorkerHeartbeatSnapshot(input: {
-  heartbeatErrorMessage?: string | null;
-  eventErrorMessage?: string | null;
-  eventHeartbeatAt: string | null;
-  eventHost: string | null;
-  tableHeartbeatAt: string | null;
-  tableHost: string | null;
-}): ScannerServiceHeartbeatSnapshot {
-  return resolveScannerServiceHeartbeatSnapshot(input);
 }
 
 export async function getFullScanQueueAvailability() {
