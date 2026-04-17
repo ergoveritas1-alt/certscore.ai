@@ -84,18 +84,18 @@ Required for the web app:
 Required for the validation runtime in `WC01`:
 
 - `DATABASE_URL`
-- `REDIS_URL`
-- `S3_BUCKET`
-- `S3_REGION`
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
+- `VALIDATION_REDIS_URL` or `REDIS_URL`
+- `OPENAI_API_KEY`
 
 Optional but recommended:
 
 - `WORKER_CONCURRENCY`
 - `PLAYWRIGHT_BROWSERS_PATH`
-- `RESEND_API_KEY`
-- `OPENAI_API_KEY`
+- `VALIDATION_OPENAI_MODEL`
+- `VALIDATION_NANO_MODEL`
+- `WEB_BOT_AUTH_ENABLED`
+- `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
+- `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
 
 Compatibility note:
 
@@ -125,7 +125,9 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - local database and auth secrets should come from the dev environment
    - production secrets should exist only in Vercel / worker deployment settings
 8. Create the S3-compatible bucket referenced by `S3_BUCKET`.
-9. Provision a Redis instance and set `REDIS_URL`.
+9. Provision Redis for app queues:
+   - set `REDIS_URL` for the web runtime
+   - set `VALIDATION_REDIS_URL` for the validation worker, or let it fall back to `REDIS_URL` if both runtimes intentionally share one Redis instance
 10. Install Playwright Chromium for validation and shared scan-core tooling:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
    - `pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium`
@@ -231,7 +233,8 @@ Common commands:
 ### Redis
 
 - create a Redis database
-- set `REDIS_URL` in any `WC01` runtime that still requires Redis
+- set `REDIS_URL` for the web runtime
+- set `VALIDATION_REDIS_URL` for the validation worker, or allow it to fall back to `REDIS_URL` when sharing one Redis instance is intentional
 
 ### Scheduler
 
