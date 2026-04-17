@@ -33,7 +33,7 @@ function getRedisConnection() {
 
   const redisUrl = getConfiguredValidationRedisUrl();
   if (!redisUrl) {
-    throw new Error("Validation Redis is not configured.");
+    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL or REDIS_URL.");
   }
 
   connection = createRedisConnection(redisUrl);
@@ -118,7 +118,7 @@ export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.
   } catch {
     return {
       enabled: false,
-      reason: "Validation queueing is unavailable because VALIDATION_REDIS_URL is invalid."
+      reason: "Validation queueing is unavailable because the configured validation Redis URL is invalid."
     } as const;
   }
 

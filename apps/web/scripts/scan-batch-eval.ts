@@ -77,7 +77,7 @@ function createRedisConnection(redisUrl: string): ConnectionOptions {
 function getRedisConnection() {
   const redisUrl = getConfiguredValidationRedisUrl();
   if (!redisUrl) {
-    throw new Error("Validation Redis is not configured.");
+    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL or REDIS_URL.");
   }
 
   return createRedisConnection(redisUrl);
