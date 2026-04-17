@@ -1,6 +1,13 @@
 "use server";
 
 import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import {
+  LEGACY_CHANGE_EVENT_TYPES,
+  isMissingComplianceChangeEventsTable,
+  type LegacyScanEventRow
+} from "../changes/legacy-change-events";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 
 export type ScanDetailQueryRow = {
@@ -136,9 +143,199 @@ export type ScanValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+export type OrganizationScanQueryRow = {
+  completed_at: string | null;
+  created_at: string;
+  domain_id: string | null;
+  id: string;
+  pages_requested: number;
+  pages_scanned: number;
+  scan_type: string;
+  started_at: string | null;
+  status: string;
+};
+
+export type OrganizationScanDomainRow = {
+  hostname: string;
+  id: string;
+  last_scanned_at: string | null;
+  latest_scan_id: string | null;
+};
+
+export type OrganizationLatestDomainScanRow = {
+  id: string;
+  status: string;
+};
+
+export type OrganizationDomainCompletedScanRow = {
+  completed_at: string | null;
+  domain_id: string | null;
+};
+
+export type OrganizationScanSnapshotRow = {
+  access_posture_class: AccessPostureClass | null;
+  accessibility_score: number | null;
+  auth_wall_detected: boolean | null;
+  blocked_flag: boolean | null;
+  captcha_flag: boolean | null;
+  certscore_overall: number | null;
+  cmp_vendor_name: string | null;
+  consent_score: number | null;
+  cookie_banner_present: boolean | null;
+  highest_successful_tier: ScanExecutionTier | null;
+  homepage_fetch_http_status: number | null;
+  homepage_fetch_status: string | null;
+  privacy_score: number | null;
+  recoverable_finding_classes: RecoverableFindingClass[] | null;
+  regulatory_exposure_score: number | null;
+  report_finding_count: number | null;
+  robots_allowed: boolean | null;
+  robots_fetch_http_status: number | null;
+  robots_fetch_status: string | null;
+  scan_id: string;
+  scan_outcome: string | null;
+  stop_reason_code: string | null;
+  stop_reason_detail: string | null;
+  stop_reason_http_status: number | null;
+  stop_reason_label: string | null;
+  stop_tier: ScanExecutionTier | null;
+  total_signals: number;
+};
+
+export type OrganizationRuntimeArtifactRow = {
+  consent_audit_completed: boolean | null;
+  consent_reject_interaction_succeeded: boolean | null;
+  consent_reject_reduced_third_party_cookies: boolean | null;
+  consent_reject_reduced_tracking: boolean | null;
+  hybrid_runtime_evidence?: Record<string, unknown> | null;
+  scan_id: string;
+};
+
+export type OrganizationChangeSummaryRow = {
+  event_type: string;
+  scan_id_current: string;
+};
+
+export type OrganizationSignalCountRow = {
+  scan_id: string;
+};
+
+export type OrganizationValidationRunSummaryRow = {
+  created_at: string;
+  finding_count: number;
+  id: string;
+  scan_id: string;
+};
+
+export type OrganizationScanDiagnosticEventRow = {
+  created_at: string;
+  event_type: string;
+  message: string;
+  metadata_json: Record<string, unknown> | null;
+  scan_id: string;
+};
+
+export type OrganizationPolicyEnrichmentRow = Record<string, unknown> & {
+  scan_id?: string;
+};
+
+export type OrganizationValidationFindingSummaryRow = {
+  category: string | null;
+  description: string | null;
+  evidence_json: Record<string, unknown> | null;
+  finding_family: string | null;
+  finding_scope: string | null;
+  finding_source: string | null;
+  finding_subject: string | null;
+  id: string;
+  page_url: string | null;
+  rule_key: string;
+  severity: string | null;
+  subtype: string | null;
+  title: string;
+  validation_run_id: string;
+  validation_verdicts:
+    | {
+        agreement_score: number | null;
+        confidence: number | null;
+        created_at: string | null;
+        evidence_json: Record<string, unknown> | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }
+    | Array<{
+        agreement_score: number | null;
+        confidence: number | null;
+        created_at: string | null;
+        evidence_json: Record<string, unknown> | null;
+        model: string | null;
+        prompt_version: string | null;
+        rationale: string | null;
+        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+        system_confidence_explanation: string | null;
+        system_confidence_score: number | null;
+        verdict: "supported" | "inconclusive" | "not_supported" | null;
+      }>
+    | null;
+};
+
+export type OrganizationValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  created_at: string | null;
+  evidence_json: Record<string, unknown> | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
+type QueryErrorLike = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+} | null;
+
+const CHANGE_EVENT_BATCH_SIZE = 50;
+
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+}
+
+function isMissingLastScannedAtColumn(error: { message?: string } | null) {
+  return Boolean(error?.message?.includes("last_scanned_at"));
+}
+
+function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
+  const message = `${error?.message ?? ""}`.toLowerCase();
+  return (
+    `${error?.code ?? ""}` === "42703" ||
+    message.includes("access_posture_class") ||
+    message.includes("highest_successful_tier") ||
+    message.includes("stop_tier") ||
+    message.includes("recoverable_finding_classes")
+  );
+}
+
+function chunkValues<T>(values: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 export async function loadScanCoreRecord(input: {
@@ -450,3 +647,373 @@ export async function loadPolicyEvidenceByHash(policyEvidenceHashes: string[]): 
       .map((row) => [row.evidence_hash, row.snippet] as const)
   );
 }
+
+export async function loadOrganizationScanPageData(
+  organizationId: string,
+  input?: {
+    from?: number;
+    to?: number;
+    limit?: number;
+    includeCount?: boolean;
+  }
+): Promise<{
+  changeSummaries: OrganizationChangeSummaryRow[];
+  changeSummariesError: QueryErrorLike;
+  count: number | null;
+  diagnosticEvents: OrganizationScanDiagnosticEventRow[];
+  domainCompletedScans: OrganizationDomainCompletedScanRow[];
+  domains: OrganizationScanDomainRow[];
+  latestDomainScans: OrganizationLatestDomainScanRow[];
+  policyEnrichmentRows: OrganizationPolicyEnrichmentRow[];
+  resolvedSnapshots: OrganizationScanSnapshotRow[];
+  runtimeArtifacts: OrganizationRuntimeArtifactRow[];
+  scanRows: OrganizationScanQueryRow[];
+  signalCountMap: Map<string, number>;
+  summaryScanIds: string[];
+  validationFindingRows: OrganizationValidationFindingSummaryRow[];
+  validationRuns: OrganizationValidationRunSummaryRow[];
+  verdictByFindingId: Map<string, OrganizationValidationVerdictRow>;
+}> {
+  const db = createDatabaseClient();
+  let query = db
+    .from("scans")
+    .select(
+      "id, domain_id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at",
+      input?.includeCount ? { count: "exact" } : undefined
+    )
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
+
+  if (typeof input?.from === "number" && typeof input?.to === "number") {
+    query = query.range(input.from, input.to);
+  } else if (typeof input?.limit === "number") {
+    query = query.limit(input.limit);
+  }
+
+  const { data: scans, error, count } = await query;
+
+  if (error) {
+    throw new Error(`Failed to load organization scans: ${error.message}`);
+  }
+
+  const scanRows = (scans ?? []) as OrganizationScanQueryRow[];
+  const scanIds = scanRows.map((scan) => scan.id);
+  const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
+  const summaryScanIds = Array.from(
+    scanRows.reduce((ids, scan) => {
+      const key = scan.domain_id ?? `scan:${scan.id}`;
+      if (!ids.has(key)) {
+        ids.set(key, scan.id);
+      }
+      return ids;
+    }, new Map<string, string>()).values()
+  );
+
+  const domainsWithLastScannedAtPromise = domainIds.length
+    ? db
+        .from("domains")
+        .select("id, hostname, last_scanned_at, latest_scan_id")
+        .eq("organization_id", organizationId)
+        .in("id", domainIds)
+    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null });
+  const domainsWithoutLastScannedAtPromise = domainIds.length
+    ? db
+        .from("domains")
+        .select("id, hostname, latest_scan_id")
+        .eq("organization_id", organizationId)
+        .in("id", domainIds)
+    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null });
+  const snapshotsPromise = summaryScanIds.length
+    ? db
+        .from("scan_snapshots")
+        .select(
+          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
+        )
+        .in("scan_id", summaryScanIds)
+    : Promise.resolve({ data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike });
+  const snapshotsFallbackPromise = summaryScanIds.length
+    ? db
+        .from("scan_snapshots")
+        .select(
+          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
+        )
+        .in("scan_id", summaryScanIds)
+    : Promise.resolve({ data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike });
+  const runtimeArtifactsPromise = summaryScanIds.length
+    ? db
+        .from("scan_runtime_artifacts")
+        .select(
+          "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
+        )
+        .in("scan_id", summaryScanIds)
+    : Promise.resolve({ data: [] as OrganizationRuntimeArtifactRow[], error: null as QueryErrorLike });
+
+  const [
+    { data: domainsWithLastScannedAt, error: domainsError },
+    { data: snapshots, error: snapshotsError },
+    { data: runtimeArtifacts, error: runtimeArtifactsError }
+  ] = await Promise.all([domainsWithLastScannedAtPromise, snapshotsPromise, runtimeArtifactsPromise]);
+
+  let domains = domainsWithLastScannedAt;
+  if (domainsError && isMissingLastScannedAtColumn(domainsError)) {
+    const fallback = await domainsWithoutLastScannedAtPromise;
+    domains = (fallback.data ?? []).map((domain) => ({
+      ...domain,
+      last_scanned_at: null
+    }));
+  } else if (domainsError) {
+    throw new Error(`Failed to load organization scans: ${domainsError.message}`);
+  }
+
+  let resolvedSnapshots = snapshots;
+  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
+    const fallback = await snapshotsFallbackPromise;
+    if (fallback.error) {
+      throw new Error(`Failed to load organization scans: ${fallback.error.message}`);
+    }
+    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
+      ...(row as OrganizationScanSnapshotRow),
+      access_posture_class: null,
+      highest_successful_tier: null,
+      stop_tier: null,
+      recoverable_finding_classes: []
+    }));
+  } else if (snapshotsError) {
+    throw new Error(`Failed to load organization scans: ${snapshotsError.message}`);
+  }
+
+  if (runtimeArtifactsError) {
+    throw new Error(`Failed to load organization scans: ${runtimeArtifactsError.message}`);
+  }
+
+  const changeSummaries: OrganizationChangeSummaryRow[] = [];
+  let changeSummariesError: QueryErrorLike = null;
+
+  if (summaryScanIds.length) {
+    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await db
+        .from("compliance_change_events")
+        .select("scan_id_current, event_type")
+        .eq("organization_id", organizationId)
+        .in("scan_id_current", scanIdBatch);
+
+      if (error) {
+        changeSummariesError = error;
+        break;
+      }
+
+      changeSummaries.push(...((data ?? []) as OrganizationChangeSummaryRow[]));
+    }
+  }
+
+  const domainRows = (domains ?? []) as OrganizationScanDomainRow[];
+  const latestDomainScanIds = [...new Set(domainRows.flatMap((domain) => (domain.latest_scan_id ? [domain.latest_scan_id] : [])))];
+  const { data: domainCompletedScans, error: domainCompletedScansError } = domainIds.length
+    ? await db
+        .from("scans")
+        .select("domain_id, completed_at")
+        .eq("organization_id", organizationId)
+        .eq("status", "completed")
+        .not("completed_at", "is", null)
+        .in("domain_id", domainIds)
+        .order("completed_at", { ascending: false })
+    : { data: [] as OrganizationDomainCompletedScanRow[], error: null };
+  const { data: latestDomainScans, error: latestDomainScansError } = latestDomainScanIds.length
+    ? await db.from("scans").select("id, status").in("id", latestDomainScanIds)
+    : { data: [] as OrganizationLatestDomainScanRow[], error: null };
+
+  if (domainCompletedScansError) {
+    throw new Error(`Failed to load organization scans: ${domainCompletedScansError.message}`);
+  }
+
+  if (latestDomainScansError) {
+    throw new Error(`Failed to load organization scans: ${latestDomainScansError.message}`);
+  }
+
+  const snapshotMap = new Map(((resolvedSnapshots ?? []) as OrganizationScanSnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
+  const zeroSignalScanIds = summaryScanIds.filter((scanId) => {
+    const totalSignals = snapshotMap.get(scanId)?.total_signals ?? null;
+    return totalSignals === null || totalSignals === 0;
+  });
+  const signalCountMap = new Map<string, number>();
+  if (zeroSignalScanIds.length) {
+    for (const scanIdBatch of chunkValues(zeroSignalScanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data: signalCountRows, error: signalCountError } = await db
+        .from("scan_signals")
+        .select("scan_id")
+        .eq("population_source", "scanner")
+        .in("scan_id", scanIdBatch);
+
+      if (signalCountError) {
+        throw new Error(`Failed to load organization scans: ${signalCountError.message}`);
+      }
+
+      for (const row of (signalCountRows ?? []) as OrganizationSignalCountRow[]) {
+        signalCountMap.set(row.scan_id, (signalCountMap.get(row.scan_id) ?? 0) + 1);
+      }
+    }
+  }
+
+  const validationRuns: OrganizationValidationRunSummaryRow[] = [];
+  if (summaryScanIds.length) {
+    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data: validationRunRows, error: validationRunsError } = await db
+        .from("validation_runs")
+        .select("id, scan_id, finding_count, created_at")
+        .in("scan_id", scanIdBatch)
+        .order("created_at", { ascending: false });
+
+      if (validationRunsError) {
+        throw new Error(`Failed to load organization scans: ${validationRunsError.message}`);
+      }
+
+      validationRuns.push(...((validationRunRows ?? []) as OrganizationValidationRunSummaryRow[]));
+    }
+  }
+
+  const diagnosticEvents: OrganizationScanDiagnosticEventRow[] = [];
+  if (summaryScanIds.length) {
+    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
+        .from("scan_events")
+        .select("scan_id, event_type, message, metadata_json, created_at")
+        .in("scan_id", scanIdBatch)
+        .order("created_at", { ascending: true });
+
+      if (diagnosticEventsError) {
+        throw new Error(`Failed to load organization scans: ${diagnosticEventsError.message}`);
+      }
+
+      diagnosticEvents.push(...((diagnosticEventRows ?? []) as OrganizationScanDiagnosticEventRow[]));
+    }
+  }
+
+  const policyEnrichmentRows: OrganizationPolicyEnrichmentRow[] = [];
+  if (summaryScanIds.length) {
+    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data: policyRows, error: policyRowsError } = await db
+        .from("policy_enrichment")
+        .select("*")
+        .in("scan_id", scanIdBatch)
+        .order("created_at", { ascending: true });
+
+      if (policyRowsError) {
+        throw new Error(`Failed to load organization scans: ${policyRowsError.message}`);
+      }
+
+      policyEnrichmentRows.push(...((policyRows ?? []) as OrganizationPolicyEnrichmentRow[]));
+    }
+  }
+
+  const latestValidationRunByScanId = new Map<string, string>();
+  for (const validationRun of validationRuns) {
+    if (!latestValidationRunByScanId.has(validationRun.scan_id)) {
+      latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
+    }
+  }
+
+  const latestValidationRunIds = [
+    ...new Set(
+      [...latestValidationRunByScanId.values()].filter(
+        (validationRunId): validationRunId is string =>
+          typeof validationRunId === "string" && validationRunId.trim().length > 0
+      )
+    )
+  ];
+
+  const validationFindingRows: OrganizationValidationFindingSummaryRow[] = [];
+  if (latestValidationRunIds.length) {
+    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await db
+        .from("validation_run_findings")
+        .select(
+          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
+        )
+        .in("validation_run_id", validationRunIdBatch);
+
+      if (error) {
+        throw new Error(`Failed to load organization scans: ${error.message}`);
+      }
+
+      validationFindingRows.push(...((data ?? []) as OrganizationValidationFindingSummaryRow[]));
+    }
+  }
+
+  const validationFindingIds = validationFindingRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, OrganizationValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const { data, error } = await db
+        .from("validation_verdicts")
+        .select(
+          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
+        )
+        .in("validation_run_finding_id", findingIdBatch)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to load organization scan verdicts: ${error.message}`);
+      }
+
+      for (const row of (data ?? []) as OrganizationValidationVerdictRow[]) {
+        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+          verdictByFindingId.set(row.validation_run_finding_id, row);
+        }
+      }
+    }
+  }
+
+  return {
+    changeSummaries,
+    changeSummariesError,
+    count: count ?? null,
+    diagnosticEvents,
+    domainCompletedScans: (domainCompletedScans ?? []) as OrganizationDomainCompletedScanRow[],
+    domains: domainRows,
+    latestDomainScans: (latestDomainScans ?? []) as OrganizationLatestDomainScanRow[],
+    policyEnrichmentRows,
+    resolvedSnapshots: (resolvedSnapshots ?? []) as OrganizationScanSnapshotRow[],
+    runtimeArtifacts: (runtimeArtifacts ?? []) as OrganizationRuntimeArtifactRow[],
+    scanRows,
+    signalCountMap,
+    summaryScanIds,
+    validationFindingRows,
+    validationRuns,
+    verdictByFindingId
+  };
+}
+
+export async function loadOrganizationScanLegacyEvents(
+  organizationId: string,
+  scanIds: string[]
+): Promise<LegacyScanEventRow[]> {
+  const db = createDatabaseClient();
+  const legacyEvents: LegacyScanEventRow[] = [];
+  let legacyEventsError: QueryErrorLike = null;
+
+  for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+    const { data, error } = await db
+      .from("scan_events")
+      .select("id, scan_id, event_type, message, metadata_json, created_at")
+      .eq("organization_id", organizationId)
+      .in("scan_id", scanIdBatch)
+      .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      legacyEventsError = error;
+      break;
+    }
+
+    legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
+  }
+
+  if (legacyEventsError) {
+    throw new Error(`Failed to load organization scans: ${legacyEventsError.message}`);
+  }
+
+  return legacyEvents;
+}
+
+export { isMissingComplianceChangeEventsTable };
