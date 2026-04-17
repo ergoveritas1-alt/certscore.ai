@@ -631,3 +631,41 @@ export async function updatePolicyReviewQueueRow(input: {
 
   return (data as AdminPolicyReviewQueueRow | null) ?? null;
 }
+
+export async function updateAdminMembershipRole(input: {
+  organizationId: string;
+  role: "admin" | "user";
+  userId: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db
+    .from("organization_members")
+    .update({
+      role: input.role
+    })
+    .eq("organization_id", input.organizationId)
+    .eq("user_id", input.userId);
+
+  if (error) {
+    throw new Error(`Failed to update membership role: ${error.message}`);
+  }
+}
+
+export async function updateAdminOrganizationPlan(input: {
+  organizationId: string;
+  plan: string;
+  planStatus: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db
+    .from("organizations")
+    .update({
+      plan: input.plan,
+      plan_status: input.planStatus
+    })
+    .eq("id", input.organizationId);
+
+  if (error) {
+    throw new Error(`Failed to update organization plan: ${error.message}`);
+  }
+}
