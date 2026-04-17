@@ -2,7 +2,6 @@ import { getSessionCookie } from "better-auth/cookies";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./server/better-auth/constants";
-import { PASSWORD_AUTH_COOKIE_NAME } from "./server/password-auth/constants";
 
 export async function middleware(request: NextRequest) {
   const betterAuthCookie = getSessionCookie(request, {
@@ -10,7 +9,7 @@ export async function middleware(request: NextRequest) {
     cookiePrefix: BETTER_AUTH_COOKIE_PREFIX
   });
 
-  if (betterAuthCookie || request.cookies.get(PASSWORD_AUTH_COOKIE_NAME)?.value) {
+  if (betterAuthCookie) {
     return NextResponse.next({
       request
     });
