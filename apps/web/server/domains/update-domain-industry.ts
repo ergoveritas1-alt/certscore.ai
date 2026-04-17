@@ -1,9 +1,9 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDashboardContext } from "../auth";
+import { updateDomainIndustry } from "./repository";
 
 const schema = z.object({
   domainId: z.string().uuid("Invalid domain."),
@@ -17,18 +17,11 @@ export async function updateDomainIndustryFormAction(formData: FormData): Promis
     industryPrimaryId: formData.get("industryPrimaryId")
   });
 
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("domains")
-    .update({
-      industry_primary_id: parsed.industryPrimaryId
-    })
-    .eq("organization_id", organization.id)
-    .eq("id", parsed.domainId);
-
-  if (error) {
-    throw new Error(`Could not update domain industry: ${error.message}`);
-  }
+  await updateDomainIndustry({
+    domainId: parsed.domainId,
+    industryPrimaryId: parsed.industryPrimaryId,
+    organizationId: organization.id
+  });
 
   revalidatePath("/app/domains");
   revalidatePath(`/app/domains/${parsed.domainId}`);

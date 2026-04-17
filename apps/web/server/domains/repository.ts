@@ -67,6 +67,10 @@ export type DomainSettingsRow = {
   default_scan_frequency: string | null;
 };
 
+export type DomainIdRow = {
+  id: string;
+};
+
 function isMissingLastScannedAtColumn(error: { message?: string } | null) {
   return Boolean(error?.message?.includes("last_scanned_at"));
 }
@@ -307,6 +311,83 @@ export async function loadDomainOrganizationAndSettings(organizationId: string):
     organization: (organization as DomainOrganizationRow | null) ?? null,
     settings: (settings as DomainSettingsRow | null) ?? null
   };
+}
+
+export async function countOrganizationDomains(organizationId: string): Promise<number> {
+  const db = createDatabaseClient();
+  const { count, error } = await db
+    .from("domains")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    throw new Error(`Could not verify domain limits: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+export async function findOrganizationDomainByNormalizedUrl(input: {
+  normalizedUrl: string;
+  organizationId: string;
+}): Promise<DomainIdRow | null> {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("domains")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("normalized_url", input.normalizedUrl)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load existing domain: ${error.message}`);
+  }
+
+  return (data as DomainIdRow | null) ?? null;
+}
+
+export async function createOrganizationDomain(input: {
+  hostname: string;
+  normalizedUrl: string;
+  organizationId: string;
+  scanFrequency: string;
+}): Promise<DomainIdRow> {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("domains")
+    .insert({
+      organization_id: input.organizationId,
+      hostname: input.hostname,
+      normalized_url: input.normalizedUrl,
+      scan_frequency: input.scanFrequency
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Could not add domain: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return data as DomainIdRow;
+}
+
+export async function updateDomainIndustry(input: {
+  domainId: string;
+  industryPrimaryId: string | null;
+  organizationId: string;
+}): Promise<void> {
+  const db = createDatabaseClient();
+  const { error } = await db
+    .from("domains")
+    .update({
+      industry_primary_id: input.industryPrimaryId
+    })
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.domainId);
+
+  if (error) {
+    throw new Error(`Could not update domain industry: ${error.message}`);
+  }
 }
 
 export async function loadLatestOrganizationDomainScans(scanIds: string[]): Promise<Map<string, OrganizationDomainScanRow>> {

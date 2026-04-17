@@ -1,10 +1,15 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { createDomainRequestSchema, getPlanDefinition, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
+import {
+  countOrganizationDomains,
+  createOrganizationDomain,
+  findOrganizationDomainByNormalizedUrl,
+  loadDomainOrganizationAndSettings
+} from "./repository";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
 
@@ -43,35 +48,28 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const db = createDatabaseClient();
-  const [planLimits, organizationSettingsResult, countResult] = await Promise.all([
+  const [planLimits, organizationSettingsAndOrg, domainCount] = await Promise.all([
     getPlanLimits(dashboardContext.organization.plan),
-    db
-      .from("organization_settings")
-      .select("default_scan_frequency")
-      .eq("organization_id", dashboardContext.organization.id)
-      .maybeSingle(),
-    db.from("domains").select("id", { count: "exact", head: true }).eq("organization_id", dashboardContext.organization.id)
+    loadDomainOrganizationAndSettings(dashboardContext.organization.id),
+    countOrganizationDomains(dashboardContext.organization.id)
   ]);
   const planDefinition = getPlanDefinition(planLimits.planCode);
-  const { data: organizationSettings } = organizationSettingsResult;
-  const { count, error: countError } = countResult;
-
-  if (countError) {
-    return {
-      error: `Could not verify domain limits: ${countError.message}`,
-      scanId: null
-    };
-  }
+  const organizationSettings = organizationSettingsAndOrg.settings;
 
   const { hostname, normalizedUrl } = parsedInput.data;
 
-  const { data: existingDomain } = await db
-    .from("domains")
-    .select("id")
-    .eq("organization_id", dashboardContext.organization.id)
-    .eq("normalized_url", normalizedUrl)
-    .maybeSingle();
+  let existingDomain;
+  try {
+    existingDomain = await findOrganizationDomainByNormalizedUrl({
+      normalizedUrl,
+      organizationId: dashboardContext.organization.id
+    });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to load existing domain.",
+      scanId: null
+    };
+  }
 
   if (existingDomain && input.allowExistingDomainRescan) {
     const queueResult = await queueFullScanForDomain({
@@ -97,7 +95,7 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  if ((count ?? 0) >= planLimits.maxDomains) {
+  if (domainCount >= planLimits.maxDomains) {
     return {
       error:
         planLimits.planCode === "free"
@@ -109,24 +107,21 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const { data: domain, error } = await db
-    .from("domains")
-    .insert({
-      organization_id: dashboardContext.organization.id,
+  let domain;
+  try {
+    domain = await createOrganizationDomain({
       hostname,
-      normalized_url: normalizedUrl,
-      scan_frequency:
+      normalizedUrl,
+      organizationId: dashboardContext.organization.id,
+      scanFrequency:
         ((organizationSettings as { default_scan_frequency: string | null } | null)?.default_scan_frequency as
           | string
           | null
           | undefined) ?? planLimits.scanFrequency
-    })
-    .select("id")
-    .single();
-
-  if (error || !domain) {
+    });
+  } catch (error) {
     return {
-      error: `Could not add domain: ${error?.message ?? "Unknown error"}`,
+      error: error instanceof Error ? error.message : "Could not add domain.",
       scanId: null
     };
   }
