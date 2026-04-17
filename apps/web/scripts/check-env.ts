@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import { z } from "zod";
 
 const webCheckSchema = z.object({
@@ -26,7 +27,31 @@ function getStorageBucket(env: NodeJS.ProcessEnv) {
   return env.SUPABASE_STORAGE_BUCKET ?? env.SUPABASE_STORAGE_BUCKET_REPORTS ?? null;
 }
 
-function main() {
+async function checkSupabaseHost(url: string) {
+  const { hostname } = new URL(url);
+
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+    info("supabase dns", `Skipping DNS lookup for local host ${hostname}.`);
+    return true;
+  }
+
+  try {
+    await lookup(hostname);
+    pass("supabase dns", `Resolved ${hostname}.`);
+    return true;
+  } catch (error) {
+    fail(
+      "supabase dns",
+      `Could not resolve ${hostname}. Update NEXT_PUBLIC_SUPABASE_URL in apps/web/.env.local or resume the configured Supabase dev project.`
+    );
+    if (error instanceof Error && error.message) {
+      info("supabase dns error", error.message);
+    }
+    return false;
+  }
+}
+
+async function main() {
   const result = webCheckSchema.safeParse(process.env);
 
   if (!result.success) {
@@ -53,6 +78,14 @@ function main() {
   info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
   info("redis host", new URL(values.REDIS_URL).host);
   info("storage bucket", storageBucket);
+
+  const supabaseReachable = await checkSupabaseHost(values.NEXT_PUBLIC_SUPABASE_URL);
+  if (!supabaseReachable) {
+    process.exitCode = 1;
+  }
 }
 
-main();
+main().catch((error) => {
+  fail("web env", error instanceof Error ? error.message : "Unknown web env validation error");
+  process.exitCode = 1;
+});
