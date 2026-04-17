@@ -44,10 +44,10 @@ type SignalRow = {
 };
 
 export async function getOrganizationSignalOverview(organizationId: string): Promise<DomainSignalOverview[]> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [{ data: domains, error: domainsError }, { data: scans, error: scansError }] = await Promise.all([
-    supabase.from("domains").select("id, hostname").eq("organization_id", organizationId).order("created_at", { ascending: false }),
-    supabase
+    db.from("domains").select("id, hostname").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+    db
       .from("scans")
       .select("id, domain_id, status, created_at, completed_at")
       .eq("organization_id", organizationId)
@@ -76,10 +76,10 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
   const latestScanIds = [...latestScanByDomain.values()].map((scan) => scan.id);
   const [{ data: snapshots }, { data: signals }] = await Promise.all([
     latestScanIds.length
-      ? supabase.from("scan_snapshots").select("scan_id, total_signals").in("scan_id", latestScanIds)
+      ? db.from("scan_snapshots").select("scan_id, total_signals").in("scan_id", latestScanIds)
       : Promise.resolve({ data: [] as SnapshotRow[] }),
     latestScanIds.length
-      ? supabase
+      ? db
           .from("scan_signals")
           .select("scan_id, category, signal_key, signal_label, signal_value_json")
           .eq("population_source", "scanner")

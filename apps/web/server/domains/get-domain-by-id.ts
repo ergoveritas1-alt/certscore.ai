@@ -67,26 +67,26 @@ function isMissingIndustrySchema(error: { message?: string } | null) {
 }
 
 export async function getDomainById(input: { domainId: string; organizationId: string }) {
-  const supabase = createAdminClient();
-  const domainQueryWithLastScannedAt = supabase
+  const db = createAdminClient();
+  const domainQueryWithLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
     .eq("id", input.domainId)
     .eq("organization_id", input.organizationId)
     .maybeSingle();
-  const domainQueryWithoutLastScannedAt = supabase
+  const domainQueryWithoutLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
     .eq("id", input.domainId)
     .eq("organization_id", input.organizationId)
     .maybeSingle();
-  const domainQueryLegacy = supabase
+  const domainQueryLegacy = db
     .from("domains")
     .select("id, hostname, normalized_url, last_scanned_at, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
     .eq("id", input.domainId)
     .eq("organization_id", input.organizationId)
     .maybeSingle();
-  const domainQueryLegacyWithoutLastScannedAt = supabase
+  const domainQueryLegacyWithoutLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
     .eq("id", input.domainId)
@@ -137,7 +137,7 @@ export async function getDomainById(input: { domainId: string; organizationId: s
     return null;
   }
 
-  const { data: scans, error: scansError } = await supabase
+  const { data: scans, error: scansError } = await db
     .from("scans")
     .select("id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at")
     .eq("organization_id", input.organizationId)
@@ -152,7 +152,7 @@ export async function getDomainById(input: { domainId: string; organizationId: s
   let industry: IndustryRow | null = null;
 
   if (domainRow.industry_primary_id) {
-    const { data: industryRow, error: industryError } = await supabase
+    const { data: industryRow, error: industryError } = await db
       .from("industries")
       .select("id, slug, label")
       .eq("id", domainRow.industry_primary_id)

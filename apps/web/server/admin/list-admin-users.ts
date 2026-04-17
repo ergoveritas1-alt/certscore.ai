@@ -72,15 +72,15 @@ type ScanRow = {
 
 export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
   const [{ data: users, error: usersError }, { data: memberships, error: membershipsError }, { data: organizations, error: organizationsError }, { data: domains, error: domainsError }, { data: scans, error: scansError }] =
     await Promise.all([
-      supabase.from("users").select("id, email, full_name, auth_provider, created_at, updated_at").order("created_at", { ascending: false }),
-      supabase.from("organization_members").select("user_id, organization_id, role, created_at"),
-      supabase.from("organizations").select("id, name, slug, plan, plan_status"),
-      supabase.from("domains").select("id, organization_id"),
-      supabase.from("scans").select("id, organization_id, completed_at")
+      db.from("users").select("id, email, full_name, auth_provider, created_at, updated_at").order("created_at", { ascending: false }),
+      db.from("organization_members").select("user_id, organization_id, role, created_at"),
+      db.from("organizations").select("id, name, slug, plan, plan_status"),
+      db.from("domains").select("id, organization_id"),
+      db.from("scans").select("id, organization_id, completed_at")
     ]);
 
   if (usersError) {

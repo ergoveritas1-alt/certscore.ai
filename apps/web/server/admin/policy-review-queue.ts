@@ -6,8 +6,8 @@ import { requirePlatformAdminContext } from "./platform-admin";
 
 export async function getPolicyReviewQueue(input?: { reviewStatus?: PolicyReviewQueueStatus }) {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
-  let query = supabase.from("policy_review_queue").select("*").order("created_at", { ascending: false });
+  const db = createAdminClient();
+  let query = db.from("policy_review_queue").select("*").order("created_at", { ascending: false });
 
   if (input?.reviewStatus) {
     query = query.eq("review_status", input.reviewStatus);
@@ -41,8 +41,8 @@ export async function updatePolicyReviewVerdict(input: {
   reviewerNotes?: string | null;
 }) {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
-  const { data: existingQueueItem, error: existingQueueItemError } = await supabase
+  const db = createAdminClient();
+  const { data: existingQueueItem, error: existingQueueItemError } = await db
     .from("policy_review_queue")
     .select("reason, policy_enrichment_id")
     .eq("id", input.queueItemId)
@@ -53,7 +53,7 @@ export async function updatePolicyReviewVerdict(input: {
   }
 
   const { data: policyEnrichmentRow, error: policyEnrichmentError } = existingQueueItem?.policy_enrichment_id
-    ? await supabase
+    ? await db
         .from("policy_enrichment")
         .select("page_type")
         .eq("id", existingQueueItem.policy_enrichment_id)
@@ -71,7 +71,7 @@ export async function updatePolicyReviewVerdict(input: {
     reviewerNotes: input.reviewerNotes ?? null
   });
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("policy_review_queue")
     .update({
       assigned_to: input.assignedTo ?? null,

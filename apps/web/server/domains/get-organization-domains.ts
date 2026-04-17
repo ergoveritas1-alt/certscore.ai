@@ -86,31 +86,31 @@ function resolveEffectiveFrequency(input: {
 }
 
 export async function getOrganizationDomains(organizationId: string): Promise<DomainListItem[]> {
-  const supabase = createAdminClient();
-  const domainQueryWithLastScannedAt = supabase
+  const db = createAdminClient();
+  const domainQueryWithLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, created_at, updated_at")
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
-  const domainQueryWithoutLastScannedAt = supabase
+  const domainQueryWithoutLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, industry_primary_id, latest_scan_id, scan_frequency, created_at, updated_at")
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
-  const domainQueryLegacy = supabase
+  const domainQueryLegacy = db
     .from("domains")
     .select("id, hostname, normalized_url, last_scanned_at, latest_scan_id, scan_frequency, created_at, updated_at")
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
-  const domainQueryLegacyWithoutLastScannedAt = supabase
+  const domainQueryLegacyWithoutLastScannedAt = db
     .from("domains")
     .select("id, hostname, normalized_url, latest_scan_id, scan_frequency, created_at, updated_at")
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
   const [{ data: domainsWithLastScannedAt, error }, { data: organization }, { data: settings }] = await Promise.all([
     domainQueryWithLastScannedAt,
-    supabase.from("organizations").select("id, plan").eq("id", organizationId).maybeSingle(),
-    supabase.from("organization_settings").select("default_scan_frequency").eq("organization_id", organizationId).maybeSingle()
+    db.from("organizations").select("id, plan").eq("id", organizationId).maybeSingle(),
+    db.from("organization_settings").select("default_scan_frequency").eq("organization_id", organizationId).maybeSingle()
   ]);
 
   let domains = domainsWithLastScannedAt;
@@ -154,7 +154,7 @@ export async function getOrganizationDomains(organizationId: string): Promise<Do
   let industryMap = new Map<string, string>();
 
   if (latestScanIds.length > 0) {
-    const { data: scans, error: scansError } = await supabase
+    const { data: scans, error: scansError } = await db
       .from("scans")
       .select("id, status, created_at")
       .in("id", latestScanIds);
@@ -169,7 +169,7 @@ export async function getOrganizationDomains(organizationId: string): Promise<Do
   if (domainRows.length > 0) {
     const industryIds = [...new Set(domainRows.flatMap((domain) => (domain.industry_primary_id ? [domain.industry_primary_id] : [])))];
     if (industryIds.length > 0) {
-      const { data: industries, error: industriesError } = await supabase.from("industries").select("id, label").in("id", industryIds);
+      const { data: industries, error: industriesError } = await db.from("industries").select("id, label").in("id", industryIds);
 
       if (industriesError && !isMissingIndustrySchema(industriesError)) {
         throw new Error(`Failed to load industries: ${industriesError.message}`);
@@ -178,7 +178,7 @@ export async function getOrganizationDomains(organizationId: string): Promise<Do
       industryMap = new Map(((industries ?? []) as IndustryRow[]).map((industry) => [industry.id, industry.label]));
     }
 
-    const { data: scans, error: scansError } = await supabase
+    const { data: scans, error: scansError } = await db
       .from("scans")
       .select("id, domain_id, status, created_at, completed_at")
       .eq("organization_id", organizationId)
