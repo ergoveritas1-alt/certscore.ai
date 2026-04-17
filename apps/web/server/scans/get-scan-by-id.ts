@@ -17,7 +17,6 @@ import {
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
@@ -39,7 +38,9 @@ import {
   dereferencePolicyEvidenceSnippets
 } from "./policy-enrichment-normalization";
 import {
+  insertScanEventRecord,
   loadPolicyEvidenceByHash,
+  loadRecentDomainBenchmarkEvent,
   loadScanComparisonArtifacts,
   loadScanCoreRecord,
   loadScanDetailArtifacts,
@@ -200,7 +201,6 @@ async function resolveDomainBenchmarkEstimate(input: {
   domainId: string | null;
   organizationId: string | null;
   scanId: string;
-  db: ReturnType<typeof createDatabaseClient>;
 }): Promise<DomainBenchmarkEstimate | null> {
   const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
   const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);
@@ -209,17 +209,12 @@ async function resolveDomainBenchmarkEstimate(input: {
   }
 
   if (input.domainId) {
-    const { data: recentDomainEvent } = await input.db
-      .from("scan_events")
-      .select("metadata_json")
-      .eq("domain_id", input.domainId)
-      .eq("event_type", DOMAIN_BENCHMARK_EVENT_TYPE)
-      .neq("scan_id", input.scanId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const cachedEstimate = normalizeDomainBenchmarkEstimate((recentDomainEvent as { metadata_json?: unknown } | null)?.metadata_json);
+    const recentDomainEvent = await loadRecentDomainBenchmarkEvent({
+      domainId: input.domainId,
+      eventType: DOMAIN_BENCHMARK_EVENT_TYPE,
+      scanId: input.scanId
+    });
+    const cachedEstimate = normalizeDomainBenchmarkEstimate(recentDomainEvent?.metadata_json);
     if (cachedEstimate) {
       return cachedEstimate;
     }
@@ -237,13 +232,13 @@ async function resolveDomainBenchmarkEstimate(input: {
     return null;
   }
 
-  await input.db.from("scan_events").insert({
-    scan_id: input.scanId,
-    domain_id: input.domainId,
-    organization_id: input.organizationId,
-    event_type: DOMAIN_BENCHMARK_EVENT_TYPE,
+  await insertScanEventRecord({
+    scanId: input.scanId,
+    domainId: input.domainId,
+    organizationId: input.organizationId,
+    eventType: DOMAIN_BENCHMARK_EVENT_TYPE,
     message: "Estimated domain benchmark for executive summary.",
-    metadata_json: generatedEstimate
+    metadataJson: generatedEstimate
   });
 
   return generatedEstimate;
@@ -493,7 +488,6 @@ async function loadScanDetailRecord(input: {
   anonymousOnly?: boolean;
   viewerEmail?: string | null;
 }) {
-  const db = createDatabaseClient();
   const scanCore = await loadScanCoreRecord(input).catch((error) => {
     if (error instanceof Error && error.message === "Scan not found.") {
       return null;
@@ -1040,8 +1034,7 @@ async function loadScanDetailRecord(input: {
     domainHostname,
     domainId: scanRow.domain_id,
     organizationId: scanOrganizationId,
-    scanId: input.scanId,
-    db
+    scanId: input.scanId
   });
 
   return {

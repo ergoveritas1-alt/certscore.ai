@@ -312,6 +312,10 @@ export type QueuedFullScanInsert = {
   submittedByUserId: string;
 };
 
+export type DomainBenchmarkEventRow = {
+  metadata_json?: unknown;
+};
+
 type QueryErrorLike = {
   code?: string;
   details?: string;
@@ -553,6 +557,69 @@ export async function updateDomainLatestScan(input: {
 
   if (error) {
     throw new Error(`Scan created but latest scan update failed: ${error.message}`);
+  }
+}
+
+export async function loadRecentDomainBenchmarkEvent(input: {
+  domainId: string;
+  eventType: string;
+  scanId: string;
+}): Promise<DomainBenchmarkEventRow | null> {
+  const db = createDatabaseClient();
+  const { data, error } = await db
+    .from("scan_events")
+    .select("metadata_json")
+    .eq("domain_id", input.domainId)
+    .eq("event_type", input.eventType)
+    .neq("scan_id", input.scanId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load recent domain benchmark event: ${error.message}`);
+  }
+
+  return (data as DomainBenchmarkEventRow | null) ?? null;
+}
+
+export async function insertScanEventRecord(input: {
+  domainId: string | null;
+  eventType: string;
+  message: string;
+  metadataJson: Record<string, unknown> | null;
+  organizationId: string | null;
+  scanId: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db.from("scan_events").insert({
+    scan_id: input.scanId,
+    domain_id: input.domainId,
+    organization_id: input.organizationId,
+    event_type: input.eventType,
+    message: input.message,
+    metadata_json: input.metadataJson
+  });
+
+  if (error) {
+    throw new Error(`Failed to insert scan event: ${error.message}`);
+  }
+}
+
+export async function persistScanReportFindingCount(input: {
+  count: number;
+  scanId: string;
+}) {
+  const db = createDatabaseClient();
+  const { error } = await db
+    .from("scan_snapshots")
+    .update({
+      report_finding_count: input.count
+    })
+    .eq("scan_id", input.scanId);
+
+  if (error) {
+    throw new Error(`Failed to persist report finding count: ${error.message}`);
   }
 }
 
