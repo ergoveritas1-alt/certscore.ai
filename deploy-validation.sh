@@ -9,9 +9,7 @@ IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/validation-worke
 cloudbuild_config="$(mktemp /tmp/validation-worker-cloudbuild.XXXXXX)"
 
 required_vars=(
-  NEXT_PUBLIC_SUPABASE_URL
-  NEXT_PUBLIC_SUPABASE_ANON_KEY
-  SUPABASE_SERVICE_ROLE_KEY
+  DATABASE_URL
   VALIDATION_REDIS_URL
   OPENAI_API_KEY
 )
