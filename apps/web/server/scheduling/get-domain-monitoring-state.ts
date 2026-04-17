@@ -54,11 +54,11 @@ export type DomainMonitoringState = {
 };
 
 export async function getDomainMonitoringState(input: { domainId: string; organizationId: string }): Promise<DomainMonitoringState | null> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [{ data: domain, error: domainError }, { data: organization, error: organizationError }, { data: settings }] = await Promise.all([
-    supabase.from("domains").select("id, scan_frequency").eq("organization_id", input.organizationId).eq("id", input.domainId).maybeSingle(),
-    supabase.from("organizations").select("id, plan").eq("id", input.organizationId).maybeSingle(),
-    supabase
+    db.from("domains").select("id, scan_frequency").eq("organization_id", input.organizationId).eq("id", input.domainId).maybeSingle(),
+    db.from("organizations").select("id, plan").eq("id", input.organizationId).maybeSingle(),
+    db
       .from("organization_settings")
       .select("default_scan_frequency")
       .eq("organization_id", input.organizationId)
@@ -86,7 +86,7 @@ export async function getDomainMonitoringState(input: { domainId: string; organi
     planFrequency: getPlanDefinition(organizationRow.plan).scanFrequency
   });
 
-  const { data: scans, error: scansError } = await supabase
+  const { data: scans, error: scansError } = await db
     .from("scans")
     .select("id, status, completed_at, created_at")
     .eq("organization_id", input.organizationId)

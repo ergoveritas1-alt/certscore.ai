@@ -161,8 +161,8 @@ function nullifyEmptySnapshotHashes(snapshot: Record<string, unknown>) {
 
 export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetail | null> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
-  const { data: scan, error } = await supabase
+  const db = createAdminClient();
+  const { data: scan, error } = await db
     .from("scans")
     .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json")
     .eq("id", scanId)
@@ -202,34 +202,34 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     { data: policyReviewQueue }
   ] =
     await Promise.all([
-      supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-      supabase
+      db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
+      db
         .from("scan_tracker_vendors")
         .select("vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id")
         .eq("scan_id", scanId)
         .order("vendor_name", { ascending: true }),
-      supabase
+      db
         .from("scan_accessibility_rule_counts")
         .select("rule_code, rule_group, severity, instance_count")
         .eq("scan_id", scanId)
         .order("instance_count", { ascending: false }),
-      supabase
+      db
         .from("scan_pages")
         .select("page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language")
         .eq("scan_id", scanId)
         .order("page_type", { ascending: true }),
-      supabase
+      db
         .from("compliance_change_events")
         .select("event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
         .eq("scan_id_current", scanId)
         .order("event_timestamp", { ascending: false }),
-      scanRow.domain_id ? supabase.from("domains").select("hostname").eq("id", scanRow.domain_id).maybeSingle() : Promise.resolve({ data: null }),
+      scanRow.domain_id ? db.from("domains").select("hostname").eq("id", scanRow.domain_id).maybeSingle() : Promise.resolve({ data: null }),
       scanRow.organization_id
-        ? supabase.from("organizations").select("name").eq("id", scanRow.organization_id).maybeSingle()
+        ? db.from("organizations").select("name").eq("id", scanRow.organization_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-      supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-      supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+      db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
+      db.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
+      db.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
     ]);
 
   const accessPostureClass =

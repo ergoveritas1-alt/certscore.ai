@@ -72,8 +72,8 @@ export type OrganizationPreconsentLeaderboardItem = {
 };
 
 export async function getOrganizationTrackerInventory(organizationId: string) {
-  const supabase = createAdminClient();
-  const { data: completedScans, error: scansError } = await supabase
+  const db = createAdminClient();
+  const { data: completedScans, error: scansError } = await db
     .from("scans")
     .select("id, domain_id, completed_at")
     .eq("organization_id", organizationId)
@@ -100,10 +100,10 @@ export async function getOrganizationTrackerInventory(organizationId: string) {
 
   const [{ data: domains, error: domainsError }, { data: trackers, error: trackersError }, { data: runtimeArtifacts, error: runtimeArtifactsError }, { data: preconsentViolations, error: preconsentViolationsError }] = await Promise.all([
     domainIds.length
-      ? supabase.from("domains").select("id, hostname").eq("organization_id", organizationId).in("id", domainIds)
+      ? db.from("domains").select("id, hostname").eq("organization_id", organizationId).in("id", domainIds)
       : Promise.resolve({ data: [] as DomainRow[], error: null }),
     scanIds.length
-      ? supabase
+      ? db
           .from("scan_tracker_vendors")
           .select(
             "scan_id, vendor_name, vendor_category, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host"
@@ -111,13 +111,13 @@ export async function getOrganizationTrackerInventory(organizationId: string) {
           .in("scan_id", scanIds)
       : Promise.resolve({ data: [] as TrackerRow[], error: null }),
     scanIds.length
-      ? supabase
+      ? db
           .from("scan_runtime_artifacts")
           .select("scan_id, consent_preconsent_violation_count")
           .in("scan_id", scanIds)
       : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null }),
     scanIds.length
-      ? supabase
+      ? db
           .from("scan_preconsent_violations")
           .select("scan_id, vendor_name, vendor_category")
           .in("scan_id", scanIds)
