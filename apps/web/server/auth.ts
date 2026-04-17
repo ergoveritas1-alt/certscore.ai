@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { bootstrapAppUserSession, type BootstrapResult } from "./bootstrap-user";
 import { getBetterAuthSessionUser } from "./better-auth/session";
-import type { AuthenticatedAppUser } from "./password-auth/types";
+import type { AuthenticatedAppUser } from "./auth-flows/types";
 
 export const getCurrentUser = cache(async (): Promise<AuthenticatedAppUser | null> => {
   return getBetterAuthSessionUser();

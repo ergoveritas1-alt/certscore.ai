@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { confirmPasswordResetAction } from "../../server/password-auth/reset-actions";
-import { initialPasswordResetConfirmState } from "../../server/password-auth/reset-action-state";
+import { confirmPasswordResetAction } from "../../server/auth-flows/password-reset-actions";
+import { initialPasswordResetConfirmState } from "../../server/auth-flows/reset-action-state";
 
 export function ResetPasswordUpdateForm() {
   const searchParams = useSearchParams();

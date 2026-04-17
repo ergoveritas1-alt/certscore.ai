@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PASSWORD_AUTH_MIN_PASSWORD_LENGTH } from "./constants";
+import { AUTH_MIN_PASSWORD_LENGTH } from "./constants";
 import type { AuthMode } from "./types";
 
 export const credentialsSchema = z.object({
@@ -13,7 +13,7 @@ export const credentialsSchema = z.object({
     .string()
     .optional()
     .transform((value) => (typeof value === "string" ? getSafeRedirectPath(value) : "/app")),
-  password: z.string().min(PASSWORD_AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${PASSWORD_AUTH_MIN_PASSWORD_LENGTH} characters.`)
+  password: z.string().min(AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`)
 });
 
 export const passwordResetRequestSchema = z.object({
@@ -26,7 +26,7 @@ export const passwordResetRequestSchema = z.object({
 });
 
 export const passwordResetSchema = z.object({
-  password: z.string().min(PASSWORD_AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${PASSWORD_AUTH_MIN_PASSWORD_LENGTH} characters.`),
+  password: z.string().min(AUTH_MIN_PASSWORD_LENGTH, `Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`),
   token: z.string().trim().min(1, "That reset link is invalid or expired.")
 });
 

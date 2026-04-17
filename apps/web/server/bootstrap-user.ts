@@ -1,6 +1,6 @@
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
-import type { AuthenticatedAppUser } from "./password-auth/types";
+import type { AuthenticatedAppUser } from "./auth-flows/types";
 
 export type UserRecord = {
   id: string;

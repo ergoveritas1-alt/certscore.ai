@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasBetterAuthPasswordAccount } from "../../../../server/better-auth/user";
-import { findAppUserByEmail, normalizeEmail } from "../../../../server/password-auth/user";
+import { findAppUserByEmail, normalizeEmail } from "../../../../server/auth-flows/user";
 
 export async function GET(request: NextRequest) {
   const email = request.nextUrl.searchParams.get("email");

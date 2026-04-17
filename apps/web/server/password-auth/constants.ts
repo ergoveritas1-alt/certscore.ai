@@ -1,1 +1,0 @@
-export const PASSWORD_AUTH_MIN_PASSWORD_LENGTH = 8;

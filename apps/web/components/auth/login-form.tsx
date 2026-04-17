@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { submitCredentialsAction } from "../../server/password-auth/actions";
-import { initialCredentialsActionState, type CredentialsActionState } from "../../server/password-auth/action-state";
+import { submitCredentialsAction } from "../../server/auth-flows/credentials-actions";
+import { initialCredentialsActionState, type CredentialsActionState } from "../../server/auth-flows/action-state";
 
 type AuthMode = CredentialsActionState["mode"];
 

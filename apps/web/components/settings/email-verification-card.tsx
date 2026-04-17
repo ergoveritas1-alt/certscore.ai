@@ -5,7 +5,7 @@ import { Button } from "@website-signal-risk-scanner/ui";
 import {
   initialResendVerificationActionState,
   resendVerificationEmailAction
-} from "../../server/password-auth/resend-verification";
+} from "../../server/auth-flows/resend-verification";
 
 type EmailVerificationCardProps = {
   email: string;

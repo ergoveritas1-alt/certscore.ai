@@ -2,7 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { headers } from "next/headers";
-import type { AuthenticatedAppUser } from "../password-auth/types";
+import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { auth } from "./auth";
 
 type BetterAuthAccountRow = {

@@ -156,9 +156,3 @@ export async function submitCredentialsAction(
     };
   }
 }
-
-export async function logoutPasswordSessionAction() {
-  await auth.api.signOut({
-    headers: await headers()
-  });
-}

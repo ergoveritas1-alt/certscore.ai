@@ -12,16 +12,6 @@ import {
 } from "./reset-action-state";
 import { passwordResetRequestSchema, passwordResetSchema } from "./validators";
 
-function getClientIp(headerStore: Headers) {
-  const forwardedFor = headerStore.get("x-forwarded-for");
-
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
-  }
-
-  return headerStore.get("x-real-ip")?.trim() || "unknown";
-}
-
 function getRequestOrigin(headerStore: Headers) {
   const forwardedHost = headerStore.get("x-forwarded-host")?.trim();
   const host = forwardedHost || headerStore.get("host")?.trim();
