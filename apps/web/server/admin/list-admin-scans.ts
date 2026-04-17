@@ -1,6 +1,5 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
@@ -69,7 +68,6 @@ export type BlockedRunTelemetry = {
 
 export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const db = createDatabaseClient();
   const {
     diagnosticEvents,
     domains,
@@ -157,8 +155,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   );
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
-    scanIds: scanRows.map((scan) => scan.id),
-    db
+    scanIds: scanRows.map((scan) => scan.id)
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {

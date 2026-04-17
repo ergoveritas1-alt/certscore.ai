@@ -1,6 +1,5 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
@@ -341,7 +340,6 @@ async function loadOrganizationScans(
     includeCount?: boolean;
   }
 ) {
-  const db = createDatabaseClient();
   const {
     changeSummaries,
     changeSummariesError,
@@ -397,8 +395,7 @@ async function loadOrganizationScans(
   );
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
-    scanIds: summaryScanIds,
-    db
+    scanIds: summaryScanIds
   });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {

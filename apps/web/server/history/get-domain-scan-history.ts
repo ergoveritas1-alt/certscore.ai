@@ -1,6 +1,5 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
@@ -407,8 +406,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   );
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
-    scanIds: scanRows.map((scan) => scan.id),
-    db: createDatabaseClient()
+    scanIds: scanRows.map((scan) => scan.id)
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
