@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { createAdminClient, query } from "@website-signal-risk-scanner/db";
 import {
   getPrimaryCategoryDescription,
   getPrimaryCategoryLabel,
@@ -15,6 +15,7 @@ type ScanCandidateRow = {
 };
 
 type ValidationRunRow = {
+  created_at: string;
   id: string;
   scan_id: string;
 };
@@ -57,6 +58,19 @@ type ValidationFindingWithVerdictRow = {
         verdict: "supported" | "inconclusive" | "not_supported" | null;
       }>
     | null;
+};
+
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
 function getArgValue(flag: string) {
@@ -123,7 +137,7 @@ async function loadScanRecordForFindingCount(input: {
       ? input.supabase
           .from("validation_run_findings")
           .select(
-            "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation )"
+            "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
           )
           .eq("validation_run_id", input.runId)
       : Promise.resolve({ data: [] as ValidationFindingWithVerdictRow[], error: null })
@@ -164,6 +178,30 @@ async function loadScanRecordForFindingCount(input: {
   }
   if (validationFindingsError) {
     throw new Error(`Failed to load validation findings for ${input.scanId}: ${validationFindingsError.message}`);
+  }
+
+  const validationFindingBaseRows = (validationFindingRows ?? []) as ValidationFindingWithVerdictRow[];
+  const validationFindingIds = validationFindingBaseRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    const { data: verdictRows, error: verdictsError } = await input.supabase
+      .from("validation_verdicts")
+      .select(
+        "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation"
+      )
+      .in("validation_run_finding_id", validationFindingIds)
+      .order("created_at", { ascending: false });
+
+    if (verdictsError) {
+      throw new Error(`Failed to load validation verdicts for ${input.scanId}: ${verdictsError.message}`);
+    }
+
+    for (const row of (verdictRows ?? []) as ValidationVerdictRow[]) {
+      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+        verdictByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
   }
 
   const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>)
@@ -216,11 +254,12 @@ async function loadScanRecordForFindingCount(input: {
     policyEnrichment: normalizedPolicyEnrichment
   });
 
-  const mappedValidationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationFindingWithVerdictRow[]).map((row) => {
+  const mappedValidationFindings: ScanValidationFinding[] = validationFindingBaseRows.map((row) => {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
 
@@ -349,28 +388,33 @@ async function main() {
   const sinceDays = Number(getArgValue("--since-days") ?? "14");
   const sinceIso = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: rows, error } = await supabase
-    .from("scan_snapshots")
-    .select("scan_id, scans!inner(id, completed_at)")
-    .is("report_finding_count", null)
-    .not("scan_id", "is", null)
-    .gte("scans.completed_at", sinceIso)
-    .order("completed_at", { ascending: false, referencedTable: "scans" })
-    .limit(limit);
+  const candidateResult = await query<{
+    completed_at: string | null;
+    scan_id: string;
+  }>(
+    `
+      select ss.scan_id, s.completed_at
+      from scan_snapshots ss
+      join scans s on s.id = ss.scan_id
+      where ss.report_finding_count is null
+        and ss.scan_id is not null
+        and s.completed_at >= $1
+      order by s.completed_at desc
+      limit $2
+    `,
+    [sinceIso, limit],
+    { readOnly: true }
+  );
 
-  if (error) {
-    throw new Error(`Failed to load candidate scans: ${error.message}`);
-  }
-
-  const candidates = ((rows ?? []) as Array<{ scan_id: string; scans: ScanCandidateRow | ScanCandidateRow[] | null }>)
+  const candidates = candidateResult.rows
     .map((row) => ({
       scanId: row.scan_id,
-      scan:
-        Array.isArray(row.scans)
-          ? (row.scans[0] ?? null)
-          : row.scans
+      scan: {
+        completed_at: row.completed_at,
+        id: row.scan_id
+      } satisfies ScanCandidateRow
     }))
-    .filter((row): row is { scanId: string; scan: ScanCandidateRow } => Boolean(row.scanId && row.scan?.id));
+    .filter((row): row is { scanId: string; scan: ScanCandidateRow } => Boolean(row.scanId && row.scan.id));
 
   const scanIds = candidates.map((row) => row.scanId);
   const latestValidationRunByScanId = new Map<string, string | null>();

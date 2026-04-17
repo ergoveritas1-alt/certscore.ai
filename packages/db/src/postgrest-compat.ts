@@ -295,7 +295,6 @@ export class PostgrestQueryBuilder<T = QueryResultRow, TResult = T[]>
     options?: {
       ascending?: boolean;
       nullsFirst?: boolean;
-      referencedTable?: string;
     }
   ) {
     this.orderSpecs.push({
