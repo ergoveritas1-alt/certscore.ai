@@ -1,7 +1,6 @@
 "use server";
 
 import { createDatabaseClient } from "@website-signal-risk-scanner/db";
-import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
@@ -9,11 +8,29 @@ import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homep
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import {
-  LEGACY_CHANGE_EVENT_TYPES,
-  isMissingComplianceChangeEventsTable,
   summarizeLegacyChangeEvents,
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
+import {
+  loadHistoryChangeEvents,
+  loadHistoryDiagnosticEvents,
+  loadHistoryLegacyChangeEvents,
+  loadHistoryPolicyEnrichments,
+  loadHistoryScanRows,
+  loadHistorySnapshots,
+  loadHistoryValidationFindings,
+  loadHistoryValidationRuns,
+  loadHistoryValidationVerdicts,
+  isMissingComplianceChangeEventsTable,
+  type HistoryChangeSummaryRow as ChangeSummaryRow,
+  type HistoryDiagnosticEventRow as ScanDiagnosticEventRow,
+  type HistoryPolicyEnrichmentRow as PolicyEnrichmentRow,
+  type HistoryScanRow as ScanRow,
+  type HistorySnapshotRow as SnapshotRow,
+  type HistoryValidationFindingSummaryRow as ValidationFindingSummaryRow,
+  type HistoryValidationRunSummaryRow as ValidationRunSummaryRow,
+  type HistoryValidationVerdictRow as ValidationVerdictRow
+} from "./repository";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 
@@ -38,139 +55,6 @@ export type DomainHistoryItem = {
   interruptionLabel: string | null;
   interruptionReason: string | null;
 };
-
-type ScanRow = {
-  completed_at: string | null;
-  created_at: string;
-  id: string;
-  pages_requested: number;
-  pages_scanned: number;
-  scan_type: string;
-  started_at: string | null;
-  status: string;
-};
-
-type SnapshotRow = {
-  auth_wall_detected: boolean | null;
-  blocked_flag: boolean | null;
-  captcha_flag: boolean | null;
-  homepage_fetch_http_status: number | null;
-  homepage_fetch_status: string | null;
-  robots_allowed: boolean | null;
-  robots_fetch_http_status: number | null;
-  robots_fetch_status: string | null;
-  scan_outcome: string | null;
-  scan_id: string;
-  stop_reason_code: string | null;
-  stop_reason_detail: string | null;
-  stop_reason_http_status: number | null;
-  stop_reason_label: string | null;
-  report_finding_count: number | null;
-  total_signals: number;
-};
-
-type ChangeSummaryRow = {
-  event_type: string;
-  scan_id_current: string;
-};
-
-type ScanDiagnosticEventRow = {
-  created_at: string;
-  event_type: string;
-  message: string;
-  metadata_json: Record<string, unknown> | null;
-  scan_id: string;
-};
-
-type PolicyEnrichmentRow = Record<string, unknown> & {
-  scan_id?: string;
-};
-
-type ValidationRunSummaryRow = {
-  created_at: string;
-  finding_count: number;
-  id: string;
-  scan_id: string;
-};
-
-type ValidationFindingSummaryRow = {
-  category: string | null;
-  description: string | null;
-  evidence_json: Record<string, unknown> | null;
-  finding_family: string | null;
-  finding_scope: string | null;
-  finding_source: string | null;
-  finding_subject: string | null;
-  id: string;
-  page_url: string | null;
-  rule_key: string;
-  severity: string | null;
-  subtype: string | null;
-  title: string;
-  validation_run_id: string;
-  validation_verdicts:
-    | {
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }
-    | Array<{
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }>
-    | null;
-};
-
-type ValidationVerdictRow = {
-  agreement_score: number | null;
-  confidence: number | null;
-  created_at: string | null;
-  evidence_json: Record<string, unknown> | null;
-  model: string | null;
-  prompt_version: string | null;
-  rationale: string | null;
-  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-  system_confidence_explanation: string | null;
-  system_confidence_score: number | null;
-  validation_run_finding_id: string;
-  verdict: "supported" | "inconclusive" | "not_supported" | null;
-};
-
-type QueryErrorLike = {
-  code?: string;
-  details?: string;
-  hint?: string;
-  message?: string;
-} | null;
-
-const CHANGE_EVENT_BATCH_SIZE = 50;
-
-function chunkValues<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-
-  return chunks;
-}
 
 function getRecordString(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
@@ -420,94 +304,33 @@ function deriveScanStateExplanation(scan: ScanRow, snapshot: SnapshotRow | null,
 }
 
 export async function getDomainScanHistory(input: { domainId: string; organizationId: string }): Promise<DomainHistoryItem[]> {
-  const db = createDatabaseClient();
-  const { data: scans, error } = await db
-    .from("scans")
-    .select("id, scan_type, status, created_at, started_at, completed_at, pages_requested, pages_scanned")
-    .eq("organization_id", input.organizationId)
-    .eq("domain_id", input.domainId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load domain scan history: ${error.message}`);
-  }
-
-  const scanRows = (scans ?? []) as ScanRow[];
+  const scanRows = await loadHistoryScanRows(input);
   const scanIds = scanRows.map((scan) => scan.id);
 
   if (scanIds.length === 0) {
     return [];
   }
 
-  const [{ data: snapshots, error: snapshotsError }, changeEventsResult] = await Promise.all([
-    db
-      .from("scan_snapshots")
-      .select("*")
-      .in("scan_id", scanIds),
-    (async () => {
-      const rows: ChangeSummaryRow[] = [];
-      let queryError: QueryErrorLike = null;
-
-      for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-        const { data, error: batchError } = await db
-          .from("compliance_change_events")
-          .select("scan_id_current, event_type")
-          .eq("organization_id", input.organizationId)
-          .eq("domain_id", input.domainId)
-          .in("scan_id_current", scanIdBatch);
-
-        if (batchError) {
-          queryError = batchError;
-          break;
-        }
-
-        rows.push(...((data ?? []) as ChangeSummaryRow[]));
-      }
-
-      return { data: rows, error: queryError };
-    })()
+  const [snapshots, changeEventsResult] = await Promise.all([
+    loadHistorySnapshots(scanIds),
+    loadHistoryChangeEvents({
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      scanIds
+    })
   ]);
-  if (snapshotsError) {
-    throw new Error(`Failed to load domain scan history: ${snapshotsError.message}`);
-  }
   const changeEvents = changeEventsResult.data;
   const changeEventsError = changeEventsResult.error;
-  const diagnosticEvents: ScanDiagnosticEventRow[] = [];
-  for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
-      .from("scan_events")
-      .select("scan_id, event_type, message, metadata_json, created_at")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: true });
+  const diagnosticEvents = await loadHistoryDiagnosticEvents(scanIds);
 
-    if (diagnosticEventsError) {
-      throw new Error(`Failed to load domain scan history: ${diagnosticEventsError.message}`);
-    }
-
-    diagnosticEvents.push(...((diagnosticEventRows ?? []) as ScanDiagnosticEventRow[]));
-  }
-
-  const snapshotMap = new Map(((snapshots ?? []) as SnapshotRow[]).map((row) => [row.scan_id, row]));
+  const snapshotMap = new Map(snapshots.map((row) => [row.scan_id, row]));
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const event of diagnosticEvents) {
     const list = diagnosticEventMap.get(event.scan_id) ?? [];
     list.push(event);
     diagnosticEventMap.set(event.scan_id, list);
   }
-  const validationRuns: ValidationRunSummaryRow[] = [];
-  for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: validationRunRows, error: validationRunsError } = await db
-      .from("validation_runs")
-      .select("id, scan_id, finding_count, created_at")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: false });
-
-    if (validationRunsError) {
-      throw new Error(`Failed to load domain scan history: ${validationRunsError.message}`);
-    }
-
-    validationRuns.push(...((validationRunRows ?? []) as ValidationRunSummaryRow[]));
-  }
+  const validationRuns = await loadHistoryValidationRuns(scanIds);
   const findingCountMap = new Map<string, number>();
   for (const validationRun of validationRuns) {
     if (!findingCountMap.has(validationRun.scan_id)) {
@@ -520,21 +343,16 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
     }
   }
-  const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
-  for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data: policyRows, error: policyRowsError } = await db
-      .from("policy_enrichment")
-      .select("*")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: true });
-
-    if (policyRowsError) {
-      throw new Error(`Failed to load domain scan history: ${policyRowsError.message}`);
-    }
-
-    policyEnrichmentRows.push(...((policyRows ?? []) as PolicyEnrichmentRow[]));
-  }
   const policyEnrichmentMap = new Map<string, Array<Record<string, unknown>>>();
+  const latestValidationRunIds = [
+    ...new Set(
+      [...latestValidationRunByScanId.values()].filter(
+        (validationRunId): validationRunId is string =>
+          typeof validationRunId === "string" && validationRunId.trim().length > 0
+      )
+    )
+  ];
+  const policyEnrichmentRows = await loadHistoryPolicyEnrichments(scanIds);
   for (const row of policyEnrichmentRows) {
     const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
     if (!scanId) {
@@ -545,55 +363,9 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
     existing.push(row);
     policyEnrichmentMap.set(scanId, existing);
   }
-  const latestValidationRunIds = [
-    ...new Set(
-      [...latestValidationRunByScanId.values()].filter(
-        (validationRunId): validationRunId is string =>
-          typeof validationRunId === "string" && validationRunId.trim().length > 0
-      )
-    )
-  ];
-  const validationFindingRows: ValidationFindingSummaryRow[] = [];
-  if (latestValidationRunIds.length) {
-    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_run_findings")
-        .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-        )
-        .in("validation_run_id", validationRunIdBatch);
-
-      if (error) {
-        throw new Error(`Failed to load domain scan history: ${error.message}`);
-      }
-
-      validationFindingRows.push(...((data ?? []) as ValidationFindingSummaryRow[]));
-    }
-  }
+  const validationFindingRows = await loadHistoryValidationFindings(latestValidationRunIds);
   const validationFindingIds = validationFindingRows.map((row) => row.id);
-  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
-
-  if (validationFindingIds.length > 0) {
-    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw new Error(`Failed to load domain scan history verdicts: ${error.message}`);
-      }
-
-      for (const row of (data ?? []) as ValidationVerdictRow[]) {
-        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-          verdictByFindingId.set(row.validation_run_finding_id, row);
-        }
-      }
-    }
-  }
+  const verdictByFindingId = await loadHistoryValidationVerdicts(validationFindingIds);
   const validationFindingsByRunId = new Map<string, ScanValidationFinding[]>();
   for (const row of validationFindingRows) {
     const validationVerdicts = verdictByFindingId.get(row.id) ?? null;
@@ -636,7 +408,7 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
     scanIds: scanRows.map((scan) => scan.id),
-    db
+    db: createDatabaseClient()
   });
   const surfacedFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
@@ -674,30 +446,11 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       throw new Error(`Failed to load domain scan history: ${changeEventsError.message}`);
     }
 
-    const legacyEvents: LegacyScanEventRow[] = [];
-    let legacyEventsError: QueryErrorLike = null;
-
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: batchError } = await db
-        .from("scan_events")
-        .select("id, scan_id, event_type, message, metadata_json, created_at")
-        .eq("organization_id", input.organizationId)
-        .eq("domain_id", input.domainId)
-        .in("scan_id", scanIdBatch)
-        .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-        .order("created_at", { ascending: false });
-
-      if (batchError) {
-        legacyEventsError = batchError;
-        break;
-      }
-
-      legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
-    }
-
-    if (legacyEventsError) {
-      throw new Error(`Failed to load domain scan history: ${legacyEventsError.message}`);
-    }
+    const legacyEvents: LegacyScanEventRow[] = await loadHistoryLegacyChangeEvents({
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      scanIds
+    });
 
     for (const [scanId, summary] of summarizeLegacyChangeEvents(legacyEvents)) {
       changeMap.set(scanId, {
