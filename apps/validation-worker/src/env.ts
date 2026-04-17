@@ -1,4 +1,4 @@
-import { getSupabaseAdminEnv, type SupabaseAdminEnv } from "@website-signal-risk-scanner/db";
+import { getDatabaseEnv, type DatabaseEnv } from "@website-signal-risk-scanner/db";
 import { parseEnvironment } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 
@@ -7,9 +7,6 @@ function emptyStringToUndefined(value: unknown) {
 }
 
 const workerEnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OPENAI_API_KEY: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   LLM_ENRICHMENT_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
   REDIS_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
@@ -63,7 +60,7 @@ const workerEnvSchema = z.object({
   )
 });
 
-export type WorkerEnv = z.infer<typeof workerEnvSchema> & SupabaseAdminEnv;
+export type WorkerEnv = z.infer<typeof workerEnvSchema> & DatabaseEnv;
 
 export function getConfiguredValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
   return env.VALIDATION_REDIS_URL?.trim() || env.REDIS_URL?.trim() || "";
@@ -79,6 +76,6 @@ export function getWorkerEnv(env: NodeJS.ProcessEnv = process.env): WorkerEnv {
   return {
     ...values,
     SCANNER_CRAWLER_PUBLIC_URL: values.SCANNER_CRAWLER_PUBLIC_URL ?? values.VALIDATION_CRAWLER_PUBLIC_URL,
-    ...getSupabaseAdminEnv(env)
+    ...getDatabaseEnv(env)
   };
 }
