@@ -29,7 +29,7 @@ website-signal-risk-scanner/
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/web-bot-auth`: server-only Web Bot Auth signing and key-directory helpers
-- `packages/db`: PostgreSQL query helpers, compatibility client, and env helpers
+- `packages/db`: PostgreSQL query helpers, database client helpers, and env helpers
 - `packages/ui`: reusable UI primitives
 
 ## Repo boundary
@@ -96,10 +96,6 @@ Optional but recommended:
 - `WEB_BOT_AUTH_ENABLED`
 - `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
 - `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
-
-Compatibility note:
-
-- Older environments may still use legacy report bucket env names. The compatibility layer keeps those as a fallback, but `S3_BUCKET` is now the canonical storage variable.
 
 ## Local development setup
 
