@@ -186,8 +186,8 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanContext(scanId: string) {
-  const supabase = createAdminClient();
-  const { data: scan, error: scanError } = await supabase
+  const db = createAdminClient();
+  const { data: scan, error: scanError } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, domain_id")
     .eq("id", scanId)
@@ -197,7 +197,7 @@ async function loadScanContext(scanId: string) {
     throw new Error(`Failed to load scan ${scanId}: ${scanError?.message ?? "Not found"}`);
   }
 
-  const { data: domain, error: domainError } = await supabase
+  const { data: domain, error: domainError } = await db
     .from("domains")
     .select("hostname, normalized_url")
     .eq("id", scan.domain_id)

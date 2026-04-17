@@ -229,8 +229,8 @@ function latestEventMs(
 }
 
 async function loadScanEvents(scanId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scan_events")
     .select("event_type, created_at")
     .eq("scan_id", scanId)
@@ -265,8 +265,8 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanState(scanId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("scans")
     .select("id, status, created_at, started_at, completed_at, error_message")
     .eq("id", scanId)

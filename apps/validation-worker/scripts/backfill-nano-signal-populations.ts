@@ -46,7 +46,7 @@ function deriveSignalCategory(key: string) {
 }
 
 async function main() {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const scanId = getArgValue("--scan-id");
   const limit = Math.max(1, Number.parseInt(getArgValue("--limit") ?? "500", 10) || 500);
   const dryRun = hasFlag("--dry-run");
@@ -55,7 +55,7 @@ async function main() {
   let runtimeArtifactRows: ScanRuntimeArtifactRow[] = [];
   if (scanIds.length > 0) {
     for (const batch of chunkValues(scanIds, 100)) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("scan_runtime_artifacts")
         .select("*")
         .in("scan_id", batch);
@@ -67,7 +67,7 @@ async function main() {
       runtimeArtifactRows.push(...((data ?? []) as ScanRuntimeArtifactRow[]));
     }
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("scan_runtime_artifacts")
       .select("*")
       .limit(limit)
@@ -114,7 +114,7 @@ async function main() {
       continue;
     }
 
-    const { error } = await supabase.from("scan_signals").upsert(payload, {
+    const { error } = await db.from("scan_signals").upsert(payload, {
       onConflict: "scan_id,signal_key,population_source"
     });
 

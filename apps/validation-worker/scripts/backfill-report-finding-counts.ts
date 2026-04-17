@@ -99,7 +99,7 @@ function chunkValues<T>(values: T[], size: number) {
 async function loadScanRecordForFindingCount(input: {
   runId: string | null;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  db: ReturnType<typeof createAdminClient>;
 }) {
   const [
     { data: snapshot, error: snapshotError },
@@ -115,26 +115,26 @@ async function loadScanRecordForFindingCount(input: {
     { data: events, error: eventsError },
     { data: validationFindingRows, error: validationFindingsError }
   ] = await Promise.all([
-    input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
+    input.db.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.db.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
+    input.db.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
+    input.db.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
+    input.db.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
+    input.db
       .from("scan_signals")
       .select("category, signal_key, signal_label, signal_value_json, value_type, population_source")
       .eq("scan_id", input.scanId),
-    input.supabase
+    input.db
       .from("scan_events")
       .select("id, event_type, message, metadata_json, created_at")
       .eq("scan_id", input.scanId)
       .order("created_at", { ascending: true }),
     input.runId
-      ? input.supabase
+      ? input.db
           .from("validation_run_findings")
           .select(
             "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
@@ -185,7 +185,7 @@ async function loadScanRecordForFindingCount(input: {
   const verdictByFindingId = new Map<string, ValidationVerdictRow>();
 
   if (validationFindingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await input.supabase
+    const { data: verdictRows, error: verdictsError } = await input.db
       .from("validation_verdicts")
       .select(
         "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation"
@@ -382,7 +382,7 @@ async function computeReportFindingCount(scanRecord: Awaited<ReturnType<typeof l
 }
 
 async function main() {
-  const supabase = createAdminClient(process.env);
+  const db = createAdminClient(process.env);
   const limit = Number(getArgValue("--limit") ?? "200");
   const dryRun = hasFlag("--dry-run");
   const sinceDays = Number(getArgValue("--since-days") ?? "14");
@@ -419,7 +419,7 @@ async function main() {
   const scanIds = candidates.map((row) => row.scanId);
   const latestValidationRunByScanId = new Map<string, string | null>();
   for (const batch of chunkValues(scanIds, 50)) {
-    const { data: validationRuns, error: validationRunsError } = await supabase
+    const { data: validationRuns, error: validationRunsError } = await db
       .from("validation_runs")
       .select("id, scan_id, created_at")
       .in("scan_id", batch)
@@ -444,7 +444,7 @@ async function main() {
       const scanRecord = await loadScanRecordForFindingCount({
         runId,
         scanId: candidate.scanId,
-        supabase
+        db
       });
       const count = await computeReportFindingCount(scanRecord);
       console.log(`${candidate.scanId} ${count}`);
@@ -453,7 +453,7 @@ async function main() {
         continue;
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("scan_snapshots")
         .update({
           report_finding_count: count

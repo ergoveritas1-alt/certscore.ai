@@ -146,7 +146,7 @@ async function main() {
     throw new Error("Provide --scan-id.");
   }
 
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   const [
     { data: scan, error: scanError },
     { data: events, error: eventsError },
@@ -154,27 +154,27 @@ async function main() {
     signalResult,
     findingsResult
   ] = await Promise.all([
-    supabase
+    db
       .from("scans")
       .select("id, status, created_at, started_at, completed_at, error_message")
       .eq("id", scanId)
       .maybeSingle(),
-    supabase
+    db
       .from("scan_events")
       .select("id, event_type, message, metadata_json, created_at")
       .eq("scan_id", scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_document_sources")
       .select("id, source, source_status, document_type, extraction_status, semantic_confidence, source_url, canonical_url, created_at, metadata_json")
       .eq("scan_id", scanId)
       .order("created_at", { ascending: true }),
-    supabase
+    db
       .from("scan_signals")
       .select("signal_key, population_source")
       .eq("scan_id", scanId)
       .order("signal_key", { ascending: true }),
-    supabase
+    db
       .from("validation_run_findings")
       .select("id")
       .eq("scan_id", scanId)
@@ -192,7 +192,7 @@ async function main() {
   let signals = signalResult.data;
   let signalsError = signalResult.error;
   if (signalsError && isMissingColumnError(signalsError, "population_source")) {
-    const fallback = await supabase
+    const fallback = await db
       .from("scan_signals")
       .select("signal_key")
       .eq("scan_id", scanId)
@@ -210,7 +210,7 @@ async function main() {
   let findings = findingsResult.data;
   let findingsError = findingsResult.error;
   if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
-    const { data: runs, error: runsError } = await supabase
+    const { data: runs, error: runsError } = await db
       .from("validation_runs")
       .select("id")
       .eq("scan_id", scanId);
@@ -226,7 +226,7 @@ async function main() {
       findings = [];
       findingsError = null;
     } else {
-      const fallback = await supabase
+      const fallback = await db
         .from("validation_run_findings")
         .select("id")
         .in("validation_run_id", runIds);
