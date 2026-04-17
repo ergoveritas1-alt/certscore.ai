@@ -44,11 +44,11 @@ Use `npx vercel deploy --prod` only as a manual fallback when you intentionally 
 Set the production environment variables in Vercel:
 
 - `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- Google provider env vars when OAuth is enabled
 - `REDIS_URL`
-- `SUPABASE_STORAGE_BUCKET`
+- S3 storage env vars
 
 Optional variables depend on the features you intend to enable.
 
@@ -73,8 +73,8 @@ The scanner scheduler also lives in `WS01`, not in this repo. `WC01` should trea
 
 Add the new domain in the Vercel project, apply the DNS records Vercel gives you, then update:
 
-- Supabase Site URL
-- Supabase redirect URLs such as `https://<domain>/auth/callback`
+- Better Auth site URL
+- Better Auth redirect URLs such as `https://<domain>/auth/callback`
 - Google OAuth redirect settings if Google login is enabled
 
 ## 6. Validate production
@@ -85,7 +85,7 @@ Validate in this order:
 2. login and callback flow work
 3. preview and full scan requests persist in the database as queued work
 4. the standalone scanner service claims and executes scans
-5. report data persists in Supabase
+5. report data persists in PostgreSQL and storage artifacts persist in S3-compatible object storage
 6. PDFs generate
 7. the standalone scanner scheduler path runs successfully
 
@@ -99,8 +99,8 @@ pnpm ops:monitor:prod
 
 It checks:
 
-- validation worker heartbeat freshness from Supabase
-- scanner service heartbeat freshness from Supabase
+- validation worker heartbeat freshness from PostgreSQL-backed settings
+- scanner service heartbeat freshness from PostgreSQL-backed settings
 - Cloud Run readiness for `certscore-validation-worker`
 
 If `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, and `OPS_ALERT_TO_EMAIL` are configured, it will email an alert and exit non-zero when a runtime is stale or not ready.

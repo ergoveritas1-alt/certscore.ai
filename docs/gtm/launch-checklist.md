@@ -4,7 +4,7 @@
 - Deploy the web app
 - Deploy the worker
 - Configure Upstash Redis
-- Configure Supabase project, auth providers, and storage bucket
+- Configure PostgreSQL, Better Auth providers, and S3-compatible storage
 - Apply database migrations
 - Install Playwright Chromium in the worker environment
 - Confirm environment variables are set in every deployed service

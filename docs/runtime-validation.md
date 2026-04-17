@@ -22,28 +22,25 @@ Expected result:
 - web env check passes
 - validation env check passes in `WC01`
 - Redis connectivity passes
-- Supabase service-role DB access passes
-- Supabase storage bucket access passes
+- PostgreSQL access passes
+- S3-compatible storage access passes
 - Playwright Chromium launch passes
-- Supabase REST recognizes the new consent snapshot/runtime columns
+- required tables and columns are present in PostgreSQL
 
 If a check fails:
 
 - missing env var: update `apps/web/.env.local` or deployment settings
 - Redis failure: verify `REDIS_URL` and network access
-- Supabase DB failure: verify service-role key and apply migrations
-- storage failure: create the bucket referenced by `SUPABASE_STORAGE_BUCKET`
+- database failure: verify `DATABASE_URL` and apply migrations
+- storage failure: create the bucket referenced by `S3_BUCKET`
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium` for `WC01` validation, or the equivalent `WS01` install flow for the standalone scanner
-- schema cache failure on dev (`ibjxttgmvdkbuqllbazj`): run `pnpm supabase:reload-schema:dev`
-- schema cache failure on prod (`wgfhzyrysztmtrjbcsgy`): run `pnpm supabase:reload-schema:prod`
-- if the REST layer is still stale after the reload notification, restart the affected Supabase project/API once
 
 ## 2. Auth validation
 
 1. Open `/login`.
 2. Verify the page loads and both login options render.
-3. Test Google OAuth.
-4. Test email magic link.
+3. Test Google OAuth if enabled.
+4. Test email/password or verification flows as configured.
 5. Confirm first login creates:
    - `users` row
    - `organizations` row

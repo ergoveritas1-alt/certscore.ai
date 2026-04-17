@@ -31,7 +31,7 @@ The validation system should run as a separate operational lane:
 - `apps/web` deployed with `APP_FLAVOR=validation_ops`
 - separate validation worker and scheduler processes
 - separate Redis for validation queues
-- shared Supabase project initially
+- shared PostgreSQL database initially
 
 The public root page on the validation domain should expose crawler identity and contact information. The authenticated `/app` surface should be restricted to validation admins.
 
@@ -149,4 +149,4 @@ The first version is successful when:
 - richer benchmark suites for accessibility and regression checks
 - more sophisticated target sampling policy
 - stronger observability around scheduler and queue health
-- possible separation into a dedicated Supabase project if operational isolation becomes necessary
+- possible separation into a dedicated PostgreSQL cluster or isolated auth/storage resources if operational isolation becomes necessary

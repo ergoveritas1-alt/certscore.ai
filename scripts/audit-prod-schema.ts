@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-
-const DEFAULT_PROJECT_REF = "wgfhzyrysztmtrjbcsgy";
+import { query } from "../packages/db/src/postgres";
 
 const REQUIRED_TABLES = [
   "policy_enrichment",
@@ -87,52 +85,18 @@ const NULLABLE_ORGANIZATION_ID_TABLES = [
   "scan_pages"
 ] as const;
 
-type QueryEnvelope<Row> = {
-  rows: Row[];
-};
-
 type TableRow = {
   table_name: string;
 };
 
 type ColumnRow = {
-  table_name: string;
   column_name: string;
   is_nullable: "YES" | "NO" | null;
+  table_name: string;
 };
-
-type MigrationRow = {
-  version: string;
-};
-
-function runSupabase(args: string[]) {
-  return execFileSync("npx", ["supabase@latest", ...args], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-}
-
-function linkProject(projectRef: string) {
-  runSupabase(["link", "--project-ref", projectRef]);
-}
-
-function runJsonQuery<Row>(sql: string) {
-  const raw = runSupabase(["db", "query", "--linked", "--output", "json", sql]);
-  return JSON.parse(raw) as QueryEnvelope<Row>;
-}
 
 function sqlString(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
-}
-
-function parseProjectRef() {
-  const argIndex = process.argv.indexOf("--project-ref");
-  if (argIndex !== -1 && process.argv[argIndex + 1]) {
-    return process.argv[argIndex + 1]!;
-  }
-
-  return process.env.SUPABASE_PROJECT_REF ?? DEFAULT_PROJECT_REF;
 }
 
 function buildInList(values: readonly string[]) {
@@ -146,65 +110,49 @@ function printSection(title: string, lines: string[]) {
   }
 }
 
-function main() {
-  const projectRef = parseProjectRef();
-
-  try {
-    linkProject(projectRef);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to link Supabase project ${projectRef}: ${message}`);
-    process.exit(1);
-  }
-
+async function main() {
   const tableNames = Array.from(
     new Set([...REQUIRED_TABLES, ...Object.keys(REQUIRED_COLUMNS), ...NULLABLE_ORGANIZATION_ID_TABLES])
   );
-  const columnNames = Array.from(
-    new Set(Object.values(REQUIRED_COLUMNS).flat().concat(["organization_id"]))
-  );
+  const columnNames = Array.from(new Set(Object.values(REQUIRED_COLUMNS).flat().concat(["organization_id"])));
 
-  let remoteTables: QueryEnvelope<TableRow>;
-  let remoteColumns: QueryEnvelope<ColumnRow>;
-  let remoteMigrations: QueryEnvelope<MigrationRow> | null = null;
+  let remoteTables: TableRow[];
+  let remoteColumns: ColumnRow[];
 
   try {
-    remoteTables = runJsonQuery<TableRow>(
-      `select table_name
-       from information_schema.tables
-       where table_schema = 'public'
-         and table_name in (${buildInList(tableNames)})
-       order by table_name;`
-    );
+    remoteTables = (
+      await query<TableRow>(
+        `select table_name
+         from information_schema.tables
+         where table_schema = 'public'
+           and table_name in (${buildInList(tableNames)})
+         order by table_name;`,
+        [],
+        { readOnly: true }
+      )
+    ).rows;
 
-    remoteColumns = runJsonQuery<ColumnRow>(
-      `select table_name, column_name, is_nullable
-       from information_schema.columns
-       where table_schema = 'public'
-         and table_name in (${buildInList(tableNames)})
-         and column_name in (${buildInList(columnNames)})
-       order by table_name, column_name;`
-    );
-
-    try {
-      remoteMigrations = runJsonQuery<MigrationRow>(
-        `select version
-         from supabase_migrations.schema_migrations
-         order by version;`
-      );
-    } catch {
-      remoteMigrations = null;
-    }
+    remoteColumns = (
+      await query<ColumnRow>(
+        `select table_name, column_name, is_nullable
+         from information_schema.columns
+         where table_schema = 'public'
+           and table_name in (${buildInList(tableNames)})
+           and column_name in (${buildInList(columnNames)})
+         order by table_name, column_name;`,
+        [],
+        { readOnly: true }
+      )
+    ).rows;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to query production schema: ${message}`);
+    console.error(`Failed to query database schema: ${message}`);
     process.exit(1);
+    return;
   }
 
-  const existingTables = new Set(remoteTables.rows.map((row) => row.table_name));
-  const existingColumns = new Map(
-    remoteColumns.rows.map((row) => [`${row.table_name}.${row.column_name}`, row] as const)
-  );
+  const existingTables = new Set(remoteTables.map((row) => row.table_name));
+  const existingColumns = new Map(remoteColumns.map((row) => [`${row.table_name}.${row.column_name}`, row] as const));
 
   const missingTables = REQUIRED_TABLES.filter((tableName) => !existingTables.has(tableName));
   const missingColumns: string[] = [];
@@ -222,14 +170,7 @@ function main() {
     return row?.is_nullable === "NO";
   });
 
-  const lines = [`Project ref: ${projectRef}`];
-  if (remoteMigrations) {
-    const latestVersion = remoteMigrations.rows.at(-1)?.version ?? "unknown";
-    lines.push(`Recorded migration history latest version: ${latestVersion}`);
-  } else {
-    lines.push("Recorded migration history: unavailable");
-  }
-  printSection("Production Schema Audit", lines);
+  printSection("Production Schema Audit", ["Connection source: DATABASE_URL"]);
 
   if (missingTables.length === 0) {
     printSection("Tables", ["All required tables are present."]);
@@ -257,4 +198,4 @@ function main() {
   }
 }
 
-main();
+void main();
