@@ -8,6 +8,18 @@ import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findi
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
+import {
+  loadAdminScanListPageData,
+  type AdminPolicyEnrichmentRow as PolicyEnrichmentRow,
+  type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
+  type AdminScanDomainRow as DomainRow,
+  type AdminScanOrganizationRow as OrganizationRow,
+  type AdminScanQueryRow as ScanRow,
+  type AdminScanSnapshotRow as SnapshotRow,
+  type AdminValidationFindingSummaryRow as ValidationFindingSummaryRow,
+  type AdminValidationRunSummaryRow as ValidationRunSummaryRow,
+  type AdminValidationVerdictRow as ValidationVerdictRow
+} from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
@@ -52,227 +64,26 @@ export type BlockedRunTelemetry = {
   successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
 };
 
-type ScanRow = {
-  completed_at: string | null;
-  created_at: string;
-  domain_id: string | null;
-  id: string;
-  organization_id: string | null;
-  pages_scanned: number;
-  scan_type: string;
-  status: string;
-};
-
-type DomainRow = {
-  hostname: string;
-  id: string;
-};
-
-type OrganizationRow = {
-  id: string;
-  name: string;
-};
-
-type SnapshotRow = {
-  access_posture_class?: AccessPostureClass | null;
-  asn?: number | null;
-  block_vendor_guess?: string | null;
-  blocked_flag: boolean | null;
-  captcha_flag: boolean | null;
-  certscore_overall: number;
-  egress_id?: string | null;
-  egress_type?: string | null;
-  highest_successful_tier?: ScanExecutionTier | null;
-  homepage_fetch_http_status: number | null;
-  normalized_body_hash?: string | null;
-  report_finding_count?: number | null;
-  recoverable_finding_classes?: RecoverableFindingClass[] | null;
-  scan_outcome?: string | null;
-  scan_timestamp?: string | null;
-  robots_fetch_http_status: number | null;
-  scan_id: string;
-  stop_tier?: ScanExecutionTier | null;
-  total_signals: number;
-};
-
-type ValidationRunSummaryRow = {
-  created_at: string;
-  finding_count: number;
-  id: string;
-  scan_id: string;
-};
-
-type ScanDiagnosticEventRow = {
-  created_at: string;
-  event_type: string;
-  message: string;
-  metadata_json: Record<string, unknown> | null;
-  scan_id: string;
-};
-
-type PolicyEnrichmentRow = Record<string, unknown> & {
-  scan_id?: string;
-};
-
-type ValidationFindingSummaryRow = {
-  category: string | null;
-  description: string | null;
-  evidence_json: Record<string, unknown> | null;
-  finding_family: string | null;
-  finding_scope: string | null;
-  finding_source: string | null;
-  finding_subject: string | null;
-  id: string;
-  page_url: string | null;
-  rule_key: string;
-  severity: string | null;
-  subtype: string | null;
-  title: string;
-  validation_run_id: string;
-  validation_verdicts:
-    | {
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }
-    | Array<{
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }>
-    | null;
-};
-
-type ValidationVerdictRow = {
-  agreement_score: number | null;
-  confidence: number | null;
-  created_at: string | null;
-  evidence_json: Record<string, unknown> | null;
-  model: string | null;
-  prompt_version: string | null;
-  rationale: string | null;
-  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-  system_confidence_explanation: string | null;
-  system_confidence_score: number | null;
-  validation_run_finding_id: string;
-  verdict: "supported" | "inconclusive" | "not_supported" | null;
-};
-
-const CHANGE_EVENT_BATCH_SIZE = 50;
-
-function chunkValues<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-
-  return chunks;
-}
-
-function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
-  const message = `${error?.message ?? ""}`.toLowerCase();
-  return (
-    `${error?.code ?? ""}` === "42703" ||
-    message.includes("access_posture_class") ||
-    message.includes("highest_successful_tier") ||
-    message.includes("stop_tier") ||
-    message.includes("recoverable_finding_classes")
-  );
-}
-
 export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
   const db = createDatabaseClient();
-  const { data: scans, error } = await db
-    .from("scans")
-    .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const {
+    diagnosticEvents,
+    domains,
+    organizations,
+    policyEnrichmentRows,
+    resolvedSnapshots,
+    scanRows,
+    validationFindingRows,
+    validationRuns,
+    verdictByFindingId
+  } = await loadAdminScanListPageData(limit);
 
-  if (error) {
-    throw new Error(`Failed to load scans: ${error.message}`);
-  }
-
-  const scanRows = (scans ?? []) as ScanRow[];
-  const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
-  const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
-  const scanIds = scanRows.map((scan) => scan.id);
-
-  const snapshotsPromise = scanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
-        )
-        .in("scan_id", scanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null });
-  const snapshotsFallbackPromise = scanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select("scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
-        .in("scan_id", scanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null });
-
-  const [{ data: domains }, { data: organizations }, { data: snapshots, error: snapshotsError }] = await Promise.all([
-    domainIds.length ? db.from("domains").select("id, hostname").in("id", domainIds) : Promise.resolve({ data: [] as DomainRow[] }),
-    organizationIds.length
-      ? db.from("organizations").select("id, name").in("id", organizationIds)
-      : Promise.resolve({ data: [] as OrganizationRow[] }),
-    snapshotsPromise
-  ]);
-  let resolvedSnapshots = snapshots;
-  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
-    const fallback = await snapshotsFallbackPromise;
-    if (fallback.error) {
-      throw new Error(`Failed to load scans: ${fallback.error.message}`);
-    }
-    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
-      ...(row as SnapshotRow),
-      access_posture_class: null,
-      highest_successful_tier: null,
-      stop_tier: null,
-      recoverable_finding_classes: []
-    }));
-  } else if (snapshotsError) {
-    throw new Error(`Failed to load scans: ${snapshotsError.message}`);
-  }
-
-  const domainMap = new Map(((domains ?? []) as DomainRow[]).map((domain) => [domain.id, domain]));
-  const organizationMap = new Map(((organizations ?? []) as OrganizationRow[]).map((organization) => [organization.id, organization]));
-  const snapshotMap = new Map(((resolvedSnapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
-  const validationRuns: ValidationRunSummaryRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: validationRunRows, error: validationRunsError } = await db
-        .from("validation_runs")
-        .select("id, scan_id, finding_count, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (validationRunsError) {
-        throw new Error(`Failed to load scans: ${validationRunsError.message}`);
-      }
-
-      validationRuns.push(...((validationRunRows ?? []) as ValidationRunSummaryRow[]));
-    }
-  }
+  const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
+  const organizationMap = new Map(organizations.flatMap((organization) => (organization.id ? [[organization.id, organization] as const] : [])));
+  const snapshotMap = new Map(
+    resolvedSnapshots.flatMap((snapshot) => (snapshot.scan_id ? [[snapshot.scan_id, snapshot] as const] : []))
+  );
   const findingCountMap = new Map<string, number>();
   for (const validationRun of validationRuns) {
     if (!findingCountMap.has(validationRun.scan_id)) {
@@ -285,43 +96,11 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
     }
   }
-  const diagnosticEvents: ScanDiagnosticEventRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
-        .from("scan_events")
-        .select("scan_id, event_type, message, metadata_json, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (diagnosticEventsError) {
-        throw new Error(`Failed to load scans: ${diagnosticEventsError.message}`);
-      }
-
-      diagnosticEvents.push(...((diagnosticEventRows ?? []) as ScanDiagnosticEventRow[]));
-    }
-  }
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
     existing.push(diagnosticEvent);
     diagnosticEventMap.set(diagnosticEvent.scan_id, existing);
-  }
-  const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: policyRows, error: policyRowsError } = await db
-        .from("policy_enrichment")
-        .select("*")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (policyRowsError) {
-        throw new Error(`Failed to load scans: ${policyRowsError.message}`);
-      }
-
-      policyEnrichmentRows.push(...((policyRows ?? []) as PolicyEnrichmentRow[]));
-    }
   }
   const policyEnrichmentMap = new Map<string, Array<Record<string, unknown>>>();
   for (const row of policyEnrichmentRows) {
@@ -333,55 +112,6 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     const existing = policyEnrichmentMap.get(scanId) ?? [];
     existing.push(row);
     policyEnrichmentMap.set(scanId, existing);
-  }
-  const latestValidationRunIds = [
-    ...new Set(
-      [...latestValidationRunByScanId.values()].filter(
-        (validationRunId): validationRunId is string =>
-          typeof validationRunId === "string" && validationRunId.trim().length > 0
-      )
-    )
-  ];
-  const validationFindingRows: ValidationFindingSummaryRow[] = [];
-  if (latestValidationRunIds.length) {
-    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: validationFindingsError } = await db
-        .from("validation_run_findings")
-        .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-        )
-        .in("validation_run_id", validationRunIdBatch);
-
-      if (validationFindingsError) {
-        throw new Error(`Failed to load scans: ${validationFindingsError.message}`);
-      }
-
-      validationFindingRows.push(...((data ?? []) as ValidationFindingSummaryRow[]));
-    }
-  }
-  const validationFindingIds = validationFindingRows.map((row) => row.id);
-  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
-
-  if (validationFindingIds.length > 0) {
-    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw new Error(`Failed to load scan verdicts: ${error.message}`);
-      }
-
-      for (const row of (data ?? []) as ValidationVerdictRow[]) {
-        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-          verdictByFindingId.set(row.validation_run_finding_id, row);
-        }
-      }
-    }
   }
   const validationFindingsByRunId = new Map<string, ScanValidationFinding[]>();
   for (const row of validationFindingRows) {
