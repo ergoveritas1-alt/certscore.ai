@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { auth } from "../better-auth/auth";
+import { getAuth } from "../better-auth/auth";
 import { getBetterAuthEnv } from "../better-auth/env";
 import { getCurrentUser } from "../auth";
 
@@ -26,7 +26,7 @@ export async function resendVerificationEmailAction(): Promise<ResendVerificatio
   }
 
   try {
-    await auth.api.sendVerificationEmail({
+    await getAuth().api.sendVerificationEmail({
       body: {
         callbackURL: `${getBetterAuthEnv().NEXT_PUBLIC_APP_URL}/login?message=email_verified`,
         email: currentUser.email

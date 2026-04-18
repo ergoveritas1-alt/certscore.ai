@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { auth } from "./server/better-auth/auth";
+import { getAuth } from "./server/better-auth/auth";
 
 function applyAuthHeaders(response: NextResponse, headers: Headers | undefined) {
   if (!headers) {
@@ -20,7 +20,7 @@ function applyAuthHeaders(response: NextResponse, headers: Headers | undefined) 
 }
 
 export async function middleware(request: NextRequest) {
-  const sessionResult = await auth.api.getSession({
+  const sessionResult = await getAuth().api.getSession({
     headers: request.headers,
     query: {
       disableCookieCache: true

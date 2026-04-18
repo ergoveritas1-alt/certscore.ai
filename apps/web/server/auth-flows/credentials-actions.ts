@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { auth } from "../better-auth/auth";
+import { getAuth } from "../better-auth/auth";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
 import { findAppUserByEmail, normalizeEmail } from "./user";
@@ -100,7 +100,7 @@ export async function submitCredentialsAction(
         };
       }
 
-      const response = await auth.api.signUpEmail({
+      const response = await getAuth().api.signUpEmail({
         body: {
           callbackURL: values.next,
           email: normalizedEmail,
@@ -119,7 +119,7 @@ export async function submitCredentialsAction(
       redirect(values.next);
     }
 
-    const response = await auth.api.signInEmail({
+    const response = await getAuth().api.signInEmail({
       body: {
         callbackURL: values.next,
         email: normalizedEmail,

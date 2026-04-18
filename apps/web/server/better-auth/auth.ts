@@ -18,122 +18,140 @@ function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
   };
 }
 
-export const auth = betterAuth({
-  account: {
-    fields: {
-      accessToken: "access_token",
-      accessTokenExpiresAt: "access_token_expires_at",
-      accountId: "account_id",
-      idToken: "id_token",
-      providerId: "provider_id",
-      refreshToken: "refresh_token",
-      refreshTokenExpiresAt: "refresh_token_expires_at",
-      userId: "user_id"
+function createAuth() {
+  const env = getBetterAuthEnv();
+
+  return betterAuth({
+    account: {
+      fields: {
+        accessToken: "access_token",
+        accessTokenExpiresAt: "access_token_expires_at",
+        accountId: "account_id",
+        idToken: "id_token",
+        providerId: "provider_id",
+        refreshToken: "refresh_token",
+        refreshTokenExpiresAt: "refresh_token_expires_at",
+        userId: "user_id"
+      },
+      modelName: "better_auth_accounts"
     },
-    modelName: "better_auth_accounts"
-  },
-  advanced: {
-    cookiePrefix: BETTER_AUTH_COOKIE_PREFIX,
-    cookies: {
-      session_token: {
-        name: BETTER_AUTH_SESSION_COOKIE_NAME
+    advanced: {
+      cookiePrefix: BETTER_AUTH_COOKIE_PREFIX,
+      cookies: {
+        session_token: {
+          name: BETTER_AUTH_SESSION_COOKIE_NAME
+        }
+      },
+      database: {
+        generateId: () => crypto.randomUUID()
       }
     },
-    database: {
-      generateId: () => crypto.randomUUID()
-    }
-  },
-  baseURL: getBetterAuthEnv().NEXT_PUBLIC_APP_URL,
-  database: getWritePool(),
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-    revokeSessionsOnPasswordReset: true,
-    sendResetPassword: async ({ user, url }) => {
-      const gmailConfig = getGmailConfig();
-
-      if (!gmailConfig) {
-        return;
-      }
-
-      const transporter = createGmailTransport(gmailConfig);
-
-      void transporter.sendMail({
-        from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
-        subject: "Reset your CertScore.ai password",
-        text: [
-          "We received a request to reset your CertScore.ai password.",
-          "",
-          "Use this secure link to choose a new password:",
-          url,
-          "",
-          `If you did not request a reset for ${user.email}, you can ignore this email.`
-        ].join("\n"),
-        to: user.email
-      });
-    }
-  },
-  emailVerification: {
-    sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      const gmailConfig = getGmailConfig();
-
-      if (!gmailConfig) {
-        return;
-      }
-
-      const transporter = createGmailTransport(gmailConfig);
-
-      void transporter.sendMail({
-        from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
-        subject: "Verify your CertScore.ai email",
-        text: [
-          "Thanks for creating your CertScore.ai account.",
-          "",
-          "Verify your email using this secure link:",
-          url,
-          "",
-          `If you did not create an account for ${user.email}, you can ignore this email.`
-        ].join("\n"),
-        to: user.email
-      });
-    }
-  },
-  plugins: [nextCookies()],
-  secret: getBetterAuthEnv().BETTER_AUTH_SECRET,
-  session: {
-    cookieCache: {
+    baseURL: env.NEXT_PUBLIC_APP_URL,
+    database: getWritePool(),
+    emailAndPassword: {
       enabled: true,
-      maxAge: 5 * 60
+      requireEmailVerification: false,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        const gmailConfig = getGmailConfig();
+
+        if (!gmailConfig) {
+          return;
+        }
+
+        const transporter = createGmailTransport(gmailConfig);
+
+        void transporter.sendMail({
+          from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
+          subject: "Reset your CertScore.ai password",
+          text: [
+            "We received a request to reset your CertScore.ai password.",
+            "",
+            "Use this secure link to choose a new password:",
+            url,
+            "",
+            `If you did not request a reset for ${user.email}, you can ignore this email.`
+          ].join("\n"),
+          to: user.email
+        });
+      }
     },
-    fields: {
-      createdAt: "created_at",
-      expiresAt: "expires_at",
-      ipAddress: "ip_address",
-      updatedAt: "updated_at",
-      userAgent: "user_agent",
-      userId: "user_id"
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        const gmailConfig = getGmailConfig();
+
+        if (!gmailConfig) {
+          return;
+        }
+
+        const transporter = createGmailTransport(gmailConfig);
+
+        void transporter.sendMail({
+          from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
+          subject: "Verify your CertScore.ai email",
+          text: [
+            "Thanks for creating your CertScore.ai account.",
+            "",
+            "Verify your email using this secure link:",
+            url,
+            "",
+            `If you did not create an account for ${user.email}, you can ignore this email.`
+          ].join("\n"),
+          to: user.email
+        });
+      }
     },
-    modelName: "better_auth_sessions"
-  },
-  socialProviders: {
-    google: getGoogleProviderConfig(getBetterAuthEnv())
-  },
-  trustedOrigins: [getBetterAuthEnv().NEXT_PUBLIC_APP_URL],
-  user: {
-    fields: {
-      createdAt: "created_at",
-      emailVerified: "email_verified",
-      updatedAt: "updated_at"
+    plugins: [nextCookies()],
+    secret: env.BETTER_AUTH_SECRET,
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60
+      },
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        ipAddress: "ip_address",
+        updatedAt: "updated_at",
+        userAgent: "user_agent",
+        userId: "user_id"
+      },
+      modelName: "better_auth_sessions"
     },
-    modelName: "better_auth_users"
-  },
-  verification: {
-    fields: {
-      createdAt: "created_at",
-      expiresAt: "expires_at",
-      updatedAt: "updated_at"
+    socialProviders: {
+      google: getGoogleProviderConfig(env)
     },
-    modelName: "better_auth_verifications"
+    trustedOrigins: [env.NEXT_PUBLIC_APP_URL],
+    user: {
+      fields: {
+        createdAt: "created_at",
+        emailVerified: "email_verified",
+        updatedAt: "updated_at"
+      },
+      modelName: "better_auth_users"
+    },
+    verification: {
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        updatedAt: "updated_at"
+      },
+      modelName: "better_auth_verifications"
+    }
+  });
+}
+
+type BetterAuthInstance = ReturnType<typeof createAuth>;
+
+let authSingleton: BetterAuthInstance | null = null;
+
+export function getAuth(): BetterAuthInstance {
+  if (authSingleton) {
+    return authSingleton;
   }
-});
+
+  const auth = createAuth();
+  authSingleton = auth;
+  return auth;
+}

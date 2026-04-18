@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "../better-auth/auth";
+import { getAuth } from "../better-auth/auth";
 import { normalizeEmail } from "./user";
 import {
   initialPasswordResetRequestState,
@@ -63,7 +63,7 @@ export async function requestPasswordResetAction(
   const requestOrigin = getRequestOrigin(headerStore);
 
   try {
-    await auth.api.requestPasswordReset({
+    await getAuth().api.requestPasswordReset({
       body: {
         email: values.email,
         redirectTo: `${requestOrigin}/reset-password/update`
@@ -112,7 +112,7 @@ export async function confirmPasswordResetAction(
   }
 
   try {
-    await auth.api.resetPassword({
+    await getAuth().api.resetPassword({
       body: {
         newPassword: parsed.data.password,
         token: parsed.data.token

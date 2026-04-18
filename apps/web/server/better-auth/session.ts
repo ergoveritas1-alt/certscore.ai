@@ -3,7 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { listBetterAuthAccountsByUserId } from "../users/repository";
-import { auth } from "./auth";
+import { getAuth } from "./auth";
 
 type BetterAuthAccountRow = {
   provider_id: string;
@@ -23,7 +23,7 @@ function normalizeProviderList(rows: BetterAuthAccountRow[]) {
 }
 
 export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser | null> {
-  const session = await auth.api.getSession({
+  const session = await getAuth().api.getSession({
     headers: await headers()
   });
 
