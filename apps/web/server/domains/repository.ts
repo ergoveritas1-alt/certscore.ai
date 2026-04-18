@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 
 export type DomainIndustryRow = {
@@ -71,27 +71,42 @@ export type DomainIdRow = {
   id: string;
 };
 
-function isMissingLastScannedAtColumn(error: { message?: string } | null) {
+type ErrorLike = { message?: string } | null;
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
+function toErrorLike(error: unknown): ErrorLike {
+  return { message: getErrorMessage(error) };
+}
+
+function isMissingLastScannedAtColumn(error: ErrorLike) {
   return Boolean(error?.message?.includes("last_scanned_at"));
 }
 
-export function isMissingIndustrySchema(error: { message?: string } | null) {
+export function isMissingIndustrySchema(error: ErrorLike) {
   return Boolean(error?.message?.includes("industry_primary_id") || error?.message?.includes("relation \"public.industries\" does not exist"));
 }
 
 export async function listIndustryRows(): Promise<DomainIndustryRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("industries").select("id, slug, label").order("sort_order", { ascending: true }).order("label", { ascending: true });
+  try {
+    const result = await query<DomainIndustryRow>(
+      `select id, slug, label
+         from industries
+        order by sort_order asc, label asc`,
+      [],
+      { readOnly: true }
+    );
 
-  if (error) {
-    if (Boolean(error.message?.includes("relation \"public.industries\" does not exist"))) {
+    return result.rows;
+  } catch (error) {
+    if (Boolean(getErrorMessage(error).includes("relation \"public.industries\" does not exist"))) {
       return [];
     }
 
-    throw new Error(`Failed to load industries: ${error.message}`);
+    throw new Error(`Failed to load industries: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as DomainIndustryRow[];
 }
 
 export async function updateDomainScanFrequency(input: {
@@ -99,17 +114,16 @@ export async function updateDomainScanFrequency(input: {
   organizationId: string;
   scanFrequency: string;
 }): Promise<void> {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("domains")
-    .update({
-      scan_frequency: input.scanFrequency
-    })
-    .eq("organization_id", input.organizationId)
-    .eq("id", input.domainId);
-
-  if (error) {
-    throw new Error(`Could not update domain scan frequency: ${error.message}`);
+  try {
+    await query(
+      `update domains
+          set scan_frequency = $1
+        where organization_id = $2
+          and id = $3`,
+      [input.scanFrequency, input.organizationId, input.domainId]
+    );
+  } catch (error) {
+    throw new Error(`Could not update domain scan frequency: ${getErrorMessage(error)}`);
   }
 }
 
@@ -117,233 +131,239 @@ export async function loadDomainMonitoringDomain(input: {
   domainId: string;
   organizationId: string;
 }): Promise<DomainMonitoringRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("domains")
-    .select("id, scan_frequency")
-    .eq("organization_id", input.organizationId)
-    .eq("id", input.domainId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load domain monitoring state: ${error.message}`);
+  try {
+    return await queryOne<DomainMonitoringRow>(
+      `select id, scan_frequency
+         from domains
+        where organization_id = $1
+          and id = $2`,
+      [input.organizationId, input.domainId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load domain monitoring state: ${getErrorMessage(error)}`);
   }
-
-  return (data as DomainMonitoringRow | null) ?? null;
 }
 
 export async function loadDomainDetail(input: {
   domainId: string;
   organizationId: string;
 }): Promise<DomainDetailRow | null> {
-  const db = createDatabaseClient();
-  const domainQueryWithLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
-  const domainQueryWithoutLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, industry_primary_id, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
-  const domainQueryLegacy = db
-    .from("domains")
-    .select("id, hostname, normalized_url, last_scanned_at, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
-  const domainQueryLegacyWithoutLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, latest_scan_id, scan_frequency, max_pages_override, created_at, updated_at")
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
+  try {
+    return await queryOne<DomainDetailRow>(
+      `select id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id,
+              scan_frequency, max_pages_override, created_at, updated_at
+         from domains
+        where id = $1
+          and organization_id = $2`,
+      [input.domainId, input.organizationId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    const primaryError = toErrorLike(error);
 
-  const { data: domainWithLastScannedAt, error } = await domainQueryWithLastScannedAt;
+    if (isMissingLastScannedAtColumn(primaryError)) {
+      try {
+        const fallback = await queryOne<Omit<DomainDetailRow, "last_scanned_at">>(
+          `select id, hostname, normalized_url, industry_primary_id, latest_scan_id,
+                  scan_frequency, max_pages_override, created_at, updated_at
+             from domains
+            where id = $1
+              and organization_id = $2`,
+          [input.domainId, input.organizationId],
+          { readOnly: true }
+        );
 
-  if (error && isMissingLastScannedAtColumn(error)) {
-    const fallback = await domainQueryWithoutLastScannedAt;
-
-    if (fallback.error) {
-      throw new Error(`Failed to load domain: ${fallback.error.message}`);
-    }
-
-    return fallback.data
-      ? ({
-          ...fallback.data,
-          last_scanned_at: null
-        } as DomainDetailRow)
-      : null;
-  }
-
-  if (error && isMissingIndustrySchema(error)) {
-    const fallback = await domainQueryLegacy;
-
-    if (fallback.error && isMissingLastScannedAtColumn(fallback.error)) {
-      const legacyWithoutLastScannedAt = await domainQueryLegacyWithoutLastScannedAt;
-
-      if (legacyWithoutLastScannedAt.error) {
-        throw new Error(`Failed to load domain: ${legacyWithoutLastScannedAt.error.message}`);
+        return fallback ? ({ ...fallback, last_scanned_at: null } as DomainDetailRow) : null;
+      } catch (fallbackError) {
+        throw new Error(`Failed to load domain: ${getErrorMessage(fallbackError)}`);
       }
-
-      return legacyWithoutLastScannedAt.data
-        ? ({
-            ...legacyWithoutLastScannedAt.data,
-            industry_primary_id: null,
-            last_scanned_at: null
-          } as DomainDetailRow)
-        : null;
     }
 
-    if (fallback.error) {
-      throw new Error(`Failed to load domain: ${fallback.error.message}`);
+    if (isMissingIndustrySchema(primaryError)) {
+      try {
+        const fallback = await queryOne<Omit<DomainDetailRow, "industry_primary_id">>(
+          `select id, hostname, normalized_url, last_scanned_at, latest_scan_id,
+                  scan_frequency, max_pages_override, created_at, updated_at
+             from domains
+            where id = $1
+              and organization_id = $2`,
+          [input.domainId, input.organizationId],
+          { readOnly: true }
+        );
+
+        return fallback ? ({ ...fallback, industry_primary_id: null } as DomainDetailRow) : null;
+      } catch (fallbackError) {
+        if (isMissingLastScannedAtColumn(toErrorLike(fallbackError))) {
+          try {
+            const legacyWithoutLastScannedAt = await queryOne<Omit<DomainDetailRow, "industry_primary_id" | "last_scanned_at">>(
+              `select id, hostname, normalized_url, latest_scan_id,
+                      scan_frequency, max_pages_override, created_at, updated_at
+                 from domains
+                where id = $1
+                  and organization_id = $2`,
+              [input.domainId, input.organizationId],
+              { readOnly: true }
+            );
+
+            return legacyWithoutLastScannedAt
+              ? ({
+                  ...legacyWithoutLastScannedAt,
+                  industry_primary_id: null,
+                  last_scanned_at: null
+                } as DomainDetailRow)
+              : null;
+          } catch (legacyError) {
+            throw new Error(`Failed to load domain: ${getErrorMessage(legacyError)}`);
+          }
+        }
+
+        throw new Error(`Failed to load domain: ${getErrorMessage(fallbackError)}`);
+      }
     }
 
-    return fallback.data
-      ? ({
-          ...fallback.data,
-          industry_primary_id: null
-        } as DomainDetailRow)
-      : null;
+    throw new Error(`Failed to load domain: ${primaryError?.message ?? "Unknown database error."}`);
   }
-
-  if (error) {
-    throw new Error(`Failed to load domain: ${error.message}`);
-  }
-
-  return (domainWithLastScannedAt as DomainDetailRow | null) ?? null;
 }
 
 export async function loadOrganizationDomains(organizationId: string): Promise<OrganizationDomainRow[]> {
-  const db = createDatabaseClient();
-  const domainQueryWithLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id, scan_frequency, created_at, updated_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  const domainQueryWithoutLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, industry_primary_id, latest_scan_id, scan_frequency, created_at, updated_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  const domainQueryLegacy = db
-    .from("domains")
-    .select("id, hostname, normalized_url, last_scanned_at, latest_scan_id, scan_frequency, created_at, updated_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  const domainQueryLegacyWithoutLastScannedAt = db
-    .from("domains")
-    .select("id, hostname, normalized_url, latest_scan_id, scan_frequency, created_at, updated_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
+  try {
+    const result = await query<OrganizationDomainRow>(
+      `select id, hostname, normalized_url, industry_primary_id, last_scanned_at, latest_scan_id,
+              scan_frequency, created_at, updated_at
+         from domains
+        where organization_id = $1
+        order by created_at desc`,
+      [organizationId],
+      { readOnly: true }
+    );
 
-  const { data: domainsWithLastScannedAt, error } = await domainQueryWithLastScannedAt;
+    return result.rows;
+  } catch (error) {
+    const primaryError = toErrorLike(error);
 
-  if (error && isMissingLastScannedAtColumn(error)) {
-    const fallback = await domainQueryWithoutLastScannedAt;
+    if (isMissingLastScannedAtColumn(primaryError)) {
+      try {
+        const fallback = await query<Omit<OrganizationDomainRow, "last_scanned_at">>(
+          `select id, hostname, normalized_url, industry_primary_id, latest_scan_id,
+                  scan_frequency, created_at, updated_at
+             from domains
+            where organization_id = $1
+            order by created_at desc`,
+          [organizationId],
+          { readOnly: true }
+        );
 
-    if (fallback.error) {
-      throw new Error(`Failed to load organization domains: ${fallback.error.message}`);
-    }
-
-    return (fallback.data ?? []).map((domain) => ({
-      ...domain,
-      last_scanned_at: null
-    })) as OrganizationDomainRow[];
-  }
-
-  if (error && isMissingIndustrySchema(error)) {
-    const fallback = await domainQueryLegacy;
-
-    if (fallback.error && isMissingLastScannedAtColumn(fallback.error)) {
-      const legacyWithoutLastScannedAt = await domainQueryLegacyWithoutLastScannedAt;
-
-      if (legacyWithoutLastScannedAt.error) {
-        throw new Error(`Failed to load organization domains: ${legacyWithoutLastScannedAt.error.message}`);
+        return fallback.rows.map((domain) => ({ ...domain, last_scanned_at: null })) as OrganizationDomainRow[];
+      } catch (fallbackError) {
+        throw new Error(`Failed to load organization domains: ${getErrorMessage(fallbackError)}`);
       }
-
-      return (legacyWithoutLastScannedAt.data ?? []).map((domain) => ({
-        ...domain,
-        industry_primary_id: null,
-        last_scanned_at: null
-      })) as OrganizationDomainRow[];
     }
 
-    if (fallback.error) {
-      throw new Error(`Failed to load organization domains: ${fallback.error.message}`);
+    if (isMissingIndustrySchema(primaryError)) {
+      try {
+        const fallback = await query<Omit<OrganizationDomainRow, "industry_primary_id">>(
+          `select id, hostname, normalized_url, last_scanned_at, latest_scan_id,
+                  scan_frequency, created_at, updated_at
+             from domains
+            where organization_id = $1
+            order by created_at desc`,
+          [organizationId],
+          { readOnly: true }
+        );
+
+        return fallback.rows.map((domain) => ({ ...domain, industry_primary_id: null })) as OrganizationDomainRow[];
+      } catch (fallbackError) {
+        if (isMissingLastScannedAtColumn(toErrorLike(fallbackError))) {
+          try {
+            const legacyWithoutLastScannedAt = await query<Omit<OrganizationDomainRow, "industry_primary_id" | "last_scanned_at">>(
+              `select id, hostname, normalized_url, latest_scan_id,
+                      scan_frequency, created_at, updated_at
+                 from domains
+                where organization_id = $1
+                order by created_at desc`,
+              [organizationId],
+              { readOnly: true }
+            );
+
+            return legacyWithoutLastScannedAt.rows.map((domain) => ({
+              ...domain,
+              industry_primary_id: null,
+              last_scanned_at: null
+            })) as OrganizationDomainRow[];
+          } catch (legacyError) {
+            throw new Error(`Failed to load organization domains: ${getErrorMessage(legacyError)}`);
+          }
+        }
+
+        throw new Error(`Failed to load organization domains: ${getErrorMessage(fallbackError)}`);
+      }
     }
 
-    return (fallback.data ?? []).map((domain) => ({
-      ...domain,
-      industry_primary_id: null
-    })) as OrganizationDomainRow[];
+    throw new Error(`Failed to load organization domains: ${primaryError?.message ?? "Unknown database error."}`);
   }
-
-  if (error) {
-    throw new Error(`Failed to load organization domains: ${error.message}`);
-  }
-
-  return (domainsWithLastScannedAt ?? []) as OrganizationDomainRow[];
 }
 
 export async function loadDomainOrganizationAndSettings(organizationId: string): Promise<{
   organization: DomainOrganizationRow | null;
   settings: DomainSettingsRow | null;
 }> {
-  const db = createDatabaseClient();
-  const [{ data: organization, error: organizationError }, { data: settings, error: settingsError }] = await Promise.all([
-    db.from("organizations").select("id, plan").eq("id", organizationId).maybeSingle(),
-    db.from("organization_settings").select("default_scan_frequency").eq("organization_id", organizationId).maybeSingle()
-  ]);
+  try {
+    const [organization, settings] = await Promise.all([
+      queryOne<DomainOrganizationRow>(
+        `select id, plan
+           from organizations
+          where id = $1`,
+        [organizationId],
+        { readOnly: true }
+      ),
+      queryOne<DomainSettingsRow>(
+        `select default_scan_frequency
+           from organization_settings
+          where organization_id = $1`,
+        [organizationId],
+        { readOnly: true }
+      )
+    ]);
 
-  if (organizationError) {
-    throw new Error(`Failed to load organization domains organization: ${organizationError.message}`);
+    return { organization, settings };
+  } catch (error) {
+    throw new Error(`Failed to load organization domains state: ${getErrorMessage(error)}`);
   }
-
-  if (settingsError) {
-    throw new Error(`Failed to load organization domains settings: ${settingsError.message}`);
-  }
-
-  return {
-    organization: (organization as DomainOrganizationRow | null) ?? null,
-    settings: (settings as DomainSettingsRow | null) ?? null
-  };
 }
 
 export async function countOrganizationDomains(organizationId: string): Promise<number> {
-  const db = createDatabaseClient();
-  const { count, error } = await db
-    .from("domains")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId);
+  try {
+    const result = await query<{ count: string }>(
+      `select count(*)::text as count
+         from domains
+        where organization_id = $1`,
+      [organizationId],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Could not verify domain limits: ${error.message}`);
+    return Number(result.rows[0]?.count ?? "0");
+  } catch (error) {
+    throw new Error(`Could not verify domain limits: ${getErrorMessage(error)}`);
   }
-
-  return count ?? 0;
 }
 
 export async function findOrganizationDomainByNormalizedUrl(input: {
   normalizedUrl: string;
   organizationId: string;
 }): Promise<DomainIdRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("domains")
-    .select("id")
-    .eq("organization_id", input.organizationId)
-    .eq("normalized_url", input.normalizedUrl)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load existing domain: ${error.message}`);
+  try {
+    return await queryOne<DomainIdRow>(
+      `select id
+         from domains
+        where organization_id = $1
+          and normalized_url = $2`,
+      [input.organizationId, input.normalizedUrl],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load existing domain: ${getErrorMessage(error)}`);
   }
-
-  return (data as DomainIdRow | null) ?? null;
 }
 
 export async function createOrganizationDomain(input: {
@@ -352,23 +372,22 @@ export async function createOrganizationDomain(input: {
   organizationId: string;
   scanFrequency: string;
 }): Promise<DomainIdRow> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("domains")
-    .insert({
-      organization_id: input.organizationId,
-      hostname: input.hostname,
-      normalized_url: input.normalizedUrl,
-      scan_frequency: input.scanFrequency
-    })
-    .select("id")
-    .single();
+  try {
+    const row = await queryOne<DomainIdRow>(
+      `insert into domains (organization_id, hostname, normalized_url, scan_frequency)
+       values ($1, $2, $3, $4)
+       returning id`,
+      [input.organizationId, input.hostname, input.normalizedUrl, input.scanFrequency]
+    );
 
-  if (error || !data) {
-    throw new Error(`Could not add domain: ${error?.message ?? "Unknown error"}`);
+    if (!row) {
+      throw new Error("Unknown error");
+    }
+
+    return row;
+  } catch (error) {
+    throw new Error(`Could not add domain: ${getErrorMessage(error)}`);
   }
-
-  return data as DomainIdRow;
 }
 
 export async function updateDomainIndustry(input: {
@@ -376,17 +395,16 @@ export async function updateDomainIndustry(input: {
   industryPrimaryId: string | null;
   organizationId: string;
 }): Promise<void> {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("domains")
-    .update({
-      industry_primary_id: input.industryPrimaryId
-    })
-    .eq("organization_id", input.organizationId)
-    .eq("id", input.domainId);
-
-  if (error) {
-    throw new Error(`Could not update domain industry: ${error.message}`);
+  try {
+    await query(
+      `update domains
+          set industry_primary_id = $1
+        where organization_id = $2
+          and id = $3`,
+      [input.industryPrimaryId, input.organizationId, input.domainId]
+    );
+  } catch (error) {
+    throw new Error(`Could not update domain industry: ${getErrorMessage(error)}`);
   }
 }
 
@@ -395,14 +413,19 @@ export async function loadLatestOrganizationDomainScans(scanIds: string[]): Prom
     return new Map();
   }
 
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("scans").select("id, status, created_at").in("id", scanIds);
+  try {
+    const result = await query<OrganizationDomainScanRow>(
+      `select id, status, created_at
+         from scans
+        where id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load latest scans: ${error.message}`);
+    return new Map(result.rows.map((scan) => [scan.id, scan]));
+  } catch (error) {
+    throw new Error(`Failed to load latest scans: ${getErrorMessage(error)}`);
   }
-
-  return new Map(((data ?? []) as OrganizationDomainScanRow[]).map((scan) => [scan.id, scan]));
 }
 
 export async function loadIndustryLabels(industryIds: string[]): Promise<Map<string, string>> {
@@ -410,67 +433,86 @@ export async function loadIndustryLabels(industryIds: string[]): Promise<Map<str
     return new Map();
   }
 
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("industries").select("id, label").in("id", industryIds);
+  try {
+    const result = await query<Pick<DomainIndustryRow, "id" | "label">>(
+      `select id, label
+         from industries
+        where id = any($1::uuid[])`,
+      [industryIds],
+      { readOnly: true }
+    );
 
-  if (error && !isMissingIndustrySchema(error)) {
-    throw new Error(`Failed to load industries: ${error.message}`);
+    return new Map(result.rows.map((industry) => [industry.id, industry.label]));
+  } catch (error) {
+    if (!isMissingIndustrySchema(toErrorLike(error))) {
+      throw new Error(`Failed to load industries: ${getErrorMessage(error)}`);
+    }
+
+    return new Map();
   }
-
-  return new Map(((data ?? []) as Array<Pick<DomainIndustryRow, "id" | "label">>).map((industry) => [industry.id, industry.label]));
 }
 
 export async function loadIndustryById(industryId: string): Promise<DomainIndustryRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("industries").select("id, slug, label").eq("id", industryId).maybeSingle();
-
-  if (error) {
-    if (isMissingIndustrySchema(error)) {
+  try {
+    return await queryOne<DomainIndustryRow>(
+      `select id, slug, label
+         from industries
+        where id = $1`,
+      [industryId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    if (isMissingIndustrySchema(toErrorLike(error))) {
       return null;
     }
 
-    throw new Error(`Failed to load domain industry: ${error.message}`);
+    throw new Error(`Failed to load domain industry: ${getErrorMessage(error)}`);
   }
-
-  return (data as DomainIndustryRow | null) ?? null;
 }
 
 export async function loadDomainScanHistory(input: {
   domainId: string;
   organizationId: string;
 }): Promise<DomainScanHistoryRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at")
-    .eq("organization_id", input.organizationId)
-    .eq("domain_id", input.domainId)
-    .order("created_at", { ascending: false });
+  try {
+    const result = await query<DomainScanHistoryRow>(
+      `select id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at
+         from scans
+        where organization_id = $1
+          and domain_id = $2
+        order by created_at desc`,
+      [input.organizationId, input.domainId],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load domain scans: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    throw new Error(`Failed to load domain scans: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as DomainScanHistoryRow[];
 }
 
 export async function loadOrganizationMonitoringHistory(
   organizationId: string
 ): Promise<Map<string, OrganizationDomainScanRow[]>> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, domain_id, status, created_at, completed_at")
-    .eq("organization_id", organizationId)
-    .in("scan_type", ["full", "scheduled"])
-    .order("created_at", { ascending: false });
+  let scans: OrganizationDomainScanRow[];
+  try {
+    const result = await query<OrganizationDomainScanRow>(
+      `select id, domain_id, status, created_at, completed_at
+         from scans
+        where organization_id = $1
+          and scan_type = any($2::text[])
+        order by created_at desc`,
+      [organizationId, ["full", "scheduled"]],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load monitoring history: ${error.message}`);
+    scans = result.rows;
+  } catch (error) {
+    throw new Error(`Failed to load monitoring history: ${getErrorMessage(error)}`);
   }
 
   const history = new Map<string, OrganizationDomainScanRow[]>();
-  for (const scan of (data ?? []) as OrganizationDomainScanRow[]) {
+  for (const scan of scans) {
     if (!scan.domain_id) {
       continue;
     }
