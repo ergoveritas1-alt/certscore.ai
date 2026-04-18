@@ -2867,6 +2867,61 @@ type ExecutiveAccessLimitationNotice = {
   summary: string;
 };
 
+export function buildPreviewExecutiveAccessLimitationNotice(input: {
+  resultState: {
+    code?: string;
+    coverageLevel?: string;
+    message: string;
+    title: string;
+  };
+  review: UnverifiedHomepageReview | null;
+}): ExecutiveAccessLimitationNotice {
+  const coverageLabel =
+    input.review?.coverageLabel ??
+    (input.resultState.coverageLevel === "limited_partial" ? "Partial public verification available" : "No public verification available");
+  const review: UnverifiedHomepageReview =
+    input.review ??
+    {
+      coverageLabel,
+      guidance: [
+        "Retry from a normal browsing session or allow scanner access to the public homepage before relying on privacy findings.",
+        "Treat this result as an access limitation, not a substantive privacy or consent review."
+      ],
+      message: input.resultState.message,
+      outcomeTitle: input.resultState.title,
+      recommendationTitle: "Protected-Site Workflow Recommended",
+      reason: "Reason: preview scores were withheld because the live pass did not verify a trustworthy public site surface.",
+      title: input.resultState.title,
+      verifiedPolicyInsights: [],
+      verifiedSurfaces: [],
+      whatThisMeans: [
+        "This scan does not support reliable privacy or consent conclusions.",
+        "Apparent runtime signals from this limited pass should be treated as non-actionable until a normal public page can be verified."
+      ]
+    };
+
+  return {
+    summary: "Preview scores were withheld because the live pass did not verify a trustworthy public site surface.",
+    review,
+    finding: {
+      id: "access_limited_no_reliable_findings",
+      label: "Public site access was limited",
+      section: "Runtime & Diagnostics",
+      defaultSurfacePriority: 110,
+      whyItMatters:
+        "When the scanner cannot verify a usable public page, any apparent runtime privacy signals are too thin to treat as trustworthy findings.",
+      remediation:
+        "Retry from a normal browsing environment or allow scanner access to the public homepage and core legal pages before relying on privacy findings.",
+      confidence: "strong",
+      directVsInferred: "direct",
+      evidencePreview: [review.message, review.reason],
+      evidenceRefs: [],
+      severity: "medium",
+      shortSummary: input.resultState.message
+    }
+  };
+}
+
 type ScanEventSummaryRecord = {
   eventType: string;
   message: string;
@@ -2948,6 +3003,33 @@ function deriveVerifiedPublicSurfaces(snapshot: Record<string, unknown>) {
   }
 
   return surfaces;
+}
+
+function isEvidenceRichZeroPagePreviewSnapshot(snapshot: Record<string, unknown>) {
+  const verifiedSurfaces = deriveVerifiedPublicSurfaces(snapshot);
+  const homepageFetchStatus = getRecordString(snapshot, "homepage_fetch_status");
+  const homepageFetchHttpStatus = getRecordNumber(snapshot, "homepage_fetch_http_status");
+  const totalSignals = getRecordNumber(snapshot, "total_signals");
+  const homepageFetchHttpStatusSuccessful =
+    homepageFetchHttpStatus === null || (homepageFetchHttpStatus >= 200 && homepageFetchHttpStatus < 400);
+
+  return (
+    getRecordNumber(snapshot, "pages_scanned") === 0 &&
+    homepageFetchStatus === "ok" &&
+    homepageFetchHttpStatusSuccessful &&
+    snapshot.blocked_flag !== true &&
+    snapshot.captcha_flag !== true &&
+    snapshot.auth_wall_detected !== true &&
+    snapshot.auth_wall_suspected !== true &&
+    snapshot.challenge_suspected !== true &&
+    (
+      verifiedSurfaces.length > 0 ||
+      (typeof totalSignals === "number" && totalSignals > 0) ||
+      snapshot.tracking_before_consent_detected === true ||
+      snapshot.preconsent_tracking_detected === true ||
+      snapshot.third_party_cookie_set_before_consent === true
+    )
+  );
 }
 
 function humanizePolicyTopic(topic: string) {
@@ -3106,6 +3188,10 @@ export function deriveUnverifiedHomepageReview(
   scanEvents: ScanEventSummaryRecord[] = [],
   policyEnrichments: Array<Record<string, unknown>> = []
 ): UnverifiedHomepageReview | null {
+  if (isEvidenceRichZeroPagePreviewSnapshot(snapshot)) {
+    return null;
+  }
+
   const reason = deriveUnverifiedHomepageReason(snapshot, scanEvents);
   const recommendation = deriveProtectedSiteRecommendation(snapshot, scanEvents);
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(snapshot);
@@ -5482,9 +5568,75 @@ function ResultCategorySection(input: {
   );
 }
 
+export function deriveExecutiveDisplayedScore(input: {
+  findings: CertScoreFinding[];
+  previewMode?: "full" | "homepage";
+  snapshot: Record<string, unknown> | null;
+  storedScore: number | null;
+}) {
+  if (typeof input.storedScore !== "number" || !Number.isFinite(input.storedScore)) {
+    return null;
+  }
+
+  if (input.previewMode !== "homepage" || !input.snapshot) {
+    return input.storedScore;
+  }
+
+  if (
+    input.storedScore === 0 &&
+    isEvidenceRichZeroPagePreviewSnapshot(input.snapshot) &&
+    getRecordNumber(input.snapshot, "privacy_score") === 0 &&
+    getRecordNumber(input.snapshot, "consent_score") === 0
+  ) {
+    return null;
+  }
+
+  const findingIds = new Set(input.findings.map((finding) => finding.id));
+  const hasConsentWeightedFinding =
+    findingIds.has("pre_consent_tracking_detected") ||
+    findingIds.has("third_party_tracking_pre_consent") ||
+    findingIds.has("storage_before_consent") ||
+    findingIds.has("third_party_cookie_pre_consent") ||
+    findingIds.has("analytics_cookie_pre_consent") ||
+    findingIds.has("adtech_cookie_pre_consent") ||
+    findingIds.has("reject_option_missing_or_hidden") ||
+    findingIds.has("asymmetric_consent_ui") ||
+    findingIds.has("forced_consent_interaction") ||
+    findingIds.has("consent_dark_patterns_detected");
+  const hasPrivacyWeightedFinding =
+    hasConsentWeightedFinding ||
+    findingIds.has("session_recording_services_detected") ||
+    findingIds.has("identifier_transmission_detected") ||
+    findingIds.has("telemetry_rich_identification_observed") ||
+    findingIds.has("device_data_collection_detected") ||
+    findingIds.has("probable_fingerprinting") ||
+    findingIds.has("non_cookie_tracking_detected");
+
+  const consentScore =
+    typeof input.snapshot.consent_score === "number" && Number.isFinite(input.snapshot.consent_score)
+      ? input.snapshot.consent_score
+      : null;
+  const privacyScore =
+    typeof input.snapshot.privacy_score === "number" && Number.isFinite(input.snapshot.privacy_score)
+      ? input.snapshot.privacy_score
+      : null;
+  const caps = [input.storedScore];
+
+  if (hasConsentWeightedFinding && consentScore !== null) {
+    caps.push(consentScore);
+  }
+
+  if (hasPrivacyWeightedFinding && privacyScore !== null) {
+    caps.push(privacyScore);
+  }
+
+  return Math.min(...caps);
+}
+
 type SharedScanDetailViewProps = {
   autoRefresh?: ReactNode;
   createAccountHref?: string | null;
+  executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
@@ -5493,6 +5645,7 @@ type SharedScanDetailViewProps = {
 export function SharedScanDetailView({
   autoRefresh = null,
   createAccountHref = null,
+  executiveAccessLimitationOverride = null,
   headerActions = null,
   previewMode = "full",
   scanRecord
@@ -5501,9 +5654,9 @@ export function SharedScanDetailView({
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
     : null;
-  const executiveAccessLimitationNotice = snapshot
-    ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment)
-    : null;
+  const executiveAccessLimitationNotice =
+    executiveAccessLimitationOverride ??
+    (snapshot ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment) : null);
   const suppressLimitedSurfaceReview =
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
@@ -5518,6 +5671,12 @@ export function SharedScanDetailView({
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
   const fallbackInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
+  const executiveDisplayedScore = deriveExecutiveDisplayedScore({
+    findings: certScoreSummary.findings,
+    previewMode,
+    snapshot,
+    storedScore: certScoreSummary.score
+  });
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
     getRecordNumber(snapshot, "cookie_count_total") ?? 0,
@@ -5748,7 +5907,7 @@ export function SharedScanDetailView({
         preConsentVendorNames={certScoreSummary.preConsentVendorNames}
         requestedHost={certScoreSummary.requestedHost}
         resolvedVendorNames={certScoreSummary.resolvedVendorNames}
-        score={certScoreSummary.score}
+        score={executiveDisplayedScore}
         sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
         thirdPartyRequestCount={certScoreSummary.thirdPartyRequestCount}
         thirdPartyDomains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}

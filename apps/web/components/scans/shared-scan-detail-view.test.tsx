@@ -120,6 +120,36 @@ async function loadExecutiveSummaryThemeHelpers() {
   };
 }
 
+async function loadExecutiveDisplayedScore() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveExecutiveDisplayedScore?: unknown })
+      .deriveExecutiveDisplayedScore
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveExecutiveDisplayedScore: (input: {
+      findings: Array<{ id: string }>;
+      previewMode?: "full" | "homepage";
+      snapshot: Record<string, unknown> | null;
+      storedScore: number | null;
+    }) => number | null;
+  }).deriveExecutiveDisplayedScore;
+}
+
 async function loadFindingEvidenceQualitySummary() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -281,6 +311,43 @@ async function loadExecutiveAccessLimitationNotice() {
         }
       | null;
   }).deriveExecutiveAccessLimitationNotice;
+}
+
+async function loadPreviewExecutiveAccessLimitationNotice() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { buildPreviewExecutiveAccessLimitationNotice?: unknown })
+      .buildPreviewExecutiveAccessLimitationNotice
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    buildPreviewExecutiveAccessLimitationNotice: (input: {
+      resultState: {
+        code?: string;
+        coverageLevel?: string;
+        message: string;
+        title: string;
+      };
+      review: Record<string, unknown> | null;
+    }) => {
+      finding: { shortSummary: string };
+      review: { coverageLabel: string; verifiedSurfaces: string[] };
+      summary: string;
+    };
+  }).buildPreviewExecutiveAccessLimitationNotice;
 }
 
 test("buildScanReportUnifiedFindings suppresses standalone privacy-rights paths when they do not support a stronger finding", async () => {
@@ -674,6 +741,80 @@ test("deriveExecutiveAccessLimitationNotice stays off when blocked scans still v
   assert.equal(notice, null);
 });
 
+test("buildPreviewExecutiveAccessLimitationNotice preserves limited homepage preview withholding", async () => {
+  const buildPreviewExecutiveAccessLimitationNotice = await loadPreviewExecutiveAccessLimitationNotice();
+
+  const notice = buildPreviewExecutiveAccessLimitationNotice({
+    resultState: {
+      code: "unknown_access_limitation",
+      coverageLevel: "limited_partial",
+      message:
+        "This run could not fully verify public pages because the site limited automated access from the scan environment. This does not by itself mean expected disclosures are absent.",
+      title: "Access limited by site protections"
+    },
+    review: {
+      coverageLabel: "Partial public verification available",
+      guidance: ["Retry from a normal browsing session."],
+      message: "Verified public surfaces detected: Privacy policy, Terms of service.",
+      outcomeTitle: "Access limited during live browser verification",
+      recommendationTitle: "Protected-Site Workflow Recommended",
+      reason: "Reason: no specific reachability blocker was retained for this run.",
+      title: "Access limited by site protections",
+      verifiedPolicyInsights: [],
+      verifiedSurfaces: ["Privacy policy", "Terms of service"],
+      whatThisMeans: ["This run does not support trustworthy privacy conclusions."]
+    }
+  });
+
+  assert.match(notice.summary, /Preview scores were withheld/i);
+  assert.equal(notice.review.coverageLabel, "Partial public verification available");
+  assert.deepEqual(notice.review.verifiedSurfaces, ["Privacy policy", "Terms of service"]);
+  assert.match(notice.finding.shortSummary, /site limited automated access/i);
+});
+
+test("deriveExecutiveDisplayedScore clamps homepage preview overall score to the weaker consent subscore when runtime findings are consent-driven", async () => {
+  const deriveExecutiveDisplayedScore = await loadExecutiveDisplayedScore();
+
+  const score = deriveExecutiveDisplayedScore({
+    findings: [
+      { id: "pre_consent_tracking_detected" },
+      { id: "asymmetric_consent_ui" },
+      { id: "reject_option_missing_or_hidden" }
+    ],
+    previewMode: "homepage",
+    snapshot: {
+      consent_score: 53,
+      privacy_score: 73
+    },
+    storedScore: 75
+  });
+
+  assert.equal(score, 53);
+});
+
+test("deriveExecutiveDisplayedScore withholds contradictory zeroed homepage preview scores when evidence was retained", async () => {
+  const deriveExecutiveDisplayedScore = await loadExecutiveDisplayedScore();
+
+  const score = deriveExecutiveDisplayedScore({
+    findings: [{ id: "pre_consent_tracking_detected" }],
+    previewMode: "homepage",
+    snapshot: {
+      consent_score: 0,
+      homepage_fetch_http_status: 200,
+      homepage_fetch_status: "ok",
+      pages_scanned: 0,
+      privacy_policy_present: true,
+      privacy_score: 0,
+      terms_of_service_present: true,
+      total_signals: 9,
+      tracking_before_consent_detected: true
+    },
+    storedScore: 0
+  });
+
+  assert.equal(score, null);
+});
+
 test("deriveUnverifiedHomepageReview carries verified privacy and terms surfaces on blocked runs", async () => {
   const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
 
@@ -748,6 +889,24 @@ test("deriveUnverifiedHomepageReview returns an explicit rate-limited explanatio
     review?.reason,
     "Reason: homepage request was rate-limited with HTTP 429 before the scanner could verify a usable page surface."
   );
+});
+
+test("deriveUnverifiedHomepageReview skips blocked-access framing for evidence-rich zero-page previews with successful homepage fetches", async () => {
+  const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
+
+  const review = deriveUnverifiedHomepageReview({
+    cookie_policy_present: true,
+    homepage_fetch_http_status: 200,
+    homepage_fetch_status: "ok",
+    pages_scanned: 0,
+    preconsent_tracking_detected: true,
+    privacy_policy_present: true,
+    terms_of_service_present: true,
+    total_signals: 9,
+    tracking_before_consent_detected: true
+  });
+
+  assert.equal(review, null);
 });
 
 test("deriveUnverifiedHomepageReview returns a generic zero-pages explanation when no stronger blocker is retained", async () => {
