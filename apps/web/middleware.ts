@@ -1,50 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getAuth } from "./server/better-auth/auth";
 
-function applyAuthHeaders(response: NextResponse, headers: Headers | undefined) {
-  if (!headers) {
-    return response;
-  }
+const FIXED_EGRESS_ORIGIN = process.env.FIXED_EGRESS_ORIGIN?.trim() || "https://certscore.ai";
 
-  for (const [key, value] of headers.entries()) {
-    if (key.toLowerCase() === "set-cookie") {
-      response.headers.append(key, value);
-      continue;
-    }
-
-    response.headers.set(key, value);
-  }
-
-  return response;
-}
-
-export async function middleware(request: NextRequest) {
-  const sessionResult = await getAuth().api.getSession({
-    headers: request.headers,
-    query: {
-      disableCookieCache: true
-    },
-    returnHeaders: true
-  });
-
-  if (sessionResult?.response?.session && sessionResult.response.user) {
-    return applyAuthHeaders(
-      NextResponse.next({
-        request
-      }),
-      sessionResult.headers
-    );
-  }
-
-  const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = "/login";
-  loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-  return applyAuthHeaders(NextResponse.redirect(loginUrl), sessionResult?.headers);
+export function middleware(request: NextRequest) {
+  const destination = new URL(request.nextUrl.pathname + request.nextUrl.search, FIXED_EGRESS_ORIGIN);
+  return NextResponse.rewrite(destination);
 }
 
 export const config = {
-  matcher: ["/app/:path*"]
+  matcher: ["/((?!\\.well-known).*)"]
 };
-
-export const runtime = "nodejs";
