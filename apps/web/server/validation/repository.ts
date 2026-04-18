@@ -987,59 +987,91 @@ async function loadSupplementalValidationFindings(input: {
     return [] as ValidationRunFindingRow[];
   }
 
-  const db = createDatabaseClient();
-  const [
-    { data: snapshot, error: snapshotError },
-    { data: policyQueue, error: policyQueueError },
-    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError }
-  ] =
-    await Promise.all([
-      db
-        .from("scan_snapshots")
-        .select("retargeting_pixel_detected, accessibility_litigation_risk_score")
-        .eq("scan_id", input.scanId)
-        .maybeSingle(),
-      db
-        .from("policy_review_queue")
-        .select("id, policy_enrichment_id, reason, review_status, scan_id")
-        .eq("scan_id", input.scanId),
-      db
-        .from("scan_accessibility_rule_examples")
-        .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
-        .eq("scan_id", input.scanId)
-        .order("node_count", { ascending: false })
-        .limit(10)
+  let snapshot: SnapshotSupplementRow | null;
+  let policyQueue: PolicyReviewQueueRow[];
+  let accessibilityRuleExamples: ScanAccessibilityRuleExampleRow[];
+  try {
+    [snapshot, policyQueue, accessibilityRuleExamples] = await Promise.all([
+      queryOne<SnapshotSupplementRow>(
+        `
+          select retargeting_pixel_detected, accessibility_litigation_risk_score
+          from scan_snapshots
+          where scan_id = $1
+        `,
+        [input.scanId],
+        { readOnly: true }
+      ),
+      query<PolicyReviewQueueRow>(
+        `
+          select id, policy_enrichment_id, reason, review_status, scan_id
+          from policy_review_queue
+          where scan_id = $1
+        `,
+        [input.scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<ScanAccessibilityRuleExampleRow>(
+        `
+          select
+            page_url,
+            rule_code,
+            rule_group,
+            severity,
+            impact,
+            help,
+            help_url,
+            description,
+            node_count,
+            representative_selectors
+          from scan_accessibility_rule_examples
+          where scan_id = $1
+          order by node_count desc
+          limit 10
+        `,
+        [input.scanId],
+        { readOnly: true }
+      ).then((result) => result.rows)
     ]);
-
-  if (snapshotError) {
-    throw new Error(`Failed to load supplemental snapshot context for ${input.scanId}: ${snapshotError.message}`);
+  } catch (error) {
+    throw new Error(`Failed to load supplemental validation findings for ${input.scanId}: ${getErrorMessage(error)}`);
   }
 
-  if (policyQueueError) {
-    throw new Error(`Failed to load supplemental policy review queue for ${input.scanId}: ${policyQueueError.message}`);
-  }
-
-  if (accessibilityRuleExamplesError) {
-    throw new Error(`Failed to load supplemental accessibility examples for ${input.scanId}: ${accessibilityRuleExamplesError.message}`);
-  }
-
-  const queueRows = (policyQueue ?? []) as PolicyReviewQueueRow[];
+  const queueRows = policyQueue;
   const enrichmentIds = queueRows
     .map((row) => row.policy_enrichment_id)
     .filter((value): value is string => typeof value === "string" && value.length > 0);
 
   let policyEnrichmentRows: PolicyEnrichmentLookupRow[] = [];
   if (enrichmentIds.length > 0) {
-    const { data: enrichmentRows, error: enrichmentError } = await db
-      .from("policy_enrichment")
-      .select("id, page_type, page_url, policy_ambiguity_score, policy_arbitration_present, policy_cancellation_or_refund_present, policy_coverage_ratio, policy_effective_date, policy_field_coverage, policy_governing_law, policy_notice_contact_present, policy_semantic_confidence, policy_snippet_count, policy_structurally_weak, policy_summary_short, policy_termination_or_suspension_present")
-      .in("id", enrichmentIds);
-
-    if (enrichmentError) {
-      throw new Error(`Failed to load supplemental policy enrichment rows for ${input.scanId}: ${enrichmentError.message}`);
+    try {
+      policyEnrichmentRows = await query<PolicyEnrichmentLookupRow>(
+        `
+          select
+            id,
+            page_type,
+            page_url,
+            policy_ambiguity_score,
+            policy_arbitration_present,
+            policy_cancellation_or_refund_present,
+            policy_coverage_ratio,
+            policy_effective_date,
+            policy_field_coverage,
+            policy_governing_law,
+            policy_notice_contact_present,
+            policy_semantic_confidence,
+            policy_snippet_count,
+            policy_structurally_weak,
+            policy_summary_short,
+            policy_termination_or_suspension_present
+          from policy_enrichment
+          where id = any($1::uuid[])
+        `,
+        [enrichmentIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load supplemental policy enrichment rows for ${input.scanId}: ${getErrorMessage(error)}`);
     }
-
-    policyEnrichmentRows = (enrichmentRows ?? []) as PolicyEnrichmentLookupRow[];
   }
   const policyEnrichmentById = new Map(policyEnrichmentRows.map((row) => [row.id, row]));
 
@@ -1050,9 +1082,9 @@ async function loadSupplementalValidationFindings(input: {
     startingRank: input.existingFindings.length
   });
   const snapshotSupplements = buildSupplementalSnapshotFindings({
-    accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as ScanAccessibilityRuleExampleRow[],
+    accessibilityRuleExamples,
     existingFindings: [...input.existingFindings, ...policySupplements],
-    snapshot: (snapshot as SnapshotSupplementRow | null) ?? null,
+    snapshot: snapshot ?? null,
     startingRank: input.existingFindings.length + policySupplements.length
   });
 
@@ -1322,38 +1354,40 @@ async function ensureValidationDomainForOrganization(input: {
   hostname: string;
   normalizedUrl: string;
 }) {
-  const db = createDatabaseClient();
-  const { data: existing, error: existingError } = await db
-    .from("domains")
-    .select("id, hostname, normalized_url")
-    .eq("organization_id", input.organizationId)
-    .eq("normalized_url", input.normalizedUrl)
-    .maybeSingle();
-
-  if (existingError) {
-    throw new Error(`Failed to load validation domain ${input.normalizedUrl}: ${existingError.message}`);
+  let existing: { hostname: string; id: string; normalized_url: string } | null;
+  try {
+    existing = await queryOne<{ hostname: string; id: string; normalized_url: string }>(
+      `
+        select id, hostname, normalized_url
+        from domains
+        where organization_id = $1
+          and normalized_url = $2
+      `,
+      [input.organizationId, input.normalizedUrl],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation domain ${input.normalizedUrl}: ${getErrorMessage(error)}`);
   }
 
   if (existing) {
-    return existing as { hostname: string; id: string; normalized_url: string };
+    return existing;
   }
 
-  const { data, error } = await db
-    .from("domains")
-    .insert({
-      hostname: input.hostname,
-      normalized_url: input.normalizedUrl,
-      organization_id: input.organizationId,
-      scan_frequency: "manual"
-    })
-    .select("id, hostname, normalized_url")
-    .single();
+  const data = await queryOne<{ hostname: string; id: string; normalized_url: string }>(
+    `
+      insert into domains (hostname, normalized_url, organization_id, scan_frequency)
+      values ($1, $2, $3, 'manual')
+      returning id, hostname, normalized_url
+    `,
+    [input.hostname, input.normalizedUrl, input.organizationId]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to create validation domain ${input.hostname}: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error(`Failed to create validation domain ${input.hostname}: Unknown error`);
   }
 
-  return data as { hostname: string; id: string; normalized_url: string };
+  return data;
 }
 
 async function createValidationScan(input: {
@@ -1364,7 +1398,6 @@ async function createValidationScan(input: {
   pagesRequested?: number;
   submittedByUserId: string;
 }) {
-  const db = createDatabaseClient();
   const pagesRequested = Math.max(3, input.pagesRequested ?? 8);
   const scanConfig = buildSharedFullScanConfig({
     hostname: input.hostname,
@@ -1375,34 +1408,38 @@ async function createValidationScan(input: {
     source: "validation-manual"
   });
 
-  const { data, error } = await db
-    .from("scans")
-    .insert({
-      domain_id: input.domainId,
-      organization_id: input.organizationId,
-      pages_requested: pagesRequested,
-      pages_scanned: 0,
-      scan_config_json: scanConfig,
-      scan_type: "full",
-      status: "queued",
-      submitted_by_user_id: input.submittedByUserId
-    })
-    .select("id")
-    .single();
+  const data = await queryOne<{ id: string }>(
+    `
+      insert into scans (
+        domain_id,
+        organization_id,
+        pages_requested,
+        pages_scanned,
+        scan_config_json,
+        scan_type,
+        status,
+        submitted_by_user_id
+      )
+      values ($1, $2, $3, 0, $4, 'full', 'queued', $5)
+      returning id
+    `,
+    [input.domainId, input.organizationId, pagesRequested, scanConfig, input.submittedByUserId]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to create validation scan for ${input.hostname}: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error(`Failed to create validation scan for ${input.hostname}: Unknown error`);
   }
 
-  const scanId = (data as { id: string }).id;
-  const { error: domainError } = await db
-    .from("domains")
-    .update({ latest_scan_id: scanId })
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId);
-  if (domainError) {
-    throw new Error(`Failed to set validation domain latest scan: ${domainError.message}`);
-  }
+  const scanId = data.id;
+  await query(
+    `
+      update domains
+         set latest_scan_id = $3
+       where id = $1
+         and organization_id = $2
+    `,
+    [input.domainId, input.organizationId, scanId]
+  );
 
   return scanId;
 }
@@ -1565,23 +1602,28 @@ export async function listValidationRuns(input?: {
   status?: string | null;
 }) {
   await requireAdmin();
-  const db = createDatabaseClient();
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * 50;
   const to = from + 49;
 
   let scanIdsFilter: string[] | null = null;
   if (input?.ruleKey) {
-    const { data: matchingRunIds, error: runIdsError } = await db
-      .from("validation_run_findings")
-      .select("validation_run_id")
-      .eq("rule_key", input.ruleKey);
-
-    if (runIdsError) {
-      throw new Error(`Failed to filter validation runs by rule key: ${runIdsError.message}`);
+    let matchingRunIds: Array<{ validation_run_id: string }>;
+    try {
+      matchingRunIds = await query<{ validation_run_id: string }>(
+        `
+          select validation_run_id
+          from validation_run_findings
+          where rule_key = $1
+        `,
+        [input.ruleKey],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to filter validation runs by rule key: ${getErrorMessage(error)}`);
     }
 
-    scanIdsFilter = [...new Set(((matchingRunIds ?? []) as Array<{ validation_run_id: string }>).map((row) => row.validation_run_id))];
+    scanIdsFilter = [...new Set(matchingRunIds.map((row) => row.validation_run_id))];
     if (scanIdsFilter.length === 0) {
       return {
         items: [],
@@ -1592,31 +1634,65 @@ export async function listValidationRuns(input?: {
     }
   }
 
-  let query = db
-    .from("validation_runs")
-    .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message", {
-      count: "exact"
-    })
-    .order("created_at", { ascending: false });
-
+  const whereClauses = ["1 = 1"];
+  const values: unknown[] = [];
   if (input?.status) {
-    query = query.eq("status", input.status);
+    values.push(input.status);
+    whereClauses.push(`status = $${values.length}`);
   }
-
   if (input?.rankBand) {
-    query = query.eq("rank_band", input.rankBand);
+    values.push(input.rankBand);
+    whereClauses.push(`rank_band = $${values.length}`);
   }
-
   if (scanIdsFilter) {
-    query = query.in("id", scanIdsFilter);
+    values.push(scanIdsFilter);
+    whereClauses.push(`id = any($${values.length}::uuid[])`);
   }
 
-  const { data, error, count } = await query.range(from, to);
-  if (error) {
-    throw new Error(`Failed to load validation runs: ${error.message}`);
+  let rows: ValidationRunRow[];
+  let countRow: { count: number } | null;
+  try {
+    [rows, countRow] = await Promise.all([
+      query<ValidationRunRow>(
+        `
+          select
+            id,
+            domain_id,
+            hostname,
+            tranco_rank,
+            rank_band,
+            trigger_mode,
+            status,
+            scan_id,
+            created_at,
+            completed_at,
+            finding_count,
+            reviewed_finding_count,
+            average_agreement_score,
+            error_message
+          from validation_runs
+          where ${whereClauses.join(" and ")}
+          order by created_at desc
+          offset $${values.length + 1}
+          limit $${values.length + 2}
+        `,
+        [...values, from, to - from + 1],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      queryOne<{ count: number }>(
+        `
+          select count(*)::int as count
+          from validation_runs
+          where ${whereClauses.join(" and ")}
+        `,
+        values,
+        { readOnly: true }
+      )
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load validation runs: ${getErrorMessage(error)}`);
   }
 
-  const rows = (data ?? []) as ValidationRunRow[];
   const runIds = rows.map((row) => row.id);
   const scanIds = rows.map((row) => row.scan_id).filter((value): value is string => typeof value === "string" && value.length > 0);
   const findingCountByRun = new Map<string, number>();
@@ -1624,16 +1700,22 @@ export async function listValidationRuns(input?: {
   const scanStatusById = new Map<string, { completed_at: string | null; started_at: string | null; status: string }>();
 
   if (runIds.length > 0) {
-    const { data: findings, error: findingsError } = await db
-      .from("validation_run_findings")
-      .select("id, validation_run_id, rule_key, title")
-      .in("validation_run_id", runIds);
-
-    if (findingsError) {
-      throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
+    let findings: Array<{ id: string; validation_run_id: string; rule_key: string; title: string }>;
+    try {
+      findings = await query<{ id: string; validation_run_id: string; rule_key: string; title: string }>(
+        `
+          select id, validation_run_id, rule_key, title
+          from validation_run_findings
+          where validation_run_id = any($1::uuid[])
+        `,
+        [runIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load validation run findings: ${getErrorMessage(error)}`);
     }
 
-    for (const row of (findings ?? []) as Array<{ id: string; validation_run_id: string; rule_key: string; title: string }>) {
+    for (const row of findings) {
       const list = findingCountByRun.get(row.validation_run_id) ?? 0;
       findingCountByRun.set(row.validation_run_id, list + 1);
       const existing = existingFindingIdentitiesByRun.get(row.validation_run_id) ?? [];
@@ -1643,16 +1725,22 @@ export async function listValidationRuns(input?: {
   }
 
   if (scanIds.length > 0) {
-    const { data: scans, error: scansError } = await db
-      .from("scans")
-      .select("id, status, started_at, completed_at")
-      .in("id", scanIds);
-
-    if (scansError) {
-      throw new Error(`Failed to load linked scans for validation runs: ${scansError.message}`);
+    let scans: Array<{ completed_at: string | null; id: string; started_at: string | null; status: string }>;
+    try {
+      scans = await query<{ completed_at: string | null; id: string; started_at: string | null; status: string }>(
+        `
+          select id, status, started_at, completed_at
+          from scans
+          where id = any($1::uuid[])
+        `,
+        [scanIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load linked scans for validation runs: ${getErrorMessage(error)}`);
     }
 
-    for (const row of (scans ?? []) as Array<{ completed_at: string | null; id: string; started_at: string | null; status: string }>) {
+    for (const row of scans) {
       scanStatusById.set(row.id, row);
     }
   }
@@ -1673,7 +1761,7 @@ export async function listValidationRuns(input?: {
     supplementalCountByRun.set(row.id, persistedCount + supplements.length);
   }
 
-  const totalCount = count ?? 0;
+  const totalCount = countRow?.count ?? 0;
   return {
     items: rows.map((row) => ({
       averageAgreementScore: null,
@@ -1705,88 +1793,188 @@ export async function listValidationRuns(input?: {
 
 export async function getValidationRunDetail(validationRunId: string) {
   await requireAdmin();
-  const db = createDatabaseClient();
-  const { data: run, error: runError } = await db
-    .from("validation_runs")
-    .select("id, domain_id, hostname, tranco_rank, rank_band, trigger_mode, status, scan_id, created_at, completed_at, finding_count, reviewed_finding_count, average_agreement_score, error_message")
-    .eq("id", validationRunId)
-    .maybeSingle();
-
-  if (runError) {
-    throw new Error(`Failed to load validation run ${validationRunId}: ${runError.message}`);
+  let run: ValidationRunRow | null;
+  try {
+    run = await queryOne<ValidationRunRow>(
+      `
+        select
+          id,
+          domain_id,
+          hostname,
+          tranco_rank,
+          rank_band,
+          trigger_mode,
+          status,
+          scan_id,
+          created_at,
+          completed_at,
+          finding_count,
+          reviewed_finding_count,
+          average_agreement_score,
+          error_message
+        from validation_runs
+        where id = $1
+      `,
+      [validationRunId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation run ${validationRunId}: ${getErrorMessage(error)}`);
   }
 
   if (!run) {
     return null;
   }
 
-  const [{ data: scanRow }, { data: scanSnapshot }, { data: runtimeArtifacts }, { count: accessibilityRuleCountTotal }] = await Promise.all([
-    (run as ValidationRunRow).scan_id
-      ? db
-          .from("scans")
-          .select("status, started_at, completed_at")
-          .eq("id", (run as ValidationRunRow).scan_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    (run as ValidationRunRow).scan_id
-      ? db
-          .from("scan_snapshots")
-          .select("timeout_flag, render_mode_used, preconsent_tracking_detected, tracking_before_consent_detected, wcag_error_count_total, pages_scanned, pages_requested")
-          .eq("scan_id", (run as ValidationRunRow).scan_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    (run as ValidationRunRow).scan_id
-      ? db
-          .from("scan_runtime_artifacts")
-          .select("consent_audit_completed, consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls, key_page_discovery_summary, hybrid_runtime_evidence")
-          .eq("scan_id", (run as ValidationRunRow).scan_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    (run as ValidationRunRow).scan_id
-      ? db
-          .from("scan_accessibility_rule_counts")
-          .select("rule_code", { count: "exact", head: true })
-          .eq("scan_id", (run as ValidationRunRow).scan_id)
-      : Promise.resolve({ count: 0 })
-  ]);
+  const runScanId = run.scan_id;
+  let scanRow: { completed_at: string | null; started_at: string | null; status: string } | null = null;
+  let scanSnapshot: Record<string, unknown> | null = null;
+  let runtimeArtifacts: Record<string, unknown> | null = null;
+  let accessibilityRuleCountTotal = 0;
+  let scanEvents: ScanEventRow[] = [];
+  let policyEnrichmentRows: Record<string, unknown>[] = [];
 
-  const { data: scanEvents } = (run as ValidationRunRow).scan_id
-    ? await db
-        .from("scan_events")
-        .select("id, event_type, message, metadata_json, created_at")
-        .eq("scan_id", (run as ValidationRunRow).scan_id)
-        .order("created_at", { ascending: true })
-    : { data: [] as ScanEventRow[] };
-  const { data: policyEnrichmentRows } = (run as ValidationRunRow).scan_id
-    ? await db.from("policy_enrichment").select("*").eq("scan_id", (run as ValidationRunRow).scan_id).order("created_at", { ascending: true })
-    : { data: [] as Record<string, unknown>[] };
-
-  const { data: findings, error: findingsError } = await db
-    .from("validation_run_findings")
-    .select("id, category, subtype, rule_key, title, description, severity, page_url, evidence_json, finding_rank")
-    .eq("validation_run_id", validationRunId)
-    .order("finding_rank", { ascending: true });
-
-  if (findingsError) {
-    throw new Error(`Failed to load validation run findings: ${findingsError.message}`);
+  try {
+    [
+      scanRow,
+      scanSnapshot,
+      runtimeArtifacts,
+      accessibilityRuleCountTotal,
+      scanEvents,
+      policyEnrichmentRows
+    ] = await Promise.all([
+      runScanId
+        ? queryOne<{ completed_at: string | null; started_at: string | null; status: string }>(
+            `
+              select status, started_at, completed_at
+              from scans
+              where id = $1
+            `,
+            [runScanId],
+            { readOnly: true }
+          )
+        : Promise.resolve(null),
+      runScanId
+        ? queryOne<Record<string, unknown>>(
+            `
+              select
+                timeout_flag,
+                render_mode_used,
+                preconsent_tracking_detected,
+                tracking_before_consent_detected,
+                wcag_error_count_total,
+                pages_scanned,
+                pages_requested
+              from scan_snapshots
+              where scan_id = $1
+            `,
+            [runScanId],
+            { readOnly: true }
+          )
+        : Promise.resolve(null),
+      runScanId
+        ? queryOne<Record<string, unknown>>(
+            `
+              select
+                consent_audit_completed,
+                consent_preconsent_violation_count,
+                consent_baseline_tracker_evidence_urls,
+                key_page_discovery_summary,
+                hybrid_runtime_evidence
+              from scan_runtime_artifacts
+              where scan_id = $1
+            `,
+            [runScanId],
+            { readOnly: true }
+          )
+        : Promise.resolve(null),
+      runScanId
+        ? queryOne<{ count: number }>(
+            `
+              select count(*)::int as count
+              from scan_accessibility_rule_counts
+              where scan_id = $1
+            `,
+            [runScanId],
+            { readOnly: true }
+          ).then((row) => row?.count ?? 0)
+        : Promise.resolve(0),
+      runScanId
+        ? query<ScanEventRow>(
+            `
+              select id, event_type, message, metadata_json, created_at
+              from scan_events
+              where scan_id = $1
+              order by created_at asc
+            `,
+            [runScanId],
+            { readOnly: true }
+          ).then((result) => result.rows)
+        : Promise.resolve([] as ScanEventRow[]),
+      runScanId
+        ? query<Record<string, unknown>>(
+            `
+              select *
+              from policy_enrichment
+              where scan_id = $1
+              order by created_at asc
+            `,
+            [runScanId],
+            { readOnly: true }
+          ).then((result) => result.rows)
+        : Promise.resolve([] as Record<string, unknown>[])
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load validation run detail context: ${getErrorMessage(error)}`);
   }
 
-  const findingRows = (findings ?? []) as ValidationRunFindingRow[];
+  let findingRows: ValidationRunFindingRow[];
+  try {
+    findingRows = await query<ValidationRunFindingRow>(
+      `
+        select
+          id,
+          category,
+          subtype,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          evidence_json,
+          finding_rank
+        from validation_run_findings
+        where validation_run_id = $1
+        order by finding_rank asc
+      `,
+      [validationRunId],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to load validation run findings: ${getErrorMessage(error)}`);
+  }
+
   const findingIds = findingRows.map((row) => row.id);
   const confidenceByFindingId = new Map<string, ValidationFindingConfidenceRow>();
 
   if (findingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await db
-      .from("validation_verdicts")
-      .select("validation_run_finding_id, confidence")
-      .in("validation_run_finding_id", findingIds)
-      .order("created_at", { ascending: false });
-
-    if (verdictsError) {
-      throw new Error(`Failed to load validation verdicts: ${verdictsError.message}`);
+    let verdictRows: ValidationFindingConfidenceRow[];
+    try {
+      verdictRows = await query<ValidationFindingConfidenceRow>(
+        `
+          select validation_run_finding_id, confidence
+          from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+          order by created_at desc
+        `,
+        [findingIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load validation verdicts: ${getErrorMessage(error)}`);
     }
 
-    for (const row of (verdictRows ?? []) as ValidationFindingConfidenceRow[]) {
+    for (const row of verdictRows) {
       if (!confidenceByFindingId.has(row.validation_run_finding_id)) {
         confidenceByFindingId.set(row.validation_run_finding_id, row);
       }
@@ -1803,14 +1991,13 @@ export async function getValidationRunDetail(validationRunId: string) {
       : null;
   const effectiveStatus = getEffectiveValidationRunStatus({
     scanStatus,
-    status: (run as ValidationRunRow).status
+    status: run.status
   });
-  const runScanId = (run as ValidationRunRow).scan_id;
   const supplementalFindings = shouldLoadSupplementalFindingsForRunStatus(effectiveStatus)
     ? await loadSupplementalValidationFindings({
         existingFindings: normalizedFindings,
         scanId: runScanId
-      })
+    })
     : [];
   normalizedFindings = [...normalizedFindings, ...supplementalFindings];
   const mergedSignalsByScanId = runScanId
@@ -1827,8 +2014,7 @@ export async function getValidationRunDetail(validationRunId: string) {
               (run as ValidationRunRow).created_at
           ]
         ]),
-        scanIds: [runScanId],
-        db
+        scanIds: [runScanId]
       })
     : new Map();
 
