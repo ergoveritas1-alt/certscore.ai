@@ -173,7 +173,6 @@ async function main() {
   }
 
   const workerPools = [
-    summarizeWorkerPool("certscore-worker", describeWorkerPool(projectId, region, "certscore-worker")),
     summarizeWorkerPool("certscore-validation-worker", describeWorkerPool(projectId, region, "certscore-validation-worker"))
   ];
 

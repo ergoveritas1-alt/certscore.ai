@@ -141,5 +141,6 @@ The validation-only deployment uses a different topology:
 - optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
 
 For the Cloud Run validation worker pool path, prefer `deploy-validation-worker.sh` with Secret Manager-backed bindings rather than shell-exporting prod secrets into the deploy command.
+Pass `DATABASE_URL_SECRET_NAME`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID_SECRET_NAME`, and `S3_SECRET_ACCESS_KEY_SECRET_NAME`, and let the deploy script scrub any legacy `SUPABASE_*` bindings from the worker pool revision.
 
 See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.

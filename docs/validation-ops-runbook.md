@@ -62,8 +62,15 @@ This builds the validation-worker Dockerfile and pushes an image intended for th
 Create an env file on the VM such as `/etc/validation-worker.env` with:
 
 - `DATABASE_URL`
+- `DATABASE_SSL_MODE` when your Postgres provider requires non-default SSL behavior
 - `OPENAI_API_KEY`
 - `VALIDATION_REDIS_URL`
+- `S3_BUCKET`
+- `S3_REGION`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+- optional `S3_ENDPOINT`
+- optional `S3_FORCE_PATH_STYLE`
 - `VALIDATION_PIPELINE_ENABLED=1`
 - `VALIDATION_SCHEDULER_POLL_MINUTES=1`
 - `VALIDATION_DEFAULT_RUN_MODE=manual`
@@ -106,6 +113,8 @@ If running directly on the VM:
 pnpm --filter @website-signal-risk-scanner/validation-worker start
 pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
+
+For the Cloud Run worker-pool path, redeploy with `deploy-validation-worker.sh` and pass the portable storage/database contract. The deploy script now removes lingering `SUPABASE_*` env and secret bindings during rollout so a fresh revision does not inherit the old Supabase contract.
 
 ## 5. Validation Runtime Checks
 
