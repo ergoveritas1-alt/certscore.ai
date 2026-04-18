@@ -1,6 +1,8 @@
 import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
 import { getDatabaseHealth } from "../server/health/get-database-health";
 
+const allowMissingEnv = process.argv.includes("--allow-missing-env");
+
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
 }
@@ -11,7 +13,14 @@ function fail(label: string, details: string) {
 
 async function main() {
   if (!hasDatabaseEnv() || !hasS3Env()) {
-    fail("runtime env", "Missing database or S3 environment variables required for runtime validation.");
+    const details = "Missing database or S3 environment variables required for runtime validation.";
+
+    if (allowMissingEnv) {
+      pass("runtime env", `${details} Skipping live runtime validation in this build environment.`);
+      return;
+    }
+
+    fail("runtime env", details);
     process.exitCode = 1;
     return;
   }
