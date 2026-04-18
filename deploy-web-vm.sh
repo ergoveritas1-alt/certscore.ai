@@ -7,6 +7,7 @@ REPOSITORY="${REPOSITORY:-certscore}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/web:${IMAGE_TAG}"
 BUILD_SERVICE_ACCOUNT="${BUILD_SERVICE_ACCOUNT:-}"
+BUILD_STRATEGY="${BUILD_STRATEGY:-cloud-build}"
 DEPLOY_TO_VM="${DEPLOY_TO_VM:-0}"
 ENSURE_ARTIFACT_REPOSITORY="${ENSURE_ARTIFACT_REPOSITORY:-0}"
 VM_NAME="${VM_NAME:-certscore-web-prod}"
@@ -59,7 +60,9 @@ if [[ "${ENSURE_ARTIFACT_REPOSITORY}" == "1" ]]; then
   fi
 fi
 
-cat > "${cloudbuild_config}" <<EOF
+case "${BUILD_STRATEGY}" in
+  cloud-build)
+    cat > "${cloudbuild_config}" <<EOF
 options:
   logging: CLOUD_LOGGING_ONLY
 steps:
@@ -75,19 +78,31 @@ images:
   - ${IMAGE_URI}
 EOF
 
-build_args=(
-  builds
-  submit
-  --project "${PROJECT_ID}"
-  --config "${cloudbuild_config}"
-  .
-)
+    build_args=(
+      builds
+      submit
+      --project "${PROJECT_ID}"
+      --config "${cloudbuild_config}"
+      .
+    )
 
-if [[ -n "${BUILD_SERVICE_ACCOUNT}" ]]; then
-  build_args+=(--service-account "projects/${PROJECT_ID}/serviceAccounts/${BUILD_SERVICE_ACCOUNT}")
-fi
+    if [[ -n "${BUILD_SERVICE_ACCOUNT}" ]]; then
+      build_args+=(--service-account "projects/${PROJECT_ID}/serviceAccounts/${BUILD_SERVICE_ACCOUNT}")
+    fi
 
-gcloud "${build_args[@]}"
+    gcloud "${build_args[@]}"
+    ;;
+  docker)
+    require_command docker
+    gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
+    docker build -f apps/web/Dockerfile -t "${IMAGE_URI}" .
+    docker push "${IMAGE_URI}"
+    ;;
+  *)
+    echo "Unsupported BUILD_STRATEGY: ${BUILD_STRATEGY}" >&2
+    exit 1
+    ;;
+esac
 
 echo "Built web image: ${IMAGE_URI}"
 

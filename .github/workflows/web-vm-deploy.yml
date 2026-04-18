@@ -60,6 +60,7 @@ jobs:
 
       - name: Deploy web to fixed-egress VM
         env:
+          BUILD_STRATEGY: docker
           IMAGE_TAG: ${{ github.sha }}
           DEPLOY_TO_VM: "1"
         run: bash ./deploy-web-vm.sh

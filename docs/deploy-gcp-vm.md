@@ -71,6 +71,12 @@ GitHub Actions in this repo uses Workload Identity Federation, not a long-lived 
 
 That service account is restricted to the `ergoveritas1-alt/certscore.ai` repository and is intended only for the web VM production workflow.
 
+The GitHub workflow builds the image directly with Docker on the runner and pushes it to Artifact Registry. Local operators can still use the default Cloud Build path, or force the runner-style path locally with:
+
+```bash
+BUILD_STRATEGY=docker bash ./deploy-web-vm.sh
+```
+
 Install the wrapper once on `certscore-web-prod`:
 
 ```bash
