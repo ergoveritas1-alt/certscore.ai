@@ -981,104 +981,129 @@ export async function createScanForValidationRun(runId: string) {
 }
 
 export async function loadCompletedScanArtifacts(scanId: string) {
-  const db = createDatabaseClient();
-  const [
-    { data: scan, error: scanError },
-    { data: snapshot, error: snapshotError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: rawSignals, error: signalsError },
-    { data: trackerVendors, error: trackerError },
-    { data: pages, error: pagesError },
-    { data: policyEnrichments, error: policyEnrichmentError },
-    { data: documentSources, error: documentSourcesError },
-    { data: macroEnrichment, error: macroEnrichmentError },
-    { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: preconsentViolations, error: preconsentError },
-    { data: signalHits, error: signalHitsError },
-    { data: pageEvidence, error: pageEvidenceError }
-  ] = await Promise.all([
-    db
-      .from("scans")
-      .select("id, status, created_at, completed_at, error_message")
-      .eq("id", scanId)
-      .maybeSingle(),
-    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    db
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", scanId)
-      .order("category", { ascending: true })
-      .order("signal_key", { ascending: true }),
-    db
-      .from("scan_tracker_vendors")
-      .select("vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id")
-      .eq("scan_id", scanId)
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_pages")
-      .select("page_type, page_url, fetch_status")
-      .eq("scan_id", scanId)
-      .order("page_type", { ascending: true }),
-    db
-      .from("policy_enrichment")
-      .select("*")
-      .eq("scan_id", scanId),
-    db.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
-    db
-      .from("policy_review_queue")
-      .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_preconsent_violations")
-      .select("vendor_name, evidence_urls, collection_endpoint_type")
-      .eq("scan_id", scanId),
-    db
-      .from("scan_signal_hits")
-      .select("id, signal_key, page_url, page_type, page_role, evidence_refs, payload")
-      .eq("scan_id", scanId)
-      .in("signal_key", [
-        "commercial.explicit_fee_disclosure_text_present",
-        "financial.apr_or_interest_rate_disclosure_text_present",
-        "financial.past_performance_disclaimer_text_present"
-      ]),
-    db
-      .from("scan_page_evidence")
-      .select("evidence_id, page_url, page_type, page_role, matched_text, metadata")
-      .eq("scan_id", scanId)
-  ]);
+  const optionalOne = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
+    queryOne<T>(text, values, { readOnly: true })
+      .then((data) => ({ data, error: null as { message?: string; code?: string | null } | null }))
+      .catch((error) => ({ data: null as T | null, error: { message: getErrorMessage(error) } }));
+  const optionalMany = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
+    query<T>(text, values, { readOnly: true })
+      .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+      .catch((error) => ({ data: [] as T[], error: { message: getErrorMessage(error) } }));
 
-  if (scanError) {
-    throw new Error(`Failed to load validation scan ${scanId}: ${scanError.message}`);
+  let scan: Record<string, unknown> | null;
+  let snapshot: Record<string, unknown> | null;
+  let runtimeArtifacts: Record<string, unknown> | null;
+  let rawSignals: SignalPopulationRow[];
+  let trackerVendors: Array<Record<string, unknown>>;
+  let pages: Array<Record<string, unknown>>;
+  let policyEnrichments: Array<Record<string, unknown>>;
+  let documentSourcesResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let macroEnrichmentResult: { data: Record<string, unknown> | null; error: { message?: string; code?: string | null } | null };
+  let policyReviewQueue: Array<Record<string, unknown>>;
+  let preconsentResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let signalHitsResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let pageEvidenceResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+
+  try {
+    [
+      scan,
+      snapshot,
+      runtimeArtifacts,
+      rawSignals,
+      trackerVendors,
+      pages,
+      policyEnrichments,
+      documentSourcesResult,
+      macroEnrichmentResult,
+      policyReviewQueue,
+      preconsentResult,
+      signalHitsResult,
+      pageEvidenceResult
+    ] = await Promise.all([
+      queryOne<Record<string, unknown>>(
+        `select id, status, created_at, completed_at, error_message from scans where id = $1`,
+        [scanId],
+        { readOnly: true }
+      ),
+      queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+      queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+      query<SignalPopulationRow>(
+        `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+           from scan_signals
+          where scan_id = $1
+          order by category asc, signal_key asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(
+        `select vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id
+           from scan_tracker_vendors
+          where scan_id = $1
+          order by vendor_name asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(
+        `select page_type, page_url, fetch_status
+           from scan_pages
+          where scan_id = $1
+          order by page_type asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1`, [scanId], { readOnly: true }).then((result) => result.rows),
+      optionalMany<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [scanId]),
+      optionalOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId]),
+      query<Record<string, unknown>>(
+        `select id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at
+           from policy_review_queue
+          where scan_id = $1
+          order by created_at asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      optionalMany<Record<string, unknown>>(
+        `select vendor_name, evidence_urls, collection_endpoint_type
+           from scan_preconsent_violations
+          where scan_id = $1`,
+        [scanId]
+      ),
+      optionalMany<Record<string, unknown>>(
+        `select id, signal_key, page_url, page_type, page_role, evidence_refs, payload
+           from scan_signal_hits
+          where scan_id = $1
+            and signal_key = any($2::text[])`,
+        [
+          scanId,
+          [
+            "commercial.explicit_fee_disclosure_text_present",
+            "financial.apr_or_interest_rate_disclosure_text_present",
+            "financial.past_performance_disclaimer_text_present"
+          ]
+        ]
+      ),
+      optionalMany<Record<string, unknown>>(
+        `select evidence_id, page_url, page_type, page_role, matched_text, metadata
+           from scan_page_evidence
+          where scan_id = $1`,
+        [scanId]
+      )
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load validation scan ${scanId}: ${getErrorMessage(error)}`);
   }
-  if (snapshotError) {
-    throw new Error(`Failed to load validation scan snapshot ${scanId}: ${snapshotError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load validation runtime artifacts ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (signalsError) {
-    throw new Error(`Failed to load validation signal populations ${scanId}: ${signalsError.message}`);
-  }
-  if (trackerError) {
-    throw new Error(`Failed to load validation tracker vendors ${scanId}: ${trackerError.message}`);
-  }
-  if (pagesError) {
-    throw new Error(`Failed to load validation scan pages ${scanId}: ${pagesError.message}`);
-  }
-  if (policyEnrichmentError) {
-    throw new Error(`Failed to load policy enrichment ${scanId}: ${policyEnrichmentError.message}`);
-  }
+
+  const documentSourcesError = documentSourcesResult.error;
+  const macroEnrichmentError = macroEnrichmentResult.error;
+  const preconsentError = preconsentResult.error;
+  const signalHitsError = signalHitsResult.error;
+  const pageEvidenceError = pageEvidenceResult.error;
+
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
   }
   if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
     throw new Error(`Failed to load scan macro enrichment ${scanId}: ${macroEnrichmentError.message}`);
-  }
-  if (policyReviewQueueError) {
-    throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
   }
   if (preconsentError && !isRecoverableOptionalLoadError(preconsentError)) {
     throw new Error(`Failed to load pre-consent violations ${scanId}: ${preconsentError.message}`);
@@ -1090,17 +1115,17 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     throw new Error(`Failed to load page evidence ${scanId}: ${pageEvidenceError.message}`);
   }
 
-  const runtimeArtifactsRecord = (runtimeArtifacts as Record<string, unknown> | null) ?? null;
-  const rawSignalRows = (rawSignals ?? []) as SignalPopulationRow[];
+  const runtimeArtifactsRecord = runtimeArtifacts ?? null;
+  const rawSignalRows = rawSignals;
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
-  const loadedPageEvidence = (pageEvidenceError ? [] : pageEvidence ?? []) as Array<Record<string, unknown>>;
-  const loadedSignalHits = (signalHitsError ? [] : signalHits ?? []) as Array<Record<string, unknown>>;
-  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const loadedPageEvidence = pageEvidenceError ? [] : pageEvidenceResult.data;
+  const loadedSignalHits = signalHitsError ? [] : signalHitsResult.data;
+  const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
-  const fallbackPolicyRows = ((policyEnrichments ?? []) as Array<Record<string, unknown>>);
+  const fallbackPolicyRows = policyEnrichments;
   const policySemanticInputs = preferDocumentSources
     ? mergeNanoPolicyInputsWithFallback({
         documentSources: normalizedDocumentSources,
@@ -1151,66 +1176,47 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     documentSources: normalizedDocumentSources,
     mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
-    pages: (pages ?? []) as Array<Record<string, unknown>>,
-    macroEnrichment: (macroEnrichmentError ? null : (macroEnrichment as Record<string, unknown> | null)) ?? null,
+    pages,
+    macroEnrichment: (macroEnrichmentError ? null : macroEnrichmentResult.data) ?? null,
     policyEnrichments: fallbackPolicyRows,
     policySemanticRows: policySemanticInputs,
     policySemanticInputs,
-    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue,
     preferDocumentSources,
-    preconsentViolations: (preconsentError ? [] : preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    preconsentViolations: preconsentError ? [] : preconsentResult.data,
     rawPolicyEnrichmentRows: fallbackPolicyRows,
     runtimeArtifacts: runtimeArtifactsRecord,
-    scan: (scan as Record<string, unknown> | null) ?? null,
+    scan: scan ?? null,
     signalHits: loadedSignalHits.length > 0 ? loadedSignalHits : fallbackFinancialEvidence.signalHits,
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
-    trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>
+    snapshot: snapshot ?? null,
+    trackerVendors
   };
 }
 
 export async function loadNanoSignalEnrichmentInputs(scanId: string) {
-  const db = createDatabaseClient();
-  const [
-    { data: scan, error: scanError },
-    { data: snapshot, error: snapshotError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: policyEnrichments, error: policyEnrichmentError },
-    { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: documentSources, error: documentSourcesError }
-  ] = await Promise.all([
-    db.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
-    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    db.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db
-      .from("scan_document_sources")
-      .select("*")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true })
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
+
+  const [scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
+    queryOne<Record<string, unknown>>(`select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows)
   ]);
 
-  if (scanError) {
-    throw new Error(`Failed to load scan for nano signal enrichment ${scanId}: ${scanError.message}`);
-  }
-  if (snapshotError) {
-    throw new Error(`Failed to load snapshot for nano signal enrichment ${scanId}: ${snapshotError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load runtime artifacts for nano signal enrichment ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (policyEnrichmentError) {
-    throw new Error(`Failed to load policy enrichment for nano signal enrichment ${scanId}: ${policyEnrichmentError.message}`);
-  }
-  if (policyReviewQueueError) {
-    throw new Error(`Failed to load policy review queue for nano signal enrichment ${scanId}: ${policyReviewQueueError.message}`);
-  }
+  const documentSourcesError = documentSourcesResult.error;
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources for nano signal enrichment ${scanId}: ${documentSourcesError.message}`);
   }
 
-  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
-  const fallbackPolicyRows = ((policyEnrichments ?? []) as Array<Record<string, unknown>>);
+  const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
+  const fallbackPolicyRows = policyEnrichments;
   const documentBackedPolicyInputs = mergeNanoPolicyInputsWithFallback({
     documentSources: normalizedDocumentSources,
     fallbackRows: fallbackPolicyRows
@@ -1221,10 +1227,10 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     policySemanticRows: preferDocumentSources ? documentBackedPolicyInputs : fallbackPolicyRows,
     policySignalInputs: preferDocumentSources ? documentBackedPolicyInputs : fallbackPolicyRows,
     policyEnrichments: fallbackPolicyRows,
-    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue,
     preferDocumentSources,
     rawPolicyEnrichmentRows: fallbackPolicyRows,
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    runtimeArtifacts: runtimeArtifacts ?? null,
     scan: (scan as {
       completed_at?: string | null;
       created_at?: string | null;
@@ -1233,88 +1239,88 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
       started_at?: string | null;
       status?: string | null;
     } | null) ?? null,
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null
+    snapshot: snapshot ?? null
   };
 }
 
 export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
-  const db = createDatabaseClient();
-  const { data: scan, error: scanError } = await db
-    .from("scans")
-    .select("id, status, created_at, started_at, completed_at, error_message, domain_id")
-    .eq("id", scanId)
-    .maybeSingle();
-
-  if (scanError) {
-    throw new Error(`Failed to load scan for nano doc retrieval ${scanId}: ${scanError.message}`);
-  }
+  const scan = await queryOne<Record<string, unknown>>(
+    `select id, status, created_at, started_at, completed_at, error_message, domain_id from scans where id = $1`,
+    [scanId],
+    { readOnly: true }
+  );
 
   const domainId = typeof scan?.domain_id === "string" ? scan.domain_id : null;
-  const recentDomainScansPromise = domainId
-    ? db
-        .from("scans")
-        .select("id")
-        .eq("domain_id", domainId)
-        .neq("id", scanId)
-        .order("created_at", { ascending: false })
-        .limit(5)
-    : Promise.resolve({ data: [], error: null });
-  const [
-    { data: domain, error: domainError },
-    { data: pages, error: pagesError },
-    { data: events, error: eventsError },
-    { data: documentSources, error: documentSourcesError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: recentDomainScans, error: recentDomainScansError }
-  ] = await Promise.all([
-    domainId ? db.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    db.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
-    db
-      .from("scan_events")
-      .select("event_type, metadata_json, created_at")
-      .eq("scan_id", scanId)
-      .eq("event_type", "runtime.build_phase_diagnostic")
-      .order("created_at", { ascending: true }),
-    db.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    recentDomainScansPromise
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
+
+  const [domain, pages, events, runtimeArtifacts, recentDomainScans] = await Promise.all([
+    domainId
+      ? queryOne<{ hostname: string }>(`select hostname from domains where id = $1`, [domainId], { readOnly: true })
+      : Promise.resolve(null),
+    query<Record<string, unknown>>(
+      `select page_type, page_url, fetch_status
+         from scan_pages
+        where scan_id = $1
+        order by page_type asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select event_type, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+          and event_type = 'runtime.build_phase_diagnostic'
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    domainId
+      ? query<Record<string, unknown>>(
+          `
+            select id
+            from scans
+            where domain_id = $1
+              and id <> $2
+            order by created_at desc
+            limit 5
+          `,
+          [domainId, scanId],
+          { readOnly: true }
+        ).then((result) => result.rows)
+      : Promise.resolve([] as Array<Record<string, unknown>>)
   ]);
 
-  if (domainError && !isMissingOptionalTableError(domainError)) {
-    throw new Error(`Failed to load domain for nano doc retrieval ${scanId}: ${domainError.message}`);
-  }
-  if (pagesError) {
-    throw new Error(`Failed to load scan pages for nano doc retrieval ${scanId}: ${pagesError.message}`);
-  }
-  if (eventsError) {
-    throw new Error(`Failed to load discovery events for nano doc retrieval ${scanId}: ${eventsError.message}`);
-  }
+  const documentSourcesError = documentSourcesResult.error;
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
   }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load runtime artifacts for nano doc retrieval ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (recentDomainScansError) {
-    throw new Error(`Failed to load recent domain scans for nano doc retrieval ${scanId}: ${recentDomainScansError.message}`);
-  }
 
-  const recentDomainScanIds = ((recentDomainScans ?? []) as Array<Record<string, unknown>>)
+  const recentDomainScanIds = recentDomainScans
     .map((row) => (typeof row.id === "string" ? row.id : null))
     .filter((value): value is string => typeof value === "string");
   const recentDomainDocumentCandidates =
     recentDomainScanIds.length > 0
-      ? (
-          await db
-            .from("scan_document_sources")
-            .select("canonical_url, source_url, document_type, title, semantic_confidence, created_at")
-            .in("scan_id", recentDomainScanIds)
-            .eq("source_status", "ready")
-            .order("created_at", { ascending: false })
-        ).data ?? []
+      ? await query<Record<string, unknown>>(
+          `
+            select canonical_url, source_url, document_type, title, semantic_confidence, created_at
+            from scan_document_sources
+            where scan_id = any($1::uuid[])
+              and source_status = 'ready'
+            order by created_at desc
+          `,
+          [recentDomainScanIds],
+          { readOnly: true }
+        ).then((result) => result.rows)
       : [];
 
-  const discoveryCandidates = ((events ?? []) as Array<Record<string, unknown>>).flatMap((event) => {
+  const discoveryCandidates = events.flatMap((event) => {
     const metadata =
       event.metadata_json && typeof event.metadata_json === "object" && !Array.isArray(event.metadata_json)
         ? (event.metadata_json as Record<string, unknown>)
@@ -1350,10 +1356,10 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   return {
     discoveryCandidates,
     domainHostname: (domain?.hostname as string | null) ?? null,
-    existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
-    pages: (pages ?? []) as Array<Record<string, unknown>>,
-    recentDomainDocumentCandidates: (recentDomainDocumentCandidates ?? []) as Array<Record<string, unknown>>,
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    existingDocumentSources: documentSourcesError ? [] : documentSourcesResult.data,
+    pages,
+    recentDomainDocumentCandidates,
+    runtimeArtifacts: runtimeArtifacts ?? null,
     scan:
       (scan as {
         completed_at?: string | null;
@@ -1993,7 +1999,6 @@ async function loadScanRecordForFindingCount(input: {
 }
 
 export async function failValidationRun(runId: string, message: string) {
-  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
   const failedAt = new Date();
 
@@ -2007,52 +2012,57 @@ export async function failValidationRun(runId: string, message: string) {
     return;
   }
 
-  const target = await db
-    .from("validation_targets")
-    .select("failure_count")
-    .eq("id", run.validation_target_id)
-    .maybeSingle();
-  const failureCount = Number(target.data?.failure_count ?? 0) + 1;
+  const target = await queryOne<{ failure_count: number | null }>(
+    `select failure_count from validation_targets where id = $1`,
+    [run.validation_target_id],
+    { readOnly: true }
+  );
+  const failureCount = Number(target?.failure_count ?? 0) + 1;
   const backoffDays = Math.min(30, 2 ** Math.min(failureCount - 1, 4));
 
-  await db
-    .from("validation_targets")
-    .update({
-      backoff_until: addDays(failedAt, backoffDays).toISOString(),
-      failure_count: failureCount,
-      last_error: message,
-      last_status: "failed"
-    })
-    .eq("id", run.validation_target_id);
+  await query(
+    `
+      update validation_targets
+         set backoff_until = $2,
+             failure_count = $3,
+             last_error = $4,
+             last_status = 'failed'
+       where id = $1
+    `,
+    [run.validation_target_id, addDays(failedAt, backoffDays).toISOString(), failureCount, message]
+  );
 }
 
 export async function markValidationSchedule(input: {
   nextDueAt: Date;
   now: Date;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("validation_settings")
-    .update({
-      last_scheduled_at: input.now.toISOString(),
-      next_due_at: input.nextDueAt.toISOString()
-    })
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
-
-  if (error) {
-    throw new Error(`Failed to update validation scheduler state: ${error.message}`);
-  }
+  await query(
+    `
+      update validation_settings
+         set last_scheduled_at = $2,
+             next_due_at = $3
+       where singleton_key = $1
+    `,
+    [VALIDATION_SETTINGS_KEY, input.now.toISOString(), input.nextDueAt.toISOString()]
+  );
 }
 
 export async function replaceScanDocumentSources(input: {
   rows: Array<Record<string, unknown>>;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error: deleteError } = await db.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
-
-  if (deleteError && !isMissingOptionalTableError(deleteError)) {
-    throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${deleteError.message}`);
+  try {
+    await query(
+      `delete from scan_document_sources where scan_id = $1 and source = 'nano_doc_retrieval'`,
+      [input.scanId]
+    );
+  } catch (error) {
+    const message = getErrorMessage(error);
+    const shaped = { message };
+    if (!isMissingOptionalTableError(shaped)) {
+      throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${message}`);
+    }
   }
 
   const nanoOwnedRows = input.rows.filter((row) => {
@@ -2064,13 +2074,14 @@ export async function replaceScanDocumentSources(input: {
     return [];
   }
 
-  const { error: insertError } = await db.from("scan_document_sources").insert(
-    prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId)
+  await query(
+    `
+      insert into scan_document_sources
+      select *
+      from jsonb_populate_recordset(null::scan_document_sources, $1::jsonb)
+    `,
+    [JSON.stringify(prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId))]
   );
-
-  if (insertError) {
-    throw new Error(`Failed to persist document sources for scan ${input.scanId}: ${insertError.message}`);
-  }
 
   return nanoOwnedRows;
 }
@@ -2083,14 +2094,14 @@ export async function appendScanDocumentSources(input: {
     return [];
   }
 
-  const db = createDatabaseClient();
-  const { error } = await db.from("scan_document_sources").insert(
-    prepareScanDocumentSourceRows(input.rows, input.scanId)
+  await query(
+    `
+      insert into scan_document_sources
+      select *
+      from jsonb_populate_recordset(null::scan_document_sources, $1::jsonb)
+    `,
+    [JSON.stringify(prepareScanDocumentSourceRows(input.rows, input.scanId))]
   );
-
-  if (error) {
-    throw new Error(`Failed to append document sources for scan ${input.scanId}: ${error.message}`);
-  }
 
   return input.rows;
 }
@@ -2104,23 +2115,26 @@ export async function updateScanDocumentSourceExtractions(input: {
     semanticConfidence: number | null;
   }>;
 }) {
-  const db = createDatabaseClient();
-
   for (const row of input.rows) {
-    const { error } = await db
-      .from("scan_document_sources")
-      .update({
-        extracted_fields_json: sanitizeJsonPersistenceValue(row.extractedFields),
-        extraction_status: row.extractionStatus,
-        metadata_json: sanitizeJsonPersistenceValue(row.metadata ?? {}),
-        semantic_confidence: row.semanticConfidence,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", row.id);
-
-    if (error) {
-      throw new Error(`Failed to update document source extraction ${row.id}: ${error.message}`);
-    }
+    await query(
+      `
+        update scan_document_sources
+           set extracted_fields_json = $2,
+               extraction_status = $3,
+               metadata_json = $4,
+               semantic_confidence = $5,
+               updated_at = $6
+         where id = $1
+      `,
+      [
+        row.id,
+        sanitizeJsonPersistenceValue(row.extractedFields),
+        row.extractionStatus,
+        sanitizeJsonPersistenceValue(row.metadata ?? {}),
+        row.semanticConfidence,
+        new Date().toISOString()
+      ]
+    );
   }
 }
 
@@ -2143,27 +2157,40 @@ export async function loadReusableNanoDocumentExtractions(input: {
     return [] as Array<Record<string, unknown>>;
   }
 
-  const db = createDatabaseClient();
   const [exactUrlResult, recentTypeResult] = await Promise.all([
     canonicalUrls.length === 0
-      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : db
-          .from("scan_document_sources")
-          .select("*")
-          .in("canonical_url", canonicalUrls)
-          .eq("extraction_status", "ready")
-          .neq("scan_id", input.scanId)
-          .order("updated_at", { ascending: false }),
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null as { message?: string; code?: string | null } | null })
+      : query<Record<string, unknown>>(
+          `
+            select *
+            from scan_document_sources
+            where canonical_url = any($1::text[])
+              and extraction_status = 'ready'
+              and scan_id <> $2
+            order by updated_at desc
+          `,
+          [canonicalUrls, input.scanId],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+          .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } })),
     documentTypes.length === 0
-      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : db
-          .from("scan_document_sources")
-          .select("*")
-          .in("document_type", documentTypes)
-          .eq("extraction_status", "ready")
-          .neq("scan_id", input.scanId)
-          .order("updated_at", { ascending: false })
-          .limit(250)
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null as { message?: string; code?: string | null } | null })
+      : query<Record<string, unknown>>(
+          `
+            select *
+            from scan_document_sources
+            where document_type = any($1::text[])
+              and extraction_status = 'ready'
+              and scan_id <> $2
+            order by updated_at desc
+            limit 250
+          `,
+          [documentTypes, input.scanId],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+          .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }))
   ]);
 
   if (exactUrlResult.error && !isMissingOptionalTableError(exactUrlResult.error)) {
@@ -2197,76 +2224,117 @@ export async function persistDerivedNanoPolicySignals(input: {
   scanId: string;
   snapshot?: Record<string, unknown> | null;
 }) {
-  const db = createDatabaseClient();
   const nextRows = buildNanoPolicySignalRows({
     policyEnrichments: input.policySemanticRows,
     policyReviewQueue: input.policyReviewQueue,
     runtimeArtifacts: input.runtimeArtifacts,
     snapshot: input.snapshot
   });
-  const { data: scanRow, error: scanError } = await db
-    .from("scans")
-    .select("organization_id, domain_id")
-    .eq("id", input.scanId)
-    .maybeSingle();
+  const scanRow = await queryOne<{ domain_id: string | null; organization_id: string | null }>(
+    `select organization_id, domain_id from scans where id = $1`,
+    [input.scanId],
+    { readOnly: true }
+  );
 
-  if (scanError || !scanRow?.domain_id) {
-    throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: ${scanError?.message ?? "missing scan"}`);
+  if (!scanRow?.domain_id) {
+    throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: missing scan`);
   }
 
   const nextKeys = new Set(nextRows.map((row) => row.key));
   const managedKeysToDelete = [...MANAGED_NANO_POLICY_SIGNAL_KEYS].filter((key) => !nextKeys.has(key));
   if (managedKeysToDelete.length > 0) {
-    const { error: deleteError } = await db
-      .from("scan_signals")
-      .delete()
-      .eq("scan_id", input.scanId)
-      .eq("population_source", "nano")
-      .in("signal_key", managedKeysToDelete);
-
-    if (deleteError) {
-      throw new Error(`Failed to clear stale nano signal rows for scan ${input.scanId}: ${deleteError.message}`);
-    }
+    await query(
+      `
+        delete from scan_signals
+        where scan_id = $1
+          and population_source = 'nano'
+          and signal_key = any($2::text[])
+      `,
+      [input.scanId, managedKeysToDelete]
+    );
   }
 
   if (nextRows.length === 0) {
     return nextRows;
   }
 
-  const { error } = await db.from("scan_signals").upsert(
-    nextRows.map((row) => ({
-      category:
-        row.key.startsWith("commerce.") ? "commerce" :
-        row.key.startsWith("disclosure.") ? "disclosure" :
-        row.key.startsWith("accessibility.") ? "accessibility" :
-        "privacy",
-      confidence: row.confidence,
-      domain_id: scanRow.domain_id,
-      evidence_refs: row.evidence_refs,
-      observed_at: new Date().toISOString(),
-      organization_id: scanRow.organization_id,
-      population_source: "nano",
-      population_status: row.population_status,
-      provenance_json: [
-        {
-          detail: row.provenance_detail,
-          kind: "document"
-        }
-      ],
-      scan_id: input.scanId,
-      signal_key: row.key,
-      signal_label: row.label,
-      signal_value_json: row.value,
-      value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
-    })),
-    {
-      onConflict: "scan_id,signal_key,population_source"
-    }
+  await query(
+    `
+      insert into scan_signals (
+        category,
+        confidence,
+        domain_id,
+        evidence_refs,
+        observed_at,
+        organization_id,
+        population_source,
+        population_status,
+        provenance_json,
+        scan_id,
+        signal_key,
+        signal_label,
+        signal_value_json,
+        value_type
+      )
+      select
+        value->>'category',
+        nullif(value->>'confidence', '')::float8,
+        nullif(value->>'domain_id', '')::uuid,
+        coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
+        value->>'observed_at',
+        nullif(value->>'organization_id', '')::uuid,
+        value->>'population_source',
+        value->>'population_status',
+        value->'provenance_json',
+        value->>'scan_id',
+        value->>'signal_key',
+        value->>'signal_label',
+        value->'signal_value_json',
+        value->>'value_type'
+      from jsonb_array_elements($1::jsonb) as value
+      on conflict (scan_id, signal_key, population_source) do update
+        set category = excluded.category,
+            confidence = excluded.confidence,
+            domain_id = excluded.domain_id,
+            evidence_refs = excluded.evidence_refs,
+            observed_at = excluded.observed_at,
+            organization_id = excluded.organization_id,
+            population_status = excluded.population_status,
+            provenance_json = excluded.provenance_json,
+            signal_label = excluded.signal_label,
+            signal_value_json = excluded.signal_value_json,
+            value_type = excluded.value_type
+    `,
+    [
+      JSON.stringify(
+        nextRows.map((row) => ({
+          category:
+            row.key.startsWith("commerce.") ? "commerce" :
+            row.key.startsWith("disclosure.") ? "disclosure" :
+            row.key.startsWith("accessibility.") ? "accessibility" :
+            "privacy",
+          confidence: row.confidence,
+          domain_id: scanRow.domain_id,
+          evidence_refs: row.evidence_refs,
+          observed_at: new Date().toISOString(),
+          organization_id: scanRow.organization_id,
+          population_source: "nano",
+          population_status: row.population_status,
+          provenance_json: [
+            {
+              detail: row.provenance_detail,
+              kind: "document"
+            }
+          ],
+          scan_id: input.scanId,
+          signal_key: row.key,
+          signal_label: row.label,
+          signal_value_json: row.value,
+          value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
+        }))
+      )
+    ]
   );
-
-  if (error) {
-    throw new Error(`Failed to persist nano policy signals for scan ${input.scanId}: ${error.message}`);
-  }
 
   return nextRows;
 }
@@ -2277,34 +2345,21 @@ export async function appendScanWorkflowEvent(input: {
   metadataJson?: Record<string, unknown>;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db.from("scan_events").insert({
-    domain_id: null,
-    event_type: input.eventType,
-    message: input.message,
-    metadata_json: input.metadataJson ?? {},
-    organization_id: null,
-    scan_id: input.scanId
-  });
-
-  if (error) {
-    throw new Error(`Failed to append scan workflow event ${input.eventType} for scan ${input.scanId}: ${error.message}`);
-  }
+  await query(
+    `
+      insert into scan_events (domain_id, event_type, message, metadata_json, organization_id, scan_id)
+      values (null, $1, $2, $3, null, $4)
+    `,
+    [input.eventType, input.message, input.metadataJson ?? {}, input.scanId]
+  );
 }
 
 export async function hasValidationRunForScan(scanId: string) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_runs")
-    .select("id")
-    .eq("scan_id", scanId)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to check validation run for scan ${scanId}: ${error.message}`);
-  }
-
+  const data = await queryOne<{ id: string }>(
+    `select id from validation_runs where scan_id = $1 limit 1`,
+    [scanId],
+    { readOnly: true }
+  );
   return Boolean(data?.id);
 }
 
@@ -2321,7 +2376,6 @@ export async function recordValidationWorkerHeartbeat(input: {
   startedAt?: Date;
   heartbeatAt?: Date;
 }) {
-  const db = createDatabaseClient();
   const patch: Record<string, string | null> = {
     last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
     last_worker_host: input.host
@@ -2331,19 +2385,20 @@ export async function recordValidationWorkerHeartbeat(input: {
     patch.last_worker_started_at = input.startedAt.toISOString();
   }
 
-  const { error } = await db
-    .from("validation_settings")
-    .upsert(
-      {
-        singleton_key: VALIDATION_SETTINGS_KEY,
-        ...patch
-      },
-      { onConflict: "singleton_key" }
-    );
-
-  if (error) {
-    throw new Error(`Failed to record validation worker heartbeat: ${error.message}`);
-  }
+  const entries = Object.entries(patch);
+  const cols = ["singleton_key", ...entries.map(([key]) => key)];
+  const values = [VALIDATION_SETTINGS_KEY, ...entries.map(([, value]) => value)];
+  const placeholders = cols.map((_, index) => `$${index + 1}`).join(", ");
+  const updates = entries.map(([key]) => `${key} = excluded.${key}`).join(", ");
+  await query(
+    `
+      insert into validation_settings (${cols.join(", ")})
+      values (${placeholders})
+      on conflict (singleton_key) do update
+        set ${updates}
+    `,
+    values
+  );
 }
 
 export async function addManualValidationTarget(hostnameOrUrl: string) {
@@ -2358,27 +2413,44 @@ export async function listRecentValidationRuns(input?: { limit?: number; page?: 
   const limit = Math.max(1, Math.min(100, input?.limit ?? 50));
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  const db = createDatabaseClient();
-  const { data, error, count } = await db
-    .from("validation_runs")
-    .select(
-      "id, hostname, normalized_url, tranco_rank, rank_band, trigger_mode, status, scan_id, finding_count, reviewed_finding_count, average_agreement_score, error_message, created_at, started_at, completed_at",
-      {
-        count: "exact"
-      }
+  const [data, countRow] = await Promise.all([
+    query<Record<string, unknown>>(
+      `
+        select
+          id,
+          hostname,
+          normalized_url,
+          tranco_rank,
+          rank_band,
+          trigger_mode,
+          status,
+          scan_id,
+          finding_count,
+          reviewed_finding_count,
+          average_agreement_score,
+          error_message,
+          created_at,
+          started_at,
+          completed_at
+        from validation_runs
+        order by created_at desc
+        offset $1
+        limit $2
+      `,
+      [from, limit],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<{ count: number }>(
+      `select count(*)::int as count from validation_runs`,
+      [],
+      { readOnly: true }
     )
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
-  if (error) {
-    throw new Error(`Failed to list validation runs: ${error.message}`);
-  }
+  ]);
 
   return {
     page,
-    pageCount: Math.max(1, Math.ceil((count ?? 0) / limit)),
-    rows: (data ?? []) as Array<Record<string, unknown>>,
-    totalCount: count ?? 0
+    pageCount: Math.max(1, Math.ceil((countRow?.count ?? 0) / limit)),
+    rows: data,
+    totalCount: countRow?.count ?? 0
   };
 }
