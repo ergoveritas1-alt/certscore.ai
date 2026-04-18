@@ -36,6 +36,12 @@ function getValidationWorkerWebBotAuthConfig(): ValidationWorkerWebBotAuthConfig
 const BROWSER_NAVIGATION_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
+export type ValidationWorkerBrowserNavigationCandidate = {
+  isMainFrame: boolean;
+  isNavigationRequest: boolean;
+  resourceType: string;
+};
+
 function getOrigin(value: string | URL | null | undefined) {
   if (!value) {
     return null;
@@ -136,4 +142,27 @@ export function buildValidationWorkerDocumentHeaders(input: {
       signatureAgentUrl: config.signatureAgentUrl
     }
   };
+}
+
+export function shouldSignValidationWorkerBrowserNavigation(input: ValidationWorkerBrowserNavigationCandidate) {
+  return input.isNavigationRequest && input.resourceType === "document" && input.isMainFrame;
+}
+
+export function buildValidationWorkerBrowserNavigationHeaders(input: {
+  currentPageUrl?: string | null;
+  requestHeaders: Record<string, string | undefined>;
+  requestTarget: ValidationWorkerBrowserNavigationCandidate;
+  url: string | URL;
+}) {
+  if (!shouldSignValidationWorkerBrowserNavigation(input.requestTarget)) {
+    return null;
+  }
+
+  const fallbackReferer =
+    input.currentPageUrl && input.currentPageUrl !== "about:blank" ? input.currentPageUrl : undefined;
+
+  return buildValidationWorkerDocumentHeaders({
+    referer: input.requestHeaders.referer ?? fallbackReferer,
+    url: input.url
+  });
 }

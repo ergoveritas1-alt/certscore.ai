@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type BrowserContext, type Frame, type Locator, type Page, type Request } from "playwright";
-import { buildValidationWorkerDocumentHeaders } from "../src/web-bot-auth";
+import { buildValidationWorkerBrowserNavigationHeaders } from "../src/web-bot-auth";
 
 type ScenarioName =
   | "fresh_visit"
@@ -443,19 +443,22 @@ async function safeGoto(page: Page, url: string) {
 async function installBrowserNavigationBotAuth(page: Page) {
   await page.route("**/*", async (route) => {
     const request = route.request();
+    const existingHeaders = request.headers();
+    const signedRequest = buildValidationWorkerBrowserNavigationHeaders({
+      currentPageUrl: page.url(),
+      requestHeaders: existingHeaders,
+      requestTarget: {
+        isMainFrame: request.frame() === page.mainFrame(),
+        isNavigationRequest: request.isNavigationRequest(),
+        resourceType: request.resourceType()
+      },
+      url: request.url()
+    });
 
-    if (!request.isNavigationRequest() || request.resourceType() !== "document" || request.frame() !== page.mainFrame()) {
+    if (!signedRequest) {
       await route.continue();
       return;
     }
-
-    const existingHeaders = request.headers();
-    const currentPageUrl = page.url();
-    const fallbackReferer = currentPageUrl && currentPageUrl !== "about:blank" ? currentPageUrl : undefined;
-    const signedRequest = buildValidationWorkerDocumentHeaders({
-      referer: existingHeaders.referer ?? fallbackReferer,
-      url: request.url()
-    });
 
     await route.continue({
       headers: {
