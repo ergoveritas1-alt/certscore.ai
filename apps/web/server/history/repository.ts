@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   LEGACY_CHANGE_EVENT_TYPES,
@@ -141,23 +141,29 @@ function chunkValues<T>(values: T[], size: number) {
   return chunks;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
 export async function loadHistoryScanRows(input: {
   domainId: string;
   organizationId: string;
 }): Promise<HistoryScanRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, scan_type, status, created_at, started_at, completed_at, pages_requested, pages_scanned")
-    .eq("organization_id", input.organizationId)
-    .eq("domain_id", input.domainId)
-    .order("created_at", { ascending: false });
+  try {
+    const result = await query<HistoryScanRow>(
+      `select id, scan_type, status, created_at, started_at, completed_at, pages_requested, pages_scanned
+         from scans
+        where organization_id = $1
+          and domain_id = $2
+        order by created_at desc`,
+      [input.organizationId, input.domainId],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load domain scan history: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as HistoryScanRow[];
 }
 
 export async function loadHistorySnapshots(scanIds: string[]): Promise<HistorySnapshotRow[]> {
@@ -165,14 +171,19 @@ export async function loadHistorySnapshots(scanIds: string[]): Promise<HistorySn
     return [];
   }
 
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("scan_snapshots").select("*").in("scan_id", scanIds);
+  try {
+    const result = await query<HistorySnapshotRow>(
+      `select *
+         from scan_snapshots
+        where scan_id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load domain scan history: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as HistorySnapshotRow[];
 }
 
 export async function loadHistoryChangeEvents(input: {
@@ -183,87 +194,95 @@ export async function loadHistoryChangeEvents(input: {
   data: HistoryChangeSummaryRow[];
   error: QueryErrorLike;
 }> {
-  const db = createDatabaseClient();
   const rows: HistoryChangeSummaryRow[] = [];
   let queryError: QueryErrorLike = null;
 
   for (const scanIdBatch of chunkValues(input.scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("compliance_change_events")
-      .select("scan_id_current, event_type")
-      .eq("organization_id", input.organizationId)
-      .eq("domain_id", input.domainId)
-      .in("scan_id_current", scanIdBatch);
+    try {
+      const result = await query<HistoryChangeSummaryRow>(
+        `select scan_id_current, event_type
+           from compliance_change_events
+          where organization_id = $1
+            and domain_id = $2
+            and scan_id_current = any($3::uuid[])`,
+        [input.organizationId, input.domainId, scanIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      queryError = error;
+      rows.push(...result.rows);
+    } catch (error) {
+      queryError = { message: getErrorMessage(error) };
       break;
     }
-
-    rows.push(...((data ?? []) as HistoryChangeSummaryRow[]));
   }
 
   return { data: rows, error: queryError };
 }
 
 export async function loadHistoryDiagnosticEvents(scanIds: string[]): Promise<HistoryDiagnosticEventRow[]> {
-  const db = createDatabaseClient();
   const diagnosticEvents: HistoryDiagnosticEventRow[] = [];
 
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("scan_events")
-      .select("scan_id, event_type, message, metadata_json, created_at")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: true });
+    try {
+      const result = await query<HistoryDiagnosticEventRow>(
+        `select scan_id, event_type, message, metadata_json, created_at
+           from scan_events
+          where scan_id = any($1::uuid[])
+          order by created_at asc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      throw new Error(`Failed to load domain scan history: ${error.message}`);
+      diagnosticEvents.push(...result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
     }
-
-    diagnosticEvents.push(...((data ?? []) as HistoryDiagnosticEventRow[]));
   }
 
   return diagnosticEvents;
 }
 
 export async function loadHistoryValidationRuns(scanIds: string[]): Promise<HistoryValidationRunSummaryRow[]> {
-  const db = createDatabaseClient();
   const rows: HistoryValidationRunSummaryRow[] = [];
 
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("validation_runs")
-      .select("id, scan_id, finding_count, created_at")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: false });
+    try {
+      const result = await query<HistoryValidationRunSummaryRow>(
+        `select id, scan_id, finding_count, created_at
+           from validation_runs
+          where scan_id = any($1::uuid[])
+          order by created_at desc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      throw new Error(`Failed to load domain scan history: ${error.message}`);
+      rows.push(...result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
     }
-
-    rows.push(...((data ?? []) as HistoryValidationRunSummaryRow[]));
   }
 
   return rows;
 }
 
 export async function loadHistoryPolicyEnrichments(scanIds: string[]): Promise<HistoryPolicyEnrichmentRow[]> {
-  const db = createDatabaseClient();
   const rows: HistoryPolicyEnrichmentRow[] = [];
 
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("policy_enrichment")
-      .select("*")
-      .in("scan_id", scanIdBatch)
-      .order("created_at", { ascending: true });
+    try {
+      const result = await query<HistoryPolicyEnrichmentRow>(
+        `select *
+           from policy_enrichment
+          where scan_id = any($1::uuid[])
+          order by created_at asc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      throw new Error(`Failed to load domain scan history: ${error.message}`);
+      rows.push(...result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
     }
-
-    rows.push(...((data ?? []) as HistoryPolicyEnrichmentRow[]));
   }
 
   return rows;
@@ -276,22 +295,23 @@ export async function loadHistoryValidationFindings(
     return [];
   }
 
-  const db = createDatabaseClient();
   const rows: HistoryValidationFindingSummaryRow[] = [];
 
   for (const validationRunIdBatch of chunkValues(validationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("validation_run_findings")
-      .select(
-        "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-      )
-      .in("validation_run_id", validationRunIdBatch);
+    try {
+      const result = await query<HistoryValidationFindingSummaryRow>(
+        `select id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope,
+                finding_subject, rule_key, title, description, severity, page_url, evidence_json
+           from validation_run_findings
+          where validation_run_id = any($1::uuid[])`,
+        [validationRunIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      throw new Error(`Failed to load domain scan history: ${error.message}`);
+      rows.push(...result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load domain scan history: ${getErrorMessage(error)}`);
     }
-
-    rows.push(...((data ?? []) as HistoryValidationFindingSummaryRow[]));
   }
 
   return rows;
@@ -300,7 +320,6 @@ export async function loadHistoryValidationFindings(
 export async function loadHistoryValidationVerdicts(
   validationFindingIds: string[]
 ): Promise<Map<string, HistoryValidationVerdictRow>> {
-  const db = createDatabaseClient();
   const verdictByFindingId = new Map<string, HistoryValidationVerdictRow>();
 
   if (!validationFindingIds.length) {
@@ -308,22 +327,25 @@ export async function loadHistoryValidationVerdicts(
   }
 
   for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("validation_verdicts")
-      .select(
-        "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-      )
-      .in("validation_run_finding_id", findingIdBatch)
-      .order("created_at", { ascending: false });
+    try {
+      const result = await query<HistoryValidationVerdictRow>(
+        `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model,
+                prompt_version, evidence_json, created_at, system_confidence_score,
+                system_confidence_band, system_confidence_explanation
+           from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+          order by created_at desc`,
+        [findingIdBatch],
+        { readOnly: true }
+      );
 
-    if (error) {
-      throw new Error(`Failed to load domain scan history verdicts: ${error.message}`);
-    }
-
-    for (const row of (data ?? []) as HistoryValidationVerdictRow[]) {
-      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-        verdictByFindingId.set(row.validation_run_finding_id, row);
+      for (const row of result.rows) {
+        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+          verdictByFindingId.set(row.validation_run_finding_id, row);
+        }
       }
+    } catch (error) {
+      throw new Error(`Failed to load domain scan history verdicts: ${getErrorMessage(error)}`);
     }
   }
 
@@ -335,26 +357,28 @@ export async function loadHistoryLegacyChangeEvents(input: {
   organizationId: string;
   scanIds: string[];
 }): Promise<LegacyScanEventRow[]> {
-  const db = createDatabaseClient();
   const legacyEvents: LegacyScanEventRow[] = [];
   let legacyEventsError: QueryErrorLike = null;
 
   for (const scanIdBatch of chunkValues(input.scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("scan_events")
-      .select("id, scan_id, event_type, message, metadata_json, created_at")
-      .eq("organization_id", input.organizationId)
-      .eq("domain_id", input.domainId)
-      .in("scan_id", scanIdBatch)
-      .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-      .order("created_at", { ascending: false });
+    try {
+      const result = await query<LegacyScanEventRow>(
+        `select id, scan_id, event_type, message, metadata_json, created_at
+           from scan_events
+          where organization_id = $1
+            and domain_id = $2
+            and scan_id = any($3::uuid[])
+            and event_type = any($4::text[])
+          order by created_at desc`,
+        [input.organizationId, input.domainId, scanIdBatch, [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed]],
+        { readOnly: true }
+      );
 
-    if (error) {
-      legacyEventsError = error;
+      legacyEvents.push(...result.rows);
+    } catch (error) {
+      legacyEventsError = { message: getErrorMessage(error) };
       break;
     }
-
-    legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
   }
 
   if (legacyEventsError) {
