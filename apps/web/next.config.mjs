@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   devIndicators: false,
+  output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: [
     "@website-signal-risk-scanner/shared",

@@ -1,8 +1,8 @@
-# Deploying CertScore to Vercel and GCP
+# Deploying CertScore to GCP VMs
 
 This repo is split across platforms:
 
-- `apps/web` deploys to Vercel.
+- `apps/web` deploys to a fixed-egress GCP VM behind Caddy.
 - scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
 - validation worker runtime remains a separate worker-style deploy path.
 
@@ -24,24 +24,23 @@ git remote add origin <repo-url>
 git push -u origin codex/init-deploy
 ```
 
-## 2. Deploy the web app to Vercel
+## 2. Deploy the web app to the fixed-egress VM
 
-Import the repository into Vercel and configure:
+Build and publish the standalone web image:
 
-- Root directory: `apps/web`
-- Install command: `pnpm install`
-- Build command: `pnpm build`
+```bash
+bash ./deploy-web-vm.sh
+```
 
 After the repo is connected, prefer Git-based deploys for web changes:
 
 - make the change in the repo root
 - `git add` the intended files
 - commit with a clear message
-- push `main` to GitHub so Vercel deploys production from Git
+- push the branch to GitHub
+- update the production VM from the published image after review
 
-Use `npx vercel deploy --prod` only as a manual fallback when you intentionally need a direct CLI deployment.
-
-Set the production environment variables in Vercel:
+Set the production environment variables in `/etc/certscore-web.env` on the VM:
 
 - `NEXT_PUBLIC_APP_URL`
 - `DATABASE_URL`
@@ -61,11 +60,19 @@ Set the production environment variables in Vercel:
 
 Optional variables depend on the features you intend to enable.
 
+The reverse proxy and canonical host policy should match the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile):
+
+- terminate TLS on the VM
+- serve `certscore.ai` directly
+- redirect `www.certscore.ai` to `https://certscore.ai`
+- expose only `80/443` publicly
+- keep the PostgreSQL security group limited to the VM public IP
+
 ## 2a. Production cutover checklist
 
 Before declaring production healthy, confirm this exact rollout contract:
 
-1. Vercel production env matches the portable contract above and no legacy `SUPABASE_*` variables remain in active use.
+1. The VM env file matches the portable contract above and no legacy `SUPABASE_*` variables remain in active use anywhere in the serving path.
 2. The production database already has the merged `packages/db/migrations` applied.
 3. The Better Auth tables exist in production PostgreSQL:
    - `better_auth_users`
@@ -95,9 +102,14 @@ Use the `WS01` repo for:
 
 The scanner scheduler also lives in `WS01`, not in this repo. `WC01` should treat scanner queue pickup and schedule sweeps as external scanner-service responsibilities.
 
-## 5. Point the production domain to Vercel
+## 5. Point the production domain to the web VM
 
-Add the new domain in the Vercel project, apply the DNS records Vercel gives you, then update:
+Update DNS so:
+
+- `A @` points to the web VM public IP
+- `www` either points at the same IP or CNAMEs to the apex
+
+Then update:
 
 - Better Auth site URL
 - Better Auth redirect URLs using the app callback alias, such as `https://<domain>/auth/callback`
@@ -107,7 +119,7 @@ Add the new domain in the Vercel project, apply the DNS records Vercel gives you
 
 Validate in this order:
 
-1. web app loads on the Vercel domain
+1. `https://certscore.ai` loads from the VM and returns `server: Caddy`
 2. login and callback flow work
 3. preview and full scan requests persist in the database as queued work
 4. the standalone scanner service claims and executes scans
@@ -135,11 +147,12 @@ If `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, and `OPS_ALERT_TO_EMAIL` are co
 
 The validation-only deployment uses a different topology:
 
-- Vercel deploy of `apps/web` with `APP_FLAVOR=validation_ops`
+- VM deploy of `apps/web` with `APP_FLAVOR=validation_ops`
 - separate Redis via `VALIDATION_REDIS_URL`
 - separate VM for `start:validation` and `start:validation:scheduler`
 - optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
 
 For the Cloud Run validation worker pool path, prefer `deploy-validation-worker.sh` with Secret Manager-backed bindings rather than shell-exporting prod secrets into the deploy command.
+Pass `DATABASE_URL_SECRET_NAME`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID_SECRET_NAME`, and `S3_SECRET_ACCESS_KEY_SECRET_NAME`, and let the deploy script scrub any legacy `SUPABASE_*` bindings from the worker pool revision.
 
 See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.

@@ -28,6 +28,22 @@ type WorkerPoolDescription = {
   };
 };
 
+function parseBooleanEnv(value: string | undefined, defaultValue: boolean) {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
 type ValidationSettingsRow = {
   last_worker_heartbeat_at: string | null;
   last_worker_host: string | null;
@@ -112,6 +128,10 @@ async function main() {
   const environment = process.env.OPS_ALERT_ENVIRONMENT?.trim() || DEFAULT_ENVIRONMENT;
   const projectId = process.env.GCP_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID;
   const region = process.env.GCP_REGION?.trim() || DEFAULT_REGION;
+  const validationWorkerPoolChecksEnabled = parseBooleanEnv(
+    process.env.OPS_CHECK_VALIDATION_WORKER_POOL,
+    false
+  );
   const databaseUrl =
     process.env.DATABASE_URL?.trim() ||
     (() => {
@@ -172,10 +192,14 @@ async function main() {
     }
   }
 
-  const workerPools = [
-    summarizeWorkerPool("certscore-worker", describeWorkerPool(projectId, region, "certscore-worker")),
-    summarizeWorkerPool("certscore-validation-worker", describeWorkerPool(projectId, region, "certscore-validation-worker"))
-  ];
+  const workerPools = validationWorkerPoolChecksEnabled
+    ? [
+        summarizeWorkerPool(
+          "certscore-validation-worker",
+          describeWorkerPool(projectId, region, "certscore-validation-worker")
+        )
+      ]
+    : [];
 
   for (const workerPool of workerPools) {
     if (!workerPool.ready) {

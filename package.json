@@ -22,6 +22,8 @@
     "dev:validation:worker": "pnpm --filter @website-signal-risk-scanner/validation-worker dev",
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/validation-worker scheduler",
     "gcloud:auth": "bash ./scripts/gcloud-auth-login.sh",
+    "db:migrate": "pnpm exec tsx ./scripts/apply-db-migrations.ts",
+    "db:import-json": "pnpm exec tsx ./scripts/import-json-to-postgres.ts",
     "ops:monitor:prod": "pnpm exec tsx ./scripts/monitor-prod-ops.ts",
     "test:web-bot-auth": "pnpm --filter @website-signal-risk-scanner/web-bot-auth build && npx -y node@22 --import tsx --test packages/web-bot-auth/src/index.test.ts",
     "web-bot-auth:generate": "npx -y node@22 --import tsx ./scripts/generate-web-bot-auth-key.ts",
