@@ -22,6 +22,10 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatMissingTables(tables: string[]) {
+  return tables.join(", ");
+}
+
 export default async function SettingsPage() {
   const { organization, user } = await getDashboardContext();
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
@@ -76,11 +80,20 @@ export default async function SettingsPage() {
         <CardContent className="grid gap-6 text-sm text-slate-600 lg:grid-cols-2">
           <div className="space-y-2">
             <p>
-              App auth and database:{" "}
+              Database connectivity:{" "}
               <span className={systemHealth.auth.databaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
                 {systemHealth.auth.databaseConnected ? "connected" : "connection issue"}
               </span>
             </p>
+            <p>
+              Better Auth schema:{" "}
+              <span className={systemHealth.auth.authSchemaReady ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
+                {systemHealth.auth.authSchemaReady ? "ready" : "incomplete"}
+              </span>
+            </p>
+            {!systemHealth.auth.authSchemaReady && systemHealth.auth.missingTables.length > 0 ? (
+              <p>Missing auth tables: {formatMissingTables(systemHealth.auth.missingTables)}</p>
+            ) : null}
             <p>
               Google sign-in:{" "}
               <span className={systemHealth.auth.googleEnabled ? "font-medium text-emerald-700" : "font-medium text-slate-500"}>

@@ -12,8 +12,10 @@ type BucketStatus = {
 
 export type SystemHealthStatus = {
   auth: {
+    authSchemaReady: boolean;
     databaseConnected: boolean;
     googleEnabled: boolean;
+    missingTables: string[];
   };
   queue: {
     enabled: boolean;
@@ -50,8 +52,10 @@ export async function getSystemHealth(): Promise<SystemHealthStatus> {
   if (!database.checks.env) {
     return {
       auth: {
+        authSchemaReady: false,
         databaseConnected: false,
         googleEnabled,
+        missingTables: [...database.requiredTables.missing]
       },
       queue,
       storage: {
@@ -94,9 +98,11 @@ export async function getSystemHealth(): Promise<SystemHealthStatus> {
   const lastEventType = workerEvent?.event_type ?? null;
 
   return {
-      auth: {
+    auth: {
+      authSchemaReady: database.checks.authSchema,
       databaseConnected: database.ok,
       googleEnabled,
+      missingTables: [...database.requiredTables.missing]
     },
     queue,
     storage: bucketState,
