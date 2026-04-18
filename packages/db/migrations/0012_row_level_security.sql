@@ -1,5 +1,5 @@
 -- CertScore RLS hardening.
--- Server-side writes currently use the Supabase service role, which bypasses RLS.
+-- Server-side application writes bypass RLS through privileged database access.
 -- These policies protect direct authenticated access and keep organization-scoped data isolated.
 
 create or replace function public.is_current_user_member_of_organization(target_organization_id uuid)

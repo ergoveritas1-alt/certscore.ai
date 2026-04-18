@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
@@ -12,6 +12,7 @@ type ScanRow = {
   id: string;
   status: string;
   created_at: string;
+  started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
 };
@@ -77,7 +78,7 @@ function createRedisConnection(redisUrl: string): ConnectionOptions {
 function getRedisConnection() {
   const redisUrl = getConfiguredValidationRedisUrl();
   if (!redisUrl) {
-    throw new Error("Validation Redis is not configured.");
+    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL or REDIS_URL.");
   }
 
   return createRedisConnection(redisUrl);
@@ -208,39 +209,36 @@ async function ensureDomain(input: {
   hostname: string;
   normalizedUrl: string;
   organizationId: string;
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
-  const existing = await input.supabase
-    .from("domains")
-    .select("id, hostname, normalized_url, max_pages_override")
-    .eq("organization_id", input.organizationId)
-    .eq("normalized_url", input.normalizedUrl)
-    .maybeSingle();
+  const existing = await queryOne<DomainRow>(
+    `
+      select id, hostname, normalized_url, max_pages_override
+      from domains
+      where organization_id = $1
+        and normalized_url = $2
+    `,
+    [input.organizationId, input.normalizedUrl],
+    { readOnly: true }
+  );
 
-  if (existing.error) {
-    throw new Error(`Failed to look up domain ${input.hostname}: ${existing.error.message}`);
+  if (existing) {
+    return existing;
   }
 
-  if (existing.data) {
-    return existing.data as DomainRow;
+  const inserted = await queryOne<DomainRow>(
+    `
+      insert into domains (organization_id, hostname, normalized_url, status)
+      values ($1, $2, $3, 'active')
+      returning id, hostname, normalized_url, max_pages_override
+    `,
+    [input.organizationId, input.hostname, input.normalizedUrl]
+  );
+
+  if (!inserted) {
+    throw new Error(`Failed to create domain ${input.hostname}: Unknown error`);
   }
 
-  const inserted = await input.supabase
-    .from("domains")
-    .insert({
-      organization_id: input.organizationId,
-      hostname: input.hostname,
-      normalized_url: input.normalizedUrl,
-      status: "active"
-    })
-    .select("id, hostname, normalized_url, max_pages_override")
-    .single();
-
-  if (inserted.error || !inserted.data) {
-    throw new Error(`Failed to create domain ${input.hostname}: ${inserted.error?.message ?? "Unknown error"}`);
-  }
-
-  return inserted.data as DomainRow;
+  return inserted;
 }
 
 async function queueScan(input: {
@@ -250,65 +248,73 @@ async function queueScan(input: {
   processor: string;
   profile: string;
   runtimeFast?: boolean;
-  supabase: ReturnType<typeof createAdminClient>;
   pagesRequestedOverride?: number | null;
 }) {
   const pagesRequested = Math.max(1, input.pagesRequestedOverride ?? input.domain.max_pages_override ?? DEFAULT_MAX_PAGES);
-  const inserted = await input.supabase
-    .from("scans")
-    .insert({
-      organization_id: input.organizationId,
-      domain_id: input.domain.id,
-      submitted_by_user_id: null,
-      scan_type: "full",
-      status: "queued",
-      pages_requested: pagesRequested,
-      pages_scanned: 0,
-      scan_config_json: getScanConfig({
+  const insertedScan = await queryOne<ScanRow>(
+    `
+      insert into scans (
+        organization_id,
+        domain_id,
+        submitted_by_user_id,
+        scan_type,
+        status,
+        pages_requested,
+        pages_scanned,
+        scan_config_json
+      )
+      values ($1, $2, null, 'full', 'queued', $3, 0, $4)
+      returning id, status, created_at, completed_at, error_message
+    `,
+    [
+      input.organizationId,
+      input.domain.id,
+      pagesRequested,
+      getScanConfig({
         maxPages: pagesRequested,
         maxRequestedTier: input.maxRequestedTier,
         processor: input.processor,
         profile: input.profile,
         runtimeFast: input.runtimeFast
       })
-    })
-    .select("id, status, created_at, completed_at, error_message")
-    .single();
+    ]
+  );
 
-  if (inserted.error || !inserted.data) {
-    throw new Error(`Failed to queue scan for ${input.domain.hostname}: ${inserted.error?.message ?? "Unknown error"}`);
+  if (!insertedScan) {
+    throw new Error(`Failed to queue scan for ${input.domain.hostname}: Unknown error`);
   }
 
-  await enqueueNanoSignalEnrichment(inserted.data.id).catch((error) => {
+  await enqueueNanoSignalEnrichment(insertedScan.id).catch((error) => {
     console.error("[scan-batch-eval] nano signal enrichment handoff failed", {
       error: error instanceof Error ? error.message : String(error),
-      scanId: inserted.data.id
+      scanId: insertedScan.id
     });
   });
 
-  return inserted.data as ScanRow;
+  return insertedScan;
 }
 
 async function waitForCompletion(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < input.timeoutMs) {
-    const { data, error } = await input.supabase
-      .from("scans")
-      .select("id, status, created_at, completed_at, error_message")
-      .eq("id", input.scanId)
-      .single();
+    const scan = await queryOne<ScanRow>(
+      `
+        select id, status, created_at, completed_at, error_message
+        from scans
+        where id = $1
+      `,
+      [input.scanId],
+      { readOnly: true }
+    );
 
-    if (error) {
-      throw new Error(`Failed to poll scan ${input.scanId} for ${input.hostname}: ${error.message}`);
+    if (!scan) {
+      throw new Error(`Failed to poll scan ${input.scanId} for ${input.hostname}: Not found`);
     }
-
-    const scan = data as ScanRow;
     if (scan.status === "completed" || scan.status === "failed" || scan.status === "canceled") {
       return scan;
     }
@@ -322,29 +328,29 @@ async function waitForCompletion(input: {
 async function waitForSignalEnrichmentCompletion(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
   timeoutMs: number;
 }) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < input.timeoutMs) {
-    const { data, error } = await input.supabase
-      .from("scan_events")
-      .select("event_type, created_at")
-      .eq("scan_id", input.scanId)
-      .in("event_type", [
+    const data = await query<{ created_at: string; event_type: string }>(
+      `
+        select event_type, created_at
+        from scan_events
+        where scan_id = $1
+          and event_type = any($2::text[])
+      `,
+      [input.scanId, [
         SCAN_EVENT_TYPES.nanoDocRetrievalCompleted,
         SCAN_EVENT_TYPES.nanoDocRetrievalFailed,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed
-      ]);
-
-    if (error) {
-      throw new Error(`Failed to poll signal enrichment events for ${input.hostname}: ${error.message}`);
-    }
+      ]],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
     const eventTypes = new Set(
-      (data ?? [])
+      data
         .map((row) => (row && typeof row === "object" ? (row as { event_type?: unknown }).event_type : null))
         .filter((value): value is string => typeof value === "string")
     );
@@ -367,60 +373,71 @@ async function waitForSignalEnrichmentCompletion(input: {
 async function summarizeScan(input: {
   hostname: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+    [input.scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: error instanceof Error ? error.message : String(error) } }));
   const [
-    { data: snapshot, error: snapshotError },
-    { data: events, error: eventsError },
-    { data: policyEnrichment, error: policyError },
-    { data: documentSources, error: documentSourcesError },
+    snapshot,
+    events,
+    policyEnrichment,
     signalResult,
     findingsResult,
-    { data: scanRow, error: scanError }
-  ] =
-    await Promise.all([
-      input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-      input.supabase
-        .from("scan_events")
-        .select("id, event_type, message, metadata_json, created_at")
-        .eq("scan_id", input.scanId)
-        .order("created_at", { ascending: true }),
-      input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-      input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-      input.supabase.from("scan_signals").select("signal_key, population_source").eq("scan_id", input.scanId).order("signal_key", { ascending: true }),
-      input.supabase.from("validation_run_findings").select("id").eq("scan_id", input.scanId),
-      input.supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", input.scanId).maybeSingle()
-    ]);
+    scanRow
+  ] = await Promise.all([
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<ScanEventRow>(
+      `select id, event_type, message, metadata_json, created_at from scan_events where scan_id = $1 order by created_at asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<ScanSignalRow>(
+      `select signal_key, population_source from scan_signals where scan_id = $1 order by signal_key asc`,
+      [input.scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as ScanSignalRow[], error: { message: error instanceof Error ? error.message : String(error) } })),
+    query<{ id: string }>(
+      `select id from validation_run_findings where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as Array<{ id: string }>, error: { message: error instanceof Error ? error.message : String(error) } })),
+    queryOne<ScanRow>(
+      `select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    )
+  ]);
 
-  if (snapshotError) {
-    throw new Error(`Failed to load snapshot for ${input.hostname}: ${snapshotError.message}`);
-  }
-  if (eventsError) {
-    throw new Error(`Failed to load events for ${input.hostname}: ${eventsError.message}`);
-  }
-  if (policyError) {
-    throw new Error(`Failed to load policy enrichment for ${input.hostname}: ${policyError.message}`);
-  }
+  const documentSourcesError = documentSourcesResult.error;
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources for ${input.hostname}: ${documentSourcesError.message}`);
   }
-  if (scanError) {
-    throw new Error(`Failed to load scan row for ${input.hostname}: ${scanError.message}`);
+  if (!scanRow) {
+    throw new Error(`Failed to load scan row for ${input.hostname}: Not found`);
   }
 
   let signals = signalResult.data;
   let signalsError = signalResult.error;
   if (signalsError && isMissingColumnError(signalsError, "population_source")) {
-    const fallback = await input.supabase
-      .from("scan_signals")
-      .select("signal_key")
-      .eq("scan_id", input.scanId)
-      .order("signal_key", { ascending: true });
-    signals = (fallback.data ?? []).map((row) => ({
+    const fallback = await query<{ signal_key: string }>(
+      `select signal_key from scan_signals where scan_id = $1 order by signal_key asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows);
+    signals = fallback.map((row) => ({
       ...row,
       population_source: null
     }));
-    signalsError = fallback.error;
+    signalsError = null;
   }
   if (signalsError) {
     throw new Error(`Failed to load signals for ${input.hostname}: ${signalsError.message}`);
@@ -429,12 +446,13 @@ async function summarizeScan(input: {
   let findings = findingsResult.data;
   let findingsError = findingsResult.error;
   if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
-    const { data: runs, error: runsError } = await input.supabase.from("validation_runs").select("id").eq("scan_id", input.scanId);
-    if (runsError) {
-      throw new Error(`Failed to load validation runs for ${input.hostname}: ${runsError.message}`);
-    }
+    const runs = await query<{ id: string }>(
+      `select id from validation_runs where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
-    const runIds = (runs ?? [])
+    const runIds = runs
       .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
       .filter((value): value is string => typeof value === "string");
 
@@ -442,25 +460,29 @@ async function summarizeScan(input: {
       findings = [];
       findingsError = null;
     } else {
-      const fallback = await input.supabase.from("validation_run_findings").select("id").in("validation_run_id", runIds);
-      findings = fallback.data;
-      findingsError = fallback.error;
+      findings = await query<{ id: string }>(
+        `select id from validation_run_findings where validation_run_id = any($1::uuid[])`,
+        [runIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+      findingsError = null;
     }
   }
   if (findingsError) {
     throw new Error(`Failed to load validation findings for ${input.hostname}: ${findingsError.message}`);
   }
 
-  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const normalizedDocumentSources = (documentSourcesError ? [] : documentSourcesResult.data) as Array<Record<string, unknown>>;
   const readyDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
-  const observedAtByScanId = new Map([[input.scanId, scanRow?.completed_at ?? scanRow?.started_at ?? scanRow?.created_at ?? null]]);
+  const observedAtByScanId = new Map<string, string | null>([
+    [input.scanId, scanRow?.completed_at ?? scanRow?.started_at ?? scanRow?.created_at ?? null]
+  ]);
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
-    scanIds: [input.scanId],
-    supabase: input.supabase
+    scanIds: [input.scanId]
   });
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
   const policySemanticRows = preferDocumentSources
@@ -477,7 +499,7 @@ async function summarizeScan(input: {
   });
 
   const repairedEvents = repairFindingFamilyPacketEvents({
-    events: ((events ?? []) as ScanEventRow[]).map((event) => ({
+    events: events.map((event) => ({
       createdAt: event.created_at,
       eventType: event.event_type,
       id: event.id,
@@ -510,7 +532,7 @@ async function summarizeScan(input: {
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
   const workflow = deriveSignalEnrichmentWorkflowState({
     documentSourceCount: readyDocumentSourceCount,
-    events: ((events ?? []) as ScanEventRow[]).map((event) => ({
+    events: events.map((event) => ({
       createdAt: event.created_at,
       eventType: event.event_type
     })),
@@ -594,7 +616,6 @@ async function main() {
     throw new Error("Provide at least one valid domain with --domains.");
   }
 
-  const supabase = createAdminClient();
   if (onlySummarize && queueOnly) {
     throw new Error("Use either --summarize-only or --queue-only, not both.");
   }
@@ -605,28 +626,27 @@ async function main() {
     const domain = await ensureDomain({
       hostname: entry.domain,
       normalizedUrl: `https://${entry.domain}`,
-      organizationId: orgId,
-      supabase
+      organizationId: orgId
     });
 
     let scanId: string;
     if (onlySummarize) {
-      const latest = await supabase
-        .from("scans")
-        .select("id, created_at, status")
-        .eq("organization_id", orgId)
-        .eq("domain_id", domain.id)
-        .eq("scan_type", "full")
-        .in("status", ["completed", "failed", "canceled"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const latest = await queryOne<{ id: string; created_at: string; status: string }>(
+        `
+          select id, created_at, status
+          from scans
+          where organization_id = $1
+            and domain_id = $2
+            and scan_type = 'full'
+            and status = any($3::text[])
+          order by created_at desc
+          limit 1
+        `,
+        [orgId, domain.id, ["completed", "failed", "canceled"]],
+        { readOnly: true }
+      );
 
-      if (latest.error) {
-        throw new Error(`Failed to load latest terminal scan for ${domain.hostname}: ${latest.error.message}`);
-      }
-
-      if (!latest.data) {
+      if (!latest) {
         results.push({
           domain: domain.hostname,
           pendingReason: "no_terminal_scan",
@@ -636,7 +656,7 @@ async function main() {
         continue;
       }
 
-      scanId = (latest.data as { id: string }).id;
+      scanId = latest.id;
     } else if (queueOnly) {
       const queued = await queueScan({
         domain,
@@ -645,8 +665,7 @@ async function main() {
         pagesRequestedOverride: pagesRequestedOverride ? Number(pagesRequestedOverride) : null,
         processor,
         profile,
-        runtimeFast,
-        supabase
+        runtimeFast
       });
 
       results.push({
@@ -665,29 +684,25 @@ async function main() {
         pagesRequestedOverride: pagesRequestedOverride ? Number(pagesRequestedOverride) : null,
         processor,
         profile,
-        runtimeFast,
-        supabase
+        runtimeFast
       });
 
       scanId = queued.id;
       await waitForCompletion({
         hostname: domain.hostname,
         scanId,
-        supabase,
         timeoutMs
       });
       await waitForSignalEnrichmentCompletion({
         hostname: domain.hostname,
         scanId,
-        supabase,
         timeoutMs: enrichmentTimeoutMs
       }).catch(() => undefined);
     }
 
     const summary = await summarizeScan({
       hostname: domain.hostname,
-      scanId,
-      supabase
+      scanId
     });
 
     results.push({

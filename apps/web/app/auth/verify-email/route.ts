@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { verifyEmailToken } from "../../../server/password-auth/verification";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -9,11 +8,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login?error=invalid_verification_link", requestUrl.origin));
   }
 
-  const verified = await verifyEmailToken(token);
-
-  if (!verified) {
-    return NextResponse.redirect(new URL("/login?error=invalid_verification_link", requestUrl.origin));
-  }
-
-  return NextResponse.redirect(new URL("/login?message=email_verified", requestUrl.origin));
+  const bridgeUrl = new URL("/api/auth/verify-email", requestUrl.origin);
+  bridgeUrl.searchParams.set("token", token);
+  bridgeUrl.searchParams.set("callbackURL", `${requestUrl.origin}/login?message=email_verified`);
+  return NextResponse.redirect(bridgeUrl);
 }

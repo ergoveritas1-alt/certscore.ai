@@ -5,7 +5,7 @@ This runbook covers the validation runtime lane:
 - `apps/web` deployed to Vercel with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler running on a separate VM
 - separate Redis for validation queues
-- shared Supabase project initially
+- shared PostgreSQL database initially
 
 ## 1. Prerequisites
 
@@ -21,9 +21,9 @@ Deploy the same `apps/web` app to Vercel, but with:
 
 - `APP_FLAVOR=validation_ops`
 - `NEXT_PUBLIC_APP_URL=https://<validation-domain>`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- provider credentials as needed for Better Auth
 - `VALIDATION_REDIS_URL`
 - `CERTSCORE_ADMIN_EMAILS`
 - optional `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
@@ -61,9 +61,7 @@ This builds the validation-worker Dockerfile and pushes an image intended for th
 
 Create an env file on the VM such as `/etc/validation-worker.env` with:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
 - `OPENAI_API_KEY`
 - `VALIDATION_REDIS_URL`
 - `VALIDATION_PIPELINE_ENABLED=1`
@@ -120,7 +118,7 @@ Expected results:
 
 - validation worker env is complete
 - validation Redis connectivity passes
-- validation tables are reachable in Supabase
+- validation tables are reachable in PostgreSQL
 - Playwright Chromium launches
 
 ## 6. First-Run Validation

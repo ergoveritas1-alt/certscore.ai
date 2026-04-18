@@ -1,4 +1,4 @@
-import { createAdminClient } from "../packages/db/dist/supabase-client.js";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { buildUnifiedFindingDisplayPackets, getUnifiedFindingCategoryRelation } from "../apps/web/lib/scans/unified-findings";
 import { buildChildContextFallbackEvidence } from "../apps/web/lib/scans/signal-fallback-evidence";
 
@@ -165,40 +165,37 @@ async function main() {
     throw new Error("Usage: verify-canonical-findings-scan.ts <scan-id>");
   }
 
-  const supabase = createAdminClient(process.env);
-  const { data: snapshotRow, error: snapshotError } = await supabase
-    .from("scan_snapshots")
-    .select(
-      [
-        "children_audience_likely",
-        "kid_directed_content_detected",
-        "privacy_policy_present",
-        "privacy_contact_channel_type",
-        "consent_mechanism_type",
-        "cookie_banner_present",
-        "cmp_vendor_name",
-        "consent_interaction_model",
-        "retargeting_pixel_detected",
-        "do_not_sell_link_present",
-        "accessibility_contact_method_present"
-      ].join(", ")
-    )
-    .eq("scan_id", scanId)
-    .maybeSingle();
-
-  if (snapshotError) {
-    throw snapshotError;
-  }
+  const snapshotRow = await queryOne<Record<string, unknown>>(
+    `
+      select
+        children_audience_likely,
+        kid_directed_content_detected,
+        privacy_policy_present,
+        privacy_contact_channel_type,
+        consent_mechanism_type,
+        cookie_banner_present,
+        cmp_vendor_name,
+        consent_interaction_model,
+        retargeting_pixel_detected,
+        do_not_sell_link_present,
+        accessibility_contact_method_present
+      from scan_snapshots
+      where scan_id = $1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
 
   const snapshot = (snapshotRow ?? null) as Record<string, unknown> | null;
-  const { data: signals, error: signalsError } = await supabase
-    .from("scan_signals")
-    .select("signal_key")
-    .eq("scan_id", scanId);
-
-  if (signalsError) {
-    throw signalsError;
-  }
+  const signals = await query<{ signal_key: string }>(
+    `
+      select signal_key
+      from scan_signals
+      where scan_id = $1
+    `,
+    [scanId],
+    { readOnly: true }
+  ).then((result) => result.rows);
 
   const explicitSignals = new Set((signals ?? []).map((signal) => signal.signal_key));
   const reviewFindingCandidates = CANDIDATES.flatMap((definition) => {

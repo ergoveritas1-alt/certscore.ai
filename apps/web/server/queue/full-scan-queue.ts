@@ -1,20 +1,11 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
-import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { loadScannerHeartbeatSources, type WorkerHeartbeatRow } from "./repository";
 
-const SCANNER_WORKER_TYPE = "scanner";
-const LEGACY_FULL_SCAN_WORKER_TYPE = "full_scan";
 const SCANNER_HEARTBEAT_WINDOW_MS = 90_000;
 
 type ScannerServiceHeartbeatSnapshot = {
   errorMessage: string | null;
   host: string | null;
   lastHeartbeatAt: string | null;
-};
-
-type WorkerHeartbeatRow = {
-  host: string | null;
-  last_heartbeat_at: string | null;
-  worker_type: string;
 };
 
 export async function enqueueFullScanJob(_scanId: string) {
@@ -28,7 +19,8 @@ export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: strin
   if (!workerHealthy) {
     return {
       enabled: false as const,
-      reason: "Scanning is unavailable because no healthy scanner service heartbeat was detected. Ensure the scanner service is running, or run `pnpm dev:scanner` locally."
+      reason:
+        "Scanning is unavailable because no healthy scanner service heartbeat was detected. Ensure the scanner service is running, or run `pnpm dev:scanner:local` locally."
     };
   }
 
@@ -118,28 +110,16 @@ export function resolveScannerServiceHeartbeatSnapshot(input: {
   };
 }
 
-export async function getLastScannerServiceHeartbeat(
-  supabase = createAdminClient()
-): Promise<ScannerServiceHeartbeatSnapshot> {
-  const { data: eventRow, error: eventError } = await supabase
-    .from("scan_events")
-    .select("created_at, metadata_json")
-    .is("scan_id", null)
-    .in("event_type", [SCAN_EVENT_TYPES.scannerHeartbeat, SCAN_EVENT_TYPES.fullWorkerHeartbeat])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
+export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHeartbeatSnapshot> {
+  const { eventErrorMessage, eventRow, heartbeatErrorMessage, heartbeatRows } = await loadScannerHeartbeatSources();
   const eventHeartbeatAt =
-    eventRow && typeof (eventRow as { created_at?: unknown }).created_at === "string"
-      ? String((eventRow as { created_at: string }).created_at)
-      : null;
-  const eventHost = getLegacyHeartbeatHost((eventRow as { metadata_json?: unknown } | null)?.metadata_json);
+    eventRow && typeof eventRow.created_at === "string" ? String(eventRow.created_at) : null;
+  const eventHost = getLegacyHeartbeatHost(eventRow?.metadata_json);
 
   if (eventHeartbeatAt) {
-    return resolveFullScanWorkerHeartbeatSnapshot({
+    return resolveScannerServiceHeartbeatSnapshot({
       heartbeatErrorMessage: null,
-      eventErrorMessage: eventError?.message ?? null,
+      eventErrorMessage,
       eventHeartbeatAt,
       eventHost,
       tableHeartbeatAt: null,
@@ -147,44 +127,20 @@ export async function getLastScannerServiceHeartbeat(
     });
   }
 
-  const { data: heartbeatRows, error: heartbeatError } = await supabase
-    .from("worker_heartbeats")
-    .select("worker_type, last_heartbeat_at, host")
-    .in("worker_type", [SCANNER_WORKER_TYPE, LEGACY_FULL_SCAN_WORKER_TYPE]);
-
-  const newestHeartbeatRow = [...(((heartbeatRows as WorkerHeartbeatRow[] | null) ?? []))]
+  const newestHeartbeatRow = [...(heartbeatRows as WorkerHeartbeatRow[])]
     .filter((row) => typeof row.last_heartbeat_at === "string")
     .sort((left, right) => getHeartbeatTimestamp(right.last_heartbeat_at) - getHeartbeatTimestamp(left.last_heartbeat_at))[0];
   const tableHeartbeatAt = newestHeartbeatRow?.last_heartbeat_at ?? null;
   const tableHost = newestHeartbeatRow?.host ?? null;
 
   return resolveScannerServiceHeartbeatSnapshot({
-    heartbeatErrorMessage: heartbeatError?.message ?? null,
-    eventErrorMessage: eventError?.message ?? null,
+    heartbeatErrorMessage,
+    eventErrorMessage,
     eventHeartbeatAt,
     eventHost,
     tableHeartbeatAt,
     tableHost
   });
-}
-
-/** @deprecated Use getLastScannerServiceHeartbeat instead. */
-export async function getLastFullScanWorkerHeartbeat(
-  supabase = createAdminClient()
-): Promise<ScannerServiceHeartbeatSnapshot> {
-  return getLastScannerServiceHeartbeat(supabase);
-}
-
-/** @deprecated Use resolveScannerServiceHeartbeatSnapshot instead. */
-export function resolveFullScanWorkerHeartbeatSnapshot(input: {
-  heartbeatErrorMessage?: string | null;
-  eventErrorMessage?: string | null;
-  eventHeartbeatAt: string | null;
-  eventHost: string | null;
-  tableHeartbeatAt: string | null;
-  tableHost: string | null;
-}): ScannerServiceHeartbeatSnapshot {
-  return resolveScannerServiceHeartbeatSnapshot(input);
 }
 
 export async function getFullScanQueueAvailability() {

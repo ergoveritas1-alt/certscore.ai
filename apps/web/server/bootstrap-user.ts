@@ -1,6 +1,13 @@
-import { createAdminClient, type User } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
-import type { AuthenticatedAppUser } from "./password-auth/types";
+import type { AuthenticatedAppUser } from "./auth-flows/types";
+import {
+  createOrganization,
+  createOrganizationMembership,
+  findAppUserProfileById,
+  findOrganizationById,
+  findOrganizationMembershipByUserId,
+  upsertAppUserProfile
+} from "./users/repository";
 
 export type UserRecord = {
   id: string;
@@ -55,31 +62,6 @@ function getWorkspaceSlug(user: BootstrapSessionUser) {
   return `${slugify(emailPart)}-${user.id.slice(0, 8)}`;
 }
 
-function getFullName(user: User) {
-  const metadataName =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name
-      : typeof user.user_metadata?.name === "string"
-        ? user.user_metadata.name
-        : null;
-
-  return metadataName;
-}
-
-function getAuthProvider(user: User) {
-  const providers = user.app_metadata?.providers;
-
-  if (Array.isArray(providers) && typeof providers[0] === "string") {
-    return providers[0];
-  }
-
-  if (typeof user.app_metadata?.provider === "string") {
-    return user.app_metadata.provider;
-  }
-
-  return "magic_link";
-}
-
 function mergeAuthProviders(existingProvider: string | null | undefined, nextProvider: string) {
   const providers = new Set(
     [existingProvider, nextProvider]
@@ -112,110 +94,29 @@ function mapOrganizationRow(row: {
 }
 
 export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
-  const supabase = createAdminClient();
-  const { data: existingProfileRow, error: existingProfileError } = await supabase
-    .from("users")
-    .select("id, email, full_name, auth_provider, created_at, updated_at")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (existingProfileError) {
-    throw new Error(`Failed to load existing user profile: ${existingProfileError.message}`);
-  }
-
-  const existingProfile = (existingProfileRow as UserRecord | null) ?? null;
+  const existingProfile = (await findAppUserProfileById(user.id)) as UserRecord | null;
   const mergedProvider = mergeAuthProviders(existingProfile?.auth_provider, user.authProvider);
+  const profile = (await upsertAppUserProfile({
+    authProvider: mergedProvider,
+    email: user.email,
+    fullName: user.fullName ?? existingProfile?.full_name ?? null,
+    userId: user.id
+  })) as UserRecord;
 
-  const { data: profileRow, error: upsertProfileError } = await supabase
-    .from("users")
-    .upsert(
-      {
-        id: user.id,
-        email: user.email,
-        full_name: user.fullName ?? existingProfile?.full_name ?? null,
-        auth_provider: mergedProvider
-      },
-      {
-        onConflict: "id"
-      }
-    )
-    .select("*")
-    .single();
-
-  if (upsertProfileError || !profileRow) {
-    throw new Error(`Failed to upsert user profile: ${upsertProfileError?.message ?? "Unknown error"}`);
-  }
-
-  const profile = profileRow as UserRecord;
-
-  const { data: existingMembershipRow, error: membershipLookupError } = await supabase
-    .from("organization_members")
-    .select("id, organization_id, user_id, role, created_at")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (membershipLookupError) {
-    throw new Error(`Failed to look up organization membership: ${membershipLookupError.message}`);
-  }
-
-  let membership = existingMembershipRow as OrganizationMemberRecord | null;
+  let membership = (await findOrganizationMembershipByUserId(user.id)) as OrganizationMemberRecord | null;
   let organization: OrganizationRecord | null = null;
 
   if (!membership) {
-    const { data: createdOrganizationRow, error: createOrganizationError } = await supabase
-      .from("organizations")
-      .insert({
-        name: getWorkspaceName(user),
-        slug: getWorkspaceSlug(user)
-      })
-      .select("id, name, slug, plan, plan_status, created_at, updated_at")
-      .single();
+    organization = mapOrganizationRow(await createOrganization({
+      name: getWorkspaceName(user),
+      slug: getWorkspaceSlug(user)
+    }));
 
-    if (createOrganizationError || !createdOrganizationRow) {
-      throw new Error(`Failed to create organization: ${createOrganizationError?.message ?? "Unknown error"}`);
-    }
-
-    organization = mapOrganizationRow(
-      createdOrganizationRow as {
-        id: string;
-        name: string;
-        slug: string;
-        plan: PlanCode;
-        plan_status: PlanStatus;
-        created_at: string;
-        updated_at: string;
-      }
-    );
-
-    const { data: createdMembershipRow, error: createMembershipError } = await supabase
-      .from("organization_members")
-      .insert({
-        organization_id: organization.id,
-        role: "admin",
-        user_id: user.id
-      })
-      .select("id, organization_id, user_id, role, created_at")
-      .single();
-
-    if (createMembershipError || !createdMembershipRow) {
-      throw new Error(
-        `Failed to create organization membership: ${createMembershipError?.message ?? "Unknown error"}`
-      );
-    }
-
-    membership = createdMembershipRow as OrganizationMemberRecord;
-  }
-
-  const { data: organizationLookupRow, error: organizationLookupError } = await supabase
-    .from("organizations")
-    .select("id, name, slug, plan, plan_status, created_at, updated_at")
-    .eq("id", membership.organization_id)
-    .single();
-
-  if (organizationLookupError || !organizationLookupRow) {
-    throw new Error(
-      `Failed to load organization after bootstrap: ${organizationLookupError?.message ?? "Unknown error"}`
-    );
+    membership = (await createOrganizationMembership({
+      organizationId: organization.id,
+      role: "admin",
+      userId: user.id
+    })) as OrganizationMemberRecord;
   }
 
   return {
@@ -223,30 +124,11 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
     profile,
     organization:
       organization ??
-      mapOrganizationRow(
-        organizationLookupRow as {
-          id: string;
-          name: string;
-          slug: string;
-          plan: PlanCode;
-          plan_status: PlanStatus;
-          created_at: string;
-          updated_at: string;
-        }
-      ),
+      mapOrganizationRow(await findOrganizationById(membership.organization_id)),
     membership
   };
 }
 
-export async function bootstrapUserFromSession(user: User): Promise<BootstrapResult> {
-  if (!user.email) {
-    throw new Error("Authenticated user is missing an email address.");
-  }
-
-  return bootstrapAppUserSession({
-    authProvider: getAuthProvider(user),
-    email: user.email,
-    fullName: getFullName(user),
-    id: user.id
-  });
+export async function bootstrapUserFromSession(user: AuthenticatedAppUser): Promise<BootstrapResult> {
+  return bootstrapAppUserSession(user);
 }

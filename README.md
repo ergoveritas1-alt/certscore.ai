@@ -29,7 +29,7 @@ website-signal-risk-scanner/
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/web-bot-auth`: server-only Web Bot Auth signing and key-directory helpers
-- `packages/db`: Supabase clients and database env helpers
+- `packages/db`: PostgreSQL query helpers, migrations, seed SQL, and env helpers
 - `packages/ui`: reusable UI primitives
 
 ## Repo boundary
@@ -43,7 +43,7 @@ website-signal-risk-scanner/
 ## What the MVP includes
 
 - public homepage with preview scan funnel
-- Supabase auth with Google OAuth and magic link login
+- Better Auth with Google OAuth and email/password login flows
 - organization bootstrap and protected workspace routes
 - domain management, plan limits, and client grouping
 - DB-backed scan creation with scanner-service claiming
@@ -63,75 +63,81 @@ Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference templa
 
 Recommended environment split inside `WC01`:
 
-- local web + local validation runtime: dedicated dev Supabase project
-- production web + production validation runtime: dedicated prod Supabase project
+- local web + local validation runtime: dedicated dev PostgreSQL database plus S3-compatible storage
+- production web + production validation runtime: dedicated production PostgreSQL database plus S3-compatible storage
 
-Do not point localhost at the production Supabase auth project unless you are intentionally testing production auth behavior.
+Do not point localhost at the production database or production auth credentials unless you are intentionally testing production behavior.
 
 Required for the web app:
 
 - `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 - `REDIS_URL`
-- `SUPABASE_STORAGE_BUCKET`
+- `S3_BUCKET`
+- `S3_REGION`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
 
 Required for the validation runtime in `WC01`:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `REDIS_URL`
-- `SUPABASE_STORAGE_BUCKET`
+- `DATABASE_URL`
+- `VALIDATION_REDIS_URL` or `REDIS_URL`
+- `OPENAI_API_KEY`
 
 Optional but recommended:
 
 - `WORKER_CONCURRENCY`
 - `PLAYWRIGHT_BROWSERS_PATH`
-- `RESEND_API_KEY`
-- `OPENAI_API_KEY`
-
-Compatibility note:
-
-- Older environments may still use `SUPABASE_STORAGE_BUCKET_REPORTS`. The hardening pass keeps that as a fallback, but `SUPABASE_STORAGE_BUCKET` is now the canonical variable for report PDF storage.
+- `VALIDATION_OPENAI_MODEL`
+- `VALIDATION_NANO_MODEL`
+- `WEB_BOT_AUTH_ENABLED`
+- `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
+- `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
 
 ## Local development setup
 
-Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here and can fail DNS resolution for Supabase-backed auth and app routes on localhost.
+Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here and can fail DNS resolution for app routes and external service calls on localhost.
 
 1. Install dependencies:
    - `pnpm install`
 2. Copy the environment template:
    - `cp apps/web/.env.example apps/web/.env.local`
-3. Create a dedicated Supabase dev project.
+3. Start a dedicated PostgreSQL instance for local development.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
-5. In Supabase Auth, enable:
-   - Google OAuth
-   - Email magic links
-6. Configure auth redirect URLs:
+5. Seed local development data when needed with [packages/db/seed/0001_dev_seed.sql](/Users/benmasek/WC01/packages/db/seed/0001_dev_seed.sql).
+6. Configure Better Auth provider settings:
+   - Google OAuth if enabled
+   - email/password and verification settings as needed
+7. Configure auth redirect URLs:
+   - use the stable callback alias exposed by the app:
    - `http://localhost:3000/auth/callback`
    - `http://127.0.0.1:3000/auth/callback`
    - `https://certscore.ai/auth/callback`
-7. Keep local and production auth isolated:
+   - the app forwards that route to Better Auth's internal callback handler
+8. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
-   - local Supabase keys should come from the dev project
-   - production Supabase keys should exist only in Vercel / worker deployment settings
-8. Create the storage bucket referenced by `SUPABASE_STORAGE_BUCKET`.
-9. Provision a Redis instance and set `REDIS_URL`.
-10. Install Playwright Chromium for validation and shared scan-core tooling:
+   - local database and auth secrets should come from the dev environment
+   - production secrets should exist only in Vercel / worker deployment settings
+9. Create the S3-compatible bucket referenced by `S3_BUCKET`.
+10. Provision Redis for app queues:
+   - set `REDIS_URL` for the web runtime
+   - set `VALIDATION_REDIS_URL` for the validation worker, or let it fall back to `REDIS_URL` if both runtimes intentionally share one Redis instance
+11. Install Playwright Chromium for validation and shared scan-core tooling:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
    - `pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium`
-11. Start validation local development with a watched validation worker:
+12. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
-12. Start the main local app by itself when needed:
+13. Start the main local app by itself when needed:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-13. Use `WS01` when you need the standalone scanner locally.
-14. Start the standalone scanner locally against the same dev Supabase project as `localhost:3000`:
+14. Use `WS01` when you need the standalone scanner locally.
+15. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
    - `pnpm dev:scanner:local`
-15. Use the combined local runner only when you want web + validation together in `WC01`:
+16. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
-16. Run a validation scheduler sweep manually when needed:
+17. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 
 ## Development verification
@@ -155,7 +161,7 @@ The normalized concern lifecycle in `WC01` is documented in [docs/normalized-con
 GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
 
 - `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks `scan-core`, and runs the deterministic accessibility validation tests.
-- `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `SUPABASE_STORAGE_BUCKET`.
+- `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `DATABASE_URL`, `REDIS_URL`, and S3 storage credentials.
 - If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
 
 ## Runtime validation tooling
@@ -205,8 +211,8 @@ Common commands:
 - do not deploy from `apps/web`
 - use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
 - configure the web environment variables from the shared list above
-- use only production Supabase URL and keys in Vercel
-- ensure Supabase Auth redirects include the production callback on `certscore.ai`
+- use only production database, auth, and storage credentials in Vercel
+- ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
 
 ### GCP worker pool
 
@@ -214,18 +220,18 @@ Common commands:
 - use `WS01` for scanner runtime deployment
 - keep `WC01` deployment guidance scoped to web and validation only
 
-### Supabase
+### Database, Auth, and Storage
 
-- create a production project separate from local development
+- create production PostgreSQL, Better Auth, and S3-compatible storage resources separate from local development
 - apply all migrations in order
-- enable Google OAuth and email magic links
 - configure the production site URL and production redirect URLs only
-- create the report storage bucket referenced by `SUPABASE_STORAGE_BUCKET`
+- create the report storage bucket referenced by `S3_BUCKET`
 
 ### Redis
 
 - create a Redis database
-- set `REDIS_URL` in any `WC01` runtime that still requires Redis
+- set `REDIS_URL` for the web runtime
+- set `VALIDATION_REDIS_URL` for the validation worker, or allow it to fall back to `REDIS_URL` when sharing one Redis instance is intentional
 
 ### Scheduler
 
@@ -242,10 +248,10 @@ The primary scanner scheduler now lives in `WS01`.
 ## Deployment readiness checklist
 
 - Environment variables configured
-- Supabase project created
-- Supabase migrations applied
-- Supabase auth providers configured
-- Supabase storage bucket created
+- PostgreSQL database created
+- database migrations applied
+- Better Auth providers configured
+- S3-compatible storage bucket created
 - Redis connection working
 - Playwright browsers installed
 - Worker process running
@@ -276,6 +282,6 @@ After deployment, validate in this order:
 
 ## References
 
-- [Supabase Next.js server-side auth guide](https://supabase.com/docs/guides/auth/server-side/nextjs)
-- [Supabase social login guide](https://supabase.com/docs/guides/auth/social-login/auth-google)
-- [Supabase passwordless magic link guide](https://supabase.com/docs/guides/auth/auth-email-passwordless?language=js&queryGroups=language)
+- [Better Auth documentation](https://www.better-auth.com/)
+- [PostgreSQL documentation](https://www.postgresql.org/docs/)
+- [Amazon S3 API reference](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html)

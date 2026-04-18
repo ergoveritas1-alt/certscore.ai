@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -65,6 +65,10 @@ type QueryError = {
   code?: string | null;
   message?: string | null;
 };
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
 
 type StaticVendorRule = {
   cookieNames?: string[];
@@ -444,80 +448,119 @@ async function inferVendorsWithLlm(input: { candidates: VendorCandidate[]; domai
 
 async function persistRegistryEntries(input: {
   inferredVendors: InferredVendor[];
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
   for (const vendor of input.inferredVendors) {
-    const { data: registryRow, error: registryError } = await input.supabase
-      .from("vendor_registry")
-      .upsert(
-        {
-          aliases: vendor.aliases,
-          canonical_name: vendor.canonicalName,
-          confidence: vendor.confidence,
-          cookie_names: vendor.cookieNames,
-          description: vendor.rationale,
-          evidence_json: {
-            rationale: vendor.rationale
-          },
-          source: ENRICHMENT_SOURCE,
-          updated_at: new Date().toISOString(),
-          vendor_category: vendor.vendorCategory
-        },
-        {
-          onConflict: "canonical_name"
-        }
-      )
-      .select("id")
-      .single();
-
-    if (registryError || !registryRow) {
-      throw new Error(`Failed to upsert vendor registry entry ${vendor.canonicalName}: ${registryError?.message ?? "unknown error"}`);
-    }
-
-    const { error: patternError } = await input.supabase.from("vendor_domain_patterns").upsert(
-      vendor.domains.map((domain) => ({
-        confidence: vendor.confidence,
-        domain,
-        match_type: "suffix",
-        source: ENRICHMENT_SOURCE,
-        vendor_registry_id: registryRow.id
-      })),
-      {
-        onConflict: "domain"
-      }
+    const registryRow = await queryOne<{ id: string }>(
+      `
+        insert into vendor_registry (
+          aliases,
+          canonical_name,
+          confidence,
+          cookie_names,
+          description,
+          evidence_json,
+          source,
+          updated_at,
+          vendor_category
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        on conflict (canonical_name) do update
+          set aliases = excluded.aliases,
+              confidence = excluded.confidence,
+              cookie_names = excluded.cookie_names,
+              description = excluded.description,
+              evidence_json = excluded.evidence_json,
+              source = excluded.source,
+              updated_at = excluded.updated_at,
+              vendor_category = excluded.vendor_category
+        returning id
+      `,
+      [
+        vendor.aliases,
+        vendor.canonicalName,
+        vendor.confidence,
+        vendor.cookieNames,
+        vendor.rationale,
+        { rationale: vendor.rationale },
+        ENRICHMENT_SOURCE,
+        new Date().toISOString(),
+        vendor.vendorCategory
+      ]
     );
 
-    if (patternError) {
-      throw new Error(`Failed to upsert vendor domain patterns for ${vendor.canonicalName}: ${patternError.message}`);
+    if (!registryRow) {
+      throw new Error(`Failed to upsert vendor registry entry ${vendor.canonicalName}: unknown error`);
+    }
+
+    await query(
+      `
+        insert into vendor_domain_patterns (
+          confidence,
+          domain,
+          match_type,
+          source,
+          vendor_registry_id
+        )
+        select
+          (value->>'confidence')::float8,
+          value->>'domain',
+          value->>'match_type',
+          value->>'source',
+          value->>'vendor_registry_id'
+        from jsonb_array_elements($1::jsonb) as value
+        on conflict (domain) do update
+          set confidence = excluded.confidence,
+              match_type = excluded.match_type,
+              source = excluded.source,
+              vendor_registry_id = excluded.vendor_registry_id
+      `,
+      [
+        JSON.stringify(
+          vendor.domains.map((domain) => ({
+            confidence: vendor.confidence,
+            domain,
+            match_type: "suffix",
+            source: ENRICHMENT_SOURCE,
+            vendor_registry_id: registryRow.id
+          }))
+        )
+      ]
+    ).catch((error) => {
+      throw new Error(`Failed to upsert vendor domain patterns for ${vendor.canonicalName}: ${getErrorMessage(error)}`);
+    });
+    if (!registryRow) {
+      throw new Error(`Failed to upsert vendor domain patterns for ${vendor.canonicalName}`);
     }
   }
 }
 
 export async function enrichUnknownScanVendors(input: { hostname: string; scanId: string }): Promise<VendorEnrichmentResult> {
-  const supabase = createAdminClient();
-  const [
-    { data: scan, error: scanError },
-    { data: runtimeArtifacts, error: runtimeError },
-    { data: snapshot, error: snapshotError },
-    { data: registryRows, error: registryError },
-    { data: patternRows, error: patternError }
-  ] = await Promise.all([
-    supabase.from("scans").select("id, organization_id, domain_id").eq("id", input.scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    supabase.from("vendor_registry").select("id, canonical_name, vendor_category, cookie_names, confidence"),
-    supabase.from("vendor_domain_patterns").select("vendor_registry_id, domain")
-  ]);
+  const optionalMany = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
+    query<T>(text, values, { readOnly: true })
+      .then((result) => ({ data: result.rows, error: null as QueryError | null }))
+      .catch((error) => ({ data: [] as T[], error: { message: getErrorMessage(error) } as QueryError }));
 
-  if (scanError) {
-    throw new Error(`Failed to load scan ${input.scanId} for vendor enrichment: ${scanError.message}`);
+  let scan: Record<string, unknown> | null;
+  let runtimeArtifacts: Record<string, unknown> | null;
+  let snapshot: Record<string, unknown> | null;
+  let registryResult: { data: Array<Record<string, unknown>>; error: QueryError | null };
+  let patternResult: { data: Array<Record<string, unknown>>; error: QueryError | null };
+  try {
+    [scan, runtimeArtifacts, snapshot, registryResult, patternResult] = await Promise.all([
+      queryOne<Record<string, unknown>>(`select id, organization_id, domain_id from scans where id = $1`, [input.scanId], { readOnly: true }),
+      queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+      queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+      optionalMany<Record<string, unknown>>(`select id, canonical_name, vendor_category, cookie_names, confidence from vendor_registry`),
+      optionalMany<Record<string, unknown>>(`select vendor_registry_id, domain from vendor_domain_patterns`)
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load vendor enrichment inputs for ${input.scanId}: ${getErrorMessage(error)}`);
   }
-  if (runtimeError) {
-    throw new Error(`Failed to load runtime artifacts ${input.scanId} for vendor enrichment: ${runtimeError.message}`);
-  }
-  if (snapshotError) {
-    throw new Error(`Failed to load snapshot ${input.scanId} for vendor enrichment: ${snapshotError.message}`);
-  }
+
+  const registryError = registryResult.error;
+  const patternError = patternResult.error;
+  const registryRows = registryResult.data;
+  const patternRows = patternResult.data;
   if (registryError && !isMissingTableError(registryError, "vendor_registry")) {
     throw new Error(`Failed to load vendor registry: ${registryError.message}`);
   }
@@ -635,8 +678,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
 
     if (!registryError && !patternError) {
       await persistRegistryEntries({
-        inferredVendors,
-        supabase
+        inferredVendors
       });
     }
 
@@ -676,10 +718,10 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   }
 
   await Promise.all([
-    supabase.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
-    supabase.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).eq("detection_source", ENRICHMENT_SOURCE),
-    supabase.from("scan_tracker_vendors").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"]),
-    supabase.from("scan_preconsent_violations").delete().eq("scan_id", input.scanId).in("detection_source", [RUNTIME_VENDOR_SOURCE, "signature"])
+    query(`delete from scan_tracker_vendors where scan_id = $1 and detection_source = $2`, [input.scanId, ENRICHMENT_SOURCE]),
+    query(`delete from scan_preconsent_violations where scan_id = $1 and detection_source = $2`, [input.scanId, ENRICHMENT_SOURCE]),
+    query(`delete from scan_tracker_vendors where scan_id = $1 and detection_source = any($2::text[])`, [input.scanId, [RUNTIME_VENDOR_SOURCE, "signature"]]),
+    query(`delete from scan_preconsent_violations where scan_id = $1 and detection_source = any($2::text[])`, [input.scanId, [RUNTIME_VENDOR_SOURCE, "signature"]])
   ]);
 
   const trackerRows = [
@@ -722,10 +764,16 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   ];
 
   if (trackerRows.length > 0) {
-    const { error: trackerError } = await supabase.from("scan_tracker_vendors").insert(trackerRows);
-    if (trackerError) {
-      throw new Error(`Failed to persist enriched tracker vendors for ${input.scanId}: ${trackerError.message}`);
-    }
+    await query(
+      `
+        insert into scan_tracker_vendors
+        select *
+        from jsonb_populate_recordset(null::scan_tracker_vendors, $1::jsonb)
+      `,
+      [JSON.stringify(trackerRows)]
+    ).catch((error) => {
+      throw new Error(`Failed to persist enriched tracker vendors for ${input.scanId}: ${getErrorMessage(error)}`);
+    });
   }
 
   const preconsentRows = new Map<string, Record<string, unknown>>();
@@ -783,10 +831,16 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   }
 
   if (preconsentRows.size > 0) {
-    const { error: preconsentError } = await supabase.from("scan_preconsent_violations").insert([...preconsentRows.values()]);
-    if (preconsentError) {
-      throw new Error(`Failed to persist enriched pre-consent violations for ${input.scanId}: ${preconsentError.message}`);
-    }
+    await query(
+      `
+        insert into scan_preconsent_violations
+        select *
+        from jsonb_populate_recordset(null::scan_preconsent_violations, $1::jsonb)
+      `,
+      [JSON.stringify([...preconsentRows.values()])]
+    ).catch((error) => {
+      throw new Error(`Failed to persist enriched pre-consent violations for ${input.scanId}: ${getErrorMessage(error)}`);
+    });
   }
 
   return {

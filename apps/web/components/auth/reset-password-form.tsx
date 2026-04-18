@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { requestPasswordResetAction } from "../../server/password-auth/reset-actions";
-import { initialPasswordResetRequestState } from "../../server/password-auth/reset-action-state";
+import { requestPasswordResetAction } from "../../server/auth-flows/password-reset-actions";
+import { initialPasswordResetRequestState } from "../../server/auth-flows/reset-action-state";
 
 type ResetPasswordFormProps = {
   email?: string;

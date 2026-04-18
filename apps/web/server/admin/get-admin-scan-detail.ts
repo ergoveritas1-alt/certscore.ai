@@ -11,10 +11,10 @@ import {
   resolvePolicyReviewVerdict,
   type PolicyReviewVerdict
 } from "@website-signal-risk-scanner/shared";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
+import { loadAdminScanDetailData } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanDetail = {
@@ -161,76 +161,25 @@ function nullifyEmptySnapshotHashes(snapshot: Record<string, unknown>) {
 
 export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetail | null> {
   await requirePlatformAdminContext();
-  const supabase = createAdminClient();
-  const { data: scan, error } = await supabase
-    .from("scans")
-    .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json")
-    .eq("id", scanId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load scan: ${error.message}`);
-  }
+  const {
+    accessibilityRuleCounts,
+    changes,
+    domain,
+    organization,
+    pages,
+    policyEnrichment,
+    policyReviewQueue,
+    runtimeArtifacts,
+    scan,
+    snapshot,
+    trackerVendors
+  } = await loadAdminScanDetailData(scanId);
 
   if (!scan) {
     return null;
   }
 
-  const scanRow = scan as {
-    completed_at: string | null;
-    created_at: string;
-    domain_id: string | null;
-    id: string;
-    organization_id: string | null;
-    pages_requested: number;
-    pages_scanned: number;
-    scan_config_json: Record<string, unknown> | null;
-    scan_type: string;
-    status: string;
-  };
-
-  const [
-    { data: snapshot },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: pages },
-    { data: changes },
-    { data: domain },
-    { data: organization },
-    { data: runtimeArtifacts },
-    { data: policyEnrichment },
-    { data: policyReviewQueue }
-  ] =
-    await Promise.all([
-      supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-      supabase
-        .from("scan_tracker_vendors")
-        .select("vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id")
-        .eq("scan_id", scanId)
-        .order("vendor_name", { ascending: true }),
-      supabase
-        .from("scan_accessibility_rule_counts")
-        .select("rule_code, rule_group, severity, instance_count")
-        .eq("scan_id", scanId)
-        .order("instance_count", { ascending: false }),
-      supabase
-        .from("scan_pages")
-        .select("page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language")
-        .eq("scan_id", scanId)
-        .order("page_type", { ascending: true }),
-      supabase
-        .from("compliance_change_events")
-        .select("event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
-        .eq("scan_id_current", scanId)
-        .order("event_timestamp", { ascending: false }),
-      scanRow.domain_id ? supabase.from("domains").select("hostname").eq("id", scanRow.domain_id).maybeSingle() : Promise.resolve({ data: null }),
-      scanRow.organization_id
-        ? supabase.from("organizations").select("name").eq("id", scanRow.organization_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-      supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-      supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
-    ]);
+  const scanRow = scan;
 
   const accessPostureClass =
     typeof (snapshot as Record<string, unknown> | null)?.access_posture_class === "string"
@@ -295,9 +244,9 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       status: scanRow.status,
       createdAt: scanRow.created_at,
       completedAt: scanRow.completed_at,
-      pagesRequested: scanRow.pages_requested,
+      pagesRequested: scanRow.pages_requested ?? 0,
       pagesScanned: scanRow.pages_scanned,
-      scanConfigJson: scanRow.scan_config_json
+      scanConfigJson: scanRow.scan_config_json ?? null
     },
     domainHostname: (domain as { hostname: string } | null)?.hostname ?? null,
     organizationName: (organization as { name: string } | null)?.name ?? null,

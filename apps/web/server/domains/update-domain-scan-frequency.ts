@@ -1,10 +1,10 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { ScanFrequency } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getDashboardContext } from "../auth";
+import { updateDomainScanFrequency } from "./repository";
 
 const schema = z.object({
   domainId: z.string().uuid("Invalid domain."),
@@ -18,18 +18,11 @@ export async function updateDomainScanFrequencyFormAction(formData: FormData): P
     scanFrequency: formData.get("scanFrequency")
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("domains")
-    .update({
-      scan_frequency: parsed.scanFrequency
-    })
-    .eq("organization_id", organization.id)
-    .eq("id", parsed.domainId);
-
-  if (error) {
-    throw new Error(`Could not update domain scan frequency: ${error.message}`);
-  }
+  await updateDomainScanFrequency({
+    domainId: parsed.domainId,
+    organizationId: organization.id,
+    scanFrequency: parsed.scanFrequency
+  });
 
   revalidatePath("/app/domains");
   revalidatePath(`/app/domains/${parsed.domainId}`);

@@ -1,3 +1,4 @@
+import { query } from "@website-signal-risk-scanner/db";
 import type { PopulatedSignalRecord } from "@website-signal-risk-scanner/shared";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 
@@ -80,7 +81,7 @@ function buildStoredSignalPopulationRecords(input: {
 export async function loadMergedSignalsByScanId(input: {
   observedAtByScanId: Map<string, string | null>;
   scanIds: string[];
-  supabase: any;
+  db?: unknown;
 }) {
   const mergedSignalsByScanId = new Map<string, ReturnType<typeof buildMergedSignalRecords>>();
   if (input.scanIds.length === 0) {
@@ -89,18 +90,33 @@ export async function loadMergedSignalsByScanId(input: {
 
   const rawRows: SummarySignalRow[] = [];
   for (const scanIdBatch of chunkValues(input.scanIds, 100)) {
-    const { data, error } = await input.supabase
-      .from("scan_signals")
-      .select(
-        "scan_id, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at"
-      )
-      .in("scan_id", scanIdBatch);
+    try {
+      const rows = await query<SummarySignalRow>(
+        `
+          select
+            scan_id,
+            signal_key,
+            signal_label,
+            signal_value_json,
+            value_type,
+            population_source,
+            population_status,
+            confidence,
+            evidence_refs,
+            provenance_json,
+            observed_at
+          from scan_signals
+          where scan_id = any($1::uuid[])
+        `,
+        [scanIdBatch],
+        { readOnly: true }
+      ).then((result) => result.rows);
 
-    if (error) {
-      throw new Error(`Failed to load merged signals: ${error.message}`);
+      rawRows.push(...rows);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to load merged signals: ${message}`);
     }
-
-    rawRows.push(...(data ?? []));
   }
 
   const rowsByScanId = new Map<string, SummarySignalRow[]>();

@@ -29,19 +29,12 @@
     "web-bot-auth:test-request": "npx -y node@22 --import tsx ./scripts/test-web-bot-auth-request.ts",
     "restart:certscore": "bash ./scripts/restart-certscore.sh",
     "restart:localhost": "bash ./scripts/restart-localhost.sh",
-    "supabase:login": "npx supabase@latest login",
-    "supabase:link": "npx supabase@latest link --project-ref ibjxttgmvdkbuqllbazj",
-    "supabase:link:prod": "npx supabase@latest link --project-ref wgfhzyrysztmtrjbcsgy",
-    "supabase:reload-schema:dev": "pnpm exec tsx ./scripts/reload-supabase-schema-cache.ts --project-ref ibjxttgmvdkbuqllbazj",
-    "supabase:reload-schema:prod": "pnpm exec tsx ./scripts/reload-supabase-schema-cache.ts --project-ref wgfhzyrysztmtrjbcsgy",
-    "supabase:audit:prod": "pnpm exec tsx ./scripts/audit-prod-schema.ts",
-    "supabase:push": "npx supabase@latest db push",
-    "supabase:status": "npx supabase@latest status",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.21.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.2"

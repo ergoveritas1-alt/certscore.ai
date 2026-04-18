@@ -4,9 +4,7 @@ import { loadMergedSignalsByScanId } from "./merged-signal-summary";
 
 test("loadMergedSignalsByScanId merges nano document semantic signals for summary paths", async () => {
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
-    observedAtByScanId: new Map([["scan-1", "2026-04-03T16:24:49.590Z"]]),
-    scanIds: ["scan-1"],
-    supabase: {
+    db: {
       from() {
         return {
           select() {
@@ -35,7 +33,9 @@ test("loadMergedSignalsByScanId merges nano document semantic signals for summar
           }
         };
       }
-    }
+    },
+    observedAtByScanId: new Map([["scan-1", "2026-04-03T16:24:49.590Z"]]),
+    scanIds: ["scan-1"]
   });
 
   const mergedSignals = mergedSignalsByScanId.get("scan-1") ?? [];

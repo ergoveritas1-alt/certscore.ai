@@ -10,7 +10,7 @@
 - Monorepo managed with `pnpm` workspaces and Turbo
 - One Next.js web app for marketing, auth, dashboard, reports, and download routes
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
-- Supabase for auth, Postgres, and storage
+- Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
 - Upstash Redis plus BullMQ for queueing
 
 ## Execution model

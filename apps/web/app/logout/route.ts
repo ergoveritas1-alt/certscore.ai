@@ -1,30 +1,30 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "../../lib/supabase/server";
-import { PASSWORD_AUTH_COOKIE_NAME } from "../../server/password-auth/constants";
-import { getPasswordSessionCookieOptions, revokePasswordSessionToken } from "../../server/password-auth/session";
+import { BETTER_AUTH_SESSION_COOKIE_NAME } from "../../server/better-auth/constants";
+import { getAuth } from "../../server/better-auth/auth";
+
+const LEGACY_PASSWORD_AUTH_COOKIE_NAME = "certscore_session";
 
 async function logout(request: Request) {
   const requestUrl = new URL(request.url);
-  const cookieStore = await cookies();
-  const passwordSessionToken = cookieStore.get(PASSWORD_AUTH_COOKIE_NAME)?.value ?? null;
   const response = NextResponse.redirect(new URL("/login?message=signed_out", requestUrl.origin));
-  const supabase = createServerSupabaseClient({
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      }
-    }
-  });
 
-  await supabase.auth.signOut();
-  await revokePasswordSessionToken(passwordSessionToken);
-  response.cookies.set(PASSWORD_AUTH_COOKIE_NAME, "", getPasswordSessionCookieOptions(new Date(0)));
+  await getAuth().api.signOut({
+    headers: request.headers
+  });
+  response.cookies.set(BETTER_AUTH_SESSION_COOKIE_NAME, "", {
+    expires: new Date(0),
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: requestUrl.protocol === "https:"
+  });
+  response.cookies.set(LEGACY_PASSWORD_AUTH_COOKIE_NAME, "", {
+    expires: new Date(0),
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: requestUrl.protocol === "https:"
+  });
 
   return response;
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findAppUserByEmail, findPasswordAuthUserByEmail, normalizeEmail } from "../../../../server/password-auth/user";
+import { hasBetterAuthPasswordAccount } from "../../../../server/better-auth/user";
+import { findAppUserByEmail, normalizeEmail } from "../../../../server/auth-flows/user";
 
 export async function GET(request: NextRequest) {
   const email = request.nextUrl.searchParams.get("email");
@@ -9,13 +10,10 @@ export async function GET(request: NextRequest) {
   }
 
   const normalizedEmail = normalizeEmail(email);
-  const [appUser, passwordUser] = await Promise.all([
-    findAppUserByEmail(normalizedEmail),
-    findPasswordAuthUserByEmail(normalizedEmail)
-  ]);
+  const [appUser, hasPassword] = await Promise.all([findAppUserByEmail(normalizedEmail), hasBetterAuthPasswordAccount(normalizedEmail)]);
 
   return NextResponse.json({
     authProvider: appUser?.auth_provider ?? null,
-    hasPassword: Boolean(passwordUser)
+    hasPassword
   });
 }

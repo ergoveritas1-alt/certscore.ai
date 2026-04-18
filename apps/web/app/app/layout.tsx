@@ -4,6 +4,8 @@ import { getDashboardContext } from "../../server/auth";
 import { getPlatformAdminFlag } from "../../server/admin/platform-admin";
 import { getValidationAdminFlag } from "../../server/validation/auth";
 
+export const dynamic = "force-dynamic";
+
 type AppLayoutProps = {
   children: ReactNode;
 };

@@ -142,7 +142,7 @@ export function categorizeScannerExecutionError(error: unknown): ScanExecutionEr
     return "missing_record";
   }
 
-  if (hasMatch(message, [/persist/, /supabase/, /insert .* event/, /mark scan/, /update .*scan/, /database/])) {
+  if (hasMatch(message, [/persist/, /postgrest/, /insert .* event/, /mark scan/, /update .*scan/, /database/])) {
     return "database";
   }
 

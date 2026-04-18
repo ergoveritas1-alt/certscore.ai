@@ -1,6 +1,5 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { FULL_SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
@@ -10,6 +9,13 @@ import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
+import {
+  createQueuedFullScan,
+  insertQueuedFullScanEvent,
+  loadUsageCounter,
+  upsertUsageCounter,
+  updateDomainLatestScan
+} from "./repository";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -117,28 +123,26 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  const supabase = createAdminClient();
-
   if (input.enforceMonthlyUsageLimit) {
     const monthWindow = getCurrentMonthWindow();
     const metricKey = USAGE_METRIC_KEYS.manualFullScans;
-    const { data: usageCounter, error: usageError } = await supabase
-      .from("usage_counters")
-      .select("id, value")
-      .eq("organization_id", input.organizationId)
-      .eq("metric_key", metricKey)
-      .eq("period_start", monthWindow.periodStart)
-      .eq("period_end", monthWindow.periodEnd)
-      .maybeSingle();
+    let usageCounter;
 
-    if (usageError) {
+    try {
+      usageCounter = await loadUsageCounter({
+        metricKey,
+        organizationId: input.organizationId,
+        periodStart: monthWindow.periodStart,
+        periodEnd: monthWindow.periodEnd
+      });
+    } catch (error) {
       return {
-        error: `Could not verify scan limits: ${usageError.message}`,
+        error: error instanceof Error ? error.message : "Could not verify scan limits.",
         scanId: null
       };
     }
 
-    const currentUsage = Number((usageCounter as { id: string; value: number } | null)?.value ?? 0);
+    const currentUsage = Number(usageCounter?.value ?? 0);
     const monthlyLimit = planLimits.manualRescanLimitPerMonth;
 
     if (monthlyLimit !== null && currentUsage >= monthlyLimit) {
@@ -153,33 +157,20 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
     const nextUsageValue = currentUsage + 1;
 
-    if (usageCounter) {
-      const { error: updateUsageError } = await supabase
-        .from("usage_counters")
-        .update({ value: nextUsageValue })
-        .eq("id", (usageCounter as { id: string }).id);
-
-      if (updateUsageError) {
-        return {
-          error: `Scan created but usage tracking failed: ${updateUsageError.message}`,
-          scanId: null
-        };
-      }
-    } else {
-      const { error: insertUsageError } = await supabase.from("usage_counters").insert({
-        organization_id: input.organizationId,
-        metric_key: metricKey,
-        period_start: monthWindow.periodStart,
-        period_end: monthWindow.periodEnd,
+    try {
+      await upsertUsageCounter({
+        counterId: usageCounter?.id ?? null,
+        metricKey,
+        organizationId: input.organizationId,
+        periodStart: monthWindow.periodStart,
+        periodEnd: monthWindow.periodEnd,
         value: nextUsageValue
       });
-
-      if (insertUsageError) {
-        return {
-          error: `Scan created but usage tracking failed: ${insertUsageError.message}`,
-          scanId: null
-        };
-      }
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Scan created but usage tracking failed.",
+        scanId: null
+      };
     }
   }
 
@@ -200,56 +191,51 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     source: input.source ?? "manual-dashboard"
   };
 
-  const { data: scan, error } = await supabase
-    .from("scans")
-    .insert({
-      organization_id: input.organizationId,
-      domain_id: domainRecord.domain.id,
-      submitted_by_user_id: input.submittedByUserId,
-      scan_type: "full",
-      status: "queued",
-      pages_requested: pagesRequested,
-      pages_scanned: 0,
-      scan_config_json: scanConfig
-    })
-    .select("id")
-    .single();
+  let scan;
 
-  if (error || !scan) {
-    return {
-      error: `Could not create full scan: ${error?.message ?? "Unknown error"}`,
-      scanId: null
-    };
-  }
-
-  const { error: eventError } = await supabase.from("scan_events").insert({
-    scan_id: scan.id,
-    domain_id: domainRecord.domain.id,
-    organization_id: input.organizationId,
-    event_type: FULL_SCAN_EVENT_TYPES.queued,
-    message: "Scan queued and awaiting scanner pickup.",
-    metadata_json: {
+  try {
+    scan = await createQueuedFullScan({
+      domainId: domainRecord.domain.id,
+      organizationId: input.organizationId,
       pagesRequested,
-      profile: planLimits.scanProfile
-    }
-  });
-
-  if (eventError) {
+      scanConfigJson: scanConfig,
+      submittedByUserId: input.submittedByUserId
+    });
+  } catch (error) {
     return {
-      error: `Scan created but event logging failed: ${eventError.message}`,
+      error: error instanceof Error ? error.message : "Could not create full scan.",
       scanId: null
     };
   }
 
-  const { error: latestScanError } = await supabase
-    .from("domains")
-    .update({ latest_scan_id: scan.id })
-    .eq("id", domainRecord.domain.id)
-    .eq("organization_id", input.organizationId);
-
-  if (latestScanError) {
+  try {
+    await insertQueuedFullScanEvent({
+      domainId: domainRecord.domain.id,
+      eventType: FULL_SCAN_EVENT_TYPES.queued,
+      message: "Scan queued and awaiting scanner pickup.",
+      metadataJson: {
+        pagesRequested,
+        profile: planLimits.scanProfile
+      },
+      organizationId: input.organizationId,
+      scanId: scan.id
+    });
+  } catch (error) {
     return {
-      error: `Scan created but latest scan update failed: ${latestScanError.message}`,
+      error: error instanceof Error ? error.message : "Scan created but event logging failed.",
+      scanId: null
+    };
+  }
+
+  try {
+    await updateDomainLatestScan({
+      domainId: domainRecord.domain.id,
+      organizationId: input.organizationId,
+      scanId: scan.id
+    });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Scan created but latest scan update failed.",
       scanId: null
     };
   }

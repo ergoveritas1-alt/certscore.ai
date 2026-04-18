@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { queryOne } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
 import { getLastScannerServiceHeartbeat } from "../apps/web/server/queue/full-scan-queue";
 
@@ -7,9 +7,6 @@ const DEFAULT_PROJECT_ID = "certscore-ai";
 const DEFAULT_REGION = "us-central1";
 const DEFAULT_ENVIRONMENT = "production";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
-const DEFAULT_SUPABASE_URL = "https://wgfhzyrysztmtrjbcsgy.supabase.co";
-const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_5IJ4sZwcahADQtkyMq2rgA_g6NaYJxS";
-const DEFAULT_SUPABASE_SERVICE_ROLE_SECRET = "certscore-validation-worker-supabase-service-role-key";
 const VALIDATION_SETTINGS_KEY = "default";
 
 type WorkerPoolDescription = {
@@ -115,29 +112,37 @@ async function main() {
   const environment = process.env.OPS_ALERT_ENVIRONMENT?.trim() || DEFAULT_ENVIRONMENT;
   const projectId = process.env.GCP_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID;
   const region = process.env.GCP_REGION?.trim() || DEFAULT_REGION;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY;
-  const supabaseServiceRoleSecretName =
-    process.env.SUPABASE_SERVICE_ROLE_SECRET_NAME?.trim() || DEFAULT_SUPABASE_SERVICE_ROLE_SECRET;
-  const supabaseServiceRoleKey = accessSecret(projectId, supabaseServiceRoleSecretName);
+  const databaseUrl =
+    process.env.DATABASE_URL?.trim() ||
+    (() => {
+      const databaseUrlSecretName = process.env.DATABASE_URL_SECRET_NAME?.trim();
+      if (!databaseUrlSecretName) {
+        throw new Error("Set DATABASE_URL or DATABASE_URL_SECRET_NAME before running the ops monitor.");
+      }
+
+      return accessSecret(projectId, databaseUrlSecretName);
+    })();
   const staleMinutes = Number(process.env.OPS_HEARTBEAT_STALE_MINUTES ?? DEFAULT_HEARTBEAT_STALE_MINUTES);
   const staleThresholdMs = staleMinutes * 60_000;
   const findings: string[] = [];
+  process.env.DATABASE_URL = databaseUrl;
 
-  const db = createAdminClient({
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey,
-    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-    SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleKey
-  });
-  const { data: validationSettings, error: validationSettingsError } = await db
-    .from("validation_settings")
-    .select("last_worker_heartbeat_at, last_worker_host, pipeline_enabled")
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY)
-    .maybeSingle<ValidationSettingsRow>();
+  let validationSettings: ValidationSettingsRow | null = null;
+  try {
+    validationSettings = await queryOne<ValidationSettingsRow>(
+      `
+        select last_worker_heartbeat_at, last_worker_host, pipeline_enabled
+        from validation_settings
+        where singleton_key = $1
+      `,
+      [VALIDATION_SETTINGS_KEY],
+      { readOnly: true }
+    );
+  } catch (error) {
+    findings.push(`Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  if (validationSettingsError) {
-    findings.push(`Validation settings query failed: ${validationSettingsError.message}`);
-  } else if (!validationSettings) {
+  if (!validationSettings) {
     findings.push("Validation settings row is missing.");
   } else if (validationSettings.pipeline_enabled) {
     if (!validationSettings.last_worker_heartbeat_at) {
@@ -152,7 +157,7 @@ async function main() {
     }
   }
 
-  const scannerHeartbeat = await getLastScannerServiceHeartbeat(db);
+  const scannerHeartbeat = await getLastScannerServiceHeartbeat();
 
   if (scannerHeartbeat.errorMessage) {
     findings.push(scannerHeartbeat.errorMessage);

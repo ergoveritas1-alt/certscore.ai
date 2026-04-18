@@ -1,11 +1,15 @@
 import { z } from "zod";
 
 const validationWorkerCheckSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   REDIS_URL: z.string().url().optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
   VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional(),
   VALIDATION_SCHEDULER_POLL_MINUTES: z.string().optional(),
@@ -57,8 +61,10 @@ function main() {
   }
 
   pass("validation worker env", "All required validation worker environment variables are present.");
-  info("supabase host", new URL(values.NEXT_PUBLIC_SUPABASE_URL).host);
+  info("database url", values.DATABASE_URL.replace(/:[^:@/]+@/, ":***@"));
   info("validation redis host", new URL(validationRedisUrl).host);
+  info("storage bucket", values.S3_BUCKET);
+  info("storage region", values.S3_REGION);
   info("pipeline enabled", values.VALIDATION_PIPELINE_ENABLED ?? "1");
   info("default run mode", values.VALIDATION_DEFAULT_RUN_MODE ?? "manual");
   info("default interval", values.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES ?? "20");

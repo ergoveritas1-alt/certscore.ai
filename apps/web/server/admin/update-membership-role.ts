@@ -1,9 +1,9 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { updateAdminMembershipRole } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 const schema = z.object({
@@ -20,18 +20,7 @@ export async function updateMembershipRoleFormAction(formData: FormData): Promis
     role: formData.get("role")
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("organization_members")
-    .update({
-      role: parsed.role
-    })
-    .eq("organization_id", parsed.organizationId)
-    .eq("user_id", parsed.userId);
-
-  if (error) {
-    throw new Error(`Failed to update membership role: ${error.message}`);
-  }
+  await updateAdminMembershipRole(parsed);
 
   revalidatePath("/app/admin");
   revalidatePath("/app/admin/users");

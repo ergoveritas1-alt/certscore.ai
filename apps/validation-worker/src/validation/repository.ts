@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
   VALIDATION_INTERVAL_OPTIONS,
@@ -121,6 +121,19 @@ type ValidationRunFindingWithVerdictRow = {
     | null;
 };
 
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
 type SignalPopulationRow = {
   category: string | null;
   confidence?: number | null;
@@ -154,6 +167,10 @@ type NanoDocRetrievalInput = {
 
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
@@ -314,41 +331,62 @@ function addDays(base: Date, days: number) {
 
 export async function ensureValidationSettings() {
   const env = getWorkerEnv();
-  const supabase = createAdminClient();
-  const { data: existing, error } = await supabase
-    .from("validation_settings")
-    .select(
-      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
-    )
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation settings: ${error.message}`);
+  let existing: ValidationSettingsRow | null;
+  try {
+    existing = await queryOne<ValidationSettingsRow>(
+      `
+        select
+          automatic_interval_minutes,
+          last_scheduled_at,
+          last_tranco_sync_at,
+          next_due_at,
+          operator_note,
+          pipeline_enabled,
+          run_mode,
+          updated_at,
+          updated_by_user_id
+        from validation_settings
+        where singleton_key = $1
+      `,
+      [VALIDATION_SETTINGS_KEY],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation settings: ${getErrorMessage(error)}`);
   }
 
   if (existing) {
-    return existing as ValidationSettingsRow;
+    return existing;
   }
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("validation_settings")
-    .insert({
-      singleton_key: VALIDATION_SETTINGS_KEY,
-      pipeline_enabled: true,
-      run_mode: env.VALIDATION_DEFAULT_RUN_MODE,
-      automatic_interval_minutes: env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES
-    })
-    .select(
-      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
-    )
-    .single();
+  const inserted = await queryOne<ValidationSettingsRow>(
+    `
+      insert into validation_settings (
+        singleton_key,
+        pipeline_enabled,
+        run_mode,
+        automatic_interval_minutes
+      )
+      values ($1, true, $2, $3)
+      returning
+        automatic_interval_minutes,
+        last_scheduled_at,
+        last_tranco_sync_at,
+        next_due_at,
+        operator_note,
+        pipeline_enabled,
+        run_mode,
+        updated_at,
+        updated_by_user_id
+    `,
+    [VALIDATION_SETTINGS_KEY, env.VALIDATION_DEFAULT_RUN_MODE, env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES]
+  );
 
-  if (insertError || !inserted) {
-    throw new Error(`Failed to initialize validation settings: ${insertError?.message ?? "Unknown error"}`);
+  if (!inserted) {
+    throw new Error("Failed to initialize validation settings: Unknown error");
   }
 
-  return inserted as ValidationSettingsRow;
+  return inserted;
 }
 
 export async function getValidationPipelineState() {
@@ -376,15 +414,19 @@ export async function getValidationPipelineState() {
 }
 
 async function getValidationInternalOrganizationId() {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("slug", VALIDATION_INTERNAL_ORG_SLUG)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation internal organization: ${error.message}`);
+  let data: { id: string } | null;
+  try {
+    data = await queryOne<{ id: string }>(
+      `
+        select id
+        from organizations
+        where slug = $1
+      `,
+      [VALIDATION_INTERNAL_ORG_SLUG],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation internal organization: ${getErrorMessage(error)}`);
   }
 
   if (!data?.id) {
@@ -399,54 +441,86 @@ export async function upsertValidationTarget(input: {
   source: string;
   trancoRank?: number | null;
 }) {
-  const supabase = createAdminClient();
   const hostname = extractHostname(input.normalizedUrl);
   const trancoRank = input.trancoRank ?? null;
   const rankBand = rankBandForRank(trancoRank);
 
-  const { data, error } = await supabase
-    .from("validation_targets")
-    .upsert(
-      {
+  const data = await queryOne<ValidationTargetRow>(
+    `
+      insert into validation_targets (
         hostname,
-        normalized_url: input.normalizedUrl,
-        source: input.source,
-        tranco_rank: trancoRank,
-        rank_band: rankBand,
-        active: true
-      },
-      {
-        onConflict: "hostname"
-      }
-    )
-    .select(
-      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-    )
-    .single();
+        normalized_url,
+        source,
+        tranco_rank,
+        rank_band,
+        active
+      )
+      values ($1, $2, $3, $4, $5, true)
+      on conflict (hostname) do update
+        set normalized_url = excluded.normalized_url,
+            source = excluded.source,
+            tranco_rank = excluded.tranco_rank,
+            rank_band = excluded.rank_band,
+            active = excluded.active
+      returning
+        active,
+        backoff_until,
+        cooldown_until,
+        deny_reason,
+        denylisted,
+        failure_count,
+        hostname,
+        id,
+        last_completed_at,
+        last_error,
+        last_run_at,
+        last_status,
+        normalized_url,
+        rank_band,
+        source,
+        tranco_rank
+    `,
+    [hostname, input.normalizedUrl, input.source, trancoRank, rankBand]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to upsert validation target ${hostname}: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error(`Failed to upsert validation target ${hostname}: Unknown error`);
   }
 
-  return data as ValidationTargetRow;
+  return data;
 }
 
 export async function listValidationTargets(limit = 50) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_targets")
-    .select(
-      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-    )
-    .order("last_run_at", { ascending: false, nullsFirst: false })
-    .order("tranco_rank", { ascending: true, nullsFirst: false })
-    .limit(limit);
-
-  if (error) {
-    throw new Error(`Failed to list validation targets: ${error.message}`);
+  try {
+    return await query<ValidationTargetRow>(
+      `
+        select
+          active,
+          backoff_until,
+          cooldown_until,
+          deny_reason,
+          denylisted,
+          failure_count,
+          hostname,
+          id,
+          last_completed_at,
+          last_error,
+          last_run_at,
+          last_status,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        from validation_targets
+        order by last_run_at desc nulls last, tranco_rank asc nulls last
+        limit $1
+      `,
+      [limit],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to list validation targets: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as ValidationTargetRow[];
 }
 
 export async function syncTrancoTargets(force = false) {
@@ -522,33 +596,54 @@ export async function syncTrancoTargets(force = false) {
     }
   }
 
-  const supabase = createAdminClient();
   let insertedCount = 0;
   const batchSize = 500;
 
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
-    const { error } = await supabase.from("validation_targets").upsert(batch, {
-      onConflict: "hostname"
-    });
-
-    if (error) {
-      throw new Error(`Failed to upsert Tranco targets: ${error.message}`);
+    try {
+      await query(
+        `
+          insert into validation_targets (
+            active,
+            hostname,
+            normalized_url,
+            rank_band,
+            source,
+            tranco_rank
+          )
+          select
+            value->>'active' = 'true',
+            value->>'hostname',
+            value->>'normalized_url',
+            value->>'rank_band',
+            value->>'source',
+            (value->>'tranco_rank')::int
+          from jsonb_array_elements($1::jsonb) as value
+          on conflict (hostname) do update
+            set active = excluded.active,
+                normalized_url = excluded.normalized_url,
+                rank_band = excluded.rank_band,
+                source = excluded.source,
+                tranco_rank = excluded.tranco_rank
+        `,
+        [JSON.stringify(batch)]
+      );
+    } catch (error) {
+      throw new Error(`Failed to upsert Tranco targets: ${getErrorMessage(error)}`);
     }
 
     insertedCount += batch.length;
   }
 
-  const { error: updateError } = await supabase
-    .from("validation_settings")
-    .update({
-      last_tranco_sync_at: now.toISOString()
-    })
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
-
-  if (updateError) {
-    throw new Error(`Failed to update validation Tranco sync state: ${updateError.message}`);
-  }
+  await query(
+    `
+      update validation_settings
+         set last_tranco_sync_at = $2
+       where singleton_key = $1
+    `,
+    [VALIDATION_SETTINGS_KEY, now.toISOString()]
+  );
 
   return { insertedCount, skipped: false as const };
 }
@@ -568,52 +663,76 @@ function pickWeightedBand() {
 }
 
 export async function claimNextAutomaticTarget(now = new Date()) {
-  const supabase = createAdminClient();
   const nowIso = now.toISOString();
   const attemptedBands = [pickWeightedBand(), ...VALIDATION_RANK_BANDS.map((band) => band.key)].filter(
     (value, index, values) => values.indexOf(value) === index
   );
 
   for (const rankBand of attemptedBands) {
-    const { data, error } = await supabase
-      .from("validation_targets")
-      .select(
-        "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-      )
-      .eq("active", true)
-      .eq("denylisted", false)
-      .eq("rank_band", rankBand)
-      .or(`cooldown_until.is.null,cooldown_until.lt.${nowIso}`)
-      .or(`backoff_until.is.null,backoff_until.lt.${nowIso}`)
-      .limit(250);
-
-    if (error) {
-      throw new Error(`Failed to load validation targets: ${error.message}`);
+    let rows: ValidationTargetRow[];
+    try {
+      rows = await query<ValidationTargetRow>(
+        `
+          select
+            active,
+            backoff_until,
+            cooldown_until,
+            deny_reason,
+            denylisted,
+            failure_count,
+            hostname,
+            id,
+            last_completed_at,
+            last_error,
+            last_run_at,
+            last_status,
+            normalized_url,
+            rank_band,
+            source,
+            tranco_rank
+          from validation_targets
+          where active = true
+            and denylisted = false
+            and rank_band = $1
+            and (cooldown_until is null or cooldown_until < $2)
+            and (backoff_until is null or backoff_until < $2)
+          limit 250
+        `,
+        [rankBand, nowIso],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load validation targets: ${getErrorMessage(error)}`);
     }
 
-    const rows = ((data ?? []) as ValidationTargetRow[]).filter((target) => {
+    const eligibleRows = rows.filter((target) => {
       const cooldownOk = !target.cooldown_until || new Date(target.cooldown_until) <= now;
       const backoffOk = !target.backoff_until || new Date(target.backoff_until) <= now;
       return cooldownOk && backoffOk;
     });
 
-    if (rows.length === 0) {
+    if (eligibleRows.length === 0) {
       continue;
     }
 
-    const shuffled = [...rows].sort(() => Math.random() - 0.5);
+    const shuffled = [...eligibleRows].sort(() => Math.random() - 0.5);
 
     for (const target of shuffled) {
-      const { data: activeRun, error: activeRunError } = await supabase
-        .from("validation_runs")
-        .select("id")
-        .eq("validation_target_id", target.id)
-        .in("status", [...ACTIVE_RUN_STATUSES])
-        .limit(1)
-        .maybeSingle();
-
-      if (activeRunError) {
-        throw new Error(`Failed to check active validation runs: ${activeRunError.message}`);
+      let activeRun: { id: string } | null;
+      try {
+        activeRun = await queryOne<{ id: string }>(
+          `
+            select id
+            from validation_runs
+            where validation_target_id = $1
+              and status = any($2::text[])
+            limit 1
+          `,
+          [target.id, [...ACTIVE_RUN_STATUSES]],
+          { readOnly: true }
+        );
+      } catch (error) {
+        throw new Error(`Failed to check active validation runs: ${getErrorMessage(error)}`);
       }
 
       if (!activeRun) {
@@ -633,70 +752,109 @@ export async function createValidationRun(input: {
   trancoRank?: number | null;
   triggerMode: ValidationRunMode;
 }) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_runs")
-    .insert({
-      hostname: input.hostname,
-      normalized_url: input.normalizedUrl,
-      rank_band: input.rankBand ?? null,
-      tranco_rank: input.trancoRank ?? null,
-      trigger_mode: input.triggerMode,
-      status: "queued",
-      validation_target_id: input.targetId ?? null
-    })
-    .select(
-      "completed_at, created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
-    )
-    .single();
+  const data = await queryOne<ValidationRunRow>(
+    `
+      insert into validation_runs (
+        hostname,
+        normalized_url,
+        rank_band,
+        tranco_rank,
+        trigger_mode,
+        status,
+        validation_target_id
+      )
+      values ($1, $2, $3, $4, $5, 'queued', $6)
+      returning
+        completed_at,
+        created_at,
+        error_message,
+        hostname,
+        id,
+        normalized_url,
+        rank_band,
+        scan_id,
+        started_at,
+        status,
+        tranco_rank,
+        trigger_mode,
+        validation_target_id
+    `,
+    [input.hostname, input.normalizedUrl, input.rankBand ?? null, input.trancoRank ?? null, input.triggerMode, input.targetId ?? null]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to create validation run: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error("Failed to create validation run: Unknown error");
   }
 
   if (input.targetId) {
-    await supabase
-      .from("validation_targets")
-      .update({
-        last_run_at: new Date().toISOString(),
-        last_status: "queued"
-      })
-      .eq("id", input.targetId);
+    await query(
+      `
+        update validation_targets
+           set last_run_at = $2,
+               last_status = 'queued'
+         where id = $1
+      `,
+      [input.targetId, new Date().toISOString()]
+    );
   }
 
-  return data as ValidationRunRow;
+  return data;
 }
 
 export async function getValidationRun(runId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_runs")
-    .select(
-      "completed_at, created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
-    )
-    .eq("id", runId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation run ${runId}: ${error.message}`);
+  try {
+    return await queryOne<ValidationRunRow>(
+      `
+        select
+          completed_at,
+          created_at,
+          error_message,
+          hostname,
+          id,
+          normalized_url,
+          rank_band,
+          scan_id,
+          started_at,
+          status,
+          tranco_rank,
+          trigger_mode,
+          validation_target_id
+        from validation_runs
+        where id = $1
+      `,
+      [runId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation run ${runId}: ${getErrorMessage(error)}`);
   }
-
-  return (data as ValidationRunRow | null) ?? null;
 }
 
 export async function updateValidationRun(
   runId: string,
   patch: Record<string, unknown>
 ) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("validation_runs").update(patch).eq("id", runId);
-  if (error) {
-    throw new Error(`Failed to update validation run ${runId}: ${error.message}`);
+  const entries = Object.entries(patch);
+  if (entries.length === 0) {
+    return;
+  }
+
+  const setClause = entries.map(([key], index) => `${key} = $${index + 1}`).join(", ");
+  try {
+    await query(
+      `
+        update validation_runs
+           set ${setClause}
+         where id = $${entries.length + 1}
+      `,
+      [...entries.map(([, value]) => value), runId]
+    );
+  } catch (error) {
+    throw new Error(`Failed to update validation run ${runId}: ${getErrorMessage(error)}`);
   }
 }
 
 export async function createScanForValidationRun(runId: string) {
-  const supabase = createAdminClient();
   const run = await getValidationRun(runId);
   const teamPlan = getPlanDefinition("team");
 
@@ -711,53 +869,71 @@ export async function createScanForValidationRun(runId: string) {
   const organizationId = await getValidationInternalOrganizationId();
   const normalizedUrl = run.normalized_url;
   const hostname = run.hostname;
-  const { data: domain } = await supabase
-    .from("domains")
-    .select("id, max_pages_override")
-    .eq("organization_id", organizationId)
-    .eq("hostname", hostname)
-    .maybeSingle();
+  const domain = await queryOne<{ id: string; max_pages_override: number | null }>(
+    `
+      select id, max_pages_override
+      from domains
+      where organization_id = $1
+        and hostname = $2
+    `,
+    [organizationId, hostname],
+    { readOnly: true }
+  );
 
-  let domainId = (domain as { id: string } | null)?.id ?? null;
+  let domainId = domain?.id ?? null;
 
   if (!domainId) {
-    const { data: insertedDomain, error: domainError } = await supabase
-      .from("domains")
-      .insert({
-        organization_id: organizationId,
-        hostname,
-        normalized_url: normalizedUrl,
-        status: "active"
-      })
-      .select("id")
-      .single();
+    const insertedDomain = await queryOne<{ id: string }>(
+      `
+        insert into domains (
+          organization_id,
+          hostname,
+          normalized_url,
+          status
+        )
+        values ($1, $2, $3, 'active')
+        returning id
+      `,
+      [organizationId, hostname, normalizedUrl]
+    );
 
-    if (domainError || !insertedDomain) {
-      throw new Error(`Failed to create validation domain ${hostname}: ${domainError?.message ?? "Unknown error"}`);
+    if (!insertedDomain) {
+      throw new Error(`Failed to create validation domain ${hostname}: Unknown error`);
     }
 
-    domainId = insertedDomain.id as string;
+    domainId = insertedDomain.id;
   } else {
-    await supabase
-      .from("domains")
-      .update({
-        normalized_url: normalizedUrl,
-        status: "active"
-      })
-      .eq("id", domainId);
+    await query(
+      `
+        update domains
+           set normalized_url = $2,
+               status = 'active'
+         where id = $1
+      `,
+      [domainId, normalizedUrl]
+    );
   }
 
-  const { data: scan, error: scanError } = await supabase
-    .from("scans")
-    .insert({
-      organization_id: organizationId,
-      domain_id: domainId,
-      submitted_by_user_id: null,
-      scan_type: "full",
-      status: "queued",
-      pages_requested: teamPlan.maxPagesPerScan,
-      pages_scanned: 0,
-      scan_config_json: buildSharedFullScanConfig({
+  const scan = await queryOne<{ id: string }>(
+    `
+      insert into scans (
+        organization_id,
+        domain_id,
+        submitted_by_user_id,
+        scan_type,
+        status,
+        pages_requested,
+        pages_scanned,
+        scan_config_json
+      )
+      values ($1, $2, null, 'full', 'queued', $3, 0, $4)
+      returning id
+    `,
+    [
+      organizationId,
+      domainId,
+      teamPlan.maxPagesPerScan,
+      buildSharedFullScanConfig({
         crawlerIdentity: {
           productToken: getCrawlerProductToken(),
           publicUrl: getCrawlerPublicUrl()
@@ -768,33 +944,36 @@ export async function createScanForValidationRun(runId: string) {
         source: "validation-canary",
         triggerMode: run.trigger_mode
       })
-    })
-    .select("id")
-    .single();
+    ]
+  );
 
-  if (scanError || !scan) {
-    throw new Error(`Failed to create validation scan for ${hostname}: ${scanError?.message ?? "Unknown error"}`);
+  if (!scan) {
+    throw new Error(`Failed to create validation scan for ${hostname}: Unknown error`);
   }
 
   await Promise.all([
-    supabase.from("domains").update({ latest_scan_id: scan.id }).eq("id", domainId),
-    supabase
-      .from("validation_runs")
-      .update({
-        scan_id: scan.id,
-        status: "collecting",
-        started_at: new Date().toISOString(),
-        error_message: null
-      })
-      .eq("id", runId),
+    query(`update domains set latest_scan_id = $2 where id = $1`, [domainId, scan.id]),
+    query(
+      `
+        update validation_runs
+           set scan_id = $2,
+               status = 'collecting',
+               started_at = $3,
+               error_message = null
+         where id = $1
+      `,
+      [runId, scan.id, new Date().toISOString()]
+    ),
     run.validation_target_id
-      ? supabase
-          .from("validation_targets")
-          .update({
-            last_run_at: new Date().toISOString(),
-            last_status: "collecting"
-          })
-          .eq("id", run.validation_target_id)
+      ? query(
+          `
+            update validation_targets
+               set last_run_at = $2,
+                   last_status = 'collecting'
+             where id = $1
+          `,
+          [run.validation_target_id, new Date().toISOString()]
+        )
       : Promise.resolve()
   ]);
 
@@ -802,104 +981,129 @@ export async function createScanForValidationRun(runId: string) {
 }
 
 export async function loadCompletedScanArtifacts(scanId: string) {
-  const supabase = createAdminClient();
-  const [
-    { data: scan, error: scanError },
-    { data: snapshot, error: snapshotError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: rawSignals, error: signalsError },
-    { data: trackerVendors, error: trackerError },
-    { data: pages, error: pagesError },
-    { data: policyEnrichments, error: policyEnrichmentError },
-    { data: documentSources, error: documentSourcesError },
-    { data: macroEnrichment, error: macroEnrichmentError },
-    { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: preconsentViolations, error: preconsentError },
-    { data: signalHits, error: signalHitsError },
-    { data: pageEvidence, error: pageEvidenceError }
-  ] = await Promise.all([
-    supabase
-      .from("scans")
-      .select("id, status, created_at, completed_at, error_message")
-      .eq("id", scanId)
-      .maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", scanId)
-      .order("category", { ascending: true })
-      .order("signal_key", { ascending: true }),
-    supabase
-      .from("scan_tracker_vendors")
-      .select("vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id")
-      .eq("scan_id", scanId)
-      .order("vendor_name", { ascending: true }),
-    supabase
-      .from("scan_pages")
-      .select("page_type, page_url, fetch_status")
-      .eq("scan_id", scanId)
-      .order("page_type", { ascending: true }),
-    supabase
-      .from("policy_enrichment")
-      .select("*")
-      .eq("scan_id", scanId),
-    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase
-      .from("policy_review_queue")
-      .select("id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("scan_preconsent_violations")
-      .select("vendor_name, evidence_urls, collection_endpoint_type")
-      .eq("scan_id", scanId),
-    supabase
-      .from("scan_signal_hits")
-      .select("id, signal_key, page_url, page_type, page_role, evidence_refs, payload")
-      .eq("scan_id", scanId)
-      .in("signal_key", [
-        "commercial.explicit_fee_disclosure_text_present",
-        "financial.apr_or_interest_rate_disclosure_text_present",
-        "financial.past_performance_disclaimer_text_present"
-      ]),
-    supabase
-      .from("scan_page_evidence")
-      .select("evidence_id, page_url, page_type, page_role, matched_text, metadata")
-      .eq("scan_id", scanId)
-  ]);
+  const optionalOne = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
+    queryOne<T>(text, values, { readOnly: true })
+      .then((data) => ({ data, error: null as { message?: string; code?: string | null } | null }))
+      .catch((error) => ({ data: null as T | null, error: { message: getErrorMessage(error) } }));
+  const optionalMany = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
+    query<T>(text, values, { readOnly: true })
+      .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+      .catch((error) => ({ data: [] as T[], error: { message: getErrorMessage(error) } }));
 
-  if (scanError) {
-    throw new Error(`Failed to load validation scan ${scanId}: ${scanError.message}`);
+  let scan: Record<string, unknown> | null;
+  let snapshot: Record<string, unknown> | null;
+  let runtimeArtifacts: Record<string, unknown> | null;
+  let rawSignals: SignalPopulationRow[];
+  let trackerVendors: Array<Record<string, unknown>>;
+  let pages: Array<Record<string, unknown>>;
+  let policyEnrichments: Array<Record<string, unknown>>;
+  let documentSourcesResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let macroEnrichmentResult: { data: Record<string, unknown> | null; error: { message?: string; code?: string | null } | null };
+  let policyReviewQueue: Array<Record<string, unknown>>;
+  let preconsentResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let signalHitsResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let pageEvidenceResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+
+  try {
+    [
+      scan,
+      snapshot,
+      runtimeArtifacts,
+      rawSignals,
+      trackerVendors,
+      pages,
+      policyEnrichments,
+      documentSourcesResult,
+      macroEnrichmentResult,
+      policyReviewQueue,
+      preconsentResult,
+      signalHitsResult,
+      pageEvidenceResult
+    ] = await Promise.all([
+      queryOne<Record<string, unknown>>(
+        `select id, status, created_at, completed_at, error_message from scans where id = $1`,
+        [scanId],
+        { readOnly: true }
+      ),
+      queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+      queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+      query<SignalPopulationRow>(
+        `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+           from scan_signals
+          where scan_id = $1
+          order by category asc, signal_key asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(
+        `select vendor_name, vendor_category, confidence, detection_source, first_party_or_third_party, before_consent, script_host, matched_signature_id
+           from scan_tracker_vendors
+          where scan_id = $1
+          order by vendor_name asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(
+        `select page_type, page_url, fetch_status
+           from scan_pages
+          where scan_id = $1
+          order by page_type asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1`, [scanId], { readOnly: true }).then((result) => result.rows),
+      optionalMany<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [scanId]),
+      optionalOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId]),
+      query<Record<string, unknown>>(
+        `select id, policy_enrichment_id, reason, review_status, review_verdict, reviewer_notes, created_at, reviewed_at
+           from policy_review_queue
+          where scan_id = $1
+          order by created_at asc`,
+        [scanId],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      optionalMany<Record<string, unknown>>(
+        `select vendor_name, evidence_urls, collection_endpoint_type
+           from scan_preconsent_violations
+          where scan_id = $1`,
+        [scanId]
+      ),
+      optionalMany<Record<string, unknown>>(
+        `select id, signal_key, page_url, page_type, page_role, evidence_refs, payload
+           from scan_signal_hits
+          where scan_id = $1
+            and signal_key = any($2::text[])`,
+        [
+          scanId,
+          [
+            "commercial.explicit_fee_disclosure_text_present",
+            "financial.apr_or_interest_rate_disclosure_text_present",
+            "financial.past_performance_disclaimer_text_present"
+          ]
+        ]
+      ),
+      optionalMany<Record<string, unknown>>(
+        `select evidence_id, page_url, page_type, page_role, matched_text, metadata
+           from scan_page_evidence
+          where scan_id = $1`,
+        [scanId]
+      )
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load validation scan ${scanId}: ${getErrorMessage(error)}`);
   }
-  if (snapshotError) {
-    throw new Error(`Failed to load validation scan snapshot ${scanId}: ${snapshotError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load validation runtime artifacts ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (signalsError) {
-    throw new Error(`Failed to load validation signal populations ${scanId}: ${signalsError.message}`);
-  }
-  if (trackerError) {
-    throw new Error(`Failed to load validation tracker vendors ${scanId}: ${trackerError.message}`);
-  }
-  if (pagesError) {
-    throw new Error(`Failed to load validation scan pages ${scanId}: ${pagesError.message}`);
-  }
-  if (policyEnrichmentError) {
-    throw new Error(`Failed to load policy enrichment ${scanId}: ${policyEnrichmentError.message}`);
-  }
+
+  const documentSourcesError = documentSourcesResult.error;
+  const macroEnrichmentError = macroEnrichmentResult.error;
+  const preconsentError = preconsentResult.error;
+  const signalHitsError = signalHitsResult.error;
+  const pageEvidenceError = pageEvidenceResult.error;
+
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
   }
   if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
     throw new Error(`Failed to load scan macro enrichment ${scanId}: ${macroEnrichmentError.message}`);
-  }
-  if (policyReviewQueueError) {
-    throw new Error(`Failed to load policy review queue ${scanId}: ${policyReviewQueueError.message}`);
   }
   if (preconsentError && !isRecoverableOptionalLoadError(preconsentError)) {
     throw new Error(`Failed to load pre-consent violations ${scanId}: ${preconsentError.message}`);
@@ -911,17 +1115,17 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     throw new Error(`Failed to load page evidence ${scanId}: ${pageEvidenceError.message}`);
   }
 
-  const runtimeArtifactsRecord = (runtimeArtifacts as Record<string, unknown> | null) ?? null;
-  const rawSignalRows = (rawSignals ?? []) as SignalPopulationRow[];
+  const runtimeArtifactsRecord = runtimeArtifacts ?? null;
+  const rawSignalRows = rawSignals;
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
-  const loadedPageEvidence = (pageEvidenceError ? [] : pageEvidence ?? []) as Array<Record<string, unknown>>;
-  const loadedSignalHits = (signalHitsError ? [] : signalHits ?? []) as Array<Record<string, unknown>>;
-  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const loadedPageEvidence = pageEvidenceError ? [] : pageEvidenceResult.data;
+  const loadedSignalHits = signalHitsError ? [] : signalHitsResult.data;
+  const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
   const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
-  const fallbackPolicyRows = ((policyEnrichments ?? []) as Array<Record<string, unknown>>);
+  const fallbackPolicyRows = policyEnrichments;
   const policySemanticInputs = preferDocumentSources
     ? mergeNanoPolicyInputsWithFallback({
         documentSources: normalizedDocumentSources,
@@ -972,66 +1176,47 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     documentSources: normalizedDocumentSources,
     mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,
-    pages: (pages ?? []) as Array<Record<string, unknown>>,
-    macroEnrichment: (macroEnrichmentError ? null : (macroEnrichment as Record<string, unknown> | null)) ?? null,
+    pages,
+    macroEnrichment: (macroEnrichmentError ? null : macroEnrichmentResult.data) ?? null,
     policyEnrichments: fallbackPolicyRows,
     policySemanticRows: policySemanticInputs,
     policySemanticInputs,
-    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue,
     preferDocumentSources,
-    preconsentViolations: (preconsentError ? [] : preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    preconsentViolations: preconsentError ? [] : preconsentResult.data,
     rawPolicyEnrichmentRows: fallbackPolicyRows,
     runtimeArtifacts: runtimeArtifactsRecord,
-    scan: (scan as Record<string, unknown> | null) ?? null,
+    scan: scan ?? null,
     signalHits: loadedSignalHits.length > 0 ? loadedSignalHits : fallbackFinancialEvidence.signalHits,
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
-    trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>
+    snapshot: snapshot ?? null,
+    trackerVendors
   };
 }
 
 export async function loadNanoSignalEnrichmentInputs(scanId: string) {
-  const supabase = createAdminClient();
-  const [
-    { data: scan, error: scanError },
-    { data: snapshot, error: snapshotError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: policyEnrichments, error: policyEnrichmentError },
-    { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: documentSources, error: documentSourcesError }
-  ] = await Promise.all([
-    supabase.from("scans").select("id, status, created_at, started_at, completed_at, error_message").eq("id", scanId).maybeSingle(),
-    supabase.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    supabase.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase
-      .from("scan_document_sources")
-      .select("*")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true })
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
+
+  const [scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
+    queryOne<Record<string, unknown>>(`select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows)
   ]);
 
-  if (scanError) {
-    throw new Error(`Failed to load scan for nano signal enrichment ${scanId}: ${scanError.message}`);
-  }
-  if (snapshotError) {
-    throw new Error(`Failed to load snapshot for nano signal enrichment ${scanId}: ${snapshotError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load runtime artifacts for nano signal enrichment ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (policyEnrichmentError) {
-    throw new Error(`Failed to load policy enrichment for nano signal enrichment ${scanId}: ${policyEnrichmentError.message}`);
-  }
-  if (policyReviewQueueError) {
-    throw new Error(`Failed to load policy review queue for nano signal enrichment ${scanId}: ${policyReviewQueueError.message}`);
-  }
+  const documentSourcesError = documentSourcesResult.error;
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources for nano signal enrichment ${scanId}: ${documentSourcesError.message}`);
   }
 
-  const normalizedDocumentSources = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
-  const fallbackPolicyRows = ((policyEnrichments ?? []) as Array<Record<string, unknown>>);
+  const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
+  const fallbackPolicyRows = policyEnrichments;
   const documentBackedPolicyInputs = mergeNanoPolicyInputsWithFallback({
     documentSources: normalizedDocumentSources,
     fallbackRows: fallbackPolicyRows
@@ -1042,10 +1227,10 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     policySemanticRows: preferDocumentSources ? documentBackedPolicyInputs : fallbackPolicyRows,
     policySignalInputs: preferDocumentSources ? documentBackedPolicyInputs : fallbackPolicyRows,
     policyEnrichments: fallbackPolicyRows,
-    policyReviewQueue: (policyReviewQueue ?? []) as Array<Record<string, unknown>>,
+    policyReviewQueue,
     preferDocumentSources,
     rawPolicyEnrichmentRows: fallbackPolicyRows,
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    runtimeArtifacts: runtimeArtifacts ?? null,
     scan: (scan as {
       completed_at?: string | null;
       created_at?: string | null;
@@ -1054,88 +1239,88 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
       started_at?: string | null;
       status?: string | null;
     } | null) ?? null,
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null
+    snapshot: snapshot ?? null
   };
 }
 
 export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
-  const supabase = createAdminClient();
-  const { data: scan, error: scanError } = await supabase
-    .from("scans")
-    .select("id, status, created_at, started_at, completed_at, error_message, domain_id")
-    .eq("id", scanId)
-    .maybeSingle();
-
-  if (scanError) {
-    throw new Error(`Failed to load scan for nano doc retrieval ${scanId}: ${scanError.message}`);
-  }
+  const scan = await queryOne<Record<string, unknown>>(
+    `select id, status, created_at, started_at, completed_at, error_message, domain_id from scans where id = $1`,
+    [scanId],
+    { readOnly: true }
+  );
 
   const domainId = typeof scan?.domain_id === "string" ? scan.domain_id : null;
-  const recentDomainScansPromise = domainId
-    ? supabase
-        .from("scans")
-        .select("id")
-        .eq("domain_id", domainId)
-        .neq("id", scanId)
-        .order("created_at", { ascending: false })
-        .limit(5)
-    : Promise.resolve({ data: [], error: null });
-  const [
-    { data: domain, error: domainError },
-    { data: pages, error: pagesError },
-    { data: events, error: eventsError },
-    { data: documentSources, error: documentSourcesError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: recentDomainScans, error: recentDomainScansError }
-  ] = await Promise.all([
-    domainId ? supabase.from("domains").select("hostname").eq("id", domainId).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    supabase.from("scan_pages").select("page_type, page_url, fetch_status").eq("scan_id", scanId).order("page_type", { ascending: true }),
-    supabase
-      .from("scan_events")
-      .select("event_type, metadata_json, created_at")
-      .eq("scan_id", scanId)
-      .eq("event_type", "runtime.build_phase_diagnostic")
-      .order("created_at", { ascending: true }),
-    supabase.from("scan_document_sources").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    recentDomainScansPromise
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
+
+  const [domain, pages, events, runtimeArtifacts, recentDomainScans] = await Promise.all([
+    domainId
+      ? queryOne<{ hostname: string }>(`select hostname from domains where id = $1`, [domainId], { readOnly: true })
+      : Promise.resolve(null),
+    query<Record<string, unknown>>(
+      `select page_type, page_url, fetch_status
+         from scan_pages
+        where scan_id = $1
+        order by page_type asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select event_type, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+          and event_type = 'runtime.build_phase_diagnostic'
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    domainId
+      ? query<Record<string, unknown>>(
+          `
+            select id
+            from scans
+            where domain_id = $1
+              and id <> $2
+            order by created_at desc
+            limit 5
+          `,
+          [domainId, scanId],
+          { readOnly: true }
+        ).then((result) => result.rows)
+      : Promise.resolve([] as Array<Record<string, unknown>>)
   ]);
 
-  if (domainError && !isMissingOptionalTableError(domainError)) {
-    throw new Error(`Failed to load domain for nano doc retrieval ${scanId}: ${domainError.message}`);
-  }
-  if (pagesError) {
-    throw new Error(`Failed to load scan pages for nano doc retrieval ${scanId}: ${pagesError.message}`);
-  }
-  if (eventsError) {
-    throw new Error(`Failed to load discovery events for nano doc retrieval ${scanId}: ${eventsError.message}`);
-  }
+  const documentSourcesError = documentSourcesResult.error;
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load existing document sources for nano doc retrieval ${scanId}: ${documentSourcesError.message}`);
   }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load runtime artifacts for nano doc retrieval ${scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (recentDomainScansError) {
-    throw new Error(`Failed to load recent domain scans for nano doc retrieval ${scanId}: ${recentDomainScansError.message}`);
-  }
 
-  const recentDomainScanIds = ((recentDomainScans ?? []) as Array<Record<string, unknown>>)
+  const recentDomainScanIds = recentDomainScans
     .map((row) => (typeof row.id === "string" ? row.id : null))
     .filter((value): value is string => typeof value === "string");
   const recentDomainDocumentCandidates =
     recentDomainScanIds.length > 0
-      ? (
-          await supabase
-            .from("scan_document_sources")
-            .select("canonical_url, source_url, document_type, title, semantic_confidence, created_at")
-            .in("scan_id", recentDomainScanIds)
-            .eq("source_status", "ready")
-            .order("created_at", { ascending: false })
-        ).data ?? []
+      ? await query<Record<string, unknown>>(
+          `
+            select canonical_url, source_url, document_type, title, semantic_confidence, created_at
+            from scan_document_sources
+            where scan_id = any($1::uuid[])
+              and source_status = 'ready'
+            order by created_at desc
+          `,
+          [recentDomainScanIds],
+          { readOnly: true }
+        ).then((result) => result.rows)
       : [];
 
-  const discoveryCandidates = ((events ?? []) as Array<Record<string, unknown>>).flatMap((event) => {
+  const discoveryCandidates = events.flatMap((event) => {
     const metadata =
       event.metadata_json && typeof event.metadata_json === "object" && !Array.isArray(event.metadata_json)
         ? (event.metadata_json as Record<string, unknown>)
@@ -1171,10 +1356,10 @@ export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDo
   return {
     discoveryCandidates,
     domainHostname: (domain?.hostname as string | null) ?? null,
-    existingDocumentSources: (documentSources ?? []) as Array<Record<string, unknown>>,
-    pages: (pages ?? []) as Array<Record<string, unknown>>,
-    recentDomainDocumentCandidates: (recentDomainDocumentCandidates ?? []) as Array<Record<string, unknown>>,
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    existingDocumentSources: documentSourcesError ? [] : documentSourcesResult.data,
+    pages,
+    recentDomainDocumentCandidates,
+    runtimeArtifacts: runtimeArtifacts ?? null,
     scan:
       (scan as {
         completed_at?: string | null;
@@ -1205,13 +1390,8 @@ export async function replaceValidationRunFindings(
     evidence: Record<string, unknown>;
   }>
 ) {
-  const supabase = createAdminClient();
   const run = await getValidationRun(runId);
-  const { error: deleteError } = await supabase.from("validation_run_findings").delete().eq("validation_run_id", runId);
-
-  if (deleteError) {
-    throw new Error(`Failed to clear validation findings for run ${runId}: ${deleteError.message}`);
-  }
+  await query(`delete from validation_run_findings where validation_run_id = $1`, [runId]);
 
   if (findings.length === 0) {
     await updateValidationRun(runId, {
@@ -1221,8 +1401,7 @@ export async function replaceValidationRunFindings(
     if (run?.scan_id) {
       await persistValidationRunReportFindingCount({
         runId,
-        scanId: run.scan_id,
-        supabase
+        scanId: run.scan_id
       });
     }
     return [];
@@ -1245,20 +1424,94 @@ export async function replaceValidationRunFindings(
     evidence_json: finding.evidence
   }));
 
-  let insertResult = await supabase
-    .from("validation_run_findings")
-    .insert(baseRows.map((row) => ({ ...row, rank: row.finding_rank })))
-    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
+  let insertedRows: Array<Record<string, unknown>>;
+  try {
+    insertedRows = await query<Record<string, unknown>>(
+      `
+        insert into validation_run_findings (
+          validation_run_id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json,
+          rank
+        )
+        select
+          value->>'validation_run_id',
+          value->>'category',
+          nullif(value->>'subtype', ''),
+          value->>'finding_family',
+          value->>'finding_source',
+          value->>'finding_scope',
+          value->>'finding_subject',
+          value->>'rule_key',
+          value->>'title',
+          value->>'description',
+          value->>'severity',
+          nullif(value->>'page_url', ''),
+          (value->>'finding_rank')::int,
+          value->'evidence_json',
+          (value->>'finding_rank')::int
+        from jsonb_array_elements($1::jsonb) as value
+        returning id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json
+      `,
+      [JSON.stringify(baseRows)],
+      { readOnly: false }
+    ).then((result) => result.rows);
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (!message.includes(`column "rank"`)) {
+      throw new Error(`Failed to insert validation findings for run ${runId}: ${message}`);
+    }
 
-  if (insertResult.error && isMissingColumnError(insertResult.error, "rank")) {
-    insertResult = await supabase
-      .from("validation_run_findings")
-      .insert(baseRows)
-      .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
-  }
-
-  if (insertResult.error) {
-    throw new Error(`Failed to insert validation findings for run ${runId}: ${insertResult.error.message}`);
+    insertedRows = await query<Record<string, unknown>>(
+      `
+        insert into validation_run_findings (
+          validation_run_id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json
+        )
+        select
+          value->>'validation_run_id',
+          value->>'category',
+          nullif(value->>'subtype', ''),
+          value->>'finding_family',
+          value->>'finding_source',
+          value->>'finding_scope',
+          value->>'finding_subject',
+          value->>'rule_key',
+          value->>'title',
+          value->>'description',
+          value->>'severity',
+          nullif(value->>'page_url', ''),
+          (value->>'finding_rank')::int,
+          value->'evidence_json'
+        from jsonb_array_elements($1::jsonb) as value
+        returning id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json
+      `,
+      [JSON.stringify(baseRows)],
+      { readOnly: false }
+    ).then((result) => result.rows);
   }
 
   await updateValidationRun(runId, {
@@ -1268,27 +1521,42 @@ export async function replaceValidationRunFindings(
   if (run?.scan_id) {
     await persistValidationRunReportFindingCount({
       runId,
-      scanId: run.scan_id,
-      supabase
+      scanId: run.scan_id
     });
   }
 
-  return (insertResult.data ?? []) as Array<Record<string, unknown>>;
+  return insertedRows;
 }
 
 export async function loadValidationRunFindings(runId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_run_findings")
-    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json")
-    .eq("validation_run_id", runId)
-    .order("finding_rank", { ascending: true });
-
-  if (error) {
-    throw new Error(`Failed to load validation findings for run ${runId}: ${error.message}`);
+  try {
+    return await query<Record<string, unknown>>(
+      `
+        select
+          id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json
+        from validation_run_findings
+        where validation_run_id = $1
+        order by finding_rank asc
+      `,
+      [runId],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to load validation findings for run ${runId}: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as Array<Record<string, unknown>>;
 }
 
 export async function upsertValidationVerdict(input: {
@@ -1301,58 +1569,71 @@ export async function upsertValidationVerdict(input: {
   validationRunFindingId: string;
   verdict: "supported" | "inconclusive" | "not_supported";
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("validation_verdicts")
-    .upsert(
-      {
-        validation_run_finding_id: input.validationRunFindingId,
-        verdict: input.verdict,
-        confidence: input.confidence,
-        rationale: input.rationale,
-        agreement_score: input.agreementScore,
-        model: input.model,
-        prompt_version: input.promptVersion,
-        evidence_json: input.evidence
-      },
-      {
-        onConflict: "validation_run_finding_id"
-      }
-    );
-
-  if (error) {
-    throw new Error(`Failed to persist validation verdict ${input.validationRunFindingId}: ${error.message}`);
-  }
+  await query(
+    `
+      insert into validation_verdicts (
+        validation_run_finding_id,
+        verdict,
+        confidence,
+        rationale,
+        agreement_score,
+        model,
+        prompt_version,
+        evidence_json
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      on conflict (validation_run_finding_id) do update
+        set verdict = excluded.verdict,
+            confidence = excluded.confidence,
+            rationale = excluded.rationale,
+            agreement_score = excluded.agreement_score,
+            model = excluded.model,
+            prompt_version = excluded.prompt_version,
+            evidence_json = excluded.evidence_json
+    `,
+    [
+      input.validationRunFindingId,
+      input.verdict,
+      input.confidence,
+      input.rationale,
+      input.agreementScore,
+      input.model,
+      input.promptVersion,
+      input.evidence
+    ]
+  );
 }
 
 export async function finalizeValidationRun(runId: string) {
-  const supabase = createAdminClient();
   const run = await getValidationRun(runId);
 
   if (!run) {
     throw new Error(`Validation run ${runId} was not found.`);
   }
 
-  const { data: verdicts, error: verdictError } = await supabase
-    .from("validation_verdicts")
-    .select("agreement_score")
-    .in(
-      "validation_run_finding_id",
-      (
-        (
-          await supabase
-            .from("validation_run_findings")
-            .select("id")
-            .eq("validation_run_id", runId)
-        ).data ?? []
-      ).map((row) => row.id)
-    );
+  const findingIds = await query<{ id: string }>(
+    `
+      select id
+      from validation_run_findings
+      where validation_run_id = $1
+    `,
+    [runId],
+    { readOnly: true }
+  ).then((result) => result.rows.map((row) => row.id));
 
-  if (verdictError) {
-    throw new Error(`Failed to load validation verdicts for run ${runId}: ${verdictError.message}`);
-  }
+  const verdicts = findingIds.length
+    ? await query<{ agreement_score: number }>(
+        `
+          select agreement_score
+          from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+        `,
+        [findingIds],
+        { readOnly: true }
+      ).then((result) => result.rows)
+    : [];
 
-  const scores = ((verdicts ?? []) as Array<{ agreement_score: number }>).map((row) => row.agreement_score);
+  const scores = verdicts.map((row) => row.agreement_score);
   const averageAgreementScore =
     scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
   const completedAt = new Date();
@@ -1368,8 +1649,7 @@ export async function finalizeValidationRun(runId: string) {
   if (run.scan_id) {
     await persistValidationRunReportFindingCount({
       runId,
-      scanId: run.scan_id,
-      supabase
+      scanId: run.scan_id
     });
   }
 
@@ -1378,11 +1658,32 @@ export async function finalizeValidationRun(runId: string) {
   }
 
   const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
-  const { data: snapshot } = await supabase
-    .from("scan_snapshots")
-    .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status, challenge_suspected, rate_limit_suspected, scan_outcome, cooldown_hours")
-    .eq("scan_id", run.scan_id)
-    .maybeSingle();
+  const snapshot = await queryOne<{
+    blocked_flag: boolean | null;
+    captcha_flag: boolean | null;
+    challenge_suspected: boolean | null;
+    cooldown_hours: number | null;
+    homepage_fetch_http_status: number | null;
+    rate_limit_suspected: boolean | null;
+    robots_fetch_http_status: number | null;
+    scan_outcome: string | null;
+  }>(
+    `
+      select
+        blocked_flag,
+        captcha_flag,
+        homepage_fetch_http_status,
+        robots_fetch_http_status,
+        challenge_suspected,
+        rate_limit_suspected,
+        scan_outcome,
+        cooldown_hours
+      from scan_snapshots
+      where scan_id = $1
+    `,
+    [run.scan_id],
+    { readOnly: true }
+  );
 
   const blocked =
     snapshot?.blocked_flag === true ||
@@ -1404,24 +1705,30 @@ export async function finalizeValidationRun(runId: string) {
       ? snapshot.cooldown_hours
       : retryPolicy.cooldownHours;
 
-  await supabase
-    .from("validation_targets")
-    .update({
-      backoff_until: blocked ? addDays(completedAt, 90).toISOString() : null,
-      cooldown_until: blocked
+  await query(
+    `
+      update validation_targets
+         set backoff_until = $2,
+             cooldown_until = $3,
+             last_completed_at = $4,
+             last_error = null,
+             last_status = 'completed'
+       where id = $1
+    `,
+    [
+      run.validation_target_id,
+      blocked ? addDays(completedAt, 90).toISOString() : null,
+      blocked
         ? new Date(completedAt.getTime() + blockedCooldownHours * 60 * 60 * 1000).toISOString()
         : addDays(completedAt, cooldownDays).toISOString(),
-      last_completed_at: completedAt.toISOString(),
-      last_error: null,
-      last_status: "completed"
-    })
-    .eq("id", run.validation_target_id);
+      completedAt.toISOString()
+    ]
+  );
 }
 
 async function persistValidationRunReportFindingCount(input: {
   runId: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
   try {
     const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
@@ -1459,8 +1766,7 @@ async function persistValidationRunReportFindingCount(input: {
 
     const scanRecord = await loadScanRecordForFindingCount({
       runId: input.runId,
-      scanId: input.scanId,
-      supabase: input.supabase
+      scanId: input.scanId
     });
 
     if (!scanRecord) {
@@ -1468,20 +1774,14 @@ async function persistValidationRunReportFindingCount(input: {
     }
 
     const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
-    const { error: snapshotUpdateError } = await input.supabase
-      .from("scan_snapshots")
-      .update({
-        report_finding_count: reportFindingCount
-      })
-      .eq("scan_id", input.scanId);
-
-    if (snapshotUpdateError) {
-      console.error("[validation-worker] failed to persist report finding count", {
-        error: snapshotUpdateError.message,
-        runId: input.runId,
-        scanId: input.scanId
-      });
-    }
+    await query(
+      `
+        update scan_snapshots
+           set report_finding_count = $2
+         where scan_id = $1
+      `,
+      [input.scanId, reportFindingCount]
+    );
   } catch (error) {
     console.error("[validation-worker] failed to compute report finding count", {
       error: error instanceof Error ? error.message : String(error),
@@ -1494,43 +1794,86 @@ async function persistValidationRunReportFindingCount(input: {
 async function loadScanRecordForFindingCount(input: {
   runId: string;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
   const [
-    { data: snapshot },
-    { data: runtimeArtifacts },
-    { data: preconsentViolations },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: accessibilityRuleExamples },
-    { data: policyEnrichment },
-    { data: documentSources },
-    { data: policyReviewQueue },
-    { data: signals },
-    { data: events },
-    { data: validationFindingRows }
+    snapshot,
+    runtimeArtifacts,
+    preconsentViolations,
+    trackerVendors,
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    policyEnrichment,
+    documentSources,
+    policyReviewQueue,
+    signals,
+    events,
+    validationFindingRows
   ] = await Promise.all([
-    input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", input.scanId),
-    input.supabase.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
-      .from("validation_run_findings")
-      .select(
-        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation )"
-      )
-      .eq("validation_run_id", input.runId)
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from scan_preconsent_violations where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_tracker_vendors where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_counts where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_examples where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<SignalPopulationRow>(
+      `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+         from scan_signals
+        where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select id, event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+        order by created_at asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<ValidationRunFindingWithVerdictRow>(
+      `select id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json
+         from validation_run_findings
+        where validation_run_id = $1`,
+      [input.runId],
+      { readOnly: true }
+    ).then((result) => result.rows)
   ]);
+
+  const validationFindingBaseRows = validationFindingRows;
+  const validationFindingIds = validationFindingBaseRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    const verdictRows = await query<ValidationVerdictRow>(
+      `
+        select
+          validation_run_finding_id,
+          verdict,
+          confidence,
+          rationale,
+          agreement_score,
+          model,
+          prompt_version,
+          system_confidence_score,
+          system_confidence_band,
+          system_confidence_explanation
+        from validation_verdicts
+        where validation_run_finding_id = any($1::uuid[])
+        order by created_at desc
+      `,
+      [validationFindingIds],
+      { readOnly: true }
+    ).then((result) => result.rows);
+
+    for (const row of verdictRows) {
+      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+        verdictByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
+  }
 
   const rawSignalRows = (signals ?? []) as SignalPopulationRow[];
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
@@ -1588,11 +1931,12 @@ async function loadScanRecordForFindingCount(input: {
     policyEnrichment: normalizedPolicyRows
   });
 
-  const validationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[]).map((row) => {
+  const validationFindings: ScanValidationFinding[] = validationFindingBaseRows.map((row) => {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
 
@@ -1655,7 +1999,6 @@ async function loadScanRecordForFindingCount(input: {
 }
 
 export async function failValidationRun(runId: string, message: string) {
-  const supabase = createAdminClient();
   const run = await getValidationRun(runId);
   const failedAt = new Date();
 
@@ -1669,52 +2012,57 @@ export async function failValidationRun(runId: string, message: string) {
     return;
   }
 
-  const target = await supabase
-    .from("validation_targets")
-    .select("failure_count")
-    .eq("id", run.validation_target_id)
-    .maybeSingle();
-  const failureCount = Number(target.data?.failure_count ?? 0) + 1;
+  const target = await queryOne<{ failure_count: number | null }>(
+    `select failure_count from validation_targets where id = $1`,
+    [run.validation_target_id],
+    { readOnly: true }
+  );
+  const failureCount = Number(target?.failure_count ?? 0) + 1;
   const backoffDays = Math.min(30, 2 ** Math.min(failureCount - 1, 4));
 
-  await supabase
-    .from("validation_targets")
-    .update({
-      backoff_until: addDays(failedAt, backoffDays).toISOString(),
-      failure_count: failureCount,
-      last_error: message,
-      last_status: "failed"
-    })
-    .eq("id", run.validation_target_id);
+  await query(
+    `
+      update validation_targets
+         set backoff_until = $2,
+             failure_count = $3,
+             last_error = $4,
+             last_status = 'failed'
+       where id = $1
+    `,
+    [run.validation_target_id, addDays(failedAt, backoffDays).toISOString(), failureCount, message]
+  );
 }
 
 export async function markValidationSchedule(input: {
   nextDueAt: Date;
   now: Date;
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("validation_settings")
-    .update({
-      last_scheduled_at: input.now.toISOString(),
-      next_due_at: input.nextDueAt.toISOString()
-    })
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
-
-  if (error) {
-    throw new Error(`Failed to update validation scheduler state: ${error.message}`);
-  }
+  await query(
+    `
+      update validation_settings
+         set last_scheduled_at = $2,
+             next_due_at = $3
+       where singleton_key = $1
+    `,
+    [VALIDATION_SETTINGS_KEY, input.now.toISOString(), input.nextDueAt.toISOString()]
+  );
 }
 
 export async function replaceScanDocumentSources(input: {
   rows: Array<Record<string, unknown>>;
   scanId: string;
 }) {
-  const supabase = createAdminClient();
-  const { error: deleteError } = await supabase.from("scan_document_sources").delete().eq("scan_id", input.scanId).eq("source", "nano_doc_retrieval");
-
-  if (deleteError && !isMissingOptionalTableError(deleteError)) {
-    throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${deleteError.message}`);
+  try {
+    await query(
+      `delete from scan_document_sources where scan_id = $1 and source = 'nano_doc_retrieval'`,
+      [input.scanId]
+    );
+  } catch (error) {
+    const message = getErrorMessage(error);
+    const shaped = { message };
+    if (!isMissingOptionalTableError(shaped)) {
+      throw new Error(`Failed to clear document sources for scan ${input.scanId}: ${message}`);
+    }
   }
 
   const nanoOwnedRows = input.rows.filter((row) => {
@@ -1726,13 +2074,14 @@ export async function replaceScanDocumentSources(input: {
     return [];
   }
 
-  const { error: insertError } = await supabase.from("scan_document_sources").insert(
-    prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId)
+  await query(
+    `
+      insert into scan_document_sources
+      select *
+      from jsonb_populate_recordset(null::scan_document_sources, $1::jsonb)
+    `,
+    [JSON.stringify(prepareScanDocumentSourceRows(nanoOwnedRows, input.scanId))]
   );
-
-  if (insertError) {
-    throw new Error(`Failed to persist document sources for scan ${input.scanId}: ${insertError.message}`);
-  }
 
   return nanoOwnedRows;
 }
@@ -1745,14 +2094,14 @@ export async function appendScanDocumentSources(input: {
     return [];
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_document_sources").insert(
-    prepareScanDocumentSourceRows(input.rows, input.scanId)
+  await query(
+    `
+      insert into scan_document_sources
+      select *
+      from jsonb_populate_recordset(null::scan_document_sources, $1::jsonb)
+    `,
+    [JSON.stringify(prepareScanDocumentSourceRows(input.rows, input.scanId))]
   );
-
-  if (error) {
-    throw new Error(`Failed to append document sources for scan ${input.scanId}: ${error.message}`);
-  }
 
   return input.rows;
 }
@@ -1766,23 +2115,26 @@ export async function updateScanDocumentSourceExtractions(input: {
     semanticConfidence: number | null;
   }>;
 }) {
-  const supabase = createAdminClient();
-
   for (const row of input.rows) {
-    const { error } = await supabase
-      .from("scan_document_sources")
-      .update({
-        extracted_fields_json: sanitizeJsonPersistenceValue(row.extractedFields),
-        extraction_status: row.extractionStatus,
-        metadata_json: sanitizeJsonPersistenceValue(row.metadata ?? {}),
-        semantic_confidence: row.semanticConfidence,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", row.id);
-
-    if (error) {
-      throw new Error(`Failed to update document source extraction ${row.id}: ${error.message}`);
-    }
+    await query(
+      `
+        update scan_document_sources
+           set extracted_fields_json = $2,
+               extraction_status = $3,
+               metadata_json = $4,
+               semantic_confidence = $5,
+               updated_at = $6
+         where id = $1
+      `,
+      [
+        row.id,
+        sanitizeJsonPersistenceValue(row.extractedFields),
+        row.extractionStatus,
+        sanitizeJsonPersistenceValue(row.metadata ?? {}),
+        row.semanticConfidence,
+        new Date().toISOString()
+      ]
+    );
   }
 }
 
@@ -1805,27 +2157,40 @@ export async function loadReusableNanoDocumentExtractions(input: {
     return [] as Array<Record<string, unknown>>;
   }
 
-  const supabase = createAdminClient();
   const [exactUrlResult, recentTypeResult] = await Promise.all([
     canonicalUrls.length === 0
-      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : supabase
-          .from("scan_document_sources")
-          .select("*")
-          .in("canonical_url", canonicalUrls)
-          .eq("extraction_status", "ready")
-          .neq("scan_id", input.scanId)
-          .order("updated_at", { ascending: false }),
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null as { message?: string; code?: string | null } | null })
+      : query<Record<string, unknown>>(
+          `
+            select *
+            from scan_document_sources
+            where canonical_url = any($1::text[])
+              and extraction_status = 'ready'
+              and scan_id <> $2
+            order by updated_at desc
+          `,
+          [canonicalUrls, input.scanId],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+          .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } })),
     documentTypes.length === 0
-      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null })
-      : supabase
-          .from("scan_document_sources")
-          .select("*")
-          .in("document_type", documentTypes)
-          .eq("extraction_status", "ready")
-          .neq("scan_id", input.scanId)
-          .order("updated_at", { ascending: false })
-          .limit(250)
+      ? Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null as { message?: string; code?: string | null } | null })
+      : query<Record<string, unknown>>(
+          `
+            select *
+            from scan_document_sources
+            where document_type = any($1::text[])
+              and extraction_status = 'ready'
+              and scan_id <> $2
+            order by updated_at desc
+            limit 250
+          `,
+          [documentTypes, input.scanId],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+          .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }))
   ]);
 
   if (exactUrlResult.error && !isMissingOptionalTableError(exactUrlResult.error)) {
@@ -1859,76 +2224,117 @@ export async function persistDerivedNanoPolicySignals(input: {
   scanId: string;
   snapshot?: Record<string, unknown> | null;
 }) {
-  const supabase = createAdminClient();
   const nextRows = buildNanoPolicySignalRows({
     policyEnrichments: input.policySemanticRows,
     policyReviewQueue: input.policyReviewQueue,
     runtimeArtifacts: input.runtimeArtifacts,
     snapshot: input.snapshot
   });
-  const { data: scanRow, error: scanError } = await supabase
-    .from("scans")
-    .select("organization_id, domain_id")
-    .eq("id", input.scanId)
-    .maybeSingle();
+  const scanRow = await queryOne<{ domain_id: string | null; organization_id: string | null }>(
+    `select organization_id, domain_id from scans where id = $1`,
+    [input.scanId],
+    { readOnly: true }
+  );
 
-  if (scanError || !scanRow?.domain_id) {
-    throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: ${scanError?.message ?? "missing scan"}`);
+  if (!scanRow?.domain_id) {
+    throw new Error(`Failed to load scan ownership for nano policy signals ${input.scanId}: missing scan`);
   }
 
   const nextKeys = new Set(nextRows.map((row) => row.key));
   const managedKeysToDelete = [...MANAGED_NANO_POLICY_SIGNAL_KEYS].filter((key) => !nextKeys.has(key));
   if (managedKeysToDelete.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("scan_signals")
-      .delete()
-      .eq("scan_id", input.scanId)
-      .eq("population_source", "nano")
-      .in("signal_key", managedKeysToDelete);
-
-    if (deleteError) {
-      throw new Error(`Failed to clear stale nano signal rows for scan ${input.scanId}: ${deleteError.message}`);
-    }
+    await query(
+      `
+        delete from scan_signals
+        where scan_id = $1
+          and population_source = 'nano'
+          and signal_key = any($2::text[])
+      `,
+      [input.scanId, managedKeysToDelete]
+    );
   }
 
   if (nextRows.length === 0) {
     return nextRows;
   }
 
-  const { error } = await supabase.from("scan_signals").upsert(
-    nextRows.map((row) => ({
-      category:
-        row.key.startsWith("commerce.") ? "commerce" :
-        row.key.startsWith("disclosure.") ? "disclosure" :
-        row.key.startsWith("accessibility.") ? "accessibility" :
-        "privacy",
-      confidence: row.confidence,
-      domain_id: scanRow.domain_id,
-      evidence_refs: row.evidence_refs,
-      observed_at: new Date().toISOString(),
-      organization_id: scanRow.organization_id,
-      population_source: "nano",
-      population_status: row.population_status,
-      provenance_json: [
-        {
-          detail: row.provenance_detail,
-          kind: "document"
-        }
-      ],
-      scan_id: input.scanId,
-      signal_key: row.key,
-      signal_label: row.label,
-      signal_value_json: row.value,
-      value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
-    })),
-    {
-      onConflict: "scan_id,signal_key,population_source"
-    }
+  await query(
+    `
+      insert into scan_signals (
+        category,
+        confidence,
+        domain_id,
+        evidence_refs,
+        observed_at,
+        organization_id,
+        population_source,
+        population_status,
+        provenance_json,
+        scan_id,
+        signal_key,
+        signal_label,
+        signal_value_json,
+        value_type
+      )
+      select
+        value->>'category',
+        nullif(value->>'confidence', '')::float8,
+        nullif(value->>'domain_id', '')::uuid,
+        coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
+        value->>'observed_at',
+        nullif(value->>'organization_id', '')::uuid,
+        value->>'population_source',
+        value->>'population_status',
+        value->'provenance_json',
+        value->>'scan_id',
+        value->>'signal_key',
+        value->>'signal_label',
+        value->'signal_value_json',
+        value->>'value_type'
+      from jsonb_array_elements($1::jsonb) as value
+      on conflict (scan_id, signal_key, population_source) do update
+        set category = excluded.category,
+            confidence = excluded.confidence,
+            domain_id = excluded.domain_id,
+            evidence_refs = excluded.evidence_refs,
+            observed_at = excluded.observed_at,
+            organization_id = excluded.organization_id,
+            population_status = excluded.population_status,
+            provenance_json = excluded.provenance_json,
+            signal_label = excluded.signal_label,
+            signal_value_json = excluded.signal_value_json,
+            value_type = excluded.value_type
+    `,
+    [
+      JSON.stringify(
+        nextRows.map((row) => ({
+          category:
+            row.key.startsWith("commerce.") ? "commerce" :
+            row.key.startsWith("disclosure.") ? "disclosure" :
+            row.key.startsWith("accessibility.") ? "accessibility" :
+            "privacy",
+          confidence: row.confidence,
+          domain_id: scanRow.domain_id,
+          evidence_refs: row.evidence_refs,
+          observed_at: new Date().toISOString(),
+          organization_id: scanRow.organization_id,
+          population_source: "nano",
+          population_status: row.population_status,
+          provenance_json: [
+            {
+              detail: row.provenance_detail,
+              kind: "document"
+            }
+          ],
+          scan_id: input.scanId,
+          signal_key: row.key,
+          signal_label: row.label,
+          signal_value_json: row.value,
+          value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
+        }))
+      )
+    ]
   );
-
-  if (error) {
-    throw new Error(`Failed to persist nano policy signals for scan ${input.scanId}: ${error.message}`);
-  }
 
   return nextRows;
 }
@@ -1939,34 +2345,21 @@ export async function appendScanWorkflowEvent(input: {
   metadataJson?: Record<string, unknown>;
   scanId: string;
 }) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("scan_events").insert({
-    domain_id: null,
-    event_type: input.eventType,
-    message: input.message,
-    metadata_json: input.metadataJson ?? {},
-    organization_id: null,
-    scan_id: input.scanId
-  });
-
-  if (error) {
-    throw new Error(`Failed to append scan workflow event ${input.eventType} for scan ${input.scanId}: ${error.message}`);
-  }
+  await query(
+    `
+      insert into scan_events (domain_id, event_type, message, metadata_json, organization_id, scan_id)
+      values (null, $1, $2, $3, null, $4)
+    `,
+    [input.eventType, input.message, input.metadataJson ?? {}, input.scanId]
+  );
 }
 
 export async function hasValidationRunForScan(scanId: string) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("validation_runs")
-    .select("id")
-    .eq("scan_id", scanId)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to check validation run for scan ${scanId}: ${error.message}`);
-  }
-
+  const data = await queryOne<{ id: string }>(
+    `select id from validation_runs where scan_id = $1 limit 1`,
+    [scanId],
+    { readOnly: true }
+  );
   return Boolean(data?.id);
 }
 
@@ -1983,7 +2376,6 @@ export async function recordValidationWorkerHeartbeat(input: {
   startedAt?: Date;
   heartbeatAt?: Date;
 }) {
-  const supabase = createAdminClient();
   const patch: Record<string, string | null> = {
     last_worker_heartbeat_at: (input.heartbeatAt ?? new Date()).toISOString(),
     last_worker_host: input.host
@@ -1993,19 +2385,20 @@ export async function recordValidationWorkerHeartbeat(input: {
     patch.last_worker_started_at = input.startedAt.toISOString();
   }
 
-  const { error } = await supabase
-    .from("validation_settings")
-    .upsert(
-      {
-        singleton_key: VALIDATION_SETTINGS_KEY,
-        ...patch
-      },
-      { onConflict: "singleton_key" }
-    );
-
-  if (error) {
-    throw new Error(`Failed to record validation worker heartbeat: ${error.message}`);
-  }
+  const entries = Object.entries(patch);
+  const cols = ["singleton_key", ...entries.map(([key]) => key)];
+  const values = [VALIDATION_SETTINGS_KEY, ...entries.map(([, value]) => value)];
+  const placeholders = cols.map((_, index) => `$${index + 1}`).join(", ");
+  const updates = entries.map(([key]) => `${key} = excluded.${key}`).join(", ");
+  await query(
+    `
+      insert into validation_settings (${cols.join(", ")})
+      values (${placeholders})
+      on conflict (singleton_key) do update
+        set ${updates}
+    `,
+    values
+  );
 }
 
 export async function addManualValidationTarget(hostnameOrUrl: string) {
@@ -2020,27 +2413,44 @@ export async function listRecentValidationRuns(input?: { limit?: number; page?: 
   const limit = Math.max(1, Math.min(100, input?.limit ?? 50));
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  const supabase = createAdminClient();
-  const { data, error, count } = await supabase
-    .from("validation_runs")
-    .select(
-      "id, hostname, normalized_url, tranco_rank, rank_band, trigger_mode, status, scan_id, finding_count, reviewed_finding_count, average_agreement_score, error_message, created_at, started_at, completed_at",
-      {
-        count: "exact"
-      }
+  const [data, countRow] = await Promise.all([
+    query<Record<string, unknown>>(
+      `
+        select
+          id,
+          hostname,
+          normalized_url,
+          tranco_rank,
+          rank_band,
+          trigger_mode,
+          status,
+          scan_id,
+          finding_count,
+          reviewed_finding_count,
+          average_agreement_score,
+          error_message,
+          created_at,
+          started_at,
+          completed_at
+        from validation_runs
+        order by created_at desc
+        offset $1
+        limit $2
+      `,
+      [from, limit],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<{ count: number }>(
+      `select count(*)::int as count from validation_runs`,
+      [],
+      { readOnly: true }
     )
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
-  if (error) {
-    throw new Error(`Failed to list validation runs: ${error.message}`);
-  }
+  ]);
 
   return {
     page,
-    pageCount: Math.max(1, Math.ceil((count ?? 0) / limit)),
-    rows: (data ?? []) as Array<Record<string, unknown>>,
-    totalCount: count ?? 0
+    pageCount: Math.max(1, Math.ceil((countRow?.count ?? 0) / limit)),
+    rows: data,
+    totalCount: countRow?.count ?? 0
   };
 }

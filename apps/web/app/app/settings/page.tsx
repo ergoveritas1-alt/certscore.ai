@@ -2,8 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { BrandingSettingsForm } from "../../../components/settings/branding-settings-form";
 import { getDashboardContext } from "../../../server/auth";
+import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getSystemHealth } from "../../../server/health/get-system-health";
-import { getPasswordAuthVerificationStatus } from "../../../server/password-auth/user";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
@@ -22,13 +22,19 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatMissingTables(tables: string[]) {
+  return tables.join(", ");
+}
+
 export default async function SettingsPage() {
   const { organization, user } = await getDashboardContext();
+  const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
   const [settings, systemHealth, verificationStatus] = await Promise.all([
     getOrganizationSettings(organization.id),
     getSystemHealth(),
-    user.authProvider === "password" ? getPasswordAuthVerificationStatus(user.id) : Promise.resolve(null)
+    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.id) : Promise.resolve(null)
   ]);
+  const verificationIsVerified = Boolean(verificationStatus?.isVerified);
 
   return (
     <div className="space-y-8">
@@ -58,7 +64,11 @@ export default async function SettingsPage() {
             <CardTitle>Email verification</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmailVerificationCard email={verificationStatus.email} verifiedAt={verificationStatus.verifiedAt} />
+            <EmailVerificationCard
+              email={verificationStatus.email}
+              isVerified={verificationIsVerified}
+              verifiedAt={verificationStatus.verifiedAt}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -70,11 +80,20 @@ export default async function SettingsPage() {
         <CardContent className="grid gap-6 text-sm text-slate-600 lg:grid-cols-2">
           <div className="space-y-2">
             <p>
-              Supabase auth and database:{" "}
-              <span className={systemHealth.auth.supabaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
-                {systemHealth.auth.supabaseConnected ? "connected" : "connection issue"}
+              Database connectivity:{" "}
+              <span className={systemHealth.auth.databaseConnected ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
+                {systemHealth.auth.databaseConnected ? "connected" : "connection issue"}
               </span>
             </p>
+            <p>
+              Better Auth schema:{" "}
+              <span className={systemHealth.auth.authSchemaReady ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
+                {systemHealth.auth.authSchemaReady ? "ready" : "incomplete"}
+              </span>
+            </p>
+            {!systemHealth.auth.authSchemaReady && systemHealth.auth.missingTables.length > 0 ? (
+              <p>Missing auth tables: {formatMissingTables(systemHealth.auth.missingTables)}</p>
+            ) : null}
             <p>
               Google sign-in:{" "}
               <span className={systemHealth.auth.googleEnabled ? "font-medium text-emerald-700" : "font-medium text-slate-500"}>
@@ -107,8 +126,8 @@ export default async function SettingsPage() {
               </span>
             </p>
             <p>
-              Live counts: {systemHealth.supabase.counts.organizations} orgs · {systemHealth.supabase.counts.domains} domains ·{" "}
-              {systemHealth.supabase.counts.scans} scans
+              Live counts: {systemHealth.database.counts.organizations} orgs · {systemHealth.database.counts.domains} domains ·{" "}
+              {systemHealth.database.counts.scans} scans
             </p>
           </div>
         </CardContent>

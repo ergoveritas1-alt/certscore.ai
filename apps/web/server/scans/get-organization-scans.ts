@@ -1,6 +1,5 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
@@ -13,13 +12,28 @@ import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } fr
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import {
-  LEGACY_CHANGE_EVENT_TYPES,
-  isMissingComplianceChangeEventsTable,
   summarizeLegacyChangeEvents,
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "./merged-signal-summary";
+import {
+  loadOrganizationScanLegacyEvents,
+  loadOrganizationScanPageData,
+  isMissingComplianceChangeEventsTable,
+  type OrganizationChangeSummaryRow as ChangeSummaryRow,
+  type OrganizationDomainCompletedScanRow as DomainCompletedScanRow,
+  type OrganizationLatestDomainScanRow as LatestDomainScanRow,
+  type OrganizationPolicyEnrichmentRow as PolicyEnrichmentRow,
+  type OrganizationRuntimeArtifactRow as RuntimeArtifactRow,
+  type OrganizationScanDiagnosticEventRow as ScanDiagnosticEventRow,
+  type OrganizationScanDomainRow as DomainRow,
+  type OrganizationScanQueryRow as ScanRow,
+  type OrganizationScanSnapshotRow as SnapshotRow,
+  type OrganizationValidationFindingSummaryRow as ValidationFindingSummaryRow,
+  type OrganizationValidationRunSummaryRow as ValidationRunSummaryRow,
+  type OrganizationValidationVerdictRow as ValidationVerdictRow
+} from "./repository";
 
 export type OrganizationScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -69,181 +83,6 @@ export type OrganizationScanPageResult = {
   pageCount: number;
   totalCount: number;
 };
-
-type ScanRow = {
-  completed_at: string | null;
-  created_at: string;
-  domain_id: string | null;
-  id: string;
-  pages_requested: number;
-  pages_scanned: number;
-  scan_type: string;
-  started_at: string | null;
-  status: string;
-};
-
-type DomainRow = {
-  hostname: string;
-  id: string;
-  last_scanned_at: string | null;
-  latest_scan_id: string | null;
-};
-
-type LatestDomainScanRow = {
-  id: string;
-  status: string;
-};
-
-type DomainCompletedScanRow = {
-  completed_at: string | null;
-  domain_id: string | null;
-};
-
-type SnapshotRow = {
-  access_posture_class: AccessPostureClass | null;
-  auth_wall_detected: boolean | null;
-  accessibility_score: number | null;
-  blocked_flag: boolean | null;
-  captcha_flag: boolean | null;
-  certscore_overall: number | null;
-  cmp_vendor_name: string | null;
-  consent_score: number | null;
-  cookie_banner_present: boolean | null;
-  highest_successful_tier: ScanExecutionTier | null;
-  homepage_fetch_http_status: number | null;
-  homepage_fetch_status: string | null;
-  privacy_score: number | null;
-  recoverable_finding_classes: RecoverableFindingClass[] | null;
-  regulatory_exposure_score: number | null;
-  robots_allowed: boolean | null;
-  robots_fetch_http_status: number | null;
-  robots_fetch_status: string | null;
-  scan_outcome: string | null;
-  scan_id: string;
-  stop_reason_code: string | null;
-  stop_reason_detail: string | null;
-  stop_reason_http_status: number | null;
-  stop_reason_label: string | null;
-  stop_tier: ScanExecutionTier | null;
-  report_finding_count: number | null;
-  total_signals: number;
-};
-
-type RuntimeArtifactRow = {
-  consent_audit_completed: boolean | null;
-  consent_reject_interaction_succeeded: boolean | null;
-  consent_reject_reduced_third_party_cookies: boolean | null;
-  consent_reject_reduced_tracking: boolean | null;
-  hybrid_runtime_evidence?: Record<string, unknown> | null;
-  scan_id: string;
-};
-
-type ChangeSummaryRow = {
-  event_type: string;
-  scan_id_current: string;
-};
-
-type SignalCountRow = {
-  scan_id: string;
-};
-
-type ValidationRunSummaryRow = {
-  created_at: string;
-  finding_count: number;
-  id: string;
-  scan_id: string;
-};
-
-type ScanDiagnosticEventRow = {
-  created_at: string;
-  event_type: string;
-  message: string;
-  metadata_json: Record<string, unknown> | null;
-  scan_id: string;
-};
-
-type PolicyEnrichmentRow = Record<string, unknown> & {
-  scan_id?: string;
-};
-
-type ValidationFindingSummaryRow = {
-  category: string | null;
-  description: string | null;
-  evidence_json: Record<string, unknown> | null;
-  finding_family: string | null;
-  finding_scope: string | null;
-  finding_source: string | null;
-  finding_subject: string | null;
-  id: string;
-  page_url: string | null;
-  rule_key: string;
-  severity: string | null;
-  subtype: string | null;
-  title: string;
-  validation_run_id: string;
-  validation_verdicts:
-    | {
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }
-    | Array<{
-        agreement_score: number | null;
-        confidence: number | null;
-        created_at: string | null;
-        evidence_json: Record<string, unknown> | null;
-        model: string | null;
-        prompt_version: string | null;
-        rationale: string | null;
-        system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
-        system_confidence_explanation: string | null;
-        system_confidence_score: number | null;
-        verdict: "supported" | "inconclusive" | "not_supported" | null;
-      }>
-    | null;
-};
-
-type SupabaseQueryError = {
-  code?: string;
-  details?: string;
-  hint?: string;
-  message?: string;
-} | null;
-
-const CHANGE_EVENT_BATCH_SIZE = 50;
-
-function isMissingLastScannedAtColumn(error: { message?: string } | null) {
-  return Boolean(error?.message?.includes("last_scanned_at"));
-}
-
-function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
-  const message = `${error?.message ?? ""}`.toLowerCase();
-  return (
-    `${error?.code ?? ""}` === "42703" ||
-    message.includes("access_posture_class") ||
-    message.includes("highest_successful_tier") ||
-    message.includes("stop_tier") ||
-    message.includes("recoverable_finding_classes")
-  );
-}
-
-function chunkValues<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-
-  return chunks;
-}
 
 function getRecordString(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
@@ -501,156 +340,26 @@ async function loadOrganizationScans(
     includeCount?: boolean;
   }
 ) {
-  const supabase = createAdminClient();
-  let query = supabase
-    .from("scans")
-    .select("id, domain_id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at", input?.includeCount ? { count: "exact" } : undefined)
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
+  const {
+    changeSummaries,
+    changeSummariesError,
+    count,
+    diagnosticEvents,
+    domainCompletedScans,
+    domains,
+    latestDomainScans,
+    policyEnrichmentRows,
+    resolvedSnapshots,
+    runtimeArtifacts,
+    scanRows,
+    signalCountMap,
+    summaryScanIds,
+    validationFindingRows,
+    validationRuns,
+    verdictByFindingId
+  } = await loadOrganizationScanPageData(organizationId, input);
 
-  if (typeof input?.from === "number" && typeof input?.to === "number") {
-    query = query.range(input.from, input.to);
-  } else if (typeof input?.limit === "number") {
-    query = query.limit(input.limit);
-  }
-
-  const { data: scans, error, count } = await query;
-
-  if (error) {
-    throw new Error(`Failed to load organization scans: ${error.message}`);
-  }
-
-  const scanRows = (scans ?? []) as ScanRow[];
-  const scanIds = scanRows.map((scan) => scan.id);
-  const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
-  const summaryScanIds = Array.from(
-    scanRows.reduce((ids, scan) => {
-      const key = scan.domain_id ?? `scan:${scan.id}`;
-      if (!ids.has(key)) {
-        ids.set(key, scan.id);
-      }
-      return ids;
-    }, new Map<string, string>()).values()
-  );
-
-  const domainsWithLastScannedAtPromise = domainIds.length
-    ? supabase
-        .from("domains")
-        .select("id, hostname, last_scanned_at, latest_scan_id")
-        .eq("organization_id", organizationId)
-        .in("id", domainIds)
-    : Promise.resolve({ data: [] as DomainRow[], error: null });
-  const domainsWithoutLastScannedAtPromise = domainIds.length
-    ? supabase
-        .from("domains")
-        .select("id, hostname, latest_scan_id")
-        .eq("organization_id", organizationId)
-        .in("id", domainIds)
-    : Promise.resolve({ data: [] as DomainRow[], error: null });
-  const snapshotsPromise = summaryScanIds.length
-    ? supabase
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
-        )
-        .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null as SupabaseQueryError });
-  const snapshotsFallbackPromise = summaryScanIds.length
-    ? supabase
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
-        )
-        .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as SnapshotRow[], error: null as SupabaseQueryError });
-  const runtimeArtifactsPromise = summaryScanIds.length
-    ? supabase
-        .from("scan_runtime_artifacts")
-        .select(
-          "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
-        )
-        .in("scan_id", summaryScanIds)
-    : Promise.resolve({ data: [] as RuntimeArtifactRow[], error: null as SupabaseQueryError });
-
-  const [{ data: domainsWithLastScannedAt, error: domainsError }, { data: snapshots, error: snapshotsError }, { data: runtimeArtifacts, error: runtimeArtifactsError }] = await Promise.all([
-    domainsWithLastScannedAtPromise,
-    snapshotsPromise,
-    runtimeArtifactsPromise
-  ]);
-  let domains = domainsWithLastScannedAt;
-  if (domainsError && isMissingLastScannedAtColumn(domainsError)) {
-    const fallback = await domainsWithoutLastScannedAtPromise;
-    domains = (fallback.data ?? []).map((domain) => ({
-      ...domain,
-      last_scanned_at: null
-    }));
-  } else if (domainsError) {
-    throw new Error(`Failed to load organization scans: ${domainsError.message}`);
-  }
-  let resolvedSnapshots = snapshots;
-  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
-    const fallback = await snapshotsFallbackPromise;
-    if (fallback.error) {
-      throw new Error(`Failed to load organization scans: ${fallback.error.message}`);
-    }
-    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
-      ...(row as SnapshotRow),
-      access_posture_class: null,
-      highest_successful_tier: null,
-      stop_tier: null,
-      recoverable_finding_classes: []
-    }));
-  } else if (snapshotsError) {
-    throw new Error(`Failed to load organization scans: ${snapshotsError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load organization scans: ${runtimeArtifactsError.message}`);
-  }
-  const changeSummaries: ChangeSummaryRow[] = [];
-  let changeSummariesError: SupabaseQueryError = null;
-
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
-        .from("compliance_change_events")
-        .select("scan_id_current, event_type")
-        .eq("organization_id", organizationId)
-        .in("scan_id_current", scanIdBatch);
-
-      if (error) {
-        changeSummariesError = error;
-        break;
-      }
-
-      changeSummaries.push(...((data ?? []) as ChangeSummaryRow[]));
-    }
-  }
-
-  const domainRows = (domains ?? []) as DomainRow[];
-  const latestDomainScanIds = [...new Set(domainRows.flatMap((domain) => (domain.latest_scan_id ? [domain.latest_scan_id] : [])))];
-  const { data: domainCompletedScans, error: domainCompletedScansError } = domainIds.length
-    ? await supabase
-        .from("scans")
-        .select("domain_id, completed_at")
-        .eq("organization_id", organizationId)
-        .eq("status", "completed")
-        .not("completed_at", "is", null)
-        .in("domain_id", domainIds)
-        .order("completed_at", { ascending: false })
-    : { data: [] as DomainCompletedScanRow[], error: null };
-  const { data: latestDomainScans, error: latestDomainScansError } = latestDomainScanIds.length
-    ? await supabase.from("scans").select("id, status").in("id", latestDomainScanIds)
-    : { data: [] as LatestDomainScanRow[], error: null };
-
-  if (domainCompletedScansError) {
-    throw new Error(`Failed to load organization scans: ${domainCompletedScansError.message}`);
-  }
-
-  if (latestDomainScansError) {
-    throw new Error(`Failed to load organization scans: ${latestDomainScansError.message}`);
-  }
-
-  const domainMap = new Map(domainRows.map((domain) => [domain.id, domain]));
+  const domainMap = new Map(domains.map((domain) => [domain.id, domain]));
   const domainLastCompletedAtMap = new Map<string, string>();
   for (const scan of (domainCompletedScans ?? []) as DomainCompletedScanRow[]) {
     if (!scan.domain_id || !scan.completed_at || domainLastCompletedAtMap.has(scan.domain_id)) {
@@ -663,51 +372,12 @@ async function loadOrganizationScans(
     ((latestDomainScans ?? []) as LatestDomainScanRow[]).map((scan) => [scan.id, scan])
   );
   const snapshotMap = new Map(((resolvedSnapshots ?? []) as SnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
-  const zeroSignalScanIds = summaryScanIds
-    .filter((scanId) => {
-      const totalSignals = snapshotMap.get(scanId)?.total_signals ?? null;
-      return totalSignals === null || totalSignals === 0;
-    });
   const runtimeArtifactMap = new Map(
     ((runtimeArtifacts ?? []) as RuntimeArtifactRow[]).map((artifact) => [
       artifact.scan_id,
       withHybridRuntimeArtifactFallbacks(artifact as Record<string, unknown>) as RuntimeArtifactRow
     ])
   );
-  const signalCountMap = new Map<string, number>();
-  if (zeroSignalScanIds.length) {
-    for (const scanIdBatch of chunkValues(zeroSignalScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: signalCountRows, error: signalCountError } = await supabase
-        .from("scan_signals")
-        .select("scan_id")
-        .eq("population_source", "scanner")
-        .in("scan_id", scanIdBatch);
-
-      if (signalCountError) {
-        throw new Error(`Failed to load organization scans: ${signalCountError.message}`);
-      }
-
-      for (const row of (signalCountRows ?? []) as SignalCountRow[]) {
-        signalCountMap.set(row.scan_id, (signalCountMap.get(row.scan_id) ?? 0) + 1);
-      }
-    }
-  }
-  const validationRuns: ValidationRunSummaryRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: validationRunRows, error: validationRunsError } = await supabase
-        .from("validation_runs")
-        .select("id, scan_id, finding_count, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (validationRunsError) {
-        throw new Error(`Failed to load organization scans: ${validationRunsError.message}`);
-      }
-
-      validationRuns.push(...((validationRunRows ?? []) as ValidationRunSummaryRow[]));
-    }
-  }
   const findingCountMap = new Map<string, number>();
   for (const validationRun of validationRuns) {
     if (!findingCountMap.has(validationRun.scan_id)) {
@@ -723,48 +393,15 @@ async function loadOrganizationScans(
   const observedAtByScanId = new Map(
     scanRows.map((scan) => [scan.id, scan.completed_at ?? scan.started_at ?? scan.created_at] as const)
   );
-  const diagnosticEvents: ScanDiagnosticEventRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: diagnosticEventRows, error: diagnosticEventsError } = await supabase
-        .from("scan_events")
-        .select("scan_id, event_type, message, metadata_json, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (diagnosticEventsError) {
-        throw new Error(`Failed to load organization scans: ${diagnosticEventsError.message}`);
-      }
-
-      diagnosticEvents.push(...((diagnosticEventRows ?? []) as ScanDiagnosticEventRow[]));
-    }
-  }
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
-    scanIds: summaryScanIds,
-    supabase
+    scanIds: summaryScanIds
   });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
     existing.push(diagnosticEvent);
     diagnosticEventMap.set(diagnosticEvent.scan_id, existing);
-  }
-  const policyEnrichmentRows: PolicyEnrichmentRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: policyRows, error: policyRowsError } = await supabase
-        .from("policy_enrichment")
-        .select("*")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (policyRowsError) {
-        throw new Error(`Failed to load organization scans: ${policyRowsError.message}`);
-      }
-
-      policyEnrichmentRows.push(...((policyRows ?? []) as PolicyEnrichmentRow[]));
-    }
   }
   const policyEnrichmentMap = new Map<string, Array<Record<string, unknown>>>();
   for (const row of policyEnrichmentRows) {
@@ -785,29 +422,13 @@ async function loadOrganizationScans(
       )
     )
   ];
-  const validationFindingRows: ValidationFindingSummaryRow[] = [];
-  if (latestValidationRunIds.length) {
-    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
-        .from("validation_run_findings")
-        .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation )"
-        )
-        .in("validation_run_id", validationRunIdBatch);
-
-      if (error) {
-        throw new Error(`Failed to load organization scans: ${error.message}`);
-      }
-
-      validationFindingRows.push(...((data ?? []) as ValidationFindingSummaryRow[]));
-    }
-  }
   const validationFindingsByRunId = new Map<string, ScanValidationFinding[]>();
   for (const row of validationFindingRows) {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
     const existing = validationFindingsByRunId.get(row.validation_run_id) ?? [];
@@ -881,29 +502,7 @@ async function loadOrganizationScans(
       throw new Error(`Failed to load organization scans: ${changeSummariesError.message}`);
     }
 
-    const legacyEvents: LegacyScanEventRow[] = [];
-    let legacyEventsError: SupabaseQueryError = null;
-
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await supabase
-        .from("scan_events")
-        .select("id, scan_id, event_type, message, metadata_json, created_at")
-        .eq("organization_id", organizationId)
-        .in("scan_id", scanIdBatch)
-        .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        legacyEventsError = error;
-        break;
-      }
-
-      legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
-    }
-
-    if (legacyEventsError) {
-      throw new Error(`Failed to load organization scans: ${legacyEventsError.message}`);
-    }
+    const legacyEvents: LegacyScanEventRow[] = await loadOrganizationScanLegacyEvents(organizationId, summaryScanIds);
 
     for (const [scanId, summary] of summarizeLegacyChangeEvents(legacyEvents)) {
       changeMap.set(scanId, {
@@ -944,7 +543,7 @@ async function loadOrganizationScans(
       domain?.latest_scan_id ? latestDomainScanMap.get(domain.latest_scan_id) ?? null : null;
     const snapshot =
       snapshotMap.get(scan.id) ??
-      (((snapshots ?? []) as SnapshotRow[]).find((snapshotRow) => snapshotRow.scan_id === scan.id) ?? null);
+      (resolvedSnapshots.find((snapshotRow) => snapshotRow.scan_id === scan.id) ?? null);
     const derivedState = deriveScanStateExplanation(
       scan,
       snapshot,

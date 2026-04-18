@@ -1,11 +1,11 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDashboardContext } from "../auth";
+import { updateOrganizationPlan } from "./repository";
 
 const schema = z.object({
   plan: z.enum(["free", "pro", "team"])
@@ -17,17 +17,10 @@ export async function updateCurrentOrganizationPlanFormAction(formData: FormData
     plan: formData.get("plan") as PlanCode
   });
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("organizations")
-    .update({
-      plan: parsed.plan
-    })
-    .eq("id", organization.id);
-
-  if (error) {
-    throw new Error(`Failed to update organization plan: ${error.message}`);
-  }
+  await updateOrganizationPlan({
+    organizationId: organization.id,
+    plan: parsed.plan
+  });
 
   revalidatePath("/app", "layout");
   revalidatePath("/app/modify-plan");

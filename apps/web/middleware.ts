@@ -1,128 +1,50 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "./lib/supabase/server";
-import { PASSWORD_AUTH_COOKIE_NAME } from "./server/password-auth/constants";
+import { getAuth } from "./server/better-auth/auth";
 
-function isSupabaseNetworkError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const cause = error.cause;
-  const code =
-    cause && typeof cause === "object" && "code" in cause && typeof (cause as { code?: unknown }).code === "string"
-      ? (cause as { code: string }).code
-      : null;
-
-  return code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "EAI_AGAIN";
-}
-
-function isSupabaseInvalidRefreshTokenError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return /Invalid Refresh Token|Refresh Token Not Found/i.test(error.message);
-}
-
-function clearSupabaseAuthCookies(response: NextResponse, request: NextRequest) {
-  for (const cookie of request.cookies.getAll()) {
-    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
-      response.cookies.set(cookie.name, "", {
-        expires: new Date(0),
-        path: "/"
-      });
-    }
-  }
-}
-
-export async function middleware(request: NextRequest) {
-  if (
-    request.nextUrl.pathname === "/" &&
-    request.nextUrl.searchParams.get("error_code") === "bad_oauth_state"
-  ) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.search = "";
-    loginUrl.searchParams.set("error", "bad_oauth_state");
-
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (request.nextUrl.pathname !== "/auth/callback" && request.nextUrl.searchParams.has("code")) {
-    const callbackUrl = request.nextUrl.clone();
-    callbackUrl.pathname = "/auth/callback";
-
-    return NextResponse.redirect(callbackUrl);
-  }
-
-  let response = NextResponse.next({
-    request
-  });
-
-  if (request.cookies.get(PASSWORD_AUTH_COOKIE_NAME)?.value) {
+function applyAuthHeaders(response: NextResponse, headers: Headers | undefined) {
+  if (!headers) {
     return response;
   }
 
-  const supabase = createServerSupabaseClient({
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-
-        response = NextResponse.next({
-          request
-        });
-
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      }
-    }
-  });
-
-  let user = null;
-
-  try {
-    const result = await supabase.auth.getUser();
-    user = result.data.user;
-  } catch (error) {
-    if (isSupabaseInvalidRefreshTokenError(error)) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/login";
-      loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-      const loginResponse = NextResponse.redirect(loginUrl);
-      clearSupabaseAuthCookies(loginResponse, request);
-      return loginResponse;
+  for (const [key, value] of headers.entries()) {
+    if (key.toLowerCase() === "set-cookie") {
+      response.headers.append(key, value);
+      continue;
     }
 
-    if (isSupabaseNetworkError(error)) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/login";
-      loginUrl.search = "";
-      loginUrl.searchParams.set("error", "auth_service_unavailable");
-      loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    throw error;
-  }
-
-  if (!user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-
-    return NextResponse.redirect(loginUrl);
+    response.headers.set(key, value);
   }
 
   return response;
 }
 
+export async function middleware(request: NextRequest) {
+  const sessionResult = await getAuth().api.getSession({
+    headers: request.headers,
+    query: {
+      disableCookieCache: true
+    },
+    returnHeaders: true
+  });
+
+  if (sessionResult?.response?.session && sessionResult.response.user) {
+    return applyAuthHeaders(
+      NextResponse.next({
+        request
+      }),
+      sessionResult.headers
+    );
+  }
+
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return applyAuthHeaders(NextResponse.redirect(loginUrl), sessionResult?.headers);
+}
+
 export const config = {
   matcher: ["/app/:path*"]
 };
+
+export const runtime = "nodejs";

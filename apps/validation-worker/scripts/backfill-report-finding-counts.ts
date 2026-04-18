@@ -1,4 +1,4 @@
-import { createAdminClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   getPrimaryCategoryDescription,
   getPrimaryCategoryLabel,
@@ -15,6 +15,7 @@ type ScanCandidateRow = {
 };
 
 type ValidationRunRow = {
+  created_at: string;
   id: string;
   scan_id: string;
 };
@@ -59,6 +60,19 @@ type ValidationFindingWithVerdictRow = {
     | null;
 };
 
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
+};
+
 function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
   if (index === -1) {
@@ -85,85 +99,75 @@ function chunkValues<T>(values: T[], size: number) {
 async function loadScanRecordForFindingCount(input: {
   runId: string | null;
   scanId: string;
-  supabase: ReturnType<typeof createAdminClient>;
 }) {
   const [
-    { data: snapshot, error: snapshotError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: preconsentViolations, error: preconsentError },
-    { data: trackerVendors, error: trackerError },
-    { data: accessibilityRuleCounts, error: accessibilityRuleCountsError },
-    { data: accessibilityRuleExamples, error: accessibilityRuleExamplesError },
-    { data: policyEnrichment, error: policyEnrichmentError },
-    { data: documentSources, error: documentSourcesError },
-    { data: policyReviewQueue, error: policyReviewQueueError },
-    { data: signals, error: signalsError },
-    { data: events, error: eventsError },
-    { data: validationFindingRows, error: validationFindingsError }
+    snapshot,
+    runtimeArtifacts,
+    preconsentViolations,
+    trackerVendors,
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    policyEnrichment,
+    documentSources,
+    policyReviewQueue,
+    signals,
+    events,
+    validationFindingRows
   ] = await Promise.all([
-    input.supabase.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.supabase.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
-    input.supabase.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.supabase
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source")
-      .eq("scan_id", input.scanId),
-    input.supabase
-      .from("scan_events")
-      .select("id, event_type, message, metadata_json, created_at")
-      .eq("scan_id", input.scanId)
-      .order("created_at", { ascending: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from scan_preconsent_violations where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_tracker_vendors where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_counts where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_examples where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select category, signal_key, signal_label, signal_value_json, value_type, population_source
+         from scan_signals
+        where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select id, event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+        order by created_at asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
     input.runId
-      ? input.supabase
-          .from("validation_run_findings")
-          .select(
-            "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json, validation_verdicts ( verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation )"
-          )
-          .eq("validation_run_id", input.runId)
-      : Promise.resolve({ data: [] as ValidationFindingWithVerdictRow[], error: null })
+      ? query<ValidationFindingWithVerdictRow>(
+          `select id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json
+             from validation_run_findings
+            where validation_run_id = $1`,
+          [input.runId],
+          { readOnly: true }
+        ).then((result) => result.rows)
+      : Promise.resolve([] as ValidationFindingWithVerdictRow[])
   ]);
 
-  if (snapshotError) {
-    throw new Error(`Failed to load snapshot for ${input.scanId}: ${snapshotError.message}`);
-  }
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load runtime artifacts for ${input.scanId}: ${runtimeArtifactsError.message}`);
-  }
-  if (preconsentError) {
-    throw new Error(`Failed to load preconsent violations for ${input.scanId}: ${preconsentError.message}`);
-  }
-  if (trackerError) {
-    throw new Error(`Failed to load tracker vendors for ${input.scanId}: ${trackerError.message}`);
-  }
-  if (accessibilityRuleCountsError) {
-    throw new Error(`Failed to load accessibility rule counts for ${input.scanId}: ${accessibilityRuleCountsError.message}`);
-  }
-  if (accessibilityRuleExamplesError) {
-    throw new Error(`Failed to load accessibility rule examples for ${input.scanId}: ${accessibilityRuleExamplesError.message}`);
-  }
-  if (policyEnrichmentError) {
-    throw new Error(`Failed to load policy enrichment for ${input.scanId}: ${policyEnrichmentError.message}`);
-  }
-  if (documentSourcesError) {
-    throw new Error(`Failed to load document sources for ${input.scanId}: ${documentSourcesError.message}`);
-  }
-  if (policyReviewQueueError) {
-    throw new Error(`Failed to load policy review queue for ${input.scanId}: ${policyReviewQueueError.message}`);
-  }
-  if (signalsError) {
-    throw new Error(`Failed to load signals for ${input.scanId}: ${signalsError.message}`);
-  }
-  if (eventsError) {
-    throw new Error(`Failed to load events for ${input.scanId}: ${eventsError.message}`);
-  }
-  if (validationFindingsError) {
-    throw new Error(`Failed to load validation findings for ${input.scanId}: ${validationFindingsError.message}`);
+  const validationFindingBaseRows = validationFindingRows;
+  const validationFindingIds = validationFindingBaseRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    const verdictRows = await query<ValidationVerdictRow>(
+      `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation
+         from validation_verdicts
+        where validation_run_finding_id = any($1::uuid[])
+        order by created_at desc`,
+      [validationFindingIds],
+      { readOnly: true }
+    ).then((result) => result.rows);
+
+    for (const row of verdictRows) {
+      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+        verdictByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
   }
 
   const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>)
@@ -216,11 +220,12 @@ async function loadScanRecordForFindingCount(input: {
     policyEnrichment: normalizedPolicyEnrichment
   });
 
-  const mappedValidationFindings: ScanValidationFinding[] = ((validationFindingRows ?? []) as ValidationFindingWithVerdictRow[]).map((row) => {
+  const mappedValidationFindings: ScanValidationFinding[] = validationFindingBaseRows.map((row) => {
+    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
     const verdictRows = Array.isArray(row.validation_verdicts)
       ? row.validation_verdicts
-      : row.validation_verdicts
-        ? [row.validation_verdicts]
+      : latestVerdict
+        ? [latestVerdict]
         : [];
     const verdict = verdictRows[0];
 
@@ -251,21 +256,21 @@ async function loadScanRecordForFindingCount(input: {
   });
 
   return {
-    accessibilityRuleCounts: (accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>,
-    accessibilityRuleExamples: (accessibilityRuleExamples ?? []) as Array<Record<string, unknown>>,
+    accessibilityRuleCounts: accessibilityRuleCounts as Array<Record<string, unknown>>,
+    accessibilityRuleExamples: accessibilityRuleExamples as Array<Record<string, unknown>>,
     events: repairedEvents,
     policyEnrichment: normalizedPolicyEnrichment,
-    policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => {
+    policyReviewQueue: (policyReviewQueue as Array<Record<string, unknown>>).map((row) => {
       const next = { ...row };
       delete next.created_at;
       delete next.updated_at;
       return next;
     }),
-    preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
+    preconsentViolations: preconsentViolations as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     signals: normalizedSignals,
     snapshot: (snapshot as Record<string, unknown> | null) ?? null,
-    trackerVendors: (trackerVendors ?? []) as Array<Record<string, unknown>>,
+    trackerVendors: trackerVendors as Array<Record<string, unknown>>,
     validationFindings: mappedValidationFindings
   };
 }
@@ -343,49 +348,52 @@ async function computeReportFindingCount(scanRecord: Awaited<ReturnType<typeof l
 }
 
 async function main() {
-  const supabase = createAdminClient(process.env);
   const limit = Number(getArgValue("--limit") ?? "200");
   const dryRun = hasFlag("--dry-run");
   const sinceDays = Number(getArgValue("--since-days") ?? "14");
   const sinceIso = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: rows, error } = await supabase
-    .from("scan_snapshots")
-    .select("scan_id, scans!inner(id, completed_at)")
-    .is("report_finding_count", null)
-    .not("scan_id", "is", null)
-    .gte("scans.completed_at", sinceIso)
-    .order("completed_at", { ascending: false, referencedTable: "scans" })
-    .limit(limit);
+  const candidateResult = await query<{
+    completed_at: string | null;
+    scan_id: string;
+  }>(
+    `
+      select ss.scan_id, s.completed_at
+      from scan_snapshots ss
+      join scans s on s.id = ss.scan_id
+      where ss.report_finding_count is null
+        and ss.scan_id is not null
+        and s.completed_at >= $1
+      order by s.completed_at desc
+      limit $2
+    `,
+    [sinceIso, limit],
+    { readOnly: true }
+  );
 
-  if (error) {
-    throw new Error(`Failed to load candidate scans: ${error.message}`);
-  }
-
-  const candidates = ((rows ?? []) as Array<{ scan_id: string; scans: ScanCandidateRow | ScanCandidateRow[] | null }>)
+  const candidates = candidateResult.rows
     .map((row) => ({
       scanId: row.scan_id,
-      scan:
-        Array.isArray(row.scans)
-          ? (row.scans[0] ?? null)
-          : row.scans
+      scan: {
+        completed_at: row.completed_at,
+        id: row.scan_id
+      } satisfies ScanCandidateRow
     }))
-    .filter((row): row is { scanId: string; scan: ScanCandidateRow } => Boolean(row.scanId && row.scan?.id));
+    .filter((row): row is { scanId: string; scan: ScanCandidateRow } => Boolean(row.scanId && row.scan.id));
 
   const scanIds = candidates.map((row) => row.scanId);
   const latestValidationRunByScanId = new Map<string, string | null>();
   for (const batch of chunkValues(scanIds, 50)) {
-    const { data: validationRuns, error: validationRunsError } = await supabase
-      .from("validation_runs")
-      .select("id, scan_id, created_at")
-      .in("scan_id", batch)
-      .order("created_at", { ascending: false });
+    const validationRuns = await query<ValidationRunRow>(
+      `select id, scan_id, created_at
+         from validation_runs
+        where scan_id = any($1::uuid[])
+        order by created_at desc`,
+      [batch],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
-    if (validationRunsError) {
-      throw new Error(`Failed to load validation runs: ${validationRunsError.message}`);
-    }
-
-    for (const row of (validationRuns ?? []) as ValidationRunRow[]) {
+    for (const row of validationRuns) {
       if (!latestValidationRunByScanId.has(row.scan_id)) {
         latestValidationRunByScanId.set(row.scan_id, row.id);
       }
@@ -399,8 +407,7 @@ async function main() {
       const runId = latestValidationRunByScanId.get(candidate.scanId) ?? null;
       const scanRecord = await loadScanRecordForFindingCount({
         runId,
-        scanId: candidate.scanId,
-        supabase
+        scanId: candidate.scanId
       });
       const count = await computeReportFindingCount(scanRecord);
       console.log(`${candidate.scanId} ${count}`);
@@ -409,16 +416,10 @@ async function main() {
         continue;
       }
 
-      const { error: updateError } = await supabase
-        .from("scan_snapshots")
-        .update({
-          report_finding_count: count
-        })
-        .eq("scan_id", candidate.scanId);
-
-      if (updateError) {
-        throw new Error(`Failed to update ${candidate.scanId}: ${updateError.message}`);
-      }
+      await query(
+        `update scan_snapshots set report_finding_count = $2 where scan_id = $1`,
+        [candidate.scanId, count]
+      );
 
       updated += 1;
     } catch (error) {

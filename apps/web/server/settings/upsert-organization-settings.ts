@@ -1,9 +1,9 @@
 "use server";
 
-import { createAdminClient } from "@website-signal-risk-scanner/db";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getDashboardContext } from "../auth";
+import { upsertOrganizationSettings } from "./repository";
 
 const settingsSchema = z.object({
   defaultScanFrequency: z.enum(["manual", "hourly", "daily", "weekly", "monthly"]).optional().or(z.literal(""))
@@ -36,20 +36,13 @@ export async function upsertOrganizationSettingsAction(
   }
 
   const values = parsed.data;
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("organization_settings").upsert(
-    {
-      organization_id: organization.id,
+  try {
+    await upsertOrganizationSettings(organization.id, {
       default_scan_frequency: values.defaultScanFrequency || null
-    },
-    {
-      onConflict: "organization_id"
-    }
-  );
-
-  if (error) {
+    });
+  } catch (error) {
     return {
-      error: `Could not save organization settings: ${error.message}`,
+      error: error instanceof Error ? `Could not save organization settings: ${error.message}` : "Could not save organization settings.",
       success: null
     };
   }
