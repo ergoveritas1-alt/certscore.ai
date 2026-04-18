@@ -8,6 +8,20 @@ type ScannerServiceHeartbeatSnapshot = {
   lastHeartbeatAt: string | null;
 };
 
+function normalizeHeartbeatValue(value: unknown) {
+  if (typeof value === "string") {
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? value : null;
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? value.toISOString() : null;
+  }
+
+  return null;
+}
+
 export async function enqueueFullScanJob(_scanId: string) {
   return;
 }
@@ -51,12 +65,14 @@ function getNewestHeartbeat(...heartbeatCandidates: Array<string | null>) {
   return newestHeartbeat;
 }
 
-function getHeartbeatTimestamp(value: string | null) {
-  if (!value) {
+function getHeartbeatTimestamp(value: string | Date | null) {
+  const normalizedValue = normalizeHeartbeatValue(value);
+
+  if (!normalizedValue) {
     return Number.NEGATIVE_INFINITY;
   }
 
-  const timestamp = new Date(value).getTime();
+  const timestamp = new Date(normalizedValue).getTime();
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
@@ -112,8 +128,7 @@ export function resolveScannerServiceHeartbeatSnapshot(input: {
 
 export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHeartbeatSnapshot> {
   const { eventErrorMessage, eventRow, heartbeatErrorMessage, heartbeatRows } = await loadScannerHeartbeatSources();
-  const eventHeartbeatAt =
-    eventRow && typeof eventRow.created_at === "string" ? String(eventRow.created_at) : null;
+  const eventHeartbeatAt = normalizeHeartbeatValue(eventRow?.created_at);
   const eventHost = getLegacyHeartbeatHost(eventRow?.metadata_json);
 
   if (eventHeartbeatAt) {
@@ -128,9 +143,9 @@ export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHe
   }
 
   const newestHeartbeatRow = [...(heartbeatRows as WorkerHeartbeatRow[])]
-    .filter((row) => typeof row.last_heartbeat_at === "string")
+    .filter((row) => normalizeHeartbeatValue(row.last_heartbeat_at))
     .sort((left, right) => getHeartbeatTimestamp(right.last_heartbeat_at) - getHeartbeatTimestamp(left.last_heartbeat_at))[0];
-  const tableHeartbeatAt = newestHeartbeatRow?.last_heartbeat_at ?? null;
+  const tableHeartbeatAt = normalizeHeartbeatValue(newestHeartbeatRow?.last_heartbeat_at);
   const tableHost = newestHeartbeatRow?.host ?? null;
 
   return resolveScannerServiceHeartbeatSnapshot({
