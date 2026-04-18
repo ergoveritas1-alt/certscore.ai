@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient, query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   buildSharedFullScanConfig,
   SCAN_EVENT_TYPES,
@@ -171,6 +171,10 @@ type ScanAccessibilityRuleExampleRow = {
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 const VALIDATION_QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
 function withValidationQueueHandoffTimeout<T>(promise: Promise<T>) {
   return Promise.race<T>([
     promise,
@@ -188,50 +192,64 @@ async function failValidationQueueHandoff(input: {
   targetId: string | null;
   validationRunId: string;
 }) {
-  const db = createDatabaseClient();
-  await db
-    .from("validation_runs")
-    .update({
-      completed_at: new Date().toISOString(),
-      error_message: input.message,
-      status: "failed"
-    })
-    .eq("id", input.validationRunId);
+  const completedAt = new Date().toISOString();
+  await query(
+    `
+      update validation_runs
+         set completed_at = $2,
+             error_message = $3,
+             status = 'failed'
+       where id = $1
+    `,
+    [input.validationRunId, completedAt, input.message]
+  );
 
   if (input.targetId) {
-    await db
-      .from("validation_targets")
-      .update({
-        last_completed_at: new Date().toISOString(),
-        last_error: input.message,
-        last_status: "failed"
-      })
-      .eq("id", input.targetId);
+    await query(
+      `
+        update validation_targets
+           set last_completed_at = $2,
+               last_error = $3,
+               last_status = 'failed'
+         where id = $1
+      `,
+      [input.targetId, completedAt, input.message]
+    );
   }
 
-  await db.from("scan_events").insert({
-    scan_id: input.scanId,
-    domain_id: null,
-    organization_id: null,
-    event_type: SCAN_EVENT_TYPES.validationRunFailed,
-    message: "Validation queue handoff failed.",
-    metadata_json: {
-      error: input.message,
-      validationRunId: input.validationRunId
-    }
-  });
+  await query(
+    `
+      insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+      values ($1, null, null, $2, $3, $4)
+    `,
+    [
+      input.scanId,
+      SCAN_EVENT_TYPES.validationRunFailed,
+      "Validation queue handoff failed.",
+      {
+        error: input.message,
+        validationRunId: input.validationRunId
+      }
+    ]
+  );
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: input.actorUserId,
-    event_type: "validation.manual_run_queue_failed",
-    metadata_json: {
-      hostname: input.hostname,
-      scanId: input.scanId,
-      targetId: input.targetId,
-      validationRunId: input.validationRunId,
-      error: input.message
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      input.actorUserId,
+      "validation.manual_run_queue_failed",
+      {
+        hostname: input.hostname,
+        scanId: input.scanId,
+        targetId: input.targetId,
+        validationRunId: input.validationRunId,
+        error: input.message
+      }
+    ]
+  );
 }
 
 function rankBandForRank(rank: number | null) {
@@ -1129,56 +1147,70 @@ export async function ensureValidationRunForManualScan(input: {
     return null;
   }
 
-  const db = createDatabaseClient();
-  const { data: settings, error: settingsError } = await db
-    .from("validation_settings")
-    .select("pipeline_enabled")
-    .eq("singleton_key", "default")
-    .single();
-
-  if (settingsError) {
-    throw new Error(`Failed to load validation pipeline state: ${settingsError.message}`);
+  let settings: { pipeline_enabled: boolean } | null;
+  try {
+    settings = await queryOne<{ pipeline_enabled: boolean }>(
+      `
+        select pipeline_enabled
+        from validation_settings
+        where singleton_key = 'default'
+      `,
+      [],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation pipeline state: ${getErrorMessage(error)}`);
   }
 
-  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !(settings as { pipeline_enabled: boolean }).pipeline_enabled) {
+  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !settings?.pipeline_enabled) {
     return null;
   }
 
-  const { data: existingRun, error: existingRunError } = await db
-    .from("validation_runs")
-    .select("id")
-    .eq("scan_id", input.scanId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingRunError) {
-    throw new Error(`Failed to check validation run for manual scan ${input.scanId}: ${existingRunError.message}`);
+  let existingRun: { id: string } | null;
+  try {
+    existingRun = await queryOne<{ id: string }>(
+      `
+        select id
+        from validation_runs
+        where scan_id = $1
+        order by created_at desc
+        limit 1
+      `,
+      [input.scanId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to check validation run for manual scan ${input.scanId}: ${getErrorMessage(error)}`);
   }
 
   if (existingRun) {
-    return (existingRun as { id: string }).id;
+    return existingRun.id;
   }
 
-  const { data: previousRun, error: previousRunError } = await db
-    .from("validation_runs")
-    .select("tranco_rank, rank_band")
-    .eq("domain_id", input.domainId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (previousRunError) {
-    throw new Error(`Failed to load previous validation run for manual scan ${input.scanId}: ${previousRunError.message}`);
+  let previousRun: { tranco_rank: number | null; rank_band: string | null } | null;
+  try {
+    previousRun = await queryOne<{ tranco_rank: number | null; rank_band: string | null }>(
+      `
+        select tranco_rank, rank_band
+        from validation_runs
+        where domain_id = $1
+        order by created_at desc
+        limit 1
+      `,
+      [input.domainId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load previous validation run for manual scan ${input.scanId}: ${getErrorMessage(error)}`);
   }
 
   const insertBase = {
     domain_id: input.domainId,
     hostname: input.hostname,
     normalized_url: input.normalizedUrl,
-    rank_band: (previousRun as { rank_band: string | null } | null)?.rank_band ?? null,
+    rank_band: previousRun?.rank_band ?? null,
     scan_id: input.scanId,
-    tranco_rank: (previousRun as { tranco_rank: number | null } | null)?.tranco_rank ?? null,
+    tranco_rank: previousRun?.tranco_rank ?? null,
     trigger_mode: "manual" as const,
     triggered_by_user_id: input.submittedByUserId
   };
@@ -1187,17 +1219,37 @@ export async function ensureValidationRunForManualScan(input: {
   let runError: { message?: string } | null = null;
 
   {
-    const firstAttempt = await db
-      .from("validation_runs")
-      .insert({
-        ...insertBase,
-        status: "waiting_for_scan"
-      })
-      .select("id")
-      .single();
-
-    run = (firstAttempt.data as { id: string } | null) ?? null;
-    runError = firstAttempt.error;
+    try {
+      run = await queryOne<{ id: string }>(
+        `
+          insert into validation_runs (
+            domain_id,
+            hostname,
+            normalized_url,
+            rank_band,
+            scan_id,
+            tranco_rank,
+            trigger_mode,
+            triggered_by_user_id,
+            status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, 'waiting_for_scan')
+          returning id
+        `,
+        [
+          insertBase.domain_id,
+          insertBase.hostname,
+          insertBase.normalized_url,
+          insertBase.rank_band,
+          insertBase.scan_id,
+          insertBase.tranco_rank,
+          insertBase.trigger_mode,
+          insertBase.triggered_by_user_id
+        ]
+      );
+    } catch (error) {
+      runError = { message: getErrorMessage(error) };
+    }
   }
 
   const statusConstraintRejectedWaitingForScan =
@@ -1206,36 +1258,63 @@ export async function ensureValidationRunForManualScan(input: {
     runError.message.includes("validation_runs_status_check");
 
   if (statusConstraintRejectedWaitingForScan) {
-    const fallbackAttempt = await db
-      .from("validation_runs")
-      .insert({
-        ...insertBase,
-        status: "queued"
-      })
-      .select("id")
-      .single();
-
-    run = (fallbackAttempt.data as { id: string } | null) ?? null;
-    runError = fallbackAttempt.error;
+    try {
+      run = await queryOne<{ id: string }>(
+        `
+          insert into validation_runs (
+            domain_id,
+            hostname,
+            normalized_url,
+            rank_band,
+            scan_id,
+            tranco_rank,
+            trigger_mode,
+            triggered_by_user_id,
+            status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, 'queued')
+          returning id
+        `,
+        [
+          insertBase.domain_id,
+          insertBase.hostname,
+          insertBase.normalized_url,
+          insertBase.rank_band,
+          insertBase.scan_id,
+          insertBase.tranco_rank,
+          insertBase.trigger_mode,
+          insertBase.triggered_by_user_id
+        ]
+      );
+      runError = null;
+    } catch (error) {
+      runError = { message: getErrorMessage(error) };
+    }
   }
 
   if (runError || !run) {
     throw new Error(`Failed to create validation run for manual scan ${input.scanId}: ${runError?.message ?? "Unknown error"}`);
   }
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: input.submittedByUserId,
-    event_type: "validation.manual_run_queued",
-    metadata_json: {
-      domainId: input.domainId,
-      hostname: input.hostname,
-      reason: "manual_scan_created",
-      scanId: input.scanId,
-      validationRunId: (run as { id: string }).id
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      input.submittedByUserId,
+      "validation.manual_run_queued",
+      {
+        domainId: input.domainId,
+        hostname: input.hostname,
+        reason: "manual_scan_created",
+        scanId: input.scanId,
+        validationRunId: run.id
+      }
+    ]
+  );
 
-  return (run as { id: string }).id;
+  return run.id;
 }
 
 async function ensureValidationDomainForOrganization(input: {
@@ -1342,25 +1421,38 @@ async function requireAdmin() {
 
 export async function getValidationSettings() {
   const context = await requireAdmin();
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_settings")
-    .upsert(
-      {
-        automatic_interval_minutes: VALIDATION_DEFAULT_INTERVAL_MINUTES,
-        run_mode: VALIDATION_DEFAULT_RUN_MODE,
-        singleton_key: "default"
-      },
-      { onConflict: "singleton_key" }
-    )
-    .select("singleton_key, pipeline_enabled, run_mode, automatic_interval_minutes, operator_note, updated_at, updated_by_user_id, next_due_at, last_tranco_sync_at, last_worker_heartbeat_at, last_worker_started_at, last_worker_host")
-    .single();
+  const data = await queryOne<ValidationSettingsRow>(
+    `
+      insert into validation_settings (
+        automatic_interval_minutes,
+        run_mode,
+        singleton_key
+      )
+      values ($1, $2, 'default')
+      on conflict (singleton_key) do update
+        set automatic_interval_minutes = validation_settings.automatic_interval_minutes
+      returning
+        singleton_key,
+        pipeline_enabled,
+        run_mode,
+        automatic_interval_minutes,
+        operator_note,
+        updated_at,
+        updated_by_user_id,
+        next_due_at,
+        last_tranco_sync_at,
+        last_worker_heartbeat_at,
+        last_worker_started_at,
+        last_worker_host
+    `,
+    [VALIDATION_DEFAULT_INTERVAL_MINUTES, VALIDATION_DEFAULT_RUN_MODE]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to load validation settings: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error("Failed to load validation settings: Unknown error");
   }
 
-  const row = data as ValidationSettingsRow;
+  const row = data;
   const queueHealth = getValidationQueueAvailability().enabled ? await getValidationQueueHealth() : null;
   const heartbeatAgeMs = row.last_worker_heartbeat_at ? Date.now() - new Date(row.last_worker_heartbeat_at).getTime() : null;
   const workerHealthy = typeof heartbeatAgeMs === "number" ? heartbeatAgeMs <= 90_000 : false;
@@ -1396,37 +1488,46 @@ export async function getValidationSettings() {
 
 export async function listValidationTargets(limit = 25) {
   await requireAdmin();
-  const db = createDatabaseClient();
-  const [manualResult, trancoResult] = await Promise.all([
-    db
-      .from("validation_targets")
-      .select(
-        "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
-      )
-      .eq("source", "manual")
-      .order("updated_at", { ascending: false })
-      .limit(limit),
-    db
-      .from("validation_targets")
-      .select(
-        "id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason, cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at, failure_count, source, created_at, updated_at"
-      )
-      .neq("source", "manual")
-      .order("tranco_rank", { ascending: true, nullsFirst: true })
-      .limit(Math.max(limit * 20, 100))
-  ]);
-
-  if (manualResult.error) {
-    throw new Error(`Failed to load manual validation targets: ${manualResult.error.message}`);
-  }
-
-  if (trancoResult.error) {
-    throw new Error(`Failed to load Tranco validation targets: ${trancoResult.error.message}`);
+  let manualRows: ValidationTargetRow[];
+  let trancoRows: ValidationTargetRow[];
+  try {
+    [manualRows, trancoRows] = await Promise.all([
+      query<ValidationTargetRow>(
+        `
+          select
+            id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason,
+            cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at,
+            failure_count, source, created_at, updated_at
+          from validation_targets
+          where source = 'manual'
+          order by updated_at desc
+          limit $1
+        `,
+        [limit],
+        { readOnly: true }
+      ).then((result) => result.rows),
+      query<ValidationTargetRow>(
+        `
+          select
+            id, hostname, normalized_url, tranco_rank, rank_band, active, denylisted, deny_reason,
+            cooldown_until, backoff_until, last_status, last_error, last_run_at, last_completed_at,
+            failure_count, source, created_at, updated_at
+          from validation_targets
+          where source <> 'manual' or source is null
+          order by tranco_rank asc nulls first
+          limit $1
+        `,
+        [Math.max(limit * 20, 100)],
+        { readOnly: true }
+      ).then((result) => result.rows)
+    ]);
+  } catch (error) {
+    throw new Error(`Failed to load validation targets: ${getErrorMessage(error)}`);
   }
 
   const rows = [
-    ...((manualResult.data ?? []) as ValidationTargetRow[]),
-    ...((trancoResult.data ?? []) as ValidationTargetRow[])
+    ...manualRows,
+    ...trancoRows
   ];
   const persistedRows = sortValidationTargetsForDisplay(rows).slice(0, limit);
   const persistedHostnames = new Set(persistedRows.map((row) => row.hostname));
