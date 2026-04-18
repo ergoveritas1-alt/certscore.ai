@@ -190,6 +190,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
+    siteSurfaceUnverified &&
     scanStopReason &&
       [
         "reachability_blocked_homepage_403",
@@ -214,7 +215,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    scanStopReason && ["timeout_navigation", "transport_failure"].includes(scanStopReason.kind)
+    siteSurfaceUnverified && scanStopReason && ["timeout_navigation", "transport_failure"].includes(scanStopReason.kind)
       ? {
           affectedPage: "Homepage",
           category: "legal",
@@ -227,7 +228,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    scanStopReason?.kind === "inactive_or_unstable"
+    siteSurfaceUnverified && scanStopReason?.kind === "inactive_or_unstable"
       ? {
           affectedPage: "Homepage",
           category: "legal",

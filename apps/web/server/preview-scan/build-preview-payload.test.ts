@@ -210,6 +210,7 @@ test("zero-page previews without an observed consent surface do not claim pre-co
   });
 
   assert.equal(payload.resultState, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "No verified public pages were captured"), false);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Cookie preferences control not obvious"), false);
 });
