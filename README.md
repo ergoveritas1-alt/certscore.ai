@@ -203,16 +203,15 @@ Common commands:
 
 ## Production deployment
 
-### Vercel web app
+### Web runtime
 
-- prefer Git-based deploys for production web changes
-- stage the intended files, commit them, and push `main` to GitHub
-- treat the connected Vercel project as the primary production deploy path
-- do not deploy from `apps/web`
-- use `npx vercel deploy --prod` from the repo root only as a manual fallback when a direct Vercel CLI deploy is intentionally needed
-- configure the web environment variables from the shared list above
-- use only production database, auth, and storage credentials in Vercel
+- prefer a fixed-egress host for production web changes when the app must reach a locked-down PostgreSQL instance
+- treat Vercel as a transitional path only; do not assume it can reach production RDS unless network ingress has been explicitly opened for it
+- build the production web image with [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh)
+- run the container on a VM with a stable public IP and authorize only that IP in the RDS security group
+- configure the web environment variables from the shared list above in `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
+- keep Vercel production env aligned only if Vercel is still actively serving traffic during transition
 
 ### GCP worker pool
 
