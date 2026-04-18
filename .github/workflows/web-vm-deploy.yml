@@ -27,9 +27,9 @@ concurrency:
 jobs:
   deploy-web-vm:
     runs-on: ubuntu-latest
-    if: ${{ secrets.GCP_CREDENTIALS_JSON != '' }}
     permissions:
       contents: read
+      id-token: write
 
     env:
       PROJECT_ID: certscore-ai
@@ -39,6 +39,8 @@ jobs:
       VM_ZONE: us-central1-a
       PUBLIC_BASE_URL: https://consentcheck.site
       BUILD_SERVICE_ACCOUNT: certscore-build-sa@certscore-ai.iam.gserviceaccount.com
+      DEPLOY_SERVICE_ACCOUNT: github-web-deploy-sa@certscore-ai.iam.gserviceaccount.com
+      WORKLOAD_IDENTITY_PROVIDER: projects/375479222526/locations/global/workloadIdentityPools/github-actions/providers/github-actions-certscore-ai
       REMOTE_DEPLOY_WRAPPER: /usr/local/bin/deploy-certscore-web
 
     steps:
@@ -48,7 +50,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2

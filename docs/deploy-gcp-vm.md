@@ -58,6 +58,13 @@ This requires the deploy principal to have:
 - GCP access for Cloud Build, Artifact Registry, and Compute SSH
 - non-interactive `sudo` for the single deploy wrapper command on the VM
 
+GitHub Actions in this repo uses Workload Identity Federation, not a long-lived JSON key. The production workflow authenticates as:
+
+- workload identity provider: `projects/375479222526/locations/global/workloadIdentityPools/github-actions/providers/github-actions-certscore-ai`
+- deploy service account: `github-web-deploy-sa@certscore-ai.iam.gserviceaccount.com`
+
+That service account is restricted to the `ergoveritas1-alt/certscore.ai` repository and is intended only for the web VM production workflow.
+
 Install the wrapper once on `certscore-web-prod`:
 
 ```bash
