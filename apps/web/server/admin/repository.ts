@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 
 export type AdminScanQueryRow = {
@@ -214,6 +214,10 @@ function chunkValues<T>(values: T[], size: number) {
   return chunks;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
 function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
   const message = `${error?.message ?? ""}`.toLowerCase();
   return (
@@ -236,114 +240,119 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
   validationRuns: AdminValidationRunSummaryRow[];
   verdictByFindingId: Map<string, AdminValidationVerdictRow>;
 }> {
-  const db = createDatabaseClient();
-  const { data: scans, error } = await db
-    .from("scans")
-    .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const scansResult = await query<AdminScanQueryRow>(
+    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned
+       from scans
+      order by created_at desc
+      limit $1`,
+    [limit],
+    { readOnly: true }
+  );
 
-  if (error) {
-    throw new Error(`Failed to load scans: ${error.message}`);
-  }
-
-  const scanRows = (scans ?? []) as AdminScanQueryRow[];
+  const scanRows = scansResult.rows;
   const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
   const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
   const scanIds = scanRows.map((scan) => scan.id);
 
-  const snapshotsPromise = scanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
+  const [domainsResult, organizationsResult] = await Promise.all([
+    domainIds.length
+      ? query<AdminScanDomainRow>(
+          `select id, hostname
+             from domains
+            where id = any($1::uuid[])`,
+          [domainIds],
+          { readOnly: true }
         )
-        .in("scan_id", scanIds)
-    : Promise.resolve({ data: [] as AdminScanSnapshotRow[], error: null as QueryErrorLike });
-  const snapshotsFallbackPromise = scanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select("scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status, robots_fetch_http_status, blocked_flag, captcha_flag")
-        .in("scan_id", scanIds)
-    : Promise.resolve({ data: [] as AdminScanSnapshotRow[], error: null as QueryErrorLike });
-
-  const [
-    { data: domains },
-    { data: organizations },
-    { data: snapshots, error: snapshotsError }
-  ] = await Promise.all([
-    domainIds.length ? db.from("domains").select("id, hostname").in("id", domainIds) : Promise.resolve({ data: [] as AdminScanDomainRow[] }),
+      : Promise.resolve({ rows: [] as AdminScanDomainRow[] }),
     organizationIds.length
-      ? db.from("organizations").select("id, name").in("id", organizationIds)
-      : Promise.resolve({ data: [] as AdminScanOrganizationRow[] }),
-    snapshotsPromise
+      ? query<AdminScanOrganizationRow>(
+          `select id, name
+             from organizations
+            where id = any($1::uuid[])`,
+          [organizationIds],
+          { readOnly: true }
+        )
+      : Promise.resolve({ rows: [] as AdminScanOrganizationRow[] })
   ]);
 
-  let resolvedSnapshots = snapshots ?? [];
-  if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
-    const fallback = await snapshotsFallbackPromise;
-    if (fallback.error) {
-      throw new Error(`Failed to load scans: ${fallback.error.message}`);
+  let resolvedSnapshots: AdminScanSnapshotRow[] = [];
+  if (scanIds.length) {
+    try {
+      const snapshotsResult = await query<AdminScanSnapshotRow>(
+        `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
+                robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class,
+                highest_successful_tier, stop_tier, recoverable_finding_classes
+           from scan_snapshots
+          where scan_id = any($1::uuid[])`,
+        [scanIds],
+        { readOnly: true }
+      );
+      resolvedSnapshots = snapshotsResult.rows;
+    } catch (error) {
+      if (isMissingTieredSnapshotColumn({ message: getErrorMessage(error) })) {
+        const fallback = await query<AdminScanSnapshotRow>(
+          `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
+                  robots_fetch_http_status, blocked_flag, captcha_flag
+             from scan_snapshots
+            where scan_id = any($1::uuid[])`,
+          [scanIds],
+          { readOnly: true }
+        );
+        resolvedSnapshots = fallback.rows.map((row) => ({
+          ...row,
+          access_posture_class: null,
+          highest_successful_tier: null,
+          stop_tier: null,
+          recoverable_finding_classes: []
+        }));
+      } else {
+        throw new Error(`Failed to load scans: ${getErrorMessage(error)}`);
+      }
     }
-    resolvedSnapshots = (fallback.data ?? []).map((row) => ({
-      ...(row as AdminScanSnapshotRow),
-      access_posture_class: null,
-      highest_successful_tier: null,
-      stop_tier: null,
-      recoverable_finding_classes: []
-    }));
-  } else if (snapshotsError) {
-    throw new Error(`Failed to load scans: ${snapshotsError.message}`);
   }
 
   const validationRuns: AdminValidationRunSummaryRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: validationRunsError } = await db
-        .from("validation_runs")
-        .select("id, scan_id, finding_count, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (validationRunsError) {
-        throw new Error(`Failed to load scans: ${validationRunsError.message}`);
-      }
-
-      validationRuns.push(...((data ?? []) as AdminValidationRunSummaryRow[]));
+      const result = await query<AdminValidationRunSummaryRow>(
+        `select id, scan_id, finding_count, created_at
+           from validation_runs
+          where scan_id = any($1::uuid[])
+          order by created_at desc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
+      validationRuns.push(...result.rows);
     }
   }
 
   const diagnosticEvents: AdminScanDiagnosticEventRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: diagnosticEventsError } = await db
-        .from("scan_events")
-        .select("scan_id, event_type, message, metadata_json, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (diagnosticEventsError) {
-        throw new Error(`Failed to load scans: ${diagnosticEventsError.message}`);
-      }
-
-      diagnosticEvents.push(...((data ?? []) as AdminScanDiagnosticEventRow[]));
+      const result = await query<AdminScanDiagnosticEventRow>(
+        `select scan_id, event_type, message, metadata_json, created_at
+           from scan_events
+          where scan_id = any($1::uuid[])
+          order by created_at asc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
+      diagnosticEvents.push(...result.rows);
     }
   }
 
   const policyEnrichmentRows: AdminPolicyEnrichmentRow[] = [];
   if (scanIds.length) {
     for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error: policyRowsError } = await db
-        .from("policy_enrichment")
-        .select("*")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
-
-      if (policyRowsError) {
-        throw new Error(`Failed to load scans: ${policyRowsError.message}`);
-      }
-
-      policyEnrichmentRows.push(...((data ?? []) as AdminPolicyEnrichmentRow[]));
+      const result = await query<AdminPolicyEnrichmentRow>(
+        `select *
+           from policy_enrichment
+          where scan_id = any($1::uuid[])
+          order by created_at asc`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
+      policyEnrichmentRows.push(...result.rows);
     }
   }
 
@@ -366,18 +375,15 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
   const validationFindingRows: AdminValidationFindingSummaryRow[] = [];
   if (latestValidationRunIds.length) {
     for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_run_findings")
-        .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-        )
-        .in("validation_run_id", validationRunIdBatch);
-
-      if (error) {
-        throw new Error(`Failed to load scans: ${error.message}`);
-      }
-
-      validationFindingRows.push(...((data ?? []) as AdminValidationFindingSummaryRow[]));
+      const result = await query<AdminValidationFindingSummaryRow>(
+        `select id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope,
+                finding_subject, rule_key, title, description, severity, page_url, evidence_json
+           from validation_run_findings
+          where validation_run_id = any($1::uuid[])`,
+        [validationRunIdBatch],
+        { readOnly: true }
+      );
+      validationFindingRows.push(...result.rows);
     }
   }
 
@@ -386,19 +392,18 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
 
   if (validationFindingIds.length) {
     for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIdBatch)
-        .order("created_at", { ascending: false });
+      const result = await query<AdminValidationVerdictRow>(
+        `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model,
+                prompt_version, evidence_json, created_at, system_confidence_score,
+                system_confidence_band, system_confidence_explanation
+           from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+          order by created_at desc`,
+        [findingIdBatch],
+        { readOnly: true }
+      );
 
-      if (error) {
-        throw new Error(`Failed to load scan verdicts: ${error.message}`);
-      }
-
-      for (const row of (data ?? []) as AdminValidationVerdictRow[]) {
+      for (const row of result.rows) {
         if (!verdictByFindingId.has(row.validation_run_finding_id)) {
           verdictByFindingId.set(row.validation_run_finding_id, row);
         }
@@ -408,10 +413,10 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
 
   return {
     diagnosticEvents,
-    domains: (domains ?? []) as AdminScanDomainRow[],
-    organizations: (organizations ?? []) as AdminScanOrganizationRow[],
+    domains: domainsResult.rows,
+    organizations: organizationsResult.rows,
     policyEnrichmentRows,
-    resolvedSnapshots: resolvedSnapshots as AdminScanSnapshotRow[],
+    resolvedSnapshots,
     scanRows,
     validationFindingRows,
     validationRuns,
@@ -432,16 +437,13 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
   snapshot: Record<string, unknown> | null;
   trackerVendors: Array<Record<string, unknown>>;
 }> {
-  const db = createDatabaseClient();
-  const { data: scan, error } = await db
-    .from("scans")
-    .select("id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json")
-    .eq("id", scanId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load scan: ${error.message}`);
-  }
+  const scan = await queryOne<AdminScanQueryRow>(
+    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json
+       from scans
+      where id = $1`,
+    [scanId],
+    { readOnly: true }
+  );
 
   if (!scan) {
     return {
@@ -459,61 +461,88 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     };
   }
 
-  const scanRow = scan as AdminScanQueryRow;
   const [
-    { data: snapshot },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: pages },
-    { data: changes },
-    { data: domain },
-    { data: organization },
-    { data: runtimeArtifacts },
-    { data: policyEnrichment },
-    { data: policyReviewQueue }
+    snapshot,
+    trackerVendors,
+    accessibilityRuleCounts,
+    pages,
+    changes,
+    domain,
+    organization,
+    runtimeArtifacts,
+    policyEnrichment,
+    policyReviewQueue
   ] = await Promise.all([
-    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    db
-      .from("scan_tracker_vendors")
-      .select("vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id")
-      .eq("scan_id", scanId)
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_accessibility_rule_counts")
-      .select("rule_code, rule_group, severity, instance_count")
-      .eq("scan_id", scanId)
-      .order("instance_count", { ascending: false }),
-    db
-      .from("scan_pages")
-      .select("page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language")
-      .eq("scan_id", scanId)
-      .order("page_type", { ascending: true }),
-    db
-      .from("compliance_change_events")
-      .select("event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
-      .eq("scan_id_current", scanId)
-      .order("event_timestamp", { ascending: false }),
-    scanRow.domain_id ? db.from("domains").select("hostname").eq("id", scanRow.domain_id).maybeSingle() : Promise.resolve({ data: null }),
-    scanRow.organization_id
-      ? db.from("organizations").select("name").eq("id", scanRow.organization_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    db.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true })
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+    query<Record<string, unknown>>(
+      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id
+         from scan_tracker_vendors
+        where scan_id = $1
+        order by vendor_name asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select rule_code, rule_group, severity, instance_count
+         from scan_accessibility_rule_counts
+        where scan_id = $1
+        order by instance_count desc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language
+         from scan_pages
+        where scan_id = $1
+        order by page_type asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
+         from compliance_change_events
+        where scan_id_current = $1
+        order by event_timestamp desc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    scan.domain_id
+      ? queryOne<AdminScanDomainRow>(`select hostname from domains where id = $1`, [scan.domain_id], { readOnly: true })
+      : Promise.resolve(null),
+    scan.organization_id
+      ? queryOne<AdminScanOrganizationRow>(`select name from organizations where id = $1`, [scan.organization_id], { readOnly: true })
+      : Promise.resolve(null),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    query<Record<string, unknown>>(
+      `select *
+         from policy_enrichment
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select *
+         from policy_review_queue
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows)
   ]);
 
   return {
-    accessibilityRuleCounts: ((accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>),
-    changes: ((changes ?? []) as Array<Record<string, unknown>>),
-    domain: (domain as AdminScanDomainRow | null) ?? null,
-    organization: (organization as AdminScanOrganizationRow | null) ?? null,
-    pages: ((pages ?? []) as Array<Record<string, unknown>>),
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>),
-    policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>),
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
-    scan: scanRow,
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
-    trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>)
+    accessibilityRuleCounts,
+    changes,
+    domain,
+    organization,
+    pages,
+    policyEnrichment,
+    policyReviewQueue,
+    runtimeArtifacts,
+    scan,
+    snapshot,
+    trackerVendors
   };
 }
 
@@ -524,101 +553,82 @@ export async function loadAdminUsersData(): Promise<{
   scans: AdminOrganizationScanSummaryRow[];
   users: AdminUserRow[];
 }> {
-  const db = createDatabaseClient();
-  const [
-    { data: users, error: usersError },
-    { data: memberships, error: membershipsError },
-    { data: organizations, error: organizationsError },
-    { data: domains, error: domainsError },
-    { data: scans, error: scansError }
-  ] = await Promise.all([
-    db.from("users").select("id, email, full_name, auth_provider, created_at, updated_at").order("created_at", { ascending: false }),
-    db.from("organization_members").select("user_id, organization_id, role, created_at"),
-    db.from("organizations").select("id, name, slug, plan, plan_status"),
-    db.from("domains").select("id, organization_id"),
-    db.from("scans").select("id, organization_id, completed_at")
+  const [users, memberships, organizations, domains, scans] = await Promise.all([
+    query<AdminUserRow>(
+      `select id, email, full_name, auth_provider, created_at, updated_at
+         from users
+        order by created_at desc`,
+      [],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<AdminMembershipRow>(`select user_id, organization_id, role, created_at from organization_members`, [], { readOnly: true }).then(
+      (result) => result.rows
+    ),
+    query<AdminOrganizationSummaryRow>(`select id, name, slug, plan, plan_status from organizations`, [], { readOnly: true }).then(
+      (result) => result.rows
+    ),
+    query<AdminDomainSummaryRow>(`select id, organization_id from domains`, [], { readOnly: true }).then((result) => result.rows),
+    query<AdminOrganizationScanSummaryRow>(`select id, organization_id, completed_at from scans`, [], { readOnly: true }).then(
+      (result) => result.rows
+    )
   ]);
 
-  if (usersError) {
-    throw new Error(`Failed to load users: ${usersError.message}`);
-  }
-
-  if (membershipsError) {
-    throw new Error(`Failed to load memberships: ${membershipsError.message}`);
-  }
-
-  if (organizationsError) {
-    throw new Error(`Failed to load organizations: ${organizationsError.message}`);
-  }
-
-  if (domainsError) {
-    throw new Error(`Failed to load domains: ${domainsError.message}`);
-  }
-
-  if (scansError) {
-    throw new Error(`Failed to load scans: ${scansError.message}`);
-  }
-
   return {
-    domains: (domains ?? []) as AdminDomainSummaryRow[],
-    memberships: (memberships ?? []) as AdminMembershipRow[],
-    organizations: (organizations ?? []) as AdminOrganizationSummaryRow[],
-    scans: (scans ?? []) as AdminOrganizationScanSummaryRow[],
-    users: (users ?? []) as AdminUserRow[]
+    domains,
+    memberships,
+    organizations,
+    scans,
+    users
   };
 }
 
 export async function loadPolicyReviewQueueRows(reviewStatus?: string | null): Promise<AdminPolicyReviewQueueRow[]> {
-  const db = createDatabaseClient();
-  let query = db.from("policy_review_queue").select("*").order("created_at", { ascending: false });
+  const result = reviewStatus
+    ? await query<AdminPolicyReviewQueueRow>(
+        `select *
+           from policy_review_queue
+          where review_status = $1
+          order by created_at desc`,
+        [reviewStatus],
+        { readOnly: true }
+      )
+    : await query<AdminPolicyReviewQueueRow>(
+        `select *
+           from policy_review_queue
+          order by created_at desc`,
+        [],
+        { readOnly: true }
+      );
 
-  if (reviewStatus) {
-    query = query.eq("review_status", reviewStatus);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(`Failed to load policy review queue: ${error.message}`);
-  }
-
-  return (data ?? []) as AdminPolicyReviewQueueRow[];
+  return result.rows;
 }
 
 export async function loadPolicyReviewQueueUpdateContext(queueItemId: string): Promise<{
   pageType: string | null;
   queueItem: Pick<AdminPolicyReviewQueueRow, "policy_enrichment_id" | "reason"> | null;
 }> {
-  const db = createDatabaseClient();
-  const { data: existingQueueItem, error: existingQueueItemError } = await db
-    .from("policy_review_queue")
-    .select("reason, policy_enrichment_id")
-    .eq("id", queueItemId)
-    .maybeSingle();
+  const existingQueueItem = await queryOne<Pick<AdminPolicyReviewQueueRow, "policy_enrichment_id" | "reason">>(
+    `select reason, policy_enrichment_id
+       from policy_review_queue
+      where id = $1`,
+    [queueItemId],
+    { readOnly: true }
+  );
 
-  if (existingQueueItemError) {
-    throw new Error(`Failed to load policy review queue item: ${existingQueueItemError.message}`);
-  }
-
-  const { data: policyEnrichmentRow, error: policyEnrichmentError } =
+  const policyEnrichmentRow =
     existingQueueItem?.policy_enrichment_id
-      ? await db
-          .from("policy_enrichment")
-          .select("page_type")
-          .eq("id", existingQueueItem.policy_enrichment_id)
-          .maybeSingle()
-      : { data: null, error: null };
-
-  if (policyEnrichmentError) {
-    throw new Error(
-      `Failed to load policy enrichment for queue item ${queueItemId}: ${policyEnrichmentError.message}`
-    );
-  }
+      ? await queryOne<{ page_type: string | null }>(
+          `select page_type
+             from policy_enrichment
+            where id = $1`,
+          [existingQueueItem.policy_enrichment_id],
+          { readOnly: true }
+        )
+      : null;
 
   return {
     pageType: typeof policyEnrichmentRow?.page_type === "string" ? policyEnrichmentRow.page_type : null,
-    queueItem:
-      (existingQueueItem as Pick<AdminPolicyReviewQueueRow, "policy_enrichment_id" | "reason"> | null) ?? null
+    queueItem: existingQueueItem ?? null
   };
 }
 
@@ -630,25 +640,24 @@ export async function updatePolicyReviewQueueRow(input: {
   reviewedAt: string;
   reviewerNotes?: string | null;
 }) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("policy_review_queue")
-    .update({
-      assigned_to: input.assignedTo ?? null,
-      review_status: input.reviewStatus,
-      review_verdict: input.reviewVerdict,
-      reviewed_at: input.reviewedAt,
-      reviewer_notes: input.reviewerNotes ?? null
-    })
-    .eq("id", input.queueItemId)
-    .select("*")
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to update policy review verdict: ${error.message}`);
-  }
-
-  return (data as AdminPolicyReviewQueueRow | null) ?? null;
+  return await queryOne<AdminPolicyReviewQueueRow>(
+    `update policy_review_queue
+        set assigned_to = $2,
+            review_status = $3,
+            review_verdict = $4,
+            reviewed_at = $5,
+            reviewer_notes = $6
+      where id = $1
+      returning *`,
+    [
+      input.queueItemId,
+      input.assignedTo ?? null,
+      input.reviewStatus,
+      input.reviewVerdict,
+      input.reviewedAt,
+      input.reviewerNotes ?? null
+    ]
+  );
 }
 
 export async function updateAdminMembershipRole(input: {
@@ -656,18 +665,13 @@ export async function updateAdminMembershipRole(input: {
   role: "admin" | "user";
   userId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("organization_members")
-    .update({
-      role: input.role
-    })
-    .eq("organization_id", input.organizationId)
-    .eq("user_id", input.userId);
-
-  if (error) {
-    throw new Error(`Failed to update membership role: ${error.message}`);
-  }
+  await query(
+    `update organization_members
+        set role = $3
+      where organization_id = $1
+        and user_id = $2`,
+    [input.organizationId, input.userId, input.role]
+  );
 }
 
 export async function updateAdminOrganizationPlan(input: {
@@ -675,78 +679,62 @@ export async function updateAdminOrganizationPlan(input: {
   plan: string;
   planStatus: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("organizations")
-    .update({
-      plan: input.plan,
-      plan_status: input.planStatus
-    })
-    .eq("id", input.organizationId);
-
-  if (error) {
-    throw new Error(`Failed to update organization plan: ${error.message}`);
-  }
+  await query(
+    `update organizations
+        set plan = $2,
+            plan_status = $3
+      where id = $1`,
+    [input.organizationId, input.plan, input.planStatus]
+  );
 }
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
-  const db = createDatabaseClient();
-  const [
-    { count: totalScans, error: totalScansError },
-    { count: http403Count, error: http403Error },
-    { count: http429Count, error: http429Error },
-    { count: blockedOrCaptchaCount, error: blockedOrCaptchaError }
-  ] = await Promise.all([
-    db.from("scans").select("id", { count: "exact", head: true }),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("homepage_fetch_http_status.eq.403,robots_fetch_http_status.eq.403"),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("homepage_fetch_http_status.eq.429,robots_fetch_http_status.eq.429"),
-    db
-      .from("scan_snapshots")
-      .select("scan_id", { count: "exact", head: true })
-      .or("blocked_flag.eq.true,captcha_flag.eq.true")
+  const [totalScansResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
+    query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
+    query<{ count: string }>(
+      `select count(*)::text as count
+         from scan_snapshots
+        where homepage_fetch_http_status = 403
+           or robots_fetch_http_status = 403`,
+      [],
+      { readOnly: true }
+    ),
+    query<{ count: string }>(
+      `select count(*)::text as count
+         from scan_snapshots
+        where homepage_fetch_http_status = 429
+           or robots_fetch_http_status = 429`,
+      [],
+      { readOnly: true }
+    ),
+    query<{ count: string }>(
+      `select count(*)::text as count
+         from scan_snapshots
+        where blocked_flag = true
+           or captcha_flag = true`,
+      [],
+      { readOnly: true }
+    )
   ]);
 
-  if (totalScansError) {
-    throw new Error(`Failed to load scan count: ${totalScansError.message}`);
-  }
-  if (http403Error) {
-    throw new Error(`Failed to load 403 scan count: ${http403Error.message}`);
-  }
-  if (http429Error) {
-    throw new Error(`Failed to load 429 scan count: ${http429Error.message}`);
-  }
-  if (blockedOrCaptchaError) {
-    throw new Error(`Failed to load blocked scan count: ${blockedOrCaptchaError.message}`);
-  }
-
   return {
-    totalScans: totalScans ?? 0,
-    http403Count: http403Count ?? 0,
-    http429Count: http429Count ?? 0,
-    blockedOrCaptchaCount: blockedOrCaptchaCount ?? 0
+    totalScans: Number(totalScansResult.rows[0]?.count ?? "0"),
+    http403Count: Number(http403Result.rows[0]?.count ?? "0"),
+    http429Count: Number(http429Result.rows[0]?.count ?? "0"),
+    blockedOrCaptchaCount: Number(blockedOrCaptchaResult.rows[0]?.count ?? "0")
   };
 }
 
 export async function loadBlockedRunTelemetryRows(hours: number): Promise<AdminBlockedRunTelemetryRow[]> {
-  const db = createDatabaseClient();
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data, error } = await db
-    .from("scan_snapshots")
-    .select(
-      "scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash"
-    )
-    .gte("scan_timestamp", since)
-    .order("scan_timestamp", { ascending: true });
+  const result = await query<AdminBlockedRunTelemetryRow>(
+    `select scan_id, scan_timestamp, scan_outcome, homepage_fetch_http_status, egress_id, egress_type, asn, block_vendor_guess, normalized_body_hash
+       from scan_snapshots
+      where scan_timestamp >= $1
+      order by scan_timestamp asc`,
+    [since],
+    { readOnly: true }
+  );
 
-  if (error) {
-    throw new Error(`Failed to load blocked run telemetry: ${error.message}`);
-  }
-
-  return (data ?? []) as AdminBlockedRunTelemetryRow[];
+  return result.rows;
 }
