@@ -12,6 +12,9 @@
 
 - Treat a push to `main` as the preferred way to promote web changes, since the Vercel project is configured to auto-deploy production from `main`.
 - If that Git-to-Vercel linkage is uncertain, call it out before claiming a change is live in production.
+- The canonical Vercel web project is `consentcheck-site`, and its root directory must stay `apps/web`.
+- Do not link repo root or the removed `apps/validation-web` path to the production Vercel project.
+- If the local Vercel link needs to be repaired, relink with `npx vercel link --yes --scope ergoveritas1-5549s-projects --project consentcheck-site --cwd apps/web`.
 
 ## Scope note
 

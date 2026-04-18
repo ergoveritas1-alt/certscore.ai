@@ -1,8 +1,9 @@
-# Deploying CertScore to GCP VMs
+# Fallback Fixed-Egress Deploy To GCP VMs
 
 This repo is split across platforms:
 
-- `apps/web` deploys to a fixed-egress GCP VM behind Caddy.
+- `apps/web` deploys to Vercel by default for the primary production web path.
+- the GCP VM path in this document is the fallback fixed-egress lane for `apps/web` when the team intentionally chooses a VM-hosted web runtime.
 - scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
 - validation worker runtime remains a separate worker-style deploy path.
 
@@ -26,13 +27,13 @@ git push -u origin codex/init-deploy
 
 ## 2. Deploy the web app to the fixed-egress VM
 
-Build and publish the standalone web image:
+Build and publish the standalone web image for the fallback VM lane:
 
 ```bash
 bash ./deploy-web-vm.sh
 ```
 
-After the repo is connected, prefer Git-based deploys for web changes:
+If the VM lane is the active production lane, prefer Git-based deploys for web changes and then update the VM from the published image:
 
 - make the change in the repo root
 - `git add` the intended files
