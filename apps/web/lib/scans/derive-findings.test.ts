@@ -379,6 +379,7 @@ test("promotes identifier transmission when stronger identifier keys are observe
 test("falls back to snapshot-backed pre-consent tracking and cookie evidence when hybrid counters are zeroed", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {
+      consentSurfaceObserved: true,
       hybrid_runtime_evidence: {
         networkSummary: {},
         vendorSummary: {
@@ -390,6 +391,9 @@ test("falls back to snapshot-backed pre-consent tracking and cookie evidence whe
           { hostname: "googleads.g.doubleclick.net", preConsent: true, vendor: "Google Ads" },
           { hostname: "analytics.tiktok.com", preConsent: true, vendor: "TikTok Pixel" }
         ],
+        consentSummary: {
+          bannerPresent: true
+        },
         storageSummary: {},
         cookieWriteObservations: [
           { cookieName: "_ttp", domain: ".tiktok.com", thirdParty: true },
@@ -398,6 +402,7 @@ test("falls back to snapshot-backed pre-consent tracking and cookie evidence whe
       }
     },
     snapshot: {
+      consent_surface_observed: true,
       preconsent_tracking_detected: true,
       tracking_before_consent_detected: true,
       first_party_cookie_set_before_consent: true,
@@ -476,6 +481,57 @@ test("does not use snapshot pre-consent fallback when runtime timing explicitly 
   assert.equal(ids.includes("third_party_tracking_pre_consent"), false);
   assert.equal(ids.includes("third_party_cookie_pre_consent"), false);
   assert.equal(ids.includes("analytics_cookie_pre_consent"), false);
+});
+
+test("does not promote consent or pre-consent findings when no consent surface was observed", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      consentSurfaceObserved: false,
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentRequestCount: 1,
+          preConsentThirdPartyRequestCount: 1,
+          thirdPartyRequestCount: 1
+        },
+        consentSummary: {
+          bannerPresent: false,
+          requestsBeforeAnyConsentAction: true
+        },
+        consentVisual: {
+          acceptProminence: "high",
+          rejectProminence: "none",
+          ctaImbalanceDetected: true
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 1,
+          thirdPartyCookieBeforeConsentCount: 1,
+          storageWrittenBeforeConsent: true
+        },
+        cookieWriteObservations: [{ cookieName: "_ga", domain: ".example.com", thirdParty: true }]
+      }
+    },
+    snapshot: {
+      consent_surface_observed: false,
+      cookie_banner_present: false,
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true,
+      third_party_cookie_set_before_consent: true
+    },
+    scan: {
+      completedAt: "2026-04-18T18:08:00.000Z",
+      createdAt: "2026-04-18T18:07:49.000Z",
+      domainHostname: "fandango.com"
+    }
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.equal(ids.includes("pre_consent_tracking_detected"), false);
+  assert.equal(ids.includes("third_party_tracking_pre_consent"), false);
+  assert.equal(ids.includes("third_party_cookie_pre_consent"), false);
+  assert.equal(ids.includes("storage_before_consent"), false);
+  assert.equal(ids.includes("reject_option_missing_or_hidden"), false);
+  assert.equal(ids.includes("asymmetric_consent_ui"), false);
+  assert.equal(ids.includes("forced_consent_interaction"), false);
 });
 
 test("uses corroborating pre-consent vendor evidence even when aggregate timing counters are zero", () => {

@@ -62,6 +62,66 @@ function getStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
 }
 
+function getObservedConsentSurface(input: {
+  consentSummary: Record<string, unknown> | null;
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+}) {
+  const explicitBannerPresent = getBoolean(input.consentSummary?.bannerPresent);
+  if (explicitBannerPresent !== null) {
+    return explicitBannerPresent;
+  }
+
+  for (const value of [
+    input.runtimeArtifacts?.consent_surface_observed,
+    input.runtimeArtifacts?.consentSurfaceObserved,
+    input.runtimeArtifacts?.cookie_banner_present,
+    input.runtimeArtifacts?.cookieBannerPresent,
+    input.runtimeArtifacts?.consentBannerPresent,
+    input.snapshot?.consent_surface_observed,
+    input.snapshot?.consentSurfaceObserved,
+    input.snapshot?.cookie_banner_present,
+    input.snapshot?.cookieBannerPresent
+  ]) {
+    const parsed = getBoolean(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const surfacedControls = [
+    input.consentSummary?.acceptPresent,
+    input.consentSummary?.rejectPresent,
+    input.consentSummary?.managePresent,
+    input.consentSummary?.closePresent
+  ].some((value) => value === true);
+
+  return surfacedControls ? true : null;
+}
+
+function getObservedConsentActionableChoice(input: {
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+}) {
+  for (const value of [
+    input.runtimeArtifacts?.consent_actionable_choice_observed,
+    input.runtimeArtifacts?.consentActionableChoiceObserved,
+    input.runtimeArtifacts?.consent_reject_interaction_succeeded,
+    input.runtimeArtifacts?.consentRejectInteractionSucceeded,
+    input.runtimeArtifacts?.consent_accept_interaction_succeeded,
+    input.runtimeArtifacts?.consentAcceptInteractionSucceeded,
+    input.snapshot?.consent_actionable_choice_observed,
+    input.snapshot?.consentActionableChoiceObserved
+  ]) {
+    const parsed = getBoolean(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -408,6 +468,16 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const thirdPartyRequestsDuringTyping = getNumber(keyloggingSummary?.thirdPartyRequestCountDuringTyping) ?? 0;
   const inputListenerRegistrationCount = getNumber(keyloggingSummary?.inputListenerRegistrationCount) ?? 0;
   const typingVendors = getStringArray(keyloggingSummary?.vendorNamesDuringTyping);
+  const consentSurfaceObserved = getObservedConsentSurface({
+    consentSummary,
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    snapshot: scanRecord.snapshot
+  });
+  const consentActionableChoiceObserved = getObservedConsentActionableChoice({
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    snapshot: scanRecord.snapshot
+  });
+  const canAssertConsentTiming = consentSurfaceObserved === true || consentActionableChoiceObserved === true;
   const snapshotPreconsentTracking =
     scanRecord.snapshot?.preconsent_tracking_detected === true || scanRecord.snapshot?.tracking_before_consent_detected === true;
   const snapshotFirstPartyCookieBeforeConsent = scanRecord.snapshot?.first_party_cookie_set_before_consent === true;
@@ -425,7 +495,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const shouldTrustExplicitPreConsentRuntimeNo =
     hasExplicitPreConsentRuntimeEvidence && !hasCorroboratedPreConsentRuntimeEvidence;
   const snapshotPreConsentFallbackCount =
-    !shouldTrustExplicitPreConsentRuntimeNo && snapshotPreconsentTracking
+    !shouldTrustExplicitPreConsentRuntimeNo && snapshotPreconsentTracking && canAssertConsentTiming
       ? effectivePreConsentVendorCount > 0
         ? effectivePreConsentVendorCount
         : 1
@@ -434,7 +504,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     preConsentThirdPartyRequestCount,
     corroboratedPreConsentVendorCount,
     persistedPreConsentViolationCount,
-    snapshotPreconsentTracking && !shouldTrustExplicitPreConsentRuntimeNo ? effectivePreConsentVendorCount : 0
+    snapshotPreconsentTracking && !shouldTrustExplicitPreConsentRuntimeNo && canAssertConsentTiming ? effectivePreConsentVendorCount : 0
   );
   const effectivePreConsentRequestCount = Math.max(
     preConsentRequestCount,
@@ -465,12 +535,16 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     cookieWriteObservations.some((row) => typeof row.beforeConsent === "boolean");
   const effectiveThirdPartyCookieBeforeConsentCount = Math.max(
     explicitThirdPartyCookieBeforeConsentCount,
-    snapshotThirdPartyCookieBeforeConsent && !hasExplicitCookieTimingEvidence ? Math.max(thirdPartyCookieNamesSeen.length, 1) : 0
+    snapshotThirdPartyCookieBeforeConsent && !hasExplicitCookieTimingEvidence && canAssertConsentTiming
+      ? Math.max(thirdPartyCookieNamesSeen.length, 1)
+      : 0
   );
   const effectiveCookiesBeforeConsentCount = Math.max(
     explicitCookiesBeforeConsentCount,
     effectiveThirdPartyCookieBeforeConsentCount,
-    (snapshotFirstPartyCookieBeforeConsent || snapshotThirdPartyCookieBeforeConsent) && !hasExplicitCookieTimingEvidence
+    (snapshotFirstPartyCookieBeforeConsent || snapshotThirdPartyCookieBeforeConsent) &&
+      !hasExplicitCookieTimingEvidence &&
+      canAssertConsentTiming
       ? Math.max(cookieNamesSeen.length, 1)
       : 0
   );
@@ -491,7 +565,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     vendorCategoryCounts
   });
 
-  if (effectivePreConsentRequestCount > 0) {
+  if (canAssertConsentTiming && effectivePreConsentRequestCount > 0) {
     findings.push(
       buildFinding("pre_consent_tracking_detected", {
         confidence: "strong",
@@ -512,7 +586,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (effectivePreConsentThirdPartyRequestCount > 0) {
+  if (canAssertConsentTiming && effectivePreConsentThirdPartyRequestCount > 0) {
     findings.push(
       buildFinding("third_party_tracking_pre_consent", {
         confidence: "strong",
@@ -528,7 +602,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (storageSummary?.storageWrittenBeforeConsent === true) {
+  if (canAssertConsentTiming && storageSummary?.storageWrittenBeforeConsent === true) {
     findings.push(
       buildFinding("storage_before_consent", {
         confidence: "strong",
@@ -544,7 +618,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (effectiveThirdPartyCookieBeforeConsentCount > 0) {
+  if (canAssertConsentTiming && effectiveThirdPartyCookieBeforeConsentCount > 0) {
     findings.push(
       buildFinding("third_party_cookie_pre_consent", {
         confidence: "strong",
@@ -559,7 +633,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (effectiveAnalyticsCookieNames.length > 0 && effectiveCookiesBeforeConsentCount > 0) {
+  if (canAssertConsentTiming && effectiveAnalyticsCookieNames.length > 0 && effectiveCookiesBeforeConsentCount > 0) {
     findings.push(
       buildFinding("analytics_cookie_pre_consent", {
         confidence: "strong",
@@ -572,7 +646,11 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (effectiveAdtechCookieNames.length > 0 && (effectiveThirdPartyCookieBeforeConsentCount > 0 || effectiveCookiesBeforeConsentCount > 0 || legacyInitialCookieCount > 0)) {
+  if (
+    canAssertConsentTiming &&
+    effectiveAdtechCookieNames.length > 0 &&
+    (effectiveThirdPartyCookieBeforeConsentCount > 0 || effectiveCookiesBeforeConsentCount > 0 || legacyInitialCookieCount > 0)
+  ) {
     findings.push(
       buildFinding("adtech_cookie_pre_consent", {
         confidence: "strong",
@@ -586,6 +664,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   }
 
   if (
+    consentSurfaceObserved === true &&
     consentSummary?.bannerPresent === true &&
     (consentSummary?.rejectPresent === false || consentSummary?.rejectDepthClass === "absent" || consentVisual?.rejectHidden === true)
   ) {
@@ -605,11 +684,14 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   }
 
   if (
-    consentVisual?.ctaImbalanceDetected === true ||
-    consentVisual?.acceptProminence === "high" ||
-    consentVisual?.rejectProminence === "none" ||
-    consentVisual?.rejectProminence === "low" ||
-    consentVisual?.contrastAsymmetryDetected === true
+    consentSurfaceObserved === true &&
+    (
+      consentVisual?.ctaImbalanceDetected === true ||
+      consentVisual?.acceptProminence === "high" ||
+      consentVisual?.rejectProminence === "none" ||
+      consentVisual?.rejectProminence === "low" ||
+      consentVisual?.contrastAsymmetryDetected === true
+    )
   ) {
     findings.push(
       buildFinding("asymmetric_consent_ui", {
@@ -626,7 +708,10 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     );
   }
 
-  if (consentSummary?.cookieWallDetected === true || consentSummary?.pageInteractionBlocked === true || uiSummary?.forcedActionRequired === true) {
+  if (
+    consentSurfaceObserved === true &&
+    (consentSummary?.cookieWallDetected === true || consentSummary?.pageInteractionBlocked === true || uiSummary?.forcedActionRequired === true)
+  ) {
     findings.push(
       buildFinding("forced_consent_interaction", {
         confidence: "good",
@@ -643,10 +728,11 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   }
 
   const overlayLikelyBlocking =
-    consentSummary?.contentObstructed === true ||
-    uiSummary?.fullScreenTakeover === true ||
-    (uiSummary?.overlayDetected === true &&
-      (consentSummary?.pageInteractionBlocked === true || uiSummary?.forcedActionRequired === true || consentSummary?.cookieWallDetected === true));
+    consentSurfaceObserved === true &&
+    (consentSummary?.contentObstructed === true ||
+      uiSummary?.fullScreenTakeover === true ||
+      (uiSummary?.overlayDetected === true &&
+        (consentSummary?.pageInteractionBlocked === true || uiSummary?.forcedActionRequired === true || consentSummary?.cookieWallDetected === true)));
 
   if (overlayLikelyBlocking) {
     findings.push(

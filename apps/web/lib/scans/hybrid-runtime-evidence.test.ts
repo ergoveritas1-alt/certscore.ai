@@ -112,6 +112,40 @@ test("builds fallback evidence for hybrid pre-consent tracking concerns", () => 
   assert.deepEqual(fallback?.runtimeEvidenceArtifacts, ["hybrid_runtime_evidence"]);
 });
 
+test("does not derive consent dark-pattern signals without an observed consent surface", () => {
+  const runtimeArtifacts = {
+    consentSurfaceObserved: false,
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        bannerPresent: false,
+        acceptPresent: true,
+        rejectPresent: false
+      },
+      consentVisual: {
+        acceptProminence: "high",
+        rejectProminence: "none",
+        ctaImbalanceDetected: true
+      },
+      uiSummary: {
+        forcedActionRequired: true
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_reject_button_missing"), undefined);
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_accept_button_prominence"), undefined);
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_forced_consent_wall"), undefined);
+  assert.equal(
+    getHybridSignalFallbackEvidence({
+      runtimeArtifacts,
+      signalKey: "privacy.dark_pattern_accept_button_prominence",
+      signalLabel: "Accept button more prominent than reject",
+      signalValue: true
+    }),
+    null
+  );
+});
+
 test("builds fallback evidence for hybrid fingerprinting concerns", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

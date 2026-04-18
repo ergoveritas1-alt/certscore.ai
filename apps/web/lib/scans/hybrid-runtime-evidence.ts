@@ -455,6 +455,46 @@ function getMediaSummary(hybrid: Record<string, unknown> | null) {
   return getRecord(hybrid?.mediaSummary);
 }
 
+function getObservedConsentSurface(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const consentSummary = getRecord(hybrid?.consentSummary);
+  const explicitBannerPresent = getBoolean(consentSummary?.bannerPresent);
+  if (explicitBannerPresent !== null) {
+    return explicitBannerPresent;
+  }
+
+  for (const value of [
+    runtimeArtifacts?.consent_surface_observed,
+    runtimeArtifacts?.consentSurfaceObserved,
+    runtimeArtifacts?.cookie_banner_present,
+    runtimeArtifacts?.cookieBannerPresent,
+    runtimeArtifacts?.consentBannerPresent
+  ]) {
+    const parsed = getBoolean(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const surfacedControls = [
+    consentSummary?.acceptPresent,
+    consentSummary?.rejectPresent,
+    consentSummary?.managePresent,
+    consentSummary?.closePresent
+  ].some((value) => value === true);
+
+  return surfacedControls ? true : null;
+}
+
+function hasVerifiedConsentSurface(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  return getObservedConsentSurface(hybrid, runtimeArtifacts) === true;
+}
+
 function hasSessionReplayObserved(hybrid: Record<string, unknown> | null) {
   const vendorSummary = getRecord(hybrid?.vendorSummary);
   const categoryCounts = getRecord(vendorSummary?.vendorCategoryCounts);
@@ -475,6 +515,7 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
   const networkSummary = getRecord(hybrid.networkSummary);
   const fingerprintSummary = getFingerprintSummary(hybrid);
   const mediaSummary = getMediaSummary(hybrid);
+  const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
 
   switch (signalKey) {
     case "privacy.preconsent_tracking_detected":
@@ -486,6 +527,9 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       return preConsentThirdPartyRequestCount > 0 || preConsentVendorCount > 0;
     }
     case "privacy.dark_pattern_reject_button_missing":
+      if (!verifiedConsentSurface) {
+        return undefined;
+      }
       return (
         consentSummary?.bannerPresent === true &&
         (consentSummary?.rejectPresent === false ||
@@ -493,6 +537,9 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
           consentVisual?.rejectHidden === true)
       );
     case "privacy.dark_pattern_accept_button_prominence":
+      if (!verifiedConsentSurface) {
+        return undefined;
+      }
       return (
         consentVisual?.ctaImbalanceDetected === true ||
         consentVisual?.acceptProminence === "high" ||
@@ -501,12 +548,18 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         consentVisual?.contrastAsymmetryDetected === true
       );
     case "privacy.dark_pattern_forced_consent_wall":
+      if (!verifiedConsentSurface) {
+        return undefined;
+      }
       return (
         consentSummary?.cookieWallDetected === true ||
         consentSummary?.pageInteractionBlocked === true ||
         uiSummary?.forcedActionRequired === true
       );
     case "privacy.dark_pattern_accept_only_banner":
+      if (!verifiedConsentSurface) {
+        return undefined;
+      }
       return (
         consentVisual?.acceptOnly === true ||
         (consentSummary?.bannerPresent === true &&
@@ -515,6 +568,9 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
           consentSummary?.managePresent === false)
       );
     case "privacy.dark_pattern_dismiss_without_reject":
+      if (!verifiedConsentSurface) {
+        return undefined;
+      }
       return consentSummary?.closePresent === true && consentSummary?.rejectPresent === false;
     case "commerce.session_replay_tool_detected":
     case "privacy.session_replay_runtime_detected":
@@ -556,6 +612,7 @@ export function getHybridSignalFallbackEvidence(input: {
   const networkSummary = getRecord(hybrid.networkSummary);
   const fingerprintSummary = getFingerprintSummary(hybrid);
   const mediaSummary = getMediaSummary(hybrid);
+  const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, input.runtimeArtifacts);
 
   switch (input.signalKey) {
     case "privacy.preconsent_tracking_detected":
@@ -572,6 +629,9 @@ export function getHybridSignalFallbackEvidence(input: {
         hybridNetworkSummary: networkSummary
       };
     case "privacy.dark_pattern_reject_button_missing":
+      if (!verifiedConsentSurface) {
+        return null;
+      }
       return {
         reject_button_missing: true,
         signalKey: input.signalKey,
@@ -582,6 +642,9 @@ export function getHybridSignalFallbackEvidence(input: {
         hybridConsentVisual: consentVisual
       };
     case "privacy.dark_pattern_accept_button_prominence":
+      if (!verifiedConsentSurface) {
+        return null;
+      }
       return {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
@@ -591,6 +654,9 @@ export function getHybridSignalFallbackEvidence(input: {
         hybridConsentVisual: consentVisual
       };
     case "privacy.dark_pattern_forced_consent_wall":
+      if (!verifiedConsentSurface) {
+        return null;
+      }
       return {
         forced_consent_wall: true,
         signalKey: input.signalKey,
@@ -601,6 +667,9 @@ export function getHybridSignalFallbackEvidence(input: {
         hybridUiSummary: uiSummary
       };
     case "privacy.dark_pattern_accept_only_banner":
+      if (!verifiedConsentSurface) {
+        return null;
+      }
       return {
         accept_only_banner: true,
         signalKey: input.signalKey,
@@ -611,6 +680,9 @@ export function getHybridSignalFallbackEvidence(input: {
         hybridConsentVisual: consentVisual
       };
     case "privacy.dark_pattern_dismiss_without_reject":
+      if (!verifiedConsentSurface) {
+        return null;
+      }
       return {
         dismiss_without_reject: true,
         signalKey: input.signalKey,
