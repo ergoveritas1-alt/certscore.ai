@@ -306,10 +306,10 @@ export type UsageCounterRow = {
 
 export type QueuedFullScanInsert = {
   domainId: string;
-  organizationId: string;
+  organizationId: string | null;
   pagesRequested: number;
   scanConfigJson: Record<string, unknown>;
-  submittedByUserId: string;
+  submittedByUserId: string | null;
 };
 
 export type DomainBenchmarkEventRow = {
@@ -415,11 +415,11 @@ export async function loadScanCoreRecord(input: {
          from domains
         where id = $1
           and ${
-            scanOrganizationId === null && adminCanViewAnonymousScans
+            scanOrganizationId === null
               ? "organization_id is null"
               : "organization_id = $2"
           }`,
-      scanOrganizationId === null && adminCanViewAnonymousScans
+      scanOrganizationId === null
         ? [scanRow.domain_id]
         : [scanRow.domain_id, input.organizationId],
       { readOnly: true }
@@ -511,7 +511,7 @@ export async function insertQueuedFullScanEvent(input: {
   eventType: string;
   message: string;
   metadataJson: Record<string, unknown>;
-  organizationId: string;
+  organizationId: string | null;
   scanId: string;
 }) {
   await query(

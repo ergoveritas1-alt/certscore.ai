@@ -1170,7 +1170,7 @@ export async function ensureValidationRunForManualScan(input: {
   domainId: string;
   hostname: string;
   normalizedUrl: string;
-  organizationId: string;
+  organizationId: string | null;
   scanId: string;
   submittedByUserId: string | null;
 }) {

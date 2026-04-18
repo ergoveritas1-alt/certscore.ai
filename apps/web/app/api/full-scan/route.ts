@@ -2,20 +2,10 @@ import { NextResponse } from "next/server";
 import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
+import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: "Sign in first to run a full scan."
-        },
-        { status: 401 }
-      );
-    }
-
     const payload = await request.json();
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
@@ -30,6 +20,40 @@ export async function POST(request: Request) {
               : singleResult.error.issues[0]?.message ?? "Invalid full scan request."
         },
         { status: 400 }
+      );
+    }
+
+    const user = await getCurrentUser();
+
+    if (!user) {
+      const firstDomain = parsedBatch.valid[0];
+
+      if (!firstDomain) {
+        return NextResponse.json(
+          {
+            error: "Invalid full scan request."
+          },
+          { status: 400 }
+        );
+      }
+
+      const anonymousScan = await createAnonymousFullScan({
+        hostname: firstDomain.hostname,
+        normalizedUrl: firstDomain.normalizedUrl
+      });
+
+      return NextResponse.json(
+        {
+          queuedCount: 1,
+          scanId: anonymousScan.scan.id,
+          scanUrl: `/scan/${anonymousScan.scan.id}`
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store"
+          },
+          status: 202
+        }
       );
     }
 
