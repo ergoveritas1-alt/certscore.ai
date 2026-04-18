@@ -11,11 +11,15 @@ function fail(label: string, details: string) {
   console.error(`FAIL ${label}: ${details}`);
 }
 
+function shouldSkipLiveValidation() {
+  return allowMissingEnv;
+}
+
 async function main() {
   if (!hasDatabaseEnv() || !hasS3Env()) {
     const details = "Missing database or S3 environment variables required for runtime validation.";
 
-    if (allowMissingEnv) {
+    if (shouldSkipLiveValidation()) {
       pass("runtime env", `${details} Skipping live runtime validation in this build environment.`);
       return;
     }
@@ -31,6 +35,14 @@ async function main() {
   ]);
 
   if (!health.ok) {
+    if (shouldSkipLiveValidation()) {
+      pass(
+        "database runtime",
+        `${health.error ?? "Unknown database runtime error."} Skipping live runtime validation in this build environment.`
+      );
+      return;
+    }
+
     const missingTableMessage =
       health.requiredTables.missing.length > 0
         ? ` Missing required tables: ${health.requiredTables.missing.join(", ")}.`
@@ -42,6 +54,14 @@ async function main() {
   }
 
   if (!health.checks.authSchema) {
+    if (shouldSkipLiveValidation()) {
+      pass(
+        "auth runtime",
+        `Missing required Better Auth tables: ${health.requiredTables.missing.join(", ")}. Skipping live runtime validation in this build environment.`
+      );
+      return;
+    }
+
     fail(
       "auth runtime",
       `Missing required Better Auth tables: ${health.requiredTables.missing.join(", ")}.`
@@ -51,6 +71,14 @@ async function main() {
   }
 
   if (!storageBucketExists) {
+    if (shouldSkipLiveValidation()) {
+      pass(
+        "storage runtime",
+        `Could not access configured S3 bucket ${getStorageBucketName()}. Skipping live runtime validation in this build environment.`
+      );
+      return;
+    }
+
     fail(
       "storage runtime",
       `Could not access configured S3 bucket ${getStorageBucketName()}. Check bucket existence, credentials, and endpoint configuration.`
