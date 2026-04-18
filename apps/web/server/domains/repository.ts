@@ -1,5 +1,3 @@
-"use server";
-
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 
