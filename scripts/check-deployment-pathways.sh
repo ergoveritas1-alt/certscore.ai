@@ -101,6 +101,7 @@ fi
 require_file "deploy-web-vm.sh" "Fallback web VM deploy script is present"
 require_file "deploy-validation-worker.sh" "Validation worker Cloud Run deploy script is present"
 require_file ".github/workflows/accessibility-validation.yml" "GitHub Actions validation workflow is present"
+require_file ".github/workflows/web-vm-deploy.yml" "GitHub Actions web VM deploy workflow is present"
 
 if command -v gcloud >/dev/null 2>&1; then
   active_account="$(gcloud config get-value account 2>/dev/null || true)"

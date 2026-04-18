@@ -2,8 +2,8 @@
 
 This repo is split across platforms:
 
-- `apps/web` deploys to Vercel by default for the primary production web path.
-- the GCP VM path in this document is the fallback fixed-egress lane for `apps/web` when the team intentionally chooses a VM-hosted web runtime.
+- `apps/web` still builds in Vercel for parity and review, but the active hardened production host for `consentcheck.site` is the fixed-egress GCP VM.
+- the GCP VM path in this document is the authoritative production lane for `apps/web` while the database ingress policy still requires fixed egress.
 - scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
 - validation worker runtime remains a separate worker-style deploy path.
 
@@ -27,19 +27,38 @@ git push -u origin codex/init-deploy
 
 ## 2. Deploy the web app to the fixed-egress VM
 
-Build and publish the standalone web image for the fallback VM lane:
+Build and publish the standalone web image for the VM lane:
 
 ```bash
 bash ./deploy-web-vm.sh
 ```
 
-If the VM lane is the active production lane, prefer Git-based deploys for web changes and then update the VM from the published image:
+The preferred production path is now:
 
-- make the change in the repo root
-- `git add` the intended files
-- commit with a clear message
-- push the branch to GitHub
-- update the production VM from the published image after review
+1. make the change in the repo root
+2. `git add` the intended files
+3. commit with a clear message
+4. push to `main`
+5. let `.github/workflows/web-vm-deploy.yml` build the image, update `certscore-web-prod`, and run smoke checks
+
+For local operator-driven rollout, run:
+
+```bash
+DEPLOY_TO_VM=1 IMAGE_TAG=$(git rev-parse HEAD) bash ./deploy-web-vm.sh
+```
+
+The deploy script now:
+
+- builds and publishes the web image to Artifact Registry
+- updates the `certscore-web-prod` container on the VM
+- waits for `http://127.0.0.1:3000/login`
+- verifies `http://127.0.0.1:3000/api/health/database`
+- verifies the public `https://consentcheck.site/login` and `/api/health/database` routes
+
+This requires the deploy principal to have:
+
+- GCP access for Cloud Build, Artifact Registry, and Compute SSH
+- non-interactive `sudo` for the narrow VM deploy commands, or an equivalent root-owned deploy wrapper on the VM
 
 Set the production environment variables in `/etc/certscore-web.env` on the VM:
 
@@ -68,6 +87,8 @@ The reverse proxy and canonical host policy should match the checked-in [deploy/
 - redirect `www.certscore.ai` to `https://certscore.ai`
 - expose only `80/443` publicly
 - keep the PostgreSQL security group limited to the VM public IP
+
+The VM deploy workflow assumes the Caddy config is already correct and persistent on the host. Treat Caddy updates as explicit topology changes, not part of routine app deploys.
 
 ## 2a. Production cutover checklist
 

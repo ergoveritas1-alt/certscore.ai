@@ -1,0 +1,61 @@
+name: Web VM Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/web-vm-deploy.yml"
+      - "apps/web/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "packages/ui/**"
+      - "packages/validation-shared/**"
+      - "deploy-web-vm.sh"
+      - "deploy/caddy/Caddyfile"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "turbo.json"
+      - "tsconfig.base.json"
+  workflow_dispatch:
+
+concurrency:
+  group: web-vm-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-web-vm:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.GCP_CREDENTIALS_JSON != '' }}
+    permissions:
+      contents: read
+
+    env:
+      PROJECT_ID: certscore-ai
+      REGION: us-central1
+      REPOSITORY: certscore
+      VM_NAME: certscore-web-prod
+      VM_ZONE: us-central1-a
+      PUBLIC_BASE_URL: https://consentcheck.site
+      BUILD_SERVICE_ACCOUNT: certscore-build-sa@certscore-ai.iam.gserviceaccount.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy web to fixed-egress VM
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DEPLOY_TO_VM: "1"
+        run: bash ./deploy-web-vm.sh
