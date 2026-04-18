@@ -57,15 +57,39 @@ export function useRotatingActivityLine(input: {
   };
 }
 
-export function LiveActivityLine({ line }: { line: string }) {
+function getActivityLabel(status: "queued" | "running" | "completed" | "failed") {
+  if (status === "queued") {
+    return "Queued...";
+  }
+
+  if (status === "completed") {
+    return "Completed...";
+  }
+
+  if (status === "failed") {
+    return "Failed...";
+  }
+
+  return "Scanning...";
+}
+
+export function LiveActivityLine({
+  line,
+  status
+}: {
+  line: string;
+  status: "queued" | "running" | "completed" | "failed";
+}) {
+  const label = getActivityLabel(status);
+
   return (
     <p className="flex max-w-full items-center gap-2 truncate whitespace-nowrap leading-5" title={line}>
       <span
         aria-hidden="true"
         className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border border-slate-300 border-t-slate-700"
       />
-      <span className="status-sheen-label shrink-0" data-text="Scanning...">
-        Scanning...
+      <span className="status-sheen-label shrink-0" data-text={label}>
+        {label}
       </span>
       <span className="truncate">{line}</span>
     </p>

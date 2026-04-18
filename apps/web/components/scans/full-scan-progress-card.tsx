@@ -684,7 +684,10 @@ export function FullScanProgressCard({
 
       <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
         <div className="min-w-0 max-w-full overflow-hidden rounded-xl bg-white/60 px-3 py-2 font-mono text-[13px] text-slate-600">
-          <LiveActivityLine line={latestActivityLine} />
+          <LiveActivityLine
+            line={latestActivityLine}
+            status={status === "queued" || status === "running" || status === "completed" || status === "failed" ? status : "running"}
+          />
         </div>
       </div>
 

@@ -120,8 +120,10 @@ test("keeps queued scans anchored to queue pickup messaging", () => {
   );
 
   assert.match(html, /Full scan queued/);
+  assert.match(html, /Queued\.\.\./);
   assert.match(html, /Queued · 0\/7 milestones complete · Scan queued and waiting for worker pickup\./);
   assert.doesNotMatch(html, /Unified finding derivation completed\./);
+  assert.doesNotMatch(html, /Scanning\.\.\./);
 });
 
 test("surfaces early tier results while a scan is still running", () => {
