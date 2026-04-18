@@ -1346,6 +1346,16 @@ export async function ensureValidationRunForManualScan(input: {
     ]
   );
 
+  try {
+    await enqueueValidationCollectJob(run.id);
+  } catch (error) {
+    console.error("[validation] failed to enqueue collect job for manual scan validation run", {
+      error: getErrorMessage(error),
+      scanId: input.scanId,
+      validationRunId: run.id
+    });
+  }
+
   return run.id;
 }
 

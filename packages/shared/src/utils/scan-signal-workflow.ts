@@ -144,6 +144,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
         : input.scanStatus === "running" || input.scanStatus === "processing"
           ? "running"
           : "queued";
+  const hasPersistedMergedSignals = input.mergedSignalCount > 0;
+  const hasPersistedFindings = input.findingsCount > 0;
 
   const docRetrievalStatus = deriveStageStatus({
     completedAt: docRetrievalTimestamps.completedAt,
@@ -158,18 +160,30 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     failedAt: nanoTimestamps.failedAt,
     startedAt: nanoTimestamps.startedAt
   });
-  const mergeStatus = deriveStageStatus({
+  const mergeLifecycleStatus = deriveStageStatus({
     blocked: nanoStatus !== "completed" || scannerStatus !== "completed",
     completedAt: mergeTimestamps.completedAt,
     failedAt: mergeTimestamps.failedAt,
     startedAt: mergeTimestamps.startedAt
   });
-  const findingsStatus = deriveStageStatus({
+  const mergeStatus =
+    mergeLifecycleStatus === "failed"
+      ? "failed"
+      : mergeLifecycleStatus === "completed" || (scannerStatus === "completed" && hasPersistedMergedSignals)
+        ? "completed"
+        : mergeLifecycleStatus;
+  const findingsLifecycleStatus = deriveStageStatus({
     blocked: mergeStatus !== "completed",
     completedAt: findingsTimestamps.completedAt,
     failedAt: findingsTimestamps.failedAt,
     startedAt: findingsTimestamps.startedAt
   });
+  const findingsStatus =
+    findingsLifecycleStatus === "failed"
+      ? "failed"
+      : findingsLifecycleStatus === "completed" || (mergeStatus === "completed" && hasPersistedFindings)
+        ? "completed"
+        : findingsLifecycleStatus;
 
   const stages: SignalEnrichmentWorkflowStage[] = [
     {
@@ -237,8 +251,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       skippedExtractions: input.skippedExtractionCount ?? 0,
       skippedByReason: input.skippedExtractionReasons ?? {}
     },
-    findingsReady: findingsStatus === "completed" || input.findingsCount > 0,
-    mergedSignalsReady: mergeStatus === "completed" || input.mergedSignalCount > 0,
+    findingsReady: findingsStatus === "completed" || hasPersistedFindings,
+    mergedSignalsReady: mergeStatus === "completed" || hasPersistedMergedSignals,
     timings: {
       scannerDurationMs: diffMs(scannerStartedAt, scannerCompletedAt),
       nanoDocRetrievalDurationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),

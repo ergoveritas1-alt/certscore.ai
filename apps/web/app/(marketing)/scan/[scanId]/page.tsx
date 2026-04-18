@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
+import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
@@ -33,6 +34,19 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SharedScanDetailView
           autoRefresh={<ScanStatusAutoRefresh status={scanRecord.scan.status} />}
+          headerActions={
+            scanRecord.scan.status === "completed" ? (
+              <div className="w-full max-w-[21rem]">
+                <DomainScanForm
+                  buttonLabel="Scan"
+                  compact
+                  inputLabel="Scan another website"
+                  inputPlaceholder="Enter another site"
+                  mode="full"
+                />
+              </div>
+            ) : null
+          }
           scanRecord={scanRecord}
         />
       </section>

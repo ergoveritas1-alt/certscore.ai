@@ -196,6 +196,10 @@ export function sanitizeJsonPersistenceValue<T>(value: T): T {
     ) as T;
   }
 
+  if (typeof value === "number") {
+    return (Number.isFinite(value) ? value : null) as T;
+  }
+
   if (Array.isArray(value)) {
     return value.map((entry) => sanitizeJsonPersistenceValue(entry)) as T;
   }
@@ -1413,22 +1417,24 @@ export async function replaceValidationRunFindings(
     return [];
   }
 
-  const baseRows = findings.map((finding) => ({
-    validation_run_id: runId,
-    category: finding.category,
-    subtype: finding.subtype,
-    finding_family: finding.findingFamily,
-    finding_source: finding.findingSource,
-    finding_scope: finding.findingScope,
-    finding_subject: finding.findingSubject,
-    rule_key: finding.ruleKey,
-    title: finding.title,
-    description: finding.description,
-    severity: finding.severity,
-    page_url: finding.pageUrl,
-    finding_rank: finding.rank,
-    evidence_json: finding.evidence
-  }));
+  const baseRows = findings.map((finding) =>
+    sanitizeJsonPersistenceValue({
+      validation_run_id: runId,
+      category: finding.category,
+      subtype: finding.subtype,
+      finding_family: finding.findingFamily,
+      finding_source: finding.findingSource,
+      finding_scope: finding.findingScope,
+      finding_subject: finding.findingSubject,
+      rule_key: finding.ruleKey,
+      title: finding.title,
+      description: finding.description,
+      severity: finding.severity,
+      page_url: finding.pageUrl,
+      finding_rank: finding.rank,
+      evidence_json: finding.evidence
+    })
+  );
 
   let insertedRows: Array<Record<string, unknown>>;
   try {
@@ -1452,7 +1458,7 @@ export async function replaceValidationRunFindings(
           rank
         )
         select
-          value->>'validation_run_id',
+          (value->>'validation_run_id')::uuid,
           value->>'category',
           nullif(value->>'subtype', ''),
           value->>'finding_family',
@@ -1498,7 +1504,7 @@ export async function replaceValidationRunFindings(
           evidence_json
         )
         select
-          value->>'validation_run_id',
+          (value->>'validation_run_id')::uuid,
           value->>'category',
           nullif(value->>'subtype', ''),
           value->>'finding_family',
@@ -1605,7 +1611,7 @@ export async function upsertValidationVerdict(input: {
       input.agreementScore,
       input.model,
       input.promptVersion,
-      input.evidence
+      JSON.stringify(sanitizeJsonPersistenceValue(input.evidence))
     ]
   );
 }

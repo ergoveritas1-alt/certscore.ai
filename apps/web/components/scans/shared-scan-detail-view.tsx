@@ -5963,6 +5963,8 @@ export function SharedScanDetailView({
     trackerEvidenceUrlCount: consentBaselineTrackerEvidenceUrls.length,
     wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total")
   });
+  const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
+
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
       <ScanPageHeader
@@ -5972,7 +5974,7 @@ export function SharedScanDetailView({
         status={scanRecord.scan.status}
         title={`Scan: ${scanRecord.scan.domainHostname ?? "Unknown website"}`}
       />
-      {(scanRecord.scan.status === "queued" || scanRecord.scan.status === "running") ? (
+      {isScanInFlight ? (
         <FullScanProgressCard
           buildPhaseSummaries={buildPhaseSummaries}
           createdAt={scanRecord.scan.createdAt}
@@ -5982,45 +5984,47 @@ export function SharedScanDetailView({
         />
       ) : null}
       {previewNotice}
-      <ExecutiveSummaryCard
-        accessLimitationNotice={
-          executiveAccessLimitationNotice
-            ? {
-                coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
-                guidance: executiveAccessLimitationNotice.review.guidance,
-                headline: "Public site access was limited during this scan",
-                message: executiveAccessLimitationNotice.finding.shortSummary,
-                recommendationTitle: executiveAccessLimitationNotice.review.recommendationTitle,
-                reason: executiveAccessLimitationNotice.review.reason,
-                title: executiveAccessLimitationNotice.review.title,
-                whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
-              }
-            : null
-        }
-        beforeConsentCookieCount={cookiesBeforeConsentCount}
-        domainBenchmark={scanRecord.domainBenchmark}
-        finalHost={certScoreSummary.finalHost}
-        fingerprintReasons={executiveFingerprintReasons}
-        fingerprintLabel={certScoreSummary.fingerprintLabel}
-        fingerprintNarrative={certScoreSummary.fingerprintNarrative}
-        landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
-        lastScannedAt={certScoreSummary.lastScannedAt}
-        posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
-        preConsentVendorNames={certScoreSummary.preConsentVendorNames}
-        requestedHost={certScoreSummary.requestedHost}
-        resolvedVendorNames={executiveResolvedVendorNames}
-        score={executiveDisplayedScore}
-        sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
-        thirdPartyRequestCount={executiveThirdPartyRequestCount}
-        thirdPartyDomains={executiveThirdPartyDomains}
-        topFindings={topExecutiveFindings}
-        topObservedEntities={executiveTopObservedEntities}
-        trackerSummary={executiveTrackerSummary}
-        unresolvedVendorHosts={executiveUnresolvedVendorHosts}
-        vendorCategoryCounts={executiveVendorCategoryCounts}
-        lightweightHeroMetrics={lightweightHeroMetrics}
-      />
-      {presentedCertScoreFindings.length > 0 ? (
+      {!isScanInFlight ? (
+        <>
+          <ExecutiveSummaryCard
+            accessLimitationNotice={
+              executiveAccessLimitationNotice
+                ? {
+                    coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
+                    guidance: executiveAccessLimitationNotice.review.guidance,
+                    headline: "Public site access was limited during this scan",
+                    message: executiveAccessLimitationNotice.finding.shortSummary,
+                    recommendationTitle: executiveAccessLimitationNotice.review.recommendationTitle,
+                    reason: executiveAccessLimitationNotice.review.reason,
+                    title: executiveAccessLimitationNotice.review.title,
+                    whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
+                  }
+                : null
+            }
+            beforeConsentCookieCount={cookiesBeforeConsentCount}
+            domainBenchmark={scanRecord.domainBenchmark}
+            finalHost={certScoreSummary.finalHost}
+            fingerprintReasons={executiveFingerprintReasons}
+            fingerprintLabel={certScoreSummary.fingerprintLabel}
+            fingerprintNarrative={certScoreSummary.fingerprintNarrative}
+            landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
+            lastScannedAt={certScoreSummary.lastScannedAt}
+            posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
+            preConsentVendorNames={certScoreSummary.preConsentVendorNames}
+            requestedHost={certScoreSummary.requestedHost}
+            resolvedVendorNames={executiveResolvedVendorNames}
+            score={executiveDisplayedScore}
+            sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
+            thirdPartyRequestCount={executiveThirdPartyRequestCount}
+            thirdPartyDomains={executiveThirdPartyDomains}
+            topFindings={topExecutiveFindings}
+            topObservedEntities={executiveTopObservedEntities}
+            trackerSummary={executiveTrackerSummary}
+            unresolvedVendorHosts={executiveUnresolvedVendorHosts}
+            vendorCategoryCounts={executiveVendorCategoryCounts}
+            lightweightHeroMetrics={lightweightHeroMetrics}
+          />
+          {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">
           <div className="space-y-2.5">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Key risk signals</p>
@@ -6105,8 +6109,10 @@ export function SharedScanDetailView({
             ))}
           </div>
         </section>
+          ) : null}
+        </>
       ) : null}
-      {snapshot ? (
+      {!isScanInFlight && snapshot ? (
         <>
           {reviewSectionError ? (
             <ScanSectionFallback

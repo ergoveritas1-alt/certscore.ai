@@ -94,3 +94,33 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
     }
   });
 });
+
+test("deriveSignalEnrichmentWorkflowState promotes merge and findings to completed when persisted counts exist after scan completion", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-18T21:29:50.260Z", eventType: SCAN_EVENT_TYPES.fullQueued },
+      { createdAt: "2026-04-18T21:29:50.310Z", eventType: SCAN_EVENT_TYPES.nanoDocRetrievalStarted },
+      { createdAt: "2026-04-18T21:29:52.241Z", eventType: SCAN_EVENT_TYPES.nanoDocRetrievalCompleted },
+      { createdAt: "2026-04-18T21:29:58.263Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted },
+      { createdAt: "2026-04-18T21:29:58.299Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted },
+      { createdAt: "2026-04-18T21:30:05.767Z", eventType: SCAN_EVENT_TYPES.fullStarted },
+      { createdAt: "2026-04-18T21:30:48.697Z", eventType: SCAN_EVENT_TYPES.fullCompleted }
+    ],
+    documentSourceCount: 3,
+    findingsCount: 1,
+    mergedSignalCount: 6,
+    nanoSignalCount: 3,
+    policyDocumentCount: 3,
+    reusedExtractionCount: 3,
+    scanCompletedAt: "2026-04-18T21:30:48.697Z",
+    scanStatus: "completed",
+    scannerSignalCount: 6
+  });
+
+  assert.equal(workflow.mergedSignalsReady, true);
+  assert.equal(workflow.findingsReady, true);
+  assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.status, "completed");
+  assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.status, "completed");
+  assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.startedAt, null);
+  assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.startedAt, null);
+});
