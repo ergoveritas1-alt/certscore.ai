@@ -12,6 +12,60 @@ import {
   serializePreviewScan
 } from "./preview-scan-repository";
 
+function getUrlscanResultApiUrl(events: Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>) {
+  for (const event of [...events].reverse()) {
+    if (event.event_type !== "runtime.build_phase_diagnostic") {
+      continue;
+    }
+
+    const metadata = event.metadata_json ?? null;
+    if (!metadata || metadata.phase !== "urlscan_preflight_lookup") {
+      continue;
+    }
+
+    const resultApiUrl = typeof metadata.resultApiUrl === "string" ? metadata.resultApiUrl.trim() : null;
+    if (resultApiUrl) {
+      return resultApiUrl;
+    }
+  }
+
+  return null;
+}
+
+async function fetchUrlscanResult(resultApiUrl: string | null) {
+  if (!resultApiUrl) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const response = await fetch(resultApiUrl, {
+      headers: {
+        accept: "application/json"
+      },
+      next: {
+        revalidate: 900
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function deriveObservedFinalUrl(events: Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>) {
   for (const event of events) {
     const metadata = event.metadata_json ?? null;
@@ -54,6 +108,8 @@ export async function getPreviewScan(scanId: string) {
     runtimeArtifacts
   });
   const snapshot = await getPreviewScanSnapshot(scanId);
+  const urlscanResultApiUrl = getUrlscanResultApiUrl(events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>);
+  const urlscanResult = await fetchUrlscanResult(urlscanResultApiUrl);
 
   if (!snapshot) {
     return response;
@@ -90,7 +146,8 @@ export async function getPreviewScan(scanId: string) {
       finalUrl: derivedFinalUrl ?? snapshot.finalUrl
     },
     events: events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>,
-    liveEarlyResults: response.liveEarlyResults
+    liveEarlyResults: response.liveEarlyResults,
+    urlscanResult
   });
 
   return {

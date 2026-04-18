@@ -163,7 +163,7 @@ test("evidence-rich zero-page previews do not collapse into blocked-access mode 
       certscoreOverall: 0,
       cookieBannerPresent: true,
       contactPagePresent: false,
-      consentInteractionModel: "banner",
+      consentInteractionModel: "accept_reject",
       cookiePolicyPresent: true,
       homepageFetchHttpStatus: 200,
       homepageFetchStatus: "ok",
@@ -252,7 +252,8 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
           status: "search_hit",
           requestCount: 4,
           cookieCount: 1,
-          reportUrl: "https://urlscan.io/result/example"
+          reportUrl: "https://urlscan.io/result/example",
+          resultApiUrl: "https://urlscan.io/api/v1/result/example"
         }
       },
       {
@@ -260,10 +261,30 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
         metadata_json: {
           phase: "urlscan_preflight_legal_fetch",
           status: "search_hit",
-          verifiedCount: 3
+          verifiedCount: 3,
+          verifiedSurfaceTargets: ["privacy_policy", "terms_of_service", "cookie_policy"]
         }
       }
-    ]
+    ],
+    urlscanResult: {
+      lists: {
+        countries: ["DE", "NL"],
+        domains: ["www.fandango.com", "images.fandango.com", "metrics.example.net"],
+        ips: ["23.3.88.43", "2.16.183.20", "198.51.100.20"],
+        servers: ["AkamaiNetStorage", "AmazonS3"]
+      },
+      meta: {
+        processors: {
+          wappa: {
+            data: [{ app: "OneTrust" }, { app: "Google Publisher Tag" }]
+          }
+        }
+      },
+      stats: {
+        domainStats: [{ count: 3 }, { count: 2 }, { count: 1 }],
+        uniqCountries: 2
+      }
+    }
   });
 
   assert.equal(
@@ -271,21 +292,28 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     true
   );
   assert.equal(
-    payload.summaryBullets.includes("Fallback runtime evidence retained 4 network requests, 1 third-party request, 1 initial cookie."),
+    payload.summaryBullets.includes("6 network requests, 1 third-party request, 1 initial cookie retained from the fallback runtime path."),
     true
   );
   assert.equal(
-    payload.sampleFindings.some((finding) => finding.title === "Third-party runtime activity observed in fallback evidence"),
+    payload.summaryBullets.includes("Named technologies retained: OneTrust and Google Publisher Tag."),
     true
   );
   assert.equal(
-    payload.sampleFindings.some((finding) => finding.title === "Cookie activity observed in fallback evidence"),
+    payload.sampleFindings.some((finding) => finding.title === "Third-party data collection footprint retained in fallback evidence"),
+    true
+  );
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Tracking or consent technologies retained in fallback evidence"),
     true
   );
   assert.equal(
     payload.sampleFindings.some((finding) => finding.title === "Disclosure surfaces verified via fallback retrieval"),
     true
   );
+  assert.equal(payload.fallbackEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);
+  assert.equal(payload.fallbackEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
+  assert.equal(payload.fallbackEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
 });
 
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {

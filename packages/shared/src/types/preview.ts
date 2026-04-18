@@ -45,6 +45,22 @@ export type PreviewScoreSummary = {
   accessibility: number;
 };
 
+export type PreviewFallbackEvidenceSection = {
+  title: string;
+  summary: string;
+  details: string[];
+};
+
+export type PreviewFallbackEvidence = {
+  source: "urlscan";
+  sourceLabel: string;
+  reportUrl?: string | null;
+  resultApiUrl?: string | null;
+  requestFootprint?: PreviewFallbackEvidenceSection;
+  vendorFootprint?: PreviewFallbackEvidenceSection;
+  disclosureFootprint?: PreviewFallbackEvidenceSection;
+};
+
 export type PreviewScanPayload = {
   version: "preview-v1";
   hostname: string;
@@ -65,6 +81,7 @@ export type PreviewScanPayload = {
     protectionVendor?: string | null;
   };
   scores?: PreviewScoreSummary;
+  fallbackEvidence?: PreviewFallbackEvidence;
   summaryBullets: string[];
   sampleFindings: PreviewSampleFinding[];
   disclaimer: string;

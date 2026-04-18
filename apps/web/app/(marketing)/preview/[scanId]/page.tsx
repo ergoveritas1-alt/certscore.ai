@@ -122,6 +122,44 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                         <li key={bullet}>{bullet}</li>
                       ))}
                     </ul>
+                    {scan.previewPayload.fallbackEvidence ? (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Fallback evidence</p>
+                          {scan.previewPayload.fallbackEvidence.reportUrl ? (
+                            <a
+                              className="text-xs font-medium text-sky-700 underline underline-offset-2"
+                              href={scan.previewPayload.fallbackEvidence.reportUrl}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Open urlscan report
+                            </a>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-3">
+                          {[
+                            scan.previewPayload.fallbackEvidence.requestFootprint,
+                            scan.previewPayload.fallbackEvidence.vendorFootprint,
+                            scan.previewPayload.fallbackEvidence.disclosureFootprint
+                          ]
+                            .filter((section): section is NonNullable<typeof scan.previewPayload.fallbackEvidence.requestFootprint> => Boolean(section))
+                            .map((section) => (
+                              <div key={section.title} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>
+                                <p className="mt-2 text-sm text-slate-800">{section.summary}</p>
+                                {section.details.length > 0 ? (
+                                  <ul className="mt-3 space-y-1 text-xs text-slate-600">
+                                    {section.details.map((detail) => (
+                                      <li key={detail}>{detail}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="space-y-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Headline findings</p>
                       {(scan.previewPayload.sampleFindings ?? []).map((finding) => (
