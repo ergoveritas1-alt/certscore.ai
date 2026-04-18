@@ -271,7 +271,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     true
   );
   assert.equal(
-    payload.summaryBullets.includes("Fallback runtime evidence retained 4 network requests, 1 third-party requests, 1 initial cookies."),
+    payload.summaryBullets.includes("Fallback runtime evidence retained 4 network requests, 1 third-party request, 1 initial cookie."),
     true
   );
   assert.equal(

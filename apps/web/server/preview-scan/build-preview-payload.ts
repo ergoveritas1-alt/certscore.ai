@@ -160,6 +160,10 @@ function prependFinding(findings: PreviewSampleFinding[], finding: PreviewSample
   }
 }
 
+function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function hasObservableConsentSurface(snapshot: PreviewSnapshotSource) {
   return (
     snapshot.cookieBannerPresent === true ||
@@ -574,9 +578,9 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   );
 
   const fallbackMetricParts = [
-    fallbackRequestCount && fallbackRequestCount > 0 ? `${fallbackRequestCount} network requests` : null,
-    fallbackThirdPartyRequestCount && fallbackThirdPartyRequestCount > 0 ? `${fallbackThirdPartyRequestCount} third-party requests` : null,
-    fallbackCookieCount && fallbackCookieCount > 0 ? `${fallbackCookieCount} initial cookies` : null
+    fallbackRequestCount && fallbackRequestCount > 0 ? formatCountLabel(fallbackRequestCount, "network request") : null,
+    fallbackThirdPartyRequestCount && fallbackThirdPartyRequestCount > 0 ? formatCountLabel(fallbackThirdPartyRequestCount, "third-party request") : null,
+    fallbackCookieCount && fallbackCookieCount > 0 ? formatCountLabel(fallbackCookieCount, "initial cookie") : null
   ].filter((value): value is string => Boolean(value));
 
   if (fallbackMetricParts.length > 0) {
@@ -606,7 +610,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       category: "privacy",
       severity: "medium",
       title: "Third-party runtime activity observed in fallback evidence",
-      description: `urlscan.io-backed fallback evidence retained ${fallbackThirdPartyRequestCount} third-party requests during this lightweight preview pass${urlscanReportUrl ? ` (report: ${urlscanReportUrl})` : ""}.`
+      description: `urlscan.io-backed fallback evidence retained ${formatCountLabel(fallbackThirdPartyRequestCount, "third-party request")} during this lightweight preview pass${urlscanReportUrl ? ` (report: ${urlscanReportUrl})` : ""}.`
     });
   }
 
@@ -616,7 +620,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       category: "privacy",
       severity: "low",
       title: "Cookie activity observed in fallback evidence",
-      description: `urlscan.io-backed fallback evidence retained ${fallbackCookieCount} initial cookies during the lightweight preview path.`
+      description: `urlscan.io-backed fallback evidence retained ${formatCountLabel(fallbackCookieCount, "initial cookie")} during the lightweight preview path.`
     });
   }
 
