@@ -100,6 +100,26 @@ test("builds policy-runtime bridge signal rows from review reasons and runtime c
   assert.equal(rows.some((row) => row.key === "privacy.cookie_runtime_disclosure_gap_detected"), true);
 });
 
+test("buildNanoPolicySignalRows discards non-string policy arrays before building persisted rows", () => {
+  const rows = buildNanoPolicySignalRows({
+    policyEnrichments: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://example.com/privacy",
+        policy_actionable_flags: ["low_confidence", { bad: true }, false],
+        policy_rights_signals: ["access_request", 12, { bad: true }, "delete_request"],
+        policy_semantic_confidence: 0.42
+      }
+    ]
+  });
+
+  const actionableFlagsRow = rows.find((row) => row.key === "policyActionableFlags");
+  const rightsSignalsRow = rows.find((row) => row.key === "policyRightsSignals");
+
+  assert.deepEqual(actionableFlagsRow?.value, ["low_confidence"]);
+  assert.deepEqual(rightsSignalsRow?.value, ["access_request", "delete_request"]);
+});
+
 test("preserves unmanaged nano rows when replacing managed policy-derived rows", () => {
   const merged = mergeManagedNanoPolicySignalRows({
     existingRows: [
