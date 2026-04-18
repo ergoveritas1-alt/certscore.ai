@@ -226,6 +226,8 @@ function buildLatestActivityLine(input: {
 }) {
   const completedStageCount = input.executionSummary?.stages.length ?? 0;
   const totalStageCount = SCAN_EXECUTION_STAGES.length + 1;
+  const latestEvent =
+    input.status === "queued" ? getLatestEventForStage(input.events, "queue_wait") : input.events.at(-1);
 
   if (input.events.length === 0) {
     return input.status === "queued"
@@ -233,9 +235,10 @@ function buildLatestActivityLine(input: {
       : `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
   }
 
-  const latestEvent = input.events.at(-1);
   if (!latestEvent) {
-    return `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
+    return input.status === "queued"
+      ? `Queued for worker pickup · 0/${totalStageCount} milestones complete.`
+      : `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
   }
 
   const metadata = formatMetadataPreview(latestEvent.metadataJson).join(" · ");
@@ -561,6 +564,22 @@ function getStageRows(input: {
   }));
 }
 
+function getCardTitle(status: string) {
+  if (status === "queued") {
+    return "Full scan queued";
+  }
+
+  if (status === "completed") {
+    return "Full scan complete";
+  }
+
+  if (status === "failed") {
+    return "Full scan failed";
+  }
+
+  return "Full scan in progress";
+}
+
 export function FullScanProgressCard({
   buildPhaseSummaries,
   createdAt,
@@ -648,7 +667,7 @@ export function FullScanProgressCard({
     <CollapsibleSectionCard
       title={
         <span className="flex items-center gap-1.5">
-          <span>Full scan in progress</span>
+          <span>{getCardTitle(status)}</span>
           <InfoTip text="Stage-driven live dashboard backed by the execution summary, with raw worker events preserved below for debugging." />
         </span>
       }
