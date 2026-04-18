@@ -1,5 +1,5 @@
 import { buildAgencyMappings, buildRegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
-import { buildPreviewPayloadFromSnapshot } from "./build-preview-payload";
+import { buildPreviewPayloadFromSnapshot, enrichPreviewPayloadWithFallbackEvidence } from "./build-preview-payload";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import {
@@ -76,17 +76,27 @@ export async function getPreviewScan(scanId: string) {
     })
   });
 
-  return {
-    ...response,
-    regulatoryRisk,
-    agencyMappings: buildAgencyMappings(buildAgencyMappingSource(snapshotWithDerivedRuntime), regulatoryRisk),
-    previewPayload: buildPreviewPayloadFromSnapshot({
+  const previewPayload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
       hostname: response.hostname,
       normalizedUrl: response.normalizedUrl,
       snapshot: {
         ...snapshot,
         finalUrl: derivedFinalUrl ?? snapshot.finalUrl
       }
-    })
+    }),
+    snapshot: {
+      ...snapshot,
+      finalUrl: derivedFinalUrl ?? snapshot.finalUrl
+    },
+    events: events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>,
+    liveEarlyResults: response.liveEarlyResults
+  });
+
+  return {
+    ...response,
+    regulatoryRisk,
+    agencyMappings: buildAgencyMappings(buildAgencyMappingSource(snapshotWithDerivedRuntime), regulatoryRisk),
+    previewPayload
   };
 }

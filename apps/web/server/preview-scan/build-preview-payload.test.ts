@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPreviewPayloadFromSnapshot } from "./build-preview-payload";
+import { buildPreviewPayloadFromSnapshot, enrichPreviewPayloadWithFallbackEvidence } from "./build-preview-payload";
 
 function buildSnapshot(overrides: Partial<Parameters<typeof buildPreviewPayloadFromSnapshot>[0]["snapshot"]> = {}) {
   return {
@@ -213,6 +213,79 @@ test("zero-page previews without an observed consent surface do not claim pre-co
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "No verified public pages were captured"), false);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Cookie preferences control not obvious"), false);
+});
+
+test("evidence-rich lean previews aggressively surface urlscan-backed fallback evidence", () => {
+  const snapshot = buildSnapshot({
+    cookieBannerPresent: false,
+    cmpVendorName: null,
+    consentInteractionModel: "none",
+    cookiePolicyPresent: true,
+    pagesScanned: 0,
+    partialScan: true,
+    preconsentTrackingDetected: true,
+    privacyPolicyPresent: true,
+    termsOfServicePresent: true,
+    thirdPartyCookieSetBeforeConsent: true,
+    totalSignals: 6,
+    trackingBeforeConsentDetected: true
+  });
+  const basePayload = buildPreviewPayloadFromSnapshot({
+    hostname: "fandango.com",
+    normalizedUrl: "https://fandango.com",
+    snapshot
+  });
+
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: basePayload,
+    snapshot,
+    liveEarlyResults: [
+      { label: "3P requests", value: "1" },
+      { label: "Initial cookies", value: "1" },
+      { label: "Verified surfaces", value: "3" }
+    ],
+    events: [
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_lookup",
+          status: "search_hit",
+          requestCount: 4,
+          cookieCount: 1,
+          reportUrl: "https://urlscan.io/result/example"
+        }
+      },
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_legal_fetch",
+          status: "search_hit",
+          verifiedCount: 3
+        }
+      }
+    ]
+  });
+
+  assert.equal(
+    payload.summaryBullets.includes("Fallback runtime evidence from urlscan.io was retained for this lightweight preview."),
+    true
+  );
+  assert.equal(
+    payload.summaryBullets.includes("Fallback runtime evidence retained 4 network requests, 1 third-party requests, 1 initial cookies."),
+    true
+  );
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Third-party runtime activity observed in fallback evidence"),
+    true
+  );
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Cookie activity observed in fallback evidence"),
+    true
+  );
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Disclosure surfaces verified via fallback retrieval"),
+    true
+  );
 });
 
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {

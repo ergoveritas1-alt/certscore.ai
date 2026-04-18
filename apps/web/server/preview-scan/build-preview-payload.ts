@@ -1,5 +1,6 @@
 import type {
   BlockPageClassification,
+  PreviewEarlyResultItem,
   BlockVendorGuess,
   PreviewIssueCounts,
   PreviewSampleFinding,
@@ -110,6 +111,53 @@ function deriveVerifiedPublicSurfaces(snapshot: PreviewSnapshotSource) {
   }
 
   return surfaces;
+}
+
+type PreviewFallbackEvent = {
+  event_type: string;
+  metadata_json: Record<string, unknown> | null;
+};
+
+function getRecordString(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getRecordNumber(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getEarlyResultNumber(items: PreviewEarlyResultItem[] | undefined, label: string) {
+  const raw = items?.find((item) => item.label === label)?.value ?? null;
+  if (!raw) {
+    return null;
+  }
+
+  const match = raw.match(/\d+/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function insertSummaryBullet(summaryBullets: string[], bullet: string) {
+  if (!summaryBullets.includes(bullet)) {
+    summaryBullets.push(bullet);
+  }
+}
+
+function prependFinding(findings: PreviewSampleFinding[], finding: PreviewSampleFinding, limit = 4) {
+  if (findings.some((existing) => existing.title === finding.title)) {
+    return;
+  }
+
+  findings.unshift(finding);
+  if (findings.length > limit) {
+    findings.length = limit;
+  }
 }
 
 function hasObservableConsentSurface(snapshot: PreviewSnapshotSource) {
@@ -461,4 +509,128 @@ export function buildPreviewPayloadFromSnapshot(input: {
     sampleFindings: findings,
     disclaimer: "Preview results show publicly observable website signals only."
   };
+}
+
+export function enrichPreviewPayloadWithFallbackEvidence(input: {
+  payload: PreviewScanPayload;
+  snapshot: PreviewSnapshotSource;
+  events: PreviewFallbackEvent[];
+  liveEarlyResults?: PreviewEarlyResultItem[];
+}) {
+  const payload: PreviewScanPayload = {
+    ...input.payload,
+    summaryBullets: [...input.payload.summaryBullets],
+    sampleFindings: [...input.payload.sampleFindings]
+  };
+
+  const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
+  const worthwhileLeanPreview =
+    input.snapshot.pagesScanned === 0 &&
+    !payload.resultState &&
+    input.snapshot.partialScan === true;
+
+  if (!worthwhileLeanPreview) {
+    return payload;
+  }
+
+  const fallbackLookup = [...input.events].reverse().find((event) => (
+    event.event_type === "runtime.build_phase_diagnostic" &&
+    getRecordString(event.metadata_json, "phase") === "urlscan_preflight_lookup" &&
+    ["search_hit", "ok"].includes(getRecordString(event.metadata_json, "status") ?? "")
+  ));
+  const fallbackLegalFetch = [...input.events].reverse().find((event) => (
+    event.event_type === "runtime.build_phase_diagnostic" &&
+    getRecordString(event.metadata_json, "phase") === "urlscan_preflight_legal_fetch" &&
+    ["search_hit", "ok"].includes(getRecordString(event.metadata_json, "status") ?? "")
+  ));
+
+  if (!fallbackLookup && !fallbackLegalFetch) {
+    return payload;
+  }
+
+  const fallbackRequestCount =
+    getRecordNumber(fallbackLookup?.metadata_json ?? null, "requestCount") ??
+    getEarlyResultNumber(input.liveEarlyResults, "3P requests");
+  const fallbackCookieCount =
+    getRecordNumber(fallbackLookup?.metadata_json ?? null, "cookieCount") ??
+    getEarlyResultNumber(input.liveEarlyResults, "Initial cookies");
+  const fallbackThirdPartyRequestCount = getEarlyResultNumber(input.liveEarlyResults, "3P requests");
+  const verifiedSurfaceCount =
+    getRecordNumber(fallbackLegalFetch?.metadata_json ?? null, "verifiedCount") ??
+    getEarlyResultNumber(input.liveEarlyResults, "Verified surfaces");
+  const urlscanReportUrl = getRecordString(fallbackLookup?.metadata_json ?? null, "reportUrl");
+
+  if (
+    (fallbackRequestCount ?? 0) <= 0 &&
+    (fallbackCookieCount ?? 0) <= 0 &&
+    (verifiedSurfaceCount ?? 0) <= 0
+  ) {
+    return payload;
+  }
+
+  insertSummaryBullet(
+    payload.summaryBullets,
+    "Fallback runtime evidence from urlscan.io was retained for this lightweight preview."
+  );
+
+  const fallbackMetricParts = [
+    fallbackRequestCount && fallbackRequestCount > 0 ? `${fallbackRequestCount} network requests` : null,
+    fallbackThirdPartyRequestCount && fallbackThirdPartyRequestCount > 0 ? `${fallbackThirdPartyRequestCount} third-party requests` : null,
+    fallbackCookieCount && fallbackCookieCount > 0 ? `${fallbackCookieCount} initial cookies` : null
+  ].filter((value): value is string => Boolean(value));
+
+  if (fallbackMetricParts.length > 0) {
+    insertSummaryBullet(
+      payload.summaryBullets,
+      `Fallback runtime evidence retained ${fallbackMetricParts.join(", ")}.`
+    );
+  }
+
+  if (verifiedSurfaceCount && verifiedSurfaceCount > 0) {
+    insertSummaryBullet(
+      payload.summaryBullets,
+      `Fallback retrieval verified ${verifiedSurfaceCount} public disclosure surfaces.`
+    );
+  }
+
+  if (!observableConsentSurface && ((fallbackThirdPartyRequestCount ?? 0) > 0 || (fallbackCookieCount ?? 0) > 0)) {
+    insertSummaryBullet(
+      payload.summaryBullets,
+      "No observable consent surface was retained, so fallback runtime activity was not promoted into a consent-violation claim."
+    );
+  }
+
+  if (fallbackThirdPartyRequestCount && fallbackThirdPartyRequestCount > 0) {
+    prependFinding(payload.sampleFindings, {
+      affectedPage: "Homepage",
+      category: "privacy",
+      severity: "medium",
+      title: "Third-party runtime activity observed in fallback evidence",
+      description: `urlscan.io-backed fallback evidence retained ${fallbackThirdPartyRequestCount} third-party requests during this lightweight preview pass${urlscanReportUrl ? ` (report: ${urlscanReportUrl})` : ""}.`
+    });
+  }
+
+  if (fallbackCookieCount && fallbackCookieCount > 0) {
+    prependFinding(payload.sampleFindings, {
+      affectedPage: "Homepage",
+      category: "privacy",
+      severity: "low",
+      title: "Cookie activity observed in fallback evidence",
+      description: `urlscan.io-backed fallback evidence retained ${fallbackCookieCount} initial cookies during the lightweight preview path.`
+    });
+  }
+
+  if (verifiedSurfaceCount && verifiedSurfaceCount > 0) {
+    prependFinding(payload.sampleFindings, {
+      affectedPage: "Public disclosures",
+      category: "legal",
+      severity: "low",
+      title: "Disclosure surfaces verified via fallback retrieval",
+      description: `Fallback retrieval confirmed ${verifiedSurfaceCount} public disclosure surfaces even though the native preview remained lightweight.`
+    });
+  }
+
+  payload.issueCounts = deriveIssueCounts(payload.sampleFindings);
+
+  return payload;
 }
