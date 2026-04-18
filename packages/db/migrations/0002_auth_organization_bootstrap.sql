@@ -9,7 +9,7 @@ end;
 $$;
 
 create table if not exists public.users (
-  id uuid primary key references auth.users (id) on delete cascade,
+  id uuid primary key,
   email text not null unique,
   full_name text,
   auth_provider text not null,
