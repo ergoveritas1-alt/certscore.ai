@@ -1,5 +1,4 @@
 import { getDatabaseEnv, type DatabaseEnv } from "@website-signal-risk-scanner/db";
-import { getBetterAuthEnv } from "../server/better-auth/env";
 import { parseEnvironment } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 
@@ -56,9 +55,6 @@ export function getQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function isGoogleAuthEnabled(env: NodeJS.ProcessEnv = process.env) {
-  try {
-    return getBetterAuthEnv(env).NEXT_PUBLIC_AUTH_GOOGLE_ENABLED;
-  } catch {
-    return false;
-  }
+  const value = env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED?.trim().toLowerCase();
+  return value === "1" || value === "true";
 }
