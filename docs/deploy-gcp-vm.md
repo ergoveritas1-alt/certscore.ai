@@ -72,7 +72,7 @@ The reverse proxy and canonical host policy should match the checked-in [deploy/
 
 Before declaring production healthy, confirm this exact rollout contract:
 
-1. The VM env file matches the portable contract above and no legacy `SUPABASE_*` variables remain in active use anywhere in the serving path.
+1. The VM env file matches the portable contract above and no legacy vendor-specific database, auth, or storage variables remain in active use anywhere in the serving path.
 2. The production database already has the merged `packages/db/migrations` applied.
 3. The Better Auth tables exist in production PostgreSQL:
    - `better_auth_users`
@@ -81,7 +81,7 @@ Before declaring production healthy, confirm this exact rollout contract:
    - `better_auth_verifications`
 4. The configured S3 bucket already exists and the supplied credentials can read and write it.
 5. Google OAuth provider settings, if enabled, point to `/auth/callback` on the production domain.
-6. Users are told they must sign in again after cutover because Supabase sessions are not preserved.
+6. Users are told they must sign in again after cutover because old hosted-session state is not preserved.
 
 If any of those are untrue, fix them before treating the deployment as complete.
 
@@ -153,6 +153,6 @@ The validation-only deployment uses a different topology:
 - optional worker image build via [`deploy-validation.sh`](/Users/benmasek/WC01/deploy-validation.sh)
 
 For the Cloud Run validation worker pool path, prefer `deploy-validation-worker.sh` with Secret Manager-backed bindings rather than shell-exporting prod secrets into the deploy command.
-Pass `DATABASE_URL_SECRET_NAME`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID_SECRET_NAME`, and `S3_SECRET_ACCESS_KEY_SECRET_NAME`, and let the deploy script scrub any legacy `SUPABASE_*` bindings from the worker pool revision.
+Pass `DATABASE_URL_SECRET_NAME`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID_SECRET_NAME`, and `S3_SECRET_ACCESS_KEY_SECRET_NAME`, and keep the worker pool revision aligned to the portable contract.
 
 See [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md) for the full setup and runtime validation sequence.
