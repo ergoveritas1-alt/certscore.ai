@@ -1,9 +1,21 @@
 import { getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../taxonomy/signal-taxonomy";
 import type { ScanSnapshot, ScanTrackerVendor, SnapshotSignalItem } from "../types/snapshots";
 
+function hasObservableConsentSurface(snapshot: ScanSnapshot) {
+  return (
+    snapshot.cookieBannerPresent === true ||
+    Boolean(snapshot.cmpVendorName) ||
+    (snapshot.consentInteractionModel != null && snapshot.consentInteractionModel !== "none") ||
+    snapshot.rejectAllPresent === true ||
+    snapshot.acceptAllPresent === true ||
+    snapshot.granularPreferencesPresent === true
+  );
+}
+
 export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: ScanTrackerVendor[]): SnapshotSignalItem[] {
   const vendors = [...new Set(trackerVendors.map((vendor) => vendor.vendorName))].sort();
   const activeSignals: SnapshotSignalItem[] = [];
+  const observableConsentSurface = hasObservableConsentSurface(snapshot);
 
   const toTaxonomySignal = (input: Omit<SnapshotSignalItem, "primaryCategory" | "primaryCategoryLabel" | "subcategory" | "regulatoryTags">) => {
     const taxonomy = mapSignalKeyToTaxonomy({
@@ -107,26 +119,41 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     "Sale/sharing controls missing",
     snapshot.doNotSellLinkPresent === false && snapshot.retargetingPixelDetected === true
   );
-  pushBoolean("privacy", "privacy.preconsent_tracking_detected", "Pre-consent tracking detected", snapshot.preconsentTrackingDetected);
+  pushBoolean(
+    "privacy",
+    "privacy.preconsent_tracking_detected",
+    "Pre-consent tracking detected",
+    observableConsentSurface && snapshot.preconsentTrackingDetected
+  );
   pushBoolean(
     "privacy",
     "privacy.dark_pattern_reject_button_missing",
     "Reject button missing on consent surface",
-    snapshot.darkPatternRejectButtonMissing
+    observableConsentSurface && snapshot.darkPatternRejectButtonMissing
   );
   pushBoolean(
     "privacy",
     "privacy.dark_pattern_accept_button_prominence",
     "Accept button more prominent than reject",
-    snapshot.darkPatternAcceptButtonProminence
+    observableConsentSurface && snapshot.darkPatternAcceptButtonProminence
   );
-  pushBoolean("privacy", "privacy.dark_pattern_forced_consent_wall", "Forced consent wall detected", snapshot.darkPatternForcedConsentWall);
-  pushBoolean("privacy", "privacy.dark_pattern_accept_only_banner", "Accept-only banner detected", snapshot.darkPatternAcceptOnlyBanner);
+  pushBoolean(
+    "privacy",
+    "privacy.dark_pattern_forced_consent_wall",
+    "Forced consent wall detected",
+    observableConsentSurface && snapshot.darkPatternForcedConsentWall
+  );
+  pushBoolean(
+    "privacy",
+    "privacy.dark_pattern_accept_only_banner",
+    "Accept-only banner detected",
+    observableConsentSurface && snapshot.darkPatternAcceptOnlyBanner
+  );
   pushBoolean(
     "privacy",
     "privacy.dark_pattern_dismiss_without_reject",
     "Dismiss-without-reject pattern detected",
-    snapshot.darkPatternDismissWithoutReject
+    observableConsentSurface && snapshot.darkPatternDismissWithoutReject
   );
   pushBoolean("privacy", "privacy.dark_pattern_countdown_timer_present", "Countdown timer language detected", snapshot.darkPatternCountdownTimerPresent);
   pushBoolean("privacy", "privacy.dark_pattern_fake_scarcity_language", "Scarcity language detected", snapshot.darkPatternFakeScarcityLanguage);

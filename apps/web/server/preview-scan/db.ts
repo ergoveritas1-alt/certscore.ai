@@ -68,6 +68,8 @@ export type PreviewSnapshotRow = {
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
   consentMaturityScore: ScanSnapshot["consentMaturityScore"];
   consumerProtectionScore: ScanSnapshot["consumerProtectionScore"];
+  cmpVendorName?: ScanSnapshot["cmpVendorName"] | null;
+  consentInteractionModel?: ScanSnapshot["consentInteractionModel"] | null;
   crossBorderTransferMechanismDetected: ScanSnapshot["crossBorderTransferMechanismDetected"];
   dataAccessRequestPresent: ScanSnapshot["dataAccessRequestPresent"];
   dataDeletionRequestPresent: ScanSnapshot["dataDeletionRequestPresent"];
@@ -322,6 +324,7 @@ export async function loadPreviewScanSnapshotRecord(scanId: string): Promise<Rec
           "block_page_classification","block_vendor_guess","challenge_suspected","rate_limit_suspected","geo_block_suspected","fingerprint_block_suspected",
           "passive_verification_attempt_count","passive_verification_attempted","coverage_level","certscore_overall","privacy_score","accessibility_score",
           "privacy_policy_present","terms_of_service_present","contact_page_present","privacy_contact_method_present","privacy_email_specific_present","cookie_banner_present",
+          "cmp_vendor_name","consent_interaction_model",
           "reject_all_present","granular_preferences_present","tracking_before_consent_detected","preconsent_tracking_detected","third_party_cookie_set_before_consent",
           "policy_behavior_conflict_detected","session_replay_without_disclosure_detected","session_replay_tracker_count","advertising_tracker_count","affiliate_disclosure_present",
           "advertising_disclosure_present","testimonial_or_review_disclosure_present","consumer_protection_score","cancellation_policy_present","subscription_offer_detected",

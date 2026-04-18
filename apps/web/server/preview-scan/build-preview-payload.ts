@@ -22,6 +22,8 @@ type PreviewSnapshotSource = {
   cookiePolicyPresent?: ScanSnapshot["cookiePolicyPresent"] | null;
   cookieBannerPresent: ScanSnapshot["cookieBannerPresent"];
   challengeSuspected?: ScanSnapshot["challengeSuspected"] | null;
+  cmpVendorName?: ScanSnapshot["cmpVendorName"] | null;
+  consentInteractionModel?: ScanSnapshot["consentInteractionModel"] | null;
   finalUrl: ScanSnapshot["finalUrl"];
   fingerprintBlockSuspected?: ScanSnapshot["fingerprintBlockSuspected"] | null;
   geoBlockSuspected?: ScanSnapshot["geoBlockSuspected"] | null;
@@ -110,6 +112,16 @@ function deriveVerifiedPublicSurfaces(snapshot: PreviewSnapshotSource) {
   return surfaces;
 }
 
+function hasObservableConsentSurface(snapshot: PreviewSnapshotSource) {
+  return (
+    snapshot.cookieBannerPresent === true ||
+    Boolean(snapshot.cmpVendorName) ||
+    (snapshot.consentInteractionModel != null && snapshot.consentInteractionModel !== "none") ||
+    snapshot.rejectAllPresent === true ||
+    snapshot.granularPreferencesPresent === true
+  );
+}
+
 function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verifiedSurfaces: string[]) {
   const homepageFetchStatusOk = snapshot.homepageFetchStatus === "ok";
   const homepageFetchHttpStatusSuccessful =
@@ -143,6 +155,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
   const findings: PreviewSampleFinding[] = [];
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
   const evidenceRichZeroPagePreview = isEvidenceRichZeroPagePreview(input.snapshot, verifiedSurfaces);
+  const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
   const scanStopReason = deriveScanStopReason({
     authWallDetected: input.snapshot.authWallDetected,
     authWallSuspected: input.snapshot.authWallSuspected,
@@ -271,6 +284,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
   pushFinding(
     findings,
     !siteSurfaceUnverified &&
+    observableConsentSurface &&
     (input.snapshot.trackingBeforeConsentDetected ||
       input.snapshot.preconsentTrackingDetected ||
       input.snapshot.thirdPartyCookieSetBeforeConsent)
@@ -300,7 +314,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    input.snapshot.cookieBannerPresent && !input.snapshot.rejectAllPresent && !input.snapshot.granularPreferencesPresent
+    observableConsentSurface && !input.snapshot.rejectAllPresent && !input.snapshot.granularPreferencesPresent
       ? {
           affectedPage: "Cookie banner",
           category: "privacy",

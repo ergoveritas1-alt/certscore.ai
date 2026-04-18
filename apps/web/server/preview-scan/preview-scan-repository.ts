@@ -572,6 +572,9 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
     certscoreOverall: Number(row.certscore_overall ?? 0),
     privacyScore: Number(row.privacy_score ?? 0),
     accessibilityScore: Number(row.accessibility_score ?? 0),
+    cmpVendorName: typeof row.cmp_vendor_name === "string" ? (row.cmp_vendor_name as string) : null,
+    consentInteractionModel:
+      typeof row.consent_interaction_model === "string" ? (row.consent_interaction_model as ScanSnapshot["consentInteractionModel"]) : null,
     privacyPolicyPresent: Boolean(row.privacy_policy_present),
     termsOfServicePresent: Boolean(row.terms_of_service_present),
     contactPagePresent: Boolean(row.contact_page_present),

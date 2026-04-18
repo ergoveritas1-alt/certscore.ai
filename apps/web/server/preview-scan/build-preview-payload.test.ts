@@ -161,7 +161,9 @@ test("evidence-rich zero-page previews do not collapse into blocked-access mode 
     snapshot: buildSnapshot({
       accessibilityScore: 0,
       certscoreOverall: 0,
+      cookieBannerPresent: true,
       contactPagePresent: false,
+      consentInteractionModel: "banner",
       cookiePolicyPresent: true,
       homepageFetchHttpStatus: 200,
       homepageFetchStatus: "ok",
@@ -186,6 +188,30 @@ test("evidence-rich zero-page previews do not collapse into blocked-access mode 
     ),
     true
   );
+});
+
+test("zero-page previews without an observed consent surface do not claim pre-consent tracking", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "fandango.com",
+    normalizedUrl: "https://fandango.com",
+    snapshot: buildSnapshot({
+      cookieBannerPresent: false,
+      cmpVendorName: null,
+      consentInteractionModel: "none",
+      pagesScanned: 0,
+      partialScan: true,
+      preconsentTrackingDetected: true,
+      privacyPolicyPresent: true,
+      termsOfServicePresent: true,
+      thirdPartyCookieSetBeforeConsent: true,
+      totalSignals: 6,
+      trackingBeforeConsentDetected: true
+    })
+  });
+
+  assert.equal(payload.resultState, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), false);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Cookie preferences control not obvious"), false);
 });
 
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {
