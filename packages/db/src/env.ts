@@ -4,6 +4,10 @@ function formatIssuePath(path: (string | number)[]) {
   return path.length > 0 ? path.join(".") : "environment";
 }
 
+function emptyStringToUndefined(value: unknown) {
+  return typeof value === "string" && value.trim().length === 0 ? undefined : value;
+}
+
 function parseEnvironment<TSchema extends z.ZodTypeAny>(input: {
   env?: NodeJS.ProcessEnv;
   schema: TSchema;
@@ -40,8 +44,11 @@ export const storageBucketEnvSchema = z
 
 export const databaseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  DATABASE_READ_URL: z.string().min(1).optional(),
-  DATABASE_SSL_MODE: z.enum(["disable", "prefer", "require", "verify-ca", "verify-full"]).optional()
+  DATABASE_READ_URL: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+  DATABASE_SSL_MODE: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["disable", "prefer", "require", "verify-ca", "verify-full"]).optional()
+  )
 });
 
 export const s3EnvSchema = z.object({
