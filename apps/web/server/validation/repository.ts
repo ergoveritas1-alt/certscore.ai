@@ -1946,30 +1946,40 @@ export async function getValidationRunDetail(validationRunId: string) {
 
 export async function getValidationIssueAnalytics() {
   await requireAdmin();
-  const db = createDatabaseClient();
-  const { data: findings, error: findingsError } = await db
-    .from("validation_run_findings")
-    .select("id, rule_key, title");
-
-  if (findingsError) {
-    throw new Error(`Failed to load validation finding analytics: ${findingsError.message}`);
+  let findingRows: Array<{ id: string; rule_key: string; title: string }>;
+  try {
+    findingRows = await query<{ id: string; rule_key: string; title: string }>(
+      `
+        select id, rule_key, title
+        from validation_run_findings
+      `,
+      [],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to load validation finding analytics: ${getErrorMessage(error)}`);
   }
 
-  const findingRows = (findings ?? []) as Array<{ id: string; rule_key: string; title: string }>;
   const findingIds = findingRows.map((row) => row.id);
   const verdictMap = new Map<string, ValidationVerdict>();
 
   if (findingIds.length > 0) {
-    const { data: verdicts, error: verdictsError } = await db
-      .from("validation_verdicts")
-      .select("validation_run_finding_id, verdict")
-      .in("validation_run_finding_id", findingIds);
-
-    if (verdictsError) {
-      throw new Error(`Failed to load validation verdict analytics: ${verdictsError.message}`);
+    let verdicts: Array<{ validation_run_finding_id: string; verdict: ValidationVerdict }>;
+    try {
+      verdicts = await query<{ validation_run_finding_id: string; verdict: ValidationVerdict }>(
+        `
+          select validation_run_finding_id, verdict
+          from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+        `,
+        [findingIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load validation verdict analytics: ${getErrorMessage(error)}`);
     }
 
-    for (const row of (verdicts ?? []) as Array<{ validation_run_finding_id: string; verdict: ValidationVerdict }>) {
+    for (const row of verdicts) {
       verdictMap.set(row.validation_run_finding_id, row.verdict);
     }
   }
@@ -2027,7 +2037,6 @@ export async function updateValidationSettingsAction(input: {
   runMode?: ValidationRunMode;
 }) {
   const context = await requireAdmin();
-  const db = createDatabaseClient();
 
   if (input.automaticIntervalMinutes !== undefined && !(VALIDATION_INTERVAL_OPTIONS as readonly number[]).includes(input.automaticIntervalMinutes)) {
     throw new Error("Invalid validation interval.");
@@ -2053,24 +2062,41 @@ export async function updateValidationSettingsAction(input: {
     patch.operator_note = input.operatorNote;
   }
 
-  const { error } = await db.from("validation_settings").update(patch).eq("singleton_key", "default");
-  if (error) {
-    throw new Error(`Failed to update validation settings: ${error.message}`);
-  }
+  const patchEntries = Object.entries(patch);
+  const assignmentSql = patchEntries.map(([key], index) => `${key} = $${index + 1}`).join(", ");
+  const values = patchEntries.map(([, value]) => value);
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type:
-      input.pipelineEnabled !== undefined
-        ? input.pipelineEnabled
-          ? "validation.pipeline_resumed"
-          : "validation.pipeline_paused"
-        : input.runMode !== undefined
-          ? "validation.mode_changed"
-          : "validation.interval_changed",
-    metadata_json: input,
-    reason: input.operatorNote ?? null
-  });
+  try {
+    await query(
+      `
+        update validation_settings
+           set ${assignmentSql}
+         where singleton_key = 'default'
+      `,
+      values
+    );
+
+    await query(
+      `
+        insert into validation_audit_events (actor_user_id, event_type, metadata_json, reason)
+        values ($1, $2, $3, $4)
+      `,
+      [
+        context.user.id,
+        input.pipelineEnabled !== undefined
+          ? input.pipelineEnabled
+            ? "validation.pipeline_resumed"
+            : "validation.pipeline_paused"
+          : input.runMode !== undefined
+            ? "validation.mode_changed"
+            : "validation.interval_changed",
+        input,
+        input.operatorNote ?? null
+      ]
+    );
+  } catch (error) {
+    throw new Error(`Failed to update validation settings: ${getErrorMessage(error)}`);
+  }
 
   revalidatePath("/app");
   revalidatePath("/app/scans");
