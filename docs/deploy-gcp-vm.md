@@ -33,6 +33,12 @@ Build and publish the standalone web image for the VM lane:
 bash ./deploy-web-vm.sh
 ```
 
+For first-time bootstrap only, allow the script to create the Artifact Registry repository if it is truly missing:
+
+```bash
+ENSURE_ARTIFACT_REPOSITORY=1 bash ./deploy-web-vm.sh
+```
+
 The preferred production path is now:
 
 1. make the change in the repo root

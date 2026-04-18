@@ -8,6 +8,7 @@ IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/web:${IMAGE_TAG}"
 BUILD_SERVICE_ACCOUNT="${BUILD_SERVICE_ACCOUNT:-}"
 DEPLOY_TO_VM="${DEPLOY_TO_VM:-0}"
+ENSURE_ARTIFACT_REPOSITORY="${ENSURE_ARTIFACT_REPOSITORY:-0}"
 VM_NAME="${VM_NAME:-certscore-web-prod}"
 VM_ZONE="${VM_ZONE:-us-central1-a}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://consentcheck.site}"
@@ -47,13 +48,15 @@ EOF
 
 require_command gcloud
 
-if ! gcloud artifacts repositories describe "${REPOSITORY}" \
-  --location "${REGION}" \
-  --project "${PROJECT_ID}" >/dev/null 2>&1; then
-  gcloud artifacts repositories create "${REPOSITORY}" \
-    --repository-format docker \
+if [[ "${ENSURE_ARTIFACT_REPOSITORY}" == "1" ]]; then
+  if ! gcloud artifacts repositories describe "${REPOSITORY}" \
     --location "${REGION}" \
-    --project "${PROJECT_ID}"
+    --project "${PROJECT_ID}" >/dev/null 2>&1; then
+    gcloud artifacts repositories create "${REPOSITORY}" \
+      --repository-format docker \
+      --location "${REGION}" \
+      --project "${PROJECT_ID}"
+  fi
 fi
 
 cat > "${cloudbuild_config}" <<EOF
