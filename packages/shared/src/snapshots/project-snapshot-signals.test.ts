@@ -6,12 +6,36 @@ import type { ScanSnapshot } from "../types/snapshots";
 function buildSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
   return {
     organizationId: null,
-    domainId: null,
-    scanId: null,
+    domainId: "domain_example",
+    scanId: "scan_example",
+    scannerSchemaVersion: 1,
+    detectionEngineVersion: "test-engine",
     domain: "example.com",
-    normalizedUrl: "https://example.com/",
     finalUrl: "https://example.com/",
     registeredDomain: "example.com",
+    crawlSource: "preview",
+    crawlTier: "quick",
+    totalSignals: 0,
+    accessibilitySignalCount: 0,
+    privacySignalCount: 0,
+    disclosureSignalCount: 0,
+    highSeverityCount: 0,
+    mediumSeverityCount: 0,
+    lowSeverityCount: 0,
+    trackerVendorCount: 0,
+    robotsTxtHash: null,
+    robotsRulesLoaded: null,
+    robotsGroupCount: null,
+    robotsDirectiveCount: null,
+    robotsHasAllowRules: null,
+    robotsHasDisallowRules: null,
+    robotsTxtFetchedAt: null,
+    robotsTxtUrl: null,
+    finalUrlScheme: "https",
+    redirectCount: 0,
+    renderModeUsed: "browser_only",
+    scanConfidence: "low",
+    timeoutFlag: false,
     siteName: null,
     pageTitle: null,
     scanTimestamp: "2026-04-18T18:37:07.114Z",
@@ -213,9 +237,8 @@ function buildSnapshot(overrides: Partial<ScanSnapshot> = {}): ScanSnapshot {
     policyBehaviorConflictDetected: false,
     sessionReplayWithoutDisclosureDetected: false,
     userRightsFrictionScore: null,
-    totalSignals: 6,
     ...overrides
-  };
+  } as unknown as ScanSnapshot;
 }
 
 test("does not emit consent snapshot signals when no consent surface was observed", () => {
