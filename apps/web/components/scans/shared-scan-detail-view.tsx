@@ -5746,9 +5746,13 @@ export function SharedScanDetailView({
     storedScore: certScoreSummary.score
   });
   const useLightweightHeroMetrics =
-    previewPayload?.fallbackEvidence &&
-    snapshot?.pagesScanned === 0 &&
-    snapshot?.partialScan === true;
+    Boolean(previewPayload?.fallbackEvidence) &&
+    (
+      fallbackObservedRequestCount > 0 ||
+      fallbackObservedCookieCount > 0 ||
+      fallbackObservedDomainCount > 0 ||
+      fallbackObservedTechnologyCount > 0
+    );
   const lightweightHeroMetrics = useLightweightHeroMetrics
     ? [
         {
