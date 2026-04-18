@@ -225,7 +225,7 @@ export default async function MarketingHomePage() {
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.18)] hover:brightness-[1.04] sm:w-auto"
-                href="/preview"
+                href="/#homepage-scan"
                 idleContent="Scan a website"
                 pendingContent="Opening..."
               />
@@ -245,14 +245,14 @@ export default async function MarketingHomePage() {
           <div className="space-y-4">
             <Card id="homepage-scan" className="border-slate-200 bg-slate-50 shadow-none">
               <CardHeader>
-                <CardTitle>Scan a homepage</CardTitle>
+                <CardTitle>Start a full scan</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
-                  helperText="Start with a lightweight homepage scan that previews the kinds of findings and observable signals CertScore can surface before signup."
+                  helperText="Start a full scan for a signed-in workspace. CertScore will queue the domain, run the scanner, and open the saved scan record when it is accepted."
                   inputLabel="Website domain"
-                  mode="preview"
+                  mode="full"
                 />
               </CardContent>
             </Card>
