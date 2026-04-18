@@ -26,14 +26,13 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   let detailLoadError = false;
   const hasRenderablePreviewResult = Boolean(scan?.previewPayload);
   const hasUnsafeDegradedExecution = Boolean(scan?.executionSummary?.degradedStages?.length);
-  const canRenderDetailedPreviewReport = Boolean(
+  const shouldAttemptDetailedPreviewReport = Boolean(
     scan?.status === "completed" &&
       hasRenderablePreviewResult &&
-      !hasUnsafeDegradedExecution &&
-      (scan?.pagesScanned ?? 0) > 0
+      !hasUnsafeDegradedExecution
   );
 
-  if (scan && canRenderDetailedPreviewReport) {
+  if (scan && shouldAttemptDetailedPreviewReport) {
     try {
       fullScanRecord = await getAnonymousScanById(scan.scanId);
     } catch (error) {
@@ -57,6 +56,57 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
             ? deriveUnverifiedHomepageReview(fullScanRecord.snapshot, fullScanRecord.events, fullScanRecord.policyEnrichment)
             : null
         })
+      : null;
+  const lightweightPreviewNotice =
+    scan?.previewPayload && ((scan?.pagesScanned ?? 0) === 0 || Boolean(scan.previewPayload.fallbackEvidence))
+      ? (
+          <Card className="border-sky-200 bg-sky-50/70">
+            <CardHeader className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="warning">Lightweight results</Badge>
+                {scan.previewPayload.fallbackEvidence?.reportUrl ? (
+                  <a
+                    className="text-xs font-medium text-sky-700 underline underline-offset-2"
+                    href={scan.previewPayload.fallbackEvidence.reportUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open urlscan report
+                  </a>
+                ) : null}
+              </div>
+              <CardTitle className="text-lg">This preview used a lightweight verification path</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-700">
+              <p>
+                The main report below is the normal results page. This small card calls out that the run short-circuited into a lean path and retained supplemental evidence from urlscan.io where it added relevant request, vendor, or disclosure coverage.
+              </p>
+              {scan.previewPayload.fallbackEvidence ? (
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {[
+                    scan.previewPayload.fallbackEvidence.requestFootprint,
+                    scan.previewPayload.fallbackEvidence.vendorFootprint,
+                    scan.previewPayload.fallbackEvidence.disclosureFootprint
+                  ]
+                    .filter((section): section is NonNullable<typeof scan.previewPayload.fallbackEvidence.requestFootprint> => Boolean(section))
+                    .map((section) => (
+                      <div key={section.title} className="rounded-xl border border-sky-100 bg-white px-4 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>
+                        <p className="mt-2 text-sm text-slate-800">{section.summary}</p>
+                        {section.details.length > 0 ? (
+                          <ul className="mt-3 space-y-1 text-xs text-slate-600">
+                            {section.details.map((detail) => (
+                              <li key={detail}>{detail}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        )
       : null;
   const loginHref = scan
     ? `/login?${new URLSearchParams({
@@ -88,10 +138,11 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                   />
                 </div>
               }
+              previewNotice={lightweightPreviewNotice}
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
-          ) : scan.status === "completed" && hasRenderablePreviewResult && !canRenderDetailedPreviewReport ? (
+          ) : scan.status === "completed" && hasRenderablePreviewResult && !shouldAttemptDetailedPreviewReport ? (
             <Card className="border-amber-200 bg-amber-50/40">
               <CardHeader>
                 <CardTitle>

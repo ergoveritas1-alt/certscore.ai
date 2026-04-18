@@ -5638,6 +5638,7 @@ type SharedScanDetailViewProps = {
   createAccountHref?: string | null;
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
+  previewNotice?: ReactNode;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
 };
@@ -5647,6 +5648,7 @@ export function SharedScanDetailView({
   createAccountHref = null,
   executiveAccessLimitationOverride = null,
   headerActions = null,
+  previewNotice = null,
   previewMode = "full",
   scanRecord
 }: SharedScanDetailViewProps) {
@@ -5880,6 +5882,7 @@ export function SharedScanDetailView({
           status={scanRecord.scan.status}
         />
       ) : null}
+      {previewNotice}
       <ExecutiveSummaryCard
         accessLimitationNotice={
           executiveAccessLimitationNotice
