@@ -6,6 +6,7 @@ ENV NODE_ENV="production"
 ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
 
 RUN corepack enable
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -16,6 +17,13 @@ COPY packages/shared ./packages/shared
 COPY packages/web-bot-auth ./packages/web-bot-auth
 COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
+
+RUN rm -rf \
+  ./apps/validation-worker/dist \
+  ./packages/shared/dist \
+  ./packages/web-bot-auth/dist \
+  ./packages/db/dist \
+  ./packages/validation-shared/dist
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @website-signal-risk-scanner/shared build

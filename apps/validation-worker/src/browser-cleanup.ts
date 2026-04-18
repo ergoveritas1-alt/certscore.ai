@@ -152,12 +152,22 @@ export async function reapStaleBrowserArtifacts(input?: {
   const tmpRoot = input?.tmpRoot ?? os.tmpdir();
   const nowMs = Date.now();
 
-  const [{ stdout }, profileDirs] = await Promise.all([
-    execFile("ps", ["-axo", "pid=,etime=,command="]),
+  const [processResult, profileDirs] = await Promise.all([
+    execFile("ps", ["-axo", "pid=,etime=,command="]).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        logger.warn("[validation-worker] process table inspection unavailable", {
+          command: "ps",
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return { stdout: "" };
+      }
+
+      throw error;
+    }),
     readManagedProfileDirs(tmpRoot)
   ]);
 
-  const processRows = parseBrowserProcessTable(stdout);
+  const processRows = parseBrowserProcessTable(processResult.stdout);
   const staleProcesses = processRows.filter((row) => row.elapsedSec * 1000 >= staleAgeMs);
   const staleProfileDirs = (
     await Promise.all(
