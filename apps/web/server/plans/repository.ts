@@ -1,20 +1,20 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query } from "@website-signal-risk-scanner/db";
 
 export async function updateOrganizationPlan(input: {
   organizationId: string;
   plan: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("organizations")
-    .update({
-      plan: input.plan
-    })
-    .eq("id", input.organizationId);
-
-  if (error) {
-    throw new Error(`Failed to update organization plan: ${error.message}`);
+  try {
+    await query(
+      `update organizations
+          set plan = $1
+        where id = $2`,
+      [input.plan, input.organizationId]
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to update organization plan: ${message}`);
   }
 }

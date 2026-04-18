@@ -1,4 +1,4 @@
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 
 const SCANNER_WORKER_TYPE = "scanner";
@@ -15,25 +15,40 @@ export type WorkerHeartbeatRow = {
 };
 
 export async function loadScannerHeartbeatSources() {
-  const db = createDatabaseClient();
-  const { data: eventRow, error: eventError } = await db
-    .from("scan_events")
-    .select("created_at, metadata_json")
-    .is("scan_id", null)
-    .eq("event_type", SCAN_EVENT_TYPES.scannerHeartbeat)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data: heartbeatRows, error: heartbeatError } = await db
-    .from("worker_heartbeats")
-    .select("worker_type, last_heartbeat_at, host")
-    .eq("worker_type", SCANNER_WORKER_TYPE);
+  const [eventResult, heartbeatResult] = await Promise.allSettled([
+    queryOne<ScannerHeartbeatEventRow>(
+      `select created_at, metadata_json
+         from scan_events
+        where scan_id is null
+          and event_type = $1
+        order by created_at desc
+        limit 1`,
+      [SCAN_EVENT_TYPES.scannerHeartbeat],
+      { readOnly: true }
+    ),
+    query<WorkerHeartbeatRow>(
+      `select worker_type, last_heartbeat_at, host
+         from worker_heartbeats
+        where worker_type = $1`,
+      [SCANNER_WORKER_TYPE],
+      { readOnly: true }
+    )
+  ]);
 
   return {
-    eventErrorMessage: eventError?.message ?? null,
-    eventRow: (eventRow as ScannerHeartbeatEventRow | null) ?? null,
-    heartbeatErrorMessage: heartbeatError?.message ?? null,
-    heartbeatRows: ((heartbeatRows as WorkerHeartbeatRow[] | null) ?? [])
+    eventErrorMessage:
+      eventResult.status === "rejected"
+        ? eventResult.reason instanceof Error
+          ? eventResult.reason.message
+          : "Unknown database error."
+        : null,
+    eventRow: eventResult.status === "fulfilled" ? eventResult.value : null,
+    heartbeatErrorMessage:
+      heartbeatResult.status === "rejected"
+        ? heartbeatResult.reason instanceof Error
+          ? heartbeatResult.reason.message
+          : "Unknown database error."
+        : null,
+    heartbeatRows: heartbeatResult.status === "fulfilled" ? heartbeatResult.value.rows : []
   };
 }

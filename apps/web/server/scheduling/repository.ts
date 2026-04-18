@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 
 export type SchedulingOrganizationRow = {
@@ -16,32 +16,39 @@ export type SchedulingScanRow = {
 };
 
 export async function loadSchedulingOrganization(organizationId: string): Promise<SchedulingOrganizationRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db.from("organizations").select("id, plan").eq("id", organizationId).maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load organization monitoring state: ${error.message}`);
+  try {
+    return await queryOne<SchedulingOrganizationRow>(
+      `select id, plan
+         from organizations
+        where id = $1`,
+      [organizationId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load organization monitoring state: ${message}`);
   }
-
-  return (data as SchedulingOrganizationRow | null) ?? null;
 }
 
 export async function loadDomainMonitoringScans(input: {
   domainId: string;
   organizationId: string;
 }): Promise<SchedulingScanRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, status, completed_at, created_at")
-    .eq("organization_id", input.organizationId)
-    .eq("domain_id", input.domainId)
-    .in("scan_type", ["full", "scheduled"])
-    .order("created_at", { ascending: false });
+  try {
+    const result = await query<SchedulingScanRow>(
+      `select id, status, completed_at, created_at
+         from scans
+        where organization_id = $1
+          and domain_id = $2
+          and scan_type = any($3::text[])
+        order by created_at desc`,
+      [input.organizationId, input.domainId, ["full", "scheduled"]],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load monitoring scans: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load monitoring scans: ${message}`);
   }
-
-  return (data ?? []) as SchedulingScanRow[];
 }
