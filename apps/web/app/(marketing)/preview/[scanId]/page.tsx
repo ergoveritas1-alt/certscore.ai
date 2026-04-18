@@ -26,8 +26,14 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   let detailLoadError = false;
   const hasRenderablePreviewResult = Boolean(scan?.previewPayload);
   const hasUnsafeDegradedExecution = Boolean(scan?.executionSummary?.degradedStages?.length);
+  const canRenderDetailedPreviewReport = Boolean(
+    scan?.status === "completed" &&
+      hasRenderablePreviewResult &&
+      !hasUnsafeDegradedExecution &&
+      (scan?.pagesScanned ?? 0) > 0
+  );
 
-  if (scan?.status === "completed" && hasRenderablePreviewResult && !hasUnsafeDegradedExecution) {
+  if (scan && canRenderDetailedPreviewReport) {
     try {
       fullScanRecord = await getAnonymousScanById(scan.scanId);
     } catch (error) {
@@ -85,14 +91,20 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
-          ) : scan.status === "completed" && hasRenderablePreviewResult && hasUnsafeDegradedExecution ? (
+          ) : scan.status === "completed" && hasRenderablePreviewResult && !canRenderDetailedPreviewReport ? (
             <Card className="border-amber-200 bg-amber-50/40">
               <CardHeader>
-                <CardTitle>Preview results were retained, but detailed report assembly was degraded</CardTitle>
+                <CardTitle>
+                  {hasUnsafeDegradedExecution
+                    ? "Preview results were retained, but detailed report assembly was degraded"
+                    : "Preview results were retained from a lightweight verification pass"}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-slate-700">
                 <p>
-                  This preview completed, but one or more persistence steps degraded before the full detailed report could be assembled reliably.
+                  {hasUnsafeDegradedExecution
+                    ? "This preview completed, but one or more persistence steps degraded before the full detailed report could be assembled reliably."
+                    : "This preview completed through a lightweight path that retained a safe preview summary without a fully assembled scan-detail record."}{" "}
                   To avoid showing a misleading executive summary, this page is falling back to the retained preview payload only.
                 </p>
                 {scan.previewPayload ? (
