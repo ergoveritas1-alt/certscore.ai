@@ -10,12 +10,13 @@
 
 ## Production expectation
 
-- Treat a push to `main` as the preferred way to promote web changes, since the Vercel project is configured to auto-deploy production from `main`.
+- Treat a push to `main` as the preferred way to promote web changes, but do not assume that alone makes `consentcheck.site` live because the current hardened production host terminates on the fixed-egress VM.
 - If that Git-to-Vercel linkage is uncertain, call it out before claiming a change is live in production.
 - The canonical Vercel web project is `consentcheck-site`, and its root directory must stay `apps/web`.
 - Do not link repo root or the removed `apps/validation-web` path to the production Vercel project.
 - If the local Vercel link needs to be repaired, relink with `npx vercel link --yes --scope ergoveritas1-5549s-projects --project consentcheck-site --cwd apps/web`.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local links and wrong remotes before treating the path as healthy.
+- The current hardened production path for `consentcheck.site` and `www.consentcheck.site` is the `certscore-web-prod` VM at `34.69.91.225`, fronted by `/etc/caddy/Caddyfile`, because the production database only allows fixed egress.
 
 ## Scope note
 
