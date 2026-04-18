@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient, query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   buildSharedFullScanConfig,
   SCAN_EVENT_TYPES,

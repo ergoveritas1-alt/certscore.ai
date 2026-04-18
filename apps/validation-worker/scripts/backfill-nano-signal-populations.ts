@@ -1,4 +1,4 @@
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query } from "@website-signal-risk-scanner/db";
 import { getHybridNanoSignalPopulations } from "../../web/lib/scans/hybrid-runtime-evidence";
 
 type ScanRuntimeArtifactRow = {
@@ -46,7 +46,6 @@ function deriveSignalCategory(key: string) {
 }
 
 async function main() {
-  const db = createDatabaseClient();
   const scanId = getArgValue("--scan-id");
   const limit = Math.max(1, Number.parseInt(getArgValue("--limit") ?? "500", 10) || 500);
   const dryRun = hasFlag("--dry-run");
@@ -55,29 +54,20 @@ async function main() {
   let runtimeArtifactRows: ScanRuntimeArtifactRow[] = [];
   if (scanIds.length > 0) {
     for (const batch of chunkValues(scanIds, 100)) {
-      const { data, error } = await db
-        .from("scan_runtime_artifacts")
-        .select("*")
-        .in("scan_id", batch);
+      const data = await query<ScanRuntimeArtifactRow>(
+        `select * from scan_runtime_artifacts where scan_id = any($1::uuid[])`,
+        [batch],
+        { readOnly: true }
+      ).then((result) => result.rows);
 
-      if (error) {
-        throw new Error(`Failed to load runtime artifacts: ${error.message}`);
-      }
-
-      runtimeArtifactRows.push(...((data ?? []) as ScanRuntimeArtifactRow[]));
+      runtimeArtifactRows.push(...data);
     }
   } else {
-    const { data, error } = await db
-      .from("scan_runtime_artifacts")
-      .select("*")
-      .limit(limit)
-      .order("updated_at", { ascending: false });
-
-    if (error) {
-      throw new Error(`Failed to load runtime artifacts: ${error.message}`);
-    }
-
-    runtimeArtifactRows = (data ?? []) as ScanRuntimeArtifactRow[];
+    runtimeArtifactRows = await query<ScanRuntimeArtifactRow>(
+      `select * from scan_runtime_artifacts order by updated_at desc limit $1`,
+      [limit],
+      { readOnly: true }
+    ).then((result) => result.rows);
   }
 
   let scansVisited = 0;
@@ -114,13 +104,44 @@ async function main() {
       continue;
     }
 
-    const { error } = await db.from("scan_signals").upsert(payload, {
-      onConflict: "scan_id,signal_key,population_source"
-    });
-
-    if (error) {
-      throw new Error(`Failed to upsert nano signals for scan ${row.scan_id}: ${error.message}`);
-    }
+    await query(
+      `
+        insert into scan_signals (
+          category, confidence, domain_id, evidence_refs, observed_at, organization_id,
+          population_source, population_status, provenance_json, scan_id, signal_key,
+          signal_label, signal_value_json, value_type
+        )
+        select
+          value->>'category',
+          nullif(value->>'confidence', '')::float8,
+          value->>'domain_id',
+          coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
+          value->>'observed_at',
+          value->>'organization_id',
+          value->>'population_source',
+          value->>'population_status',
+          value->'provenance_json',
+          value->>'scan_id',
+          value->>'signal_key',
+          value->>'signal_label',
+          value->'signal_value_json',
+          value->>'value_type'
+        from jsonb_array_elements($1::jsonb) as value
+        on conflict (scan_id, signal_key, population_source) do update
+          set category = excluded.category,
+              confidence = excluded.confidence,
+              domain_id = excluded.domain_id,
+              evidence_refs = excluded.evidence_refs,
+              observed_at = excluded.observed_at,
+              organization_id = excluded.organization_id,
+              population_status = excluded.population_status,
+              provenance_json = excluded.provenance_json,
+              signal_label = excluded.signal_label,
+              signal_value_json = excluded.signal_value_json,
+              value_type = excluded.value_type
+      `,
+      [JSON.stringify(payload)]
+    );
 
     upsertedRows += payload.length;
   }

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { queryOne } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
 import { getLastScannerServiceHeartbeat } from "../apps/web/server/queue/full-scan-queue";
 
@@ -127,16 +127,22 @@ async function main() {
   const findings: string[] = [];
   process.env.DATABASE_URL = databaseUrl;
 
-  const db = createDatabaseClient();
-  const { data: validationSettings, error: validationSettingsError } = await db
-    .from("validation_settings")
-    .select("last_worker_heartbeat_at, last_worker_host, pipeline_enabled")
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY)
-    .maybeSingle<ValidationSettingsRow>();
+  let validationSettings: ValidationSettingsRow | null = null;
+  try {
+    validationSettings = await queryOne<ValidationSettingsRow>(
+      `
+        select last_worker_heartbeat_at, last_worker_host, pipeline_enabled
+        from validation_settings
+        where singleton_key = $1
+      `,
+      [VALIDATION_SETTINGS_KEY],
+      { readOnly: true }
+    );
+  } catch (error) {
+    findings.push(`Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  if (validationSettingsError) {
-    findings.push(`Validation settings query failed: ${validationSettingsError.message}`);
-  } else if (!validationSettings) {
+  if (!validationSettings) {
     findings.push("Validation settings row is missing.");
   } else if (validationSettings.pipeline_enabled) {
     if (!validationSettings.last_worker_heartbeat_at) {
@@ -151,7 +157,7 @@ async function main() {
     }
   }
 
-  const scannerHeartbeat = await getLastScannerServiceHeartbeat(db);
+  const scannerHeartbeat = await getLastScannerServiceHeartbeat();
 
   if (scannerHeartbeat.errorMessage) {
     findings.push(scannerHeartbeat.errorMessage);

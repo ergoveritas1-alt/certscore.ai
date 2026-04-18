@@ -1,4 +1,4 @@
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { queryOne } from "@website-signal-risk-scanner/db";
 import {
   createValidationRun,
   getValidationPipelineState,
@@ -186,25 +186,39 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanContext(scanId: string) {
-  const db = createDatabaseClient();
-  const { data: scan, error: scanError } = await db
-    .from("scans")
-    .select("id, status, created_at, started_at, completed_at, domain_id")
-    .eq("id", scanId)
-    .maybeSingle();
+  const scan = await queryOne<{
+    completed_at: string | null;
+    created_at: string;
+    domain_id: string;
+    id: string;
+    started_at: string | null;
+    status: string;
+  }>(
+    `
+      select id, status, created_at, started_at, completed_at, domain_id
+      from scans
+      where id = $1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
 
-  if (scanError || !scan) {
-    throw new Error(`Failed to load scan ${scanId}: ${scanError?.message ?? "Not found"}`);
+  if (!scan) {
+    throw new Error(`Failed to load scan ${scanId}: Not found`);
   }
 
-  const { data: domain, error: domainError } = await db
-    .from("domains")
-    .select("hostname, normalized_url")
-    .eq("id", scan.domain_id)
-    .maybeSingle();
+  const domain = await queryOne<{ hostname: string; normalized_url: string }>(
+    `
+      select hostname, normalized_url
+      from domains
+      where id = $1
+    `,
+    [scan.domain_id],
+    { readOnly: true }
+  );
 
-  if (domainError || !domain) {
-    throw new Error(`Failed to load domain for scan ${scanId}: ${domainError?.message ?? "Not found"}`);
+  if (!domain) {
+    throw new Error(`Failed to load domain for scan ${scanId}: Not found`);
   }
 
   return {

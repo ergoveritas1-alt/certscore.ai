@@ -1,4 +1,4 @@
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 
 type ScanEventRow = {
@@ -146,62 +146,85 @@ async function main() {
     throw new Error("Provide --scan-id.");
   }
 
-  const db = createDatabaseClient();
-  const [
-    { data: scan, error: scanError },
-    { data: events, error: eventsError },
-    { data: documentSources, error: documentSourcesError },
-    signalResult,
-    findingsResult
-  ] = await Promise.all([
-    db
-      .from("scans")
-      .select("id, status, created_at, started_at, completed_at, error_message")
-      .eq("id", scanId)
-      .maybeSingle(),
-    db
-      .from("scan_events")
-      .select("id, event_type, message, metadata_json, created_at")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_document_sources")
-      .select("id, source, source_status, document_type, extraction_status, semantic_confidence, source_url, canonical_url, created_at, metadata_json")
-      .eq("scan_id", scanId)
-      .order("created_at", { ascending: true }),
-    db
-      .from("scan_signals")
-      .select("signal_key, population_source")
-      .eq("scan_id", scanId)
-      .order("signal_key", { ascending: true }),
-    db
-      .from("validation_run_findings")
-      .select("id")
-      .eq("scan_id", scanId)
+  const documentSourcesResult = await query<Record<string, unknown>>(
+    `
+      select id, source, source_status, document_type, extraction_status, semantic_confidence, source_url, canonical_url, created_at, metadata_json
+      from scan_document_sources
+      where scan_id = $1
+      order by created_at asc
+    `,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: error instanceof Error ? error.message : String(error) } }));
+  const documentSourcesError = documentSourcesResult.error;
+
+  const [scan, events, signalRowsInitial, findingsResult] = await Promise.all([
+    queryOne<Record<string, unknown>>(
+      `select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`,
+      [scanId],
+      { readOnly: true }
+    ),
+    query<ScanEventRow>(
+      `
+        select id, event_type, message, metadata_json, created_at
+        from scan_events
+        where scan_id = $1
+        order by created_at asc
+      `,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<ScanSignalRow>(
+      `
+        select signal_key, population_source
+        from scan_signals
+        where scan_id = $1
+        order by signal_key asc
+      `,
+      [scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as ScanSignalRow[], error: { message: error instanceof Error ? error.message : String(error) } })),
+    query<{ id: string }>(
+      `
+        select id
+        from validation_run_findings
+        where scan_id = $1
+      `,
+      [scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as Array<{ id: string }>, error: { message: error instanceof Error ? error.message : String(error) } }))
   ]);
 
-  if (scanError) {
-    throw new Error(`Failed to load scan ${scanId}: ${scanError.message}`);
-  }
-  if (eventsError) {
-    throw new Error(`Failed to load scan events ${scanId}: ${eventsError.message}`);
+  if (!scan) {
+    throw new Error(`Failed to load scan ${scanId}: Not found`);
   }
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
   }
-  let signals = signalResult.data;
-  let signalsError = signalResult.error;
+  let signals = signalRowsInitial.data;
+  let signalsError = signalRowsInitial.error;
   if (signalsError && isMissingColumnError(signalsError, "population_source")) {
-    const fallback = await db
-      .from("scan_signals")
-      .select("signal_key")
-      .eq("scan_id", scanId)
-      .order("signal_key", { ascending: true });
-    signals = (fallback.data ?? []).map((row) => ({
+    const fallback = await query<{ signal_key: string }>(
+      `
+        select signal_key
+        from scan_signals
+        where scan_id = $1
+        order by signal_key asc
+      `,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows);
+    signals = fallback.map((row) => ({
       ...row,
       population_source: null
     }));
-    signalsError = fallback.error;
+    signalsError = null;
   }
 
   if (signalsError) {
@@ -210,13 +233,15 @@ async function main() {
   let findings = findingsResult.data;
   let findingsError = findingsResult.error;
   if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
-    const { data: runs, error: runsError } = await db
-      .from("validation_runs")
-      .select("id")
-      .eq("scan_id", scanId);
-    if (runsError) {
-      throw new Error(`Failed to load validation runs ${scanId}: ${runsError.message}`);
-    }
+    const runs = await query<{ id: string }>(
+      `
+        select id
+        from validation_runs
+        where scan_id = $1
+      `,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
     const runIds = (runs ?? [])
       .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
@@ -226,12 +251,16 @@ async function main() {
       findings = [];
       findingsError = null;
     } else {
-      const fallback = await db
-        .from("validation_run_findings")
-        .select("id")
-        .in("validation_run_id", runIds);
-      findings = fallback.data;
-      findingsError = fallback.error;
+      findings = await query<{ id: string }>(
+        `
+          select id
+          from validation_run_findings
+          where validation_run_id = any($1::uuid[])
+        `,
+        [runIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+      findingsError = null;
     }
   }
 
@@ -239,12 +268,12 @@ async function main() {
     throw new Error(`Failed to load validation findings ${scanId}: ${findingsError.message}`);
   }
 
-  const eventRows = ((events ?? []) as ScanEventRow[]).map((event) => ({
+  const eventRows = events.map((event) => ({
     createdAt: event.created_at,
     eventType: event.event_type
   }));
-  const signalRows = (signals ?? []) as ScanSignalRow[];
-  const documentRows = (documentSourcesError ? [] : documentSources ?? []) as Array<Record<string, unknown>>;
+  const signalRows = signals as ScanSignalRow[];
+  const documentRows = (documentSourcesError ? [] : documentSourcesResult.data) as Array<Record<string, unknown>>;
   const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
   const readyDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(documentRows, "rejected");
@@ -287,7 +316,7 @@ async function main() {
     workflow,
     counts: {
       documentSourcesAvailable: !documentSourcesError,
-      signalSourceColumnAvailable: !(signalResult.error && isMissingColumnError(signalResult.error, "population_source")),
+      signalSourceColumnAvailable: !(signalsError && isMissingColumnError(signalsError, "population_source")),
       documentSources: readyDocumentSourceCount,
       rejectedDocumentSources: rejectedDocumentSourceCount,
       totalDocumentSourceRows: documentRows.length,

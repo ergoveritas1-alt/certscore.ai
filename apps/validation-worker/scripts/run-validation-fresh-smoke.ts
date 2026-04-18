@@ -1,4 +1,4 @@
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   createScanForValidationRun,
@@ -229,18 +229,16 @@ function latestEventMs(
 }
 
 async function loadScanEvents(scanId: string) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scan_events")
-    .select("event_type, created_at")
-    .eq("scan_id", scanId)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    throw new Error(`Failed to load scan events for ${scanId}: ${error.message}`);
-  }
-
-  return (data ?? []) as Array<{ created_at: string; event_type: string }>;
+  return await query<{ created_at: string; event_type: string }>(
+    `
+      select event_type, created_at
+      from scan_events
+      where scan_id = $1
+      order by created_at asc
+    `,
+    [scanId],
+    { readOnly: true }
+  ).then((result) => result.rows);
 }
 
 function formatDurationMs(value: number | null) {
@@ -265,15 +263,25 @@ function parseIsoMs(value: string | null | undefined) {
 }
 
 async function loadScanState(scanId: string) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, status, created_at, started_at, completed_at, error_message")
-    .eq("id", scanId)
-    .maybeSingle();
+  const data = await queryOne<{
+    completed_at: string | null;
+    created_at: string;
+    error_message: string | null;
+    id: string;
+    started_at: string | null;
+    status: string;
+  }>(
+    `
+      select id, status, created_at, started_at, completed_at, error_message
+      from scans
+      where id = $1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to load fresh smoke scan ${scanId}: ${error?.message ?? "Not found"}`);
+  if (!data) {
+    throw new Error(`Failed to load fresh smoke scan ${scanId}: Not found`);
   }
 
   return {

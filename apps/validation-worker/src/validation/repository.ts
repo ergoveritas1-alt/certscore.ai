@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabaseClient, query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
   VALIDATION_INTERVAL_OPTIONS,
