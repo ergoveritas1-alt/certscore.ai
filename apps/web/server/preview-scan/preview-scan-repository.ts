@@ -2,6 +2,7 @@ import {
   buildAgencyMappings,
   getScannerExecutionSummary,
   PREVIEW_SCAN_EVENT_TYPES,
+  SCAN_EVENT_TYPES,
   type AgencyMapping,
   type PreviewEarlyResultItem,
   type PreviewBuildPhaseSummary,
@@ -16,6 +17,7 @@ import {
 import { createHash } from "node:crypto";
 import { buildEventActivityFeed } from "../../lib/scans/activity-feed";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   createPreviewScanRecord,
   findOrCreateAnonymousPreviewDomain,
@@ -60,6 +62,12 @@ type ScanConfig = {
   previewPayload?: PreviewScanPayload;
   processor?: string;
 };
+
+const PREVIEW_STALE_RUNNING_MS = 60_000;
+
+function isPresentationOnlyEvent(eventType: string) {
+  return eventType.startsWith("presentation.");
+}
 
 function getRecordValue(record: unknown, key: string) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
@@ -197,6 +205,94 @@ function getStatusMessage(status: ScanStatus) {
   return "The preview scan could not be completed.";
 }
 
+function getLatestEventCreatedAt(events: ScanEventRow[], eventTypes: string[]) {
+  const matches = events
+    .filter((event) => eventTypes.includes(event.event_type))
+    .map((event) => event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? ""))
+    .filter((value) => value.length > 0)
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches.at(-1) ?? null;
+}
+
+function getEarliestEventCreatedAt(events: ScanEventRow[], eventTypes: string[]) {
+  const matches = events
+    .filter((event) => eventTypes.includes(event.event_type))
+    .map((event) => event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? ""))
+    .filter((value) => value.length > 0)
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches[0] ?? null;
+}
+
+function getComparableTimestampMs(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const now = Date.now();
+  const futureDeltaMs = parsed - now;
+  if (futureDeltaMs <= 60 * 60 * 1000) {
+    return parsed;
+  }
+
+  const hourMs = 60 * 60 * 1000;
+  const roundedHourDelta = Math.round(futureDeltaMs / hourMs);
+  return parsed - roundedHourDelta * hourMs;
+}
+
+function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
+  const lifecycleEvents = events.filter((event) => !isPresentationOnlyEvent(event.event_type));
+
+  if (lifecycleEvents.length === 0) {
+    return {
+      completedAt: scan.completed_at,
+      startedAt: scan.started_at,
+      status: scan.status
+    };
+  }
+
+  const completedAt =
+    scan.completed_at ??
+    getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.completed]);
+  const failedAt =
+    scan.status === "failed"
+      ? scan.updated_at
+      : getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.failed]);
+  const latestEventAt = getLatestEventCreatedAt(
+    lifecycleEvents,
+    [...new Set(lifecycleEvents.map((event) => event.event_type))]
+  );
+  const startedAt =
+    scan.started_at ??
+    getEarliestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.started]);
+  const staleRunning =
+    !completedAt &&
+    !failedAt &&
+    Boolean(startedAt) &&
+    (() => {
+      const comparableLatestEventAtMs = getComparableTimestampMs(latestEventAt);
+      return comparableLatestEventAtMs !== null && Date.now() - comparableLatestEventAtMs > PREVIEW_STALE_RUNNING_MS;
+    })();
+
+  const status =
+    failedAt || staleRunning ? "failed" :
+    completedAt ? "completed" :
+    startedAt ? "running" :
+    scan.status;
+
+  return {
+    completedAt,
+    startedAt,
+    status
+  };
+}
+
 function formatCount(value: unknown, singular: string, plural = `${singular}s`) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -205,9 +301,35 @@ function formatCount(value: unknown, singular: string, plural = `${singular}s`) 
   return `${value} ${value === 1 ? singular : plural}`;
 }
 
-function buildActivityTailParts(scan: ScanRow, latestEvent: ScanEventRow | null) {
+function getPersistenceFinalizationStage(executionSummary: ReturnType<typeof getScannerExecutionSummary>) {
+  return executionSummary?.stages.find((stage) => stage.stage === "persistence_diff_finalization") ?? null;
+}
+
+export function hasPersistedSignalsMismatch(input: {
+  executionSummary: ReturnType<typeof getScannerExecutionSummary>;
+  latestEvent: ScanEventRow | null;
+}) {
+  const persistenceStage = getPersistenceFinalizationStage(input.executionSummary);
+  const persistenceMessage = persistenceStage?.message ?? "";
+
+  return (
+    input.latestEvent?.event_type === SCAN_EVENT_TYPES.signalsPersisted &&
+    persistenceStage?.outcome === "degraded" &&
+    /persist scan signals/i.test(persistenceMessage)
+  );
+}
+
+function buildActivityTailParts(
+  scan: ScanRow,
+  latestEvent: ScanEventRow | null,
+  executionSummary: ReturnType<typeof getScannerExecutionSummary> = null
+) {
   const metadata = latestEvent?.metadata_json ?? null;
   const fragments: string[] = [];
+  const hasPersistedSignalsDegradation = hasPersistedSignalsMismatch({
+    executionSummary,
+    latestEvent
+  });
 
   if (scan.status === "queued") {
     fragments.push("mode=lightweight-preview");
@@ -243,9 +365,13 @@ function buildActivityTailParts(scan: ScanRow, latestEvent: ScanEventRow | null)
   }
 
   if (latestEvent?.event_type === "signals.persisted") {
-    const totalSignals = formatCount(metadata?.totalSignals, "signal");
-    if (totalSignals) {
-      fragments.push(`saved=${totalSignals}`);
+    if (hasPersistedSignalsDegradation) {
+      fragments.push("signals=not-saved");
+    } else {
+      const totalSignals = formatCount(metadata?.totalSignals, "signal");
+      if (totalSignals) {
+        fragments.push(`saved=${totalSignals}`);
+      }
     }
     const pagesPersisted = formatCount(metadata?.pagesPersisted, "page");
     if (pagesPersisted) {
@@ -287,6 +413,27 @@ function buildActivityTailParts(scan: ScanRow, latestEvent: ScanEventRow | null)
 }
 
 function buildActivityLine(scan: ScanRow, latestEvent: ScanEventRow | null) {
+  return buildActivityLineWithExecutionSummary(scan, latestEvent, null);
+}
+
+export function buildActivityLineWithExecutionSummary(
+  scan: ScanRow,
+  latestEvent: ScanEventRow | null,
+  executionSummary: ReturnType<typeof getScannerExecutionSummary>
+) {
+  if (scan.status === "failed") {
+    return scan.error_message ? `Preview failed: ${scan.error_message}` : "The preview scan did not complete.";
+  }
+
+  if (
+    hasPersistedSignalsMismatch({
+      executionSummary,
+      latestEvent
+    })
+  ) {
+    return "Stage 7 completed with degraded signal persistence; snapshot, page metadata, and vendor rows were saved, but canonical scan signals were not fully persisted.";
+  }
+
   if (latestEvent?.message) {
     return latestEvent.message;
   }
@@ -302,12 +449,15 @@ function buildActivityLine(scan: ScanRow, latestEvent: ScanEventRow | null) {
   if (scan.status === "completed") {
     return "Preview results were assembled from the latest saved snapshot.";
   }
-
-  return scan.error_message ? `Preview failed: ${scan.error_message}` : null;
+  return null;
 }
 
-function buildActivityDetails(scan: ScanRow, latestEvent: ScanEventRow | null) {
-  const details = buildActivityTailParts(scan, latestEvent);
+function buildActivityDetails(
+  scan: ScanRow,
+  latestEvent: ScanEventRow | null,
+  executionSummary: ReturnType<typeof getScannerExecutionSummary> = null
+) {
+  const details = buildActivityTailParts(scan, latestEvent, executionSummary);
   const lines: string[] = [];
 
   if (latestEvent) {
@@ -356,10 +506,13 @@ function buildActivityRef(scanId: string, latestEvent: ScanEventRow | null) {
     return null;
   }
 
+  const createdAt =
+    latestEvent.created_at instanceof Date ? latestEvent.created_at.toISOString() : String(latestEvent.created_at ?? "");
+
   const digest = createHash("sha256")
     .update(scanId)
     .update(latestEvent.event_type)
-    .update(latestEvent.created_at)
+    .update(createdAt)
     .update(latestEvent.message)
     .digest("hex");
 
@@ -507,6 +660,18 @@ export function serializePreviewScan(input: {
   const payload = getPreviewPayload(input.scan);
   const events = input.events ?? input.recentEvents ?? [];
   const executionSummary = getScannerExecutionSummary(input.scan.scan_config_json);
+  const displayState = derivePreviewDisplayState(input.scan, events);
+  const displayScan = {
+    ...input.scan,
+    completed_at: displayState.completedAt,
+    started_at: displayState.startedAt,
+    status: displayState.status
+  };
+  const displayCreatedAt = deriveDisplayCreatedAt({
+    completedAt: displayState.completedAt,
+    createdAt: input.scan.created_at,
+    startedAt: displayState.startedAt
+  });
 
   return {
     scanId: input.scan.id,
@@ -514,19 +679,19 @@ export function serializePreviewScan(input: {
     hostname: input.domain?.hostname ?? ((input.scan.scan_config_json as ScanConfig).hostname ?? "Unknown"),
     normalizedUrl:
       input.domain?.normalized_url ?? ((input.scan.scan_config_json as ScanConfig).normalizedUrl ?? ""),
-    status: input.scan.status,
+    status: displayState.status,
     scanType: input.scan.scan_type,
-    createdAt: input.scan.created_at,
+    createdAt: displayCreatedAt,
     updatedAt: input.scan.updated_at,
-    startedAt: input.scan.started_at,
-    completedAt: input.scan.completed_at,
+    startedAt: displayState.startedAt,
+    completedAt: displayState.completedAt,
     pagesRequested: input.scan.pages_requested,
     pagesScanned: input.scan.pages_scanned,
     errorMessage: input.scan.error_message,
-    statusMessage: getStatusMessage(input.scan.status),
-    activityLine: buildActivityLine(input.scan, input.latestEvent ?? null),
-    activityDetails: buildActivityDetails(input.scan, input.latestEvent ?? null),
-    activityFeed: buildActivityFeed(input.scan, input.recentEvents ?? []),
+    statusMessage: getStatusMessage(displayState.status),
+    activityLine: buildActivityLineWithExecutionSummary(displayScan, input.latestEvent ?? null, executionSummary),
+    activityDetails: buildActivityDetails(displayScan, input.latestEvent ?? null, executionSummary),
+    activityFeed: buildActivityFeed(displayScan, input.recentEvents ?? []),
     activityRef: buildActivityRef(input.scan.id, input.latestEvent ?? null),
     events: serializePreviewEvents(events),
     executionSummary,
