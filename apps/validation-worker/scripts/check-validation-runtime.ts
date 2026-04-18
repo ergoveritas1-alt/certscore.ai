@@ -1,4 +1,4 @@
-import { hasDatabaseEnv, query } from "@website-signal-risk-scanner/db";
+import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3Env, query } from "@website-signal-risk-scanner/db";
 import Redis from "ioredis";
 import { chromium } from "playwright";
 import { z } from "zod";
@@ -7,6 +7,12 @@ const runtimeSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   REDIS_URL: z.string().url().optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
   VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional()
 });
@@ -50,6 +56,25 @@ async function checkDatabase() {
   }
 }
 
+async function checkStorage() {
+  try {
+    const bucketExists = await checkStorageBucketExists();
+    if (!bucketExists) {
+      fail(
+        "validation storage",
+        `Could not access configured S3 bucket ${getStorageBucketName()}. Check bucket existence, credentials, and endpoint configuration.`
+      );
+      return false;
+    }
+
+    pass("validation storage", `Connected to S3-compatible storage bucket ${getStorageBucketName()}.`);
+    return true;
+  } catch (error) {
+    fail("validation storage", error instanceof Error ? error.message : "Unknown error");
+    return false;
+  }
+}
+
 async function checkChromium() {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
 
@@ -72,6 +97,12 @@ async function checkChromium() {
 async function main() {
   if (!hasDatabaseEnv()) {
     fail("DATABASE_URL", "Set DATABASE_URL in apps/web/.env.local for local validation worker runs.");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!hasS3Env()) {
+    fail("validation storage", "Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY in apps/web/.env.local.");
     process.exitCode = 1;
     return;
   }
@@ -102,6 +133,7 @@ async function main() {
   const checks = await Promise.all([
     checkRedis(validationRedisUrl),
     checkDatabase(),
+    checkStorage(),
     checkChromium()
   ]);
 
