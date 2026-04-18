@@ -25,8 +25,9 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   let fullScanRecord = null;
   let detailLoadError = false;
   const hasRenderablePreviewResult = Boolean(scan?.previewPayload);
+  const hasUnsafeDegradedExecution = Boolean(scan?.executionSummary?.degradedStages?.length);
 
-  if (scan?.status === "completed" && hasRenderablePreviewResult) {
+  if (scan?.status === "completed" && hasRenderablePreviewResult && !hasUnsafeDegradedExecution) {
     try {
       fullScanRecord = await getAnonymousScanById(scan.scanId);
     } catch (error) {
@@ -84,6 +85,47 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
+          ) : scan.status === "completed" && hasRenderablePreviewResult && hasUnsafeDegradedExecution ? (
+            <Card className="border-amber-200 bg-amber-50/40">
+              <CardHeader>
+                <CardTitle>Preview results were retained, but detailed report assembly was degraded</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-slate-700">
+                <p>
+                  This preview completed, but one or more persistence steps degraded before the full detailed report could be assembled reliably.
+                  To avoid showing a misleading executive summary, this page is falling back to the retained preview payload only.
+                </p>
+                {scan.previewPayload ? (
+                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Retained preview summary</p>
+                      <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                        <span>Overall score: {scan.previewPayload.scores?.overall ?? "unavailable"}</span>
+                        <span>Privacy: {scan.previewPayload.scores?.privacy ?? "unavailable"}</span>
+                        <span>Accessibility: {scan.previewPayload.scores?.accessibility ?? "unavailable"}</span>
+                      </div>
+                    </div>
+                    <ul className="space-y-2 text-sm text-slate-700">
+                      {(scan.previewPayload.summaryBullets ?? []).map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Headline findings</p>
+                      {(scan.previewPayload.sampleFindings ?? []).map((finding) => (
+                        <div key={`${finding.category}-${finding.title}`} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-sm font-semibold text-slate-900">{finding.title}</p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
+                            {finding.severity} · {finding.category} · {finding.affectedPage}
+                          </p>
+                          <p className="mt-2 text-sm text-slate-700">{finding.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
           ) : scan.status === "completed" && !hasRenderablePreviewResult ? (
             <Card className="border-amber-200 bg-amber-50/40">
               <CardHeader>
