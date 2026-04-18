@@ -14,18 +14,21 @@ Use `WS01` for scanner-runtime-specific deploy and operational validation.
 Run these first:
 
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
+- `pnpm --filter @website-signal-risk-scanner/web check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/validation-worker check-env`
 - `pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime`
 
 Expected result:
 
 - web env check passes
+- web runtime check passes
 - validation env check passes in `WC01`
 - Redis connectivity passes
 - PostgreSQL access passes
 - S3-compatible storage access passes
 - Playwright Chromium launch passes
 - required tables and columns are present in PostgreSQL
+- Better Auth tables are present in PostgreSQL
 
 If a check fails:
 
@@ -33,6 +36,7 @@ If a check fails:
 - Redis failure: verify `REDIS_URL` and network access
 - database failure: verify `DATABASE_URL` and apply migrations
 - storage failure: create the bucket referenced by `S3_BUCKET`
+- auth-table failure: apply the latest migrations and confirm the Better Auth tables exist in the active PostgreSQL database
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium` for `WC01` validation, or the equivalent `WS01` install flow for the standalone scanner
 
 ## 2. Auth validation

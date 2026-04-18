@@ -45,12 +45,38 @@ Set the production environment variables in Vercel:
 
 - `NEXT_PUBLIC_APP_URL`
 - `DATABASE_URL`
+- `DATABASE_READ_URL` when you use a dedicated read replica
+- `DATABASE_SSL_MODE` when your Postgres provider requires non-default SSL behavior
 - `BETTER_AUTH_SECRET`
-- Google provider env vars when OAuth is enabled
+- `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED`
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` when OAuth is enabled
 - `REDIS_URL`
-- S3 storage env vars
+- `VALIDATION_REDIS_URL` when validation uses a dedicated Redis
+- `S3_BUCKET`
+- `S3_REGION`
+- `S3_ENDPOINT` when using a non-AWS S3-compatible provider
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+- `S3_FORCE_PATH_STYLE` when required by the storage provider
 
 Optional variables depend on the features you intend to enable.
+
+## 2a. Production cutover checklist
+
+Before declaring production healthy, confirm this exact rollout contract:
+
+1. Vercel production env matches the portable contract above and no legacy `SUPABASE_*` variables remain in active use.
+2. The production database already has the merged `packages/db/migrations` applied.
+3. The Better Auth tables exist in production PostgreSQL:
+   - `better_auth_users`
+   - `better_auth_sessions`
+   - `better_auth_accounts`
+   - `better_auth_verifications`
+4. The configured S3 bucket already exists and the supplied credentials can read and write it.
+5. Google OAuth provider settings, if enabled, point to `/auth/callback` on the production domain.
+6. Users are told they must sign in again after cutover because Supabase sessions are not preserved.
+
+If any of those are untrue, fix them before treating the deployment as complete.
 
 ## 3. Deploy scanner runtime separately
 
