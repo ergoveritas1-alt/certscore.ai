@@ -5,6 +5,8 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { isGoogleAuthEnabled } from "../../../lib/env";
 import { getCurrentUser } from "../../../server/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   const user = await getCurrentUser();
 
