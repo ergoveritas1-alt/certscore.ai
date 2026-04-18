@@ -56,6 +56,22 @@ export type PreviewFallbackEvidence = {
   sourceLabel: string;
   reportUrl?: string | null;
   resultApiUrl?: string | null;
+  metrics?: {
+    requestCount?: number;
+    thirdPartyRequestCount?: number;
+    initialCookieCount?: number;
+    domainCount?: number;
+    ipCount?: number;
+    countryCount?: number;
+    verifiedSurfaceCount?: number;
+  };
+  entities?: {
+    technologyNames?: string[];
+    serverNames?: string[];
+    topDomains?: string[];
+    countries?: string[];
+    verifiedSurfaceTargets?: string[];
+  };
   requestFootprint?: PreviewFallbackEvidenceSection;
   vendorFootprint?: PreviewFallbackEvidenceSection;
   disclosureFootprint?: PreviewFallbackEvidenceSection;

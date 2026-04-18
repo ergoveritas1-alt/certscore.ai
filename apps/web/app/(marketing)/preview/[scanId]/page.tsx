@@ -60,10 +60,10 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   const lightweightPreviewNotice =
     scan?.previewPayload && ((scan?.pagesScanned ?? 0) === 0 || Boolean(scan.previewPayload.fallbackEvidence))
       ? (
-          <Card className="border-sky-200 bg-sky-50/70">
-            <CardHeader className="space-y-2">
+          <Card className="border-slate-200 bg-slate-50/70">
+            <CardHeader className="space-y-2 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="warning">Lightweight results</Badge>
+                <Badge tone="warning">Indirect source</Badge>
                 {scan.previewPayload.fallbackEvidence?.reportUrl ? (
                   <a
                     className="text-xs font-medium text-sky-700 underline underline-offset-2"
@@ -75,11 +75,11 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                   </a>
                 ) : null}
               </div>
-              <CardTitle className="text-lg">This preview used a lightweight verification path</CardTitle>
+              <CardTitle className="text-base">Lightweight results were enriched with retained urlscan.io evidence</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-700">
+            <CardContent className="space-y-3 text-sm text-slate-700">
               <p>
-                The main report below is the normal results page. This small card calls out that the run short-circuited into a lean path and retained supplemental evidence from urlscan.io where it added relevant request, vendor, or disclosure coverage.
+                The main report below is the standard scan page. This microcard only indicates that some request, vendor, or disclosure context came from an indirect public source because the preview used a lightweight path.
               </p>
               {scan.previewPayload.fallbackEvidence ? (
                 <div className="grid gap-3 lg:grid-cols-3">
@@ -139,6 +139,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                 </div>
               }
               previewNotice={lightweightPreviewNotice}
+              previewPayload={scan.previewPayload}
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />

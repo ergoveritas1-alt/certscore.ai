@@ -314,6 +314,10 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);
   assert.equal(payload.fallbackEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
   assert.equal(payload.fallbackEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
+  assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 6);
+  assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 1);
+  assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
+  assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
 });
 
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {

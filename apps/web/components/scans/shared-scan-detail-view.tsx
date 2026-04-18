@@ -7,6 +7,7 @@ import {
   getReportSignalsForEvidenceCategory,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForValidationRule,
+  type PreviewScanPayload,
   type PreviewSampleFinding,
   type ReportSignalDefinition,
   type SignalEnrichmentWorkflowStageStatus
@@ -5639,6 +5640,7 @@ type SharedScanDetailViewProps = {
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
   previewNotice?: ReactNode;
+  previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
 };
@@ -5649,6 +5651,7 @@ export function SharedScanDetailView({
   executiveAccessLimitationOverride = null,
   headerActions = null,
   previewNotice = null,
+  previewPayload = null,
   previewMode = "full",
   scanRecord
 }: SharedScanDetailViewProps) {
@@ -5673,6 +5676,64 @@ export function SharedScanDetailView({
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
   const fallbackInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
+  const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
+  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
+  const fallbackServerNames = uniqueStrings(fallbackEvidence?.entities?.serverNames ?? []);
+  const fallbackTopDomains = uniqueStrings(fallbackEvidence?.entities?.topDomains ?? []);
+  const fallbackVerifiedSurfaceTargets = uniqueStrings(fallbackEvidence?.entities?.verifiedSurfaceTargets ?? []);
+  const fallbackThirdPartyRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.thirdPartyRequestCount) ?? 0;
+  const executiveResolvedVendorNames = uniqueStrings([
+    ...certScoreSummary.resolvedVendorNames,
+    ...fallbackTechnologyNames
+  ]);
+  const executiveThirdPartyDomains = uniqueStrings([
+    ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains"),
+    ...fallbackTopDomains
+  ]);
+  const executiveThirdPartyRequestCount = Math.max(certScoreSummary.thirdPartyRequestCount, fallbackThirdPartyRequestCount);
+  const executiveTopObservedEntities =
+    certScoreSummary.topObservedEntities.length > 0
+      ? certScoreSummary.topObservedEntities
+      : [
+          ...fallbackTechnologyNames.map((label) => ({
+            label,
+            category: "unknown",
+            requestCount: executiveThirdPartyRequestCount
+          })),
+          ...fallbackTopDomains
+            .filter((label) => !fallbackTechnologyNames.includes(label))
+            .slice(0, Math.max(0, 6 - fallbackTechnologyNames.length))
+            .map((label) => ({
+              label,
+              category: "unknown",
+              requestCount: executiveThirdPartyRequestCount
+            }))
+        ];
+  const executiveVendorCategoryCounts =
+    Object.keys(certScoreSummary.vendorCategoryCounts).length > 0
+      ? certScoreSummary.vendorCategoryCounts
+      : fallbackTechnologyNames.length > 0
+        ? { unknown: fallbackTechnologyNames.length }
+        : fallbackServerNames.length > 0
+          ? { unknown: fallbackServerNames.length }
+          : certScoreSummary.vendorCategoryCounts;
+  const executiveTrackerSummary =
+    certScoreSummary.trackerSummary === "No meaningful third-party footprint observed"
+      ? fallbackEvidence?.vendorFootprint?.summary ??
+        fallbackEvidence?.requestFootprint?.summary ??
+        (executiveThirdPartyRequestCount > 0
+          ? `${executiveThirdPartyRequestCount} third-party request${executiveThirdPartyRequestCount === 1 ? "" : "s"} retained from an indirect scan source.`
+          : certScoreSummary.trackerSummary)
+      : certScoreSummary.trackerSummary;
+  const executiveUnresolvedVendorHosts = uniqueStrings([
+    ...certScoreSummary.unresolvedVendorHosts,
+    ...fallbackTopDomains
+  ]);
+  const executiveFingerprintReasons = uniqueStrings([
+    ...getRecordStringArray(hybridFingerprintSummary, "reasons"),
+    ...(fallbackServerNames.length > 0 ? [`Indirect source retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
+    ...(fallbackVerifiedSurfaceTargets.length > 0 ? [`Indirect source retained disclosure surfaces: ${fallbackVerifiedSurfaceTargets.join(", ")}`] : [])
+  ]);
   const executiveDisplayedScore = deriveExecutiveDisplayedScore({
     findings: certScoreSummary.findings,
     previewMode,
@@ -5901,7 +5962,7 @@ export function SharedScanDetailView({
         beforeConsentCookieCount={cookiesBeforeConsentCount}
         domainBenchmark={scanRecord.domainBenchmark}
         finalHost={certScoreSummary.finalHost}
-        fingerprintReasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
+        fingerprintReasons={executiveFingerprintReasons}
         fingerprintLabel={certScoreSummary.fingerprintLabel}
         fingerprintNarrative={certScoreSummary.fingerprintNarrative}
         landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
@@ -5909,16 +5970,16 @@ export function SharedScanDetailView({
         posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
         preConsentVendorNames={certScoreSummary.preConsentVendorNames}
         requestedHost={certScoreSummary.requestedHost}
-        resolvedVendorNames={certScoreSummary.resolvedVendorNames}
+        resolvedVendorNames={executiveResolvedVendorNames}
         score={executiveDisplayedScore}
         sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
-        thirdPartyRequestCount={certScoreSummary.thirdPartyRequestCount}
-        thirdPartyDomains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
+        thirdPartyRequestCount={executiveThirdPartyRequestCount}
+        thirdPartyDomains={executiveThirdPartyDomains}
         topFindings={topExecutiveFindings}
-        topObservedEntities={certScoreSummary.topObservedEntities}
-        trackerSummary={certScoreSummary.trackerSummary}
-        unresolvedVendorHosts={certScoreSummary.unresolvedVendorHosts}
-        vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
+        topObservedEntities={executiveTopObservedEntities}
+        trackerSummary={executiveTrackerSummary}
+        unresolvedVendorHosts={executiveUnresolvedVendorHosts}
+        vendorCategoryCounts={executiveVendorCategoryCounts}
       />
       {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">

@@ -390,6 +390,22 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
     sourceLabel: "urlscan.io fallback evidence",
     reportUrl: snapshot.reportUrl,
     resultApiUrl: snapshot.resultApiUrl,
+    metrics: {
+      requestCount: snapshot.requestCount ?? undefined,
+      thirdPartyRequestCount: snapshot.thirdPartyRequestCount ?? undefined,
+      initialCookieCount: snapshot.initialCookieCount ?? undefined,
+      domainCount: snapshot.domainCount ?? undefined,
+      ipCount: snapshot.ipCount ?? undefined,
+      countryCount: snapshot.countryCount ?? undefined,
+      verifiedSurfaceCount: snapshot.verifiedSurfaceCount ?? undefined
+    },
+    entities: {
+      technologyNames: snapshot.technologyNames,
+      serverNames: snapshot.serverNames,
+      topDomains: snapshot.topDomains,
+      countries: snapshot.countries,
+      verifiedSurfaceTargets: snapshot.verifiedSurfaceTargets
+    },
     requestFootprint:
       hasRequestEvidence && requestSummaryParts.length > 0
         ? {
