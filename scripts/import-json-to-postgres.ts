@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Client, type ClientConfig } from "pg";
 
-const DEFAULT_INPUT_DIR = path.resolve(process.cwd(), "tmp/supabase-export");
+const DEFAULT_INPUT_DIR = path.resolve(process.cwd(), "tmp/postgres-import");
 const DEFAULT_CHUNK_ROWS = 1000;
 
 type ManifestFile = {
