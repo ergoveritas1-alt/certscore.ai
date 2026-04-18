@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query } from "@website-signal-risk-scanner/db";
 import { LEGACY_CHANGE_EVENT_TYPES, isMissingComplianceChangeEventsTable } from "./legacy-change-events";
 
 export type OrganizationChangeEventRow = {
@@ -38,49 +38,56 @@ export async function loadOrganizationComplianceChangeEvents(input: {
   events: OrganizationChangeEventRow[];
   missingTable: boolean;
 }> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("compliance_change_events")
-    .select("event_id, scan_id_current, domain_id, event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp")
-    .eq("organization_id", input.organizationId)
-    .order("event_timestamp", { ascending: false })
-    .limit(input.limit);
+  try {
+    const result = await query<OrganizationChangeEventRow>(
+      `select event_id, scan_id_current, domain_id, event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
+         from compliance_change_events
+        where organization_id = $1
+        order by event_timestamp desc
+        limit $2`,
+      [input.organizationId, input.limit],
+      { readOnly: true }
+    );
 
-  if (error) {
-    if (isMissingComplianceChangeEventsTable(error)) {
+    return {
+      events: result.rows,
+      missingTable: false
+    };
+  } catch (error) {
+    const queryError = error instanceof Error ? { message: error.message } : { message: "Unknown database error." };
+
+    if (isMissingComplianceChangeEventsTable(queryError)) {
       return {
         events: [],
         missingTable: true
       };
     }
 
-    throw new Error(`Failed to load organization changes: ${error.message}`);
+    throw new Error(`Failed to load organization changes: ${queryError.message}`);
   }
-
-  return {
-    events: (data ?? []) as OrganizationChangeEventRow[],
-    missingTable: false
-  };
 }
 
 export async function loadLegacyOrganizationChangeEvents(input: {
   limit: number;
   organizationId: string;
 }): Promise<LegacyOrganizationChangeEventRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scan_events")
-    .select("id, scan_id, domain_id, event_type, message, metadata_json, created_at")
-    .eq("organization_id", input.organizationId)
-    .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES])
-    .order("created_at", { ascending: false })
-    .limit(input.limit);
+  try {
+    const result = await query<LegacyOrganizationChangeEventRow>(
+      `select id, scan_id, domain_id, event_type, message, metadata_json, created_at
+         from scan_events
+        where organization_id = $1
+          and event_type = any($2::text[])
+        order by created_at desc
+        limit $3`,
+      [input.organizationId, [...LEGACY_CHANGE_EVENT_TYPES], input.limit],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load organization changes: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load organization changes: ${message}`);
   }
-
-  return (data ?? []) as LegacyOrganizationChangeEventRow[];
 }
 
 export async function loadOrganizationChangeDomains(input: {
@@ -91,16 +98,19 @@ export async function loadOrganizationChangeDomains(input: {
     return [];
   }
 
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("domains")
-    .select("id, hostname")
-    .eq("organization_id", input.organizationId)
-    .in("id", input.domainIds);
+  try {
+    const result = await query<OrganizationChangeDomainRow>(
+      `select id, hostname
+         from domains
+        where organization_id = $1
+          and id = any($2::uuid[])`,
+      [input.organizationId, input.domainIds],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load change event domains: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load change event domains: ${message}`);
   }
-
-  return (data ?? []) as OrganizationChangeDomainRow[];
 }
