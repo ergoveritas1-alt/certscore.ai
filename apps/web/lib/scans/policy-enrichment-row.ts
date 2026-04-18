@@ -6,6 +6,12 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
 export function getPolicyEvidenceSnippets(row: PolicyEnrichmentRow) {
   return row.policyEvidenceSnippets && typeof row.policyEvidenceSnippets === "object"
     ? (row.policyEvidenceSnippets as Record<string, unknown>)
@@ -15,13 +21,13 @@ export function getPolicyEvidenceSnippets(row: PolicyEnrichmentRow) {
 }
 
 export function getPolicyRightsSignals(row: PolicyEnrichmentRow, snippets?: Record<string, unknown> | null) {
-  return Array.isArray(row.policyRightsSignals)
-    ? row.policyRightsSignals
-    : Array.isArray(row.policy_rights_signals)
-      ? row.policy_rights_signals
-      : Array.isArray(snippets?.policy_rights_signals)
-        ? snippets.policy_rights_signals
-        : [];
+  return normalizeStringArray(
+    Array.isArray(row.policyRightsSignals)
+      ? row.policyRightsSignals
+      : Array.isArray(row.policy_rights_signals)
+        ? row.policy_rights_signals
+        : snippets?.policy_rights_signals
+  );
 }
 
 export function getPolicyMentions(row: PolicyEnrichmentRow) {
@@ -73,11 +79,11 @@ export function getPolicyChildrenReference(row: PolicyEnrichmentRow) {
 }
 
 export function getPolicyActionableFlags(row: PolicyEnrichmentRow) {
-  return Array.isArray(row.policyActionableFlags)
-    ? row.policyActionableFlags
-    : Array.isArray(row.policy_actionable_flags)
-      ? row.policy_actionable_flags
-      : [];
+  return normalizeStringArray(
+    Array.isArray(row.policyActionableFlags)
+      ? row.policyActionableFlags
+      : row.policy_actionable_flags
+  );
 }
 
 export function getPolicySemanticConfidence(row: PolicyEnrichmentRow) {

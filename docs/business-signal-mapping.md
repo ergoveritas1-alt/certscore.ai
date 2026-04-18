@@ -11,9 +11,9 @@ This document maps business-facing signal categories to the actual snapshot fiel
 ## Source of Truth
 
 - Snapshot schema: [packages/shared/src/types/snapshots.ts](/Users/benmasek/WC01/packages/shared/src/types/snapshots.ts)
-- Snapshot assembly and scoring: [build-snapshot-bundle.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/snapshot/build-snapshot-bundle.ts)
-- Full scan orchestration and persistence: [run-full-scan.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/run-full-scan.ts)
-- Compatibility signal persistence: [derive-scan-signals.ts](/Users/benmasek/WC01/packages/scan-core/src/scan/signals/derive-scan-signals.ts)
+- Snapshot assembly and scoring now live in `WS01`: [build-snapshot-bundle.ts](/Users/benmasek/WS01/packages/scan-core/src/scan/snapshot/build-snapshot-bundle.ts)
+- Full scan orchestration and persistence now live in `WS01`: [run-full-scan.ts](/Users/benmasek/WS01/packages/scan-core/src/scan/run-full-scan.ts)
+- Compatibility signal persistence now lives in `WS01`: [derive-scan-signals.ts](/Users/benmasek/WS01/packages/scan-core/src/scan/signals/derive-scan-signals.ts)
 
 ## Mapping Table
 

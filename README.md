@@ -13,7 +13,6 @@ website-signal-risk-scanner/
 │  ├─ shared/
 │  ├─ web-bot-auth/
 │  ├─ db/
-│  ├─ scan-core/
 │  └─ ui/
 ├─ docs/
 ├─ .env.example
@@ -26,7 +25,6 @@ website-signal-risk-scanner/
 
 - `apps/web`: product-facing web app and control-plane workflows
 - `apps/validation-worker`: active validation runtime owned by `WC01`
-- `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/web-bot-auth`: server-only Web Bot Auth signing and key-directory helpers
 - `packages/db`: PostgreSQL query helpers, migrations, seed SQL, and env helpers
@@ -125,9 +123,8 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
 10. Provision Redis for app queues:
    - set `REDIS_URL` for the web runtime
    - set `VALIDATION_REDIS_URL` for the validation worker, or let it fall back to `REDIS_URL` if both runtimes intentionally share one Redis instance
-11. Install Playwright Chromium for validation and shared scan-core tooling:
+11. Install Playwright Chromium for the validation runtime:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
-   - `pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium`
 12. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
 13. Start the main local app by itself when needed:
@@ -147,22 +144,22 @@ Use these commands before shipping changes:
 - `pnpm turbo run typecheck`
 - `pnpm turbo run build`
 
-Accessibility-specific validation:
+Validation-specific checks:
 
-- `pnpm --filter @website-signal-risk-scanner/scan-core typecheck`
-- `pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility:assert`
+- `pnpm --filter @website-signal-risk-scanner/validation-worker typecheck`
+- `pnpm test:scan-pipeline`
 
-The live benchmark assertion command uses `apps/web/.env.local` and will execute real scans against the demo workspace.
+The scan pipeline test is deterministic and runs locally from `apps/validation-worker/src/validation/pipeline.test.ts`.
 
 The normalized concern lifecycle in `WC01` is documented in [docs/normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).
 
-## CI accessibility validation
+## CI validation
 
 GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
 
-- `worker-accessibility-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks `scan-core`, and runs the deterministic accessibility validation tests.
-- `live-accessibility-benchmark` runs after the deterministic job and executes `pnpm benchmark:accessibility:assert` only when these repository secrets are configured: `DATABASE_URL`, `REDIS_URL`, and S3 storage credentials.
-- If those secrets are missing, the live benchmark job is skipped and only the deterministic accessibility validation job runs.
+- `worker-scan-pipeline-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks `validation-worker`, and runs `pnpm test:scan-pipeline`.
+- `live-validation-smoke` runs after the deterministic job and executes `pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation` only when the runtime secrets are configured.
+- If those secrets are missing, the live smoke job is skipped and only the deterministic scan pipeline job runs.
 
 ## Runtime validation tooling
 
@@ -213,7 +210,7 @@ Common commands:
 - configure the web environment variables from the shared list above in `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
 - redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
-- once DNS and TLS are live on the VM path, remove stale Supabase-era env from any leftover Vercel project instead of treating Vercel as an active production dependency
+- once DNS and TLS are live on the VM path, remove stale legacy env from any leftover Vercel project instead of treating Vercel as an active production dependency
 
 ### GCP worker pool
 

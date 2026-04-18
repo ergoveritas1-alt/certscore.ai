@@ -134,6 +134,7 @@ export function isolateLikelyLegalDocumentText(input: { html: string; title: str
     "Back to Legal Home",
     "© ",
     "Why Lookout",
+    "Why Example",
     "Partners Partner Programs",
     "Company About Us",
     "Support Enterprise Support Login",
@@ -142,7 +143,7 @@ export function isolateLikelyLegalDocumentText(input: { html: string; title: str
 
   for (const marker of footerMarkers) {
     const index = candidate.indexOf(marker);
-    if (index >= 500) {
+    if (index >= 120) {
       candidate = candidate.slice(0, index).trim();
       break;
     }
@@ -292,6 +293,55 @@ function isLowSignalPolicyNoiseFinding(ruleKey: string | null) {
 
 function isRuntimePrivacyFinding(ruleKey: string | null) {
   return typeof ruleKey === "string" && ruleKey.startsWith("runtime_privacy.");
+}
+
+function findingSortBucket(ruleKey: string) {
+  if (ruleKey.startsWith("access_review.")) {
+    return 0;
+  }
+  if (ruleKey.startsWith("runtime_privacy.")) {
+    return 1;
+  }
+  if (ruleKey.startsWith("cookie_runtime.")) {
+    return 2;
+  }
+  if (ruleKey.startsWith("policy_runtime.")) {
+    return 3;
+  }
+  if (ruleKey.startsWith("section_review.")) {
+    return 4;
+  }
+  return 5;
+}
+
+function buildFindingSortBucket(ruleKeys: string[]) {
+  const hasLegalCoverageGap = ruleKeys.includes("access_review.legal_coverage_unverified");
+  const hasConsentInterfaceFinding = ruleKeys.includes("runtime_privacy.consent_interface_obstructive");
+  const hasPreconsentFinding = ruleKeys.includes("runtime_privacy.preconsent_tracking_observed");
+
+  return (ruleKey: string) => {
+    if (ruleKey.startsWith("scan_report_review.")) {
+      return 0;
+    }
+
+    if (ruleKey === "access_review.public_access_blocked") {
+      return 1;
+    }
+
+    if (ruleKey === "access_review.legal_coverage_unverified") {
+      return hasPreconsentFinding ? 1 : hasConsentInterfaceFinding ? 3 : 1;
+    }
+
+    if (ruleKey === "runtime_privacy.preconsent_tracking_observed") {
+      return hasLegalCoverageGap ? 2 : 1;
+    }
+
+    if (ruleKey === "runtime_privacy.consent_interface_obstructive") {
+      return hasLegalCoverageGap && hasPreconsentFinding ? 3 : 1;
+    }
+
+    return findingSortBucket(ruleKey) + 4;
+  };
 }
 
 function collapseSingletonRuleFindings<T extends { pageUrl: string | null; ruleKey: string; severity: string }>(findings: T[]) {
@@ -532,6 +582,13 @@ function hasSubstantivePolicySemantics(input: {
   if (
     input.pageType === "terms_of_service" &&
     (input.enrichment.policy_arbitration_present === true ||
+      (Array.isArray(input.enrichment.policy_actionable_flags) &&
+        input.enrichment.policy_actionable_flags.some(
+          (value) =>
+            value === "warranty_disclaimer_present" ||
+            value === "liability_waiver_present" ||
+            value === "content_use_restrictions_present"
+        )) ||
       (typeof input.summaryShort === "string" &&
         /arbitration|binding contract|class action|governing law|limitation of liability/i.test(input.summaryShort)))
   ) {
@@ -709,8 +766,17 @@ function stringIncludesRetentionCue(value: unknown) {
     return false;
   }
 
-  return /retention|how long do we keep|retain(?:ed)? .* personal data|retain(?:ed)? .* personal information|deleted after|deleted within|as long as reasonably necessary/i.test(
-    value
+  const normalized = value.toLowerCase();
+  if (
+    /does not provide .*retention|no concrete retention|no retention periods|retention periods? (?:not|were not) (?:provided|noted|disclosed)|without (?:any )?retention/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  return /how long do we keep|retain(?:ed)? .* personal data|retain(?:ed)? .* personal information|deleted after|deleted within|stored for approximately|as long as reasonably necessary|retention period varies/i.test(
+    normalized
   );
 }
 
@@ -785,10 +851,6 @@ function hasStrongCookieCategoryDisclosure(input: {
   mentionTopics?: string[];
   summaryShort: unknown;
 }) {
-  if (input.disclosures.length > 0) {
-    return true;
-  }
-
   if (input.flags.includes("low_confidence")) {
     return false;
   }
@@ -1422,7 +1484,7 @@ function deriveCookieRuntimeFindings(input: {
   }
 
   if (
-    !structurallyWeak &&
+    (!structurallyWeak || hasRichCookieSemantics) &&
     unmatched.length > 0 &&
     !hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort })
   ) {
@@ -2372,12 +2434,18 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ? collapsed.filter((finding) => !isLowSignalPolicyNoiseFinding(finding.ruleKey))
     : collapsed;
   const hasSubstantiveFinding = withoutLowSignalNoise.some((finding) => !isMetaSectionFinding(finding.ruleKey));
-  const filtered = hasSubstantiveFinding
+  const filtered = hasRuntimePrivacySignal && hasSubstantiveFinding
     ? withoutLowSignalNoise.filter((finding) => !isMetaSectionFinding(finding.ruleKey))
     : withoutLowSignalNoise;
+  const sortBucket = buildFindingSortBucket(filtered.map((finding) => finding.ruleKey));
 
   return filtered
-    .sort((left, right) => severityWeight(right.severity) - severityWeight(left.severity) || left.ruleKey.localeCompare(right.ruleKey))
+    .sort(
+      (left, right) =>
+        sortBucket(left.ruleKey) - sortBucket(right.ruleKey) ||
+        severityWeight(right.severity) - severityWeight(left.severity) ||
+        left.ruleKey.localeCompare(right.ruleKey)
+    )
     .map((finding, index) => ({
       ...finding,
       rank: index + 1
@@ -3010,7 +3078,7 @@ export function shouldQueueNanoDocumentSourceForExtraction(row: Record<string, u
   return (
     retentionPeriods.length === 0 &&
     hasRetentionInferenceCue(documentText) &&
-    normalizationVersion < NANO_DOCUMENT_NORMALIZATION_VERSION
+    normalizationVersion < 2
   );
 }
 
@@ -3193,7 +3261,10 @@ export function selectPendingNanoDocumentSourcesForExtraction(input: {
   );
   const selectedPrimaryPrivacyId = strongReadyPrivacyExists || pendingPrivacyRows.length === 0
     ? null
-    : [...pendingPrivacyRows].sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0]?.id;
+    : [...pendingPrivacyRows]
+        .filter((row) => getPrivacySupplementalCoverageScore(row) === 0)
+        .sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0]?.id ??
+      [...pendingPrivacyRows].sort((left, right) => getPrivacyDocumentSpecificityScore(right) - getPrivacyDocumentSpecificityScore(left))[0]?.id;
 
   return input.rows.filter((row) => {
     const documentType = getString(row.document_type) ?? getString(row.documentType);

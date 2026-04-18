@@ -88,7 +88,7 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
         status={scan.status}
         title={`Scan: ${scan.hostname}`}
       />
-      <p className="text-sm text-slate-600">Refreshing the final scan findings…</p>
+      <p className="text-sm text-slate-600">{scan.statusMessage}</p>
     </div>
   );
 }

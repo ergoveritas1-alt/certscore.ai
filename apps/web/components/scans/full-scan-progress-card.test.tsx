@@ -95,6 +95,37 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
   assert.doesNotMatch(html, /Live update/);
 });
 
+test("keeps queued scans anchored to queue pickup messaging", () => {
+  const html = renderToStaticMarkup(
+    <FullScanProgressCard
+      buildPhaseSummaries={[]}
+      createdAt="2026-04-18T10:43:07.000Z"
+      events={[
+        {
+          createdAt: "2026-04-18T10:43:07.000Z",
+          eventType: SCAN_EVENT_TYPES.fullQueued,
+          message: "Scan queued and waiting for worker pickup.",
+          metadataJson: { profile: "preview", pagesRequested: 1 }
+        },
+        {
+          createdAt: "2026-04-18T10:43:08.000Z",
+          eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+          message: "Unified finding derivation completed.",
+          metadataJson: { stage: "unified_findings", findingCount: 0 }
+        }
+      ]}
+      executionSummary={null}
+      status="queued"
+    />
+  );
+
+  assert.match(html, /Full scan queued/);
+  assert.match(html, /Queued\.\.\./);
+  assert.match(html, /Queued · 0\/7 milestones complete · Scan queued and waiting for worker pickup\./);
+  assert.doesNotMatch(html, /Unified finding derivation completed\./);
+  assert.doesNotMatch(html, /Scanning\.\.\./);
+});
+
 test("surfaces early tier results while a scan is still running", () => {
   const html = renderToStaticMarkup(
     <FullScanProgressCard

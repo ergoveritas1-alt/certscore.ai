@@ -154,6 +154,40 @@ test("blocked previews can still surface verified cookie policy and contact disc
   );
 });
 
+test("evidence-rich zero-page previews do not collapse into blocked-access mode when runtime and verified surfaces were retained", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "nytimes.com",
+    normalizedUrl: "https://nytimes.com",
+    snapshot: buildSnapshot({
+      accessibilityScore: 0,
+      certscoreOverall: 0,
+      contactPagePresent: false,
+      cookiePolicyPresent: true,
+      homepageFetchHttpStatus: 200,
+      homepageFetchStatus: "ok",
+      pagesScanned: 0,
+      partialScan: true,
+      preconsentTrackingDetected: true,
+      privacyPolicyPresent: true,
+      privacyScore: 0,
+      termsOfServicePresent: true,
+      thirdPartyCookieSetBeforeConsent: false,
+      totalSignals: 9,
+      trackingBeforeConsentDetected: true
+    })
+  });
+
+  assert.equal(payload.resultState, undefined);
+  assert.equal(payload.scores, undefined);
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), true);
+  assert.equal(
+    payload.summaryBullets.includes(
+      "Preview scores are temporarily withheld because structured evidence was retained but the saved score fields were incomplete for this run."
+    ),
+    true
+  );
+});
+
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "coinbase.com",

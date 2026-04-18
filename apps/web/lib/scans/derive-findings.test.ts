@@ -171,6 +171,28 @@ test("selectTopFindings keeps the strongest privacy findings at the top", () => 
   assert.ok(topFindings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
 });
 
+test("does not present privacy_score as the overall score when certscore_overall is missing", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyRequestCount: 12
+        }
+      }
+    },
+    snapshot: {
+      privacy_score: 91
+    },
+    scan: {
+      completedAt: "2026-04-02T10:05:00.000Z",
+      createdAt: "2026-04-02T10:04:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.equal(summary.score, null);
+});
+
 test("selectTopFindings avoids duplicating overlapping pre-consent tracking cards", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

@@ -33,6 +33,7 @@ import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-e
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
+import { deriveDisplayCreatedAt, deriveScanDisplayState } from "./display-state";
 import {
   collectPolicyEvidenceHashes,
   dereferencePolicyEvidenceSnippets
@@ -597,7 +598,7 @@ async function loadScanDetailRecord(input: {
         eventType: event.event_type,
         message: event.message,
         metadataJson: event.metadata_json,
-        createdAt: event.created_at
+        createdAt: event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? "")
       }) satisfies ScanEventRecord
   );
   const normalizedRelatedPreviewSnapshot = relatedPreviewSnapshot
@@ -632,6 +633,13 @@ async function loadScanDetailRecord(input: {
     events: rawNormalizedEvents,
     policyEnrichment: normalizedPolicyEnrichment
   });
+  const displayState = deriveScanDisplayState(scanRow, normalizedEvents);
+  const displayCreatedAt = deriveDisplayCreatedAt({
+    completedAt: displayState.completedAt,
+    createdAt: scanRow.created_at,
+    startedAt: displayState.startedAt
+  });
+  const scanObservedAt = displayState.completedAt ?? displayState.startedAt ?? scanRow.created_at;
   const supplementalCoverageSignals = deriveSupplementalCoverageSignals({
     events: normalizedEvents,
     existingSignals: normalizedSignals
@@ -655,7 +663,7 @@ async function loadScanDetailRecord(input: {
     snapshot: normalizedSnapshot
   }));
   const scannerSignalPopulations = buildScannerSignalPopulationRecords({
-    observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+    observedAt: scanObservedAt,
     signals: [
       ...normalizedSignals,
       ...supplementalSnapshotSignals,
@@ -942,13 +950,13 @@ async function loadScanDetailRecord(input: {
     : null;
   const mergedSignals = buildMergedSignalRecords({
     nanoSignals: buildStoredSignalPopulationRecords({
-      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+      observedAt: scanObservedAt,
       rows: storedNanoSignalRows,
       source: "nano"
     }),
     scannerSignals: scannerSignalPopulations,
     validationSignals: buildStoredSignalPopulationRecords({
-      observedAt: scanRow.completed_at ?? scanRow.started_at ?? scanRow.created_at,
+      observedAt: scanObservedAt,
       rows: storedValidationSignalRows,
       source: "validation"
     })
@@ -1025,8 +1033,8 @@ async function loadScanDetailRecord(input: {
     reusedExtractionCount,
     skippedExtractionCount,
     skippedExtractionReasons,
-    scanCompletedAt: scanRow.completed_at,
-    scanStatus: scanRow.status,
+    scanCompletedAt: displayState.completedAt,
+    scanStatus: displayState.status,
     scannerSignalCount: scannerSignalPopulations.length
   });
   const domainBenchmark = await resolveDomainBenchmarkEstimate({
@@ -1077,14 +1085,14 @@ async function loadScanDetailRecord(input: {
       domainId: scanRow.domain_id,
       domainHostname,
       scanType: scanRow.scan_type,
-      status: scanRow.status,
+      status: displayState.status,
       pagesRequested: scanRow.pages_requested,
       pagesScanned: scanRow.pages_scanned,
       scanConfigJson: scanRow.scan_config_json,
       executionSummary: getScannerExecutionSummary(scanRow.scan_config_json),
-      createdAt: scanRow.created_at,
-      startedAt: scanRow.started_at,
-      completedAt: scanRow.completed_at,
+      createdAt: displayCreatedAt,
+      startedAt: displayState.startedAt,
+      completedAt: displayState.completedAt,
       errorMessage: scanRow.error_message
     } satisfies ScanDetailRecord,
     snapshot: normalizedSnapshot ? (normalizedSnapshot satisfies Exclude<ScanSnapshotRecord, null>) : null,

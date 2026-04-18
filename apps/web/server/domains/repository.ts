@@ -42,6 +42,7 @@ export type OrganizationDomainScanRow = {
   created_at: string;
   domain_id?: string;
   id: string;
+  started_at?: string | null;
   status: string;
 };
 
@@ -413,7 +414,7 @@ export async function loadLatestOrganizationDomainScans(scanIds: string[]): Prom
 
   try {
     const result = await query<OrganizationDomainScanRow>(
-      `select id, status, created_at
+      `select id, status, created_at, started_at, completed_at
          from scans
         where id = any($1::uuid[])`,
       [scanIds],

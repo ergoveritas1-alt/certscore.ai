@@ -110,6 +110,31 @@ function deriveVerifiedPublicSurfaces(snapshot: PreviewSnapshotSource) {
   return surfaces;
 }
 
+function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verifiedSurfaces: string[]) {
+  const homepageFetchStatusOk = snapshot.homepageFetchStatus === "ok";
+  const homepageFetchHttpStatusSuccessful =
+    snapshot.homepageFetchHttpStatus == null ||
+    (snapshot.homepageFetchHttpStatus >= 200 && snapshot.homepageFetchHttpStatus < 400);
+  const corroboratedEvidencePresent =
+    verifiedSurfaces.length > 0 ||
+    snapshot.totalSignals > 0 ||
+    snapshot.trackingBeforeConsentDetected === true ||
+    snapshot.preconsentTrackingDetected === true ||
+    snapshot.thirdPartyCookieSetBeforeConsent === true;
+
+  return (
+    snapshot.pagesScanned === 0 &&
+    homepageFetchStatusOk &&
+    homepageFetchHttpStatusSuccessful &&
+    snapshot.blockedFlag !== true &&
+    snapshot.captchaFlag !== true &&
+    snapshot.authWallDetected !== true &&
+    snapshot.authWallSuspected !== true &&
+    snapshot.challengeSuspected !== true &&
+    corroboratedEvidencePresent
+  );
+}
+
 export function buildPreviewPayloadFromSnapshot(input: {
   hostname: string;
   normalizedUrl: string;
@@ -117,6 +142,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 }): PreviewScanPayload {
   const findings: PreviewSampleFinding[] = [];
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
+  const evidenceRichZeroPagePreview = isEvidenceRichZeroPagePreview(input.snapshot, verifiedSurfaces);
   const scanStopReason = deriveScanStopReason({
     authWallDetected: input.snapshot.authWallDetected,
     authWallSuspected: input.snapshot.authWallSuspected,
@@ -135,13 +161,19 @@ export function buildPreviewPayloadFromSnapshot(input: {
     robotsFetchHttpStatus: input.snapshot.robotsFetchHttpStatus,
     robotsFetchStatus: input.snapshot.robotsFetchStatus
   });
-  const siteSurfaceUnverified = scanStopReason !== null;
+  const siteSurfaceUnverified = scanStopReason !== null && !evidenceRichZeroPagePreview;
   const secondarySurfaceCoverageLimited = input.snapshot.partialScan || input.snapshot.pagesScanned < 3;
   const requestedHostname = input.hostname.toLowerCase().replace(/^www\./, "");
   const finalHostname = hostnameFromUrl(input.snapshot.finalUrl);
   const registeredDomain = input.snapshot.registeredDomain?.toLowerCase().replace(/^www\./, "") ?? null;
   const offDomainRedirect =
     Boolean(finalHostname) && finalHostname !== requestedHostname && (!registeredDomain || finalHostname !== registeredDomain);
+
+  const snapshotScoresLookUnreliable =
+    evidenceRichZeroPagePreview &&
+    input.snapshot.certscoreOverall === 0 &&
+    input.snapshot.privacyScore === 0 &&
+    input.snapshot.accessibilityScore === 0;
 
   pushFinding(
     findings,
@@ -386,7 +418,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
           protectionVendor
         }
       : undefined,
-    scores: siteSurfaceUnverified
+    scores: siteSurfaceUnverified || snapshotScoresLookUnreliable
       ? undefined
       : {
           overall: input.snapshot.certscoreOverall,
@@ -401,7 +433,11 @@ export function buildPreviewPayloadFromSnapshot(input: {
             "Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface.",
             scanStopReason?.reason ?? "Reason: the scanner could not verify a usable homepage surface."
           ]
-        : [`Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`]),
+        : snapshotScoresLookUnreliable
+          ? [
+              "Preview scores are temporarily withheld because structured evidence was retained but the saved score fields were incomplete for this run."
+            ]
+          : [`Preview scores: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`]),
       pagesScannedDescriptor,
       ...(redirectDescriptor ? [redirectDescriptor] : []),
       ...(verifiedSurfaceDescriptor ? [verifiedSurfaceDescriptor] : []),

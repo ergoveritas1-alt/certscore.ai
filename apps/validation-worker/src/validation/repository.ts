@@ -174,7 +174,13 @@ function getErrorMessage(error: unknown) {
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
-  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+  return (
+    error?.code === "PGRST205" ||
+    error?.code === "42P01" ||
+    message.includes("schema cache") ||
+    message.includes("Could not find the table") ||
+    message.includes("relation") && message.includes("does not exist")
+  );
 }
 
 function isRecoverableOptionalLoadError(error: { code?: string | null; message?: string | null } | null | undefined) {
@@ -2281,12 +2287,12 @@ export async function persistDerivedNanoPolicySignals(input: {
         nullif(value->>'confidence', '')::float8,
         nullif(value->>'domain_id', '')::uuid,
         coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
-        value->>'observed_at',
+        nullif(value->>'observed_at', '')::timestamptz,
         nullif(value->>'organization_id', '')::uuid,
         value->>'population_source',
         value->>'population_status',
         value->'provenance_json',
-        value->>'scan_id',
+        nullif(value->>'scan_id', '')::uuid,
         value->>'signal_key',
         value->>'signal_label',
         value->'signal_value_json',

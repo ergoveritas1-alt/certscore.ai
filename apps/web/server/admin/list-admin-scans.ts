@@ -5,6 +5,7 @@ import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
 import {
@@ -208,6 +209,12 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     });
 
+    const displayCreatedAt = deriveDisplayCreatedAt({
+      completedAt: scan.completed_at,
+      createdAt: scan.created_at,
+      startedAt: null
+    });
+
     return {
       scanId: scan.id,
       domainId: scan.domain_id,
@@ -215,7 +222,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       scanType: scan.scan_type,
       status: scan.status,
-      createdAt: scan.created_at,
+      createdAt: displayCreatedAt,
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,

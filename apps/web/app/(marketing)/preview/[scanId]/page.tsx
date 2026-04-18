@@ -3,7 +3,11 @@ import { DomainScanForm } from "../../../../components/marketing/domain-scan-for
 import { PreviewScanState } from "../../../../components/marketing/preview-scan-state";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
-import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
+import {
+  buildPreviewExecutiveAccessLimitationNotice,
+  deriveUnverifiedHomepageReview,
+  SharedScanDetailView
+} from "../../../../components/scans/shared-scan-detail-view";
 import { getPreviewScan } from "../../../../server/preview-scan/get-preview-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 
@@ -20,8 +24,9 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   const scan = await getPreviewScan(scanId);
   let fullScanRecord = null;
   let detailLoadError = false;
+  const hasRenderablePreviewResult = Boolean(scan?.previewPayload);
 
-  if (scan && scan.status !== "queued" && scan.status !== "running") {
+  if (scan?.status === "completed" && hasRenderablePreviewResult) {
     try {
       fullScanRecord = await getAnonymousScanById(scan.scanId);
     } catch (error) {
@@ -32,6 +37,20 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
       });
     }
   }
+  const previewExecutiveAccessLimitationNotice =
+    scan?.previewPayload?.resultState && fullScanRecord
+      ? buildPreviewExecutiveAccessLimitationNotice({
+          resultState: {
+            code: scan.previewPayload.resultState.code,
+            coverageLevel: scan.previewPayload.resultState.coverageLevel,
+            message: scan.previewPayload.resultState.message,
+            title: scan.previewPayload.resultState.title
+          },
+          review: fullScanRecord.snapshot
+            ? deriveUnverifiedHomepageReview(fullScanRecord.snapshot, fullScanRecord.events, fullScanRecord.policyEnrichment)
+            : null
+        })
+      : null;
   const loginHref = scan
     ? `/login?${new URLSearchParams({
         domain: scan.hostname,
@@ -45,11 +64,12 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         {scan ? (
-          scan.status === "queued" || scan.status === "running" ? (
+          scan.status === "queued" || scan.status === "running" || scan.status === "failed" ? (
             <PreviewScanState initialScan={scan} />
-          ) : loginHref && fullScanRecord ? (
+          ) : loginHref && fullScanRecord && hasRenderablePreviewResult ? (
             <SharedScanDetailView
               createAccountHref={loginHref}
+              executiveAccessLimitationOverride={previewExecutiveAccessLimitationNotice}
               headerActions={
                 <div className="w-full max-w-[21rem]">
                   <DomainScanForm
@@ -64,6 +84,20 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
               previewMode="homepage"
               scanRecord={fullScanRecord}
             />
+          ) : scan.status === "completed" && !hasRenderablePreviewResult ? (
+            <Card className="border-amber-200 bg-amber-50/40">
+              <CardHeader>
+                <CardTitle>Homepage preview data was not captured</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-700">
+                <p>
+                  This preview did not retain a homepage snapshot, so the report cannot responsibly summarize privacy, consent, or third-party behavior for this site.
+                </p>
+                <p>
+                  The scan record shows no scanned pages and no preview payload. Treat this run as incomplete rather than as a clean result.
+                </p>
+              </CardContent>
+            </Card>
           ) : detailLoadError ? (
             <Card className="border-slate-200 bg-white">
               <CardHeader>

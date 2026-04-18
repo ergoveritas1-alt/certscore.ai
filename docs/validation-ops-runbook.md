@@ -114,7 +114,7 @@ pnpm --filter @website-signal-risk-scanner/validation-worker start
 pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
 
-For the Cloud Run worker-pool path, redeploy with `deploy-validation-worker.sh` and pass the portable storage/database contract. The deploy script now removes lingering `SUPABASE_*` env and secret bindings during rollout so a fresh revision does not inherit the old Supabase contract.
+For the Cloud Run worker-pool path, redeploy with `deploy-validation-worker.sh` and pass the portable storage/database contract. Keep the revision environment aligned to the portable contract so a fresh rollout does not inherit stale provider-era bindings.
 
 ## 5. Validation Runtime Checks
 

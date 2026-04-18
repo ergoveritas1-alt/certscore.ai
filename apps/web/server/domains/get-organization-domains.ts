@@ -2,6 +2,7 @@
 
 import type { PlanCode, ScanFrequency } from "@website-signal-risk-scanner/shared";
 import { getNextScheduledAt, getPlanDefinition, isScheduledScanDue } from "@website-signal-risk-scanner/shared";
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadDomainOrganizationAndSettings,
   loadIndustryLabels,
@@ -73,6 +74,14 @@ export async function getOrganizationDomains(organizationId: string): Promise<Do
     const history = scanHistoryMap.get(domain.id) ?? [];
     const lastCompletedScanAt = history.find((scan) => scan.status === "completed" && scan.completed_at)?.completed_at ?? null;
     const activeScanExists = history.some((scan) => scan.status === "queued" || scan.status === "running");
+    const latestScanCreatedAt =
+      latestScan
+        ? deriveDisplayCreatedAt({
+            completedAt: latestScan.completed_at ?? null,
+            createdAt: latestScan.created_at,
+            startedAt: latestScan.started_at ?? null
+          })
+        : null;
     const effectiveFrequency = resolveEffectiveFrequency({
       domainFrequency: domain.scan_frequency,
       settingsFrequency: settings?.default_scan_frequency ?? null,
@@ -100,7 +109,7 @@ export async function getOrganizationDomains(organizationId: string): Promise<Do
       }),
       latestScanId: domain.latest_scan_id,
       latestScanStatus: latestScan?.status ?? null,
-      latestScanCreatedAt: latestScan?.created_at ?? null,
+      latestScanCreatedAt,
       scanFrequency: effectiveFrequency,
       createdAt: domain.created_at,
       updatedAt: domain.updated_at

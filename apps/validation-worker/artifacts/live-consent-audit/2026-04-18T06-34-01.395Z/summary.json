@@ -1,0 +1,12 @@
+[
+  {
+    "finalClassification": "possible pre-consent tracking",
+    "hostname": "certscore.ai",
+    "likelyVendorsObserved": [
+      "DoubleClick"
+    ],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 3,
+    "rejectResidualRequestCount": 0
+  }
+]
