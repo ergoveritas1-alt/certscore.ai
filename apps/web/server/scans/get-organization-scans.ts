@@ -15,6 +15,7 @@ import {
   summarizeLegacyChangeEvents,
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
+import { deriveDisplayCreatedAt } from "./display-state";
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "./merged-signal-summary";
 import {
@@ -585,6 +586,11 @@ async function loadOrganizationScans(
       pagesScanned: scan.pages_scanned,
       status: scan.status
     });
+    const displayCreatedAt = deriveDisplayCreatedAt({
+      completedAt: scan.completed_at,
+      createdAt: scan.created_at,
+      startedAt: scan.started_at
+    });
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -620,7 +626,7 @@ async function loadOrganizationScans(
         status: scan.status,
         pagesRequested: scan.pages_requested,
         pagesScanned: scan.pages_scanned,
-        createdAt: scan.created_at,
+        createdAt: displayCreatedAt,
         startedAt: scan.started_at,
         completedAt: scan.completed_at,
         scanQualityLevel: qualitySummary.level,

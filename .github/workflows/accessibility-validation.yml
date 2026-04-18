@@ -4,9 +4,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/accessibility-validation.yml"
-      - "packages/scan-core/**"
+      - "apps/validation-worker/**"
       - "packages/db/**"
       - "packages/shared/**"
+      - "packages/validation-shared/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "package.json"
@@ -15,16 +16,17 @@ on:
       - main
     paths:
       - ".github/workflows/accessibility-validation.yml"
-      - "packages/scan-core/**"
+      - "apps/validation-worker/**"
       - "packages/db/**"
       - "packages/shared/**"
+      - "packages/validation-shared/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "package.json"
   workflow_dispatch:
 
 jobs:
-  worker-accessibility-tests:
+  worker-scan-pipeline-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -46,17 +48,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium
+        run: pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium
 
-      - name: Typecheck scan-core
-        run: pnpm --filter @website-signal-risk-scanner/scan-core typecheck
+      - name: Typecheck validation-worker
+        run: pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
 
-      - name: Run accessibility validation tests
-        run: pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility --dry-run --limit=1
+      - name: Run scan pipeline tests
+        run: pnpm test:scan-pipeline
 
-  live-accessibility-benchmark:
+  live-validation-smoke:
     runs-on: ubuntu-latest
-    needs: worker-accessibility-tests
+    needs: worker-scan-pipeline-tests
     if: ${{ secrets.DATABASE_URL != '' && secrets.NEXT_PUBLIC_APP_URL != '' && secrets.REDIS_URL != '' && secrets.S3_BUCKET != '' && secrets.S3_REGION != '' && secrets.S3_ACCESS_KEY_ID != '' && secrets.S3_SECRET_ACCESS_KEY != '' }}
     env:
       NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
@@ -88,7 +90,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium
+        run: pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium
 
       - name: Create web env file
         working-directory: apps/web
@@ -105,5 +107,5 @@ jobs:
           S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE}
           EOF
 
-      - name: Run live accessibility benchmark assertions
-        run: pnpm --filter @website-signal-risk-scanner/scan-core benchmark:accessibility:assert
+      - name: Run live validation smoke
+        run: pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation

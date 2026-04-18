@@ -294,6 +294,21 @@ const CONSENT_KEYWORDS = [
   "legitimate interest"
 ];
 
+const CONSENT_ACTION_KEYWORDS = [
+  "accept",
+  "reject",
+  "decline",
+  "allow",
+  "agree",
+  "preferences",
+  "settings",
+  "manage choices",
+  "manage options",
+  "customize",
+  "customise",
+  "necessary only"
+];
+
 const CMP_HINTS = [
   "onetrust",
   "trustarc",
@@ -326,20 +341,26 @@ const CMP_ROOT_SELECTORS = [
   "[id*='cookie' i][role='dialog']"
 ];
 
-const VENDOR_RULES: Array<{ category: VendorCategory; name: string; patterns: string[] }> = [
-  { name: "Google Tag Manager", category: "analytics", patterns: ["googletagmanager.com"] },
-  { name: "Google Analytics", category: "analytics", patterns: ["google-analytics.com", "analytics.google.com", "_ga", "_gid", "_gat"] },
-  { name: "DoubleClick", category: "advertising_marketing", patterns: ["doubleclick.net", "adservice.google.com", "IDE", "test_cookie"] },
-  { name: "Meta / Facebook", category: "advertising_marketing", patterns: ["facebook.net", "facebook.com/tr", "_fbp", "fr"] },
-  { name: "TikTok", category: "advertising_marketing", patterns: ["analytics.tiktok.com", "tiktok.com/i18n/pixel", "_ttp"] },
-  { name: "Amazon Ads", category: "advertising_marketing", patterns: ["amazon-adsystem.com"] },
-  { name: "Criteo", category: "advertising_marketing", patterns: ["criteo.com", "criteo.net"] },
-  { name: "AppNexus / Xandr", category: "advertising_marketing", patterns: ["adnxs.com"] },
-  { name: "Hotjar", category: "session_replay_behavioral_analytics", patterns: ["hotjar.com", "_hj"] },
-  { name: "FullStory", category: "session_replay_behavioral_analytics", patterns: ["fullstory.com", "fs.js"] },
-  { name: "Segment", category: "analytics", patterns: ["segment.com", "segment.io", "ajs_"] },
-  { name: "Pinterest", category: "social_embedded_media", patterns: ["pinimg.com", "ct.pinterest.com"] },
-  { name: "Snap", category: "advertising_marketing", patterns: ["sc-static.net", "tr.snapchat.com"] }
+const VENDOR_RULES: Array<{
+  category: VendorCategory;
+  cookieNames?: string[];
+  hostnames?: string[];
+  name: string;
+  urlSubstrings?: string[];
+}> = [
+  { name: "Google Tag Manager", category: "analytics", hostnames: ["googletagmanager.com"] },
+  { name: "Google Analytics", category: "analytics", hostnames: ["google-analytics.com", "analytics.google.com"], cookieNames: ["_ga", "_gid", "_gat"] },
+  { name: "DoubleClick", category: "advertising_marketing", hostnames: ["doubleclick.net", "adservice.google.com"], cookieNames: ["IDE", "test_cookie"] },
+  { name: "Meta / Facebook", category: "advertising_marketing", hostnames: ["facebook.net"], urlSubstrings: ["facebook.com/tr"], cookieNames: ["_fbp", "fr"] },
+  { name: "TikTok", category: "advertising_marketing", hostnames: ["analytics.tiktok.com"], urlSubstrings: ["tiktok.com/i18n/pixel"], cookieNames: ["_ttp"] },
+  { name: "Amazon Ads", category: "advertising_marketing", hostnames: ["amazon-adsystem.com"] },
+  { name: "Criteo", category: "advertising_marketing", hostnames: ["criteo.com", "criteo.net"] },
+  { name: "AppNexus / Xandr", category: "advertising_marketing", hostnames: ["adnxs.com"] },
+  { name: "Hotjar", category: "session_replay_behavioral_analytics", hostnames: ["hotjar.com"], cookieNames: ["_hj"] },
+  { name: "FullStory", category: "session_replay_behavioral_analytics", hostnames: ["fullstory.com"], urlSubstrings: ["fs.js"] },
+  { name: "Segment", category: "analytics", hostnames: ["segment.com", "segment.io"], cookieNames: ["ajs_"] },
+  { name: "Pinterest", category: "social_embedded_media", hostnames: ["pinimg.com", "ct.pinterest.com"] },
+  { name: "Snap", category: "advertising_marketing", hostnames: ["sc-static.net", "tr.snapchat.com"] }
 ];
 
 const SECURITY_INTERSTITIAL_PATTERNS = [
@@ -380,13 +401,53 @@ function inferVisibleActionsFromText(text: string | null | undefined): SurfaceAc
   };
 }
 
-function classifyArtifact(input: string): { category: VendorCategory; vendorName: string | null } {
+function hostnameMatches(hostname: string, candidate: string) {
+  const normalizedHostname = hostname.toLowerCase();
+  const normalizedCandidate = candidate.toLowerCase();
+  return normalizedHostname === normalizedCandidate || normalizedHostname.endsWith(`.${normalizedCandidate}`);
+}
+
+function tokenizeArtifact(value: string) {
+  return value
+    .split(/[^A-Za-z0-9_]+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length > 0);
+}
+
+export function classifyCookieArtifact(domain: string, name: string): { category: VendorCategory; vendorName: string | null } {
+  const haystack = `${domain} ${name}`.toLowerCase();
+  if (SECURITY_INTERSTITIAL_PATTERNS.some((pattern) => haystack.includes(pattern))) {
+    return { category: "strictly_necessary", vendorName: "Security / anti-bot" };
+  }
+
+  const tokens = new Set(tokenizeArtifact(`${domain} ${name}`));
+  const normalizedDomain = domain.toLowerCase();
+  const match = VENDOR_RULES.find((rule) =>
+    rule.hostnames?.some((candidate) => hostnameMatches(normalizedDomain, candidate)) ||
+    rule.cookieNames?.some((candidate) => tokens.has(candidate.toLowerCase()))
+  );
+  if (match) {
+    return { category: match.category, vendorName: match.name };
+  }
+
+  if (/(optanon|onetrust|consent|cookiebot|didomi|trustarc|usercentrics)/i.test(`${domain} ${name}`)) {
+    return { category: "strictly_necessary", vendorName: "Consent Management Platform" };
+  }
+
+  return { category: "unknown_needs_manual_review", vendorName: null };
+}
+
+export function classifyUrlArtifact(input: string): { category: VendorCategory; vendorName: string | null } {
   const haystack = input.toLowerCase();
   if (SECURITY_INTERSTITIAL_PATTERNS.some((pattern) => haystack.includes(pattern))) {
     return { category: "strictly_necessary", vendorName: "Security / anti-bot" };
   }
 
-  const match = VENDOR_RULES.find((rule) => rule.patterns.some((pattern) => haystack.includes(pattern.toLowerCase())));
+  const hostname = safeHostname(input);
+  const match = VENDOR_RULES.find((rule) =>
+    rule.hostnames?.some((candidate) => hostnameMatches(hostname, candidate)) ||
+    rule.urlSubstrings?.some((candidate) => haystack.includes(candidate.toLowerCase()))
+  );
   if (match) {
     return { category: match.category, vendorName: match.name };
   }
@@ -489,7 +550,7 @@ async function collectStorageSnapshot(context: BrowserContext, page: Page): Prom
 
   return {
     cookies: cookies.map((cookie) => {
-      const classified = classifyArtifact(`${cookie.domain} ${cookie.name}`);
+      const classified = classifyCookieArtifact(cookie.domain, cookie.name);
       return {
         domain: cookie.domain,
         expires: cookie.expires,
@@ -515,7 +576,7 @@ function networkLogger() {
 
   const handler = (request: Request) => {
     const url = request.url();
-    const classified = classifyArtifact(url);
+    const classified = classifyUrlArtifact(url);
     entries.push({
       documentUrl: request.frame()?.url() ?? null,
       hostname: safeHostname(url),
@@ -755,9 +816,16 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
       cmpRootCandidate?.selector.toLowerCase().includes("sp_message") ? "sourcepoint" :
       cmpRootCandidate ? "detected_cmp_root" : null;
 
-    const surface = await frame.evaluate(function (keywords) {
+    const surface = await frame.evaluate(function ({ actionKeywords, keywords }) {
       const elements = [...document.querySelectorAll("dialog, [role='dialog'], [aria-modal='true'], aside, section, div, form, iframe")];
-      let bestMatch: { html: string; score: number; selector: string; text: string } | null = null;
+      let bestMatch: {
+        consentActionHits: number;
+        html: string;
+        looksLikeBannerShell: boolean;
+        score: number;
+        selector: string;
+        text: string;
+      } | null = null;
       for (const element of elements) {
         const style = window.getComputedStyle(element as HTMLElement);
         const rect = (element as HTMLElement).getBoundingClientRect();
@@ -778,10 +846,25 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
           continue;
         }
 
+        let consentActionHits = 0;
+        for (const keyword of actionKeywords as string[]) {
+          if (text.toLowerCase().includes(keyword)) {
+            consentActionHits += 1;
+          }
+        }
+
         const lowerText = text.toLowerCase();
         const position = style.position;
         const zIndex = Number.parseInt(style.zIndex || "0", 10);
         const selector = element.id ? `#${element.id}` : element.getAttribute("aria-label") ? `[aria-label="${element.getAttribute("aria-label")}"]` : element.tagName.toLowerCase();
+        const looksLikeBannerShell =
+          element.tagName.toLowerCase() === "dialog" ||
+          element.tagName.toLowerCase() === "iframe" ||
+          element.getAttribute("role") === "dialog" ||
+          element.getAttribute("aria-modal") === "true" ||
+          position === "fixed" ||
+          position === "sticky" ||
+          zIndex >= 100;
 
         let score = keywordHits * 5;
         if (element.tagName.toLowerCase() === "dialog" || element.getAttribute("role") === "dialog" || element.getAttribute("aria-modal") === "true") {
@@ -799,6 +882,7 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
         if (lowerText.includes("accept") || lowerText.includes("reject") || lowerText.includes("preferences") || lowerText.includes("settings")) {
           score += 10;
         }
+        score += consentActionHits * 8;
         if (rect.height <= window.innerHeight * 0.75 && rect.width >= window.innerWidth * 0.2) {
           score += 4;
         }
@@ -808,7 +892,9 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
 
         if (!bestMatch || score > bestMatch.score) {
           bestMatch = {
+            consentActionHits,
             html: element.outerHTML.slice(0, 15_000),
+            looksLikeBannerShell,
             score,
             selector,
             text: text.slice(0, 4_000)
@@ -818,20 +904,29 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
 
       if (bestMatch && bestMatch.score >= 12) {
         return {
+          consentActionHits: bestMatch.consentActionHits,
           html: bestMatch.html,
+          looksLikeBannerShell: bestMatch.looksLikeBannerShell,
           selector: bestMatch.selector,
           text: bestMatch.text
         };
       }
       return null;
-    }, CONSENT_KEYWORDS);
+    }, { actionKeywords: CONSENT_ACTION_KEYWORDS, keywords: CONSENT_KEYWORDS });
 
     const accept = await findAction(frame, ACCEPT_PATTERNS);
     const reject = await findAction(frame, REJECT_PATTERNS);
     const manage = (await findAction(frame, MANAGE_PATTERNS)) ?? (await findAction(frame, SAVE_PATTERNS));
     const impliedActions = inferVisibleActionsFromText(surface?.text);
 
-    if (surface || accept || reject || manage || cmpRootCandidate) {
+    const qualifiesAsConsentSurface =
+      Boolean(cmpRootCandidate) ||
+      Boolean(accept) ||
+      Boolean(reject) ||
+      Boolean(manage) ||
+      Boolean(surface?.looksLikeBannerShell && ((surface?.consentActionHits ?? 0) > 0));
+
+    if (qualifiesAsConsentSurface) {
       return {
         accept,
         bannerHtml: surface?.html ?? null,
@@ -1009,7 +1104,7 @@ function nonEssentialCookies(snapshot: StorageSnapshot) {
 }
 
 function nonEssentialStorage(snapshot: StorageSnapshot) {
-  return [...snapshot.localStorage, ...snapshot.sessionStorage].filter((entry) => classifyArtifact(`${entry.key} ${entry.preview}`).category !== "strictly_necessary");
+  return [...snapshot.localStorage, ...snapshot.sessionStorage].filter((entry) => classifyCookieArtifact("", entry.key).category !== "strictly_necessary");
 }
 
 function collectLikelyVendors(entries: Array<{ vendorName: string | null }>) {

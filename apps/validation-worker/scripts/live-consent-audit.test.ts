@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildSiteReport } from "./live-consent-audit";
+import { buildSiteReport, classifyCookieArtifact, classifyUrlArtifact } from "./live-consent-audit";
 
 function makeScenario(overrides: Record<string, unknown> = {}) {
   return {
@@ -167,4 +167,48 @@ test("buildSiteReport does not treat always-active preferences as optional prese
 
   const report = buildSiteReport("https://betterment.com", scenarios);
   assert.equal(report.findings.some((finding) => finding.findingId === "F004"), false);
+});
+
+test("classifyUrlArtifact does not treat first-party /guides paths as DoubleClick", () => {
+  const classified = classifyUrlArtifact("https://certscore.ai/guides?_rsc=178l4");
+  assert.equal(classified.vendorName, null);
+  assert.equal(classified.category, "unknown_needs_manual_review");
+});
+
+test("classifyCookieArtifact still recognizes DoubleClick cookie names", () => {
+  const classified = classifyCookieArtifact(".doubleclick.net", "IDE");
+  assert.equal(classified.vendorName, "DoubleClick");
+  assert.equal(classified.category, "advertising_marketing");
+});
+
+test("buildSiteReport does not treat inline homepage marketing copy as a consent banner", () => {
+  const scenarios: any = {
+    accept_all: makeScenario(),
+    custom_preferences: makeScenario(),
+    fresh_visit: makeScenario({
+      banner: {
+        bannerHtmlPath: null,
+        bannerPresent: false,
+        bannerText: null,
+        frameUrl: null,
+        screenshots: { banner: null, firstLoad: null, preferencesCenter: null },
+        visibleActions: {
+          accept: false,
+          manage: false,
+          reject: false
+        }
+      },
+      url: "https://certscore.ai/"
+    }),
+    fresh_visit_gpc: makeScenario(),
+    reject_all: makeScenario({
+      url: "https://certscore.ai/"
+    })
+  };
+
+  const report = buildSiteReport("https://certscore.ai", scenarios);
+  assert.equal(report.consentUxScorecard.bannerPresent, "no");
+  assert.equal(report.consentUxScorecard.rejectAllFirstLayer, "inconclusive");
+  assert.equal(report.findings.length, 0);
+  assert.equal(report.finalClassification, "no obvious issue observed");
 });

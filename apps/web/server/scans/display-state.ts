@@ -13,6 +13,39 @@ export type ScanDisplayStateEvent = {
   eventType: string;
 };
 
+function parseTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function deriveDisplayCreatedAt(input: {
+  completedAt: string | null;
+  createdAt: string;
+  startedAt: string | null;
+}) {
+  const trustedLifecycleAt = input.startedAt ?? input.completedAt;
+  if (!trustedLifecycleAt) {
+    return input.createdAt;
+  }
+
+  const createdAtMs = parseTimestamp(input.createdAt);
+  const trustedLifecycleAtMs = parseTimestamp(trustedLifecycleAt);
+  if (createdAtMs === null || trustedLifecycleAtMs === null) {
+    return input.createdAt;
+  }
+
+  const displayToleranceMs = 60 * 1000;
+  if (createdAtMs <= trustedLifecycleAtMs + displayToleranceMs) {
+    return input.createdAt;
+  }
+
+  return trustedLifecycleAt;
+}
+
 function getEventTimestampBounds(events: ScanDisplayStateEvent[], eventTypes: string[]) {
   const timestamps = events
     .filter((event) => eventTypes.includes(event.eventType))
@@ -38,28 +71,18 @@ export function deriveScanDisplayState(scan: ScanDisplayStateInput, events: Scan
   const startedAt =
     scan.started_at ??
     getEventTimestampBounds(events, [
-      SCAN_EVENT_TYPES.previewStarted,
-      SCAN_EVENT_TYPES.nanoDocRetrievalStarted,
-      SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
-      SCAN_EVENT_TYPES.signalMergeStarted,
-      SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted
+      SCAN_EVENT_TYPES.previewStarted
     ]).earliest;
   const completedAt =
     scan.completed_at ??
     getEventTimestampBounds(events, [
-      SCAN_EVENT_TYPES.previewCompleted,
-      SCAN_EVENT_TYPES.signalMergeCompleted,
-      SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+      SCAN_EVENT_TYPES.previewCompleted
     ]).latest;
   const failedAt =
     scan.status === "failed"
       ? scan.completed_at ?? scan.started_at ?? scan.created_at
       : getEventTimestampBounds(events, [
-          SCAN_EVENT_TYPES.previewFailed,
-          SCAN_EVENT_TYPES.nanoDocRetrievalFailed,
-          SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-          SCAN_EVENT_TYPES.signalMergeFailed,
-          SCAN_EVENT_TYPES.unifiedFindingsDerivedFailed
+          SCAN_EVENT_TYPES.previewFailed
         ]).latest;
   const status =
     failedAt ? "failed" :

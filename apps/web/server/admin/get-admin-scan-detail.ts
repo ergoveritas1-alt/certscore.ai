@@ -14,6 +14,7 @@ import {
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadAdminScanDetailData } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -228,6 +229,11 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     pagesScanned: scanRow.pages_scanned,
     recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses
   });
+  const displayCreatedAt = deriveDisplayCreatedAt({
+    completedAt: scanRow.completed_at,
+    createdAt: scanRow.created_at,
+    startedAt: null
+  });
 
   return {
     accessPostureSummary: {
@@ -242,7 +248,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       id: scanRow.id,
       scanType: scanRow.scan_type,
       status: scanRow.status,
-      createdAt: scanRow.created_at,
+      createdAt: displayCreatedAt,
       completedAt: scanRow.completed_at,
       pagesRequested: scanRow.pages_requested ?? 0,
       pagesScanned: scanRow.pages_scanned,

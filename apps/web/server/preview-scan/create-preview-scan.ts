@@ -1,7 +1,13 @@
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
+import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
 
 export async function createPreviewScan(input: { hostname: string; normalizedUrl: string }) {
+  const scannerAvailability = await getFullScanQueueAvailability();
+  if (!scannerAvailability.enabled) {
+    throw new Error(scannerAvailability.reason ?? "Preview scanning is unavailable because the scanner service is not healthy.");
+  }
+
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const scan = await createPreviewScanRecord({
     domainId: domain.id,

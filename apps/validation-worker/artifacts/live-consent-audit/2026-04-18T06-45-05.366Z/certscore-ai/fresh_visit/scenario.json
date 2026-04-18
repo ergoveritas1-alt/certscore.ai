@@ -1,0 +1,379 @@
+{
+  "actionSummary": {
+    "acceptPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    },
+    "rejectPath": {
+      "attempted": false,
+      "clicks": null,
+      "labels": [],
+      "timeMs": null
+    }
+  },
+  "banner": {
+    "bannerHtmlPath": null,
+    "bannerPresent": false,
+    "bannerText": null,
+    "frameUrl": null,
+    "screenshots": {
+      "banner": null,
+      "firstLoad": "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-04-18T06-45-05.366Z/certscore-ai/fresh_visit/first-load.png",
+      "preferencesCenter": null
+    },
+    "visibleActions": {
+      "accept": false,
+      "manage": false,
+      "reject": false
+    }
+  },
+  "cmpSignals": [],
+  "errors": [],
+  "network": [
+    {
+      "documentUrl": "about:blank",
+      "hostname": "certscore.ai",
+      "initiator": "document",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "document",
+      "timestamp": "2026-04-18T06:45:06.601Z",
+      "url": "https://certscore.ai/",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "image",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "image",
+      "timestamp": "2026-04-18T06:45:06.971Z",
+      "url": "https://certscore.ai/_next/image?url=%2Fcertscore_logo_alpha.png&w=128&q=75",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "stylesheet",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "stylesheet",
+      "timestamp": "2026-04-18T06:45:06.971Z",
+      "url": "https://certscore.ai/_next/static/css/55d5cc110bffb803.css",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.971Z",
+      "url": "https://certscore.ai/_next/static/chunks/webpack-f0128176a21a6226.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/d98a2fc4-46a64405dee3214e.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/8243-f197d750e451a0a1.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/main-app-802f286b85b693ea.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/2725-94f461c64f9a7581.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/6886-586eb4d7cdef1eee.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/5931-19f12ea150353621.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/5387-dfedf3f576ee9027.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/9100-24375df60fe2dc03.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/(marketing)/page-8546e543617cea73.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:06.972Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/global-error-6ce4a9af27c65011.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.333Z",
+      "url": "https://certscore.ai/how-it-works?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.334Z",
+      "url": "https://certscore.ai/methodology?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.334Z",
+      "url": "https://certscore.ai/pricing?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.334Z",
+      "url": "https://certscore.ai/guides?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.334Z",
+      "url": "https://certscore.ai/login?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.450Z",
+      "url": "https://certscore.ai/contact-sales?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/how-it-works/page-8232a76551d76a94.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "fetch",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "fetch",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/preview?_rsc=178l4",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/(marketing)/pricing/page-3bf8876e6e549a1c.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/guides/page-3d977ac90e497628.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/guides/layout-013fee9fefbafcde.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.452Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/methodology/page-013fee9fefbafcde.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    },
+    {
+      "documentUrl": "https://certscore.ai/",
+      "hostname": "certscore.ai",
+      "initiator": "script",
+      "method": "GET",
+      "phase": "before_interaction",
+      "resourceType": "script",
+      "timestamp": "2026-04-18T06:45:07.554Z",
+      "url": "https://certscore.ai/_next/static/chunks/app/contact-sales/page-b00e17de48eb3d63.js",
+      "vendorCategory": "unknown_needs_manual_review",
+      "vendorName": null
+    }
+  ],
+  "notes": [
+    "No consent surface detected with current heuristics on the tested first load.",
+    "No interaction wait completed for 12000 ms."
+  ],
+  "preferences": null,
+  "refresh": null,
+  "storageDiffs": {
+    "acceptPhase": null,
+    "refreshPhase": null
+  },
+  "storageAfterAction": null,
+  "storageBeforeInteraction": {
+    "cookies": [],
+    "indexedDbNames": [],
+    "localStorage": [],
+    "sessionStorage": []
+  },
+  "timestamp": "2026-04-18T06:45:24.692Z",
+  "url": "https://certscore.ai/"
+}

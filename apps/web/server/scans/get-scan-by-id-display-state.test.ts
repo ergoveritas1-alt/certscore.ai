@@ -37,6 +37,38 @@ test("derives completed preview detail state from nano and unified finding event
     ]
   );
 
+  assert.equal(displayState.status, "queued");
+  assert.equal(displayState.startedAt, null);
+  assert.equal(displayState.completedAt, null);
+});
+
+test("derives completed preview detail state only from preview lifecycle events", () => {
+  const displayState = deriveScanDisplayState(
+    {
+      completed_at: null,
+      created_at: "2026-04-18T17:48:24.500Z",
+      scan_type: "preview",
+      started_at: null,
+      status: "queued"
+    },
+    [
+      {
+        createdAt: "2026-04-18T17:48:24.596Z",
+        eventType: SCAN_EVENT_TYPES.previewStarted,
+        id: "evt-start",
+        message: "Preview scan started.",
+        metadataJson: null
+      },
+      {
+        createdAt: "2026-04-18T17:48:38.437Z",
+        eventType: SCAN_EVENT_TYPES.previewCompleted,
+        id: "evt-complete",
+        message: "Preview scan completed.",
+        metadataJson: null
+      }
+    ]
+  );
+
   assert.equal(displayState.status, "completed");
   assert.equal(displayState.startedAt, "2026-04-18T17:48:24.596Z");
   assert.equal(displayState.completedAt, "2026-04-18T17:48:38.437Z");

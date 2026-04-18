@@ -965,10 +965,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   }));
 
   const lastScannedAt = scanRecord.scan.completedAt ?? scanRecord.scan.createdAt;
-  const score =
-    getNumber(scanRecord.snapshot?.certscore_overall) ??
-    getNumber(scanRecord.snapshot?.privacy_score) ??
-    null;
+  const score = getNumber(scanRecord.snapshot?.certscore_overall) ?? null;
 
   return {
     findings: dedupedFindings,

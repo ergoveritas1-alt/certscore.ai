@@ -331,7 +331,13 @@ function getErrorMessage(error: unknown) {
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
-  return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
+  return (
+    error?.code === "PGRST205" ||
+    error?.code === "42P01" ||
+    message.includes("schema cache") ||
+    message.includes("Could not find the table") ||
+    message.includes("relation") && message.includes("does not exist")
+  );
 }
 
 function isMissingLastScannedAtColumn(error: { message?: string } | null) {
@@ -860,14 +866,17 @@ export async function loadOrganizationScanPageData(
 }> {
   const limitClauses: string[] = [];
   const limitParams: Array<number> = [];
+  const baseParamCount = 1;
   if (typeof input?.from === "number" && typeof input?.to === "number") {
     const offset = input.from;
     const limit = input.to - input.from + 1;
     limitParams.push(limit, offset);
-    limitClauses.push(`limit $${limitParams.length - 1} offset $${limitParams.length}`);
+    limitClauses.push(
+      `limit $${baseParamCount + limitParams.length - 1} offset $${baseParamCount + limitParams.length}`
+    );
   } else if (typeof input?.limit === "number") {
     limitParams.push(input.limit);
-    limitClauses.push(`limit $${limitParams.length}`);
+    limitClauses.push(`limit $${baseParamCount + limitParams.length}`);
   }
 
   const scanRowsPromise = query<OrganizationScanQueryRow>(

@@ -1,0 +1,10 @@
+[
+  {
+    "finalClassification": "no obvious issue observed",
+    "hostname": "certscore.ai",
+    "likelyVendorsObserved": [],
+    "manualReviewRecommended": true,
+    "preConsentRequestCount": 0,
+    "rejectResidualRequestCount": 0
+  }
+]

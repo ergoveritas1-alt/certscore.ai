@@ -81,7 +81,7 @@ function guessDocumentType(input: { anchorText?: string | null; url: string }) {
     return "cookie_policy" as const;
   }
   if (
-    /terms of service|terms and conditions|\bterms\b|\blegal terms\b|end user agreement|license agreement|service license agreement|\beula\b/.test(
+    /terms of service|terms and conditions|\bterms\b|\blegal terms\b|end[- ]user[- ]agreement|license agreement|service[- ]license[- ]agreement|\beula\b/.test(
       haystack
     )
   ) {
@@ -112,13 +112,13 @@ function getDocumentSpecificityAdjustment(input: { documentType: string | null; 
 
   if (input.documentType === "terms_of_service") {
     if (
-      /\bterms of service\b|\bterms and conditions\b|\/terms\b|\/terms-of-service\b|end-user-agreement|service-license-agreement|license agreement|eula/.test(
+      /\bterms of service\b|\bterms and conditions\b|\/terms\b|\/terms-of-service\b|enterprise-end-user-agreement|end-user-agreement|end user agreement|service-license-agreement|service license agreement|license agreement|eula/.test(
         haystack
       )
     ) {
       adjustment += 0.16;
     }
-    if (/\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace\b/.test(haystack)) adjustment -= 0.26;
+    if (/\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace|service-license-agreement|\bmes\b/.test(haystack)) adjustment -= 0.26;
   }
 
   if (input.documentType === "cookie_policy") {
@@ -136,7 +136,7 @@ function isSpecialScopeLegalDoc(input: { documentType: string | null; url: strin
   }
 
   if (input.documentType === "terms_of_service") {
-    return /\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace\b/.test(haystack);
+    return /\baffiliate|partner|marketing|supplier|vendor|developer|beta|api terms|marketplace|service-license-agreement|\bmes\b/.test(haystack);
   }
 
   return false;
@@ -407,33 +407,51 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
   return [
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/help/privacy` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-center` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/your-privacy-choices` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/do-not-share-my-data` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/privacy` },
-    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/do-not-share-my-data` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
-    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
-    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
-    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` }
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` }
+  ] satisfies NanoDocCandidate[];
+}
+
+function buildSupplementalPrivacyFallbackCandidates(domainHostname: string | null) {
+  if (!domainHostname) {
+    return [] as NanoDocCandidate[];
+  }
+
+  return [
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/help/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/guest/settings/do-not-share-my-data` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-center` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/your-privacy-choices` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/do-not-share-my-data` }
   ] satisfies NanoDocCandidate[];
 }
 
 function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
+  const docTypePriority = (documentType: string) =>
+    documentType === "privacy_policy" ? 0 : documentType === "cookie_policy" ? 1 : 2;
+  const sorted = [...candidates].sort(
+    (left, right) =>
+      Number(left.priorityTier === "secondary") - Number(right.priorityTier === "secondary") ||
+      docTypePriority(left.documentType) - docTypePriority(right.documentType) ||
+      left.url.localeCompare(right.url)
+  );
   const hasMainDocByType = new Set(
-    candidates
-      .filter((candidate) => !isSpecialScopeLegalDoc(candidate))
+    sorted
+      .filter(
+        (candidate) =>
+          !isSpecialScopeLegalDoc(candidate) &&
+          !(candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url }))
+      )
       .map((candidate) => candidate.documentType)
   );
   const counts = new Map<string, number>();
   const limited: NanoDocCandidate[] = [];
 
-  for (const candidate of candidates) {
+  for (const candidate of sorted) {
     if (hasMainDocByType.has(candidate.documentType) && isSpecialScopeLegalDoc(candidate)) {
       continue;
     }
@@ -502,6 +520,7 @@ export function buildNanoDocCandidateUrls(input: {
     } satisfies NanoDocCandidate));
 
   const fallbackCandidates = buildSeedFallbackCandidates(input.domainHostname);
+  const supplementalPrivacyFallbackCandidates = buildSupplementalPrivacyFallbackCandidates(input.domainHostname);
 
   if (orderedEvidence.length > 0) {
     const evidenceHasSupplementalPrivacyCoverage = orderedEvidence.some(
@@ -525,13 +544,15 @@ export function buildNanoDocCandidateUrls(input: {
     const hasSupplementalPrivacyCoverage = [...orderedEvidence, ...supplementalRecentCandidates].some(
       (candidate) => candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })
     );
-    const filteredFallbackCandidates = fallbackCandidates.filter((candidate) => {
-      if (candidate.documentType === "privacy_policy" && isSupplementalPrivacySurface({ url: candidate.url })) {
-        return !hasSupplementalPrivacyCoverage;
-      }
-      return !coveredTypes.has(candidate.documentType);
-    });
-    return limitNanoDocCandidates([...orderedEvidence, ...supplementalRecentCandidates, ...filteredFallbackCandidates]);
+    const supplementalPrivacyCandidates =
+      orderedEvidence.some((candidate) => candidate.documentType === "privacy_policy") && !hasSupplementalPrivacyCoverage
+        ? supplementalPrivacyFallbackCandidates.slice(0, 2)
+        : [];
+    return limitNanoDocCandidates([
+      ...orderedEvidence,
+      ...supplementalRecentCandidates,
+      ...supplementalPrivacyCandidates
+    ]);
   }
 
   if (recentDomainCandidates.length > 0) {

@@ -10,6 +10,7 @@ import {
   summarizeLegacyChangeEvents,
   type LegacyScanEventRow
 } from "../changes/legacy-change-events";
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadHistoryChangeEvents,
   loadHistoryDiagnosticEvents,
@@ -501,11 +502,17 @@ export async function getDomainScanHistory(input: { domainId: string; organizati
       status: scan.status
     });
 
+    const displayCreatedAt = deriveDisplayCreatedAt({
+      completedAt: scan.completed_at,
+      createdAt: scan.created_at,
+      startedAt: scan.started_at
+    });
+
     return {
       id: scan.id,
       scanType: scan.scan_type,
       status: scan.status,
-      createdAt: scan.created_at,
+      createdAt: displayCreatedAt,
       startedAt: scan.started_at,
       completedAt: scan.completed_at,
       pagesRequested: scan.pages_requested,

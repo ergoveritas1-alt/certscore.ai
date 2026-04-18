@@ -23,7 +23,7 @@
 - `WC01` should not be treated as the source of truth for scanner runtime behavior
 
 ## Current repo boundary
-- `WC01` no longer carries `packages/scan-core`
+- `WC01` no longer carries `packages/scan-core`; that package now lives in the sibling `WS01` workspace
 - scanner-side extraction, enrichment, and runtime changes should originate in `WS01`
 - `WC01` should limit scan-specific logic to normalization, concern policy, unified-finding assembly, and product-facing presentation
 

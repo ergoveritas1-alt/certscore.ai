@@ -33,7 +33,7 @@ import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-e
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
-import { deriveScanDisplayState } from "./display-state";
+import { deriveDisplayCreatedAt, deriveScanDisplayState } from "./display-state";
 import {
   collectPolicyEvidenceHashes,
   dereferencePolicyEvidenceSnippets
@@ -634,6 +634,11 @@ async function loadScanDetailRecord(input: {
     policyEnrichment: normalizedPolicyEnrichment
   });
   const displayState = deriveScanDisplayState(scanRow, normalizedEvents);
+  const displayCreatedAt = deriveDisplayCreatedAt({
+    completedAt: displayState.completedAt,
+    createdAt: scanRow.created_at,
+    startedAt: displayState.startedAt
+  });
   const scanObservedAt = displayState.completedAt ?? displayState.startedAt ?? scanRow.created_at;
   const supplementalCoverageSignals = deriveSupplementalCoverageSignals({
     events: normalizedEvents,
@@ -1085,7 +1090,7 @@ async function loadScanDetailRecord(input: {
       pagesScanned: scanRow.pages_scanned,
       scanConfigJson: scanRow.scan_config_json,
       executionSummary: getScannerExecutionSummary(scanRow.scan_config_json),
-      createdAt: scanRow.created_at,
+      createdAt: displayCreatedAt,
       startedAt: displayState.startedAt,
       completedAt: displayState.completedAt,
       errorMessage: scanRow.error_message

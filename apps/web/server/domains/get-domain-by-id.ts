@@ -1,5 +1,6 @@
 "use server";
 
+import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadDomainDetail, loadDomainScanHistory, loadIndustryById } from "./repository";
 
 export type DomainDetailRecord = {
@@ -63,7 +64,11 @@ export async function getDomainById(input: { domainId: string; organizationId: s
           status: scan.status,
           pagesRequested: scan.pages_requested,
           pagesScanned: scan.pages_scanned,
-          createdAt: scan.created_at,
+          createdAt: deriveDisplayCreatedAt({
+            completedAt: scan.completed_at,
+            createdAt: scan.created_at,
+            startedAt: scan.started_at
+          }),
           startedAt: scan.started_at,
           completedAt: scan.completed_at
         }) satisfies DomainScanHistoryItem
