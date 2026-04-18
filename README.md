@@ -207,6 +207,7 @@ Common commands:
 - the Vercel project root directory must stay `apps/web`
 - prefer pushing reviewed commits to GitHub and letting Vercel create the production deployment from the connected repo
 - do not treat repo-root `.vercel` linkage or the removed `apps/validation-web` path as valid production config
+- run `pnpm ops:check:deploy` before or after deployment changes to catch stale Vercel links, wrong GitHub remote wiring, or missing cloud context
 - use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) only as a fallback fixed-egress path when Vercel cannot reach required production dependencies and the team explicitly chooses the VM route
 - if the VM route is active, terminate TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and configure `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
@@ -217,6 +218,8 @@ Common commands:
 - do not use `WC01` for the primary scanner deploy path
 - use `WS01` for scanner runtime deployment
 - keep `WC01` deployment guidance scoped to web and validation only
+- use `deploy-validation-worker.sh` for the validation worker Cloud Run worker-pool lane
+- keep web production, validation worker, and scanner runtime as three distinct deployment paths
 
 ### Database, Auth, and Storage
 

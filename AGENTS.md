@@ -15,6 +15,7 @@
 - The canonical Vercel web project is `consentcheck-site`, and its root directory must stay `apps/web`.
 - Do not link repo root or the removed `apps/validation-web` path to the production Vercel project.
 - If the local Vercel link needs to be repaired, relink with `npx vercel link --yes --scope ergoveritas1-5549s-projects --project consentcheck-site --cwd apps/web`.
+- Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local links and wrong remotes before treating the path as healthy.
 
 ## Scope note
 

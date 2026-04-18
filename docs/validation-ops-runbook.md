@@ -1,9 +1,10 @@
 # Validation Ops Runbook
 
-This runbook covers the validation runtime lane:
+This runbook covers the validation runtime lane only. It is not the primary `certscore.ai` production web path.
 
-- `apps/web` deployed to Vercel with `APP_FLAVOR=validation_ops`
-- validation worker and scheduler running on a separate VM
+- primary product web production stays on the Vercel `consentcheck-site` project with root `apps/web`
+- validation can use a separate Vercel surface with `APP_FLAVOR=validation_ops`
+- validation worker and scheduler run outside the primary web deployment lane
 - separate Redis for validation queues
 - shared PostgreSQL database initially
 
@@ -11,13 +12,13 @@ This runbook covers the validation runtime lane:
 
 - apply migration [0045_validation_pipeline.sql](/Users/benmasek/WC01/packages/db/migrations/0045_validation_pipeline.sql)
 - provision a separate Redis instance for validation
-- create the new domain in Vercel
+- create the validation domain and keep it separate from the primary `certscore.ai` production host
 - prepare a VM with Docker or Node 20 + pnpm
 - set the validation crawler contact/identity copy you want exposed on the public root page
 
 ## 2. Validation Surface Deploy
 
-Deploy the same `apps/web` app to Vercel, but with:
+Deploy the same `apps/web` app to a separate Vercel project or environment intended for validation operations, with:
 
 - `APP_FLAVOR=validation_ops`
 - `NEXT_PUBLIC_APP_URL=https://<validation-domain>`
@@ -114,7 +115,12 @@ pnpm --filter @website-signal-risk-scanner/validation-worker start
 pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
 
-For the Cloud Run worker-pool path, redeploy with `deploy-validation-worker.sh` and pass the portable storage/database contract. Keep the revision environment aligned to the portable contract so a fresh rollout does not inherit stale provider-era bindings.
+For the Cloud Run worker-pool path, prefer `deploy-validation-worker.sh` over hand-built commands. Keep the revision environment aligned to the portable storage and database contract so a fresh rollout does not inherit stale bindings.
+
+Before trusting any validation deployment change, run:
+
+- `pnpm ops:check:deploy`
+- `bash ./deploy-validation-worker.sh` only from an authenticated GCloud shell with the intended project selected
 
 ## 5. Validation Runtime Checks
 
