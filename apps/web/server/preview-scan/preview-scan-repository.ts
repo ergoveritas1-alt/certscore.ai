@@ -205,10 +205,18 @@ function getStatusMessage(status: ScanStatus) {
   return "The preview scan could not be completed.";
 }
 
+function toIsoTimestamp(value: string | Date | null | undefined) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value ?? "");
+}
+
 function getLatestEventCreatedAt(events: ScanEventRow[], eventTypes: string[]) {
   const matches = events
     .filter((event) => eventTypes.includes(event.event_type))
-    .map((event) => event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? ""))
+    .map((event) => toIsoTimestamp(event.created_at))
     .filter((value) => value.length > 0)
     .sort((left, right) => left.localeCompare(right));
 
@@ -218,7 +226,7 @@ function getLatestEventCreatedAt(events: ScanEventRow[], eventTypes: string[]) {
 function getEarliestEventCreatedAt(events: ScanEventRow[], eventTypes: string[]) {
   const matches = events
     .filter((event) => eventTypes.includes(event.event_type))
-    .map((event) => event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? ""))
+    .map((event) => toIsoTimestamp(event.created_at))
     .filter((value) => value.length > 0)
     .sort((left, right) => left.localeCompare(right));
 
@@ -506,8 +514,7 @@ function buildActivityRef(scanId: string, latestEvent: ScanEventRow | null) {
     return null;
   }
 
-  const createdAt =
-    latestEvent.created_at instanceof Date ? latestEvent.created_at.toISOString() : String(latestEvent.created_at ?? "");
+  const createdAt = toIsoTimestamp(latestEvent.created_at);
 
   const digest = createHash("sha256")
     .update(scanId)

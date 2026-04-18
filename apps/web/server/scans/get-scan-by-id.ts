@@ -261,6 +261,14 @@ function deriveHostnameFromTargetUrl(value: string | null | undefined) {
   }
 }
 
+function toIsoTimestamp(value: string | Date | null | undefined) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value ?? "");
+}
+
 function getStringRecordValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
   if (!record) {
     return null;
@@ -598,7 +606,7 @@ async function loadScanDetailRecord(input: {
         eventType: event.event_type,
         message: event.message,
         metadataJson: event.metadata_json,
-        createdAt: event.created_at instanceof Date ? event.created_at.toISOString() : String(event.created_at ?? "")
+        createdAt: toIsoTimestamp(event.created_at)
       }) satisfies ScanEventRecord
   );
   const normalizedRelatedPreviewSnapshot = relatedPreviewSnapshot
