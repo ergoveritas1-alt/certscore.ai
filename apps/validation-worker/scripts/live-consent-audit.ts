@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type BrowserContext, type Frame, type Locator, type Page, type Request } from "playwright";
+import { buildValidationWorkerDocumentHeaders } from "../src/web-bot-auth";
 
 type ScenarioName =
   | "fresh_visit"
@@ -437,6 +438,32 @@ async function writeText(filePath: string, value: string) {
 async function safeGoto(page: Page, url: string) {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForTimeout(LOAD_WAIT_MS);
+}
+
+async function installBrowserNavigationBotAuth(page: Page) {
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+
+    if (!request.isNavigationRequest() || request.resourceType() !== "document" || request.frame() !== page.mainFrame()) {
+      await route.continue();
+      return;
+    }
+
+    const existingHeaders = request.headers();
+    const currentPageUrl = page.url();
+    const fallbackReferer = currentPageUrl && currentPageUrl !== "about:blank" ? currentPageUrl : undefined;
+    const signedRequest = buildValidationWorkerDocumentHeaders({
+      referer: existingHeaders.referer ?? fallbackReferer,
+      url: request.url()
+    });
+
+    await route.continue({
+      headers: {
+        ...existingHeaders,
+        ...signedRequest.headers
+      }
+    });
+  });
 }
 
 async function collectStorageSnapshot(context: BrowserContext, page: Page): Promise<StorageSnapshot> {
@@ -1122,6 +1149,7 @@ async function runScenario(siteDir: string, url: string, scenarioName: ScenarioN
   }
 
   const page = await context.newPage();
+  await installBrowserNavigationBotAuth(page);
   const logger = networkLogger();
   page.on("request", logger.handler);
 
