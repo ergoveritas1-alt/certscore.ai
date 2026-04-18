@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { createDatabaseClient, query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
   VALIDATION_INTERVAL_OPTIONS,
@@ -168,6 +168,10 @@ type NanoDocRetrievalInput = {
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
@@ -327,41 +331,62 @@ function addDays(base: Date, days: number) {
 
 export async function ensureValidationSettings() {
   const env = getWorkerEnv();
-  const db = createDatabaseClient();
-  const { data: existing, error } = await db
-    .from("validation_settings")
-    .select(
-      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
-    )
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation settings: ${error.message}`);
+  let existing: ValidationSettingsRow | null;
+  try {
+    existing = await queryOne<ValidationSettingsRow>(
+      `
+        select
+          automatic_interval_minutes,
+          last_scheduled_at,
+          last_tranco_sync_at,
+          next_due_at,
+          operator_note,
+          pipeline_enabled,
+          run_mode,
+          updated_at,
+          updated_by_user_id
+        from validation_settings
+        where singleton_key = $1
+      `,
+      [VALIDATION_SETTINGS_KEY],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation settings: ${getErrorMessage(error)}`);
   }
 
   if (existing) {
-    return existing as ValidationSettingsRow;
+    return existing;
   }
 
-  const { data: inserted, error: insertError } = await db
-    .from("validation_settings")
-    .insert({
-      singleton_key: VALIDATION_SETTINGS_KEY,
-      pipeline_enabled: true,
-      run_mode: env.VALIDATION_DEFAULT_RUN_MODE,
-      automatic_interval_minutes: env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES
-    })
-    .select(
-      "automatic_interval_minutes, last_scheduled_at, last_tranco_sync_at, next_due_at, operator_note, pipeline_enabled, run_mode, updated_at, updated_by_user_id"
-    )
-    .single();
+  const inserted = await queryOne<ValidationSettingsRow>(
+    `
+      insert into validation_settings (
+        singleton_key,
+        pipeline_enabled,
+        run_mode,
+        automatic_interval_minutes
+      )
+      values ($1, true, $2, $3)
+      returning
+        automatic_interval_minutes,
+        last_scheduled_at,
+        last_tranco_sync_at,
+        next_due_at,
+        operator_note,
+        pipeline_enabled,
+        run_mode,
+        updated_at,
+        updated_by_user_id
+    `,
+    [VALIDATION_SETTINGS_KEY, env.VALIDATION_DEFAULT_RUN_MODE, env.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES]
+  );
 
-  if (insertError || !inserted) {
-    throw new Error(`Failed to initialize validation settings: ${insertError?.message ?? "Unknown error"}`);
+  if (!inserted) {
+    throw new Error("Failed to initialize validation settings: Unknown error");
   }
 
-  return inserted as ValidationSettingsRow;
+  return inserted;
 }
 
 export async function getValidationPipelineState() {
@@ -389,15 +414,19 @@ export async function getValidationPipelineState() {
 }
 
 async function getValidationInternalOrganizationId() {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("organizations")
-    .select("id")
-    .eq("slug", VALIDATION_INTERNAL_ORG_SLUG)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation internal organization: ${error.message}`);
+  let data: { id: string } | null;
+  try {
+    data = await queryOne<{ id: string }>(
+      `
+        select id
+        from organizations
+        where slug = $1
+      `,
+      [VALIDATION_INTERNAL_ORG_SLUG],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation internal organization: ${getErrorMessage(error)}`);
   }
 
   if (!data?.id) {
@@ -412,54 +441,86 @@ export async function upsertValidationTarget(input: {
   source: string;
   trancoRank?: number | null;
 }) {
-  const db = createDatabaseClient();
   const hostname = extractHostname(input.normalizedUrl);
   const trancoRank = input.trancoRank ?? null;
   const rankBand = rankBandForRank(trancoRank);
 
-  const { data, error } = await db
-    .from("validation_targets")
-    .upsert(
-      {
+  const data = await queryOne<ValidationTargetRow>(
+    `
+      insert into validation_targets (
         hostname,
-        normalized_url: input.normalizedUrl,
-        source: input.source,
-        tranco_rank: trancoRank,
-        rank_band: rankBand,
-        active: true
-      },
-      {
-        onConflict: "hostname"
-      }
-    )
-    .select(
-      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-    )
-    .single();
+        normalized_url,
+        source,
+        tranco_rank,
+        rank_band,
+        active
+      )
+      values ($1, $2, $3, $4, $5, true)
+      on conflict (hostname) do update
+        set normalized_url = excluded.normalized_url,
+            source = excluded.source,
+            tranco_rank = excluded.tranco_rank,
+            rank_band = excluded.rank_band,
+            active = excluded.active
+      returning
+        active,
+        backoff_until,
+        cooldown_until,
+        deny_reason,
+        denylisted,
+        failure_count,
+        hostname,
+        id,
+        last_completed_at,
+        last_error,
+        last_run_at,
+        last_status,
+        normalized_url,
+        rank_band,
+        source,
+        tranco_rank
+    `,
+    [hostname, input.normalizedUrl, input.source, trancoRank, rankBand]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to upsert validation target ${hostname}: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error(`Failed to upsert validation target ${hostname}: Unknown error`);
   }
 
-  return data as ValidationTargetRow;
+  return data;
 }
 
 export async function listValidationTargets(limit = 50) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_targets")
-    .select(
-      "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-    )
-    .order("last_run_at", { ascending: false, nullsFirst: false })
-    .order("tranco_rank", { ascending: true, nullsFirst: false })
-    .limit(limit);
-
-  if (error) {
-    throw new Error(`Failed to list validation targets: ${error.message}`);
+  try {
+    return await query<ValidationTargetRow>(
+      `
+        select
+          active,
+          backoff_until,
+          cooldown_until,
+          deny_reason,
+          denylisted,
+          failure_count,
+          hostname,
+          id,
+          last_completed_at,
+          last_error,
+          last_run_at,
+          last_status,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        from validation_targets
+        order by last_run_at desc nulls last, tranco_rank asc nulls last
+        limit $1
+      `,
+      [limit],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to list validation targets: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as ValidationTargetRow[];
 }
 
 export async function syncTrancoTargets(force = false) {
@@ -535,33 +596,54 @@ export async function syncTrancoTargets(force = false) {
     }
   }
 
-  const db = createDatabaseClient();
   let insertedCount = 0;
   const batchSize = 500;
 
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
-    const { error } = await db.from("validation_targets").upsert(batch, {
-      onConflict: "hostname"
-    });
-
-    if (error) {
-      throw new Error(`Failed to upsert Tranco targets: ${error.message}`);
+    try {
+      await query(
+        `
+          insert into validation_targets (
+            active,
+            hostname,
+            normalized_url,
+            rank_band,
+            source,
+            tranco_rank
+          )
+          select
+            value->>'active' = 'true',
+            value->>'hostname',
+            value->>'normalized_url',
+            value->>'rank_band',
+            value->>'source',
+            (value->>'tranco_rank')::int
+          from jsonb_array_elements($1::jsonb) as value
+          on conflict (hostname) do update
+            set active = excluded.active,
+                normalized_url = excluded.normalized_url,
+                rank_band = excluded.rank_band,
+                source = excluded.source,
+                tranco_rank = excluded.tranco_rank
+        `,
+        [JSON.stringify(batch)]
+      );
+    } catch (error) {
+      throw new Error(`Failed to upsert Tranco targets: ${getErrorMessage(error)}`);
     }
 
     insertedCount += batch.length;
   }
 
-  const { error: updateError } = await db
-    .from("validation_settings")
-    .update({
-      last_tranco_sync_at: now.toISOString()
-    })
-    .eq("singleton_key", VALIDATION_SETTINGS_KEY);
-
-  if (updateError) {
-    throw new Error(`Failed to update validation Tranco sync state: ${updateError.message}`);
-  }
+  await query(
+    `
+      update validation_settings
+         set last_tranco_sync_at = $2
+       where singleton_key = $1
+    `,
+    [VALIDATION_SETTINGS_KEY, now.toISOString()]
+  );
 
   return { insertedCount, skipped: false as const };
 }
@@ -581,52 +663,76 @@ function pickWeightedBand() {
 }
 
 export async function claimNextAutomaticTarget(now = new Date()) {
-  const db = createDatabaseClient();
   const nowIso = now.toISOString();
   const attemptedBands = [pickWeightedBand(), ...VALIDATION_RANK_BANDS.map((band) => band.key)].filter(
     (value, index, values) => values.indexOf(value) === index
   );
 
   for (const rankBand of attemptedBands) {
-    const { data, error } = await db
-      .from("validation_targets")
-      .select(
-        "active, backoff_until, cooldown_until, deny_reason, denylisted, failure_count, hostname, id, last_completed_at, last_error, last_run_at, last_status, normalized_url, rank_band, source, tranco_rank"
-      )
-      .eq("active", true)
-      .eq("denylisted", false)
-      .eq("rank_band", rankBand)
-      .or(`cooldown_until.is.null,cooldown_until.lt.${nowIso}`)
-      .or(`backoff_until.is.null,backoff_until.lt.${nowIso}`)
-      .limit(250);
-
-    if (error) {
-      throw new Error(`Failed to load validation targets: ${error.message}`);
+    let rows: ValidationTargetRow[];
+    try {
+      rows = await query<ValidationTargetRow>(
+        `
+          select
+            active,
+            backoff_until,
+            cooldown_until,
+            deny_reason,
+            denylisted,
+            failure_count,
+            hostname,
+            id,
+            last_completed_at,
+            last_error,
+            last_run_at,
+            last_status,
+            normalized_url,
+            rank_band,
+            source,
+            tranco_rank
+          from validation_targets
+          where active = true
+            and denylisted = false
+            and rank_band = $1
+            and (cooldown_until is null or cooldown_until < $2)
+            and (backoff_until is null or backoff_until < $2)
+          limit 250
+        `,
+        [rankBand, nowIso],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load validation targets: ${getErrorMessage(error)}`);
     }
 
-    const rows = ((data ?? []) as ValidationTargetRow[]).filter((target) => {
+    const eligibleRows = rows.filter((target) => {
       const cooldownOk = !target.cooldown_until || new Date(target.cooldown_until) <= now;
       const backoffOk = !target.backoff_until || new Date(target.backoff_until) <= now;
       return cooldownOk && backoffOk;
     });
 
-    if (rows.length === 0) {
+    if (eligibleRows.length === 0) {
       continue;
     }
 
-    const shuffled = [...rows].sort(() => Math.random() - 0.5);
+    const shuffled = [...eligibleRows].sort(() => Math.random() - 0.5);
 
     for (const target of shuffled) {
-      const { data: activeRun, error: activeRunError } = await db
-        .from("validation_runs")
-        .select("id")
-        .eq("validation_target_id", target.id)
-        .in("status", [...ACTIVE_RUN_STATUSES])
-        .limit(1)
-        .maybeSingle();
-
-      if (activeRunError) {
-        throw new Error(`Failed to check active validation runs: ${activeRunError.message}`);
+      let activeRun: { id: string } | null;
+      try {
+        activeRun = await queryOne<{ id: string }>(
+          `
+            select id
+            from validation_runs
+            where validation_target_id = $1
+              and status = any($2::text[])
+            limit 1
+          `,
+          [target.id, [...ACTIVE_RUN_STATUSES]],
+          { readOnly: true }
+        );
+      } catch (error) {
+        throw new Error(`Failed to check active validation runs: ${getErrorMessage(error)}`);
       }
 
       if (!activeRun) {
@@ -646,65 +752,105 @@ export async function createValidationRun(input: {
   trancoRank?: number | null;
   triggerMode: ValidationRunMode;
 }) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_runs")
-    .insert({
-      hostname: input.hostname,
-      normalized_url: input.normalizedUrl,
-      rank_band: input.rankBand ?? null,
-      tranco_rank: input.trancoRank ?? null,
-      trigger_mode: input.triggerMode,
-      status: "queued",
-      validation_target_id: input.targetId ?? null
-    })
-    .select(
-      "completed_at, created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
-    )
-    .single();
+  const data = await queryOne<ValidationRunRow>(
+    `
+      insert into validation_runs (
+        hostname,
+        normalized_url,
+        rank_band,
+        tranco_rank,
+        trigger_mode,
+        status,
+        validation_target_id
+      )
+      values ($1, $2, $3, $4, $5, 'queued', $6)
+      returning
+        completed_at,
+        created_at,
+        error_message,
+        hostname,
+        id,
+        normalized_url,
+        rank_band,
+        scan_id,
+        started_at,
+        status,
+        tranco_rank,
+        trigger_mode,
+        validation_target_id
+    `,
+    [input.hostname, input.normalizedUrl, input.rankBand ?? null, input.trancoRank ?? null, input.triggerMode, input.targetId ?? null]
+  );
 
-  if (error || !data) {
-    throw new Error(`Failed to create validation run: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error("Failed to create validation run: Unknown error");
   }
 
   if (input.targetId) {
-    await db
-      .from("validation_targets")
-      .update({
-        last_run_at: new Date().toISOString(),
-        last_status: "queued"
-      })
-      .eq("id", input.targetId);
+    await query(
+      `
+        update validation_targets
+           set last_run_at = $2,
+               last_status = 'queued'
+         where id = $1
+      `,
+      [input.targetId, new Date().toISOString()]
+    );
   }
 
-  return data as ValidationRunRow;
+  return data;
 }
 
 export async function getValidationRun(runId: string) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_runs")
-    .select(
-      "completed_at, created_at, error_message, hostname, id, normalized_url, rank_band, scan_id, started_at, status, tranco_rank, trigger_mode, validation_target_id"
-    )
-    .eq("id", runId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load validation run ${runId}: ${error.message}`);
+  try {
+    return await queryOne<ValidationRunRow>(
+      `
+        select
+          completed_at,
+          created_at,
+          error_message,
+          hostname,
+          id,
+          normalized_url,
+          rank_band,
+          scan_id,
+          started_at,
+          status,
+          tranco_rank,
+          trigger_mode,
+          validation_target_id
+        from validation_runs
+        where id = $1
+      `,
+      [runId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation run ${runId}: ${getErrorMessage(error)}`);
   }
-
-  return (data as ValidationRunRow | null) ?? null;
 }
 
 export async function updateValidationRun(
   runId: string,
   patch: Record<string, unknown>
 ) {
-  const db = createDatabaseClient();
-  const { error } = await db.from("validation_runs").update(patch).eq("id", runId);
-  if (error) {
-    throw new Error(`Failed to update validation run ${runId}: ${error.message}`);
+  const entries = Object.entries(patch);
+  if (entries.length === 0) {
+    return;
+  }
+
+  const setClause = entries.map(([key], index) => `${key} = $${index + 1}`).join(", ");
+  try {
+    await query(
+      `
+        update validation_runs
+           set ${setClause}
+         where id = $${entries.length + 1}
+      `,
+      [...entries.map(([, value]) => value), runId]
+    );
+  } catch (error) {
+    throw new Error(`Failed to update validation run ${runId}: ${getErrorMessage(error)}`);
   }
 }
 
