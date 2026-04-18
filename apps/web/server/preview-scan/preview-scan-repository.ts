@@ -267,18 +267,30 @@ function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
 
   const completedAt =
     scan.completed_at ??
-    getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.completed]);
+    getLatestEventCreatedAt(lifecycleEvents, [
+      PREVIEW_SCAN_EVENT_TYPES.completed,
+      SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+      SCAN_EVENT_TYPES.nanoDocRetrievalCompleted
+    ]);
   const failedAt =
     scan.status === "failed"
       ? scan.updated_at
-      : getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.failed]);
+      : getLatestEventCreatedAt(lifecycleEvents, [
+          PREVIEW_SCAN_EVENT_TYPES.failed,
+          SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+          SCAN_EVENT_TYPES.nanoDocRetrievalFailed
+        ]);
   const latestEventAt = getLatestEventCreatedAt(
     lifecycleEvents,
     [...new Set(lifecycleEvents.map((event) => event.event_type))]
   );
   const startedAt =
     scan.started_at ??
-    getEarliestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.started]);
+    getEarliestEventCreatedAt(lifecycleEvents, [
+      PREVIEW_SCAN_EVENT_TYPES.started,
+      SCAN_EVENT_TYPES.nanoDocRetrievalStarted,
+      SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted
+    ]);
   const staleRunning =
     !completedAt &&
     !failedAt &&
