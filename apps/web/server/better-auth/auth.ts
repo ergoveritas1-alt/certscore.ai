@@ -27,10 +27,12 @@ function createAuth() {
         accessToken: "access_token",
         accessTokenExpiresAt: "access_token_expires_at",
         accountId: "account_id",
+        createdAt: "created_at",
         idToken: "id_token",
         providerId: "provider_id",
         refreshToken: "refresh_token",
         refreshTokenExpiresAt: "refresh_token_expires_at",
+        updatedAt: "updated_at",
         userId: "user_id"
       },
       modelName: "better_auth_accounts"
