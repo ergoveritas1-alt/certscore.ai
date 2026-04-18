@@ -2302,76 +2302,95 @@ export async function queueManualValidationRunAction(input: {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const db = createDatabaseClient();
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
   let resolvedTarget: { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null = null;
 
   if (!isSyntheticPreviewTarget) {
-    const { data: target, error } = await db
-      .from("validation_targets")
-      .select("id, hostname, normalized_url, tranco_rank")
-      .eq("id", input.targetId)
-      .maybeSingle();
-
-    if (error) {
-      throw new Error(`Failed to load validation target: ${error.message}`);
+    try {
+      resolvedTarget = await queryOne<{ hostname: string; id: string; normalized_url: string; tranco_rank: number | null }>(
+        `
+          select id, hostname, normalized_url, tranco_rank
+          from validation_targets
+          where id = $1
+        `,
+        [input.targetId],
+        { readOnly: true }
+      );
+    } catch (error) {
+      throw new Error(`Failed to load validation target: ${getErrorMessage(error)}`);
     }
-
-    resolvedTarget = (target as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
   }
 
   if (!resolvedTarget && input.hostname && input.normalizedUrl) {
     const materializedSource = input.source === "tranco" ? "tranco" : "manual";
-    const { data: insertedTarget, error: insertError } = await db
-      .from("validation_targets")
-      .upsert(
-        {
-          active: true,
-          denylisted: false,
-          hostname: input.hostname,
-          normalized_url: input.normalizedUrl,
-          rank_band: rankBandForRank(input.trancoRank ?? null),
-          source: materializedSource,
-          tranco_rank: input.trancoRank ?? null
-        },
-        { onConflict: "hostname" }
-      )
-      .select("id, hostname, normalized_url, tranco_rank")
-      .single();
+    const insertedTarget = await queryOne<{ hostname: string; id: string; normalized_url: string; tranco_rank: number | null }>(
+      `
+        insert into validation_targets (
+          active,
+          denylisted,
+          hostname,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        )
+        values (true, false, $1, $2, $3, $4, $5)
+        on conflict (hostname) do update
+          set active = excluded.active,
+              denylisted = excluded.denylisted,
+              normalized_url = excluded.normalized_url,
+              rank_band = excluded.rank_band,
+              source = excluded.source,
+              tranco_rank = excluded.tranco_rank
+        returning id, hostname, normalized_url, tranco_rank
+      `,
+      [input.hostname, input.normalizedUrl, rankBandForRank(input.trancoRank ?? null), materializedSource, input.trancoRank ?? null]
+    );
 
-    if (insertError || !insertedTarget) {
-      throw new Error(`Failed to materialize validation target: ${insertError?.message ?? "Unknown error"}`);
+    if (!insertedTarget) {
+      throw new Error("Failed to materialize validation target: Unknown error");
     }
 
-    await db.from("validation_audit_events").insert({
-      actor_user_id: context.user.id,
-      event_type: "validation.target_added",
-      metadata_json: {
-        hostname: input.hostname,
-        normalizedUrl: input.normalizedUrl,
-        source: `${materializedSource}_fallback_materialized`,
-        trancoRank: input.trancoRank ?? null
-      }
-    });
+    await query(
+      `
+        insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+        values ($1, $2, $3)
+      `,
+      [
+        context.user.id,
+        "validation.target_added",
+        {
+          hostname: input.hostname,
+          normalizedUrl: input.normalizedUrl,
+          source: `${materializedSource}_fallback_materialized`,
+          trancoRank: input.trancoRank ?? null
+        }
+      ]
+    );
 
-    resolvedTarget = insertedTarget as { hostname: string; id: string; normalized_url: string; tranco_rank: number | null };
+    resolvedTarget = insertedTarget;
   }
 
   if (!resolvedTarget) {
     throw new Error("Validation target not found.");
   }
 
-  const { data: settings, error: settingsError } = await db
-    .from("validation_settings")
-    .select("pipeline_enabled")
-    .eq("singleton_key", "default")
-    .single();
-
-  if (settingsError) {
-    throw new Error(`Failed to load validation pipeline state: ${settingsError.message}`);
+  let settings: { pipeline_enabled: boolean } | null;
+  try {
+    settings = await queryOne<{ pipeline_enabled: boolean }>(
+      `
+        select pipeline_enabled
+        from validation_settings
+        where singleton_key = 'default'
+      `,
+      [],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation pipeline state: ${getErrorMessage(error)}`);
   }
 
-  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !(settings as { pipeline_enabled: boolean }).pipeline_enabled) {
+  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !settings?.pipeline_enabled) {
     throw new Error("Validation pipeline is paused.");
   }
 
@@ -2388,52 +2407,53 @@ export async function queueManualValidationRunAction(input: {
     submittedByUserId: context.user.id
   });
 
-  const { data: run, error: runError } = await db
-    .from("validation_runs")
-    .insert({
-      domain_id: domain.id,
-      hostname: resolvedTarget.hostname,
-      normalized_url: resolvedTarget.normalized_url,
-      rank_band:
-        typeof resolvedTarget.tranco_rank === "number"
-          ? resolvedTarget.tranco_rank <= 5_000
-            ? "1k-5k"
-            : resolvedTarget.tranco_rank <= 20_000
-              ? "5k-20k"
-              : resolvedTarget.tranco_rank <= 50_000
-                ? "20k-50k"
-                : "50k-100k"
-          : null,
-      scan_id: scanId,
-      status: "queued",
-      tranco_rank: resolvedTarget.tranco_rank,
-      trigger_mode: "manual",
-      triggered_by_user_id: context.user.id,
-      validation_target_id: resolvedTarget.id
-    })
-    .select("id")
-    .single();
+  const run = await queryOne<{ id: string }>(
+    `
+      insert into validation_runs (
+        domain_id,
+        hostname,
+        normalized_url,
+        rank_band,
+        scan_id,
+        status,
+        tranco_rank,
+        trigger_mode,
+        triggered_by_user_id,
+        validation_target_id
+      )
+      values ($1, $2, $3, $4, $5, 'queued', $6, 'manual', $7, $8)
+      returning id
+    `,
+    [
+      domain.id,
+      resolvedTarget.hostname,
+      resolvedTarget.normalized_url,
+      rankBandForRank(resolvedTarget.tranco_rank),
+      scanId,
+      resolvedTarget.tranco_rank,
+      context.user.id,
+      resolvedTarget.id
+    ]
+  );
 
-  if (runError || !run) {
-    throw new Error(`Failed to create manual validation run: ${runError?.message ?? "Unknown error"}`);
+  if (!run) {
+    throw new Error("Failed to create manual validation run: Unknown error");
   }
 
-  const { error: targetError } = await db
-    .from("validation_targets")
-    .update({
-      last_error: null,
-      last_run_at: new Date().toISOString(),
-      last_status: "queued"
-    })
-    .eq("id", resolvedTarget.id);
-
-  if (targetError) {
-    throw new Error(`Failed to mark validation target queued: ${targetError.message}`);
-  }
+  await query(
+    `
+      update validation_targets
+         set last_error = null,
+             last_run_at = $2,
+             last_status = 'queued'
+       where id = $1
+    `,
+    [resolvedTarget.id, new Date().toISOString()]
+  );
 
   try {
     await withValidationQueueHandoffTimeout(enqueueFullScanJob(scanId));
-    await withValidationQueueHandoffTimeout(enqueueValidationCollectJob((run as { id: string }).id));
+    await withValidationQueueHandoffTimeout(enqueueValidationCollectJob(run.id));
   } catch (queueError) {
     const message = queueError instanceof Error ? queueError.message : "Unknown validation queue handoff error";
     await failValidationQueueHandoff({
@@ -2442,36 +2462,45 @@ export async function queueManualValidationRunAction(input: {
       message,
       scanId,
       targetId: resolvedTarget.id,
-      validationRunId: (run as { id: string }).id
+      validationRunId: run.id
     });
     throw new Error(`Validation queue handoff failed: ${message}`);
   }
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: "validation.manual_run_queued",
-    metadata_json: {
-      hostname: resolvedTarget.hostname,
-      targetId: resolvedTarget.id,
-      validationRunId: (run as { id: string }).id
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      "validation.manual_run_queued",
+      {
+        hostname: resolvedTarget.hostname,
+        targetId: resolvedTarget.id,
+        validationRunId: run.id
+      }
+    ]
+  );
 
-  const { error: removeError } = await db.from("validation_targets").delete().eq("id", resolvedTarget.id);
-  if (removeError) {
-    throw new Error(`Failed to consume validation target from queue: ${removeError.message}`);
-  }
+  await query(`delete from validation_targets where id = $1`, [resolvedTarget.id]);
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: "validation.target_removed",
-    metadata_json: {
-      hostname: resolvedTarget.hostname,
-      reason: "queued_for_manual_run",
-      targetId: resolvedTarget.id,
-      validationRunId: (run as { id: string }).id
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      "validation.target_removed",
+      {
+        hostname: resolvedTarget.hostname,
+        reason: "queued_for_manual_run",
+        targetId: resolvedTarget.id,
+        validationRunId: run.id
+      }
+    ]
+  );
 
   await addRandomTrancoValidationTarget({
     actorUserId: context.user.id,
@@ -2479,9 +2508,8 @@ export async function queueManualValidationRunAction(input: {
     excludedHostnames: [resolvedTarget.hostname],
     metadata: {
       replacedHostname: resolvedTarget.hostname,
-      validationRunId: (run as { id: string }).id
-    },
-    db
+      validationRunId: run.id
+    }
   });
 
   revalidatePath("/app");
@@ -2490,7 +2518,7 @@ export async function queueManualValidationRunAction(input: {
 
   return {
     scanId,
-    validationRunId: (run as { id: string }).id
+    validationRunId: run.id
   };
 }
 
@@ -2501,71 +2529,95 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     throw new Error(availability.reason ?? "Validation queue is unavailable.");
   }
 
-  const db = createDatabaseClient();
-  const { data: domain, error: domainError } = await db
-    .from("domains")
-    .select("id, hostname, normalized_url")
-    .eq("id", input.domainId)
-    .eq("organization_id", context.organization.id)
-    .maybeSingle();
-
-  if (domainError) {
-    throw new Error(`Failed to load validation domain: ${domainError.message}`);
+  let domain: { hostname: string; id: string; normalized_url: string } | null;
+  try {
+    domain = await queryOne<{ hostname: string; id: string; normalized_url: string }>(
+      `
+        select id, hostname, normalized_url
+        from domains
+        where id = $1
+          and organization_id = $2
+      `,
+      [input.domainId, context.organization.id],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation domain: ${getErrorMessage(error)}`);
   }
 
   if (!domain) {
     throw new Error("Validation domain not found.");
   }
 
-  const { data: settings, error: settingsError } = await db
-    .from("validation_settings")
-    .select("pipeline_enabled")
-    .eq("singleton_key", "default")
-    .single();
-
-  if (settingsError) {
-    throw new Error(`Failed to load validation pipeline state: ${settingsError.message}`);
+  let settings: { pipeline_enabled: boolean } | null;
+  try {
+    settings = await queryOne<{ pipeline_enabled: boolean }>(
+      `
+        select pipeline_enabled
+        from validation_settings
+        where singleton_key = 'default'
+      `,
+      [],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation pipeline state: ${getErrorMessage(error)}`);
   }
 
-  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !(settings as { pipeline_enabled: boolean }).pipeline_enabled) {
+  if (process.env.VALIDATION_PIPELINE_ENABLED === "0" || !settings?.pipeline_enabled) {
     throw new Error("Validation pipeline is paused.");
   }
 
   const scanId = await createValidationScan({
-    domainId: (domain as { id: string }).id,
-    hostname: (domain as { hostname: string }).hostname,
-    normalizedUrl: (domain as { normalized_url: string }).normalized_url,
+    domainId: domain.id,
+    hostname: domain.hostname,
+    normalizedUrl: domain.normalized_url,
     organizationId: context.organization.id,
     submittedByUserId: context.user.id
   });
 
-  const { data: previousRun } = await db
-    .from("validation_runs")
-    .select("tranco_rank, rank_band")
-    .eq("domain_id", (domain as { id: string }).id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const previousRun = await queryOne<{ rank_band: string | null; tranco_rank: number | null }>(
+    `
+      select tranco_rank, rank_band
+      from validation_runs
+      where domain_id = $1
+      order by created_at desc
+      limit 1
+    `,
+    [domain.id],
+    { readOnly: true }
+  );
 
-  const { data: run, error: runError } = await db
-    .from("validation_runs")
-    .insert({
-      domain_id: (domain as { id: string }).id,
-      hostname: (domain as { hostname: string }).hostname,
-      normalized_url: (domain as { normalized_url: string }).normalized_url,
-      rank_band: (previousRun as { rank_band: string | null } | null)?.rank_band ?? null,
-      scan_id: scanId,
-      status: "queued",
-      tranco_rank: (previousRun as { tranco_rank: number | null } | null)?.tranco_rank ?? null,
-      trigger_mode: "manual",
-      triggered_by_user_id: context.user.id,
-      validation_target_id: null
-    })
-    .select("id")
-    .single();
+  const run = await queryOne<{ id: string }>(
+    `
+      insert into validation_runs (
+        domain_id,
+        hostname,
+        normalized_url,
+        rank_band,
+        scan_id,
+        status,
+        tranco_rank,
+        trigger_mode,
+        triggered_by_user_id,
+        validation_target_id
+      )
+      values ($1, $2, $3, $4, $5, 'queued', $6, 'manual', $7, null)
+      returning id
+    `,
+    [
+      domain.id,
+      domain.hostname,
+      domain.normalized_url,
+      previousRun?.rank_band ?? null,
+      scanId,
+      previousRun?.tranco_rank ?? null,
+      context.user.id
+    ]
+  );
 
-  if (runError || !run) {
-    throw new Error(`Failed to create validation re-scan run: ${runError?.message ?? "Unknown error"}`);
+  if (!run) {
+    throw new Error("Failed to create validation re-scan run: Unknown error");
   }
 
   try {
@@ -2575,26 +2627,32 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
     const message = queueError instanceof Error ? queueError.message : "Unknown validation queue handoff error";
     await failValidationQueueHandoff({
       actorUserId: context.user.id,
-      hostname: (domain as { hostname: string }).hostname,
+      hostname: domain.hostname,
       message,
       scanId,
       targetId: null,
-      validationRunId: (run as { id: string }).id
+      validationRunId: run.id
     });
     throw new Error(`Validation queue handoff failed: ${message}`);
   }
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: "validation.manual_run_queued",
-    metadata_json: {
-      domainId: input.domainId,
-      hostname: (domain as { hostname: string }).hostname,
-      scanId,
-      validationRunId: (run as { id: string }).id,
-      reason: "validation_rescan"
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      "validation.manual_run_queued",
+      {
+        domainId: input.domainId,
+        hostname: domain.hostname,
+        scanId,
+        validationRunId: run.id,
+        reason: "validation_rescan"
+      }
+    ]
+  );
 
   revalidatePath("/app");
   revalidatePath("/app/scans");
@@ -2602,7 +2660,7 @@ export async function queueValidationRescanAction(input: { domainId: string }) {
 
   return {
     scanId,
-    validationRunId: (run as { id: string }).id
+    validationRunId: run.id
   };
 }
 
@@ -2617,35 +2675,41 @@ export async function updateValidationTargetStateAction(input: {
   trancoRank?: number;
 }) {
   const context = await requireAdmin();
-  const db = createDatabaseClient();
   const patch: Record<string, string | boolean | null> = {};
   const isSyntheticPreviewTarget = input.targetId.startsWith("tranco-preview-");
 
   let resolvedTargetId = input.targetId;
   if (isSyntheticPreviewTarget && input.hostname && input.normalizedUrl) {
     const materializedSource = input.source === "tranco" ? "tranco" : "manual";
-    const { data: insertedTarget, error: insertError } = await db
-      .from("validation_targets")
-      .upsert(
-        {
-          active: true,
-          denylisted: false,
-          hostname: input.hostname,
-          normalized_url: input.normalizedUrl,
-          rank_band: rankBandForRank(input.trancoRank ?? null),
-          source: materializedSource,
-          tranco_rank: input.trancoRank ?? null
-        },
-        { onConflict: "hostname" }
-      )
-      .select("id")
-      .single();
+    const insertedTarget = await queryOne<{ id: string }>(
+      `
+        insert into validation_targets (
+          active,
+          denylisted,
+          hostname,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        )
+        values (true, false, $1, $2, $3, $4, $5)
+        on conflict (hostname) do update
+          set active = excluded.active,
+              denylisted = excluded.denylisted,
+              normalized_url = excluded.normalized_url,
+              rank_band = excluded.rank_band,
+              source = excluded.source,
+              tranco_rank = excluded.tranco_rank
+        returning id
+      `,
+      [input.hostname, input.normalizedUrl, rankBandForRank(input.trancoRank ?? null), materializedSource, input.trancoRank ?? null]
+    );
 
-    if (insertError || !insertedTarget) {
-      throw new Error(`Failed to materialize validation target: ${insertError?.message ?? "Unknown error"}`);
+    if (!insertedTarget) {
+      throw new Error("Failed to materialize validation target: Unknown error");
     }
 
-    resolvedTargetId = (insertedTarget as { id: string }).id;
+    resolvedTargetId = insertedTarget.id;
   }
 
   if (input.clearBackoff) {
@@ -2659,19 +2723,33 @@ export async function updateValidationTargetStateAction(input: {
     patch.deny_reason = input.denylisted ? input.denyReason ?? "Suppressed by operator." : null;
   }
 
-  const { error } = await db.from("validation_targets").update(patch).eq("id", resolvedTargetId);
-  if (error) {
-    throw new Error(`Failed to update validation target: ${error.message}`);
+  const patchEntries = Object.entries(patch);
+  if (patchEntries.length > 0) {
+    const setClause = patchEntries.map(([key], index) => `${key} = $${index + 1}`).join(", ");
+    await query(
+      `
+        update validation_targets
+           set ${setClause}
+         where id = $${patchEntries.length + 1}
+      `,
+      [...patchEntries.map(([, value]) => value), resolvedTargetId]
+    );
   }
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: input.denylisted ? "validation.target_suppressed" : input.clearBackoff ? "validation.target_backoff_cleared" : "validation.target_updated",
-    metadata_json: {
-      ...input,
-      targetId: resolvedTargetId
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      input.denylisted ? "validation.target_suppressed" : input.clearBackoff ? "validation.target_backoff_cleared" : "validation.target_updated",
+      {
+        ...input,
+        targetId: resolvedTargetId
+      }
+    ]
+  );
 
   revalidatePath("/app");
   revalidatePath("/app/scans");
@@ -2679,35 +2757,41 @@ export async function updateValidationTargetStateAction(input: {
 
 export async function removeValidationTargetAction(input: { targetId: string }) {
   const context = await requireAdmin();
-  const db = createDatabaseClient();
-
-  const { data: target, error: loadError } = await db
-    .from("validation_targets")
-    .select("id, hostname")
-    .eq("id", input.targetId)
-    .maybeSingle();
-
-  if (loadError) {
-    throw new Error(`Failed to load validation target: ${loadError.message}`);
+  let target: { hostname: string; id: string } | null;
+  try {
+    target = await queryOne<{ hostname: string; id: string }>(
+      `
+        select id, hostname
+        from validation_targets
+        where id = $1
+      `,
+      [input.targetId],
+      { readOnly: true }
+    );
+  } catch (error) {
+    throw new Error(`Failed to load validation target: ${getErrorMessage(error)}`);
   }
 
   if (!target) {
     throw new Error("Validation target not found.");
   }
 
-  const { error } = await db.from("validation_targets").delete().eq("id", input.targetId);
-  if (error) {
-    throw new Error(`Failed to remove validation target: ${error.message}`);
-  }
+  await query(`delete from validation_targets where id = $1`, [input.targetId]);
 
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: "validation.target_removed",
-    metadata_json: {
-      hostname: (target as { hostname: string }).hostname,
-      targetId: input.targetId
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      "validation.target_removed",
+      {
+        hostname: target.hostname,
+        targetId: input.targetId
+      }
+    ]
+  );
 
   revalidatePath("/app");
   revalidatePath("/app/scans");
@@ -2715,40 +2799,32 @@ export async function removeValidationTargetAction(input: { targetId: string }) 
 }
 
 async function pickRandomTrancoValidationTarget(
-  db: ReturnType<typeof createDatabaseClient>,
   excludedHostnames: string[] = []
 ) {
   const targetRank = Math.floor(Math.random() * (50_000 - 1_000 + 1)) + 1_000;
   const excluded = excludedHostnames.filter(Boolean);
 
   const loadCandidate = async (direction: "gte" | "lte") => {
-    let query = db
-      .from("validation_targets")
-      .select("hostname, normalized_url, tranco_rank")
-      .eq("source", "tranco")
-      .gte("tranco_rank", 1_000)
-      .lte("tranco_rank", 50_000)
-      .limit(1);
-
-    query =
-      direction === "gte"
-        ? query.gte("tranco_rank", targetRank).order("tranco_rank", { ascending: true })
-        : query.lte("tranco_rank", targetRank).order("tranco_rank", { ascending: false });
-
-    if (excluded.length > 0) {
-      query = query.not("hostname", "in", `(${excluded.map((hostname) => `"${hostname}"`).join(",")})`);
-    }
-
-    const { data, error } = await query.maybeSingle();
-    if (error) {
-      throw new Error(`Failed to load Tranco validation target: ${error.message}`);
-    }
-
-    return (data as { hostname: string; normalized_url: string; tranco_rank: number | null } | null) ?? null;
+    return await queryOne<{ hostname: string; normalized_url: string; tranco_rank: number | null }>(
+      `
+        select hostname, normalized_url, tranco_rank
+        from validation_targets
+        where source = 'tranco'
+          and tranco_rank between 1000 and 50000
+          and (
+            cardinality($1::text[]) = 0
+            or not (hostname = any($1::text[]))
+          )
+          and tranco_rank ${direction === "gte" ? ">=" : "<="} $2
+        order by tranco_rank ${direction === "gte" ? "asc" : "desc"}
+        limit 1
+      `,
+      [excluded, targetRank],
+      { readOnly: true }
+    );
   };
 
-  const higherCandidate = await loadCandidate("gte");
-  const lowerCandidate = await loadCandidate("lte");
+  const [higherCandidate, lowerCandidate] = await Promise.all([loadCandidate("gte"), loadCandidate("lte")]);
   const candidate =
     higherCandidate && lowerCandidate
       ? Math.abs((higherCandidate.tranco_rank ?? targetRank) - targetRank) <= Math.abs((lowerCandidate.tranco_rank ?? targetRank) - targetRank)
@@ -2771,43 +2847,54 @@ async function addRandomTrancoValidationTarget(params: {
   excludedHostnames?: string[];
   eventType?: string;
   metadata?: Record<string, unknown>;
-  db: ReturnType<typeof createDatabaseClient>;
 }) {
-  const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata, db } = params;
+  const { actorUserId, excludedHostnames, eventType = "validation.target_added", metadata } = params;
   try {
-    const { candidate, targetRank } = await pickRandomTrancoValidationTarget(db, excludedHostnames);
+    const { candidate, targetRank } = await pickRandomTrancoValidationTarget(excludedHostnames);
 
     const hostname = extractHostname(candidate.normalized_url);
     const normalizedUrl = normalizeUrl(candidate.normalized_url);
 
-    const { error } = await db.from("validation_targets").upsert(
-      {
-        active: true,
-        denylisted: false,
-        hostname,
-        normalized_url: normalizedUrl,
-        rank_band: rankBandForRank(candidate.tranco_rank ?? null),
-        source: "tranco",
-        tranco_rank: candidate.tranco_rank ?? null
-      },
-      { onConflict: "hostname" }
+    await query(
+      `
+        insert into validation_targets (
+          active,
+          denylisted,
+          hostname,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        )
+        values (true, false, $1, $2, $3, 'tranco', $4)
+        on conflict (hostname) do update
+          set active = excluded.active,
+              denylisted = excluded.denylisted,
+              normalized_url = excluded.normalized_url,
+              rank_band = excluded.rank_band,
+              source = excluded.source,
+              tranco_rank = excluded.tranco_rank
+      `,
+      [hostname, normalizedUrl, rankBandForRank(candidate.tranco_rank ?? null), candidate.tranco_rank ?? null]
     );
 
-    if (error) {
-      throw new Error(`Failed to add validation target: ${error.message}`);
-    }
-
-    await db.from("validation_audit_events").insert({
-      actor_user_id: actorUserId,
-      event_type: eventType,
-      metadata_json: {
-        hostname,
-        ...metadata,
-        normalizedUrl,
-        selectedRank: candidate.tranco_rank,
-        targetRank
-      }
-    });
+    await query(
+      `
+        insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+        values ($1, $2, $3)
+      `,
+      [
+        actorUserId,
+        eventType,
+        {
+          hostname,
+          ...metadata,
+          normalizedUrl,
+          selectedRank: candidate.tranco_rank,
+          targetRank
+        }
+      ]
+    );
 
     return {
       hostname,
@@ -2828,35 +2915,47 @@ async function addRandomTrancoValidationTarget(params: {
       throw new Error("No Tranco validation target is available.");
     }
 
-    const { error: insertError } = await db.from("validation_targets").upsert(
-      {
-        active: true,
-        denylisted: false,
-        hostname: fallback.hostname,
-        normalized_url: fallback.normalized_url,
-        rank_band: rankBandForRank(fallback.tranco_rank ?? null),
-        source: "tranco",
-        tranco_rank: fallback.tranco_rank ?? null
-      },
-      { onConflict: "hostname" }
+    await query(
+      `
+        insert into validation_targets (
+          active,
+          denylisted,
+          hostname,
+          normalized_url,
+          rank_band,
+          source,
+          tranco_rank
+        )
+        values (true, false, $1, $2, $3, 'tranco', $4)
+        on conflict (hostname) do update
+          set active = excluded.active,
+              denylisted = excluded.denylisted,
+              normalized_url = excluded.normalized_url,
+              rank_band = excluded.rank_band,
+              source = excluded.source,
+              tranco_rank = excluded.tranco_rank
+      `,
+      [fallback.hostname, fallback.normalized_url, rankBandForRank(fallback.tranco_rank ?? null), fallback.tranco_rank ?? null]
     );
 
-    if (insertError) {
-      throw new Error(`Failed to add validation target: ${insertError.message}`);
-    }
-
-    await db.from("validation_audit_events").insert({
-      actor_user_id: actorUserId,
-      event_type: eventType,
-      metadata_json: {
-        hostname: fallback.hostname,
-        ...metadata,
-        normalizedUrl: fallback.normalized_url,
-        selectedRank: fallback.tranco_rank,
-        targetRank: fallback.tranco_rank,
-        replacementSource: "tranco_preview_fallback"
-      }
-    });
+    await query(
+      `
+        insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+        values ($1, $2, $3)
+      `,
+      [
+        actorUserId,
+        eventType,
+        {
+          hostname: fallback.hostname,
+          ...metadata,
+          normalizedUrl: fallback.normalized_url,
+          selectedRank: fallback.tranco_rank,
+          targetRank: fallback.tranco_rank,
+          replacementSource: "tranco_preview_fallback"
+        }
+      ]
+    );
 
     return {
       hostname: fallback.hostname,
@@ -2869,34 +2968,43 @@ async function addRandomTrancoValidationTarget(params: {
 
 export async function addValidationTargetAction(input: { hostname: string }) {
   const context = await requireAdmin();
-  const db = createDatabaseClient();
   const normalizedUrl = normalizeUrl(input.hostname);
   const hostname = extractHostname(normalizedUrl);
 
-  const { error } = await db.from("validation_targets").upsert(
-    {
-      active: true,
-      denylisted: false,
-      hostname,
-      normalized_url: normalizedUrl,
-      source: "manual"
-    },
-    { onConflict: "hostname" }
+  await query(
+    `
+      insert into validation_targets (
+        active,
+        denylisted,
+        hostname,
+        normalized_url,
+        source
+      )
+      values (true, false, $1, $2, 'manual')
+      on conflict (hostname) do update
+        set active = excluded.active,
+            denylisted = excluded.denylisted,
+            normalized_url = excluded.normalized_url,
+            source = excluded.source
+    `,
+    [hostname, normalizedUrl]
   );
 
-  if (error) {
-    throw new Error(`Failed to add validation target: ${error.message}`);
-  }
-
-  await db.from("validation_audit_events").insert({
-    actor_user_id: context.user.id,
-    event_type: "validation.target_added",
-    metadata_json: {
-      hostname,
-      normalizedUrl,
-      source: "manual_entry"
-    }
-  });
+  await query(
+    `
+      insert into validation_audit_events (actor_user_id, event_type, metadata_json)
+      values ($1, $2, $3)
+    `,
+    [
+      context.user.id,
+      "validation.target_added",
+      {
+        hostname,
+        normalizedUrl,
+        source: "manual_entry"
+      }
+    ]
+  );
 
   revalidatePath("/app");
   revalidatePath("/app/validation");
