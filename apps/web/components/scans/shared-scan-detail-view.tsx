@@ -5674,9 +5674,13 @@ export function SharedScanDetailView({
   const hybridNavigationSummary = getRecord(hybridRuntimeEvidence?.navigationSummary);
   const hybridUiSummary = getRecord(hybridRuntimeEvidence?.uiSummary);
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
-  const fallbackInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
+  const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
   const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
+  const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
+  const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
+  const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
+  const fallbackObservedIpCount = getFiniteNumber(fallbackEvidence?.metrics?.ipCount) ?? 0;
   const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
   const fallbackServerNames = uniqueStrings(fallbackEvidence?.entities?.serverNames ?? []);
   const fallbackTopDomains = uniqueStrings(fallbackEvidence?.entities?.topDomains ?? []);
@@ -5743,7 +5747,8 @@ export function SharedScanDetailView({
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
     getRecordNumber(snapshot, "cookie_count_total") ?? 0,
-    fallbackInitialCookieCount
+    runtimeInitialCookieCount,
+    fallbackObservedCookieCount
   );
   const thirdPartyCookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "thirdPartyCookieCount") ?? 0,
@@ -5753,7 +5758,7 @@ export function SharedScanDetailView({
   const cookiesBeforeConsentCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
     certScoreSummary.cookieNamesBeforeConsent.length,
-    fallbackInitialCookieCount
+    runtimeInitialCookieCount
   );
   let reviewSectionError: string | null = null;
   let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
@@ -5999,14 +6004,18 @@ export function SharedScanDetailView({
             <div className="grid gap-4 xl:grid-cols-2">
               <VendorFootprintCard
                 adtechHosts={certScoreSummary.rawAdtechHosts}
-                domains={getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")}
+                domains={executiveThirdPartyDomains}
+                observedCookieCount={cookiesSeenCount}
+                observedDomainCount={fallbackObservedDomainCount || undefined}
+                observedIpCount={fallbackObservedIpCount || undefined}
+                observedRequestCount={fallbackObservedRequestCount || undefined}
                 preConsentVendors={certScoreSummary.preConsentVendorNames}
                 sessionReplayVendors={certScoreSummary.sessionReplayVendorNames}
-                topObservedEntities={certScoreSummary.topObservedEntities}
-                trackerSummary={certScoreSummary.trackerSummary}
-                unresolvedHosts={certScoreSummary.unresolvedVendorHosts}
-                vendorCategoryCounts={certScoreSummary.vendorCategoryCounts}
-                vendors={certScoreSummary.resolvedVendorNames}
+                topObservedEntities={executiveTopObservedEntities}
+                trackerSummary={executiveTrackerSummary}
+                unresolvedHosts={executiveUnresolvedVendorHosts}
+                vendorCategoryCounts={executiveVendorCategoryCounts}
+                vendors={executiveResolvedVendorNames}
               />
               <FingerprintingPanel
                 categories={getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
@@ -6017,7 +6026,7 @@ export function SharedScanDetailView({
                 confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
                 label={certScoreSummary.fingerprintLabel}
                 narrative={certScoreSummary.fingerprintNarrative}
-                reasons={getRecordStringArray(hybridFingerprintSummary, "reasons")}
+                reasons={executiveFingerprintReasons}
               />
               <CookieStoragePanel
                 adtechCookieNames={certScoreSummary.adtechCookieNames}

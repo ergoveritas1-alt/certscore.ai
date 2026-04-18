@@ -286,10 +286,19 @@ function buildUrlscanFallbackSnapshot(input: {
   fallbackLegalFetch: PreviewFallbackEvent | undefined;
   liveEarlyResults?: PreviewEarlyResultItem[];
   urlscanResult?: Record<string, unknown> | null;
+  urlscanSource?: {
+    reportUrl?: string | null;
+    resultApiUrl?: string | null;
+  };
 }) {
   const urlscanLists = getNestedRecord(input.urlscanResult, ["lists"]);
   const urlscanStats = getNestedRecord(input.urlscanResult, ["stats"]);
-  const urlscanRequestCountFromStats = sumCounts(getRecordArray(urlscanStats, "domainStats"));
+  const urlscanData = getNestedRecord(input.urlscanResult, ["data"]);
+  const urlscanRequestCountFromStats = Math.max(
+    sumCounts(getRecordArray(urlscanStats, "domainStats")),
+    getRecordNumber(urlscanStats, "totalRequests") ?? 0,
+    getRecordArray(urlscanData, "requests").length
+  );
   const urlscanRequestCount =
     (urlscanRequestCountFromStats > 0 ? urlscanRequestCountFromStats : null) ??
     getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "requestCount") ??
@@ -308,13 +317,19 @@ function buildUrlscanFallbackSnapshot(input: {
   const technologyNames = extractTechnologyNames(input.urlscanResult);
 
   return {
-    reportUrl: getRecordString(input.fallbackLookup?.metadata_json ?? null, "reportUrl"),
-    resultApiUrl: getRecordString(input.fallbackLookup?.metadata_json ?? null, "resultApiUrl"),
+    reportUrl:
+      input.urlscanSource?.reportUrl ??
+      getRecordString(input.fallbackLookup?.metadata_json ?? null, "reportUrl"),
+    resultApiUrl:
+      input.urlscanSource?.resultApiUrl ??
+      getRecordString(input.fallbackLookup?.metadata_json ?? null, "resultApiUrl"),
     requestCount: urlscanRequestCount,
     thirdPartyRequestCount:
       getEarlyResultNumber(input.liveEarlyResults, "3P requests") ??
       getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "thirdPartyRequestCount"),
     initialCookieCount:
+      (getRecordArray(urlscanData, "cookies").length > 0 ? getRecordArray(urlscanData, "cookies").length : null) ??
+      getRecordNumber(urlscanStats, "cookies") ??
       getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "cookieCount") ??
       getEarlyResultNumber(input.liveEarlyResults, "Initial cookies"),
     verifiedSurfaceCount:
@@ -790,6 +805,10 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   events: PreviewFallbackEvent[];
   liveEarlyResults?: PreviewEarlyResultItem[];
   urlscanResult?: Record<string, unknown> | null;
+  urlscanSource?: {
+    reportUrl?: string | null;
+    resultApiUrl?: string | null;
+  };
 }) {
   const payload: PreviewScanPayload = {
     ...input.payload,
@@ -826,7 +845,8 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     fallbackLegalFetch,
     fallbackLookup,
     liveEarlyResults: input.liveEarlyResults,
-    urlscanResult: input.urlscanResult
+    urlscanResult: input.urlscanResult,
+    urlscanSource: input.urlscanSource
   });
   const fallbackEvidence = buildNormalizedUrlscanFallbackEvidence(fallbackSnapshot);
 

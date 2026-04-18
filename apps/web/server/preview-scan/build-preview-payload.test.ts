@@ -267,6 +267,10 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
       }
     ],
     urlscanResult: {
+      data: {
+        cookies: [{ name: "a" }, { name: "b" }, { name: "c" }],
+        requests: [{}, {}, {}, {}, {}, {}, {}, {}]
+      },
       lists: {
         countries: ["DE", "NL"],
         domains: ["www.fandango.com", "images.fandango.com", "metrics.example.net"],
@@ -284,6 +288,10 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
         domainStats: [{ count: 3 }, { count: 2 }, { count: 1 }],
         uniqCountries: 2
       }
+    },
+    urlscanSource: {
+      reportUrl: "https://urlscan.io/result/promoted-example/",
+      resultApiUrl: "https://urlscan.io/api/v1/result/promoted-example/"
     }
   });
 
@@ -292,7 +300,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     true
   );
   assert.equal(
-    payload.summaryBullets.includes("6 network requests, 1 third-party request, 1 initial cookie retained from the fallback runtime path."),
+    payload.summaryBullets.includes("8 network requests, 1 third-party request, 3 initial cookies retained from the fallback runtime path."),
     true
   );
   assert.equal(
@@ -314,8 +322,11 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);
   assert.equal(payload.fallbackEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
   assert.equal(payload.fallbackEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
-  assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 6);
+  assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 8);
   assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 1);
+  assert.equal(payload.fallbackEvidence?.metrics?.initialCookieCount, 3);
+  assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/promoted-example/");
+  assert.equal(payload.fallbackEvidence?.resultApiUrl, "https://urlscan.io/api/v1/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
   assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
 });

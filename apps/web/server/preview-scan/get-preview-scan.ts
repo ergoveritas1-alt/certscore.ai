@@ -3,6 +3,12 @@ import { buildPreviewPayloadFromSnapshot, enrichPreviewPayloadWithFallbackEviden
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
 import {
+  choosePreferredUrlscanSource,
+  fetchUrlscanResult,
+  isUrlscanResultThin,
+  searchUrlscanCandidates
+} from "./urlscan-fallback";
+import {
   getAllPreviewScanEvents,
   getLatestPreviewScanEvent,
   getRecentPreviewScanEvents,
@@ -30,40 +36,6 @@ function getUrlscanResultApiUrl(events: Array<{ event_type: string; metadata_jso
   }
 
   return null;
-}
-
-async function fetchUrlscanResult(resultApiUrl: string | null) {
-  if (!resultApiUrl) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
-
-  try {
-    const response = await fetch(resultApiUrl, {
-      headers: {
-        accept: "application/json"
-      },
-      next: {
-        revalidate: 900
-      },
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = await response.json();
-    return payload && typeof payload === "object" && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function deriveObservedFinalUrl(events: Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>) {
@@ -109,13 +81,45 @@ export async function getPreviewScan(scanId: string) {
   });
   const snapshot = await getPreviewScanSnapshot(scanId);
   const urlscanResultApiUrl = getUrlscanResultApiUrl(events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>);
-  const urlscanResult = await fetchUrlscanResult(urlscanResultApiUrl);
+  const derivedFinalUrl = deriveObservedFinalUrl(events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>);
+  const preferredUrlscanHostname = (() => {
+    const candidates = [derivedFinalUrl, response.normalizedUrl, response.hostname]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    for (const candidate of candidates) {
+      try {
+        return new URL(candidate).hostname.toLowerCase();
+      } catch {
+        if (!candidate.includes("://")) {
+          return candidate.toLowerCase();
+        }
+      }
+    }
+    return null;
+  })();
+  const retainedUrlscanResult = await fetchUrlscanResult(urlscanResultApiUrl);
+  const promotedUrlscanCandidates = retainedUrlscanResult && !isUrlscanResultThin(retainedUrlscanResult, preferredUrlscanHostname)
+    ? []
+    : await searchUrlscanCandidates({
+        hostname: preferredUrlscanHostname,
+        limit: 5
+      });
+  const selectedUrlscanSource = choosePreferredUrlscanSource({
+    retained: urlscanResultApiUrl
+      ? {
+          resultApiUrl: urlscanResultApiUrl,
+          reportUrl: urlscanResultApiUrl.replace("/api/v1/result/", "/result/"),
+          result: retainedUrlscanResult
+        }
+      : null,
+    candidates: promotedUrlscanCandidates,
+    preferredHostname: preferredUrlscanHostname
+  });
+  const urlscanResult = selectedUrlscanSource?.result ?? retainedUrlscanResult;
 
   if (!snapshot) {
     return response;
   }
 
-  const derivedFinalUrl = deriveObservedFinalUrl(events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>);
   const snapshotWithDerivedRuntime = {
     ...(snapshot as unknown as Record<string, unknown>),
     homepage_fetch_status: snapshot.homepageFetchStatus,
@@ -147,7 +151,13 @@ export async function getPreviewScan(scanId: string) {
     },
     events: events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>,
     liveEarlyResults: response.liveEarlyResults,
-    urlscanResult
+    urlscanResult,
+    urlscanSource: selectedUrlscanSource
+      ? {
+          reportUrl: selectedUrlscanSource.reportUrl,
+          resultApiUrl: selectedUrlscanSource.resultApiUrl
+        }
+      : undefined
   });
 
   return {

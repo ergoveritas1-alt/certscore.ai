@@ -1,6 +1,10 @@
 type VendorFootprintCardProps = {
   adtechHosts: string[];
   domains: string[];
+  observedCookieCount?: number;
+  observedDomainCount?: number;
+  observedIpCount?: number;
+  observedRequestCount?: number;
   preConsentVendors: string[];
   sessionReplayVendors: string[];
   topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
@@ -11,12 +15,37 @@ type VendorFootprintCardProps = {
 };
 
 export function VendorFootprintCard(input: VendorFootprintCardProps) {
+  const summaryMetrics = [
+    typeof input.observedRequestCount === "number" && input.observedRequestCount > 0
+      ? { label: "Requests observed", value: input.observedRequestCount }
+      : null,
+    typeof input.observedCookieCount === "number" && input.observedCookieCount > 0
+      ? { label: "Cookies observed", value: input.observedCookieCount }
+      : null,
+    typeof input.observedDomainCount === "number" && input.observedDomainCount > 0
+      ? { label: "Domains observed", value: input.observedDomainCount }
+      : null,
+    typeof input.observedIpCount === "number" && input.observedIpCount > 0
+      ? { label: "IPs observed", value: input.observedIpCount }
+      : null
+  ].filter((metric): metric is { label: string; value: number } => Boolean(metric));
+
   return (
     <div className="space-y-5 rounded-[1.55rem] border border-slate-200/80 bg-white/92 p-5 shadow-[0_16px_44px_-26px_rgba(15,23,42,0.24)]">
       <div className="space-y-1.5">
         <p className="text-sm font-semibold tracking-tight text-slate-950">Vendor footprint</p>
         <p className="text-sm text-slate-600">{input.trackerSummary}</p>
       </div>
+      {summaryMetrics.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryMetrics.map((metric) => (
+            <div key={metric.label} className="rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{metric.label}</p>
+              <p className="mt-2 text-lg font-semibold text-slate-950">{metric.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {Object.keys(input.vendorCategoryCounts).length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {Object.entries(input.vendorCategoryCounts)
