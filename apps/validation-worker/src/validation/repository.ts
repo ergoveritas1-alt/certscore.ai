@@ -855,7 +855,6 @@ export async function updateValidationRun(
 }
 
 export async function createScanForValidationRun(runId: string) {
-  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
   const teamPlan = getPlanDefinition("team");
 
@@ -870,53 +869,71 @@ export async function createScanForValidationRun(runId: string) {
   const organizationId = await getValidationInternalOrganizationId();
   const normalizedUrl = run.normalized_url;
   const hostname = run.hostname;
-  const { data: domain } = await db
-    .from("domains")
-    .select("id, max_pages_override")
-    .eq("organization_id", organizationId)
-    .eq("hostname", hostname)
-    .maybeSingle();
+  const domain = await queryOne<{ id: string; max_pages_override: number | null }>(
+    `
+      select id, max_pages_override
+      from domains
+      where organization_id = $1
+        and hostname = $2
+    `,
+    [organizationId, hostname],
+    { readOnly: true }
+  );
 
-  let domainId = (domain as { id: string } | null)?.id ?? null;
+  let domainId = domain?.id ?? null;
 
   if (!domainId) {
-    const { data: insertedDomain, error: domainError } = await db
-      .from("domains")
-      .insert({
-        organization_id: organizationId,
-        hostname,
-        normalized_url: normalizedUrl,
-        status: "active"
-      })
-      .select("id")
-      .single();
+    const insertedDomain = await queryOne<{ id: string }>(
+      `
+        insert into domains (
+          organization_id,
+          hostname,
+          normalized_url,
+          status
+        )
+        values ($1, $2, $3, 'active')
+        returning id
+      `,
+      [organizationId, hostname, normalizedUrl]
+    );
 
-    if (domainError || !insertedDomain) {
-      throw new Error(`Failed to create validation domain ${hostname}: ${domainError?.message ?? "Unknown error"}`);
+    if (!insertedDomain) {
+      throw new Error(`Failed to create validation domain ${hostname}: Unknown error`);
     }
 
-    domainId = insertedDomain.id as string;
+    domainId = insertedDomain.id;
   } else {
-    await db
-      .from("domains")
-      .update({
-        normalized_url: normalizedUrl,
-        status: "active"
-      })
-      .eq("id", domainId);
+    await query(
+      `
+        update domains
+           set normalized_url = $2,
+               status = 'active'
+         where id = $1
+      `,
+      [domainId, normalizedUrl]
+    );
   }
 
-  const { data: scan, error: scanError } = await db
-    .from("scans")
-    .insert({
-      organization_id: organizationId,
-      domain_id: domainId,
-      submitted_by_user_id: null,
-      scan_type: "full",
-      status: "queued",
-      pages_requested: teamPlan.maxPagesPerScan,
-      pages_scanned: 0,
-      scan_config_json: buildSharedFullScanConfig({
+  const scan = await queryOne<{ id: string }>(
+    `
+      insert into scans (
+        organization_id,
+        domain_id,
+        submitted_by_user_id,
+        scan_type,
+        status,
+        pages_requested,
+        pages_scanned,
+        scan_config_json
+      )
+      values ($1, $2, null, 'full', 'queued', $3, 0, $4)
+      returning id
+    `,
+    [
+      organizationId,
+      domainId,
+      teamPlan.maxPagesPerScan,
+      buildSharedFullScanConfig({
         crawlerIdentity: {
           productToken: getCrawlerProductToken(),
           publicUrl: getCrawlerPublicUrl()
@@ -927,33 +944,36 @@ export async function createScanForValidationRun(runId: string) {
         source: "validation-canary",
         triggerMode: run.trigger_mode
       })
-    })
-    .select("id")
-    .single();
+    ]
+  );
 
-  if (scanError || !scan) {
-    throw new Error(`Failed to create validation scan for ${hostname}: ${scanError?.message ?? "Unknown error"}`);
+  if (!scan) {
+    throw new Error(`Failed to create validation scan for ${hostname}: Unknown error`);
   }
 
   await Promise.all([
-    db.from("domains").update({ latest_scan_id: scan.id }).eq("id", domainId),
-    db
-      .from("validation_runs")
-      .update({
-        scan_id: scan.id,
-        status: "collecting",
-        started_at: new Date().toISOString(),
-        error_message: null
-      })
-      .eq("id", runId),
+    query(`update domains set latest_scan_id = $2 where id = $1`, [domainId, scan.id]),
+    query(
+      `
+        update validation_runs
+           set scan_id = $2,
+               status = 'collecting',
+               started_at = $3,
+               error_message = null
+         where id = $1
+      `,
+      [runId, scan.id, new Date().toISOString()]
+    ),
     run.validation_target_id
-      ? db
-          .from("validation_targets")
-          .update({
-            last_run_at: new Date().toISOString(),
-            last_status: "collecting"
-          })
-          .eq("id", run.validation_target_id)
+      ? query(
+          `
+            update validation_targets
+               set last_run_at = $2,
+                   last_status = 'collecting'
+             where id = $1
+          `,
+          [run.validation_target_id, new Date().toISOString()]
+        )
       : Promise.resolve()
   ]);
 
@@ -1364,13 +1384,8 @@ export async function replaceValidationRunFindings(
     evidence: Record<string, unknown>;
   }>
 ) {
-  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
-  const { error: deleteError } = await db.from("validation_run_findings").delete().eq("validation_run_id", runId);
-
-  if (deleteError) {
-    throw new Error(`Failed to clear validation findings for run ${runId}: ${deleteError.message}`);
-  }
+  await query(`delete from validation_run_findings where validation_run_id = $1`, [runId]);
 
   if (findings.length === 0) {
     await updateValidationRun(runId, {
@@ -1380,8 +1395,7 @@ export async function replaceValidationRunFindings(
     if (run?.scan_id) {
       await persistValidationRunReportFindingCount({
         runId,
-        scanId: run.scan_id,
-        db
+        scanId: run.scan_id
       });
     }
     return [];
@@ -1404,20 +1418,94 @@ export async function replaceValidationRunFindings(
     evidence_json: finding.evidence
   }));
 
-  let insertResult = await db
-    .from("validation_run_findings")
-    .insert(baseRows.map((row) => ({ ...row, rank: row.finding_rank })))
-    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
+  let insertedRows: Array<Record<string, unknown>>;
+  try {
+    insertedRows = await query<Record<string, unknown>>(
+      `
+        insert into validation_run_findings (
+          validation_run_id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json,
+          rank
+        )
+        select
+          value->>'validation_run_id',
+          value->>'category',
+          nullif(value->>'subtype', ''),
+          value->>'finding_family',
+          value->>'finding_source',
+          value->>'finding_scope',
+          value->>'finding_subject',
+          value->>'rule_key',
+          value->>'title',
+          value->>'description',
+          value->>'severity',
+          nullif(value->>'page_url', ''),
+          (value->>'finding_rank')::int,
+          value->'evidence_json',
+          (value->>'finding_rank')::int
+        from jsonb_array_elements($1::jsonb) as value
+        returning id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json
+      `,
+      [JSON.stringify(baseRows)],
+      { readOnly: false }
+    ).then((result) => result.rows);
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (!message.includes(`column "rank"`)) {
+      throw new Error(`Failed to insert validation findings for run ${runId}: ${message}`);
+    }
 
-  if (insertResult.error && isMissingColumnError(insertResult.error, "rank")) {
-    insertResult = await db
-      .from("validation_run_findings")
-      .insert(baseRows)
-      .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json");
-  }
-
-  if (insertResult.error) {
-    throw new Error(`Failed to insert validation findings for run ${runId}: ${insertResult.error.message}`);
+    insertedRows = await query<Record<string, unknown>>(
+      `
+        insert into validation_run_findings (
+          validation_run_id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json
+        )
+        select
+          value->>'validation_run_id',
+          value->>'category',
+          nullif(value->>'subtype', ''),
+          value->>'finding_family',
+          value->>'finding_source',
+          value->>'finding_scope',
+          value->>'finding_subject',
+          value->>'rule_key',
+          value->>'title',
+          value->>'description',
+          value->>'severity',
+          nullif(value->>'page_url', ''),
+          (value->>'finding_rank')::int,
+          value->'evidence_json'
+        from jsonb_array_elements($1::jsonb) as value
+        returning id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json
+      `,
+      [JSON.stringify(baseRows)],
+      { readOnly: false }
+    ).then((result) => result.rows);
   }
 
   await updateValidationRun(runId, {
@@ -1427,27 +1515,42 @@ export async function replaceValidationRunFindings(
   if (run?.scan_id) {
     await persistValidationRunReportFindingCount({
       runId,
-      scanId: run.scan_id,
-      db
+      scanId: run.scan_id
     });
   }
 
-  return (insertResult.data ?? []) as Array<Record<string, unknown>>;
+  return insertedRows;
 }
 
 export async function loadValidationRunFindings(runId: string) {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("validation_run_findings")
-    .select("id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, finding_rank, evidence_json")
-    .eq("validation_run_id", runId)
-    .order("finding_rank", { ascending: true });
-
-  if (error) {
-    throw new Error(`Failed to load validation findings for run ${runId}: ${error.message}`);
+  try {
+    return await query<Record<string, unknown>>(
+      `
+        select
+          id,
+          category,
+          subtype,
+          finding_family,
+          finding_source,
+          finding_scope,
+          finding_subject,
+          rule_key,
+          title,
+          description,
+          severity,
+          page_url,
+          finding_rank,
+          evidence_json
+        from validation_run_findings
+        where validation_run_id = $1
+        order by finding_rank asc
+      `,
+      [runId],
+      { readOnly: true }
+    ).then((result) => result.rows);
+  } catch (error) {
+    throw new Error(`Failed to load validation findings for run ${runId}: ${getErrorMessage(error)}`);
   }
-
-  return (data ?? []) as Array<Record<string, unknown>>;
 }
 
 export async function upsertValidationVerdict(input: {
@@ -1460,58 +1563,71 @@ export async function upsertValidationVerdict(input: {
   validationRunFindingId: string;
   verdict: "supported" | "inconclusive" | "not_supported";
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("validation_verdicts")
-    .upsert(
-      {
-        validation_run_finding_id: input.validationRunFindingId,
-        verdict: input.verdict,
-        confidence: input.confidence,
-        rationale: input.rationale,
-        agreement_score: input.agreementScore,
-        model: input.model,
-        prompt_version: input.promptVersion,
-        evidence_json: input.evidence
-      },
-      {
-        onConflict: "validation_run_finding_id"
-      }
-    );
-
-  if (error) {
-    throw new Error(`Failed to persist validation verdict ${input.validationRunFindingId}: ${error.message}`);
-  }
+  await query(
+    `
+      insert into validation_verdicts (
+        validation_run_finding_id,
+        verdict,
+        confidence,
+        rationale,
+        agreement_score,
+        model,
+        prompt_version,
+        evidence_json
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      on conflict (validation_run_finding_id) do update
+        set verdict = excluded.verdict,
+            confidence = excluded.confidence,
+            rationale = excluded.rationale,
+            agreement_score = excluded.agreement_score,
+            model = excluded.model,
+            prompt_version = excluded.prompt_version,
+            evidence_json = excluded.evidence_json
+    `,
+    [
+      input.validationRunFindingId,
+      input.verdict,
+      input.confidence,
+      input.rationale,
+      input.agreementScore,
+      input.model,
+      input.promptVersion,
+      input.evidence
+    ]
+  );
 }
 
 export async function finalizeValidationRun(runId: string) {
-  const db = createDatabaseClient();
   const run = await getValidationRun(runId);
 
   if (!run) {
     throw new Error(`Validation run ${runId} was not found.`);
   }
 
-  const { data: verdicts, error: verdictError } = await db
-    .from("validation_verdicts")
-    .select("agreement_score")
-    .in(
-      "validation_run_finding_id",
-      (
-        (
-          await db
-            .from("validation_run_findings")
-            .select("id")
-            .eq("validation_run_id", runId)
-        ).data ?? []
-      ).map((row) => row.id)
-    );
+  const findingIds = await query<{ id: string }>(
+    `
+      select id
+      from validation_run_findings
+      where validation_run_id = $1
+    `,
+    [runId],
+    { readOnly: true }
+  ).then((result) => result.rows.map((row) => row.id));
 
-  if (verdictError) {
-    throw new Error(`Failed to load validation verdicts for run ${runId}: ${verdictError.message}`);
-  }
+  const verdicts = findingIds.length
+    ? await query<{ agreement_score: number }>(
+        `
+          select agreement_score
+          from validation_verdicts
+          where validation_run_finding_id = any($1::uuid[])
+        `,
+        [findingIds],
+        { readOnly: true }
+      ).then((result) => result.rows)
+    : [];
 
-  const scores = ((verdicts ?? []) as Array<{ agreement_score: number }>).map((row) => row.agreement_score);
+  const scores = verdicts.map((row) => row.agreement_score);
   const averageAgreementScore =
     scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
   const completedAt = new Date();
@@ -1527,8 +1643,7 @@ export async function finalizeValidationRun(runId: string) {
   if (run.scan_id) {
     await persistValidationRunReportFindingCount({
       runId,
-      scanId: run.scan_id,
-      db
+      scanId: run.scan_id
     });
   }
 
@@ -1537,11 +1652,32 @@ export async function finalizeValidationRun(runId: string) {
   }
 
   const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
-  const { data: snapshot } = await db
-    .from("scan_snapshots")
-    .select("blocked_flag, captcha_flag, homepage_fetch_http_status, robots_fetch_http_status, challenge_suspected, rate_limit_suspected, scan_outcome, cooldown_hours")
-    .eq("scan_id", run.scan_id)
-    .maybeSingle();
+  const snapshot = await queryOne<{
+    blocked_flag: boolean | null;
+    captcha_flag: boolean | null;
+    challenge_suspected: boolean | null;
+    cooldown_hours: number | null;
+    homepage_fetch_http_status: number | null;
+    rate_limit_suspected: boolean | null;
+    robots_fetch_http_status: number | null;
+    scan_outcome: string | null;
+  }>(
+    `
+      select
+        blocked_flag,
+        captcha_flag,
+        homepage_fetch_http_status,
+        robots_fetch_http_status,
+        challenge_suspected,
+        rate_limit_suspected,
+        scan_outcome,
+        cooldown_hours
+      from scan_snapshots
+      where scan_id = $1
+    `,
+    [run.scan_id],
+    { readOnly: true }
+  );
 
   const blocked =
     snapshot?.blocked_flag === true ||
@@ -1563,24 +1699,30 @@ export async function finalizeValidationRun(runId: string) {
       ? snapshot.cooldown_hours
       : retryPolicy.cooldownHours;
 
-  await db
-    .from("validation_targets")
-    .update({
-      backoff_until: blocked ? addDays(completedAt, 90).toISOString() : null,
-      cooldown_until: blocked
+  await query(
+    `
+      update validation_targets
+         set backoff_until = $2,
+             cooldown_until = $3,
+             last_completed_at = $4,
+             last_error = null,
+             last_status = 'completed'
+       where id = $1
+    `,
+    [
+      run.validation_target_id,
+      blocked ? addDays(completedAt, 90).toISOString() : null,
+      blocked
         ? new Date(completedAt.getTime() + blockedCooldownHours * 60 * 60 * 1000).toISOString()
         : addDays(completedAt, cooldownDays).toISOString(),
-      last_completed_at: completedAt.toISOString(),
-      last_error: null,
-      last_status: "completed"
-    })
-    .eq("id", run.validation_target_id);
+      completedAt.toISOString()
+    ]
+  );
 }
 
 async function persistValidationRunReportFindingCount(input: {
   runId: string;
   scanId: string;
-  db: ReturnType<typeof createDatabaseClient>;
 }) {
   try {
     const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
@@ -1618,8 +1760,7 @@ async function persistValidationRunReportFindingCount(input: {
 
     const scanRecord = await loadScanRecordForFindingCount({
       runId: input.runId,
-      scanId: input.scanId,
-      db: input.db
+      scanId: input.scanId
     });
 
     if (!scanRecord) {
@@ -1627,20 +1768,14 @@ async function persistValidationRunReportFindingCount(input: {
     }
 
     const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
-    const { error: snapshotUpdateError } = await input.db
-      .from("scan_snapshots")
-      .update({
-        report_finding_count: reportFindingCount
-      })
-      .eq("scan_id", input.scanId);
-
-    if (snapshotUpdateError) {
-      console.error("[validation-worker] failed to persist report finding count", {
-        error: snapshotUpdateError.message,
-        runId: input.runId,
-        scanId: input.scanId
-      });
-    }
+    await query(
+      `
+        update scan_snapshots
+           set report_finding_count = $2
+         where scan_id = $1
+      `,
+      [input.scanId, reportFindingCount]
+    );
   } catch (error) {
     console.error("[validation-worker] failed to compute report finding count", {
       error: error instanceof Error ? error.message : String(error),
@@ -1653,62 +1788,81 @@ async function persistValidationRunReportFindingCount(input: {
 async function loadScanRecordForFindingCount(input: {
   runId: string;
   scanId: string;
-  db: ReturnType<typeof createDatabaseClient>;
 }) {
   const [
-    { data: snapshot },
-    { data: runtimeArtifacts },
-    { data: preconsentViolations },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: accessibilityRuleExamples },
-    { data: policyEnrichment },
-    { data: documentSources },
-    { data: policyReviewQueue },
-    { data: signals },
-    { data: events },
-    { data: validationFindingRows }
+    snapshot,
+    runtimeArtifacts,
+    preconsentViolations,
+    trackerVendors,
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    policyEnrichment,
+    documentSources,
+    policyReviewQueue,
+    signals,
+    events,
+    validationFindingRows
   ] = await Promise.all([
-    input.db.from("scan_snapshots").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.db.from("scan_runtime_artifacts").select("*").eq("scan_id", input.scanId).maybeSingle(),
-    input.db.from("scan_preconsent_violations").select("*").eq("scan_id", input.scanId),
-    input.db.from("scan_tracker_vendors").select("*").eq("scan_id", input.scanId),
-    input.db.from("scan_accessibility_rule_counts").select("*").eq("scan_id", input.scanId),
-    input.db.from("scan_accessibility_rule_examples").select("*").eq("scan_id", input.scanId),
-    input.db.from("policy_enrichment").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.db.from("scan_document_sources").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.db.from("policy_review_queue").select("*").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.db
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", input.scanId),
-    input.db.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", input.scanId).order("created_at", { ascending: true }),
-    input.db
-      .from("validation_run_findings")
-      .select(
-        "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-      )
-      .eq("validation_run_id", input.runId)
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from scan_preconsent_violations where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_tracker_vendors where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_counts where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_examples where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<SignalPopulationRow>(
+      `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+         from scan_signals
+        where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select id, event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+        order by created_at asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<ValidationRunFindingWithVerdictRow>(
+      `select id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json
+         from validation_run_findings
+        where validation_run_id = $1`,
+      [input.runId],
+      { readOnly: true }
+    ).then((result) => result.rows)
   ]);
 
-  const validationFindingBaseRows = (validationFindingRows ?? []) as ValidationRunFindingWithVerdictRow[];
+  const validationFindingBaseRows = validationFindingRows;
   const validationFindingIds = validationFindingBaseRows.map((row) => row.id);
   const verdictByFindingId = new Map<string, ValidationVerdictRow>();
 
   if (validationFindingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await input.db
-      .from("validation_verdicts")
-      .select(
-        "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation"
-      )
-      .in("validation_run_finding_id", validationFindingIds)
-      .order("created_at", { ascending: false });
+    const verdictRows = await query<ValidationVerdictRow>(
+      `
+        select
+          validation_run_finding_id,
+          verdict,
+          confidence,
+          rationale,
+          agreement_score,
+          model,
+          prompt_version,
+          system_confidence_score,
+          system_confidence_band,
+          system_confidence_explanation
+        from validation_verdicts
+        where validation_run_finding_id = any($1::uuid[])
+        order by created_at desc
+      `,
+      [validationFindingIds],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
-    if (verdictsError) {
-      throw new Error(`Failed to load validation verdicts for ${input.scanId}: ${verdictsError.message}`);
-    }
-
-    for (const row of (verdictRows ?? []) as ValidationVerdictRow[]) {
+    for (const row of verdictRows) {
       if (!verdictByFindingId.has(row.validation_run_finding_id)) {
         verdictByFindingId.set(row.validation_run_finding_id, row);
       }
