@@ -39,6 +39,7 @@ jobs:
       VM_ZONE: us-central1-a
       PUBLIC_BASE_URL: https://consentcheck.site
       BUILD_SERVICE_ACCOUNT: certscore-build-sa@certscore-ai.iam.gserviceaccount.com
+      REMOTE_DEPLOY_WRAPPER: /usr/local/bin/deploy-certscore-web
 
     steps:
       - name: Checkout

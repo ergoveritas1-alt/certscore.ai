@@ -14,6 +14,7 @@ PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://consentcheck.site}"
 CONTAINER_NAME="${CONTAINER_NAME:-certscore-web}"
 CONTAINER_PORT="${CONTAINER_PORT:-3000}"
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-/etc/certscore-web.env}"
+REMOTE_DEPLOY_WRAPPER="${REMOTE_DEPLOY_WRAPPER:-/usr/local/bin/deploy-certscore-web}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-120}"
 cloudbuild_config="$(mktemp /tmp/certscore-web-cloudbuild.XXXXXX)"
 
@@ -90,9 +91,7 @@ echo "Built web image: ${IMAGE_URI}"
 if [[ "${DEPLOY_TO_VM}" != "1" ]]; then
   echo
   echo "Suggested VM commands:"
-  echo "  sudo docker pull ${IMAGE_URI}"
-  echo "  sudo docker rm -f ${CONTAINER_NAME} || true"
-  echo "  sudo docker run -d --name ${CONTAINER_NAME} --restart unless-stopped --env-file ${REMOTE_ENV_FILE} -p ${CONTAINER_PORT}:3000 ${IMAGE_URI}"
+  echo "  sudo ${REMOTE_DEPLOY_WRAPPER} ${IMAGE_URI}"
   exit 0
 fi
 
@@ -101,40 +100,12 @@ echo "Deploying ${IMAGE_URI} to ${VM_NAME} (${VM_ZONE})"
 run_remote_script <<EOF
 set -euo pipefail
 
-if sudo -n true >/dev/null 2>&1; then
-  SUDO='sudo -n'
-elif command -v sudo >/dev/null 2>&1; then
-  echo "Remote deploy requires non-interactive sudo on ${VM_NAME}." >&2
-  exit 1
-else
-  SUDO=''
-fi
-
-if [[ ! -f "${REMOTE_ENV_FILE}" ]]; then
-  echo "Missing remote env file: ${REMOTE_ENV_FILE}" >&2
+if [[ ! -x "${REMOTE_DEPLOY_WRAPPER}" ]]; then
+  echo "Missing remote deploy wrapper: ${REMOTE_DEPLOY_WRAPPER}" >&2
   exit 1
 fi
 
-\${SUDO} docker pull "${IMAGE_URI}"
-\${SUDO} docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
-\${SUDO} docker run -d \
-  --name "${CONTAINER_NAME}" \
-  --restart unless-stopped \
-  --env-file "${REMOTE_ENV_FILE}" \
-  -p ${CONTAINER_PORT}:3000 \
-  "${IMAGE_URI}"
-
-deadline=\$((SECONDS + ${SMOKE_TIMEOUT_SECONDS}))
-until curl -fsS "http://127.0.0.1:${CONTAINER_PORT}/login" >/dev/null; do
-  if (( SECONDS >= deadline )); then
-    echo "Timed out waiting for remote login route on ${VM_NAME}." >&2
-    \${SUDO} docker logs --tail 200 "${CONTAINER_NAME}" >&2 || true
-    exit 1
-  fi
-  sleep 2
-done
-
-curl -fsS "http://127.0.0.1:${CONTAINER_PORT}/api/health/database" >/dev/null
+sudo -n "${REMOTE_DEPLOY_WRAPPER}" "${IMAGE_URI}"
 EOF
 
 echo "Remote VM rollout succeeded. Running public smoke checks against ${PUBLIC_BASE_URL}"

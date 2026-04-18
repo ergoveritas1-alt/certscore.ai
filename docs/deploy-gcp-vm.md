@@ -50,15 +50,27 @@ DEPLOY_TO_VM=1 IMAGE_TAG=$(git rev-parse HEAD) bash ./deploy-web-vm.sh
 The deploy script now:
 
 - builds and publishes the web image to Artifact Registry
-- updates the `certscore-web-prod` container on the VM
-- waits for `http://127.0.0.1:3000/login`
-- verifies `http://127.0.0.1:3000/api/health/database`
+- invokes a root-owned deploy wrapper on the VM
 - verifies the public `https://consentcheck.site/login` and `/api/health/database` routes
 
 This requires the deploy principal to have:
 
 - GCP access for Cloud Build, Artifact Registry, and Compute SSH
-- non-interactive `sudo` for the narrow VM deploy commands, or an equivalent root-owned deploy wrapper on the VM
+- non-interactive `sudo` for the single deploy wrapper command on the VM
+
+Install the wrapper once on `certscore-web-prod`:
+
+```bash
+gcloud compute scp deploy/vm/install-web-deploy-wrapper.sh certscore-web-prod:~/install-web-deploy-wrapper.sh --zone us-central1-a
+gcloud compute ssh certscore-web-prod --zone us-central1-a --command 'bash ~/install-web-deploy-wrapper.sh'
+```
+
+That installs:
+
+- `/usr/local/bin/deploy-certscore-web`
+- `/etc/sudoers.d/certscore-web-deploy`
+
+The wrapper is intentionally narrow: it accepts a single image URI, restarts the `certscore-web` container with `/etc/certscore-web.env`, and verifies the local login and database health endpoints before returning success.
 
 Set the production environment variables in `/etc/certscore-web.env` on the VM:
 
