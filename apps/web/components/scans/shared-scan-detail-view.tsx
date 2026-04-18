@@ -5677,11 +5677,12 @@ export function SharedScanDetailView({
   const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
   const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
+  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
   const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
   const fallbackObservedIpCount = getFiniteNumber(fallbackEvidence?.metrics?.ipCount) ?? 0;
-  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
+  const fallbackObservedTechnologyCount = fallbackTechnologyNames.length;
   const fallbackServerNames = uniqueStrings(fallbackEvidence?.entities?.serverNames ?? []);
   const fallbackTopDomains = uniqueStrings(fallbackEvidence?.entities?.topDomains ?? []);
   const fallbackVerifiedSurfaceTargets = uniqueStrings(fallbackEvidence?.entities?.verifiedSurfaceTargets ?? []);
@@ -5744,6 +5745,34 @@ export function SharedScanDetailView({
     snapshot,
     storedScore: certScoreSummary.score
   });
+  const useLightweightHeroMetrics =
+    previewPayload?.fallbackEvidence &&
+    snapshot?.pagesScanned === 0 &&
+    snapshot?.partialScan === true;
+  const lightweightHeroMetrics = useLightweightHeroMetrics
+    ? [
+        {
+          accent: "sky" as const,
+          helper: "Indirect-source footprint",
+          label: "Requests observed",
+          value: fallbackObservedRequestCount || null
+        },
+        {
+          accent: "emerald" as const,
+          helper: "Observed in retained runtime payload",
+          label: "Cookies observed",
+          value: fallbackObservedCookieCount || null
+        },
+        {
+          accent: "amber" as const,
+          helper: fallbackObservedDomainCount > 0
+            ? "Distinct domains contacted"
+            : "Named technologies retained",
+          label: fallbackObservedDomainCount > 0 ? "Domains observed" : "Technologies retained",
+          value: fallbackObservedDomainCount > 0 ? fallbackObservedDomainCount : fallbackObservedTechnologyCount || null
+        }
+      ]
+    : null;
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
     getRecordNumber(snapshot, "cookie_count_total") ?? 0,
@@ -5985,6 +6014,7 @@ export function SharedScanDetailView({
         trackerSummary={executiveTrackerSummary}
         unresolvedVendorHosts={executiveUnresolvedVendorHosts}
         vendorCategoryCounts={executiveVendorCategoryCounts}
+        lightweightHeroMetrics={lightweightHeroMetrics}
       />
       {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">

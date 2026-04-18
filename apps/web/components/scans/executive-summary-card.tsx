@@ -373,6 +373,67 @@ function BenchmarkMetricCard(input: {
   );
 }
 
+function ExecutiveMetricCard(input: {
+  accent?: "sky" | "amber" | "emerald" | "slate";
+  helper?: string | null;
+  label: string;
+  value: number | string | null;
+}) {
+  const tone =
+    input.accent === "amber"
+      ? {
+          rail: "bg-amber-100/90",
+          fill: "bg-amber-500/85"
+        }
+      : input.accent === "emerald"
+        ? {
+            rail: "bg-emerald-100/90",
+            fill: "bg-emerald-500/82"
+          }
+        : input.accent === "slate"
+          ? {
+              rail: "bg-slate-200/90",
+              fill: "bg-slate-500/80"
+            }
+          : {
+              rail: "bg-sky-100/90",
+              fill: "bg-sky-500/85"
+            };
+
+  const numericValue =
+    typeof input.value === "number" && Number.isFinite(input.value)
+      ? input.value
+      : null;
+  const width =
+    numericValue === null
+      ? 0
+      : Math.max(8, Math.min(100, numericValue >= 100 ? 100 : numericValue));
+
+  return (
+    <div className="relative overflow-hidden rounded-[1.6rem] border border-slate-200 px-5 py-4 bg-white">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{input.label}</p>
+      </div>
+      <div className="mt-5">
+        <div className="flex items-end gap-1">
+          <span className="text-[3.2rem] font-semibold leading-none tracking-tight text-slate-950">{input.value ?? "—"}</span>
+        </div>
+      </div>
+      <div className="mt-5 space-y-2">
+        <div className={`relative h-3 rounded-full ${tone.rail}`}>
+          <div
+            className={`absolute left-0 top-0 h-3 rounded-full ${tone.fill}`}
+            style={{ width: `${width}%` }}
+          />
+        </div>
+        <div className="flex items-center text-[11px] text-slate-500">
+          <span>{input.helper ?? "\u00A0"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getFindingReferenceLink(finding: CertScoreFinding) {
   if (finding.id === "third_party_tracking_pre_consent") {
     return {
@@ -623,6 +684,12 @@ export function ExecutiveSummaryCard(input: {
   trackerSummary: string;
   unresolvedVendorHosts: string[];
   vendorCategoryCounts: Record<string, number>;
+  lightweightHeroMetrics?: Array<{
+    accent?: "sky" | "amber" | "emerald" | "slate";
+    helper?: string | null;
+    label: string;
+    value: number | string | null;
+  }> | null;
 }) {
   const suppressedTopFindingIds = new Set([
     "multi_vendor_tracking_detected",
@@ -690,7 +757,19 @@ export function ExecutiveSummaryCard(input: {
               </div>
             </div>
           </div>
-          {input.accessLimitationNotice ? null : (
+          {input.accessLimitationNotice ? null : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {input.lightweightHeroMetrics.slice(0, 3).map((metric) => (
+                <ExecutiveMetricCard
+                  key={metric.label}
+                  accent={metric.accent}
+                  helper={metric.helper}
+                  label={metric.label}
+                  value={metric.value}
+                />
+              ))}
+            </div>
+          ) : (
             <div className="grid gap-3 sm:grid-cols-3">
               <BenchmarkMetricCard
                 label="Overall score"
