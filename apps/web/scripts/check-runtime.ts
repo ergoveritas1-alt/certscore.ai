@@ -1,6 +1,5 @@
-import { hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
+import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3Env } from "@website-signal-risk-scanner/db";
 import { getDatabaseHealth } from "../server/health/get-database-health";
-import { checkStorageBucketExists, getStorageBucketName } from "../server/storage/s3";
 
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
