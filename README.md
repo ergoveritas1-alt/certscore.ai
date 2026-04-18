@@ -209,9 +209,11 @@ Common commands:
 - treat Vercel as a transitional path only; do not assume it can reach production RDS unless network ingress has been explicitly opened for it
 - build the production web image with [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh)
 - run the container on a VM with a stable public IP and authorize only that IP in the RDS security group
+- terminate TLS and canonical-host routing with a reverse proxy such as the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile)
 - configure the web environment variables from the shared list above in `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
-- keep Vercel production env aligned only if Vercel is still actively serving traffic during transition
+- redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
+- once DNS and TLS are live on the VM path, remove stale Supabase-era env from any leftover Vercel project instead of treating Vercel as an active production dependency
 
 ### GCP worker pool
 
