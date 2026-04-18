@@ -29,7 +29,7 @@ website-signal-risk-scanner/
 - `packages/scan-core`: shared scan engine carryover while scanner ownership finishes moving to `WS01`
 - `packages/shared`: shared constants, types, validators, scoring config, and scheduling helpers
 - `packages/web-bot-auth`: server-only Web Bot Auth signing and key-directory helpers
-- `packages/db`: PostgreSQL query helpers, database client helpers, and env helpers
+- `packages/db`: PostgreSQL query helpers, migrations, seed SQL, and env helpers
 - `packages/ui`: reusable UI primitives
 
 ## Repo boundary
@@ -107,36 +107,37 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - `cp apps/web/.env.example apps/web/.env.local`
 3. Start a dedicated PostgreSQL instance for local development.
 4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
-5. Configure Better Auth provider settings:
+5. Seed local development data when needed with [packages/db/seed/0001_dev_seed.sql](/Users/benmasek/WC01/packages/db/seed/0001_dev_seed.sql).
+6. Configure Better Auth provider settings:
    - Google OAuth if enabled
    - email/password and verification settings as needed
-6. Configure auth redirect URLs:
+7. Configure auth redirect URLs:
    - use the stable callback alias exposed by the app:
    - `http://localhost:3000/auth/callback`
    - `http://127.0.0.1:3000/auth/callback`
    - `https://certscore.ai/auth/callback`
    - the app forwards that route to Better Auth's internal callback handler
-7. Keep local and production auth isolated:
+8. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
    - local database and auth secrets should come from the dev environment
    - production secrets should exist only in Vercel / worker deployment settings
-8. Create the S3-compatible bucket referenced by `S3_BUCKET`.
-9. Provision Redis for app queues:
+9. Create the S3-compatible bucket referenced by `S3_BUCKET`.
+10. Provision Redis for app queues:
    - set `REDIS_URL` for the web runtime
    - set `VALIDATION_REDIS_URL` for the validation worker, or let it fall back to `REDIS_URL` if both runtimes intentionally share one Redis instance
-10. Install Playwright Chromium for validation and shared scan-core tooling:
+11. Install Playwright Chromium for validation and shared scan-core tooling:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
    - `pnpm --filter @website-signal-risk-scanner/scan-core exec playwright install chromium`
-11. Start validation local development with a watched validation worker:
+12. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
-12. Start the main local app by itself when needed:
+13. Start the main local app by itself when needed:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-13. Use `WS01` when you need the standalone scanner locally.
-14. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
+14. Use `WS01` when you need the standalone scanner locally.
+15. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
    - `pnpm dev:scanner:local`
-15. Use the combined local runner only when you want web + validation together in `WC01`:
+16. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
-16. Run a validation scheduler sweep manually when needed:
+17. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 
 ## Development verification

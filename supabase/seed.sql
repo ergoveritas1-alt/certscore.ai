@@ -1,1 +1,0 @@
-../packages/db/seed/0001_dev_seed.sql
