@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
@@ -325,6 +325,10 @@ type QueryErrorLike = {
 
 const CHANGE_EVENT_BATCH_SIZE = 50;
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown database error.";
+}
+
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
@@ -367,70 +371,73 @@ export async function loadScanCoreRecord(input: {
   scan: ScanDetailQueryRow;
   scanOrganizationId: string | null;
 }> {
-  const db = createDatabaseClient();
   const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
   const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
 
   const loadScan = async (organizationId: string | null) => {
-    let query = db
-      .from("scans")
-      .select("id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, created_at, started_at, completed_at, error_message")
-      .eq("id", input.scanId);
-
-    query = organizationId === null ? query.is("organization_id", null) : query.eq("organization_id", organizationId);
-
-    return query.maybeSingle();
+    return await queryOne<ScanDetailQueryRow>(
+      `select id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned,
+              scan_config_json, created_at, started_at, completed_at, error_message
+         from scans
+        where id = $1
+          and ${
+            organizationId === null ? "organization_id is null" : "organization_id = $2"
+          }`,
+      organizationId === null ? [input.scanId] : [input.scanId, organizationId],
+      { readOnly: true }
+    );
   };
 
   const primaryOrganizationId = input.anonymousOnly ? null : input.organizationId;
-  const primaryScanResult = await loadScan(primaryOrganizationId);
-  let scan = primaryScanResult.data;
-  let error = primaryScanResult.error;
+  let scan = await loadScan(primaryOrganizationId);
 
-  if (!scan && !error && !input.anonymousOnly && allowAnonymousAccess) {
-    const anonymousScanResult = await loadScan(null);
-    scan = anonymousScanResult.data;
-    error = anonymousScanResult.error;
-  }
-
-  if (error) {
-    throw new Error(`Failed to load scan: ${error.message}`);
+  if (!scan && !input.anonymousOnly && allowAnonymousAccess) {
+    scan = await loadScan(null);
   }
 
   if (!scan) {
     throw new Error("Scan not found.");
   }
 
-  const scanRow = scan as ScanDetailQueryRow;
+  const scanRow = scan;
   const scanOrganizationId = (scanRow.organization_id ?? null) as string | null;
   let domainHostname: string | null = null;
 
   if (scanRow.domain_id) {
-    let domainQuery = db.from("domains").select("id, hostname").eq("id", scanRow.domain_id);
-    domainQuery =
+    const domain = await queryOne<ScanDomainRow>(
+      `select id, hostname
+         from domains
+        where id = $1
+          and ${
+            scanOrganizationId === null && adminCanViewAnonymousScans
+              ? "organization_id is null"
+              : "organization_id = $2"
+          }`,
       scanOrganizationId === null && adminCanViewAnonymousScans
-        ? domainQuery.is("organization_id", null)
-        : domainQuery.eq("organization_id", input.organizationId);
-
-    const { data: domain } = await domainQuery.maybeSingle();
-    domainHostname = (domain as ScanDomainRow | null)?.hostname ?? null;
+        ? [scanRow.domain_id]
+        : [scanRow.domain_id, input.organizationId],
+      { readOnly: true }
+    );
+    domainHostname = domain?.hostname ?? null;
   }
 
   const previousScanPromise =
     scanRow.domain_id && scanOrganizationId !== null
-      ? db
-          .from("scans")
-          .select("id")
-          .eq("organization_id", scanOrganizationId)
-          .eq("domain_id", scanRow.domain_id)
-          .eq("status", "completed")
-          .lt("created_at", scanRow.created_at)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null });
+      ? queryOne<{ id?: string }>(
+          `select id
+             from scans
+            where organization_id = $1
+              and domain_id = $2
+              and status = 'completed'
+              and created_at < $3
+            order by created_at desc
+            limit 1`,
+          [scanOrganizationId, scanRow.domain_id, scanRow.created_at],
+          { readOnly: true }
+        )
+      : Promise.resolve(null);
 
-  const { data: previousScan } = await previousScanPromise;
+  const previousScan = await previousScanPromise;
 
   return {
     domainHostname,
@@ -446,21 +453,16 @@ export async function loadUsageCounter(input: {
   periodEnd: string;
   periodStart: string;
 }): Promise<UsageCounterRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("usage_counters")
-    .select("id, value")
-    .eq("organization_id", input.organizationId)
-    .eq("metric_key", input.metricKey)
-    .eq("period_start", input.periodStart)
-    .eq("period_end", input.periodEnd)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Could not verify scan limits: ${error.message}`);
-  }
-
-  return (data as UsageCounterRow | null) ?? null;
+  return await queryOne<UsageCounterRow>(
+    `select id, value
+       from usage_counters
+      where organization_id = $1
+        and metric_key = $2
+        and period_start = $3
+        and period_end = $4`,
+    [input.organizationId, input.metricKey, input.periodStart, input.periodEnd],
+    { readOnly: true }
+  );
 }
 
 export async function upsertUsageCounter(input: {
@@ -471,53 +473,31 @@ export async function upsertUsageCounter(input: {
   periodStart: string;
   value: number;
 }) {
-  const db = createDatabaseClient();
-
   if (input.counterId) {
-    const { error } = await db.from("usage_counters").update({ value: input.value }).eq("id", input.counterId);
-
-    if (error) {
-      throw new Error(`Scan created but usage tracking failed: ${error.message}`);
-    }
-
+    await query(`update usage_counters set value = $2 where id = $1`, [input.counterId, input.value]);
     return;
   }
 
-  const { error } = await db.from("usage_counters").insert({
-    organization_id: input.organizationId,
-    metric_key: input.metricKey,
-    period_start: input.periodStart,
-    period_end: input.periodEnd,
-    value: input.value
-  });
-
-  if (error) {
-    throw new Error(`Scan created but usage tracking failed: ${error.message}`);
-  }
+  await query(
+    `insert into usage_counters (organization_id, metric_key, period_start, period_end, value)
+     values ($1, $2, $3, $4, $5)`,
+    [input.organizationId, input.metricKey, input.periodStart, input.periodEnd, input.value]
+  );
 }
 
 export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .insert({
-      organization_id: input.organizationId,
-      domain_id: input.domainId,
-      submitted_by_user_id: input.submittedByUserId,
-      scan_type: "full",
-      status: "queued",
-      pages_requested: input.pagesRequested,
-      pages_scanned: 0,
-      scan_config_json: input.scanConfigJson
-    })
-    .select("id")
-    .single();
+  const data = await queryOne<{ id: string }>(
+    `insert into scans (organization_id, domain_id, submitted_by_user_id, scan_type, status, pages_requested, pages_scanned, scan_config_json)
+     values ($1, $2, $3, 'full', 'queued', $4, 0, $5)
+     returning id`,
+    [input.organizationId, input.domainId, input.submittedByUserId, input.pagesRequested, input.scanConfigJson]
+  );
 
-  if (error || !data) {
-    throw new Error(`Could not create full scan: ${error?.message ?? "Unknown error"}`);
+  if (!data) {
+    throw new Error("Could not create full scan: Unknown error");
   }
 
-  return { id: data.id as string };
+  return { id: data.id };
 }
 
 export async function insertQueuedFullScanEvent(input: {
@@ -528,19 +508,11 @@ export async function insertQueuedFullScanEvent(input: {
   organizationId: string;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db.from("scan_events").insert({
-    scan_id: input.scanId,
-    domain_id: input.domainId,
-    organization_id: input.organizationId,
-    event_type: input.eventType,
-    message: input.message,
-    metadata_json: input.metadataJson
-  });
-
-  if (error) {
-    throw new Error(`Scan created but event logging failed: ${error.message}`);
-  }
+  await query(
+    `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [input.scanId, input.domainId, input.organizationId, input.eventType, input.message, input.metadataJson]
+  );
 }
 
 export async function updateDomainLatestScan(input: {
@@ -548,16 +520,13 @@ export async function updateDomainLatestScan(input: {
   organizationId: string;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("domains")
-    .update({ latest_scan_id: input.scanId })
-    .eq("id", input.domainId)
-    .eq("organization_id", input.organizationId);
-
-  if (error) {
-    throw new Error(`Scan created but latest scan update failed: ${error.message}`);
-  }
+  await query(
+    `update domains
+        set latest_scan_id = $3
+      where id = $1
+        and organization_id = $2`,
+    [input.domainId, input.organizationId, input.scanId]
+  );
 }
 
 export async function loadRecentDomainBenchmarkEvent(input: {
@@ -565,22 +534,17 @@ export async function loadRecentDomainBenchmarkEvent(input: {
   eventType: string;
   scanId: string;
 }): Promise<DomainBenchmarkEventRow | null> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scan_events")
-    .select("metadata_json")
-    .eq("domain_id", input.domainId)
-    .eq("event_type", input.eventType)
-    .neq("scan_id", input.scanId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to load recent domain benchmark event: ${error.message}`);
-  }
-
-  return (data as DomainBenchmarkEventRow | null) ?? null;
+  return await queryOne<DomainBenchmarkEventRow>(
+    `select metadata_json
+       from scan_events
+      where domain_id = $1
+        and event_type = $2
+        and scan_id <> $3
+      order by created_at desc
+      limit 1`,
+    [input.domainId, input.eventType, input.scanId],
+    { readOnly: true }
+  );
 }
 
 export async function insertScanEventRecord(input: {
@@ -591,36 +555,23 @@ export async function insertScanEventRecord(input: {
   organizationId: string | null;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db.from("scan_events").insert({
-    scan_id: input.scanId,
-    domain_id: input.domainId,
-    organization_id: input.organizationId,
-    event_type: input.eventType,
-    message: input.message,
-    metadata_json: input.metadataJson
-  });
-
-  if (error) {
-    throw new Error(`Failed to insert scan event: ${error.message}`);
-  }
+  await query(
+    `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [input.scanId, input.domainId, input.organizationId, input.eventType, input.message, input.metadataJson]
+  );
 }
 
 export async function persistScanReportFindingCount(input: {
   count: number;
   scanId: string;
 }) {
-  const db = createDatabaseClient();
-  const { error } = await db
-    .from("scan_snapshots")
-    .update({
-      report_finding_count: input.count
-    })
-    .eq("scan_id", input.scanId);
-
-  if (error) {
-    throw new Error(`Failed to persist report finding count: ${error.message}`);
-  }
+  await query(
+    `update scan_snapshots
+        set report_finding_count = $2
+      where scan_id = $1`,
+    [input.scanId, input.count]
+  );
 }
 
 export async function loadScanDetailArtifacts(scanId: string): Promise<{
@@ -638,88 +589,127 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   trackerVendors: Array<Record<string, unknown>>;
   validationRunId: string | null;
 }> {
-  const db = createDatabaseClient();
   const [
-    { data: events, error: eventsError },
-    { data: snapshot },
-    { data: signals },
-    { data: runtimeArtifacts },
-    { data: preconsentViolations },
-    { data: trackerVendors },
-    { data: accessibilityRuleCounts },
-    { data: accessibilityRuleExamples },
-    { data: policyEnrichment },
-    { data: policyReviewQueue },
-    { data: documentSources },
-    { data: macroEnrichment, error: macroEnrichmentError },
-    { data: validationRun }
+    events,
+    snapshot,
+    signals,
+    runtimeArtifacts,
+    preconsentViolations,
+    trackerVendors,
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    policyEnrichment,
+    policyReviewQueue,
+    documentSources,
+    macroEnrichmentResult,
+    validationRun
   ] = await Promise.all([
-    db.from("scan_events").select("id, event_type, message, metadata_json, created_at").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("scan_snapshots").select("*").eq("scan_id", scanId).maybeSingle(),
-    db
-      .from("scan_signals")
-      .select("category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at")
-      .eq("scan_id", scanId)
-      .order("category", { ascending: true })
-      .order("signal_key", { ascending: true }),
-    db.from("scan_runtime_artifacts").select("*").eq("scan_id", scanId).maybeSingle(),
-    db
-      .from("scan_preconsent_violations")
-      .select(
-        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, script_host, matched_signature_id, evidence_urls"
-      )
-      .eq("scan_id", scanId)
-      .order("vendor_category", { ascending: true })
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_tracker_vendors")
-      .select(
-        "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
-      )
-      .eq("scan_id", scanId)
-      .order("vendor_category", { ascending: true })
-      .order("vendor_name", { ascending: true }),
-    db
-      .from("scan_accessibility_rule_counts")
-      .select("rule_code, rule_group, severity, instance_count")
-      .eq("scan_id", scanId)
-      .order("instance_count", { ascending: false })
-      .order("rule_code", { ascending: true }),
-    db
-      .from("scan_accessibility_rule_examples")
-      .select("page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors")
-      .eq("scan_id", scanId)
-      .order("node_count", { ascending: false })
-      .order("rule_code", { ascending: true }),
-    db.from("policy_enrichment").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("policy_review_queue").select("*").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("scan_document_sources").select("source_status, extraction_status, metadata_json").eq("scan_id", scanId).order("created_at", { ascending: true }),
-    db.from("scan_macro_enrichments").select("*").eq("scan_id", scanId).maybeSingle(),
-    db.from("validation_runs").select("id").eq("scan_id", scanId).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    query<ScanEventQueryRow>(
+      `select id, event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
+    query<ScanSignalQueryRow>(
+      `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+         from scan_signals
+        where scan_id = $1
+        order by category asc, signal_key asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    query<ScanPreconsentViolationRow>(
+      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, script_host, matched_signature_id, evidence_urls
+         from scan_preconsent_violations
+        where scan_id = $1
+        order by vendor_category asc, vendor_name asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id
+         from scan_tracker_vendors
+        where scan_id = $1
+        order by vendor_category asc, vendor_name asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select rule_code, rule_group, severity, instance_count
+         from scan_accessibility_rule_counts
+        where scan_id = $1
+        order by instance_count desc, rule_code asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors
+         from scan_accessibility_rule_examples
+        where scan_id = $1
+        order by node_count desc, rule_code asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select *
+         from policy_enrichment
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select *
+         from policy_review_queue
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select source_status, extraction_status, metadata_json
+         from scan_document_sources
+        where scan_id = $1
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId], { readOnly: true }).then(
+      (row) => ({ data: row, error: null as QueryErrorLike })
+    ).catch((error) => ({ data: null, error: { message: getErrorMessage(error) } as QueryErrorLike })),
+    queryOne<{ id?: string }>(
+      `select id
+         from validation_runs
+        where scan_id = $1
+        order by created_at desc
+        limit 1`,
+      [scanId],
+      { readOnly: true }
+    )
   ]);
 
-  if (eventsError) {
-    throw new Error(`Failed to load scan events: ${eventsError.message}`);
-  }
-
-  if (macroEnrichmentError && !isMissingOptionalTableError(macroEnrichmentError)) {
-    throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentError.message}`);
+  if (macroEnrichmentResult.error && !isMissingOptionalTableError(macroEnrichmentResult.error)) {
+    throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentResult.error.message}`);
   }
 
   return {
-    accessibilityRuleCounts: ((accessibilityRuleCounts ?? []) as Array<Record<string, unknown>>),
-    accessibilityRuleExamples: ((accessibilityRuleExamples ?? []) as Array<Record<string, unknown>>),
-    documentSources: ((documentSources ?? []) as Array<Record<string, unknown>>),
-    events: ((events ?? []) as ScanEventQueryRow[]),
-    macroEnrichment: (macroEnrichment as Record<string, unknown> | null) ?? null,
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>),
-    policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>),
-    preconsentViolations: ((preconsentViolations ?? []) as ScanPreconsentViolationRow[]),
-    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
-    signals: ((signals ?? []) as ScanSignalQueryRow[]),
-    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
-    trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>),
-    validationRunId: (validationRun as { id?: string } | null)?.id ?? null
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    documentSources,
+    events,
+    macroEnrichment: macroEnrichmentResult.data ?? null,
+    policyEnrichment,
+    policyReviewQueue,
+    preconsentViolations,
+    runtimeArtifacts,
+    signals,
+    snapshot,
+    trackerVendors,
+    validationRunId: validationRun?.id ?? null
   };
 }
 
@@ -729,37 +719,28 @@ export async function loadScanValidationFindingRows(
 ): Promise<{
   findings: ScanValidationRunFindingRow[];
 }> {
-  const db = createDatabaseClient();
-  const { data: validationFindingRows, error: validationFindingsError } = await db
-    .from("validation_run_findings")
-    .select(
-      "id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-    )
-    .eq("validation_run_id", validationRunId)
-    .order("finding_rank", { ascending: true });
-
-  if (validationFindingsError) {
-    throw new Error(`Failed to load validation findings for scan ${scanId}: ${validationFindingsError.message}`);
-  }
-
-  const baseFindingRows = (validationFindingRows ?? []) as ScanValidationRunFindingRow[];
+  const baseFindingRows = await query<ScanValidationRunFindingRow>(
+    `select id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json
+       from validation_run_findings
+      where validation_run_id = $1
+      order by finding_rank asc`,
+    [validationRunId],
+    { readOnly: true }
+  ).then((result) => result.rows);
   const findingIds = baseFindingRows.map((row) => row.id);
   const verdictByFindingId = new Map<string, ScanValidationVerdictRow>();
 
   if (findingIds.length > 0) {
-    const { data: verdictRows, error: verdictsError } = await db
-      .from("validation_verdicts")
-      .select(
-        "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-      )
-      .in("validation_run_finding_id", findingIds)
-      .order("created_at", { ascending: false });
+    const verdictRows = await query<ScanValidationVerdictRow>(
+      `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation
+         from validation_verdicts
+        where validation_run_finding_id = any($1::uuid[])
+        order by created_at desc`,
+      [findingIds],
+      { readOnly: true }
+    ).then((result) => result.rows);
 
-    if (verdictsError) {
-      throw new Error(`Failed to load validation verdicts for scan ${scanId}: ${verdictsError.message}`);
-    }
-
-    for (const row of (verdictRows ?? []) as ScanValidationVerdictRow[]) {
+    for (const row of verdictRows) {
       if (!verdictByFindingId.has(row.validation_run_finding_id)) {
         verdictByFindingId.set(row.validation_run_finding_id, row);
       }
@@ -784,43 +765,47 @@ export async function loadScanComparisonArtifacts(input: {
   previousTrackerRows: Array<Record<string, unknown>>;
   relatedPreviewSnapshot: Record<string, unknown> | null;
 }> {
-  const db = createDatabaseClient();
-
   const previousSnapshot = input.previousScanId
-    ? (await db.from("scan_snapshots").select("*").eq("scan_id", input.previousScanId).maybeSingle()).data
+    ? await queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.previousScanId], { readOnly: true })
     : null;
   const previousTrackerRows = input.previousScanId
-    ? (
-        await db
-          .from("scan_tracker_vendors")
-          .select(
-            "vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id"
-          )
-          .eq("scan_id", input.previousScanId)
-      ).data ?? []
+    ? await query<Record<string, unknown>>(
+        `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id
+           from scan_tracker_vendors
+          where scan_id = $1`,
+        [input.previousScanId],
+        { readOnly: true }
+      ).then((result) => result.rows)
     : [];
   const relatedPreviewSnapshot = input.domainField
-    ? (
-        await db
-          .from("scan_snapshots")
-          .select("*")
-          .eq("domain", input.domainField)
-          .eq("crawl_source", "preview")
-          .neq("scan_id", input.scanId)
-          .order("scan_timestamp", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      ).data
+    ? await queryOne<Record<string, unknown>>(
+        `select *
+           from scan_snapshots
+          where domain = $1
+            and crawl_source = 'preview'
+            and scan_id <> $2
+          order by scan_timestamp desc
+          limit 1`,
+        [input.domainField, input.scanId],
+        { readOnly: true }
+      )
     : null;
   const previousPolicyRows = input.previousScanId
-    ? (await db.from("policy_enrichment").select("*").eq("scan_id", input.previousScanId).order("created_at", { ascending: true })).data ?? []
+    ? await query<Record<string, unknown>>(
+        `select *
+           from policy_enrichment
+          where scan_id = $1
+          order by created_at asc`,
+        [input.previousScanId],
+        { readOnly: true }
+      ).then((result) => result.rows)
     : [];
 
   return {
-    previousPolicyRows: previousPolicyRows as Array<Record<string, unknown>>,
-    previousSnapshot: (previousSnapshot as Record<string, unknown> | null) ?? null,
-    previousTrackerRows: previousTrackerRows as Array<Record<string, unknown>>,
-    relatedPreviewSnapshot: (relatedPreviewSnapshot as Record<string, unknown> | null) ?? null
+    previousPolicyRows,
+    previousSnapshot: previousSnapshot ?? null,
+    previousTrackerRows,
+    relatedPreviewSnapshot: relatedPreviewSnapshot ?? null
   };
 }
 
@@ -829,14 +814,13 @@ export async function loadPolicyEvidenceByHash(policyEvidenceHashes: string[]): 
     return new Map();
   }
 
-  const db = createDatabaseClient();
-  const rows =
-    (
-      await db
-        .from("policy_evidence")
-        .select("evidence_hash, snippet")
-        .in("evidence_hash", policyEvidenceHashes)
-    ).data ?? [];
+  const rows = await query<{ evidence_hash: string; snippet: string }>(
+    `select evidence_hash, snippet
+       from policy_evidence
+      where evidence_hash = any($1::text[])`,
+    [policyEvidenceHashes],
+    { readOnly: true }
+  ).then((result) => result.rows);
 
   return new Map(
     rows
@@ -874,29 +858,54 @@ export async function loadOrganizationScanPageData(
   validationRuns: OrganizationValidationRunSummaryRow[];
   verdictByFindingId: Map<string, OrganizationValidationVerdictRow>;
 }> {
-  const db = createDatabaseClient();
-  let query = db
-    .from("scans")
-    .select(
-      "id, domain_id, scan_type, status, pages_requested, pages_scanned, created_at, started_at, completed_at",
-      input?.includeCount ? { count: "exact" } : undefined
-    )
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-
+  const limitClauses: string[] = [];
+  const limitParams: Array<number> = [];
   if (typeof input?.from === "number" && typeof input?.to === "number") {
-    query = query.range(input.from, input.to);
+    const offset = input.from;
+    const limit = input.to - input.from + 1;
+    limitParams.push(limit, offset);
+    limitClauses.push(`limit $${limitParams.length - 1} offset $${limitParams.length}`);
   } else if (typeof input?.limit === "number") {
-    query = query.limit(input.limit);
+    limitParams.push(input.limit);
+    limitClauses.push(`limit $${limitParams.length}`);
   }
 
-  const { data: scans, error, count } = await query;
+  const scanRowsPromise = query<OrganizationScanQueryRow>(
+    `
+      select
+        id,
+        domain_id,
+        scan_type,
+        status,
+        pages_requested,
+        pages_scanned,
+        created_at,
+        started_at,
+        completed_at
+      from scans
+      where organization_id = $1
+      order by created_at desc
+      ${limitClauses.join(" ")}
+    `,
+    [organizationId, ...limitParams],
+    { readOnly: true }
+  ).then((result) => result.rows);
+  const countPromise = input?.includeCount
+    ? queryOne<{ count: number }>(
+        `select count(*)::int as count from scans where organization_id = $1`,
+        [organizationId],
+        { readOnly: true }
+      )
+    : Promise.resolve(null);
 
-  if (error) {
-    throw new Error(`Failed to load organization scans: ${error.message}`);
+  let scanRows: OrganizationScanQueryRow[];
+  let countRow: { count: number } | null;
+  try {
+    [scanRows, countRow] = await Promise.all([scanRowsPromise, countPromise]);
+  } catch (error) {
+    throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
   }
 
-  const scanRows = (scans ?? []) as OrganizationScanQueryRow[];
   const scanIds = scanRows.map((scan) => scan.id);
   const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
   const summaryScanIds = Array.from(
@@ -910,42 +919,142 @@ export async function loadOrganizationScanPageData(
   );
 
   const domainsWithLastScannedAtPromise = domainIds.length
-    ? db
-        .from("domains")
-        .select("id, hostname, last_scanned_at, latest_scan_id")
-        .eq("organization_id", organizationId)
-        .in("id", domainIds)
-    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null });
+    ? query<OrganizationScanDomainRow>(
+        `
+          select id, hostname, last_scanned_at, latest_scan_id
+          from domains
+          where organization_id = $1
+            and id = any($2::uuid[])
+        `,
+        [organizationId, domainIds],
+        { readOnly: true }
+      )
+        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+        .catch((error) => ({
+          data: [] as OrganizationScanDomainRow[],
+          error: { message: getErrorMessage(error) } as QueryErrorLike
+        }))
+    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null as QueryErrorLike });
   const domainsWithoutLastScannedAtPromise = domainIds.length
-    ? db
-        .from("domains")
-        .select("id, hostname, latest_scan_id")
-        .eq("organization_id", organizationId)
-        .in("id", domainIds)
-    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null });
+    ? query<OrganizationScanDomainRow>(
+        `
+          select id, hostname, latest_scan_id
+          from domains
+          where organization_id = $1
+            and id = any($2::uuid[])
+        `,
+        [organizationId, domainIds],
+        { readOnly: true }
+      )
+        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+        .catch((error) => ({
+          data: [] as OrganizationScanDomainRow[],
+          error: { message: getErrorMessage(error) } as QueryErrorLike
+        }))
+    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null as QueryErrorLike });
   const snapshotsPromise = summaryScanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count, access_posture_class, highest_successful_tier, stop_tier, recoverable_finding_classes"
-        )
-        .in("scan_id", summaryScanIds)
+    ? query<OrganizationScanSnapshotRow>(
+        `
+          select
+            scan_id,
+            total_signals,
+            certscore_overall,
+            regulatory_exposure_score,
+            privacy_score,
+            consent_score,
+            accessibility_score,
+            cookie_banner_present,
+            cmp_vendor_name,
+            homepage_fetch_http_status,
+            homepage_fetch_status,
+            robots_allowed,
+            robots_fetch_http_status,
+            robots_fetch_status,
+            blocked_flag,
+            captcha_flag,
+            auth_wall_detected,
+            scan_outcome,
+            stop_reason_code,
+            stop_reason_label,
+            stop_reason_detail,
+            stop_reason_http_status,
+            report_finding_count,
+            access_posture_class,
+            highest_successful_tier,
+            stop_tier,
+            recoverable_finding_classes
+          from scan_snapshots
+          where scan_id = any($1::uuid[])
+        `,
+        [summaryScanIds],
+        { readOnly: true }
+      )
+        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+        .catch((error) => ({
+          data: [] as OrganizationScanSnapshotRow[],
+          error: { message: getErrorMessage(error) } as QueryErrorLike
+        }))
     : Promise.resolve({ data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike });
   const snapshotsFallbackPromise = summaryScanIds.length
-    ? db
-        .from("scan_snapshots")
-        .select(
-          "scan_id, total_signals, certscore_overall, regulatory_exposure_score, privacy_score, consent_score, accessibility_score, cookie_banner_present, cmp_vendor_name, homepage_fetch_http_status, homepage_fetch_status, robots_allowed, robots_fetch_http_status, robots_fetch_status, blocked_flag, captcha_flag, auth_wall_detected, scan_outcome, stop_reason_code, stop_reason_label, stop_reason_detail, stop_reason_http_status, report_finding_count"
-        )
-        .in("scan_id", summaryScanIds)
+    ? query<OrganizationScanSnapshotRow>(
+        `
+          select
+            scan_id,
+            total_signals,
+            certscore_overall,
+            regulatory_exposure_score,
+            privacy_score,
+            consent_score,
+            accessibility_score,
+            cookie_banner_present,
+            cmp_vendor_name,
+            homepage_fetch_http_status,
+            homepage_fetch_status,
+            robots_allowed,
+            robots_fetch_http_status,
+            robots_fetch_status,
+            blocked_flag,
+            captcha_flag,
+            auth_wall_detected,
+            scan_outcome,
+            stop_reason_code,
+            stop_reason_label,
+            stop_reason_detail,
+            stop_reason_http_status,
+            report_finding_count
+          from scan_snapshots
+          where scan_id = any($1::uuid[])
+        `,
+        [summaryScanIds],
+        { readOnly: true }
+      )
+        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+        .catch((error) => ({
+          data: [] as OrganizationScanSnapshotRow[],
+          error: { message: getErrorMessage(error) } as QueryErrorLike
+        }))
     : Promise.resolve({ data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike });
   const runtimeArtifactsPromise = summaryScanIds.length
-    ? db
-        .from("scan_runtime_artifacts")
-        .select(
-          "scan_id, consent_audit_completed, consent_reject_interaction_succeeded, consent_reject_reduced_tracking, consent_reject_reduced_third_party_cookies, hybrid_runtime_evidence"
-        )
-        .in("scan_id", summaryScanIds)
+    ? query<OrganizationRuntimeArtifactRow>(
+        `
+          select
+            scan_id,
+            consent_audit_completed,
+            consent_reject_interaction_succeeded,
+            consent_reject_reduced_tracking,
+            consent_reject_reduced_third_party_cookies,
+            hybrid_runtime_evidence
+          from scan_runtime_artifacts
+          where scan_id = any($1::uuid[])
+        `,
+        [summaryScanIds],
+        { readOnly: true }
+      )
+        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+        .catch((error) => ({
+          data: [] as OrganizationRuntimeArtifactRow[],
+          error: { message: getErrorMessage(error) } as QueryErrorLike
+        }))
     : Promise.resolve({ data: [] as OrganizationRuntimeArtifactRow[], error: null as QueryErrorLike });
 
   const [
@@ -991,43 +1100,63 @@ export async function loadOrganizationScanPageData(
 
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("compliance_change_events")
-        .select("scan_id_current, event_type")
-        .eq("organization_id", organizationId)
-        .in("scan_id_current", scanIdBatch);
-
-      if (error) {
-        changeSummariesError = error;
+      try {
+        const data = await query<OrganizationChangeSummaryRow>(
+          `
+            select scan_id_current, event_type
+            from compliance_change_events
+            where organization_id = $1
+              and scan_id_current = any($2::uuid[])
+          `,
+          [organizationId, scanIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
+        changeSummaries.push(...data);
+      } catch (error) {
+        changeSummariesError = { message: getErrorMessage(error) };
         break;
       }
-
-      changeSummaries.push(...((data ?? []) as OrganizationChangeSummaryRow[]));
     }
   }
 
   const domainRows = (domains ?? []) as OrganizationScanDomainRow[];
   const latestDomainScanIds = [...new Set(domainRows.flatMap((domain) => (domain.latest_scan_id ? [domain.latest_scan_id] : [])))];
-  const { data: domainCompletedScans, error: domainCompletedScansError } = domainIds.length
-    ? await db
-        .from("scans")
-        .select("domain_id, completed_at")
-        .eq("organization_id", organizationId)
-        .eq("status", "completed")
-        .not("completed_at", "is", null)
-        .in("domain_id", domainIds)
-        .order("completed_at", { ascending: false })
-    : { data: [] as OrganizationDomainCompletedScanRow[], error: null };
-  const { data: latestDomainScans, error: latestDomainScansError } = latestDomainScanIds.length
-    ? await db.from("scans").select("id, status").in("id", latestDomainScanIds)
-    : { data: [] as OrganizationLatestDomainScanRow[], error: null };
-
-  if (domainCompletedScansError) {
-    throw new Error(`Failed to load organization scans: ${domainCompletedScansError.message}`);
+  let domainCompletedScans: OrganizationDomainCompletedScanRow[] = [];
+  if (domainIds.length) {
+    try {
+      domainCompletedScans = await query<OrganizationDomainCompletedScanRow>(
+        `
+          select domain_id, completed_at
+          from scans
+          where organization_id = $1
+            and status = 'completed'
+            and completed_at is not null
+            and domain_id = any($2::uuid[])
+          order by completed_at desc
+        `,
+        [organizationId, domainIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
+    }
   }
 
-  if (latestDomainScansError) {
-    throw new Error(`Failed to load organization scans: ${latestDomainScansError.message}`);
+  let latestDomainScans: OrganizationLatestDomainScanRow[] = [];
+  if (latestDomainScanIds.length) {
+    try {
+      latestDomainScans = await query<OrganizationLatestDomainScanRow>(
+        `
+          select id, status
+          from scans
+          where id = any($1::uuid[])
+        `,
+        [latestDomainScanIds],
+        { readOnly: true }
+      ).then((result) => result.rows);
+    } catch (error) {
+      throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
+    }
   }
 
   const snapshotMap = new Map(((resolvedSnapshots ?? []) as OrganizationScanSnapshotRow[]).map((snapshot) => [snapshot.scan_id, snapshot]));
@@ -1038,17 +1167,23 @@ export async function loadOrganizationScanPageData(
   const signalCountMap = new Map<string, number>();
   if (zeroSignalScanIds.length) {
     for (const scanIdBatch of chunkValues(zeroSignalScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: signalCountRows, error: signalCountError } = await db
-        .from("scan_signals")
-        .select("scan_id")
-        .eq("population_source", "scanner")
-        .in("scan_id", scanIdBatch);
-
-      if (signalCountError) {
-        throw new Error(`Failed to load organization scans: ${signalCountError.message}`);
+      let signalCountRows: OrganizationSignalCountRow[];
+      try {
+        signalCountRows = await query<OrganizationSignalCountRow>(
+          `
+            select scan_id
+            from scan_signals
+            where population_source = 'scanner'
+              and scan_id = any($1::uuid[])
+          `,
+          [scanIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
+      } catch (error) {
+        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
       }
 
-      for (const row of (signalCountRows ?? []) as OrganizationSignalCountRow[]) {
+      for (const row of signalCountRows) {
         signalCountMap.set(row.scan_id, (signalCountMap.get(row.scan_id) ?? 0) + 1);
       }
     }
@@ -1057,51 +1192,66 @@ export async function loadOrganizationScanPageData(
   const validationRuns: OrganizationValidationRunSummaryRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: validationRunRows, error: validationRunsError } = await db
-        .from("validation_runs")
-        .select("id, scan_id, finding_count, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: false });
+      try {
+        const validationRunRows = await query<OrganizationValidationRunSummaryRow>(
+          `
+            select id, scan_id, finding_count, created_at
+            from validation_runs
+            where scan_id = any($1::uuid[])
+            order by created_at desc
+          `,
+          [scanIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
 
-      if (validationRunsError) {
-        throw new Error(`Failed to load organization scans: ${validationRunsError.message}`);
+        validationRuns.push(...validationRunRows);
+      } catch (error) {
+        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
       }
-
-      validationRuns.push(...((validationRunRows ?? []) as OrganizationValidationRunSummaryRow[]));
     }
   }
 
   const diagnosticEvents: OrganizationScanDiagnosticEventRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: diagnosticEventRows, error: diagnosticEventsError } = await db
-        .from("scan_events")
-        .select("scan_id, event_type, message, metadata_json, created_at")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
+      try {
+        const diagnosticEventRows = await query<OrganizationScanDiagnosticEventRow>(
+          `
+            select scan_id, event_type, message, metadata_json, created_at
+            from scan_events
+            where scan_id = any($1::uuid[])
+            order by created_at asc
+          `,
+          [scanIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
 
-      if (diagnosticEventsError) {
-        throw new Error(`Failed to load organization scans: ${diagnosticEventsError.message}`);
+        diagnosticEvents.push(...diagnosticEventRows);
+      } catch (error) {
+        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
       }
-
-      diagnosticEvents.push(...((diagnosticEventRows ?? []) as OrganizationScanDiagnosticEventRow[]));
     }
   }
 
   const policyEnrichmentRows: OrganizationPolicyEnrichmentRow[] = [];
   if (summaryScanIds.length) {
     for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data: policyRows, error: policyRowsError } = await db
-        .from("policy_enrichment")
-        .select("*")
-        .in("scan_id", scanIdBatch)
-        .order("created_at", { ascending: true });
+      try {
+        const policyRows = await query<OrganizationPolicyEnrichmentRow>(
+          `
+            select *
+            from policy_enrichment
+            where scan_id = any($1::uuid[])
+            order by created_at asc
+          `,
+          [scanIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
 
-      if (policyRowsError) {
-        throw new Error(`Failed to load organization scans: ${policyRowsError.message}`);
+        policyEnrichmentRows.push(...policyRows);
+      } catch (error) {
+        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
       }
-
-      policyEnrichmentRows.push(...((policyRows ?? []) as OrganizationPolicyEnrichmentRow[]));
     }
   }
 
@@ -1124,18 +1274,35 @@ export async function loadOrganizationScanPageData(
   const validationFindingRows: OrganizationValidationFindingSummaryRow[] = [];
   if (latestValidationRunIds.length) {
     for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_run_findings")
-        .select(
-          "id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json"
-        )
-        .in("validation_run_id", validationRunIdBatch);
+      try {
+        const data = await query<OrganizationValidationFindingSummaryRow>(
+          `
+            select
+              id,
+              validation_run_id,
+              category,
+              subtype,
+              finding_family,
+              finding_source,
+              finding_scope,
+              finding_subject,
+              rule_key,
+              title,
+              description,
+              severity,
+              page_url,
+              evidence_json
+            from validation_run_findings
+            where validation_run_id = any($1::uuid[])
+          `,
+          [validationRunIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
 
-      if (error) {
-        throw new Error(`Failed to load organization scans: ${error.message}`);
+        validationFindingRows.push(...data);
+      } catch (error) {
+        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
       }
-
-      validationFindingRows.push(...((data ?? []) as OrganizationValidationFindingSummaryRow[]));
     }
   }
 
@@ -1144,19 +1311,35 @@ export async function loadOrganizationScanPageData(
 
   if (validationFindingIds.length > 0) {
     for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const { data, error } = await db
-        .from("validation_verdicts")
-        .select(
-          "validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, evidence_json, created_at, system_confidence_score, system_confidence_band, system_confidence_explanation"
-        )
-        .in("validation_run_finding_id", findingIdBatch)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw new Error(`Failed to load organization scan verdicts: ${error.message}`);
+      let data: OrganizationValidationVerdictRow[];
+      try {
+        data = await query<OrganizationValidationVerdictRow>(
+          `
+            select
+              validation_run_finding_id,
+              verdict,
+              confidence,
+              rationale,
+              agreement_score,
+              model,
+              prompt_version,
+              evidence_json,
+              created_at,
+              system_confidence_score,
+              system_confidence_band,
+              system_confidence_explanation
+            from validation_verdicts
+            where validation_run_finding_id = any($1::uuid[])
+            order by created_at desc
+          `,
+          [findingIdBatch],
+          { readOnly: true }
+        ).then((result) => result.rows);
+      } catch (error) {
+        throw new Error(`Failed to load organization scan verdicts: ${getErrorMessage(error)}`);
       }
 
-      for (const row of (data ?? []) as OrganizationValidationVerdictRow[]) {
+      for (const row of data) {
         if (!verdictByFindingId.has(row.validation_run_finding_id)) {
           verdictByFindingId.set(row.validation_run_finding_id, row);
         }
@@ -1167,11 +1350,11 @@ export async function loadOrganizationScanPageData(
   return {
     changeSummaries,
     changeSummariesError,
-    count: count ?? null,
+    count: countRow?.count ?? null,
     diagnosticEvents,
-    domainCompletedScans: (domainCompletedScans ?? []) as OrganizationDomainCompletedScanRow[],
+    domainCompletedScans,
     domains: domainRows,
-    latestDomainScans: (latestDomainScans ?? []) as OrganizationLatestDomainScanRow[],
+    latestDomainScans,
     policyEnrichmentRows,
     resolvedSnapshots: (resolvedSnapshots ?? []) as OrganizationScanSnapshotRow[],
     runtimeArtifacts: (runtimeArtifacts ?? []) as OrganizationRuntimeArtifactRow[],
@@ -1188,25 +1371,29 @@ export async function loadOrganizationScanLegacyEvents(
   organizationId: string,
   scanIds: string[]
 ): Promise<LegacyScanEventRow[]> {
-  const db = createDatabaseClient();
   const legacyEvents: LegacyScanEventRow[] = [];
   let legacyEventsError: QueryErrorLike = null;
 
   for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    const { data, error } = await db
-      .from("scan_events")
-      .select("id, scan_id, event_type, message, metadata_json, created_at")
-      .eq("organization_id", organizationId)
-      .in("scan_id", scanIdBatch)
-      .in("event_type", [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed])
-      .order("created_at", { ascending: false });
+    try {
+      const data = await query<LegacyScanEventRow>(
+        `
+          select id, scan_id, event_type, message, metadata_json, created_at
+          from scan_events
+          where organization_id = $1
+            and scan_id = any($2::uuid[])
+            and event_type = any($3::text[])
+          order by created_at desc
+        `,
+        [organizationId, scanIdBatch, [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed]],
+        { readOnly: true }
+      ).then((result) => result.rows);
 
-    if (error) {
-      legacyEventsError = error;
+      legacyEvents.push(...data);
+    } catch (error) {
+      legacyEventsError = { message: getErrorMessage(error) };
       break;
     }
-
-    legacyEvents.push(...((data ?? []) as LegacyScanEventRow[]));
   }
 
   if (legacyEventsError) {
