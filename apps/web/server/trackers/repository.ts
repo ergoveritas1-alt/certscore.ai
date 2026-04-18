@@ -1,6 +1,6 @@
 "use server";
 
-import { createDatabaseClient } from "@website-signal-risk-scanner/db";
+import { query } from "@website-signal-risk-scanner/db";
 
 export type TrackerInventoryCompletedScanRow = {
   completed_at: string;
@@ -36,21 +36,24 @@ export type TrackerInventoryPreconsentViolationRow = {
 };
 
 export async function loadTrackerInventoryCompletedScans(organizationId: string): Promise<TrackerInventoryCompletedScanRow[]> {
-  const db = createDatabaseClient();
-  const { data, error } = await db
-    .from("scans")
-    .select("id, domain_id, completed_at")
-    .eq("organization_id", organizationId)
-    .eq("status", "completed")
-    .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false })
-    .limit(500);
+  try {
+    const result = await query<TrackerInventoryCompletedScanRow>(
+      `select id, domain_id, completed_at
+         from scans
+        where organization_id = $1
+          and status = 'completed'
+          and completed_at is not null
+        order by completed_at desc
+        limit 500`,
+      [organizationId],
+      { readOnly: true }
+    );
 
-  if (error) {
-    throw new Error(`Failed to load tracker inventory scans: ${error.message}`);
+    return result.rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load tracker inventory scans: ${message}`);
   }
-
-  return (data ?? []) as TrackerInventoryCompletedScanRow[];
 }
 
 export async function loadTrackerInventoryRelatedData(input: {
@@ -63,58 +66,56 @@ export async function loadTrackerInventoryRelatedData(input: {
   runtimeArtifacts: TrackerInventoryRuntimeArtifactRow[];
   trackers: TrackerInventoryTrackerRow[];
 }> {
-  const db = createDatabaseClient();
-  const [
-    { data: domains, error: domainsError },
-    { data: trackers, error: trackersError },
-    { data: runtimeArtifacts, error: runtimeArtifactsError },
-    { data: preconsentViolations, error: preconsentViolationsError }
-  ] = await Promise.all([
-    input.domainIds.length
-      ? db.from("domains").select("id, hostname").eq("organization_id", input.organizationId).in("id", input.domainIds)
-      : Promise.resolve({ data: [] as TrackerInventoryDomainRow[], error: null }),
-    input.scanIds.length
-      ? db
-          .from("scan_tracker_vendors")
-          .select(
-            "scan_id, vendor_name, vendor_category, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host"
+  try {
+    const [domainsResult, trackersResult, runtimeArtifactsResult, preconsentViolationsResult] = await Promise.all([
+      input.domainIds.length
+        ? query<TrackerInventoryDomainRow>(
+            `select id, hostname
+               from domains
+              where organization_id = $1
+                and id = any($2::uuid[])`,
+            [input.organizationId, input.domainIds],
+            { readOnly: true }
           )
-          .in("scan_id", input.scanIds)
-      : Promise.resolve({ data: [] as TrackerInventoryTrackerRow[], error: null }),
-    input.scanIds.length
-      ? db
-          .from("scan_runtime_artifacts")
-          .select("scan_id, consent_preconsent_violation_count")
-          .in("scan_id", input.scanIds)
-      : Promise.resolve({ data: [] as TrackerInventoryRuntimeArtifactRow[], error: null }),
-    input.scanIds.length
-      ? db
-          .from("scan_preconsent_violations")
-          .select("scan_id, vendor_name, vendor_category")
-          .in("scan_id", input.scanIds)
-      : Promise.resolve({ data: [] as TrackerInventoryPreconsentViolationRow[], error: null })
-  ]);
+        : Promise.resolve({ rows: [] as TrackerInventoryDomainRow[] }),
+      input.scanIds.length
+        ? query<TrackerInventoryTrackerRow>(
+            `select scan_id, vendor_name, vendor_category, confidence, first_party_or_third_party,
+                    collection_endpoint_type, before_consent, script_host
+               from scan_tracker_vendors
+              where scan_id = any($1::uuid[])`,
+            [input.scanIds],
+            { readOnly: true }
+          )
+        : Promise.resolve({ rows: [] as TrackerInventoryTrackerRow[] }),
+      input.scanIds.length
+        ? query<TrackerInventoryRuntimeArtifactRow>(
+            `select scan_id, consent_preconsent_violation_count
+               from scan_runtime_artifacts
+              where scan_id = any($1::uuid[])`,
+            [input.scanIds],
+            { readOnly: true }
+          )
+        : Promise.resolve({ rows: [] as TrackerInventoryRuntimeArtifactRow[] }),
+      input.scanIds.length
+        ? query<TrackerInventoryPreconsentViolationRow>(
+            `select scan_id, vendor_name, vendor_category
+               from scan_preconsent_violations
+              where scan_id = any($1::uuid[])`,
+            [input.scanIds],
+            { readOnly: true }
+          )
+        : Promise.resolve({ rows: [] as TrackerInventoryPreconsentViolationRow[] })
+    ]);
 
-  if (domainsError) {
-    throw new Error(`Failed to load tracker inventory domains: ${domainsError.message}`);
+    return {
+      domains: domainsResult.rows,
+      preconsentViolations: preconsentViolationsResult.rows,
+      runtimeArtifacts: runtimeArtifactsResult.rows,
+      trackers: trackersResult.rows
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load tracker inventory data: ${message}`);
   }
-
-  if (trackersError) {
-    throw new Error(`Failed to load tracker inventory trackers: ${trackersError.message}`);
-  }
-
-  if (runtimeArtifactsError) {
-    throw new Error(`Failed to load tracker inventory runtime artifacts: ${runtimeArtifactsError.message}`);
-  }
-
-  if (preconsentViolationsError) {
-    throw new Error(`Failed to load tracker inventory pre-consent violations: ${preconsentViolationsError.message}`);
-  }
-
-  return {
-    domains: (domains ?? []) as TrackerInventoryDomainRow[],
-    preconsentViolations: (preconsentViolations ?? []) as TrackerInventoryPreconsentViolationRow[],
-    runtimeArtifacts: (runtimeArtifacts ?? []) as TrackerInventoryRuntimeArtifactRow[],
-    trackers: (trackers ?? []) as TrackerInventoryTrackerRow[]
-  };
 }
