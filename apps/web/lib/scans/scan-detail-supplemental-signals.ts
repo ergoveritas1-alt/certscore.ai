@@ -141,8 +141,12 @@ export function deriveSupplementalSnapshotSignals(input: {
   const doNotSellLinkPresent = snapshot.do_not_sell_link_present === true;
   const retargetingPixelDetected = snapshot.retargeting_pixel_detected === true;
   const familyPacketFindingIds = getFamilyPacketFindingIds(input.events);
-  const accessibilitySupportPresent = familyPacketFindingIds.has("accessibility_support_path_present");
-  const privacyContactPresent = familyPacketFindingIds.has("privacy_contact_path_present");
+  const accessibilitySupportPresent =
+    familyPacketFindingIds.has("accessibility_support_path_present") ||
+    seenKeys.has("accessibility.accessibility_contact_method_present");
+  const privacyContactPresent =
+    familyPacketFindingIds.has("privacy_contact_path_present") ||
+    seenKeys.has("privacy.privacy_contact_path_present");
   const weakPrivacyContactMissingSignal = shouldSuppressWeakPrivacyContactMissingSignal(input.primaryPolicyEnrichment);
 
   pushBoolean(
