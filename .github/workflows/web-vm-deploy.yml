@@ -37,7 +37,7 @@ jobs:
       REPOSITORY: certscore
       VM_NAME: certscore-web-prod
       VM_ZONE: us-central1-a
-      PUBLIC_BASE_URL: https://consentcheck.site
+      PUBLIC_BASE_URL: https://certscore.ai
       DEPLOY_SERVICE_ACCOUNT: github-web-deploy-sa@certscore-ai.iam.gserviceaccount.com
       WORKLOAD_IDENTITY_PROVIDER: projects/375479222526/locations/global/workloadIdentityPools/github-actions/providers/github-actions-certscore-ai
       REMOTE_DEPLOY_WRAPPER: /usr/local/bin/deploy-certscore-web
