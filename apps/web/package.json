@@ -29,7 +29,6 @@
     "@website-signal-risk-scanner/validation-shared": "workspace:*",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.6.5",
-    "bullmq": "^5.43.0",
     "next": "^15.2.0",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",

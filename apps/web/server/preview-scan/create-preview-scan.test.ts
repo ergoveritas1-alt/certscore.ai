@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getPreviewScanAvailability } from "./preview-scan-availability";
 
-test("preview scans stay available when the environment has queue credentials", () => {
+test("preview scans stay available when unrelated legacy env is present", () => {
   const availability = getPreviewScanAvailability(({
     REDIS_URL: "redis://localhost:6379"
   } as unknown) as NodeJS.ProcessEnv);
