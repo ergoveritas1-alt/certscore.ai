@@ -40,6 +40,7 @@ jobs:
       ECS_WEB_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WEB_SERVICE }}
       ECS_WORKER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       ECS_SCHEDULER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_SCHEDULER_SERVICE }}
+      VALIDATION_OPS_BASE_URL: ${{ vars.AWS_VALIDATION_OPS_BASE_URL }}
 
     steps:
       - name: Checkout
@@ -54,6 +55,7 @@ jobs:
           test -n "${ECS_WEB_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WEB_SERVICE" && exit 1)
           test -n "${ECS_WORKER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WORKER_SERVICE" && exit 1)
           test -n "${ECS_SCHEDULER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_SCHEDULER_SERVICE" && exit 1)
+          test -n "${VALIDATION_OPS_BASE_URL}" || (echo "Missing var AWS_VALIDATION_OPS_BASE_URL" && exit 1)
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -87,6 +89,16 @@ jobs:
 
       - name: Run validation pipeline tests
         run: pnpm test:scan-pipeline
+
+      - name: Validate dedicated validation ops contract
+        run: |
+          APP_FLAVOR=validation_ops \
+          NEXT_PUBLIC_APP_URL="${VALIDATION_OPS_BASE_URL}" \
+          DATABASE_URL=postgresql://validation.example.internal/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          CERTSCORE_ADMIN_EMAILS=ops@example.com \
+          VALIDATION_REDIS_URL=rediss://:token@validation-redis.example.internal:6379 \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
 
       - name: Build and push validation ops web image
         env:

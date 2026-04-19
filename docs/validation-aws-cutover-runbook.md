@@ -27,6 +27,7 @@ Set these GitHub repository values before the first AWS deploy:
 
 - secret `AWS_ROLE_TO_ASSUME`
 - variable `AWS_REGION`
+- variable `AWS_VALIDATION_OPS_BASE_URL`
 - variable `AWS_VALIDATION_WEB_ECR_REPOSITORY`
 - variable `AWS_VALIDATION_WORKER_ECR_REPOSITORY`
 - variable `AWS_VALIDATION_ECS_CLUSTER`

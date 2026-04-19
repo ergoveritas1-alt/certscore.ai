@@ -42,6 +42,20 @@ terraform apply
 
 5. Configure the GitHub Actions AWS deploy workflow with those output values.
 
+Required repository configuration for `.github/workflows/validation-aws-deploy.yml`:
+
+- GitHub secret:
+  - `AWS_ROLE_TO_ASSUME`
+- GitHub variables:
+  - `AWS_REGION`
+  - `AWS_VALIDATION_OPS_BASE_URL`
+  - `AWS_VALIDATION_WEB_ECR_REPOSITORY`
+  - `AWS_VALIDATION_WORKER_ECR_REPOSITORY`
+  - `AWS_VALIDATION_ECS_CLUSTER`
+  - `AWS_VALIDATION_ECS_WEB_SERVICE`
+  - `AWS_VALIDATION_ECS_WORKER_SERVICE`
+  - `AWS_VALIDATION_ECS_SCHEDULER_SERVICE`
+
 ## Notes
 
 - This stack intentionally uses a standard node-based ElastiCache replication group, not serverless, because the validation queue lane uses BullMQ.
