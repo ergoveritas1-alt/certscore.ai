@@ -32,6 +32,10 @@ export function getConfiguredValidationRedisUrl(env: NodeJS.ProcessEnv = process
   return env.VALIDATION_REDIS_URL?.trim() || env.REDIS_URL?.trim() || "";
 }
 
+export function getConfiguredWebValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
+  return env.VALIDATION_REDIS_URL?.trim() || "";
+}
+
 export function getValidationOpsBaseUrl(env: NodeJS.ProcessEnv = process.env) {
   return env.VALIDATION_OPS_BASE_URL?.trim() || "";
 }

@@ -144,6 +144,12 @@ Expected results:
 - validation tables are reachable in PostgreSQL
 - Playwright Chromium launches
 
+Main-app production note:
+
+- the primary Vercel app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
+- the primary Vercel app should not keep `VALIDATION_REDIS_URL` after AWS cutover
+- web-side validation BullMQ access now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`
+
 ## 6. First-Run Validation
 
 1. Open the validation domain root page and confirm the public crawler identity page renders.

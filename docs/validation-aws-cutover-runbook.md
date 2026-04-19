@@ -39,8 +39,10 @@ Push to `main` or manually dispatch `Validation AWS Deploy`.
 ## 3. Switch the main app to the dedicated validation host
 
 1. Set `VALIDATION_OPS_BASE_URL` on the primary Vercel deployment to the AWS validation ops hostname.
-2. Do not remove validation queue credentials from the main app until the remaining preview/nano-enrichment queue paths are migrated or intentionally disabled.
-3. Confirm `/app/validation`, `/app/validation/scans`, and `/app/validation/issues` on the main app now send admins to the dedicated validation ops host instead of exposing local queue controls.
+2. Remove `VALIDATION_REDIS_URL` from the primary Vercel deployment so validation BullMQ is no longer reachable from the main app.
+3. Keep `REDIS_URL` scoped to non-validation web needs only. The main web validation queue path now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`.
+4. Confirm `/app/validation`, `/app/validation/scans`, and `/app/validation/issues` on the main app now send admins to the dedicated validation ops host instead of exposing local queue controls.
+5. Confirm public preview/full scans still queue normally even when validation-side nano enrichment is unavailable; those sidecars should degrade gracefully instead of failing scan creation.
 
 ## 4. Validate AWS runtime health
 
@@ -65,7 +67,7 @@ Only after the AWS validation lane passes end-to-end:
 1. Pause the old GCP validation worker pool or scale desired capacity to zero.
 2. Confirm no new validation jobs are being consumed by the old worker path.
 3. Re-run three fresh validation sites from the AWS ops surface.
-4. Verify the old Redis Cloud endpoint is no longer receiving validation traffic.
+4. Verify the old Redis Cloud endpoint is no longer receiving validation traffic from either the main web app or the legacy worker path.
 
 ## 6. Post-cutover cleanup
 
