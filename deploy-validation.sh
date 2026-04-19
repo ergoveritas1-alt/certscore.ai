@@ -6,6 +6,7 @@ REGION="${REGION:-us-central1}"
 REPOSITORY="${REPOSITORY:-certscore-validation}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/validation-worker:${IMAGE_TAG}"
+BUILD_SERVICE_ACCOUNT="${BUILD_SERVICE_ACCOUNT:-certscore-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
 cloudbuild_config="$(mktemp /tmp/validation-worker-cloudbuild.XXXXXX)"
 
 required_vars=(
@@ -65,6 +66,7 @@ EOF
 
 gcloud builds submit \
   --project "${PROJECT_ID}" \
+  --service-account "projects/${PROJECT_ID}/serviceAccounts/${BUILD_SERVICE_ACCOUNT}" \
   --config "${cloudbuild_config}" \
   .
 
