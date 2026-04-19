@@ -2,6 +2,14 @@
 
 This runbook covers the validation runtime lane only. It is not the primary `certscore.ai` production web path.
 
+Preferred production target:
+
+- AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
+- AWS ElastiCache for the validation BullMQ lane
+- Vercel remains the primary `certscore.ai` public web host
+
+Legacy paths in this document remain useful for debugging and rollback, but the active replacement plan is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with cutover steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
+
 - primary product web production stays on the Vercel `consentcheck-site` project with root `apps/web`
 - validation can use a separate Vercel surface with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler run outside the primary web deployment lane
