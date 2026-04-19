@@ -653,6 +653,39 @@ test("filterContradictoryPositiveSurfaceFindings removes contradictory missing-s
   assert.equal(findings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"), true);
 });
 
+test("filterContradictoryPositiveSurfaceFindings removes contradictory title-matched packets when positive topics are present", async () => {
+  const filterContradictoryPositiveSurfaceFindings = await loadFilterContradictoryPositiveSurfaceFindings();
+
+  const findings = filterContradictoryPositiveSurfaceFindings([
+    {
+      title: "Privacy contact path missing",
+      unifiedFindingId: "privacy_contact_channel_missing_variant"
+    },
+    {
+      title: "Privacy contact path present",
+      unifiedFindingId: "privacy_contact_path_present"
+    },
+    {
+      title: "Accessibility support path missing",
+      unifiedFindingId: "accessibility_support_path_missing_variant"
+    },
+    {
+      title: "Accessibility support path present",
+      unifiedFindingId: "accessibility_support_path_present"
+    },
+    {
+      title: "Forced consent wall",
+      unifiedFindingId: "forced_consent_wall"
+    }
+  ]);
+
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_channel_missing_variant"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_missing_variant"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_path_present"), true);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_present"), true);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"), true);
+});
+
 test("deriveExecutiveSummaryBadgeCounts only counts surfaced contradiction and pre-consent findings", async () => {
   const deriveExecutiveSummaryBadgeCounts = await loadExecutiveSummaryBadgeCounts();
 

@@ -2382,11 +2382,98 @@ export function filterContradictoryPositiveSurfaceFindings(findings: UnifiedFind
     ["cookie_policy_missing_surface", "cookie_policy_present"]
   ]);
   const presentFindingIds = new Set(findings.map((finding) => finding.unifiedFindingId));
+  const normalizedPositiveTopicKeys = new Set(
+    findings.flatMap((finding) => {
+      const topicKey = getPositiveSurfaceTopicKey(finding);
+      return topicKey ? [topicKey] : [];
+    })
+  );
 
   return findings.filter((finding) => {
     const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(finding.unifiedFindingId);
-    return !contradictoryPositiveFindingId || !presentFindingIds.has(contradictoryPositiveFindingId);
+    if (contradictoryPositiveFindingId && presentFindingIds.has(contradictoryPositiveFindingId)) {
+      return false;
+    }
+
+    const contradictoryPositiveTopicKey = getContradictoryPositiveTopicKey(finding);
+    return !contradictoryPositiveTopicKey || !normalizedPositiveTopicKeys.has(contradictoryPositiveTopicKey);
   });
+}
+
+function normalizeFindingTopicText(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ") : "";
+}
+
+function getPositiveSurfaceTopicKey(finding: Pick<UnifiedFindingDisplayPacket, "title" | "unifiedFindingId">) {
+  switch (finding.unifiedFindingId) {
+    case "privacy_contact_path_present":
+      return "privacy_contact_path";
+    case "accessibility_support_path_present":
+      return "accessibility_support_path";
+    case "privacy_policy_present":
+      return "privacy_policy";
+    case "terms_of_service_present":
+      return "terms_of_service";
+    case "cookie_policy_present":
+      return "cookie_policy";
+    default:
+      break;
+  }
+
+  const normalizedTitle = normalizeFindingTopicText(finding.title);
+  if (normalizedTitle === "privacy contact path present") {
+    return "privacy_contact_path";
+  }
+  if (normalizedTitle === "accessibility support path present") {
+    return "accessibility_support_path";
+  }
+  if (normalizedTitle === "privacy policy present") {
+    return "privacy_policy";
+  }
+  if (normalizedTitle === "terms of service present") {
+    return "terms_of_service";
+  }
+  if (normalizedTitle === "cookie policy present") {
+    return "cookie_policy";
+  }
+
+  return null;
+}
+
+function getContradictoryPositiveTopicKey(finding: Pick<UnifiedFindingDisplayPacket, "title" | "unifiedFindingId">) {
+  switch (finding.unifiedFindingId) {
+    case "privacy_contact_channel_missing":
+      return "privacy_contact_path";
+    case "accessibility_support_path_missing":
+      return "accessibility_support_path";
+    case "privacy_policy_missing_surface":
+      return "privacy_policy";
+    case "terms_missing_surface":
+      return "terms_of_service";
+    case "cookie_policy_missing_surface":
+      return "cookie_policy";
+    default:
+      break;
+  }
+
+  const normalizedTitle = normalizeFindingTopicText(finding.title);
+  if (normalizedTitle === "privacy contact path missing") {
+    return "privacy_contact_path";
+  }
+  if (normalizedTitle === "accessibility support path missing") {
+    return "accessibility_support_path";
+  }
+  if (normalizedTitle === "privacy policy missing") {
+    return "privacy_policy";
+  }
+  if (normalizedTitle === "terms missing") {
+    return "terms_of_service";
+  }
+  if (normalizedTitle === "cookie policy missing") {
+    return "cookie_policy";
+  }
+
+  return null;
 }
 
 function isPositiveSurfaceFinding(finding: UnifiedFindingDisplayPacket) {
