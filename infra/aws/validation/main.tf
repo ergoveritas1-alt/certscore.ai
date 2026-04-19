@@ -22,6 +22,7 @@ locals {
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
+      { name = "DATABASE_SSL_MODE", value = "require" },
       { name = "NEXT_PUBLIC_APP_URL", value = local.validation_ops_base_url },
       { name = "NODE_ENV", value = "production" },
       { name = "PORT", value = "3000" },
@@ -41,6 +42,7 @@ locals {
   )
   worker_container_environment = concat(
     [
+      { name = "DATABASE_SSL_MODE", value = "require" },
       { name = "NODE_ENV", value = "production" },
       { name = "S3_BUCKET", value = var.s3_bucket },
       { name = "S3_REGION", value = var.s3_region },
