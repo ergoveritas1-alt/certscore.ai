@@ -2373,6 +2373,22 @@ function summarizeObservedIssueEvidence(evidence: string[] | undefined, severity
   return normalizedEvidence.length === 1 ? "Linked evidence available" : `${normalizedEvidence.length} linked evidence items`;
 }
 
+export function filterContradictoryPositiveSurfaceFindings(findings: UnifiedFindingDisplayPacket[]) {
+  const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
+    ["privacy_contact_channel_missing", "privacy_contact_path_present"],
+    ["accessibility_support_path_missing", "accessibility_support_path_present"],
+    ["privacy_policy_missing_surface", "privacy_policy_present"],
+    ["terms_missing_surface", "terms_of_service_present"],
+    ["cookie_policy_missing_surface", "cookie_policy_present"]
+  ]);
+  const presentFindingIds = new Set(findings.map((finding) => finding.unifiedFindingId));
+
+  return findings.filter((finding) => {
+    const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(finding.unifiedFindingId);
+    return !contradictoryPositiveFindingId || !presentFindingIds.has(contradictoryPositiveFindingId);
+  });
+}
+
 function isPositiveSurfaceFinding(finding: UnifiedFindingDisplayPacket) {
   return new Set([
     "accessibility_support_path_present",
@@ -4751,7 +4767,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         ...section.issueFindings
       ])
     );
-    const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+    const globalUnifiedFindings = filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
       coverageSummary: {
         legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
         pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
@@ -4764,7 +4780,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
       scanEvents: scanRecord.events,
       validationFindings: scanRecord.validationFindings,
       validationFindingLookup
-    }).filter((finding) => finding.presentationDecision.status !== "suppress");
+    }).filter((finding) => finding.presentationDecision.status !== "suppress"));
 
     return {
       allReviewFindingCandidates,
@@ -4822,19 +4838,7 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
       ).values()
     ];
 
-    const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
-      ["privacy_contact_channel_missing", "privacy_contact_path_present"],
-      ["accessibility_support_path_missing", "accessibility_support_path_present"],
-      ["privacy_policy_missing_surface", "privacy_policy_present"],
-      ["terms_missing_surface", "terms_of_service_present"],
-      ["cookie_policy_missing_surface", "cookie_policy_present"]
-    ]);
-    const presentFindingIds = new Set(ownerFindings.map((finding) => finding.unifiedFindingId));
-
-    return ownerFindings.filter((finding) => {
-      const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(finding.unifiedFindingId);
-      return !contradictoryPositiveFindingId || !presentFindingIds.has(contradictoryPositiveFindingId);
-    });
+    return filterContradictoryPositiveSurfaceFindings(ownerFindings);
   } catch (error) {
     console.error("Failed to build scan report unified findings", error);
     return [] as UnifiedFindingDisplayPacket[];
@@ -4944,7 +4948,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       ...section.issueFindings
     ])
   );
-  const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+  const globalUnifiedFindings = filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
     coverageSummary: {
       legalCoverageScore: getFiniteNumber(input.scanRecord.snapshot?.legal_coverage_score),
       pagesScanned: getFiniteNumber(input.scanRecord.snapshot?.pages_scanned),
@@ -4957,7 +4961,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
     scanEvents: input.scanRecord.events,
     validationFindings: input.scanRecord.validationFindings,
     validationFindingLookup
-  }).filter((finding) => finding.presentationDecision.status !== "suppress");
+  }).filter((finding) => finding.presentationDecision.status !== "suppress"));
   const pillarSections = sectionDrafts.map(({ pillar, sections }) => {
     return {
       pillar,
