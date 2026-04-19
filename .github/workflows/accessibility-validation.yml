@@ -108,7 +108,6 @@ jobs:
   live-validation-smoke:
     runs-on: ubuntu-latest
     needs: [web-validation-contract, worker-scan-pipeline-tests]
-    if: ${{ secrets.DATABASE_URL != '' && secrets.NEXT_PUBLIC_APP_URL != '' && secrets.REDIS_URL != '' && secrets.S3_BUCKET != '' && secrets.S3_REGION != '' && secrets.S3_ACCESS_KEY_ID != '' && secrets.S3_SECRET_ACCESS_KEY != '' }}
     env:
       NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -121,27 +120,49 @@ jobs:
       S3_FORCE_PATH_STYLE: ${{ secrets.S3_FORCE_PATH_STYLE }}
 
     steps:
+      - name: Check live smoke secret availability
+        id: preflight
+        run: |
+          if [ -n "${NEXT_PUBLIC_APP_URL}" ] && \
+             [ -n "${DATABASE_URL}" ] && \
+             [ -n "${REDIS_URL}" ] && \
+             [ -n "${S3_BUCKET}" ] && \
+             [ -n "${S3_REGION}" ] && \
+             [ -n "${S3_ACCESS_KEY_ID}" ] && \
+             [ -n "${S3_SECRET_ACCESS_KEY}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "Skipping live validation smoke because required secrets are not configured."
+          fi
+
       - name: Checkout
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: actions/checkout@v4
 
       - name: Setup pnpm
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: pnpm/action-setup@v4
         with:
           version: 10.6.3
 
       - name: Setup Node.js
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium
 
       - name: Create web env file
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         working-directory: apps/web
         run: |
           cat <<'EOF' > .env.local
@@ -157,4 +178,5 @@ jobs:
           EOF
 
       - name: Run live validation smoke
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation
