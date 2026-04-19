@@ -658,18 +658,18 @@ async function loadScanDetailRecord(input: {
         ...supplementalCoverageSignals.snapshotOverrides
       } satisfies Record<string, unknown>)
     : null;
-  const supplementalSnapshotSignals = deriveSupplementalSnapshotSignals({
-    existingSignals: normalizedSignals,
-    events: normalizedEvents,
-    primaryPolicyEnrichment,
-    snapshot: normalizedSnapshot
-  });
   const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
     existingSignalKeys: normalizedSignals.map((signal) => signal.key),
     policyEnrichment: normalizedPolicyEnrichment,
     primaryPolicyEnrichment,
     snapshot: normalizedSnapshot
   }));
+  const supplementalSnapshotSignals = deriveSupplementalSnapshotSignals({
+    existingSignals: [...normalizedSignals, ...supplementalPolicySignals],
+    events: normalizedEvents,
+    primaryPolicyEnrichment,
+    snapshot: normalizedSnapshot
+  });
   const scannerSignalPopulations = buildScannerSignalPopulationRecords({
     observedAt: scanObservedAt,
     signals: [

@@ -38,6 +38,23 @@ test("suppresses accessibility support missing when family packet already verifi
   assert.equal(signals.some((signal) => signal.key === "accessibility.accessibility_support_path_missing"), false);
 });
 
+test("suppresses accessibility support missing when a positive accessibility signal already exists", () => {
+  const signals = deriveSupplementalSnapshotSignals({
+    existingSignals: [
+      {
+        key: "accessibility.accessibility_contact_method_present"
+      }
+    ] satisfies ScanSignalRecord[],
+    events: [],
+    primaryPolicyEnrichment: null,
+    snapshot: {
+      accessibility_contact_method_present: false
+    }
+  });
+
+  assert.equal(signals.some((signal) => signal.key === "accessibility.accessibility_support_path_missing"), false);
+});
+
 test("suppresses weak privacy contact missing when policy extraction confidence is low", () => {
   const signals = deriveSupplementalSnapshotSignals({
     existingSignals: [] satisfies ScanSignalRecord[],
@@ -72,4 +89,26 @@ test("keeps privacy contact missing when the negative is backed by stronger extr
   });
 
   assert.equal(signals.some((signal) => signal.key === "privacy.privacy_contact_channel_missing"), true);
+});
+
+test("suppresses privacy contact missing when a positive privacy-contact signal already exists", () => {
+  const signals = deriveSupplementalSnapshotSignals({
+    existingSignals: [
+      {
+        key: "privacy.privacy_contact_path_present"
+      }
+    ] satisfies ScanSignalRecord[],
+    events: [],
+    primaryPolicyEnrichment: {
+      policy_dsar_confidence: 0.92,
+      policy_notice_contact_present: null,
+      policy_semantic_confidence: 0.93,
+      policy_snippet_count: 7
+    },
+    snapshot: {
+      privacy_contact_channel_type: "none"
+    }
+  });
+
+  assert.equal(signals.some((signal) => signal.key === "privacy.privacy_contact_channel_missing"), false);
 });
