@@ -97,7 +97,6 @@ jobs:
           DATABASE_URL=postgresql://validation.example.internal/certscore \
           BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
           CERTSCORE_ADMIN_EMAILS=ops@example.com \
-          VALIDATION_REDIS_URL=rediss://:token@validation-redis.example.internal:6379 \
           node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
 
       - name: Build and push validation ops web image

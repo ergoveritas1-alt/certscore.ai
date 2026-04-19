@@ -33,9 +33,6 @@ validation_openai_model         = "gpt-5.4"
 worker_concurrency              = "1"
 llm_enrichment_enabled          = "0"
 
-redis_node_type                 = "cache.t4g.small"
-redis_num_cache_clusters        = 2
-
 tags = {
   Environment = "production"
   Service     = "validation"

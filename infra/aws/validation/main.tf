@@ -18,7 +18,6 @@ locals {
   certificate_arn         = var.existing_certificate_arn != "" ? var.existing_certificate_arn : local.create_certificate ? aws_acm_certificate.validation[0].arn : null
   validation_ops_base_url = var.validation_domain_name != "" ? "https://${var.validation_domain_name}" : "http://${aws_lb.validation.dns_name}"
   common_tags             = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "validation" })
-  validation_redis_url    = "rediss://:${urlencode(random_password.redis_auth_token.result)}@${aws_elasticache_replication_group.validation.primary_endpoint_address}:${var.redis_port}"
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
@@ -65,8 +64,6 @@ locals {
     [
       { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
       { name = "BETTER_AUTH_SECRET", valueFrom = var.better_auth_secret_arn },
-      { name = "VALIDATION_REDIS_URL", valueFrom = aws_secretsmanager_secret.validation_redis_url.arn },
-      { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.validation_redis_url.arn },
       { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
       { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
     ],
@@ -77,8 +74,6 @@ locals {
   worker_container_secrets = [
     { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
     { name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn },
-    { name = "VALIDATION_REDIS_URL", valueFrom = aws_secretsmanager_secret.validation_redis_url.arn },
-    { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.validation_redis_url.arn },
     { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
     { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
   ]
@@ -88,8 +83,7 @@ locals {
       var.better_auth_secret_arn,
       var.openai_api_key_secret_arn,
       var.s3_access_key_id_secret_arn,
-      var.s3_secret_access_key_secret_arn,
-      aws_secretsmanager_secret.validation_redis_url.arn
+      var.s3_secret_access_key_secret_arn
     ],
     var.google_client_id_secret_arn != "" ? [var.google_client_id_secret_arn] : [],
     var.google_client_secret_secret_arn != "" ? [var.google_client_secret_secret_arn] : [],
@@ -238,28 +232,6 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-ecs-sg" })
-}
-
-resource "aws_security_group" "redis" {
-  name        = "${local.prefix}-redis"
-  description = "Validation ElastiCache access"
-  vpc_id      = aws_vpc.validation.id
-
-  ingress {
-    from_port       = var.redis_port
-    to_port         = var.redis_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.common_tags, { Name = "${local.prefix}-redis-sg" })
 }
 
 resource "aws_lb" "validation" {
@@ -602,63 +574,6 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
       }
     ]
   })
-}
-
-resource "random_password" "redis_auth_token" {
-  length           = 32
-  special          = true
-  override_special = "!&#$^<>-"
-}
-
-resource "aws_elasticache_subnet_group" "validation" {
-  name       = "${local.prefix}-redis-subnets"
-  subnet_ids = [for subnet in values(aws_subnet.private) : subnet.id]
-
-  tags = local.common_tags
-}
-
-resource "aws_elasticache_parameter_group" "validation" {
-  name        = "${local.prefix}-redis7"
-  family      = "redis7"
-  description = "Validation queue parameter group"
-
-  parameter {
-    name  = "maxmemory-policy"
-    value = "noeviction"
-  }
-}
-
-resource "aws_elasticache_replication_group" "validation" {
-  replication_group_id       = replace(substr(local.prefix, 0, 36), "_", "-")
-  description                = "Validation queue for CertScore"
-  engine                     = "redis"
-  engine_version             = var.redis_engine_version
-  node_type                  = var.redis_node_type
-  port                       = var.redis_port
-  subnet_group_name          = aws_elasticache_subnet_group.validation.name
-  security_group_ids         = [aws_security_group.redis.id]
-  parameter_group_name       = aws_elasticache_parameter_group.validation.name
-  num_cache_clusters         = var.redis_num_cache_clusters
-  automatic_failover_enabled = var.redis_num_cache_clusters > 1
-  multi_az_enabled           = var.redis_num_cache_clusters > 1
-  at_rest_encryption_enabled = true
-  transit_encryption_enabled = true
-  auth_token                 = random_password.redis_auth_token.result
-  apply_immediately          = true
-
-  tags = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "validation_redis_url" {
-  name_prefix = "${local.prefix}-validation-redis-url-"
-  description = "Validation queue rediss URL for ECS services"
-
-  tags = local.common_tags
-}
-
-resource "aws_secretsmanager_secret_version" "validation_redis_url" {
-  secret_id     = aws_secretsmanager_secret.validation_redis_url.id
-  secret_string = local.validation_redis_url
 }
 
 resource "aws_ecs_task_definition" "web" {
