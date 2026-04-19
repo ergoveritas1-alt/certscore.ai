@@ -131,6 +131,43 @@ test("contradiction beats generic absence while retaining the absence as support
   assert.equal(absence?.supportTargetId, "policy_behavior_conflict");
 });
 
+test("suppresses contradictory missing-surface findings when a matching positive surface finding exists", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_contact_channel_missing"),
+      makePacket("privacy_contact_path_present", {
+        confidenceBand: "low",
+        confidenceInputs: {
+          ...makePacket("privacy_contact_path_present").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        }
+      }),
+      makePacket("accessibility_support_path_missing"),
+      makePacket("accessibility_support_path_present", {
+        confidenceBand: "low",
+        confidenceInputs: {
+          ...makePacket("accessibility_support_path_present").confidenceInputs,
+          hasKeyPageDiscoveryEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        }
+      })
+    ]
+  });
+
+  const privacyMissing = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_contact_channel_missing");
+  const privacyPresent = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_contact_path_present");
+  const accessibilityMissing = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "accessibility_support_path_missing");
+  const accessibilityPresent = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "accessibility_support_path_present");
+
+  assert.equal(privacyMissing?.decisionState, "suppressed");
+  assert.equal(privacyMissing?.reportLane, "suppressed");
+  assert.equal(privacyPresent?.reportable, true);
+  assert.equal(accessibilityMissing?.decisionState, "suppressed");
+  assert.equal(accessibilityMissing?.reportLane, "suppressed");
+  assert.equal(accessibilityPresent?.reportable, true);
+});
+
 test("specific consent-gating contradiction demotes generic pre-consent tracking to support", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

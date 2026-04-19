@@ -1029,6 +1029,13 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
   const negativeFlags = getNegativeEvidenceFlags(packet);
   const policyExtractionDetails = packet.details?.family === "policy_extraction" ? packet.details : null;
+  const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
+    ["privacy_contact_channel_missing", "privacy_contact_path_present"],
+    ["accessibility_support_path_missing", "accessibility_support_path_present"],
+    ["privacy_policy_missing_surface", "privacy_policy_present"],
+    ["terms_missing_surface", "terms_of_service_present"],
+    ["cookie_policy_missing_surface", "cookie_policy_present"]
+  ]);
 
   if (packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "suppress")) {
     overrideDecision(decision, {
@@ -1037,6 +1044,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       tier: "support",
       reason: "Normalized concern gating marked this finding ineligible for external surfacing.",
       ruleId: "unknown.conservative_fallback"
+    });
+    return;
+  }
+
+  const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(packet.unifiedFindingId);
+  if (contradictoryPositiveFindingId && context.allPacketsById.has(contradictoryPositiveFindingId)) {
+    overrideDecision(decision, {
+      state: "suppressed",
+      lane: "suppressed",
+      tier: "support",
+      reason: "A stronger positive surface finding for the same disclosure or support path is present, so the contradictory missing-surface finding was suppressed.",
+      ruleId: "support.orphan_support_suppressed"
     });
     return;
   }
