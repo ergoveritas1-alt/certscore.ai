@@ -122,6 +122,10 @@ export async function ValidationRunDetailPage({ runId }: ValidationRunDetailPage
     policyEnrichment: detail.policyEnrichment ?? []
   });
   const unifiedPackets = buildUnifiedFindingDisplayPackets({
+    coverageSummary: {
+      pagesScanned: detail.scanExecution.pagesScanned,
+      policyEnrichmentCount: detail.policyEnrichment?.length ?? 0
+    },
     mergedSignals: detail.mergedSignals ?? [],
     policyEnrichment: detail.policyEnrichment ?? [],
     reviewFindingCandidates: [],

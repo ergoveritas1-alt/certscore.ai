@@ -2,6 +2,10 @@ import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding, type CertScoreFindi
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
 
 type MinimalScanRecord = {
+  events?: Array<{
+    eventType?: string | null;
+    metadataJson?: unknown;
+  }> | null;
   runtimeArtifacts: Record<string, unknown> | null;
   snapshot: Record<string, unknown> | null;
   scan: {
@@ -60,6 +64,38 @@ function getNumber(value: unknown) {
 
 function getStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function deriveEventFinalHost(
+  events: MinimalScanRecord["events"],
+  requestedHost: string | null
+) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return null;
+  }
+
+  for (const event of [...events].reverse()) {
+    const metadata = getRecord(event.metadataJson);
+    if (!metadata) {
+      continue;
+    }
+
+    const candidateHost =
+      deriveHostname(getString(metadata.currentUrl)) ??
+      deriveHostname(getString(metadata.finalUrl)) ??
+      deriveHostname(getString(metadata.resolvedHostname)) ??
+      deriveHostname(getString(metadata.canonicalHost));
+
+    if (!candidateHost) {
+      continue;
+    }
+
+    if (!requestedHost || candidateHost !== requestedHost) {
+      return candidateHost;
+    }
+  }
+
+  return null;
 }
 
 function getObservedConsentSurface(input: {
@@ -171,7 +207,11 @@ function deriveHostname(value: string | null | undefined) {
     return null;
   }
   try {
-    return new URL(value).hostname || null;
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.hostname || null;
   } catch {
     return value.includes("/") ? null : value;
   }
@@ -374,11 +414,17 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const fingerprintReasons = getStringArray(fingerprintSummary?.reasons);
   const attributeCategoryCount = getNumber(fingerprintSummary?.attributeCategoryCount) ?? 0;
   const requestedHost = deriveHostname(scanRecord.scan.domainHostname);
+  const eventFinalHost = deriveEventFinalHost(scanRecord.events, requestedHost);
   const finalHost =
+    eventFinalHost ??
     deriveHostname(getString(navigationSummary?.finalUrl)) ??
     deriveHostname(getString(scanRecord.snapshot?.final_url)) ??
     deriveHostname(getString(scanRecord.snapshot?.finalUrl));
-  const landedOnDifferentHost = Boolean(requestedHost && finalHost && requestedHost !== finalHost);
+  const landedOnDifferentHost = Boolean(
+    requestedHost &&
+    finalHost &&
+    normalizeComparableHost(requestedHost) !== normalizeComparableHost(finalHost)
+  );
   const cookieBuckets = cookieWriteObservations.reduce<{
     adtech: string[];
     analytics: string[];

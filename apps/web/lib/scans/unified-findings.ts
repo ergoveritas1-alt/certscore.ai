@@ -214,6 +214,13 @@ type UnifiedFindingScanEvent = {
   metadataJson?: unknown;
 };
 
+export type UnifiedFindingCoverageSummary = {
+  legalCoverageScore?: number | null;
+  pagesScanned?: number | null;
+  policyEnrichmentCount?: number | null;
+  verifiedPublicSurfacesCount?: number | null;
+};
+
 type FamilyPacketTargetRecord = {
   canonicalUrl?: unknown;
   fetchQuality?: unknown;
@@ -3303,17 +3310,90 @@ function buildPresentationCopy(
   return override ? { ...base, ...override } : base;
 }
 
+function isCoverageThin(summary?: UnifiedFindingCoverageSummary) {
+  if (!summary) {
+    return false;
+  }
+
+  const pagesScanned = typeof summary.pagesScanned === "number" ? summary.pagesScanned : null;
+  const policyEnrichmentCount = typeof summary.policyEnrichmentCount === "number" ? summary.policyEnrichmentCount : null;
+  const verifiedPublicSurfacesCount =
+    typeof summary.verifiedPublicSurfacesCount === "number" ? summary.verifiedPublicSurfacesCount : null;
+  const legalCoverageScore = typeof summary.legalCoverageScore === "number" ? summary.legalCoverageScore : null;
+
+  return (
+    pagesScanned !== null &&
+    pagesScanned <= 1 &&
+    (policyEnrichmentCount === null || policyEnrichmentCount === 0) &&
+    (verifiedPublicSurfacesCount === null || verifiedPublicSurfacesCount === 0) &&
+    (legalCoverageScore === null || legalCoverageScore <= 0)
+  );
+}
+
+function isCoverageSensitiveAbsencePacket(packet: UnifiedFindingPacket) {
+  if (
+    packet.confidenceInputs.hasDirectRuntimeEvidence ||
+    packet.confidenceInputs.hasConcretePayloadEvidence ||
+    packet.confidenceInputs.hasStructuredValidationEvidence
+  ) {
+    return false;
+  }
+
+  if (packet.details?.family === "coverage_gap") {
+    return true;
+  }
+
+  if (/(missing|absent|unresolved|fetch_failed)/i.test(packet.unifiedFindingId)) {
+    return true;
+  }
+
+  return packet.sourceRefs.some((sourceRef) => {
+    if (sourceRef.kind !== "signal") {
+      return false;
+    }
+
+    return /(missing|absent|unresolved|fetch_failed)/i.test(sourceRef.key);
+  });
+}
+
+function applyCoverageCalibrationToPresentationDecision(
+  packet: UnifiedFindingPacket,
+  decision: UnifiedFindingPresentationDecision,
+  coverageSummary?: UnifiedFindingCoverageSummary
+) {
+  if (decision.status !== "surface" || !isCoverageThin(coverageSummary) || !isCoverageSensitiveAbsencePacket(packet)) {
+    return decision;
+  }
+
+  return {
+    ...decision,
+    confidenceRationale: `${decision.confidenceRationale} Thin scan coverage reduced confidence in this absence-style finding.`,
+    downgradeReasons: uniqueStrings([
+      ...decision.downgradeReasons,
+      "Thin scan coverage means this absence-style finding was not verified across enough public surfaces."
+    ]),
+    rationale:
+      "Thin scan coverage retained this absence-style finding for audit review, but not for main-narrative surfacing.",
+    status: "audit_only" as const
+  };
+}
+
 function buildLegacyPresentationDecisionFromSurfacing(input: {
+  coverageSummary?: UnifiedFindingCoverageSummary;
   packet: UnifiedFindingPacket;
   surfacingDecision: UnifiedFindingSurfacingDecision;
 }): UnifiedFindingPresentationDecision {
-  return finalizePresentationDecision(input.packet, {
-    confidenceRationale: buildConfidenceRationale(input.packet),
-    rationale:
-      input.surfacingDecision.decisionReasons[0] ??
-      "Surfacing policy retained this finding for report review.",
-    status: mapSurfacingDecisionToLegacyStatus(input.surfacingDecision)
-  });
+  return applyCoverageCalibrationToPresentationDecision(
+    input.packet,
+    finalizePresentationDecision(input.packet, {
+      confidenceRationale: buildConfidenceRationale(input.packet),
+      rationale:
+        input.surfacingDecision.decisionReasons[0] ??
+        "Surfacing policy retained this finding for report review.",
+      status: mapSurfacingDecisionToLegacyStatus(input.surfacingDecision)
+    }),
+    input.coverageSummary
+  );
 }
 
 function getSourceLabel(packet: UnifiedFindingPacket) {
@@ -4267,6 +4347,7 @@ export function buildUnifiedFindingPackets(input: {
 }
 
 export function buildUnifiedFindingDisplayPackets(input: {
+  coverageSummary?: UnifiedFindingCoverageSummary;
   mergedSignals?: MergedSignalRecord[];
   policyEnrichment?: Array<Record<string, unknown>>;
   reviewFindingCandidates: UnifiedFindingCandidate[];
@@ -4325,6 +4406,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
       siblingRows.map((row) => buildCanonicalPresentationSiblingInput(row))
     );
     const presentationDecision = buildLegacyPresentationDecisionFromSurfacing({
+      coverageSummary: input.coverageSummary,
       packet,
       surfacingDecision
     });

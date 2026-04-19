@@ -82,9 +82,183 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
     })
   );
 
-  assert.match(html, /Primary concerns:<\/span> No headline issue crossed the executive threshold for this scan\./);
+  assert.match(html, /Primary concerns:<\/span> No headline findings surfaced from the available scan coverage\./);
   assert.match(html, /Highest-priority issues/);
   assert.match(html, /Review the supporting evidence below for lower-priority signals and scan context\./);
+});
+
+test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 6,
+      domainBenchmark: null,
+      finalHost: "www.ford.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-18T19:31:00.000Z",
+      legalCoverageScore: 0,
+      pagesScanned: 1,
+      policyEnrichmentCount: 0,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "ford.com",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 67,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["www.googletagmanager.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Tracking started before consent."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Tag Manager", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 0
+    })
+  );
+
+  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
+  assert.match(html, /Possible homepage issues/);
+  assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
+});
+
+test("ExecutiveSummaryCard scopes the hero copy when the scan outcome shows blocked partial access", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 6,
+      domainBenchmark: null,
+      finalHost: "www.nytimes.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-18T21:02:19.000Z",
+      legalCoverageScore: 0,
+      pagesScanned: 4,
+      policyEnrichmentCount: 3,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "nytimes.com",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 67,
+      scanOutcome: "reachability_blocked_captcha",
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["www.googletagmanager.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Tracking started before consent."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Tag Manager", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 3
+    })
+  );
+
+  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
+  assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
+});
+
+test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited partial", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 6,
+      coverageLevel: "limited_partial",
+      domainBenchmark: null,
+      finalHost: "www.nist.gov",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-18T21:03:44.000Z",
+      legalCoverageScore: 0,
+      pagesScanned: 3,
+      policyEnrichmentCount: 1,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "nist.gov",
+      resolvedVendorNames: ["Google Analytics"],
+      score: 65,
+      scanOutcome: "completed_partial",
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["www.google-analytics.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Tracking started before consent."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Analytics", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 2
+    })
+  );
+
+  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
+  assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
+});
+
+test("ExecutiveSummaryCard switches to host-resolution scope language when the request lands on a different host", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 6,
+      domainBenchmark: null,
+      finalHost: "www.brandforce.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: true,
+      lastScannedAt: "2026-04-18T20:02:33.000Z",
+      legalCoverageScore: 0,
+      pagesScanned: 1,
+      policyEnrichmentCount: 0,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "helio.com",
+      resolvedVendorNames: ["Google Analytics"],
+      score: 65,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["www.google-analytics.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Tracking started before consent."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Analytics", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 0
+    })
+  );
+
+  assert.match(html, /Requested domain resolved to a different host during this scan/);
+  assert.match(html, /Scope note:<\/span> Observed runtime and disclosure signals came from www\.brandforce\.com, not helio\.com\./);
+  assert.match(html, /Observed on landed host/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
 test("ExecutiveSummaryCard switches to blocked-access language when no reliable findings were retained", () => {

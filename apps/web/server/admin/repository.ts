@@ -38,6 +38,7 @@ export type AdminScanSnapshotRow = {
   highest_successful_tier?: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status?: string | null;
+  legal_coverage_score?: number | null;
   normalized_body_hash?: string | null;
   report_finding_count?: number | null;
   recoverable_finding_classes?: RecoverableFindingClass[] | null;
@@ -47,6 +48,7 @@ export type AdminScanSnapshotRow = {
   scan_timestamp?: string | null;
   stop_tier?: ScanExecutionTier | null;
   total_signals?: number;
+  verified_public_surfaces_count?: number | null;
 };
 
 export type AdminValidationRunSummaryRow = {

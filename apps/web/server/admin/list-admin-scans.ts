@@ -175,6 +175,12 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     const validationFindings = validationRunId ? validationFindingsByRunId.get(validationRunId) ?? [] : [];
     const validationFindingLookup = new Map(validationFindings.map((finding) => [finding.ruleKey, finding] as const));
     const displayPackets = buildUnifiedFindingDisplayPackets({
+      coverageSummary: {
+        legalCoverageScore: snapshotMap.get(scan.id)?.legal_coverage_score ?? null,
+        pagesScanned: scan.pages_scanned,
+        policyEnrichmentCount: (policyEnrichmentMap.get(scan.id) ?? []).length,
+        verifiedPublicSurfacesCount: snapshotMap.get(scan.id)?.verified_public_surfaces_count ?? null
+      },
       mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
       policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
       reviewFindingCandidates: [],

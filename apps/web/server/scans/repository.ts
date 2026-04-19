@@ -185,6 +185,7 @@ export type OrganizationScanSnapshotRow = {
   highest_successful_tier: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
+  legal_coverage_score?: number | null;
   privacy_score: number | null;
   recoverable_finding_classes: RecoverableFindingClass[] | null;
   regulatory_exposure_score: number | null;
@@ -200,6 +201,7 @@ export type OrganizationScanSnapshotRow = {
   stop_reason_label: string | null;
   stop_tier: ScanExecutionTier | null;
   total_signals: number;
+  verified_public_surfaces_count?: number | null;
 };
 
 export type OrganizationRuntimeArtifactRow = {

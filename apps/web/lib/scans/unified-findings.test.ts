@@ -191,6 +191,72 @@ test("resolves financial-review validation findings into the matching unified fi
   assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
+test("keeps direct runtime findings surfaced under thin coverage", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    coverageSummary: {
+      legalCoverageScore: 0,
+      pagesScanned: 1,
+      policyEnrichmentCount: 0,
+      verifiedPublicSurfacesCount: 0
+    },
+    reviewFindingCandidates: [
+      {
+        description: "The homepage triggered tracking before any consent action.",
+        fallbackEvidence: {
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true,
+          sourceUrls: ["https://example.com/collect"]
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("downgrades absence-style findings under thin coverage", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    coverageSummary: {
+      legalCoverageScore: 0,
+      pagesScanned: 1,
+      policyEnrichmentCount: 0,
+      verifiedPublicSurfacesCount: 0
+    },
+    reviewFindingCandidates: [
+      {
+        description: "No accessibility support path was detected in the scanned coverage.",
+        fallbackEvidence: {
+          signalKey: "accessibility.accessibility_support_path_missing",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalLabel: "Accessibility support path missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Accessibility support path missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accessibility_support_path_missing");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.match(packet?.presentationDecision.rationale ?? "", /thin scan coverage/i);
+});
+
 test("surfaces privacy-control unified findings from finding-family packets before legacy signal reconstruction", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],

@@ -47,6 +47,7 @@ import {
 import {
   deriveCertScoreFindings,
 } from "../../lib/scans/derive-findings";
+import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
 import {
   getHybridDerivedSignalValue,
   getHybridRuntimeEvidence,
@@ -4722,6 +4723,12 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
       ])
     );
     const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+      coverageSummary: {
+        legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
+        pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
+        policyEnrichmentCount: scanRecord.policyEnrichment.length,
+        verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
+      },
       mergedSignals: scanRecord.mergedSignals,
       policyEnrichment: scanRecord.policyEnrichment,
       reviewFindingCandidates: allReviewFindingCandidates,
@@ -4895,6 +4902,12 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
     ])
   );
   const globalUnifiedFindings = buildUnifiedFindingDisplayPackets({
+    coverageSummary: {
+      legalCoverageScore: getFiniteNumber(input.scanRecord.snapshot?.legal_coverage_score),
+      pagesScanned: getFiniteNumber(input.scanRecord.snapshot?.pages_scanned),
+      policyEnrichmentCount: input.scanRecord.policyEnrichment.length,
+      verifiedPublicSurfacesCount: getFiniteNumber(input.scanRecord.snapshot?.verified_public_surfaces_count)
+    },
     mergedSignals: input.scanRecord.mergedSignals,
     policyEnrichment: input.scanRecord.policyEnrichment,
     reviewFindingCandidates: allReviewFindingCandidates,
@@ -5965,9 +5978,44 @@ export function SharedScanDetailView({
     wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total")
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
+  const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
+    ? {
+        coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
+        guidance: executiveAccessLimitationNotice.review.guidance,
+        headline: "Public site access was limited during this scan",
+        message: executiveAccessLimitationNotice.finding.shortSummary,
+        recommendationTitle: executiveAccessLimitationNotice.review.recommendationTitle,
+        reason: executiveAccessLimitationNotice.review.reason,
+        title: executiveAccessLimitationNotice.review.title,
+        whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
+      }
+    : null;
+  const scanCalibrationSummary = buildScanCalibrationSummary({
+    accessLimitationNotice: executiveAccessNoticeCardProps,
+    coverageLevel: typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null,
+    domain: scanRecord.scan.domainHostname,
+    finalHost: certScoreSummary.finalHost,
+    legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
+    pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
+    policyEnrichmentCount: scanRecord.policyEnrichment.length,
+    posture: executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture,
+    requestedHost: certScoreSummary.requestedHost,
+    scanId: scanRecord.scan.id,
+    scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
+    status: scanRecord.scan.status,
+    topFindings: topExecutiveFindings,
+    verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
+  });
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
+      <script
+        type="application/json"
+        data-testid="scan-calibration-summary"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(scanCalibrationSummary).replace(/</g, "\\u003c")
+        }}
+      />
       <ScanPageHeader
         actions={headerActions}
         autoRefresh={autoRefresh}
@@ -5992,21 +6040,9 @@ export function SharedScanDetailView({
       {!isScanInFlight ? (
         <>
           <ExecutiveSummaryCard
-            accessLimitationNotice={
-              executiveAccessLimitationNotice
-                ? {
-                    coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
-                    guidance: executiveAccessLimitationNotice.review.guidance,
-                    headline: "Public site access was limited during this scan",
-                    message: executiveAccessLimitationNotice.finding.shortSummary,
-                    recommendationTitle: executiveAccessLimitationNotice.review.recommendationTitle,
-                    reason: executiveAccessLimitationNotice.review.reason,
-                    title: executiveAccessLimitationNotice.review.title,
-                    whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
-                  }
-                : null
-            }
+            accessLimitationNotice={executiveAccessNoticeCardProps}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
+            coverageLevel={typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null}
             domainBenchmark={scanRecord.domainBenchmark}
             finalHost={certScoreSummary.finalHost}
             fingerprintReasons={executiveFingerprintReasons}
@@ -6019,6 +6055,7 @@ export function SharedScanDetailView({
             requestedHost={certScoreSummary.requestedHost}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
+            scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}
             sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
             thirdPartyRequestCount={executiveThirdPartyRequestCount}
             thirdPartyDomains={executiveThirdPartyDomains}
@@ -6027,6 +6064,10 @@ export function SharedScanDetailView({
             trackerSummary={executiveTrackerSummary}
             unresolvedVendorHosts={executiveUnresolvedVendorHosts}
             vendorCategoryCounts={executiveVendorCategoryCounts}
+            legalCoverageScore={getFiniteNumber(scanRecord.snapshot?.legal_coverage_score)}
+            pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned)}
+            policyEnrichmentCount={scanRecord.policyEnrichment.length}
+            verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
             lightweightHeroMetrics={lightweightHeroMetrics}
           />
           {presentedCertScoreFindings.length > 0 ? (

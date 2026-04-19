@@ -1,6 +1,8 @@
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { Queue, type ConnectionOptions } from "bullmq";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
+import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { getConfiguredValidationRedisUrl } from "../lib/env";
@@ -98,6 +100,16 @@ function getNanoDocQueue() {
   });
 
   return nanoDocQueue;
+}
+
+async function closeNanoDocQueue() {
+  if (!nanoDocQueue) {
+    return;
+  }
+
+  const queueToClose = nanoDocQueue;
+  nanoDocQueue = null;
+  await queueToClose.close();
 }
 
 async function enqueueNanoSignalEnrichment(scanId: string) {
@@ -527,6 +539,35 @@ async function summarizeScan(input: {
       url: packet.primaryPageUrl ?? packet.evidence?.pageUrls?.[0] ?? null,
       summary: packet.summary
     }));
+  const certScoreSummary = deriveCertScoreFindings({
+    events: repairedEvents.map((event) => ({
+      eventType: event.eventType,
+      metadataJson: event.metadataJson
+    })),
+    runtimeArtifacts: snapshot,
+    snapshot,
+    scan: {
+      completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
+      createdAt: typeof scanRow?.created_at === "string" ? scanRow.created_at : new Date().toISOString(),
+      domainHostname: input.hostname
+    }
+  });
+  const calibrationSummary = buildScanCalibrationSummary({
+    coverageLevel: typeof snapshot?.coverage_level === "string" ? snapshot.coverage_level : null,
+    domain: input.hostname,
+    finalHost: certScoreSummary.finalHost,
+    legalCoverageScore: typeof snapshot?.legal_coverage_score === "number" ? snapshot.legal_coverage_score : null,
+    pagesScanned: typeof snapshot?.pages_scanned === "number" ? snapshot.pages_scanned : null,
+    policyEnrichmentCount: normalizedPolicyRows.length,
+    posture: certScoreSummary.posture,
+    requestedHost: certScoreSummary.requestedHost,
+    scanId: input.scanId,
+    scanOutcome: typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : null,
+    status: typeof scanRow?.status === "string" ? scanRow.status : null,
+    topFindings: certScoreSummary.findings,
+    verifiedPublicSurfacesCount:
+      typeof snapshot?.verified_public_surfaces_count === "number" ? snapshot.verified_public_surfaces_count : null
+  });
 
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
@@ -562,6 +603,7 @@ async function summarizeScan(input: {
       status: typeof scanRow?.status === "string" ? scanRow.status : null
     },
     snapshot,
+    calibrationSummary,
     surfaced,
     workflow
   };
@@ -721,6 +763,7 @@ async function main() {
       stopReason: (summary.snapshot as Record<string, unknown> | null)?.stop_reason_code ?? null,
       homepageStatus: (summary.snapshot as Record<string, unknown> | null)?.homepage_fetch_http_status ?? null,
       blocked: (summary.snapshot as Record<string, unknown> | null)?.blocked_flag ?? null,
+      calibrationSummary: summary.calibrationSummary,
       workflow: {
         actualMode: summary.workflow.actualMode,
         findingsReady: summary.workflow.findingsReady,
@@ -795,7 +838,18 @@ async function main() {
   console.log(JSON.stringify(results, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeNanoDocQueue().catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
+    await closePools().catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
+  });

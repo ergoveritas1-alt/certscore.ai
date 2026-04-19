@@ -25,6 +25,7 @@ export type HistorySnapshotRow = {
   captcha_flag: boolean | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
+  legal_coverage_score?: number | null;
   report_finding_count: number | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;
@@ -36,6 +37,7 @@ export type HistorySnapshotRow = {
   stop_reason_http_status: number | null;
   stop_reason_label: string | null;
   total_signals: number;
+  verified_public_surfaces_count?: number | null;
 };
 
 export type HistoryChangeSummaryRow = {

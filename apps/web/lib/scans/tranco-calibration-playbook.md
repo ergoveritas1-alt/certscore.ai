@@ -16,6 +16,7 @@ Find generic surfacing-engine and canonical-object weaknesses by scanning a broa
    - repaired family packets
    - unified findings
    - independent live read
+   - prod report narrative vs local calibration summary
 5. Classify each mismatch by failure shape.
 6. Fix only the generic pattern in the concern pipeline, repair layer, or unified-finding promotion.
 7. Re-scan the same domain.
@@ -50,3 +51,11 @@ The Tranco triage script emits:
 - `triage_summary.txt`
 
 Use the queue for real scans and the ledger as the calibration record of truth.
+
+For a fixed prod-vs-local narrative pass, run `pnpm compare:tranco-batch` from `apps/web`. The comparison script:
+
+- runs fresh local scans for the default five-domain Tranco batch or a `--domains` override
+- can reuse the latest terminal local scans with `--reuse-local`
+- queues matching anonymous scans on production
+- reads the rendered scan-page calibration summary artifact
+- classifies each mismatch as `same_site_alias`, `off_origin_landing`, `browser_error_surface`, `thin_or_blocked_scan`, `true_detection_gap`, or `aligned`

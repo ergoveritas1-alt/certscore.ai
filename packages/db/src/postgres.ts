@@ -63,3 +63,10 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(
   const result = await query<T>(text, values, options);
   return result.rows[0] ?? null;
 }
+
+export async function closePools() {
+  const pools = [writePool, readPool].filter((pool): pool is Pool => pool !== null);
+  writePool = null;
+  readPool = null;
+  await Promise.all(pools.map((pool) => pool.end()));
+}

@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  deriveExecutiveNarrativePresentation,
+  formatTopFindingHeadline,
+  type ExecutivePosture
+} from "../../lib/scans/calibration-summary";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
@@ -79,7 +84,7 @@ type RegulatoryLens = {
   findings: string[];
 };
 
-type ExecutiveAccessLimitationNotice = {
+export type ExecutiveAccessLimitationNotice = {
   coverageLabel: string;
   headline: string;
   message: string;
@@ -92,24 +97,6 @@ type ExecutiveAccessLimitationNotice = {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
-}
-
-function getPostureHeadline(posture: "Clear" | "Watch" | "Action Needed") {
-  if (posture === "Action Needed") {
-    return "Immediate privacy and consent issues detected";
-  }
-  if (posture === "Watch") {
-    return "Notable privacy and consent issues detected";
-  }
-  return "No major privacy and consent issues surfaced";
-}
-
-function formatTopFindingHeadline(findings: CertScoreFinding[]) {
-  const labels = findings.slice(0, 3).map((finding) => finding.label);
-  if (labels.length === 0) {
-    return "No headline issue crossed the executive threshold for this scan.";
-  }
-  return labels.join(" • ");
 }
 
 function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
@@ -664,6 +651,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 export function ExecutiveSummaryCard(input: {
   accessLimitationNotice?: ExecutiveAccessLimitationNotice | null;
   beforeConsentCookieCount: number;
+  coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
   finalHost: string | null;
   fingerprintReasons: string[];
@@ -676,6 +664,7 @@ export function ExecutiveSummaryCard(input: {
   requestedHost: string | null;
   resolvedVendorNames: string[];
   score: number | null;
+  scanOutcome?: string | null;
   sessionReplayVendorNames: string[];
   thirdPartyRequestCount: number;
   thirdPartyDomains: string[];
@@ -684,6 +673,10 @@ export function ExecutiveSummaryCard(input: {
   trackerSummary: string;
   unresolvedVendorHosts: string[];
   vendorCategoryCounts: Record<string, number>;
+  legalCoverageScore?: number | null;
+  pagesScanned?: number | null;
+  policyEnrichmentCount?: number | null;
+  verifiedPublicSurfacesCount?: number | null;
   lightweightHeroMetrics?: Array<{
     accent?: "sky" | "amber" | "emerald" | "slate";
     helper?: string | null;
@@ -719,6 +712,19 @@ export function ExecutiveSummaryCard(input: {
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(primaryFindings);
+  const narrativePresentation = deriveExecutiveNarrativePresentation({
+    accessLimitationNotice: input.accessLimitationNotice,
+    executiveHeadline,
+    finalHost: input.finalHost,
+    coverageLevel: input.coverageLevel,
+    legalCoverageScore: input.legalCoverageScore,
+    pagesScanned: input.pagesScanned,
+    policyEnrichmentCount: input.policyEnrichmentCount,
+    posture: input.posture as ExecutivePosture,
+    requestedHost: input.requestedHost,
+    scanOutcome: input.scanOutcome,
+    verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
+  });
   const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
@@ -730,7 +736,10 @@ export function ExecutiveSummaryCard(input: {
         <div className="space-y-5">
           <div className="rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.28)]">
             <div className="flex flex-wrap items-center gap-3">
-              <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}>
+              <span
+                data-testid="executive-posture-badge"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}
+              >
                 {input.posture}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
@@ -745,15 +754,19 @@ export function ExecutiveSummaryCard(input: {
             <div className="mt-5 space-y-3">
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Executive readout</p>
-                <h2 className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]">
-                  {input.accessLimitationNotice ? input.accessLimitationNotice.headline : getPostureHeadline(input.posture)}
+                <h2
+                  data-testid="executive-headline"
+                  className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]"
+                >
+                  {narrativePresentation.headline}
                 </h2>
               </div>
-              <div className="rounded-[1.2rem] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-700">
-                <span className="font-medium text-slate-950">
-                  {input.accessLimitationNotice ? "Scan limitation:" : "Primary concerns:"}
-                </span>{" "}
-                {executiveHeadline}
+              <div
+                data-testid="executive-summary-callout"
+                className="rounded-[1.2rem] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-700"
+              >
+                <span className="font-medium text-slate-950">{narrativePresentation.summaryLabel}</span>{" "}
+                {narrativePresentation.summaryMessage}
               </div>
             </div>
           </div>
@@ -793,8 +806,8 @@ export function ExecutiveSummaryCard(input: {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
-                  {input.accessLimitationNotice ? "Access limitation" : "Highest-priority issues"}
+                <h2 data-testid="executive-findings-heading" className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
+                  {narrativePresentation.findingsHeading}
                 </h2>
               </div>
             </div>
@@ -818,7 +831,9 @@ export function ExecutiveSummaryCard(input: {
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
                       <FindingTitleIcon finding={finding} />
                     </div>
-                    <p className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">{finding.label}</p>
+                    <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
+                      {finding.label}
+                    </p>
                   </div>
                   <FindingDetailDisclosure finding={finding} />
                 </div>

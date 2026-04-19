@@ -9,6 +9,7 @@
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts --allow-missing-env",
     "run:tranco-batch": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-batch.ts",
+    "compare:tranco-batch": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/compare-prod-local-tranco-calibration.ts",
     "run:tranco-session": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-session.ts",
     "run:tranco-session:2h": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-session.ts --hours 2 --poll-minutes 1 --batch-limit 20 --max-pending-batches 3 --out-dir ./tmp/tranco-calibration/session-2h",
     "status:tranco-session": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/tranco-calibration-status.ts",

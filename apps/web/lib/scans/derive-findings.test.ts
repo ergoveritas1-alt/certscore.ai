@@ -125,6 +125,91 @@ test("derives high-signal privacy and consent findings from hybrid runtime evide
   assert.ok(ids.includes("tracking_redirect_chain"));
 });
 
+test("prefers event-derived landed host when runtime metadata shows an off-origin landing", () => {
+  const summary = deriveCertScoreFindings({
+    events: [
+      {
+        eventType: "runtime.browser_pass_diagnostic",
+        metadataJson: {
+          currentUrl: "https://www.brandforce.com/domain/Helio.com/",
+          homepageUrl: "https://helio.com/",
+          stepKey: "homepage_navigation"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        navigationSummary: {
+          finalUrl: "https://helio.com/",
+          initialUrl: "https://helio.com/"
+        }
+      }
+    },
+    snapshot: {
+      certscore_overall: 65,
+      final_url: "https://helio.com/"
+    },
+    scan: {
+      completedAt: "2026-04-18T20:02:33.000Z",
+      createdAt: "2026-04-18T20:01:12.000Z",
+      domainHostname: "helio.com"
+    }
+  });
+
+  assert.equal(summary.finalHost, "www.brandforce.com");
+  assert.equal(summary.landedOnDifferentHost, true);
+});
+
+test("treats apex and www host variants as the same landed site", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        navigationSummary: {
+          finalUrl: "https://www.google.com/",
+          initialUrl: "https://google.com/"
+        }
+      }
+    },
+    snapshot: {
+      certscore_overall: 74,
+      final_url: "https://www.google.com/"
+    },
+    scan: {
+      completedAt: "2026-04-18T20:08:10.000Z",
+      createdAt: "2026-04-18T20:07:11.000Z",
+      domainHostname: "google.com"
+    }
+  });
+
+  assert.equal(summary.finalHost, "www.google.com");
+  assert.equal(summary.landedOnDifferentHost, false);
+});
+
+test("ignores browser error pages for landed-host attribution", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        navigationSummary: {
+          finalUrl: "chrome-error://chromewebdata/",
+          initialUrl: "https://danger.com/"
+        }
+      }
+    },
+    snapshot: {
+      certscore_overall: 81,
+      final_url: "https://danger.com/"
+    },
+    scan: {
+      completedAt: "2026-04-18T20:09:09.000Z",
+      createdAt: "2026-04-18T20:07:11.000Z",
+      domainHostname: "danger.com"
+    }
+  });
+
+  assert.equal(summary.finalHost, "danger.com");
+  assert.equal(summary.landedOnDifferentHost, false);
+});
+
 test("selectTopFindings keeps the strongest privacy findings at the top", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

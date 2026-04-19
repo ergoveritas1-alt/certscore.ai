@@ -11,6 +11,9 @@ export type ScanDisplayStateInput = {
 export type ScanDisplayStateEvent = {
   createdAt: string;
   eventType: string;
+  id?: string;
+  message?: string | null;
+  metadataJson?: unknown;
 };
 
 function parseTimestamp(value: string | null) {
