@@ -135,6 +135,7 @@ Before trusting any validation deployment change, run:
 Run these before trusting the deployment:
 
 - `pnpm check-env:validation`
+- `pnpm check-env:validation-cutover`
 - `pnpm check-runtime:validation`
 
 Expected results:

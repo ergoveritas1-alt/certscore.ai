@@ -43,6 +43,9 @@ Push to `main` or manually dispatch `Validation AWS Deploy`.
 3. Keep `REDIS_URL` scoped to non-validation web needs only. The main web validation queue path now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`.
 4. Confirm `/app/validation`, `/app/validation/scans`, and `/app/validation/issues` on the main app now send admins to the dedicated validation ops host instead of exposing local queue controls.
 5. Confirm public preview/full scans still queue normally even when validation-side nano enrichment is unavailable; those sidecars should degrade gracefully instead of failing scan creation.
+6. Run `pnpm check-env:validation-cutover` against both environments:
+   - on the main app it should fail if `VALIDATION_REDIS_URL` is still present
+   - on the validation ops host it should fail if `VALIDATION_REDIS_URL`, `CERTSCORE_ADMIN_EMAILS`, or other required ops-host settings are missing
 
 ## 4. Validate AWS runtime health
 
