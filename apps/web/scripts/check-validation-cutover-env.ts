@@ -7,9 +7,7 @@ const schema = z.object({
   CERTSCORE_ADMIN_EMAILS: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
-  REDIS_URL: z.string().url().optional(),
-  VALIDATION_OPS_BASE_URL: z.string().url().optional(),
-  VALIDATION_REDIS_URL: z.string().url().optional()
+  VALIDATION_OPS_BASE_URL: z.string().url().optional()
 });
 
 type ValidationCutoverEnv = z.infer<typeof schema>;
@@ -93,20 +91,6 @@ export function evaluateValidationCutoverContract(env: ValidationCutoverEnv) {
       });
     }
 
-    if (env.VALIDATION_REDIS_URL) {
-      findings.push({
-        label: "validation ops redis",
-        level: "info",
-        details: `VALIDATION_REDIS_URL remains configured at ${new URL(env.VALIDATION_REDIS_URL).host}. Remove it after the Postgres worker migration is deployed.`
-      });
-    } else {
-      findings.push({
-        label: "validation ops redis",
-        level: "pass",
-        details: "VALIDATION_REDIS_URL is not configured."
-      });
-    }
-
     if (env.VALIDATION_OPS_BASE_URL && env.NEXT_PUBLIC_APP_URL && env.VALIDATION_OPS_BASE_URL !== env.NEXT_PUBLIC_APP_URL) {
       findings.push({
         label: "validation ops base url",
@@ -129,33 +113,11 @@ export function evaluateValidationCutoverContract(env: ValidationCutoverEnv) {
       });
     }
 
-    if (env.VALIDATION_REDIS_URL) {
-      findings.push({
-        label: "main app validation redis",
-        level: "fail",
-        details: "Remove VALIDATION_REDIS_URL from the main app. Validation queueing no longer depends on Redis."
-      });
-    } else {
-      findings.push({
-        label: "main app validation redis",
-        level: "pass",
-        details: "VALIDATION_REDIS_URL is not configured."
-      });
-    }
-
     if (env.VALIDATION_OPS_BASE_URL && env.NEXT_PUBLIC_APP_URL && env.VALIDATION_OPS_BASE_URL === env.NEXT_PUBLIC_APP_URL) {
       findings.push({
         label: "main app validation host",
         level: "fail",
         details: "VALIDATION_OPS_BASE_URL must point at the dedicated validation host, not the main app origin."
-      });
-    }
-
-    if (env.REDIS_URL) {
-      findings.push({
-        label: "main app redis",
-        level: "info",
-        details: `REDIS_URL remains configured at ${new URL(env.REDIS_URL).host}. This is acceptable only for non-validation web features.`
       });
     }
   }

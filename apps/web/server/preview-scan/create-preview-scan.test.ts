@@ -4,7 +4,7 @@ import { getPreviewScanAvailability } from "./preview-scan-availability";
 
 test("preview scans stay available when unrelated legacy env is present", () => {
   const availability = getPreviewScanAvailability(({
-    REDIS_URL: "redis://localhost:6379"
+    UNUSED_LEGACY_FLAG: "1"
   } as unknown) as NodeJS.ProcessEnv);
 
   assert.deepEqual(availability, {
