@@ -104,6 +104,8 @@ async function main() {
       continue;
     }
 
+    const observedAt = new Date().toISOString();
+
     await query(
       `
         insert into scan_signals (
@@ -116,7 +118,7 @@ async function main() {
           nullif(value->>'confidence', '')::float8,
           nullif(value->>'domain_id', '')::uuid,
           coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
-          nullif(value->>'observed_at', '')::timestamptz,
+          coalesce(nullif(value->>'observed_at', '')::timestamptz, $2::timestamptz),
           nullif(value->>'organization_id', '')::uuid,
           value->>'population_source',
           value->>'population_status',
@@ -140,7 +142,7 @@ async function main() {
               signal_value_json = excluded.signal_value_json,
               value_type = excluded.value_type
       `,
-      [JSON.stringify(payload)]
+      [JSON.stringify(payload), observedAt]
     );
 
     upsertedRows += payload.length;

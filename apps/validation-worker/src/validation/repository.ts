@@ -2270,6 +2270,8 @@ export async function persistDerivedNanoPolicySignals(input: {
     return nextRows;
   }
 
+  const observedAt = new Date().toISOString();
+
   await query(
     `
       insert into scan_signals (
@@ -2293,7 +2295,7 @@ export async function persistDerivedNanoPolicySignals(input: {
         nullif(value->>'confidence', '')::float8,
         nullif(value->>'domain_id', '')::uuid,
         coalesce(array(select jsonb_array_elements_text(value->'evidence_refs')), ARRAY[]::text[]),
-        nullif(value->>'observed_at', '')::timestamptz,
+        $2::timestamptz,
         nullif(value->>'organization_id', '')::uuid,
         value->>'population_source',
         value->>'population_status',
@@ -2328,7 +2330,6 @@ export async function persistDerivedNanoPolicySignals(input: {
           confidence: row.confidence,
           domain_id: scanRow.domain_id,
           evidence_refs: row.evidence_refs,
-          observed_at: new Date().toISOString(),
           organization_id: scanRow.organization_id,
           population_source: "nano",
           population_status: row.population_status,
@@ -2344,7 +2345,8 @@ export async function persistDerivedNanoPolicySignals(input: {
           signal_value_json: row.value,
           value_type: Array.isArray(row.value) ? "string_array" : typeof row.value === "number" ? "number" : typeof row.value === "boolean" ? "boolean" : "text"
         }))
-      )
+      ),
+      observedAt
     ]
   );
 
