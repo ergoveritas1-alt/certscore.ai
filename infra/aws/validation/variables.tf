@@ -4,6 +4,12 @@ variable "project_name" {
   default     = "certscore-validation"
 }
 
+variable "github_actions_subjects" {
+  description = "GitHub OIDC subject patterns allowed to assume the deploy role."
+  type        = list(string)
+  default     = ["repo:ergoveritas1-alt/certscore.ai:*"]
+}
+
 variable "aws_region" {
   description = "AWS region for the validation stack."
   type        = string

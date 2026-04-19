@@ -4,17 +4,21 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
+data "tls_certificate" "github_actions_oidc" {
+  url = "https://token.actions.githubusercontent.com"
+}
+
 locals {
-  prefix                    = var.project_name
-  azs                       = length(var.availability_zones) > 0 ? var.availability_zones : slice(data.aws_availability_zones.available.names, 0, 2)
-  nat_gateway_count         = min(max(var.nat_gateway_count, 1), length(local.azs))
-  public_subnet_cidrs       = [for index, _az in local.azs : cidrsubnet(var.vpc_cidr, 4, index)]
-  private_subnet_cidrs      = [for index, _az in local.azs : cidrsubnet(var.vpc_cidr, 4, index + 8)]
-  create_certificate        = var.validation_domain_name != "" && var.existing_certificate_arn == "" && var.hosted_zone_id != ""
-  certificate_arn           = var.existing_certificate_arn != "" ? var.existing_certificate_arn : local.create_certificate ? aws_acm_certificate.validation[0].arn : null
-  validation_ops_base_url   = var.validation_domain_name != "" ? "https://${var.validation_domain_name}" : "http://${aws_lb.validation.dns_name}"
-  common_tags               = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "validation" })
-  validation_redis_url      = "rediss://:${random_password.redis_auth_token.result}@${aws_elasticache_replication_group.validation.primary_endpoint_address}:${var.redis_port}"
+  prefix                  = var.project_name
+  azs                     = length(var.availability_zones) > 0 ? var.availability_zones : slice(data.aws_availability_zones.available.names, 0, 2)
+  nat_gateway_count       = min(max(var.nat_gateway_count, 1), length(local.azs))
+  public_subnet_cidrs     = [for index, _az in local.azs : cidrsubnet(var.vpc_cidr, 4, index)]
+  private_subnet_cidrs    = [for index, _az in local.azs : cidrsubnet(var.vpc_cidr, 4, index + 8)]
+  create_certificate      = var.validation_domain_name != "" && var.existing_certificate_arn == "" && var.hosted_zone_id != ""
+  certificate_arn         = var.existing_certificate_arn != "" ? var.existing_certificate_arn : local.create_certificate ? aws_acm_certificate.validation[0].arn : null
+  validation_ops_base_url = var.validation_domain_name != "" ? "https://${var.validation_domain_name}" : "http://${aws_lb.validation.dns_name}"
+  common_tags             = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "validation" })
+  validation_redis_url    = "rediss://:${random_password.redis_auth_token.result}@${aws_elasticache_replication_group.validation.primary_endpoint_address}:${var.redis_port}"
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
@@ -518,6 +522,86 @@ resource "aws_iam_role_policy" "task_exec" {
   })
 }
 
+resource "aws_iam_openid_connect_provider" "github_actions" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.github_actions_oidc.certificates[0].sha1_fingerprint]
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role" "github_actions_deploy" {
+  name = "${local.prefix}-github-actions-deploy"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github_actions.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = var.github_actions_subjects
+          }
+        }
+      }
+    ]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "github_actions_deploy" {
+  name = "${local.prefix}-github-actions-deploy"
+  role = aws_iam_role.github_actions_deploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
+          "ecr:DescribeRepositories",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart"
+        ]
+        Resource = [
+          aws_ecr_repository.web.arn,
+          aws_ecr_repository.worker.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeClusters",
+          "ecs:DescribeServices",
+          "ecs:DescribeTaskDefinition",
+          "ecs:DescribeTasks",
+          "ecs:ListTasks",
+          "ecs:UpdateService"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "random_password" "redis_auth_token" {
   length           = 32
   special          = true
@@ -628,10 +712,10 @@ resource "aws_ecs_task_definition" "worker" {
 
   container_definitions = jsonencode([
     {
-      name      = "validation-worker"
-      image     = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
-      essential = true
-      command   = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start"]
+      name        = "validation-worker"
+      image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
+      essential   = true
+      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start"]
       environment = local.worker_container_environment
       secrets     = local.worker_container_secrets
       logConfiguration = {
@@ -664,10 +748,10 @@ resource "aws_ecs_task_definition" "scheduler" {
 
   container_definitions = jsonencode([
     {
-      name      = "validation-scheduler"
-      image     = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
-      essential = true
-      command   = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start:scheduler"]
+      name        = "validation-scheduler"
+      image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
+      essential   = true
+      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start:scheduler"]
       environment = local.worker_container_environment
       secrets     = local.worker_container_secrets
       logConfiguration = {

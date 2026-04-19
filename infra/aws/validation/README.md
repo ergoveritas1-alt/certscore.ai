@@ -36,6 +36,7 @@ terraform apply
    - `ecs_web_service_name`
    - `ecs_worker_service_name`
    - `ecs_scheduler_service_name`
+   - `github_actions_deploy_role_arn`
    - `web_ecr_repository_url`
    - `worker_ecr_repository_url`
    - `validation_redis_secret_arn`
@@ -46,6 +47,7 @@ Required repository configuration for `.github/workflows/validation-aws-deploy.y
 
 - GitHub secret:
   - `AWS_ROLE_TO_ASSUME`
+    Set this to the Terraform output `github_actions_deploy_role_arn`.
 - GitHub variables:
   - `AWS_REGION`
   - `AWS_VALIDATION_OPS_BASE_URL`
@@ -60,3 +62,4 @@ Required repository configuration for `.github/workflows/validation-aws-deploy.y
 
 - This stack intentionally uses a standard node-based ElastiCache replication group, not serverless, because the validation queue lane uses BullMQ.
 - The main Vercel app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL` while the validation ECS tasks consume the generated `VALIDATION_REDIS_URL` secret directly.
+- The stack now creates the GitHub OIDC provider and a dedicated deploy role for this repository. Tighten `github_actions_subjects` if you want to restrict assumption to only `main` or a narrower workflow pattern.

@@ -28,6 +28,11 @@ output "ecs_scheduler_service_name" {
   value       = aws_ecs_service.scheduler.name
 }
 
+output "github_actions_deploy_role_arn" {
+  description = "IAM role ARN for the GitHub Actions AWS deploy workflow."
+  value       = aws_iam_role.github_actions_deploy.arn
+}
+
 output "web_ecr_repository_url" {
   description = "ECR repository URL for the validation ops web image."
   value       = aws_ecr_repository.web.repository_url
