@@ -1969,8 +1969,31 @@ function buildReviewFindings(input: {
   sectionItems: CanonicalSignalItem[];
   validationFindingLookup?: Map<string, ScanValidationFinding>;
 }) {
+  const contradictorySignalPairs = new Map<string, string>([
+    ["privacy.privacy_contact_channel_missing", "privacy.privacy_contact_path_present"],
+    ["accessibility.accessibility_support_path_missing", "accessibility.accessibility_contact_method_present"]
+  ]);
+  const availableSignalKeys = new Set([
+    ...input.sectionItems
+      .filter((item) => isSignalValuePopulated(item.key, item.value))
+      .map((item) => item.key),
+    ...(input.allSignals ?? [])
+      .filter((signal) => isSignalValuePopulated(signal.key, signal.value))
+      .map((signal) => signal.key)
+  ]);
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
-    .filter((item) => item.relation === "primary" && isConcerningSignal(item.key, item.value))
+    .filter((item) => {
+      if (item.relation !== "primary" || !isConcerningSignal(item.key, item.value)) {
+        return false;
+      }
+
+      const contradictoryPositiveSignalKey = contradictorySignalPairs.get(item.key);
+      if (contradictoryPositiveSignalKey && availableSignalKeys.has(contradictoryPositiveSignalKey)) {
+        return false;
+      }
+
+      return true;
+    })
     .flatMap((item): CanonicalReviewFinding[] => {
       const linkedValidationFinding = input.validationFindingLookup
         ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
