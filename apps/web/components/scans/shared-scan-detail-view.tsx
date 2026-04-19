@@ -4808,13 +4808,27 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
       };
     });
 
-    return [
+    const ownerFindings = [
       ...new Map(
         pillarSections
           .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
           .map((finding) => [finding.unifiedFindingId, finding])
       ).values()
     ];
+
+    const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
+      ["privacy_contact_channel_missing", "privacy_contact_path_present"],
+      ["accessibility_support_path_missing", "accessibility_support_path_present"],
+      ["privacy_policy_missing_surface", "privacy_policy_present"],
+      ["terms_missing_surface", "terms_of_service_present"],
+      ["cookie_policy_missing_surface", "cookie_policy_present"]
+    ]);
+    const presentFindingIds = new Set(ownerFindings.map((finding) => finding.unifiedFindingId));
+
+    return ownerFindings.filter((finding) => {
+      const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(finding.unifiedFindingId);
+      return !contradictoryPositiveFindingId || !presentFindingIds.has(contradictoryPositiveFindingId);
+    });
   } catch (error) {
     console.error("Failed to build scan report unified findings", error);
     return [] as UnifiedFindingDisplayPacket[];
