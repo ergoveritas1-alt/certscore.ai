@@ -18,7 +18,7 @@ import {
 } from "./pipeline";
 
 export function createValidationWorkers() {
-  const { WORKER_CONCURRENCY: concurrency } = getWorkerEnv();
+  const { LLM_ENRICHMENT_ENABLED: llmEnrichmentEnabled, WORKER_CONCURRENCY: concurrency } = getWorkerEnv();
 
   const collectWorker = new Worker<{ validationRunId: string }>(
     QUEUE_NAMES.validationCollect,
@@ -80,20 +80,24 @@ export function createValidationWorkers() {
     }
   );
 
-  const verdictWorker = new Worker<{ validationRunId: string }>(
-    QUEUE_NAMES.validationVerdict,
-    async (job) => {
-      if (job.name !== VALIDATION_VERDICT_JOB) {
-        throw new Error(`Unsupported validation verdict job: ${job.name}`);
-      }
+  const verdictWorker = llmEnrichmentEnabled
+    ? new Worker<{ validationRunId: string }>(
+        QUEUE_NAMES.validationVerdict,
+        async (job) => {
+          if (job.name !== VALIDATION_VERDICT_JOB) {
+            throw new Error(`Unsupported validation verdict job: ${job.name}`);
+          }
 
-      await processValidationVerdictJob(job.data.validationRunId);
-    },
-    {
-      connection: getValidationRedisConnection(),
-      concurrency: 1
-    }
+          await processValidationVerdictJob(job.data.validationRunId);
+        },
+        {
+          connection: getValidationRedisConnection(),
+          concurrency: 1
+        }
+      )
+    : null;
+
+  return [collectWorker, nanoDocRetrievalWorker, nanoSignalWorker, rankWorker, verdictWorker].filter(
+    (worker): worker is Worker => worker !== null
   );
-
-  return [collectWorker, nanoDocRetrievalWorker, nanoSignalWorker, rankWorker, verdictWorker];
 }

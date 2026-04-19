@@ -51,6 +51,7 @@ import {
   createValidationRankQueue,
   createValidationVerdictQueue
 } from "../queue/queues";
+import { getWorkerEnv } from "../env";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
@@ -3894,6 +3895,7 @@ export async function processValidationCollectJob(validationRunId: string) {
 }
 
 export async function processValidationRankJob(validationRunId: string) {
+  const workerEnv = getWorkerEnv();
   const { state } = await getValidationPipelineState();
   if (state !== "running") {
     return;
@@ -3987,6 +3989,11 @@ export async function processValidationRankJob(validationRunId: string) {
     }).catch(() => undefined);
 
     if (findings.length === 0) {
+      await finalizeValidationRun(validationRunId);
+      return;
+    }
+
+    if (!workerEnv.LLM_ENRICHMENT_ENABLED) {
       await finalizeValidationRun(validationRunId);
       return;
     }

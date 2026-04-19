@@ -50,7 +50,14 @@ function bootstrapValidationWorker() {
 
   console.info("[validation-worker] started", {
     concurrency: env.WORKER_CONCURRENCY,
-    jobs: [QUEUE_NAMES.validationCollect, QUEUE_NAMES.nanoDocRetrieval, QUEUE_NAMES.nanoSignalEnrichment, QUEUE_NAMES.validationRank, QUEUE_NAMES.validationVerdict],
+    jobs: [
+      QUEUE_NAMES.validationCollect,
+      QUEUE_NAMES.nanoDocRetrieval,
+      QUEUE_NAMES.nanoSignalEnrichment,
+      QUEUE_NAMES.validationRank,
+      ...(env.LLM_ENRICHMENT_ENABLED ? [QUEUE_NAMES.validationVerdict] : [])
+    ],
+    llmEnrichmentEnabled: env.LLM_ENRICHMENT_ENABLED,
     redisHost: new URL(redisUrl).host
   });
 
