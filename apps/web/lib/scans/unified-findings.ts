@@ -2614,6 +2614,7 @@ function deriveConfidenceInputs(input: {
   const hasPageAttribution =
     normalizedConcernStrengthFlags.includes("page_attributed") ||
     (input.packet.affectedPageCount ?? 0) > 0 ||
+    (input.packet.evidence?.pageUrls?.length ?? 0) > 0 ||
     (input.packet.evidence?.sourceUrls?.length ?? 0) > 0;
   const humanFacingUrls = uniqueStrings([
     ...(input.packet.evidence?.pageUrls ?? []),
