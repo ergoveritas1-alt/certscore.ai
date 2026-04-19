@@ -516,6 +516,86 @@ test("buildScanReportUnifiedFindings suppresses standalone positive surfaces and
   assert.equal(affiliateFinding, undefined);
 });
 
+test("buildScanReportUnifiedFindings suppresses contradictory missing-surface review findings when matching positive signals exist", async () => {
+  const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
+
+  const findings = buildScanReportUnifiedFindings({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    runtimeArtifacts: null,
+    scan: {
+      completedAt: "",
+      createdAt: "",
+      domainHostname: "example.com",
+      domainId: "domain-1",
+      id: "scan-1",
+      startedAt: "",
+      status: "completed"
+    },
+    signals: [
+      {
+        category: "privacy",
+        key: "privacy.privacy_contact_channel_missing",
+        label: "Privacy contact path missing",
+        primaryCategory: "policies_rights_disclosures",
+        primaryCategoryDescription: "",
+        primaryCategoryLabel: "",
+        subcategory: null,
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        category: "privacy",
+        key: "privacy.privacy_contact_path_present",
+        label: "Privacy contact path present",
+        primaryCategory: "policies_rights_disclosures",
+        primaryCategoryDescription: "",
+        primaryCategoryLabel: "",
+        subcategory: null,
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        category: "accessibility",
+        key: "accessibility.accessibility_support_path_missing",
+        label: "Accessibility support path missing",
+        primaryCategory: "access_barriers_task_completion",
+        primaryCategoryDescription: "",
+        primaryCategoryLabel: "",
+        subcategory: null,
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        category: "accessibility",
+        key: "accessibility.accessibility_contact_method_present",
+        label: "Accessibility support path present",
+        primaryCategory: "accessibility_commitments_conformance_support",
+        primaryCategoryDescription: "",
+        primaryCategoryLabel: "",
+        subcategory: null,
+        value: true,
+        valueType: "boolean"
+      }
+    ],
+    snapshot: {
+      accessibility_contact_method_present: true,
+      domain: "example.com",
+      privacy_contact_channel_type: "email"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  });
+
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_channel_missing"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_missing"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_path_present"), true);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_present"), true);
+});
+
 test("deriveExecutiveSummaryBadgeCounts only counts surfaced contradiction and pre-consent findings", async () => {
   const deriveExecutiveSummaryBadgeCounts = await loadExecutiveSummaryBadgeCounts();
 
