@@ -26,8 +26,25 @@ function formatViewerTimestampValue(value: string | Date, timeZone: string) {
   }).format(date);
 }
 
+function formatViewerTimestampFallback(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  }).format(date);
+}
+
 export function ViewerTimestamp({ value, fallback = "Not available" }: ViewerTimestampProps) {
-  const [timeZone, setTimeZone] = useState("UTC");
+  const [timeZone, setTimeZone] = useState<string | null>(null);
 
   useEffect(() => {
     const resolvedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -40,11 +57,11 @@ export function ViewerTimestamp({ value, fallback = "Not available" }: ViewerTim
     return <>{fallback}</>;
   }
 
-  const formatted = formatViewerTimestampValue(value, timeZone);
+  const formatted = timeZone ? formatViewerTimestampValue(value, timeZone) : formatViewerTimestampFallback(value);
 
   if (!formatted) {
     return <>{fallback}</>;
   }
 
-  return <span title={timeZone}>{formatted}</span>;
+  return <span title={timeZone ?? "Viewer local time"}>{formatted}</span>;
 }
