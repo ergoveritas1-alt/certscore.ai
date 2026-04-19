@@ -202,16 +202,14 @@ Common commands:
 
 ### Web runtime
 
-- the source-of-truth web code path is still Git promotion from `main`
+- the primary production web path is Vercel Git deployment from `main`
 - the canonical Vercel project is `consentcheck-site`
 - the Vercel project root directory must stay `apps/web`
 - prefer pushing reviewed commits to GitHub and letting Vercel create the production deployment from the connected repo
 - do not treat repo-root `.vercel` linkage or the removed `apps/validation-web` path as valid production config
 - run `pnpm ops:check:deploy` before or after deployment changes to catch stale Vercel links, wrong GitHub remote wiring, or missing cloud context
-- the currently active hardened production host for `consentcheck.site` and `www.consentcheck.site` is the `certscore-web-prod` VM at `34.69.91.225`
-- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) for the fixed-egress VM path when production needs direct access to the locked-down RDS instance
-- when the VM route is active, terminate TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and configure `/etc/certscore-web.env` on the host
-- do not move `consentcheck.site` back to Vercel unless the database ingress policy is redesigned around a safe fixed-egress path
+- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) only as a fallback fixed-egress path when Vercel cannot reach required production dependencies and the team explicitly chooses the VM route
+- if the VM route is active, terminate TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and configure `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
 - redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
 

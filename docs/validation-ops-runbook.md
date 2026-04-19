@@ -1,8 +1,8 @@
 # Validation Ops Runbook
 
-This runbook covers the validation runtime lane only. It is not the primary `consentcheck.site` or `certscore.ai` production web path.
+This runbook covers the validation runtime lane only. It is not the primary `certscore.ai` production web path.
 
-- primary product web code continues to build from `apps/web`, but the current hardened production host for `consentcheck.site` terminates on the fixed-egress `certscore-web-prod` VM
+- primary product web production stays on the Vercel `consentcheck-site` project with root `apps/web`
 - validation can use a separate Vercel surface with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler run outside the primary web deployment lane
 - separate Redis for validation queues
