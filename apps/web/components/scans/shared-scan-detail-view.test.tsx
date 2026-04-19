@@ -30,6 +30,35 @@ async function loadBuildScanReportUnifiedFindings() {
   }).buildScanReportUnifiedFindings;
 }
 
+async function loadFilterContradictoryPositiveSurfaceFindings() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule = (
+    sharedScanDetailViewImport as unknown as {
+      default?: Record<string, unknown>;
+      "module.exports"?: Record<string, unknown>;
+      filterContradictoryPositiveSurfaceFindings?: unknown;
+    }
+  ).filterContradictoryPositiveSurfaceFindings
+    ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+    : (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      ).default ??
+      (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      )["module.exports"] ??
+      (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    filterContradictoryPositiveSurfaceFindings: (findings: Array<Record<string, unknown>>) => Array<Record<string, unknown>>;
+  }).filterContradictoryPositiveSurfaceFindings;
+}
+
 async function loadExecutiveSummaryScanCondition() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -594,6 +623,34 @@ test("buildScanReportUnifiedFindings suppresses contradictory missing-surface re
   assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_missing"), false);
   assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_path_present"), true);
   assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_present"), true);
+});
+
+test("filterContradictoryPositiveSurfaceFindings removes contradictory missing-surface packets from analyst detail", async () => {
+  const filterContradictoryPositiveSurfaceFindings = await loadFilterContradictoryPositiveSurfaceFindings();
+
+  const findings = filterContradictoryPositiveSurfaceFindings([
+    {
+      unifiedFindingId: "privacy_contact_channel_missing"
+    },
+    {
+      unifiedFindingId: "privacy_contact_path_present"
+    },
+    {
+      unifiedFindingId: "accessibility_support_path_missing"
+    },
+    {
+      unifiedFindingId: "accessibility_support_path_present"
+    },
+    {
+      unifiedFindingId: "forced_consent_wall"
+    }
+  ]);
+
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_channel_missing"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_missing"), false);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "privacy_contact_path_present"), true);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "accessibility_support_path_present"), true);
+  assert.equal(findings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"), true);
 });
 
 test("deriveExecutiveSummaryBadgeCounts only counts surfaced contradiction and pre-consent findings", async () => {
