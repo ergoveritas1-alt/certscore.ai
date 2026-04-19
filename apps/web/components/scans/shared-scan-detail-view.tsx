@@ -1988,8 +1988,14 @@ function buildReviewFindings(input: {
       }
 
       const contradictoryPositiveSignalKey = contradictorySignalPairs.get(item.key);
-      if (contradictoryPositiveSignalKey && availableSignalKeys.has(contradictoryPositiveSignalKey)) {
-        return false;
+      if (contradictoryPositiveSignalKey) {
+        const mergedPositiveValue = findMergedSignalValue(input.mergedSignals, contradictoryPositiveSignalKey);
+        if (
+          availableSignalKeys.has(contradictoryPositiveSignalKey) ||
+          isSignalValuePopulated(contradictoryPositiveSignalKey, mergedPositiveValue)
+        ) {
+          return false;
+        }
       }
 
       return true;
