@@ -4125,7 +4125,7 @@ function isSupportingContextFinding(finding: UnifiedFindingDisplayPacket) {
 }
 
 function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
-  const sortedFindings = [...input.findings].sort((left, right) => {
+  const sortedFindings = [...filterContradictoryPositiveSurfaceFindings(input.findings)].sort((left, right) => {
     const severityDelta = getScanFindingSeverityWeight(right.severity) - getScanFindingSeverityWeight(left.severity);
     if (severityDelta !== 0) {
       return severityDelta;
@@ -5006,13 +5006,13 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
       })
     };
   });
-  const reviewFindings = [
+  const reviewFindings = filterContradictoryPositiveSurfaceFindings([
     ...new Map(
       pillarSections
         .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
         .map((finding) => [finding.unifiedFindingId, finding])
     ).values()
-  ];
+  ]);
   const vendorGroups = deriveVendorContext({
     scanRecord: input.scanRecord,
     snapshot: input.snapshot
