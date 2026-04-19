@@ -303,6 +303,51 @@ test("suppresses missing-surface packets when a stronger positive surface is alr
   );
 });
 
+test("suppresses missing-surface packets when the positive surface only has page-url attribution", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "No privacy contact path was detected in the scanned coverage.",
+        fallbackEvidence: {
+          signalKey: "privacy.privacy_contact_channel_missing",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "privacy.privacy_contact_channel_missing",
+        signalLabel: "Privacy contact path missing",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Privacy contact path missing"
+      },
+      {
+        description: "The privacy policy includes a privacy request contact path.",
+        evidence: ["https://example.com/privacy"],
+        fallbackEvidence: {
+          policySnippet: "Contact us at privacy@example.com for privacy requests.",
+          signalKey: "privacy.privacy_contact_path_present",
+          signalLabel: "Privacy contact path present",
+          signalValue: true
+        },
+        observedValue: "privacy@example.com",
+        severity: "low",
+        signalKey: "privacy.privacy_contact_path_present",
+        signalLabel: "Privacy contact path present",
+        signalSource: "document_semantic_signal",
+        sourceType: "signal",
+        title: "Privacy contact path present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.deepEqual(
+    packets.map((packet) => packet.unifiedFindingId),
+    ["privacy_contact_path_present"]
+  );
+});
+
 test("surfaces privacy-control unified findings from finding-family packets before legacy signal reconstruction", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],
