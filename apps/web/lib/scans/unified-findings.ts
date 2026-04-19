@@ -411,6 +411,14 @@ const CONTEXT_FINDING_IDS = new Set([
   "autoplay_media_observed"
 ]);
 
+const CONTRADICTORY_SURFACE_FINDING_PAIRS: ReadonlyMap<string, string> = new Map([
+  ["privacy_contact_channel_missing", "privacy_contact_path_present"],
+  ["privacy_policy_missing_surface", "privacy_policy_present"],
+  ["terms_missing_surface", "terms_of_service_present"],
+  ["cookie_policy_missing_surface", "cookie_policy_present"],
+  ["accessibility_support_path_missing", "accessibility_support_path_present"]
+]);
+
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
   "apr_or_interest_rate_disclosure_present",
@@ -3378,6 +3386,39 @@ function applyCoverageCalibrationToPresentationDecision(
   };
 }
 
+function hasContradictionSuppressingPositiveSurface(packet: UnifiedFindingPacket) {
+  return (
+    packet.confidenceInputs.hasPageAttribution &&
+    (
+      packet.confidenceInputs.hasCorroboratedPositiveSurfaceEvidence ||
+      packet.confidenceInputs.hasReadableSurfaceSnippetEvidence ||
+      packet.confidenceInputs.hasPolicyTextEvidence ||
+      packet.confidenceInputs.hasPacketBackedEvidence
+    )
+  );
+}
+
+function suppressContradictoryMissingSurfacePackets(packets: UnifiedFindingPacket[]) {
+  const suppressingPositiveIds = new Set(
+    packets
+      .filter(
+        (packet) =>
+          [...CONTRADICTORY_SURFACE_FINDING_PAIRS.values()].includes(packet.unifiedFindingId) &&
+          hasContradictionSuppressingPositiveSurface(packet)
+      )
+      .map((packet) => packet.unifiedFindingId)
+  );
+
+  if (suppressingPositiveIds.size === 0) {
+    return packets;
+  }
+
+  return packets.filter((packet) => {
+    const suppressingPositiveId = CONTRADICTORY_SURFACE_FINDING_PAIRS.get(packet.unifiedFindingId);
+    return !suppressingPositiveId || !suppressingPositiveIds.has(suppressingPositiveId);
+  });
+}
+
 function buildLegacyPresentationDecisionFromSurfacing(input: {
   coverageSummary?: UnifiedFindingCoverageSummary;
   packet: UnifiedFindingPacket;
@@ -4374,14 +4415,15 @@ export function buildUnifiedFindingDisplayPackets(input: {
       })
     )
   );
+  const calibratedPackets = suppressContradictoryMissingSurfacePackets(repairedPackets);
   const surfacingEvaluation = evaluateUnifiedFindingSurfacing({
-    packets: repairedPackets
+    packets: calibratedPackets
   });
   const surfacingDecisionById = new Map(
     surfacingEvaluation.debugDecisions.map((decision) => [decision.unifiedFindingId, decision] as const)
   );
 
-  const displayPackets = repairedPackets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
+  const displayPackets = calibratedPackets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
     const linkedValidationFinding = resolveLinkedValidationFindingForPacket(packet, input.validationFindingLookup);
     const surfacingDecision =
       surfacingDecisionById.get(packet.unifiedFindingId) ??
