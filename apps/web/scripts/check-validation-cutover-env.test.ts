@@ -25,7 +25,7 @@ test("main app contract passes when validation host is external and validation r
   assert.equal(findings.some((finding) => finding.level === "fail"), false);
 });
 
-test("validation ops contract requires explicit validation redis and admin allowlist", () => {
+test("validation ops contract requires admin allowlist and tolerates redis being absent", () => {
   const findings = evaluateValidationCutoverContract({
     APP_FLAVOR: "validation_ops",
     BETTER_AUTH_SECRET: "x".repeat(32),
@@ -33,6 +33,5 @@ test("validation ops contract requires explicit validation redis and admin allow
     NEXT_PUBLIC_APP_URL: "https://validation.certscore.ai"
   });
 
-  assert.ok(findings.some((finding) => finding.level === "fail" && finding.label === "validation ops redis"));
   assert.ok(findings.some((finding) => finding.level === "fail" && finding.label === "validation ops admins"));
 });

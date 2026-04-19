@@ -3,14 +3,12 @@ import { z } from "zod";
 const validationWorkerCheckSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  REDIS_URL: z.string().url().optional(),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
-  VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional(),
   VALIDATION_SCHEDULER_POLL_MINUTES: z.string().optional(),
   VALIDATION_DEFAULT_RUN_MODE: z.enum(["manual", "automatic"]).optional(),
@@ -53,16 +51,8 @@ function main() {
   }
 
   const values = result.data;
-  const validationRedisUrl = values.VALIDATION_REDIS_URL ?? values.REDIS_URL;
-  if (!validationRedisUrl) {
-    fail("validation redis", "Provide VALIDATION_REDIS_URL or REDIS_URL.");
-    process.exitCode = 1;
-    return;
-  }
-
   pass("validation worker env", "All required validation worker environment variables are present.");
   info("database url", values.DATABASE_URL.replace(/:[^:@/]+@/, ":***@"));
-  info("validation redis host", new URL(validationRedisUrl).host);
   info("storage bucket", values.S3_BUCKET);
   info("storage region", values.S3_REGION);
   info("pipeline enabled", values.VALIDATION_PIPELINE_ENABLED ?? "1");

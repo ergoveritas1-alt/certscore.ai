@@ -96,6 +96,7 @@ export const SCAN_EVENT_TYPES = {
   nanoDocRetrievalStarted: "signals.nano_doc_retrieval_started",
   nanoDocRetrievalCompleted: "signals.nano_doc_retrieval_completed",
   nanoDocRetrievalFailed: "signals.nano_doc_retrieval_failed",
+  nanoSignalEnrichmentQueued: "signals.nano_doc_enrichment_requested",
   nanoSignalEnrichmentStarted: "signals.nano_doc_enrichment_started",
   nanoSignalEnrichmentCompleted: "signals.nano_doc_enrichment_completed",
   nanoSignalEnrichmentFailed: "signals.nano_doc_enrichment_failed",

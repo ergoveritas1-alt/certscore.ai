@@ -9,8 +9,6 @@ function emptyStringToUndefined(value: unknown) {
 const workerEnvSchema = z.object({
   OPENAI_API_KEY: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   LLM_ENRICHMENT_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
-  REDIS_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
-  VALIDATION_REDIS_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_PIPELINE_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
     .transform((value) => value !== "0"),
   VALIDATION_SCHEDULER_POLL_MINUTES: z.preprocess(
@@ -61,10 +59,6 @@ const workerEnvSchema = z.object({
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema> & DatabaseEnv;
-
-export function getConfiguredValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
-  return env.VALIDATION_REDIS_URL?.trim() || env.REDIS_URL?.trim() || "";
-}
 
 export function getWorkerEnv(env: NodeJS.ProcessEnv = process.env): WorkerEnv {
   const values = parseEnvironment({

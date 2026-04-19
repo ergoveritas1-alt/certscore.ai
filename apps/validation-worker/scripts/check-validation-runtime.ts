@@ -1,19 +1,16 @@
 import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3Env, query } from "@website-signal-risk-scanner/db";
-import Redis from "ioredis";
 import { chromium } from "playwright";
 import { z } from "zod";
 
 const runtimeSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  REDIS_URL: z.string().url().optional(),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
-  VALIDATION_REDIS_URL: z.string().url().optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional()
 });
 
@@ -23,25 +20,6 @@ function pass(label: string, details: string) {
 
 function fail(label: string, details: string) {
   console.error(`FAIL ${label}: ${details}`);
-}
-
-async function checkRedis(redisUrl: string) {
-  const redis = new Redis(redisUrl, {
-    lazyConnect: true,
-    maxRetriesPerRequest: 1
-  });
-
-  try {
-    await redis.connect();
-    const response = await redis.ping();
-    pass("validation redis", `Connected to ${new URL(redisUrl).host} and received ${response}.`);
-    return true;
-  } catch (error) {
-    fail("validation redis", `Unable to connect. ${error instanceof Error ? error.message : "Unknown error"}`);
-    return false;
-  } finally {
-    redis.disconnect();
-  }
 }
 
 async function checkDatabase() {
@@ -123,15 +101,7 @@ async function main() {
     return;
   }
 
-  const validationRedisUrl = result.data.VALIDATION_REDIS_URL ?? result.data.REDIS_URL;
-  if (!validationRedisUrl) {
-    fail("validation redis", "Provide VALIDATION_REDIS_URL or REDIS_URL.");
-    process.exitCode = 1;
-    return;
-  }
-
   const checks = await Promise.all([
-    checkRedis(validationRedisUrl),
     checkDatabase(),
     checkStorage(),
     checkChromium()

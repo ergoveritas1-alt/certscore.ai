@@ -93,17 +93,17 @@ export function evaluateValidationCutoverContract(env: ValidationCutoverEnv) {
       });
     }
 
-    if (!env.VALIDATION_REDIS_URL) {
+    if (env.VALIDATION_REDIS_URL) {
       findings.push({
         label: "validation ops redis",
-        level: "fail",
-        details: "Set VALIDATION_REDIS_URL on the dedicated validation ops deployment."
+        level: "info",
+        details: `VALIDATION_REDIS_URL remains configured at ${new URL(env.VALIDATION_REDIS_URL).host}. Remove it after the Postgres worker migration is deployed.`
       });
     } else {
       findings.push({
         label: "validation ops redis",
         level: "pass",
-        details: new URL(env.VALIDATION_REDIS_URL).host
+        details: "VALIDATION_REDIS_URL is not configured."
       });
     }
 
@@ -133,7 +133,7 @@ export function evaluateValidationCutoverContract(env: ValidationCutoverEnv) {
       findings.push({
         label: "main app validation redis",
         level: "fail",
-        details: "Remove VALIDATION_REDIS_URL from the main app after AWS cutover so validation BullMQ is not reachable from Vercel."
+        details: "Remove VALIDATION_REDIS_URL from the main app. Validation queueing no longer depends on Redis."
       });
     } else {
       findings.push({

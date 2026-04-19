@@ -101,7 +101,7 @@ export default async function SettingsPage() {
               </span>
             </p>
             <p>
-              Redis queue:{" "}
+              Validation worker lane:{" "}
               <span className={systemHealth.queue.enabled ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
                 {systemHealth.queue.enabled ? "configured" : "unavailable"}
               </span>

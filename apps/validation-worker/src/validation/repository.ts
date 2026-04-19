@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { getWritePool, query, queryOne } from "@website-signal-risk-scanner/db";
+import type { PoolClient } from "pg";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   VALIDATION_INTERNAL_ORG_SLUG,
   VALIDATION_INTERVAL_OPTIONS,
@@ -78,6 +80,7 @@ type ValidationRunRow = {
   status: "queued" | "waiting_for_scan" | "collecting" | "ranking" | "validating" | "completed" | "failed";
   tranco_rank: number | null;
   trigger_mode: ValidationRunMode;
+  updated_at?: string;
   validation_target_id: string | null;
 };
 
@@ -167,6 +170,19 @@ type NanoDocRetrievalInput = {
 
 const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "ranking", "validating"] as const;
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
+const VALIDATION_WORKER_LOCK_NAMESPACE = 41017;
+const NANO_SIGNAL_SCAN_LOCK_NAMESPACE = 41018;
+const VALIDATION_COLLECT_RECHECK_MS = 15_000;
+
+export type ValidationRunLease = {
+  client: PoolClient;
+  run: ValidationRunRow;
+};
+
+export type NanoSignalScanLease = {
+  client: PoolClient;
+  scanId: string;
+};
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown database error.";
@@ -809,6 +825,146 @@ export async function createValidationRun(input: {
   }
 
   return data;
+}
+
+export async function claimNextValidationRunLease(limit = 20): Promise<ValidationRunLease | null> {
+  const client = await getWritePool().connect();
+
+  try {
+    const result = await client.query<ValidationRunRow>(
+      `
+        select
+          completed_at,
+          created_at,
+          error_message,
+          hostname,
+          id,
+          normalized_url,
+          rank_band,
+          scan_id,
+          started_at,
+          status,
+          tranco_rank,
+          trigger_mode,
+          updated_at,
+          validation_target_id
+        from validation_runs
+        where
+          status in ('queued', 'waiting_for_scan', 'collecting', 'ranking', 'validating')
+          and (
+            status in ('queued', 'ranking', 'validating')
+            or (
+              status in ('waiting_for_scan', 'collecting')
+              and updated_at <= timezone('utc', now()) - ($1::text)::interval
+            )
+          )
+        order by
+          case status
+            when 'queued' then 1
+            when 'ranking' then 2
+            when 'validating' then 3
+            when 'waiting_for_scan' then 4
+            when 'collecting' then 5
+            else 99
+          end,
+          updated_at asc,
+          created_at asc
+        limit $2
+      `,
+      [`${Math.ceil(VALIDATION_COLLECT_RECHECK_MS / 1000)} seconds`, limit]
+    );
+
+    for (const run of result.rows) {
+      const lockResult = await client.query<{ locked: boolean }>(
+        `select pg_try_advisory_lock($1, hashtext($2)) as locked`,
+        [VALIDATION_WORKER_LOCK_NAMESPACE, run.id]
+      );
+
+      if (lockResult.rows[0]?.locked) {
+        return {
+          client,
+          run
+        };
+      }
+    }
+
+    client.release();
+    return null;
+  } catch (error) {
+    client.release();
+    throw error;
+  }
+}
+
+export async function releaseValidationRunLease(lease: ValidationRunLease) {
+  try {
+    await lease.client.query(`select pg_advisory_unlock($1, hashtext($2))`, [VALIDATION_WORKER_LOCK_NAMESPACE, lease.run.id]);
+  } finally {
+    lease.client.release();
+  }
+}
+
+export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSignalScanLease | null> {
+  const client = await getWritePool().connect();
+
+  try {
+    const result = await client.query<{ requested_at: string; scan_id: string }>(
+      `
+        with requested as (
+          select scan_id, max(created_at) as requested_at
+          from scan_events
+          where event_type = $1
+            and scan_id is not null
+          group by scan_id
+        )
+        select requested.scan_id, requested.requested_at
+        from requested
+        where not exists (
+          select 1
+          from scan_events completed
+          where completed.scan_id = requested.scan_id
+            and completed.event_type in ($2, $3)
+            and completed.created_at >= requested.requested_at
+        )
+        order by requested.requested_at asc
+        limit $4
+      `,
+      [
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+        limit
+      ]
+    );
+
+    for (const row of result.rows) {
+      const lockResult = await client.query<{ locked: boolean }>(
+        `select pg_try_advisory_lock($1, hashtext($2)) as locked`,
+        [NANO_SIGNAL_SCAN_LOCK_NAMESPACE, row.scan_id]
+      );
+
+      if (lockResult.rows[0]?.locked) {
+        return {
+          client,
+          scanId: row.scan_id
+        };
+      }
+    }
+
+    client.release();
+    return null;
+  } catch (error) {
+    client.release();
+    throw error;
+  }
+}
+
+export async function releaseNanoSignalScanLease(lease: NanoSignalScanLease) {
+  try {
+    await lease.client.query(`select pg_advisory_unlock($1, hashtext($2))`, [NANO_SIGNAL_SCAN_LOCK_NAMESPACE, lease.scanId]);
+  } finally {
+    lease.client.release();
+  }
 }
 
 export async function getValidationRun(runId: string) {
