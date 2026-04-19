@@ -506,7 +506,7 @@ async function persistRegistryEntries(input: {
           value->>'domain',
           value->>'match_type',
           value->>'source',
-          value->>'vendor_registry_id'
+          (value->>'vendor_registry_id')::uuid
         from jsonb_array_elements($1::jsonb) as value
         on conflict (domain) do update
           set confidence = excluded.confidence,
