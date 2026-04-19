@@ -7,6 +7,8 @@ import {
   type ScanDetailSupplementalSignalRecord as ScanSignalRecord
 } from "../../lib/scans/scan-detail-supplemental-signals";
 
+type ExistingSignalRecord = Pick<ScanSignalRecord, "key">;
+
 function makeFamilyPacketEvent(findingIds: string[]): ScanEventRecord {
   return {
     createdAt: "2026-03-30T00:00:00.000Z",
@@ -44,7 +46,7 @@ test("suppresses accessibility support missing when a positive accessibility sig
       {
         key: "accessibility.accessibility_contact_method_present"
       }
-    ] satisfies ScanSignalRecord[],
+    ] satisfies ExistingSignalRecord[],
     events: [],
     primaryPolicyEnrichment: null,
     snapshot: {
@@ -97,7 +99,7 @@ test("suppresses privacy contact missing when a positive privacy-contact signal 
       {
         key: "privacy.privacy_contact_path_present"
       }
-    ] satisfies ScanSignalRecord[],
+    ] satisfies ExistingSignalRecord[],
     events: [],
     primaryPolicyEnrichment: {
       policy_dsar_confidence: 0.92,
