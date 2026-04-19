@@ -8,7 +8,7 @@ const webCheckSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: z.string().optional(),
-  REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
@@ -97,10 +97,14 @@ async function main() {
   }
 
   pass("web env", "All required CertScore web environment variables are present.");
-  info("expected services", "PostgreSQL, Redis, and S3-compatible storage should be reachable.");
+  info("expected services", "PostgreSQL and S3-compatible storage should be reachable.");
   info("better auth", googleEnabled ? "App auth env includes email/password and Google OAuth." : "App auth env includes email/password.");
   info("app url", new URL(values.NEXT_PUBLIC_APP_URL).origin);
-  info("redis host", new URL(values.REDIS_URL).host);
+  if (values.REDIS_URL) {
+    info("redis host", new URL(values.REDIS_URL).host);
+  } else {
+    info("redis host", "REDIS_URL is not configured on the main web app.");
+  }
   info("storage bucket", storageBucket);
   info("storage region", values.S3_REGION);
 
