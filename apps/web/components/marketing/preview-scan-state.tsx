@@ -6,23 +6,11 @@ import { useEffect, useState } from "react";
 import { FullScanProgressCard } from "../scans/full-scan-progress-card";
 import { ScanPageHeader } from "../scans/scan-page-header";
 import { ScanStatusAutoRefresh } from "../scans/scan-status-auto-refresh";
+import { ViewerTimestamp } from "../time/viewer-timestamp";
 
 type PreviewScanStateProps = {
   initialScan: PreviewScanStatusResponse;
 };
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
   const router = useRouter();
@@ -65,7 +53,11 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
       <div className="space-y-8">
         <ScanPageHeader
           autoRefresh={<ScanStatusAutoRefresh status={scan.status} />}
-          createdAtLabel={`Created ${formatDateTime(scan.createdAt)}`}
+          createdAtLabel={
+            <>
+              Created <ViewerTimestamp value={scan.createdAt} />
+            </>
+          }
           status={scan.status}
           title={`Scan: ${scan.hostname}`}
         />
@@ -84,7 +76,11 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
   return (
     <div className="space-y-4">
       <ScanPageHeader
-        createdAtLabel={`Created ${formatDateTime(scan.createdAt)}`}
+        createdAtLabel={
+          <>
+            Created <ViewerTimestamp value={scan.createdAt} />
+          </>
+        }
         status={scan.status}
         title={`Scan: ${scan.hostname}`}
       />

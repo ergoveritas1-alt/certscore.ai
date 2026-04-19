@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 type ScanPageHeaderProps = {
   actions?: ReactNode;
   autoRefresh?: ReactNode;
-  createdAtLabel?: string | null;
+  createdAtLabel?: ReactNode;
   status: string;
   title: string;
 };

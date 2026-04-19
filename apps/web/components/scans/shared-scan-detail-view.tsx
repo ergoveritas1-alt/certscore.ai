@@ -107,6 +107,7 @@ import {
 } from "../../lib/scans/tracker-risk";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
+import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -5970,7 +5971,11 @@ export function SharedScanDetailView({
       <ScanPageHeader
         actions={headerActions}
         autoRefresh={autoRefresh}
-        createdAtLabel={`Created ${formatDateTime(scanRecord.scan.createdAt)}`}
+        createdAtLabel={
+          <>
+            Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
+          </>
+        }
         status={scanRecord.scan.status}
         title={`Scan: ${scanRecord.scan.domainHostname ?? "Unknown website"}`}
       />
