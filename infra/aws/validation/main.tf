@@ -18,7 +18,7 @@ locals {
   certificate_arn         = var.existing_certificate_arn != "" ? var.existing_certificate_arn : local.create_certificate ? aws_acm_certificate.validation[0].arn : null
   validation_ops_base_url = var.validation_domain_name != "" ? "https://${var.validation_domain_name}" : "http://${aws_lb.validation.dns_name}"
   common_tags             = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "validation" })
-  validation_redis_url    = "rediss://:${random_password.redis_auth_token.result}@${aws_elasticache_replication_group.validation.primary_endpoint_address}:${var.redis_port}"
+  validation_redis_url    = "rediss://:${urlencode(random_password.redis_auth_token.result)}@${aws_elasticache_replication_group.validation.primary_endpoint_address}:${var.redis_port}"
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
@@ -282,7 +282,7 @@ resource "aws_lb_target_group" "web" {
     healthy_threshold   = 2
     interval            = 30
     matcher             = "200-399"
-    path                = "/crawler"
+    path                = "/"
     port                = "traffic-port"
     protocol            = "HTTP"
     timeout             = 5
