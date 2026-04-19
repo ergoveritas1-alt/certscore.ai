@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - ".github/workflows/accessibility-validation.yml"
+      - "apps/web/**"
       - "apps/validation-worker/**"
+      - "docs/validation-aws-cutover-runbook.md"
       - "packages/db/**"
       - "packages/shared/**"
       - "packages/validation-shared/**"
@@ -16,7 +18,9 @@ on:
       - main
     paths:
       - ".github/workflows/accessibility-validation.yml"
+      - "apps/web/**"
       - "apps/validation-worker/**"
+      - "docs/validation-aws-cutover-runbook.md"
       - "packages/db/**"
       - "packages/shared/**"
       - "packages/validation-shared/**"
@@ -26,6 +30,57 @@ on:
   workflow_dispatch:
 
 jobs:
+  web-validation-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck web
+        run: pnpm --filter @website-signal-risk-scanner/web typecheck
+
+      - name: Build web test dependencies
+        run: |
+          pnpm --filter @website-signal-risk-scanner/shared build
+          pnpm --filter @website-signal-risk-scanner/db build
+          pnpm --filter @website-signal-risk-scanner/validation-shared build
+
+      - name: Test validation cutover contract helpers
+        run: pnpm exec tsx --test apps/web/scripts/check-validation-cutover-env.test.ts apps/web/server/validation/ops-host.test.ts apps/web/server/preview-scan/create-preview-scan.test.ts
+
+      - name: Validate main app split contract example
+        run: |
+          APP_FLAVOR=certscore \
+          NEXT_PUBLIC_APP_URL=https://certscore.ai \
+          VALIDATION_OPS_BASE_URL=https://validation.certscore.ai \
+          REDIS_URL=redis://cache.example.internal:6379 \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
+
+      - name: Validate dedicated validation ops contract example
+        run: |
+          APP_FLAVOR=validation_ops \
+          NEXT_PUBLIC_APP_URL=https://validation.certscore.ai \
+          DATABASE_URL=postgresql://validation.example.internal/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          CERTSCORE_ADMIN_EMAILS=ops@example.com \
+          VALIDATION_REDIS_URL=rediss://:token@validation-redis.example.internal:6379 \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
+
   worker-scan-pipeline-tests:
     runs-on: ubuntu-latest
 
@@ -58,8 +113,7 @@ jobs:
 
   live-validation-smoke:
     runs-on: ubuntu-latest
-    needs: worker-scan-pipeline-tests
-    if: ${{ secrets.DATABASE_URL != '' && secrets.NEXT_PUBLIC_APP_URL != '' && secrets.REDIS_URL != '' && secrets.S3_BUCKET != '' && secrets.S3_REGION != '' && secrets.S3_ACCESS_KEY_ID != '' && secrets.S3_SECRET_ACCESS_KEY != '' }}
+    needs: [web-validation-contract, worker-scan-pipeline-tests]
     env:
       NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -72,27 +126,49 @@ jobs:
       S3_FORCE_PATH_STYLE: ${{ secrets.S3_FORCE_PATH_STYLE }}
 
     steps:
+      - name: Check live smoke secret availability
+        id: preflight
+        run: |
+          if [ -n "${NEXT_PUBLIC_APP_URL}" ] && \
+             [ -n "${DATABASE_URL}" ] && \
+             [ -n "${REDIS_URL}" ] && \
+             [ -n "${S3_BUCKET}" ] && \
+             [ -n "${S3_REGION}" ] && \
+             [ -n "${S3_ACCESS_KEY_ID}" ] && \
+             [ -n "${S3_SECRET_ACCESS_KEY}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "Skipping live validation smoke because required secrets are not configured."
+          fi
+
       - name: Checkout
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: actions/checkout@v4
 
       - name: Setup pnpm
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: pnpm/action-setup@v4
         with:
           version: 10.6.3
 
       - name: Setup Node.js
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium
 
       - name: Create web env file
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         working-directory: apps/web
         run: |
           cat <<'EOF' > .env.local
@@ -108,4 +184,5 @@ jobs:
           EOF
 
       - name: Run live validation smoke
+        if: ${{ steps.preflight.outputs.enabled == 'true' }}
         run: pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation

@@ -103,6 +103,9 @@ require_file "deploy/vm/install-web-deploy-wrapper.sh" "VM web deploy wrapper in
 require_file "deploy-validation-worker.sh" "Validation worker Cloud Run deploy script is present"
 require_file ".github/workflows/accessibility-validation.yml" "GitHub Actions validation workflow is present"
 require_file ".github/workflows/web-vm-deploy.yml" "GitHub Actions web VM deploy workflow is present"
+require_file ".github/workflows/validation-aws-deploy.yml" "GitHub Actions AWS validation deploy workflow is present"
+require_file "infra/aws/validation/main.tf" "AWS validation Terraform stack is present"
+require_file "docs/validation-aws-cutover-runbook.md" "AWS validation cutover runbook is present"
 
 if command -v gcloud >/dev/null 2>&1; then
   active_account="$(gcloud config get-value account 2>/dev/null || true)"

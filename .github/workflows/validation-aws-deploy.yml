@@ -1,0 +1,129 @@
+name: Validation AWS Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/validation-aws-deploy.yml"
+      - "apps/web/**"
+      - "apps/validation-worker/**"
+      - "infra/aws/validation/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "packages/ui/**"
+      - "packages/validation-shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "turbo.json"
+  workflow_dispatch:
+
+concurrency:
+  group: validation-aws-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-validation-aws:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      ECR_WEB_REPOSITORY: ${{ vars.AWS_VALIDATION_WEB_ECR_REPOSITORY }}
+      ECR_WORKER_REPOSITORY: ${{ vars.AWS_VALIDATION_WORKER_ECR_REPOSITORY }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_VALIDATION_ECS_CLUSTER }}
+      ECS_WEB_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WEB_SERVICE }}
+      ECS_WORKER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
+      ECS_SCHEDULER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_SCHEDULER_SERVICE }}
+      VALIDATION_OPS_BASE_URL: ${{ vars.AWS_VALIDATION_OPS_BASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${ECR_WEB_REPOSITORY}" || (echo "Missing var AWS_VALIDATION_WEB_ECR_REPOSITORY" && exit 1)
+          test -n "${ECR_WORKER_REPOSITORY}" || (echo "Missing var AWS_VALIDATION_WORKER_ECR_REPOSITORY" && exit 1)
+          test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_CLUSTER" && exit 1)
+          test -n "${ECS_WEB_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WEB_SERVICE" && exit 1)
+          test -n "${ECS_WORKER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WORKER_SERVICE" && exit 1)
+          test -n "${ECS_SCHEDULER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_SCHEDULER_SERVICE" && exit 1)
+          test -n "${VALIDATION_OPS_BASE_URL}" || (echo "Missing var AWS_VALIDATION_OPS_BASE_URL" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck web
+        run: pnpm --filter @website-signal-risk-scanner/web typecheck
+
+      - name: Typecheck validation worker
+        run: pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
+
+      - name: Run validation pipeline tests
+        run: pnpm test:scan-pipeline
+
+      - name: Validate dedicated validation ops contract
+        run: |
+          APP_FLAVOR=validation_ops \
+          NEXT_PUBLIC_APP_URL="${VALIDATION_OPS_BASE_URL}" \
+          DATABASE_URL=postgresql://validation.example.internal/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          CERTSCORE_ADMIN_EMAILS=ops@example.com \
+          VALIDATION_REDIS_URL=rediss://:token@validation-redis.example.internal:6379 \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
+
+      - name: Build and push validation ops web image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
+          docker build -f apps/web/Dockerfile -t "${WEB_IMAGE}:${GITHUB_SHA}" -t "${WEB_IMAGE}:latest" .
+          docker push "${WEB_IMAGE}:${GITHUB_SHA}"
+          docker push "${WEB_IMAGE}:latest"
+
+      - name: Build and push validation worker image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          WORKER_IMAGE="${REGISTRY}/${ECR_WORKER_REPOSITORY}"
+          docker build -f apps/validation-worker/Dockerfile -t "${WORKER_IMAGE}:${GITHUB_SHA}" -t "${WORKER_IMAGE}:latest" .
+          docker push "${WORKER_IMAGE}:${GITHUB_SHA}"
+          docker push "${WORKER_IMAGE}:latest"
+
+      - name: Force ECS deployments
+        run: |
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_WEB_SERVICE_NAME}" --force-new-deployment >/dev/null
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_WORKER_SERVICE_NAME}" --force-new-deployment >/dev/null
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SCHEDULER_SERVICE_NAME}" --force-new-deployment >/dev/null
+
+      - name: Wait for ECS services to stabilize
+        run: |
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_WEB_SERVICE_NAME}" "${ECS_WORKER_SERVICE_NAME}" "${ECS_SCHEDULER_SERVICE_NAME}"

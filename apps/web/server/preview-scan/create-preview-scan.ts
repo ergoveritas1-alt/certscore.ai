@@ -3,10 +3,7 @@ import { getPreviewScanAvailability } from "./preview-scan-availability";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
 
 export async function createPreviewScan(input: { hostname: string; normalizedUrl: string }) {
-  const previewAvailability = getPreviewScanAvailability();
-  if (!previewAvailability.enabled) {
-    throw new Error(previewAvailability.reason ?? "Preview scanning is unavailable because the validation queue is not healthy.");
-  }
+  getPreviewScanAvailability();
 
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const scan = await createPreviewScanRecord({

@@ -240,27 +240,25 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  try {
-    await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {
-      console.error("[web] nano signal enrichment handoff failed", {
-        error: error instanceof Error ? error.message : String(error),
-        scanId: scan.id
-      });
-    });
-    await ensureValidationRunForManualScan({
-      domainId: domainRecord.domain.id,
-      hostname: domainRecord.domain.hostname,
-      normalizedUrl: domainRecord.domain.normalizedUrl,
-      organizationId: input.organizationId,
-      scanId: scan.id,
-      submittedByUserId: input.submittedByUserId
-    });
-  } catch (validationRunError) {
-    return {
-      error: `Scan queued but validation handoff failed: ${validationRunError instanceof Error ? validationRunError.message : "Unknown error"}`,
+  await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {
+    console.error("[web] nano signal enrichment handoff failed", {
+      error: error instanceof Error ? error.message : String(error),
       scanId: scan.id
-    };
-  }
+    });
+  });
+  await ensureValidationRunForManualScan({
+    domainId: domainRecord.domain.id,
+    hostname: domainRecord.domain.hostname,
+    normalizedUrl: domainRecord.domain.normalizedUrl,
+    organizationId: input.organizationId,
+    scanId: scan.id,
+    submittedByUserId: input.submittedByUserId
+  }).catch((error) => {
+    console.error("[web] validation handoff failed for full scan", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId: scan.id
+    });
+  });
 
   return {
     error: null,

@@ -2,7 +2,7 @@ import "server-only";
 
 import { Queue, type ConnectionOptions } from "bullmq";
 import { NANO_DOC_RETRIEVAL_JOB, VALIDATION_COLLECT_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
-import { getConfiguredValidationRedisUrl } from "../../lib/env";
+import { getConfiguredWebValidationRedisUrl } from "../../lib/env";
 
 let connection: ConnectionOptions | null = null;
 let collectQueue: Queue<{ validationRunId: string }> | null = null;
@@ -31,9 +31,9 @@ function getRedisConnection() {
     return connection;
   }
 
-  const redisUrl = getConfiguredValidationRedisUrl();
+  const redisUrl = getConfiguredWebValidationRedisUrl();
   if (!redisUrl) {
-    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL or REDIS_URL.");
+    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL.");
   }
 
   connection = createRedisConnection(redisUrl);
@@ -105,11 +105,11 @@ function getNanoDocQueue() {
 }
 
 export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
-  const redisUrl = getConfiguredValidationRedisUrl(env);
+  const redisUrl = getConfiguredWebValidationRedisUrl(env);
   if (!redisUrl) {
     return {
       enabled: false,
-      reason: "Validation queueing is unavailable until VALIDATION_REDIS_URL or REDIS_URL is configured."
+      reason: "Validation queueing is unavailable until VALIDATION_REDIS_URL is configured."
     } as const;
   }
 

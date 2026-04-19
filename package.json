@@ -10,6 +10,7 @@
     "build": "turbo run build",
     "check-env": "pnpm --filter @website-signal-risk-scanner/web check-env",
     "check-env:validation": "pnpm --filter @website-signal-risk-scanner/validation-worker check-env",
+    "check-env:validation-cutover": "pnpm --filter @website-signal-risk-scanner/web check-env:validation-cutover",
     "check-runtime": "pnpm --filter @website-signal-risk-scanner/web check-runtime",
     "check-runtime:validation": "pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime",
     "dev": "turbo run dev --parallel",

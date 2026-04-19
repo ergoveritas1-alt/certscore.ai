@@ -1,0 +1,42 @@
+project_name                    = "certscore-validation"
+aws_region                      = "us-east-1"
+github_actions_subjects         = ["repo:ergoveritas1-alt/certscore.ai:*"]
+validation_domain_name          = "validation.certscore.ai"
+hosted_zone_id                  = "Z1234567890"
+existing_certificate_arn        = ""
+
+database_url_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/database-url"
+better_auth_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/better-auth-secret"
+google_client_id_secret_arn     = ""
+google_client_secret_secret_arn = ""
+openai_api_key_secret_arn       = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/openai-api-key"
+
+s3_bucket                       = "scan-artifacts"
+s3_region                       = "us-east-1"
+s3_endpoint                     = ""
+s3_force_path_style             = ""
+s3_access_key_id_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-access-key-id"
+s3_secret_access_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-secret-access-key"
+
+certscore_admin_emails          = "ops@example.com"
+next_public_auth_google_enabled = "false"
+web_bot_auth_private_key_secret_arn = ""
+web_bot_auth_signature_agent_url    = ""
+
+validation_tranco_min_rank      = 1000
+validation_tranco_max_rank      = 100000
+validation_pipeline_enabled     = "1"
+validation_scheduler_poll_minutes = "1"
+validation_default_run_mode     = "manual"
+validation_default_sample_interval_minutes = "20"
+validation_openai_model         = "gpt-5.4"
+worker_concurrency              = "1"
+llm_enrichment_enabled          = "0"
+
+redis_node_type                 = "cache.t4g.small"
+redis_num_cache_clusters        = 2
+
+tags = {
+  Environment = "production"
+  Service     = "validation"
+}

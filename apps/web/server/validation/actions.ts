@@ -3,6 +3,7 @@
 import type { ValidationRunMode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getValidationQueueAvailability } from "../queue/validation-queue";
+import { buildValidationOpsUrl, getValidationOpsHostState } from "./ops-host";
 import {
   addValidationTargetAction,
   queueManualValidationRunAction,
@@ -16,7 +17,19 @@ export type ValidationRescanActionState = {
   error: string | null;
 };
 
+function redirectToValidationOpsIfNeeded(pathname: string) {
+  if (!getValidationOpsHostState().hostedOnDedicatedOpsApp) {
+    return;
+  }
+
+  const destinationUrl = buildValidationOpsUrl(pathname);
+  if (destinationUrl) {
+    redirect(destinationUrl);
+  }
+}
+
 export async function submitValidationSettingsAction(formData: FormData) {
+  redirectToValidationOpsIfNeeded("/app/validation");
   const runMode = String(formData.get("runMode") ?? "manual") === "automatic" ? "automatic" : "manual";
   const pipelineEnabled = String(formData.get("pipelineEnabled") ?? "0") === "1";
   const automaticIntervalMinutes = Number.parseInt(String(formData.get("automaticIntervalMinutes") ?? ""), 10);
@@ -29,6 +42,7 @@ export async function submitValidationSettingsAction(formData: FormData) {
 }
 
 export async function submitManualValidationRunAction(formData: FormData) {
+  redirectToValidationOpsIfNeeded("/app/validation");
   const targetId = String(formData.get("targetId") ?? "").trim();
   if (!targetId) {
     throw new Error("Missing validation target.");
@@ -46,6 +60,7 @@ export async function submitManualValidationRunAction(formData: FormData) {
 }
 
 export async function submitValidationTargetAction(formData: FormData) {
+  redirectToValidationOpsIfNeeded("/app/validation");
   const targetId = String(formData.get("targetId") ?? "").trim();
   const action = String(formData.get("targetAction") ?? "").trim();
   if (!targetId || !action) {
@@ -99,6 +114,7 @@ export async function submitValidationTargetAction(formData: FormData) {
 }
 
 export async function submitValidationTargetAddAction(formData: FormData) {
+  redirectToValidationOpsIfNeeded("/app/validation");
   const hostname = String(formData.get("hostname") ?? "").trim();
   if (!hostname) {
     throw new Error("Missing hostname.");
@@ -108,6 +124,7 @@ export async function submitValidationTargetAddAction(formData: FormData) {
 }
 
 export async function submitValidationRescanAction(formData: FormData) {
+  redirectToValidationOpsIfNeeded("/app/validation/scans");
   const domainId = String(formData.get("domainId") ?? "").trim();
   if (!domainId) {
     throw new Error("Missing validation domain.");
@@ -125,6 +142,12 @@ export async function submitValidationRescanFormAction(
   _previousState: ValidationRescanActionState = initialValidationRescanState,
   formData: FormData
 ): Promise<ValidationRescanActionState> {
+  if (getValidationOpsHostState().hostedOnDedicatedOpsApp) {
+    return {
+      error: buildValidationOpsUrl("/app/validation/scans") ?? "Validation controls are hosted on the dedicated validation operations app."
+    };
+  }
+
   const queueAvailability = getValidationQueueAvailability();
   if (!queueAvailability.enabled) {
     return {

@@ -122,7 +122,9 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
 9. Create the S3-compatible bucket referenced by `S3_BUCKET`.
 10. Provision Redis for app queues:
    - set `REDIS_URL` for the web runtime
-   - set `VALIDATION_REDIS_URL` for the validation worker, or let it fall back to `REDIS_URL` if both runtimes intentionally share one Redis instance
+   - set `VALIDATION_REDIS_URL` for the validation worker
+   - set `VALIDATION_REDIS_URL` for a web deployment only when that deployment should have validation BullMQ access
+   - the main production app should prefer `VALIDATION_OPS_BASE_URL` for validation operations instead of direct BullMQ access
 11. Install Playwright Chromium for the validation runtime:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
 12. Start validation local development with a watched validation worker:
@@ -232,7 +234,8 @@ Common commands:
 
 - create a Redis database
 - set `REDIS_URL` for the web runtime
-- set `VALIDATION_REDIS_URL` for the validation worker, or allow it to fall back to `REDIS_URL` when sharing one Redis instance is intentional
+- set `VALIDATION_REDIS_URL` for the validation worker
+- set `VALIDATION_REDIS_URL` for a web deployment only when that web deployment should have validation BullMQ access
 
 ### Scheduler
 

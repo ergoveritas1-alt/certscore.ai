@@ -7,9 +7,11 @@ const webEnvSchema = z.object({
 });
 
 const webServerEnvSchema = z.object({
+  APP_FLAVOR: z.enum(["certscore", "validation_ops"]).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
   VALIDATION_REDIS_URL: z.string().url().optional(),
+  VALIDATION_OPS_BASE_URL: z.string().url().optional(),
   VALIDATION_TRANCO_SOURCE_URL: z.string().url().optional(),
   VALIDATION_TRANCO_MIN_RANK: z.coerce.number().int().min(1).optional(),
   VALIDATION_TRANCO_MAX_RANK: z.coerce.number().int().min(1000).optional()
@@ -18,12 +20,28 @@ const webServerEnvSchema = z.object({
 export type WebEnv = z.infer<typeof webEnvSchema>;
 export type WebServerEnv = z.infer<typeof webServerEnvSchema> & DatabaseEnv;
 
+export function getAppFlavor(env: NodeJS.ProcessEnv = process.env) {
+  return env.APP_FLAVOR === "validation_ops" ? "validation_ops" : "certscore";
+}
+
 export function getConfiguredRedisUrl(env: NodeJS.ProcessEnv = process.env) {
   return env.REDIS_URL?.trim() || "";
 }
 
 export function getConfiguredValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
   return env.VALIDATION_REDIS_URL?.trim() || env.REDIS_URL?.trim() || "";
+}
+
+export function getConfiguredWebValidationRedisUrl(env: NodeJS.ProcessEnv = process.env) {
+  return env.VALIDATION_REDIS_URL?.trim() || "";
+}
+
+export function getValidationOpsBaseUrl(env: NodeJS.ProcessEnv = process.env) {
+  return env.VALIDATION_OPS_BASE_URL?.trim() || "";
+}
+
+export function isValidationOpsApp(env: NodeJS.ProcessEnv = process.env) {
+  return getAppFlavor(env) === "validation_ops";
 }
 
 export function getWebEnv(env: NodeJS.ProcessEnv = process.env): WebEnv {

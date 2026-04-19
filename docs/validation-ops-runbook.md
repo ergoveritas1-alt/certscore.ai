@@ -2,6 +2,14 @@
 
 This runbook covers the validation runtime lane only. It is not the primary `certscore.ai` production web path.
 
+Preferred production target:
+
+- AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
+- AWS ElastiCache for the validation BullMQ lane
+- Vercel remains the primary `certscore.ai` public web host
+
+Legacy paths in this document remain useful for debugging and rollback, but the active replacement plan is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with cutover steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
+
 - primary product web production stays on the Vercel `consentcheck-site` project with root `apps/web`
 - validation can use a separate Vercel surface with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler run outside the primary web deployment lane
@@ -127,6 +135,7 @@ Before trusting any validation deployment change, run:
 Run these before trusting the deployment:
 
 - `pnpm check-env:validation`
+- `pnpm check-env:validation-cutover`
 - `pnpm check-runtime:validation`
 
 Expected results:
@@ -135,6 +144,12 @@ Expected results:
 - validation Redis connectivity passes
 - validation tables are reachable in PostgreSQL
 - Playwright Chromium launches
+
+Main-app production note:
+
+- the primary Vercel app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
+- the primary Vercel app should not keep `VALIDATION_REDIS_URL` after AWS cutover
+- web-side validation BullMQ access now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`
 
 ## 6. First-Run Validation
 
