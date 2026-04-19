@@ -54,6 +54,12 @@ jobs:
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck
 
+      - name: Build web test dependencies
+        run: |
+          pnpm --filter @website-signal-risk-scanner/shared build
+          pnpm --filter @website-signal-risk-scanner/db build
+          pnpm --filter @website-signal-risk-scanner/validation-shared build
+
       - name: Test validation cutover contract helpers
         run: pnpm exec tsx --test apps/web/scripts/check-validation-cutover-env.test.ts apps/web/server/validation/ops-host.test.ts apps/web/server/preview-scan/create-preview-scan.test.ts
 
