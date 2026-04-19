@@ -51,6 +51,8 @@ if ! gcloud artifacts repositories describe "${REPOSITORY}" \
 fi
 
 cat > "${cloudbuild_config}" <<EOF
+options:
+  logging: CLOUD_LOGGING_ONLY
 steps:
   - name: gcr.io/cloud-builders/docker
     args:
