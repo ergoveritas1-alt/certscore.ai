@@ -127,7 +127,7 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
 });
 
-test("buildRegulatoryLenses does not add DOJ / ADA accessibility when accessibility relevance stays limited", () => {
+test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA mappings with softer fallback copy", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -151,7 +151,9 @@ test("buildRegulatoryLenses does not add DOJ / ADA accessibility when accessibil
     }
   );
 
-  assert.equal(lenses.some((lens) => lens.acronym === "DOJ / ADA accessibility"), false);
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  assert.ok(adaLens);
+  assert.equal(adaLens?.summary, "Accessibility support and disclosure posture needs work.");
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

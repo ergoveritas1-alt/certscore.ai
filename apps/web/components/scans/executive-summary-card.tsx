@@ -274,7 +274,8 @@ export function buildRegulatoryLenses(
     dojAdaMapping !== undefined &&
     (dojAdaMapping.relevanceLevel === "high" ||
       dojAdaMapping.relevanceLevel === "moderate" ||
-      (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45) ||
+      dojAdaMapping.relevanceLevel === "limited" ||
+      (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 20) ||
       hasStrongAdaDriver);
 
   if (!shouldIncludeAdaLens) {
@@ -302,7 +303,9 @@ export function buildRegulatoryLenses(
     typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45
       ? `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`
       : null,
-    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null
+    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null,
+    ...((dojAdaMapping?.triggeredSignals ?? []).map((signal) => signal.label)),
+    ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) => `${subscore.label} subscore ${subscore.score}`))
   ].filter(Boolean) as string[];
 
   const adaSummary =
@@ -313,7 +316,7 @@ export function buildRegulatoryLenses(
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
         ? "Accessibility barriers and disclosure gaps are the main issue."
         : "Accessibility support and disclosure posture needs work.";
-  const adaScore = clampScore(100 - (accessibilityRiskScore ?? 50));
+  const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
   const adaTone = buildTone(adaScore);
 
   lenses.push({
