@@ -34,7 +34,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
   return (
     <main className="min-h-screen bg-white">
       <SiteHeader />
-      <section className="mx-auto max-w-6xl px-6 py-16">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-11">
         <SharedScanDetailView
           autoRefresh={<ScanStatusAutoRefresh status={scanRecord.scan.status} />}
           headerActions={
