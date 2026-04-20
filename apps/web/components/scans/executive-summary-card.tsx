@@ -113,51 +113,6 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
   }
 }
 
-function buildFinancialClaimsLens(financialClaimFindings: CertScoreFinding[]): RegulatoryLens {
-  if (financialClaimFindings.length === 0) {
-    const tone = buildTone(88);
-    return {
-      acronym: "Financial & commercial claims",
-      detailTitle: "Claims, urgency, and pricing disclosures",
-      findings: [],
-      ratingLabel: tone.label,
-      score: 88,
-      summary: "No significant financial or commercial claims issues found.",
-      toneClass: tone.toneClass
-    };
-  }
-
-  const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
-  const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
-    switch (finding.severity) {
-      case "critical":
-        return total + 24;
-      case "high":
-        return total + 20;
-      case "medium":
-        return total + 14;
-      default:
-        return total + 8;
-    }
-  }, 0);
-  const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialClaimFindings.length - 1) * 6);
-  const financialTone = buildTone(financialScore);
-
-  return {
-    acronym: "Financial & commercial claims",
-    detailTitle: "Claims, urgency, and pricing disclosures",
-    findings: financialFindings,
-    ratingLabel: financialTone.label,
-    score: financialScore,
-    summary:
-      financialClaimFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
-      financialClaimFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
-        ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
-        : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
-    toneClass: financialTone.toneClass
-  };
-}
-
 export type ExecutiveAccessLimitationNotice = {
   coverageLabel: string;
   headline: string;
@@ -353,7 +308,37 @@ export function buildRegulatoryLenses(
       hasStrongAdaDriver);
 
   if (!shouldIncludeAdaLens) {
-    lenses.push(buildFinancialClaimsLens(financialClaimFindings));
+    if (financialClaimFindings.length > 0) {
+      const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
+      const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
+        switch (finding.severity) {
+          case "critical":
+            return total + 24;
+          case "high":
+            return total + 20;
+          case "medium":
+            return total + 14;
+          default:
+            return total + 8;
+        }
+      }, 0);
+      const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialClaimFindings.length - 1) * 6);
+      const financialTone = buildTone(financialScore);
+
+      lenses.push({
+        acronym: "Financial & commercial claims",
+        detailTitle: "Claims, urgency, and pricing disclosures",
+        findings: financialFindings,
+        ratingLabel: financialTone.label,
+        score: financialScore,
+        summary:
+          financialClaimFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
+          financialClaimFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+            ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
+            : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+        toneClass: financialTone.toneClass
+      });
+    }
     return lenses;
   }
 
@@ -414,7 +399,37 @@ export function buildRegulatoryLenses(
     toneClass: adaTone.toneClass
   });
 
-  lenses.push(buildFinancialClaimsLens(financialClaimFindings));
+  if (financialClaimFindings.length > 0) {
+    const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
+    const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
+      switch (finding.severity) {
+        case "critical":
+          return total + 24;
+        case "high":
+          return total + 20;
+        case "medium":
+          return total + 14;
+        default:
+          return total + 8;
+      }
+    }, 0);
+    const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialClaimFindings.length - 1) * 6);
+    const financialTone = buildTone(financialScore);
+
+    lenses.push({
+      acronym: "Financial & commercial claims",
+      detailTitle: "Claims, urgency, and pricing disclosures",
+      findings: financialFindings,
+      ratingLabel: financialTone.label,
+      score: financialScore,
+      summary:
+        financialClaimFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
+        financialClaimFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+          ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
+          : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+      toneClass: financialTone.toneClass
+    });
+  }
 
   return lenses;
 }
