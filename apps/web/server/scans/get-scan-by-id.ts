@@ -38,6 +38,7 @@ import {
   collectPolicyEvidenceHashes,
   dereferencePolicyEvidenceSnippets
 } from "./policy-enrichment-normalization";
+import { z } from "zod";
 import {
   insertScanEventRecord,
   loadPolicyEvidenceByHash,
@@ -1170,10 +1171,15 @@ export async function getScanById(input: { organizationId: string; scanId: strin
 }
 
 export async function getAnonymousScanById(scanId: string) {
+  const parsedScanId = z.string().uuid().safeParse(scanId);
+  if (!parsedScanId.success) {
+    return null;
+  }
+
   return loadScanDetailRecord({
     anonymousOnly: true,
     organizationId: null,
-    scanId,
+    scanId: parsedScanId.data,
     viewerEmail: null
   });
 }
