@@ -83,6 +83,7 @@ type RegulatoryLens = {
   summary: string;
   toneClass: string;
   findings: string[];
+  minimal?: boolean;
 };
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
@@ -111,6 +112,27 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
     default:
       return finding.shortSummary;
   }
+}
+
+function buildMinimalRegulatoryLens(input: {
+  acronym: string;
+  detailTitle: string;
+  score?: number;
+  summary: string;
+}) {
+  const score = input.score ?? 88;
+  const tone = buildTone(score);
+
+  return {
+    acronym: input.acronym,
+    detailTitle: input.detailTitle,
+    findings: [],
+    minimal: true,
+    ratingLabel: tone.label,
+    score,
+    summary: input.summary,
+    toneClass: tone.toneClass
+  } satisfies RegulatoryLens;
 }
 
 export type ExecutiveAccessLimitationNotice = {
@@ -322,6 +344,15 @@ export function buildRegulatoryLenses(
     (hasSignificantAccessibilitySignals || hasStrongAdaDriver);
 
   if (!shouldIncludeAdaLens) {
+    lenses.push(
+      buildMinimalRegulatoryLens({
+        acronym: "DOJ / ADA accessibility",
+        detailTitle: "Accessibility and digital access issues",
+        score: 88,
+        summary: "No significant accessibility issues found."
+      })
+    );
+
     if (financialClaimFindings.length > 0) {
       const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
       const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
@@ -352,6 +383,15 @@ export function buildRegulatoryLenses(
             : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
         toneClass: financialTone.toneClass
       });
+    } else {
+      lenses.push(
+        buildMinimalRegulatoryLens({
+          acronym: "Financial & commercial claims",
+          detailTitle: "Claims, urgency, and pricing disclosures",
+          score: 88,
+          summary: "No significant financial or commercial claims issues found."
+        })
+      );
     }
     return lenses;
   }
@@ -435,6 +475,15 @@ export function buildRegulatoryLenses(
           : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
       toneClass: financialTone.toneClass
     });
+  } else {
+    lenses.push(
+      buildMinimalRegulatoryLens({
+        acronym: "Financial & commercial claims",
+        detailTitle: "Claims, urgency, and pricing disclosures",
+        score: 88,
+        summary: "No significant financial or commercial claims issues found."
+      })
+    );
   }
 
   return lenses;
@@ -1150,42 +1199,62 @@ export function ExecutiveSummaryCard(input: {
               <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
                 <div className="mt-3 space-y-3">
-                  {regulatoryLenses.map((lens) => (
-                    <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
-                      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{lens.acronym}</p>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                              {lens.ratingLabel}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
-                          <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                          <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
-                        </div>
-                      </summary>
-                      <div className="mt-3 border-t border-slate-200 pt-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {lens.findings.length > 0 ? (
-                            lens.findings.map((item) => (
-                              <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                                {item}
+                  {regulatoryLenses.map((lens) =>
+                    lens.minimal ? (
+                      <div key={lens.acronym} className="rounded-xl border border-slate-200 bg-slate-50/55 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                                {lens.ratingLabel}
                               </span>
-                            ))
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                              No top-level issue mapped here
-                            </span>
-                          )}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
+                            <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                          </div>
                         </div>
                       </div>
-                    </details>
-                  ))}
+                    ) : (
+                      <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
+                        <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                                {lens.ratingLabel}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
+                            <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                            <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
+                          </div>
+                        </summary>
+                        <div className="mt-3 border-t border-slate-200 pt-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {lens.findings.length > 0 ? (
+                              lens.findings.map((item) => (
+                                <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                                  {item}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                                No top-level issue mapped here
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    )
+                  )}
                 </div>
               </div>
             </>

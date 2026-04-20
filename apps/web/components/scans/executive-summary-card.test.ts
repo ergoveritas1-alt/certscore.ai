@@ -131,7 +131,7 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   );
 });
 
-test("buildRegulatoryLenses omits DOJ / ADA accessibility when no significant accessibility findings are present", () => {
+test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when no significant findings are present", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -156,10 +156,16 @@ test("buildRegulatoryLenses omits DOJ / ADA accessibility when no significant ac
   );
 
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.equal(adaLens, undefined);
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(adaLens);
+  assert.ok(financialLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(financialLens?.minimal, true);
+  assert.equal(adaLens?.summary, "No significant accessibility issues found.");
+  assert.equal(financialLens?.summary, "No significant financial or commercial claims issues found.");
 });
 
-test("buildRegulatoryLenses omits DOJ / ADA accessibility when accessibility signals remain low-signal", () => {
+test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessibility signals remain low-signal", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -184,7 +190,11 @@ test("buildRegulatoryLenses omits DOJ / ADA accessibility when accessibility sig
   );
 
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.equal(adaLens, undefined);
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(adaLens);
+  assert.ok(financialLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(financialLens?.minimal, true);
 });
 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
@@ -223,6 +233,7 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
   const financialLens = lenses.at(-1);
   assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
   assert.match(financialLens?.summary ?? "", /claims|pricing/i);
+  assert.equal(financialLens?.minimal, undefined);
   assert.match(financialLens?.findings.join(" ") ?? "", /Earnings-style claim surfaced/);
   assert.match(financialLens?.findings.join(" ") ?? "", /Pricing or fee disclosure remains unclear/);
 });
@@ -248,6 +259,19 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
       thirdPartyRequestCount: 85,
       thirdPartyDomains: ["www.paypalobjects.com", "www.googletagmanager.com"],
       topFindings: [],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: []
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      }),
       topObservedEntities: [{ label: "Google Tag Manager", category: "cdn_infra", requestCount: 12 }],
       trackerSummary: "1 vendor across 5 third-party domains",
       unresolvedVendorHosts: [],
@@ -258,6 +282,10 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
   assert.match(html, /Primary concerns:<\/span> No headline findings surfaced from the available scan coverage\./);
   assert.match(html, /Highest-priority issues/);
   assert.match(html, /Review the supporting evidence below for lower-priority signals and scan context\./);
+  assert.match(html, /DOJ \/ ADA accessibility/);
+  assert.match(html, /Financial &amp; commercial claims/);
+  assert.match(html, /No significant accessibility issues found\./);
+  assert.match(html, /No significant financial or commercial claims issues found\./);
 });
 
 test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () => {
