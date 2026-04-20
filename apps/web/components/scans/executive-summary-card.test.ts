@@ -462,3 +462,42 @@ test("ExecutiveSummaryCard renders DOJ / ADA accessibility with accessibility-sp
   assert.match(html, /Accessibility statement not detected/);
   assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);
 });
+
+test("ExecutiveSummaryCard renders regulatory score bars with fractional segment fill", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 0,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Top 10k",
+        expectedCookiesBeforeConsent: 1,
+        expectedOverallScore: 60,
+        expectedThirdPartyRequests: 12,
+        industry: "Social",
+        rationale: "test"
+      },
+      finalHost: "facebook.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "Low",
+      fingerprintNarrative: "No notable fingerprinting indicators.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-20T17:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "facebook.com",
+      resolvedVendorNames: [],
+      score: 53,
+      sessionReplayVendorNames: [],
+      thirdPartyDomains: [],
+      thirdPartyRequestCount: 46,
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "Minimal footprint",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /width:20(?:\.\d+)?%/);
+});

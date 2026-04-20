@@ -333,18 +333,39 @@ export function buildRegulatoryLenses(
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
-  const filledSegments = Math.max(1, Math.min(5, Math.round(input.score / 20)));
+  const normalizedScore = clampScore(input.score);
+  const ratingBucket = normalizedScore / 20;
+  const segmentBorderClass = input.toneClass.includes("emerald")
+    ? "border-emerald-200"
+    : input.toneClass.includes("amber")
+      ? "border-amber-200"
+      : "border-rose-200";
+  const segmentFillClass = input.toneClass.includes("emerald")
+    ? "bg-emerald-200"
+    : input.toneClass.includes("amber")
+      ? "bg-amber-200"
+      : "bg-rose-200";
 
   return (
     <div className="flex items-center gap-1.5">
-      {Array.from({ length: 5 }, (_, index) => (
-        <span
-          key={index}
-          className={`h-2.5 w-7 rounded-full border ${
-            index < filledSegments ? input.toneClass : "border-slate-200 bg-slate-100 text-transparent"
-          }`}
-        />
-      ))}
+      {Array.from({ length: 5 }, (_, index) => {
+        const segmentFill = Math.max(0, Math.min(1, ratingBucket - index));
+        const isActive = segmentFill > 0;
+
+        return (
+          <span
+            key={index}
+            className={`relative h-2.5 w-7 overflow-hidden rounded-full border ${
+              isActive ? segmentBorderClass : "border-slate-200"
+            } bg-slate-100`}
+          >
+            <span
+              className={`absolute inset-y-0 left-0 rounded-full ${segmentFillClass}`}
+              style={{ width: `${segmentFill * 100}%` }}
+            />
+          </span>
+        );
+      })}
     </div>
   );
 }
