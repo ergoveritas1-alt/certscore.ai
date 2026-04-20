@@ -1310,16 +1310,26 @@ const FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE = 0.78;
 const FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE = 0.72;
 
 const CLAIM_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  { label: "earnings", pattern: /\b(earn(?:ings?|ed)?|income|profit|profitable|passive income|make \$|make up to|per month)\b/i },
+  { label: "earnings", pattern: /\b(earn(?:ings?|ed)?|income|profit|profitable|passive income|make \$|make up to|per month|payouts?)\b/i },
   { label: "returns", pattern: /\b(return|yield|apy|apr|roi|gain|grow your money|double your money|high return)\b/i },
   { label: "guarantee", pattern: /\b(guarantee(?:d)?|risk[- ]free|surefire|certain returns?|can't lose|never lose)\b/i },
   { label: "simulated", pattern: /\b(backtest(?:ed)?|simulated?|hypothetical|paper trading|demo results?)\b/i },
-  { label: "superlative", pattern: /\b(best|#1|top[- ]rated|highest returns?|safest|lowest fees?|unbeatable|industry[- ]leading)\b/i },
+  { label: "superlative", pattern: /\b(best|#1|top[- ]rated|highest returns?|safest|lowest fees?|unbeatable|industry[- ]leading|premium)\b/i },
   { label: "urgency", pattern: /\b(act now|limited time|ends (today|soon)|spots? left|deadline|before it'?s gone|don'?t miss out)\b/i },
-  { label: "cta", pattern: /\b(sign up|join now|get started|start now|subscribe|buy now|enroll now|claim offer|upgrade now|apply now)\b/i },
+  { label: "cta", pattern: /\b(sign up|join now|join for free|get started|start now|subscribe|buy now|enroll now|claim offer|upgrade now|apply now|start your trading journey today|get access now)\b/i },
   { label: "pricing", pattern: /\b(price|pricing|plan|plans|subscription|membership|fee|fees|cost|costs|billing|billed|rate|rates|trial)\b/i },
   { label: "currency", pattern: /[$€£]\s?\d|\b\d+(?:,\d{3})*(?:\.\d+)?\s?(?:usd|eur|gbp|dollars?)\b/i },
-  { label: "percent", pattern: /\b\d+(?:\.\d+)?%\b/i }
+  { label: "percent", pattern: /\b\d+(?:\.\d+)?%\b/i },
+  {
+    label: "investment_context",
+    pattern:
+      /\b(forex|trading|trader|signals?|signal provider|market breakdowns?|risk management strategy|xauusd|investment|investor|investing|portfolio|crypto|stocks?|options?|futures?)\b/i
+  },
+  {
+    label: "results_social_proof",
+    pattern:
+      /\b(real results?|success stories?|community member results?|students? from around the world|consistently profitable|testimonials?|reviews?|full transparency)\b/i
+  }
 ];
 
 function trimBlockText(value: string | null | undefined, maxLength = 700) {
@@ -1369,10 +1379,39 @@ function scoreFinancialCommercialCandidate(signals: string[]) {
   if (signals.includes("pricing")) {
     score += 1;
   }
+  if (signals.includes("investment_context")) {
+    score += 1;
+  }
+  if (signals.includes("results_social_proof")) {
+    score += 1;
+  }
   if (signals.includes("urgency") && signals.includes("cta")) {
     score += 2;
   }
+  if (
+    signals.includes("investment_context") &&
+    (signals.includes("earnings") || signals.includes("returns") || signals.includes("superlative") || signals.includes("results_social_proof"))
+  ) {
+    score += 2;
+  }
   return score;
+}
+
+function isEarningsLikeFinancialClaim(input: {
+  blockText: string;
+  claimText: string | null;
+  claimType: string;
+}) {
+  if (input.claimType === "earnings_claim") {
+    return true;
+  }
+
+  if (input.claimType !== "return_performance_claim") {
+    return false;
+  }
+
+  const normalized = `${input.claimText ?? ""} ${input.blockText}`.toLowerCase();
+  return /\b(earn|earnings|income|profit|profitable|payout|make money|learn\s*&?\s*profit)\b/.test(normalized);
 }
 
 function isFinancialCommercialDocumentType(pageType: string | null) {
@@ -1588,7 +1627,11 @@ export async function deriveFinancialCommercialClaimFindings(input: ValidationAr
     }
 
     if (
-      classification.claimType === "earnings_claim" &&
+      isEarningsLikeFinancialClaim({
+        blockText: row.candidate.blockText,
+        claimText: classification.claimText,
+        claimType: classification.claimType
+      }) &&
       classification.claimPresent &&
       !classification.adjacentDisclosurePresent
     ) {

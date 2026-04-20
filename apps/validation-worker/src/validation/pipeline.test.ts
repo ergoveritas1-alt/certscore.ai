@@ -1858,6 +1858,73 @@ test("deriveFinancialCommercialClaimFindings emits earnings claim findings from 
   }
 });
 
+test("deriveFinancialCommercialClaimFindings treats trading profitability copy as earnings-like when nano returns performance claim", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.DATABASE_URL = "postgres://postgres:postgres@localhost:5432/test";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                claimPresent: true,
+                claimType: "return_performance_claim",
+                claimText: "Learn & profit from my trading ideas daily",
+                commercialContext: true,
+                contextType: "financial_offer",
+                adjacentDisclosurePresent: false,
+                adjacentDisclosureType: null,
+                adjacentDisclosureText: null,
+                guaranteeLanguage: false,
+                superlativeLanguage: false,
+                simulatedPerformanceLanguage: false,
+                urgencyPresent: false,
+                urgencyTiedToConversion: false,
+                pricingPresent: false,
+                feeDisclosurePresent: false,
+                confidence: 0.9,
+                rationaleShort: "Trading profitability language is presented as an outcome-oriented promotional claim."
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+
+  try {
+    const findings = await deriveFinancialCommercialClaimFindings(
+      buildArtifacts({
+        documentSources: [
+          {
+            document_type: "marketing_page",
+            canonical_url: "https://www.example.com/trading-community",
+            title: "Trading Community",
+            document_text:
+              "Join my free trading community and learn & profit from my trading ideas daily.\n\nCommunity member results. Real students, real results, real success stories."
+          }
+        ],
+        snapshot: {}
+      })
+    );
+
+    const earningsFinding = findings.find((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure");
+    assert.ok(earningsFinding);
+    assert.equal(earningsFinding?.pageUrl, "https://www.example.com/trading-community");
+    assert.equal(earningsFinding?.evidence.claim_text, "Learn & profit from my trading ideas daily");
+    assert.deepEqual(earningsFinding?.evidence.candidate_signals, ["earnings", "investment_context"]);
+  } finally {
+    process.env.OPENAI_API_KEY = originalKey;
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");

@@ -230,6 +230,40 @@ export const FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED: FinancialCommercialClaims
     }
   }),
   example({
+    id: "trading-profitability-community-claim",
+    split: "eval",
+    notes: "Trading-community profitability language without balancing disclosure should still count as a qualifying commercial claim.",
+    input: {
+      adjacentAfter: "Join for free today.",
+      adjacentBefore: "Trading community",
+      blockHeading: "Learn and profit",
+      blockText: "Join my free trading community and learn & profit from my trading ideas daily.",
+      candidateSignals: ["earnings", "cta", "investment_context"],
+      pageType: "marketing_page",
+      pageUrl: "https://example.com/trading-community",
+      sourceType: "document_source"
+    },
+    expected: {
+      claimPresent: true,
+      claimType: "return_performance_claim",
+      claimText: "learn & profit from my trading ideas daily",
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: false,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: false,
+      feeDisclosurePresent: false,
+      confidence: 0.84,
+      rationaleShort: "Trading profitability language is presented as a promotional outcome near a join CTA."
+    }
+  }),
+  example({
     id: "educational-article-negative",
     split: "eval",
     notes: "Negative control: finance-adjacent educational content without a commercial claim should be rejected.",
