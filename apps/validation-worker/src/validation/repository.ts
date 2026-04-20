@@ -181,6 +181,7 @@ export type ValidationRunLease = {
 
 export type NanoSignalScanLease = {
   client: PoolClient;
+  recovered: boolean;
   scanId: string;
 };
 
@@ -908,25 +909,51 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
   const client = await getWritePool().connect();
 
   try {
-    const result = await client.query<{ requested_at: string; scan_id: string }>(
+    const result = await client.query<{ recovered: boolean; requested_at: string; scan_id: string }>(
       `
         with requested as (
-          select scan_id, max(created_at) as requested_at
+          select scan_id, max(created_at) as requested_at, false as recovered
           from scan_events
           where event_type = $1
             and scan_id is not null
           group by scan_id
+        ),
+        recovered as (
+          select
+            scans.id as scan_id,
+            coalesce(scans.completed_at, scans.updated_at, scans.created_at) as requested_at,
+            true as recovered
+          from scans
+          where scans.status = 'completed'
+            and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
+            and not exists (
+              select 1
+              from scan_events requested
+              where requested.scan_id = scans.id
+                and requested.event_type = $1
+            )
+            and not exists (
+              select 1
+              from scan_events terminal
+              where terminal.scan_id = scans.id
+                and terminal.event_type in ($2, $3)
+            )
+        ),
+        candidates as (
+          select scan_id, requested_at, recovered from requested
+          union all
+          select scan_id, requested_at, recovered from recovered
         )
-        select requested.scan_id, requested.requested_at
-        from requested
+        select candidates.scan_id, candidates.requested_at, candidates.recovered
+        from candidates
         where not exists (
           select 1
           from scan_events completed
-          where completed.scan_id = requested.scan_id
+          where completed.scan_id = candidates.scan_id
             and completed.event_type in ($2, $3)
-            and completed.created_at >= requested.requested_at
+            and completed.created_at >= candidates.requested_at
         )
-        order by requested.requested_at asc
+        order by candidates.requested_at asc
         limit $4
       `,
       [
@@ -946,6 +973,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
       if (lockResult.rows[0]?.locked) {
         return {
           client,
+          recovered: row.recovered,
           scanId: row.scan_id
         };
       }
