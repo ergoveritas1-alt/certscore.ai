@@ -290,6 +290,14 @@ export function buildRegulatoryLenses(
   const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
   const accessibilitySignals = options?.accessibilitySignals ?? null;
   const accessibilityRiskScore = options?.regulatoryRisk?.accessibilityEnforcementRiskScore ?? null;
+  const wcagErrorCountTotal = accessibilitySignals?.wcagErrorCountTotal ?? null;
+  const wcagFormLabelErrorCount = accessibilitySignals?.wcagFormLabelErrorCount ?? null;
+  const wcagKeyboardNavigationIssueCount = accessibilitySignals?.wcagKeyboardNavigationIssueCount ?? null;
+  const wcagMissingAltCount = accessibilitySignals?.wcagMissingAltCount ?? null;
+  const accessibilityStatementPresent = accessibilitySignals?.accessibilityStatementPresent ?? null;
+  const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
+  const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
+  const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
   const strongAdaDriverLabels = new Set([
     "Accessibility claim mismatch",
     "High automated WCAG issue count",
@@ -299,13 +307,19 @@ export function buildRegulatoryLenses(
     "Elevated ADA demand-letter exposure"
   ]);
   const hasStrongAdaDriver = Boolean(dojAdaMapping?.triggeredSignals.some((signal) => strongAdaDriverLabels.has(signal.label)));
+  const hasSignificantAccessibilitySignals =
+    accessibilityClaimMismatchDetected === true ||
+    accessibilityStatementPresent === false ||
+    (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+    (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
+    (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0) ||
+    (typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5) ||
+    (typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45) ||
+    (typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45) ||
+    (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45);
   const shouldIncludeAdaLens =
     dojAdaMapping !== undefined &&
-    (dojAdaMapping.relevanceLevel === "high" ||
-      dojAdaMapping.relevanceLevel === "moderate" ||
-      dojAdaMapping.relevanceLevel === "limited" ||
-      (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 20) ||
-      hasStrongAdaDriver);
+    (hasSignificantAccessibilitySignals || hasStrongAdaDriver);
 
   if (!shouldIncludeAdaLens) {
     if (financialClaimFindings.length > 0) {
@@ -342,14 +356,6 @@ export function buildRegulatoryLenses(
     return lenses;
   }
 
-  const wcagErrorCountTotal = accessibilitySignals?.wcagErrorCountTotal ?? null;
-  const wcagFormLabelErrorCount = accessibilitySignals?.wcagFormLabelErrorCount ?? null;
-  const wcagKeyboardNavigationIssueCount = accessibilitySignals?.wcagKeyboardNavigationIssueCount ?? null;
-  const wcagMissingAltCount = accessibilitySignals?.wcagMissingAltCount ?? null;
-  const accessibilityStatementPresent = accessibilitySignals?.accessibilityStatementPresent ?? null;
-  const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
-  const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
-  const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
   const hasDirectAccessibilityStatementFinding = accessibilityStatementPresent === false;
   const normalizedAgencyFindingLabels = (dojAdaMapping?.triggeredSignals ?? [])
     .map((signal) => signal.label)

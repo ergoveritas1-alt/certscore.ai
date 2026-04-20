@@ -131,7 +131,7 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   );
 });
 
-test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA mappings with softer fallback copy", () => {
+test("buildRegulatoryLenses omits DOJ / ADA accessibility when no significant accessibility findings are present", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -156,13 +156,10 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA map
   );
 
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.ok(adaLens);
-  assert.equal(adaLens?.ratingLabel, "Strong");
-  assert.equal(adaLens?.summary, "No significant issues found.");
-  assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 2/);
+  assert.equal(adaLens, undefined);
 });
 
-test("buildRegulatoryLenses omits zero-value WCAG count detail from DOJ / ADA accessibility findings", () => {
+test("buildRegulatoryLenses omits DOJ / ADA accessibility when accessibility signals remain low-signal", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -187,8 +184,7 @@ test("buildRegulatoryLenses omits zero-value WCAG count detail from DOJ / ADA ac
   );
 
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.ok(adaLens);
-  assert.doesNotMatch(adaLens?.findings.join(" ") ?? "", /Automated WCAG issues detected: 0/);
+  assert.equal(adaLens, undefined);
 });
 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
