@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildActivityLineWithExecutionSummary,
-  hasPersistedSignalsMismatch
+  hasPersistedSignalsMismatch,
+  serializePreviewScan
 } from "./preview-scan-repository";
 
 test("hasPersistedSignalsMismatch detects degraded signal persistence behind a signals.persisted event", () => {
@@ -103,4 +104,72 @@ test("buildActivityLineWithExecutionSummary overrides misleading signals.persist
 
   assert.match(line ?? "", /degraded signal persistence/i);
   assert.doesNotMatch(line ?? "", /compatibility signals persisted/i);
+});
+
+test("serializePreviewScan does not treat nano enrichment completion as preview completion", () => {
+  const preview = serializePreviewScan({
+    domain: {
+      created_at: "2026-04-20T17:37:08.304Z",
+      hostname: "facebook.com",
+      id: "domain-1",
+      latest_scan_id: "scan-1",
+      normalized_url: "https://facebook.com/",
+      organization_id: null,
+      updated_at: "2026-04-20T17:37:08.304Z"
+    },
+    events: [
+      {
+        created_at: "2026-04-20T17:37:08.361Z",
+        event_type: "preview_scan.queued",
+        message: "Preview scan queued.",
+        metadata_json: {
+          hostname: "facebook.com",
+          normalizedUrl: "https://facebook.com/"
+        }
+      },
+      {
+        created_at: "2026-04-20T17:38:44.602Z",
+        event_type: "signals.nano_doc_enrichment_completed",
+        message: "Nano document signal enrichment completed.",
+        metadata_json: {
+          stage: "nano_doc_signals"
+        }
+      }
+    ],
+    latestEvent: {
+      created_at: "2026-04-20T17:38:44.602Z",
+      event_type: "signals.nano_doc_enrichment_completed",
+      message: "Nano document signal enrichment completed.",
+      metadata_json: {
+        stage: "nano_doc_signals"
+      }
+    },
+    recentEvents: [],
+    runtimeArtifacts: null,
+    scan: {
+      completed_at: null,
+      created_at: "2026-04-20T17:37:08.304Z",
+      domain_id: "domain-1",
+      duration_ms: null,
+      error_message: null,
+      id: "scan-1",
+      organization_id: null,
+      pages_requested: 1,
+      pages_scanned: 0,
+      scan_config_json: {
+        hostname: "facebook.com",
+        normalizedUrl: "https://facebook.com/",
+        processor: "live-preview-v1"
+      },
+      scan_type: "preview",
+      started_at: null,
+      status: "queued",
+      submitted_by_user_id: null,
+      updated_at: "2026-04-20T17:37:08.304Z"
+    }
+  });
+
+  assert.equal(preview.status, "queued");
+  assert.equal(preview.completedAt, null);
+  assert.match(preview.activityLine ?? "", /waiting for a worker/i);
 });

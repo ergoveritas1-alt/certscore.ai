@@ -267,30 +267,18 @@ function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
 
   const completedAt =
     scan.completed_at ??
-    getLatestEventCreatedAt(lifecycleEvents, [
-      PREVIEW_SCAN_EVENT_TYPES.completed,
-      SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
-      SCAN_EVENT_TYPES.nanoDocRetrievalCompleted
-    ]);
+    getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.completed]);
   const failedAt =
     scan.status === "failed"
       ? scan.updated_at
-      : getLatestEventCreatedAt(lifecycleEvents, [
-          PREVIEW_SCAN_EVENT_TYPES.failed,
-          SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-          SCAN_EVENT_TYPES.nanoDocRetrievalFailed
-        ]);
+      : getLatestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.failed]);
   const latestEventAt = getLatestEventCreatedAt(
     lifecycleEvents,
     [...new Set(lifecycleEvents.map((event) => event.event_type))]
   );
   const startedAt =
     scan.started_at ??
-    getEarliestEventCreatedAt(lifecycleEvents, [
-      PREVIEW_SCAN_EVENT_TYPES.started,
-      SCAN_EVENT_TYPES.nanoDocRetrievalStarted,
-      SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted
-    ]);
+    getEarliestEventCreatedAt(lifecycleEvents, [PREVIEW_SCAN_EVENT_TYPES.started]);
   const staleRunning =
     !completedAt &&
     !failedAt &&
@@ -454,12 +442,12 @@ export function buildActivityLineWithExecutionSummary(
     return "Stage 7 completed with degraded signal persistence; snapshot, page metadata, and vendor rows were saved, but canonical scan signals were not fully persisted.";
   }
 
-  if (latestEvent?.message) {
-    return latestEvent.message;
-  }
-
   if (scan.status === "queued") {
     return "Waiting for a worker to pick up this lightweight live preview. · mode=lightweight-preview · target=1 page";
+  }
+
+  if (latestEvent?.message) {
+    return latestEvent.message;
   }
 
   if (scan.status === "running") {
@@ -480,7 +468,7 @@ function buildActivityDetails(
   const details = buildActivityTailParts(scan, latestEvent, executionSummary);
   const lines: string[] = [];
 
-  if (latestEvent) {
+  if (latestEvent && scan.status !== "queued") {
     lines.push(`evt=${latestEvent.event_type}`);
   }
 
