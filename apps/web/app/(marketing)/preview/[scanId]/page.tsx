@@ -104,7 +104,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   return (
     <main className="min-h-screen bg-white">
       <SiteHeader />
-      <section className="mx-auto max-w-6xl px-6 pb-16 pt-11">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-6">
         {scan ? (
           scan.status === "queued" || scan.status === "running" || scan.status === "failed" ? (
             <PreviewScanState initialScan={scan} />
