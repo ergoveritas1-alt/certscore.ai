@@ -117,8 +117,10 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
 function buildMinimalRegulatoryLens(input: {
   acronym: string;
   detailTitle: string;
+  ratingLabel?: string;
   score?: number;
   summary: string;
+  toneClass?: string;
 }) {
   const score = input.score ?? 88;
   const tone = buildTone(score);
@@ -128,10 +130,10 @@ function buildMinimalRegulatoryLens(input: {
     detailTitle: input.detailTitle,
     findings: [],
     minimal: true,
-    ratingLabel: tone.label,
+    ratingLabel: input.ratingLabel ?? tone.label,
     score,
     summary: input.summary,
-    toneClass: tone.toneClass
+    toneClass: input.toneClass ?? tone.toneClass
   } satisfies RegulatoryLens;
 }
 
@@ -388,8 +390,10 @@ export function buildRegulatoryLenses(
         buildMinimalRegulatoryLens({
           acronym: "Financial & commercial claims",
           detailTitle: "Claims, urgency, and pricing disclosures",
+          ratingLabel: "Not applicable",
           score: 88,
-          summary: "No significant financial or commercial claims issues found."
+          summary: "",
+          toneClass: "border-slate-200 bg-slate-50 text-slate-700"
         })
       );
     }
@@ -480,8 +484,10 @@ export function buildRegulatoryLenses(
       buildMinimalRegulatoryLens({
         acronym: "Financial & commercial claims",
         detailTitle: "Claims, urgency, and pricing disclosures",
+        ratingLabel: "Not applicable",
         score: 88,
-        summary: "No significant financial or commercial claims issues found."
+        summary: "",
+        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
       })
     );
   }
@@ -1210,7 +1216,7 @@ export function ExecutiveSummaryCard(input: {
                                 {lens.ratingLabel}
                               </span>
                             </div>
-                            <p className="mt-0.5 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                            {lens.summary ? <p className="mt-0.5 text-xs leading-5 text-slate-600">{lens.summary}</p> : null}
                           </div>
                           <div className="shrink-0" />
                         </div>

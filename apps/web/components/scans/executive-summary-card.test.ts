@@ -162,7 +162,8 @@ test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when
   assert.equal(adaLens?.minimal, true);
   assert.equal(financialLens?.minimal, true);
   assert.equal(adaLens?.summary, "No significant accessibility issues found.");
-  assert.equal(financialLens?.summary, "No significant financial or commercial claims issues found.");
+  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.summary, "");
 });
 
 test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessibility signals remain low-signal", () => {
@@ -195,6 +196,8 @@ test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessib
   assert.ok(financialLens);
   assert.equal(adaLens?.minimal, true);
   assert.equal(financialLens?.minimal, true);
+  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.summary, "");
 });
 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
@@ -285,7 +288,8 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
   assert.match(html, /DOJ \/ ADA accessibility/);
   assert.match(html, /Financial &amp; commercial claims/);
   assert.match(html, /No significant accessibility issues found\./);
-  assert.match(html, /No significant financial or commercial claims issues found\./);
+  assert.match(html, /Not applicable/);
+  assert.doesNotMatch(html, /No significant financial or commercial claims issues found\./);
 });
 
 test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () => {
