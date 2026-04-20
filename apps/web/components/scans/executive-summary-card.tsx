@@ -350,8 +350,10 @@ export function buildRegulatoryLenses(
       buildMinimalRegulatoryLens({
         acronym: "DOJ / ADA accessibility",
         detailTitle: "Accessibility and digital access issues",
+        ratingLabel: "Not applicable",
         score: 88,
-        summary: "No significant accessibility issues found."
+        summary: "",
+        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
       })
     );
 
