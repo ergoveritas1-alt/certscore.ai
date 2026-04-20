@@ -11,8 +11,8 @@
 - One Next.js web app for marketing, auth, dashboard, reports, and download routes
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
 - Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
-- The public web host for `certscore.ai` currently runs on the fixed-egress GCP VM behind Caddy
-- The `consentcheck-site` Vercel project is kept as a parity and review deployment lane for `apps/web`
+- The target web topology is two AWS Amplify Hosting apps that both build from `apps/web`
+- `certscore.ai` and `consentcheck.site` stay separate public hosts with separate env and domain settings even though they share code
 
 ## Execution model
 
@@ -31,9 +31,8 @@
 
 ## Deployment model
 
-- `certscore.ai` production traffic is currently served by the GCP web VM, not by the Vercel project alias
-- Vercel deploys are still useful for previewing and validating `apps/web`, but they are not sufficient by themselves to update the live host
-- Production verification should check the public host directly and confirm whether responses are coming from Caddy or Vercel before concluding a rollout path is healthy
+- Web deploys should be promoted through Git-connected Amplify apps rather than ad hoc VM or Vercel pushes
+- Production verification should check each public host directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
 
 ## Data model highlights
 

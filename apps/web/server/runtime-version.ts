@@ -1,6 +1,8 @@
-type RuntimeTarget = "gcp-vm" | "vercel" | "unknown";
+type RuntimeTarget = "amplify" | "gcp-vm" | "vercel" | "unknown";
 
 export type RuntimeVersionInfo = {
+  amplifyAppId: string | null;
+  amplifyBranch: string | null;
   appUrl: string | null;
   gitRef: string | null;
   gitSha: string | null;
@@ -28,6 +30,14 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
     return "vercel";
   }
 
+  if (
+    env.BUILD_RUNTIME_TARGET === "amplify" ||
+    normalizeNonEmptyString(env.AWS_APP_ID) ||
+    normalizeNonEmptyString(env.AWS_BRANCH)
+  ) {
+    return "amplify";
+  }
+
   if (env.BUILD_RUNTIME_TARGET === "gcp-vm") {
     return "gcp-vm";
   }
@@ -37,6 +47,8 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
 
 export function getRuntimeVersionInfo(env: NodeJS.ProcessEnv = process.env): RuntimeVersionInfo {
   return {
+    amplifyAppId: normalizeNonEmptyString(env.AWS_APP_ID),
+    amplifyBranch: normalizeNonEmptyString(env.AWS_BRANCH),
     appUrl: normalizeNonEmptyString(env.NEXT_PUBLIC_APP_URL),
     gitRef: normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_REF) ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
     gitSha: normalizeNonEmptyString(env.BUILD_GIT_SHA) ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_SHA),

@@ -204,18 +204,15 @@ Common commands:
 
 ### Web runtime
 
-- the active production web path for `certscore.ai` is the fixed-egress GCP web VM
-- Vercel remains a parity and review lane for `apps/web`, not the authoritative live host unless DNS is explicitly cut back over
-- the canonical Vercel project is `consentcheck-site`
-- the Vercel project root directory must stay `apps/web`
-- prefer pushing reviewed commits to GitHub first, then promote the same revision to the active runtime
-- do not treat repo-root `.vercel` linkage or the removed `apps/validation-web` path as valid production config
-- run `pnpm ops:check:deploy` before or after deployment changes to catch stale Vercel links, wrong GitHub remote wiring, or missing cloud context
-- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) to build and promote the web image to the live VM path
-- the live VM path terminates TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and uses `/etc/certscore-web.env` on the host
-- ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
-- redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
-- do not claim a web change is live on `certscore.ai` until the VM rollout has completed and the public host has been checked directly
+- the preferred web deployment target is two AWS Amplify Hosting apps backed by the same `apps/web` monorepo app:
+  - `certscore.ai`
+  - `consentcheck.site`
+- keep both Amplify apps pointed at the same GitHub repo and branch, with separate per-app environment variables and domains
+- use the checked-in [amplify.yml](/Users/benmasek/WC01/amplify.yml) and root [/.npmrc](/Users/benmasek/WC01/.npmrc) for pnpm monorepo builds
+- run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions and missing Amplify build inputs
+- run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after cutover
+- treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as the primary web deployment runbook
+- keep [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) and the Vercel linkage only as temporary rollback tooling until DNS and Amplify runtime checks are clean
 
 ### GCP worker pool
 

@@ -7,6 +7,12 @@ test("detectRuntimeTarget identifies Vercel runtime", () => {
   assert.equal(detectRuntimeTarget({ VERCEL_ENV: "production" } as NodeJS.ProcessEnv), "vercel");
 });
 
+test("detectRuntimeTarget identifies Amplify runtime", () => {
+  assert.equal(detectRuntimeTarget({ BUILD_RUNTIME_TARGET: "amplify" } as NodeJS.ProcessEnv), "amplify");
+  assert.equal(detectRuntimeTarget({ AWS_APP_ID: "d123example" } as NodeJS.ProcessEnv), "amplify");
+  assert.equal(detectRuntimeTarget({ AWS_BRANCH: "main" } as NodeJS.ProcessEnv), "amplify");
+});
+
 test("detectRuntimeTarget identifies VM runtime", () => {
   assert.equal(detectRuntimeTarget({ BUILD_RUNTIME_TARGET: "gcp-vm" } as NodeJS.ProcessEnv), "gcp-vm");
 });
@@ -27,4 +33,18 @@ test("getRuntimeVersionInfo prefers baked VM git sha when present", () => {
   assert.equal(info.gitRef, "main");
   assert.equal(info.imageTag, "abc123");
   assert.equal(info.appUrl, "https://certscore.ai");
+});
+
+test("getRuntimeVersionInfo exposes Amplify metadata when present", () => {
+  const info = getRuntimeVersionInfo({
+    AWS_APP_ID: "d123example",
+    AWS_BRANCH: "main",
+    BUILD_RUNTIME_TARGET: "amplify",
+    NEXT_PUBLIC_APP_URL: "https://consentcheck.site"
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(info.runtimeTarget, "amplify");
+  assert.equal(info.amplifyAppId, "d123example");
+  assert.equal(info.amplifyBranch, "main");
+  assert.equal(info.appUrl, "https://consentcheck.site");
 });

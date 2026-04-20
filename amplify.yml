@@ -1,0 +1,30 @@
+version: 1
+applications:
+  - appRoot: apps/web
+    env:
+      variables:
+        AMPLIFY_MONOREPO_APP_ROOT: apps/web
+        BUILD_RUNTIME_TARGET: amplify
+    frontend:
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - corepack enable
+            - pnpm config set store-dir .pnpm-store
+            - pnpm install --frozen-lockfile
+        build:
+          commands:
+            - rm -f apps/web/.env.production
+            - env | grep -e '^NEXT_PUBLIC_' >> apps/web/.env.production || true
+            - env | grep -e '^APP_FLAVOR=' -e '^VALIDATION_OPS_BASE_URL=' -e '^BUILD_RUNTIME_TARGET=' >> apps/web/.env.production || true
+            - pnpm --filter @website-signal-risk-scanner/web build
+      artifacts:
+        baseDirectory: apps/web/.next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - .pnpm-store/**/*
+          - node_modules/**/*
+          - apps/web/.next/cache/**/*

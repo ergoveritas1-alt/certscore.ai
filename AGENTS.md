@@ -5,20 +5,19 @@
 - Make changes in the repo, then stage the relevant files with `git add`.
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
-- Prefer Git-based deploy promotion where possible, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
-- Do not run `npx vercel deploy --prod` unless the user explicitly asks for a direct Vercel CLI deploy or the Git-based deploy path is unavailable.
+- Prefer Git-based deploy promotion through the connected AWS Amplify apps where possible, but verify which runtime is actually serving `certscore.ai` and `consentcheck.site` before claiming production is updated.
+- Do not run `npx vercel deploy --prod` unless the user explicitly asks for a direct Vercel CLI deploy or the Git-based Amplify path is unavailable.
 
 ## Production expectation
 
-- Treat the GCP web VM as the current production host for `certscore.ai` unless the user explicitly says production has been cut back to Vercel.
-- Treat the Vercel `consentcheck-site` project as a parity, preview, and review lane unless production DNS has been explicitly moved there.
-- A push to `main` is not enough to claim `certscore.ai` is live; for web changes, confirm whether a VM rollout is also required.
+- Treat dual AWS Amplify apps as the preferred target web topology:
+  1. `certscore.ai`
+  2. `consentcheck.site`
+- A push to `main` is not enough to claim either host is live; for web changes, confirm the intended Amplify app has completed a healthy build and the public host is serving the expected revision.
 - If the active production host is uncertain, call it out before claiming a change is live in production.
-- The canonical Vercel web project is `consentcheck-site`, and its root directory must stay `apps/web`.
-- Do not link repo root or the removed `apps/validation-web` path to the `consentcheck-site` Vercel project.
-- If the local Vercel link needs to be repaired, relink with `npx vercel link --yes --scope ergoveritas1-5549s-projects --project consentcheck-site --cwd apps/web`.
-- Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local links and wrong remotes before treating the path as healthy.
-- When validating the live `certscore.ai` host, prefer checking response headers for `server: Caddy` versus Vercel headers so you know which platform is serving traffic.
+- `apps/web` remains the canonical root for both web hosts in Amplify.
+- Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local assumptions and wrong remotes before treating the path as healthy.
+- Legacy GCP VM and Vercel files may remain temporarily as rollback tooling, but they are not the preferred steady-state web deployment path.
 
 ## Scope note
 

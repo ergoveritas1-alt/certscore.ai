@@ -1,11 +1,17 @@
-# Fallback Fixed-Egress Deploy To GCP VMs
+# Legacy Fallback Fixed-Egress Deploy To GCP VMs
 
-This repo is split across platforms:
+This document is now the rollback path, not the preferred web deploy path.
+
+Current target topology:
+
+- `apps/web` should deploy to two AWS Amplify Hosting apps, one for `certscore.ai` and one for `consentcheck.site`.
+- scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
+- validation worker runtime remains a separate worker-style deploy path.
+
+Legacy topology covered by this document:
 
 - `apps/web` still builds in Vercel for parity and review, but the active hardened production host for `consentcheck.site` is the fixed-egress GCP VM.
 - the GCP VM path in this document is the authoritative production lane for `apps/web` while the database ingress policy still requires fixed egress.
-- scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
-- validation worker runtime remains a separate worker-style deploy path.
 
 ## 1. Push the monorepo to Git
 
