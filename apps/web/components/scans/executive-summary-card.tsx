@@ -1201,8 +1201,8 @@ export function ExecutiveSummaryCard(input: {
                 <div className="mt-3 space-y-3">
                   {regulatoryLenses.map((lens) =>
                     lens.minimal ? (
-                      <div key={lens.acronym} className="rounded-xl border border-slate-200 bg-slate-50/55 px-3 py-3">
-                        <div className="flex items-start justify-between gap-3">
+                      <div key={lens.acronym} className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{lens.acronym}</p>
@@ -1210,12 +1210,9 @@ export function ExecutiveSummaryCard(input: {
                                 {lens.ratingLabel}
                               </span>
                             </div>
-                            <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                            <p className="mt-0.5 text-xs leading-5 text-slate-600">{lens.summary}</p>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
-                            <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                          </div>
+                          <div className="shrink-0" />
                         </div>
                       </div>
                     ) : (
