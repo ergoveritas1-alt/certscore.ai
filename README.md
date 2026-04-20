@@ -204,16 +204,18 @@ Common commands:
 
 ### Web runtime
 
-- the primary production web path is Vercel Git deployment from `main`
+- the active production web path for `certscore.ai` is the fixed-egress GCP web VM
+- Vercel remains a parity and review lane for `apps/web`, not the authoritative live host unless DNS is explicitly cut back over
 - the canonical Vercel project is `consentcheck-site`
 - the Vercel project root directory must stay `apps/web`
-- prefer pushing reviewed commits to GitHub and letting Vercel create the production deployment from the connected repo
+- prefer pushing reviewed commits to GitHub first, then promote the same revision to the active runtime
 - do not treat repo-root `.vercel` linkage or the removed `apps/validation-web` path as valid production config
 - run `pnpm ops:check:deploy` before or after deployment changes to catch stale Vercel links, wrong GitHub remote wiring, or missing cloud context
-- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) only as a fallback fixed-egress path when Vercel cannot reach required production dependencies and the team explicitly chooses the VM route
-- if the VM route is active, terminate TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and configure `/etc/certscore-web.env` on the host
+- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) to build and promote the web image to the live VM path
+- the live VM path terminates TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and uses `/etc/certscore-web.env` on the host
 - ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
 - redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
+- do not claim a web change is live on `certscore.ai` until the VM rollout has completed and the public host has been checked directly
 
 ### GCP worker pool
 

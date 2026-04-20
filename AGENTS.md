@@ -4,18 +4,21 @@
 
 - Make changes in the repo, then stage the relevant files with `git add`.
 - Create a commit with a clear message.
-- Push the branch to GitHub instead of deploying the current working tree directly to Vercel.
-- Prefer Git-based production deploys through the connected GitHub repository.
+- Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
+- Prefer Git-based deploy promotion where possible, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 - Do not run `npx vercel deploy --prod` unless the user explicitly asks for a direct Vercel CLI deploy or the Git-based deploy path is unavailable.
 
 ## Production expectation
 
-- Treat a push to `main` as the preferred way to promote web changes, since the Vercel project is configured to auto-deploy production from `main`.
-- If that Git-to-Vercel linkage is uncertain, call it out before claiming a change is live in production.
+- Treat the GCP web VM as the current production host for `certscore.ai` unless the user explicitly says production has been cut back to Vercel.
+- Treat the Vercel `consentcheck-site` project as a parity, preview, and review lane unless production DNS has been explicitly moved there.
+- A push to `main` is not enough to claim `certscore.ai` is live; for web changes, confirm whether a VM rollout is also required.
+- If the active production host is uncertain, call it out before claiming a change is live in production.
 - The canonical Vercel web project is `consentcheck-site`, and its root directory must stay `apps/web`.
-- Do not link repo root or the removed `apps/validation-web` path to the production Vercel project.
+- Do not link repo root or the removed `apps/validation-web` path to the `consentcheck-site` Vercel project.
 - If the local Vercel link needs to be repaired, relink with `npx vercel link --yes --scope ergoveritas1-5549s-projects --project consentcheck-site --cwd apps/web`.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local links and wrong remotes before treating the path as healthy.
+- When validating the live `certscore.ai` host, prefer checking response headers for `server: Caddy` versus Vercel headers so you know which platform is serving traffic.
 
 ## Scope note
 

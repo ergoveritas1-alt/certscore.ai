@@ -11,7 +11,8 @@
 - One Next.js web app for marketing, auth, dashboard, reports, and download routes
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
 - Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
-- Upstash Redis plus BullMQ for queueing
+- The public web host for `certscore.ai` currently runs on the fixed-egress GCP VM behind Caddy
+- The `consentcheck-site` Vercel project is kept as a parity and review deployment lane for `apps/web`
 
 ## Execution model
 
@@ -27,6 +28,12 @@
   - persist findings, scores, reports, and regressions
   - generate and upload PDFs
   - enqueue scheduled rescans
+
+## Deployment model
+
+- `certscore.ai` production traffic is currently served by the GCP web VM, not by the Vercel project alias
+- Vercel deploys are still useful for previewing and validating `apps/web`, but they are not sufficient by themselves to update the live host
+- Production verification should check the public host directly and confirm whether responses are coming from Caddy or Vercel before concluding a rollout path is healthy
 
 ## Data model highlights
 
