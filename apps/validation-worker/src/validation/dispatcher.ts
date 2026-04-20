@@ -1,4 +1,5 @@
 import {
+  appendScanWorkflowEvent,
   claimNextNanoSignalScanLease,
   claimNextValidationRunLease,
   getValidationPipelineState,
@@ -7,6 +8,7 @@ import {
   type NanoSignalScanLease,
   type ValidationRunLease
 } from "./repository";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   processNanoSignalEnrichmentJob,
   processValidationCollectJob,
@@ -55,6 +57,18 @@ async function dispatchValidationRun(lease: ValidationRunLease) {
 }
 
 async function dispatchNanoSignalScan(lease: NanoSignalScanLease) {
+  if (lease.recovered) {
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+      message: "Nano document signal enrichment requested.",
+      metadataJson: {
+        recoveryMode: "completed_scan_backfill",
+        stage: "nano_doc_signals"
+      },
+      scanId: lease.scanId
+    }).catch(() => undefined);
+  }
+
   await processNanoSignalEnrichmentJob({
     pollCount: 0,
     scanId: lease.scanId
@@ -119,6 +133,7 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
 
       try {
         console.info("[validation-worker] nano signal scan claimed", {
+          recovered: scanLease.recovered,
           scanId: scanLease.scanId,
           slot
         });
