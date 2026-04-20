@@ -131,6 +131,40 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   );
 });
 
+test("buildRegulatoryLenses keeps ADA minimal when accessibility statement is the only missing signal", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: false,
+        wcagErrorCountTotal: 0,
+        wcagFormLabelErrorCount: 0,
+        wcagKeyboardNavigationIssueCount: 0,
+        wcagMissingAltCount: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  assert.ok(adaLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.summary, "");
+});
+
 test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when no significant findings are present", () => {
   const lenses = buildRegulatoryLenses(
     [],

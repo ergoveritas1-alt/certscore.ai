@@ -331,9 +331,19 @@ export function buildRegulatoryLenses(
     "Elevated ADA demand-letter exposure"
   ]);
   const hasStrongAdaDriver = Boolean(dojAdaMapping?.triggeredSignals.some((signal) => strongAdaDriverLabels.has(signal.label)));
+  const hasOnlyAccessibilityStatementMissingSignal =
+    accessibilityStatementPresent === false &&
+    accessibilityClaimMismatchDetected !== true &&
+    !((typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20)) &&
+    !((typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0)) &&
+    !((typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)) &&
+    !((typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5)) &&
+    !((typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45)) &&
+    !((typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45)) &&
+    !((typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45)) &&
+    !hasStrongAdaDriver;
   const hasSignificantAccessibilitySignals =
     accessibilityClaimMismatchDetected === true ||
-    accessibilityStatementPresent === false ||
     (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
     (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
     (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0) ||
@@ -343,7 +353,7 @@ export function buildRegulatoryLenses(
     (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45);
   const shouldIncludeAdaLens =
     dojAdaMapping !== undefined &&
-    (hasSignificantAccessibilitySignals || hasStrongAdaDriver);
+    (hasSignificantAccessibilitySignals || (hasStrongAdaDriver && !hasOnlyAccessibilityStatementMissingSignal));
 
   if (!shouldIncludeAdaLens) {
     lenses.push(
