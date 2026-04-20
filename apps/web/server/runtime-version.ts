@@ -1,5 +1,4 @@
 import { generatedBuildInfo } from "./generated-build-info";
-
 type RuntimeTarget = "amplify" | "gcp-vm" | "vercel" | "unknown";
 
 export type RuntimeVersionInfo = {
