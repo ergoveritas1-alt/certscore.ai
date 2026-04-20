@@ -191,6 +191,46 @@ test("buildRegulatoryLenses omits zero-value WCAG count detail from DOJ / ADA ac
   assert.doesNotMatch(adaLens?.findings.join(" ") ?? "", /Automated WCAG issues detected: 0/);
 });
 
+test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
+        severity: "high",
+        shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
+      }),
+      makeFinding("pricing_or_fee_transparency_unclear", "Pricing or fee transparency unclear", {
+        severity: "medium",
+        shortSummary: "Pricing details were not clearly visible near the conversion path."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 2
+      },
+      agencyMappings: [makeAgencyMapping()],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  assert.deepEqual(
+    lenses.map((lens) => lens.acronym),
+    ["GDPR / ePrivacy", "CCPA / CPRA", "FTC", "DOJ / ADA accessibility", "Financial & commercial claims"]
+  );
+
+  const financialLens = lenses.at(-1);
+  assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
+  assert.match(financialLens?.summary ?? "", /claims|pricing/i);
+  assert.match(financialLens?.findings.join(" ") ?? "", /Earnings-style claim surfaced/);
+  assert.match(financialLens?.findings.join(" ") ?? "", /Pricing or fee disclosure remains unclear/);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

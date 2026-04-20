@@ -38,7 +38,7 @@ test("defines the v1 pillar order", () => {
 });
 
 test("keeps each section attached to exactly one pillar", () => {
-  assert.equal(REPORT_SECTIONS.length, 19);
+  assert.equal(REPORT_SECTIONS.length, 20);
   assert.ok(
     REPORT_SECTIONS.every((section) =>
       REPORT_PRIMARY_PILLARS.some((pillar) => pillar.id === section.pillarId && pillar.sectionIds.includes(section.id))
@@ -47,7 +47,7 @@ test("keeps each section attached to exactly one pillar", () => {
 });
 
 test("keeps each evidence category attached to exactly one section", () => {
-  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 70);
+  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 73);
   assert.ok(
     REPORT_EVIDENCE_CATEGORIES.every((category) =>
       REPORT_SECTIONS.some(
@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 126);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 136);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -304,12 +304,12 @@ test("returns signals attached to an evidence category by relation", () => {
       "snapshot_signal:privacy.sale_sharing_controls_missing",
       "snapshot_signal:privacy.consent_withdrawal_mechanism_present",
       "snapshot_signal:privacy.user_rights_friction_score",
-      "policy_enrichment_signal:policyDsarMechanism",
+      "document_semantic_signal:policyDsarMechanism",
       "snapshot_signal:privacy.privacy_contact_channel_missing",
-      "policy_enrichment_signal:policyDoNotSell",
-      "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected",
-      "policy_enrichment_signal:policyRightsSignals",
-      "policy_enrichment_signal:privacy.gpc_disclosure_present"
+      "document_semantic_signal:policyDoNotSell",
+      "document_semantic_signal:privacy.policy_runtime_functional_misalignment_detected",
+      "document_semantic_signal:policyRightsSignals",
+      "document_semantic_signal:privacy.gpc_disclosure_present"
     ]
   );
 });
@@ -370,51 +370,51 @@ test("maps signals and validation rules into unified findings", () => {
     "sale_sharing_controls_missing"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "policyRightsSignals")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "policyRightsSignals")?.id,
     "privacy_rights_path_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.privacy_rights_path_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_rights_path_present")?.id,
     "privacy_rights_path_present"
-  );
-  assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.privacy_contact_path_present")?.id,
-    "privacy_contact_path_present"
-  );
-  assert.equal(
-    getReportUnifiedFindingForSignal("document_semantic_signal", "privacyContactChannelType"),
-    undefined
   );
   assert.equal(
     getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_contact_path_present")?.id,
     "privacy_contact_path_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.gpc_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacyContactChannelType"),
+    null
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_contact_path_present")?.id,
+    "privacy_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.gpc_disclosure_present")?.id,
     "gpc_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.tracking_technologies_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.tracking_technologies_disclosure_present")?.id,
     "tracking_technologies_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.targeted_advertising_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.targeted_advertising_disclosure_present")?.id,
     "targeted_advertising_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.third_party_advertising_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.third_party_advertising_disclosure_present")?.id,
     "third_party_advertising_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.behavioral_analytics_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.behavioral_analytics_disclosure_present")?.id,
     "behavioral_analytics_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.children_privacy_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.children_privacy_disclosure_present")?.id,
     "children_privacy_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "commerce.arbitration_clause_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "commerce.arbitration_clause_present")?.id,
     "arbitration_clause_present"
   );
   assert.equal(
@@ -519,10 +519,27 @@ test("registers financial sections, categories, and signals additively", () => {
     ]
   });
 
+  assert.deepEqual(getReportSection("financial_commercial_claims_risk"), {
+    id: "financial_commercial_claims_risk",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "Financial & Commercial Claims Risk",
+    evidenceCategoryIds: [
+      "financial_commercial_claims_disclosure_risk",
+      "financial_commercial_urgency_conversion_risk",
+      "financial_commercial_pricing_fee_risk"
+    ]
+  });
+
   assert.deepEqual(getReportEvidenceCategory("fee_disclosure_clarity"), {
     id: "fee_disclosure_clarity",
     sectionId: "fees_terms_pricing_transparency",
     label: "fee disclosure clarity"
+  });
+
+  assert.deepEqual(getReportEvidenceCategory("financial_commercial_claims_disclosure_risk"), {
+    id: "financial_commercial_claims_disclosure_risk",
+    sectionId: "financial_commercial_claims_risk",
+    label: "financial and commercial claims disclosure risk"
   });
 
   assert.deepEqual(
@@ -561,7 +578,10 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       "accept_more_prominent_than_reject",
       "forced_consent_wall",
       "accept_only_banner",
-      "dismiss_without_reject"
+      "dismiss_without_reject",
+      "popup_behavior_observed",
+      "blocking_overlay_observed",
+      "autoplay_media_observed"
     ]
   );
 
@@ -580,6 +600,10 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
 test("returns unified findings by id and alias", () => {
   assert.equal(getReportUnifiedFinding("policy_behavior_conflict")?.label, "Policy/behavior conflict");
   assert.equal(getReportUnifiedFindingByAlias("Possible undisclosed session replay")?.id, "session_replay_undisclosed");
+  assert.equal(
+    getReportUnifiedFindingForValidationRule("section_review.earnings_claim_without_adjacent_disclosure")?.id,
+    "earnings_claim_without_adjacent_disclosure"
+  );
 });
 
 test("keeps unified-finding signal and validation mappings unique", () => {

@@ -10,6 +10,7 @@ export type ReportSectionId =
   | "terms_legal_disclosures"
   | "policy_clarity_consistency_review"
   | "financial_promotions_claims_disclosures"
+  | "financial_commercial_claims_risk"
   | "entity_identity_registration_transparency"
   | "consent_controls_enforcement"
   | "tracking_third_party_ecosystem"
@@ -65,6 +66,9 @@ export type ReportEvidenceCategoryId =
   | "offer_framing_promotional_mechanics"
   | "urgency_scarcity_pressure_tactics"
   | "commercial_claims_disclosure_adequacy"
+  | "financial_commercial_claims_disclosure_risk"
+  | "financial_commercial_urgency_conversion_risk"
+  | "financial_commercial_pricing_fee_risk"
   | "checkout_payment_disclosures"
   | "billing_recurring_charge_mechanics"
   | "cancellation_termination_rights"
@@ -223,6 +227,16 @@ const FINANCIAL_REPORT_SECTIONS: ReportSectionDefinition[] = [
     ]
   },
   {
+    id: "financial_commercial_claims_risk",
+    pillarId: "consumer_protection_commercial_practices",
+    label: "Financial & Commercial Claims Risk",
+    evidenceCategoryIds: [
+      "financial_commercial_claims_disclosure_risk",
+      "financial_commercial_urgency_conversion_risk",
+      "financial_commercial_pricing_fee_risk"
+    ]
+  },
+  {
     id: "entity_identity_registration_transparency",
     pillarId: "policies_rights_disclosures",
     label: "Entity identity, operator accountability & registration transparency",
@@ -267,6 +281,21 @@ const FINANCIAL_REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] =
     id: "performance_claim_context_and_risk_disclosure",
     sectionId: "financial_promotions_claims_disclosures",
     label: "performance claim context and risk disclosure"
+  },
+  {
+    id: "financial_commercial_claims_disclosure_risk",
+    sectionId: "financial_commercial_claims_risk",
+    label: "financial and commercial claims disclosure risk"
+  },
+  {
+    id: "financial_commercial_urgency_conversion_risk",
+    sectionId: "financial_commercial_claims_risk",
+    label: "financial and commercial urgency tied to conversion"
+  },
+  {
+    id: "financial_commercial_pricing_fee_risk",
+    sectionId: "financial_commercial_claims_risk",
+    label: "financial and commercial pricing or fee clarity risk"
   },
   {
     id: "entity_identity_governance_and_operator_accountability",
@@ -416,6 +445,48 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "consumer_financial_marketing_claims",
     mirrors: ["disclosures_claim_substantiation", "performance_claim_context_and_risk_disclosure"],
     validationRuleKeys: ["section_review.claim_disclosure_distance_exceeds_threshold"]
+  }),
+  defineReportUnifiedFinding({
+    id: "guaranteed_outcome_claim_detected",
+    label: "Guaranteed outcome claim detected",
+    owner: "financial_commercial_claims_disclosure_risk",
+    mirrors: ["consumer_financial_marketing_claims", "commercial_claims_disclosure_adequacy"],
+    validationRuleKeys: ["section_review.guaranteed_outcome_claim_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "earnings_claim_without_adjacent_disclosure",
+    label: "Earnings claim without adjacent disclosure",
+    owner: "financial_commercial_claims_disclosure_risk",
+    mirrors: ["consumer_financial_marketing_claims", "commercial_claims_disclosure_adequacy"],
+    validationRuleKeys: ["section_review.earnings_claim_without_adjacent_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "simulated_performance_without_disclosure",
+    label: "Simulated performance without disclosure",
+    owner: "financial_commercial_claims_disclosure_risk",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "commercial_claims_disclosure_adequacy"],
+    validationRuleKeys: ["section_review.simulated_performance_without_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "unqualified_superlative_claim_detected",
+    label: "Unqualified superlative claim detected",
+    owner: "financial_commercial_claims_disclosure_risk",
+    mirrors: ["commercial_claims_disclosure_adequacy"],
+    validationRuleKeys: ["section_review.unqualified_superlative_claim_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "financial_urgency_pressure_tactic_detected",
+    label: "Financial urgency pressure tactic detected",
+    owner: "financial_commercial_urgency_conversion_risk",
+    mirrors: ["urgency_scarcity_pressure_tactics"],
+    validationRuleKeys: ["section_review.financial_urgency_pressure_tactic_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "pricing_or_fee_transparency_unclear",
+    label: "Pricing or fee transparency unclear",
+    owner: "financial_commercial_pricing_fee_risk",
+    mirrors: ["price_fee_transparency", "fee_disclosure_clarity"],
+    validationRuleKeys: ["section_review.pricing_or_fee_transparency_unclear"]
   }),
   defineReportUnifiedFinding({
     id: "guaranteed_or_high_return_claims_present",
@@ -622,6 +693,7 @@ export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
       "offers_pricing_claims",
       "billing_cancellation_post_purchase_rights",
       "financial_promotions_claims_disclosures",
+      "financial_commercial_claims_risk",
       "fees_terms_pricing_transparency",
       "high_risk_product_marketing_disclosures"
     ]

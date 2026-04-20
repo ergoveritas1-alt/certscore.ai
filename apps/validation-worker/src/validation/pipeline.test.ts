@@ -4,6 +4,7 @@ import {
   buildNanoDocumentContentHash,
   buildNanoDocCandidateUrls,
   dedupeNanoDocumentSources,
+  deriveFinancialCommercialClaimFindings,
   deriveUnifiedFindingsWithWorkflowEvents,
   deriveValidationFindings,
   determineValidationCollectAction,
@@ -1787,6 +1788,74 @@ test("deriveValidationFindings emits pilot financial review rows from retained s
   assert.deepEqual(finding?.evidence.policySnippets, ["A monthly fee of $25 applies to premium managed accounts."]);
   assert.deepEqual(finding?.evidence.supportingSignals, ["commercial.explicit_fee_disclosure_text_present"]);
   assert.equal(finding?.evidence.unifiedFindingId, "fee_disclosure_present");
+});
+
+test("deriveFinancialCommercialClaimFindings emits earnings claim findings from nano-classified candidate blocks", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.DATABASE_URL = "postgres://postgres:postgres@localhost:5432/test";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                claimPresent: true,
+                claimType: "earnings_claim",
+                claimText: "Earn up to $5,000 per month",
+                commercialContext: true,
+                contextType: "subscription_offer",
+                adjacentDisclosurePresent: false,
+                adjacentDisclosureType: null,
+                adjacentDisclosureText: null,
+                guaranteeLanguage: false,
+                superlativeLanguage: false,
+                simulatedPerformanceLanguage: false,
+                urgencyPresent: true,
+                urgencyTiedToConversion: true,
+                pricingPresent: false,
+                feeDisclosurePresent: false,
+                confidence: 0.91,
+                rationaleShort: "Earnings-style claim near signup CTA without nearby balancing language."
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+
+  try {
+    const findings = await deriveFinancialCommercialClaimFindings(
+      buildArtifacts({
+        documentSources: [
+          {
+            document_type: "marketing_page",
+            canonical_url: "https://www.example.com/academy",
+            title: "Trading Academy",
+            document_text:
+              "Earn up to $5,000 per month with our signals service. Join now and start today.\n\nResults vary and educational use only."
+          }
+        ],
+        snapshot: {}
+      })
+    );
+
+    assert.ok(findings.some((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure"));
+    assert.ok(findings.some((finding) => finding.ruleKey === "section_review.financial_urgency_pressure_tactic_detected"));
+    const earningsFinding = findings.find((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure");
+    assert.equal(earningsFinding?.pageUrl, "https://www.example.com/academy");
+    assert.equal(earningsFinding?.evidence.claim_text, "Earn up to $5,000 per month");
+    assert.equal(earningsFinding?.evidence.context_type, "subscription_offer");
+  } finally {
+    process.env.OPENAI_API_KEY = originalKey;
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("validation collect hands off queued and running scans to WS01 execution", () => {

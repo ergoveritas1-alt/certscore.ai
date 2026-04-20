@@ -316,6 +316,12 @@ const FINANCIAL_PROMOTION_IDS = [
   "fee_disclosure_present",
   "past_performance_disclaimer_present",
   "apr_or_interest_rate_disclosure_present",
+  "guaranteed_outcome_claim_detected",
+  "earnings_claim_without_adjacent_disclosure",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "pricing_or_fee_transparency_unclear",
   "performance_claims_without_context",
   "guaranteed_or_high_return_claims_present",
   "investment_risk_disclosure_missing",
@@ -353,6 +359,12 @@ const SUPPORT_ONLY_FINANCIAL_CONTEXT_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const NEGATIVE_FINANCIAL_RISK_IDS = [
+  "guaranteed_outcome_claim_detected",
+  "earnings_claim_without_adjacent_disclosure",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "pricing_or_fee_transparency_unclear",
   "performance_claims_without_context",
   "guaranteed_or_high_return_claims_present",
   "investment_risk_disclosure_missing",

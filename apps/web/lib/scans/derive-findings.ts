@@ -1,5 +1,6 @@
 import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding, type CertScoreFindingSection } from "./finding-registry";
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
+import type { ScanValidationFinding } from "./validation-review-linking";
 
 type MinimalScanRecord = {
   events?: Array<{
@@ -8,6 +9,7 @@ type MinimalScanRecord = {
   }> | null;
   runtimeArtifacts: Record<string, unknown> | null;
   snapshot: Record<string, unknown> | null;
+  validationFindings?: ScanValidationFinding[] | null;
   scan: {
     completedAt: string | null;
     createdAt: string;
@@ -60,6 +62,70 @@ function getBoolean(value: unknown) {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+const FINANCIAL_VALIDATION_RULE_TO_FINDING_ID = {
+  "section_review.guaranteed_outcome_claim_detected": "guaranteed_outcome_claim_detected",
+  "section_review.earnings_claim_without_adjacent_disclosure": "earnings_claim_without_adjacent_disclosure",
+  "section_review.simulated_performance_without_disclosure": "simulated_performance_without_disclosure",
+  "section_review.unqualified_superlative_claim_detected": "unqualified_superlative_claim_detected",
+  "section_review.financial_urgency_pressure_tactic_detected": "financial_urgency_pressure_tactic_detected",
+  "section_review.pricing_or_fee_transparency_unclear": "pricing_or_fee_transparency_unclear"
+} as const satisfies Record<string, keyof typeof CERT_SCORE_FINDING_REGISTRY>;
+
+function getValidationFindingSeverity(
+  severity: string | null | undefined
+): CertScoreFinding["severity"] {
+  switch ((severity ?? "").toLowerCase()) {
+    case "critical":
+      return "critical";
+    case "high":
+      return "high";
+    case "medium":
+      return "medium";
+    default:
+      return "low";
+  }
+}
+
+function getValidationFindingConfidence(
+  band: ScanValidationFinding["systemConfidenceBand"]
+): CertScoreFinding["confidence"] {
+  switch (band) {
+    case "very_high":
+    case "high":
+      return "strong";
+    case "moderate":
+      return "good";
+    default:
+      return "moderate";
+  }
+}
+
+function getValidationFindingDirectness(
+  evidence: ScanValidationFinding["evidence"]
+): CertScoreFinding["directVsInferred"] {
+  const claimText = getString(evidence?.claimText) ?? getString(evidence?.claim_text);
+  return claimText ? "direct" : "mixed";
+}
+
+function getValidationFindingEvidencePreview(finding: ScanValidationFinding) {
+  const evidence = finding.evidence;
+  return uniqueStrings([
+    getString(evidence?.claimText) ?? getString(evidence?.claim_text),
+    getString(evidence?.matchedText) ?? getString(evidence?.matched_text),
+    getString(evidence?.adjacentDisclosureText) ?? getString(evidence?.adjacent_disclosure_text),
+    finding.description,
+    finding.pageUrl
+  ]).slice(0, 3);
+}
+
+function getValidationFindingEvidenceRefs(finding: ScanValidationFinding) {
+  return uniqueStrings([
+    finding.ruleKey,
+    finding.pageUrl ? "validation.page_url" : null,
+    finding.evidence ? "validation.evidence" : null
+  ]);
 }
 
 function getStringArray(value: unknown) {
@@ -1078,6 +1144,32 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
         evidenceRefs: ["ui_summary.interstitial_detected", "ui_summary.full_screen_takeover"],
         severity: "medium",
         shortSummary: "An interstitial or full-screen interruption was observed."
+      })
+    );
+  }
+
+  const financialValidationFindings = (scanRecord.validationFindings ?? []).filter((finding) => {
+    if (!(finding.ruleKey in FINANCIAL_VALIDATION_RULE_TO_FINDING_ID)) {
+      return false;
+    }
+
+    return finding.verdict !== "not_supported";
+  });
+
+  for (const validationFinding of financialValidationFindings) {
+    const findingId =
+      FINANCIAL_VALIDATION_RULE_TO_FINDING_ID[
+        validationFinding.ruleKey as keyof typeof FINANCIAL_VALIDATION_RULE_TO_FINDING_ID
+      ];
+
+    findings.push(
+      buildFinding(findingId, {
+        confidence: getValidationFindingConfidence(validationFinding.systemConfidenceBand),
+        directVsInferred: getValidationFindingDirectness(validationFinding.evidence),
+        evidencePreview: getValidationFindingEvidencePreview(validationFinding),
+        evidenceRefs: getValidationFindingEvidenceRefs(validationFinding),
+        severity: getValidationFindingSeverity(validationFinding.severity),
+        shortSummary: validationFinding.description ?? validationFinding.title
       })
     );
   }

@@ -4,6 +4,7 @@ export type CertScoreFindingSection =
   | "Cookies & Storage"
   | "Vendors & Requests"
   | "Fingerprinting"
+  | "Commercial Claims & Pricing"
   | "Navigation & Redirects"
   | "Runtime & Diagnostics";
 
@@ -237,5 +238,53 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 57,
     whyItMatters: "Interstitials can block access and create pressure to act.",
     remediation: "Avoid full-page interruptions for non-essential messaging."
+  },
+  guaranteed_outcome_claim_detected: {
+    id: "guaranteed_outcome_claim_detected",
+    label: "Guaranteed outcome claim detected",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 95,
+    whyItMatters: "Guaranteed outcome language is a strong commercial-claims risk signal and should be qualified with clear context and disclosure.",
+    remediation: "Remove certainty language or pair the claim with clear, nearby qualification and supporting disclosure."
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    id: "earnings_claim_without_adjacent_disclosure",
+    label: "Earnings claim without adjacent disclosure",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 97,
+    whyItMatters: "Earnings-style claims need immediate supporting context so users can understand limits, assumptions, and typical outcomes.",
+    remediation: "Add clear balancing disclosure next to the claim or reduce the claim to language that does not imply likely income outcomes."
+  },
+  simulated_performance_without_disclosure: {
+    id: "simulated_performance_without_disclosure",
+    label: "Simulated performance without disclosure",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 92,
+    whyItMatters: "Hypothetical or backtested performance can mislead if the simulation context is not disclosed close to the claim.",
+    remediation: "State that the figures are simulated or hypothetical and place the explanation immediately next to the performance language."
+  },
+  unqualified_superlative_claim_detected: {
+    id: "unqualified_superlative_claim_detected",
+    label: "Unqualified superlative claim detected",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 84,
+    whyItMatters: "Absolute claims like best, safest, or number one need visible qualification or substantiation context.",
+    remediation: "Qualify the claim with the basis, scope, or comparison set, or remove the superlative."
+  },
+  financial_urgency_pressure_tactic_detected: {
+    id: "financial_urgency_pressure_tactic_detected",
+    label: "Financial urgency pressure tactic detected",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 88,
+    whyItMatters: "Urgency language tied to signup or purchase flows can pressure decisions around money or performance claims.",
+    remediation: "Reduce countdown or scarcity pressure and separate urgency messaging from financial claims or conversion CTAs."
+  },
+  pricing_or_fee_transparency_unclear: {
+    id: "pricing_or_fee_transparency_unclear",
+    label: "Pricing or fee transparency unclear",
+    section: "Commercial Claims & Pricing",
+    defaultSurfacePriority: 86,
+    whyItMatters: "When price or fee terms are not clear near the offer path, users may not understand the commercial commitment they are being asked to make.",
+    remediation: "Expose price, fee, and billing terms clearly near the CTA or offer entry point."
   }
 };

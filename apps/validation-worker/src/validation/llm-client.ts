@@ -1,5 +1,9 @@
 import {
   VALIDATION_PROMPT_VERSION,
+  buildFinancialCommercialClaimPrompt,
+  financialCommercialClaimCandidateInputSchema,
+  financialCommercialClaimClassificationSchema,
+  type FinancialCommercialClaimCandidateInput,
   buildFinancialJudgePrompt,
   financialJudgeInputSchema,
   financialJudgeOutputSchema,
@@ -224,4 +228,52 @@ export async function validateFinancialFindingWithLlm(input: FinancialJudgeInput
     rationale: `Financial judge ${judge.verdict.replaceAll("_", " ")} (${judge.rationaleCode}).`,
     verdict
   };
+}
+
+export async function classifyFinancialCommercialClaimWithLlm(input: FinancialCommercialClaimCandidateInput) {
+  const env = getWorkerEnv();
+  const parsedInput = financialCommercialClaimCandidateInputSchema.parse(input);
+
+  if (!env.OPENAI_API_KEY) {
+    return null;
+  }
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: env.VALIDATION_NANO_MODEL,
+      temperature: 0,
+      response_format: {
+        type: "json_object"
+      },
+      messages: [
+        {
+          role: "user",
+          content: buildFinancialCommercialClaimPrompt(parsedInput)
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(
+      `OpenAI financial commercial claim classification failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`
+    );
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  };
+
+  const rawContent = payload.choices?.[0]?.message?.content ?? "";
+  return financialCommercialClaimClassificationSchema.parse(JSON.parse(extractJson(rawContent)));
 }

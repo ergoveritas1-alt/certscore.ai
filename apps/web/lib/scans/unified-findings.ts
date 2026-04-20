@@ -422,8 +422,11 @@ const CONTRADICTORY_SURFACE_FINDING_PAIRS: ReadonlyMap<string, string> = new Map
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
   "apr_or_interest_rate_disclosure_present",
+  "earnings_claim_without_adjacent_disclosure",
   "fee_disclosure_missing_or_opaque",
   "fee_disclosure_present",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
   "guaranteed_or_high_return_claims_present",
   "high_risk_product_risk_disclosure_missing",
   "hypothetical_performance_disclosure_missing",
@@ -437,27 +440,36 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "operator_contact_path_present",
   "past_performance_disclaimer_present",
   "performance_claims_without_context",
+  "pricing_or_fee_transparency_unclear",
   "promo_to_terms_conflict",
   "pump_and_dump_language_present",
   "registration_claim_support_missing",
   "registration_identifier_missing",
   "regulatory_compliance_claim_present",
+  "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
 ]);
 
 const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
+  "earnings_claim_without_adjacent_disclosure",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
   "guaranteed_or_high_return_claims_present",
   "high_risk_product_risk_disclosure_missing",
   "investment_purchase_by_credit_card_present",
   "investment_risk_disclosure_missing",
   "investment_urgency_countdown_present",
   "performance_claims_without_context",
+  "pricing_or_fee_transparency_unclear",
   "pump_and_dump_language_present",
   "regulatory_compliance_claim_present",
+  "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
 ]);
@@ -3229,6 +3241,22 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review return language anywhere the site promotes an investment and remove or qualify claims that imply guaranteed, unusually high, or low-risk returns without strong substantiation and nearby risk context.",
     whyThisMatters: "Guaranteed or unusually high return claims are a core financial-promotion risk signal because they can overstate likely outcomes and understate investor risk."
   },
+  guaranteed_outcome_claim_detected: {
+    suggestedFix: "Remove or qualify guarantee-style outcome language unless the claim can be supported clearly and paired with immediate balancing context.",
+    whyThisMatters: "Guarantee-style outcome claims can cause users to overread certainty and underread real risk, especially on conversion-oriented offer pages."
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    suggestedFix: "Keep earnings language tightly paired with nearby qualifying disclosure so readers can understand the limits, assumptions, or variability of the promoted outcome.",
+    whyThisMatters: "Earnings claims without adjacent disclosure can leave users with an incomplete picture of how likely or conditional the promoted outcome really is."
+  },
+  simulated_performance_without_disclosure: {
+    suggestedFix: "Keep simulated, hypothetical, or backtested performance language paired with nearby disclosure explaining that the results are not live realized outcomes.",
+    whyThisMatters: "Simulated performance language can look more concrete than it is when the surrounding qualification is weak or absent."
+  },
+  unqualified_superlative_claim_detected: {
+    suggestedFix: "Review superiority claims such as best, #1, safest, or lowest fees and qualify them clearly where the site cannot support them with immediate context.",
+    whyThisMatters: "Unqualified superlative language can steer user trust and decision-making without giving enough context for the comparison being implied."
+  },
   operator_contact_path_present: {
     suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",
     whyThisMatters: "A visible operator contact path helps users and reviewers understand how to reach the business behind the offer."
@@ -3261,9 +3289,17 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review countdowns, scarcity language, and deadline-driven investment prompts so users are not pressured into acting before they can assess risks and disclosures.",
     whyThisMatters: "Urgency tactics can distort decision-making in investment contexts, especially when paired with return claims or credibility cues."
   },
+  financial_urgency_pressure_tactic_detected: {
+    suggestedFix: "Review deadline, scarcity, or act-now language when it appears next to signup, purchase, or enrollment CTAs so users are not rushed through key commercial decisions.",
+    whyThisMatters: "Urgency language tied directly to conversion can pressure users before they have fully assessed the offer, pricing, or claim context."
+  },
   pump_and_dump_language_present: {
     suggestedFix: "Investigate whether the site is using insider-style timing language, coordinated hype claims, or other market-manipulation cues, and remove them from the offer surface.",
     whyThisMatters: "Pump-and-dump style language is a strong financial-promotion red flag because it frames value around artificial hype or coordinated price movement rather than legitimate product information."
+  },
+  pricing_or_fee_transparency_unclear: {
+    suggestedFix: "Keep pricing and fee language paired with concrete plan, fee, rate, or condition details so users can understand the commercial terms before acting.",
+    whyThisMatters: "If pricing or fee-oriented claims appear without nearby term clarity, users may not understand the real commercial commitment being promoted."
   },
   vague_whitepaper_or_technical_obfuscation_present: {
     suggestedFix: "Review the white paper, technical explanation, or token mechanics language and replace vague jargon with concrete, user-facing explanations of what the product is and how it works.",

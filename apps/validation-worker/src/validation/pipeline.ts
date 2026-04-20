@@ -30,7 +30,11 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
-import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
+import {
+  classifyFinancialCommercialClaimWithLlm,
+  validateFinancialFindingWithLlm,
+  validateFindingWithLlm
+} from "./llm-client";
 import { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 import {
   extractNanoDocumentSourceWithLlm,
@@ -969,6 +973,7 @@ function classifyFinancialValidationPage(pageType: string | null) {
 
 type ValidationArtifactBundle = {
   documentSources?: Array<Record<string, unknown>>;
+  financialCommercialClaimFindings?: Array<ReturnType<typeof buildSectionIssueFinding>>;
   pageEvidence: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
@@ -1287,6 +1292,389 @@ function deriveFinancialValidationFindings(input: ValidationArtifactBundle) {
   }
 
   return findings.filter((finding) => !isMetaSectionFinding(finding.ruleKey));
+}
+
+type FinancialCommercialClaimCandidate = {
+  adjacentAfter: string | null;
+  adjacentBefore: string | null;
+  blockHeading: string | null;
+  blockText: string;
+  candidateSignals: string[];
+  pageType: string | null;
+  pageUrl: string | null;
+  sourceType: "document_source" | "page_evidence" | "signal_hit";
+};
+
+const FINANCIAL_COMMERCIAL_CLAIM_BLOCK_LIMIT = 12;
+const FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE = 0.78;
+const FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE = 0.72;
+
+const CLAIM_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: "earnings", pattern: /\b(earn(?:ings?|ed)?|income|profit|profitable|passive income|make \$|make up to|per month)\b/i },
+  { label: "returns", pattern: /\b(return|yield|apy|apr|roi|gain|grow your money|double your money|high return)\b/i },
+  { label: "guarantee", pattern: /\b(guarantee(?:d)?|risk[- ]free|surefire|certain returns?|can't lose|never lose)\b/i },
+  { label: "simulated", pattern: /\b(backtest(?:ed)?|simulated?|hypothetical|paper trading|demo results?)\b/i },
+  { label: "superlative", pattern: /\b(best|#1|top[- ]rated|highest returns?|safest|lowest fees?|unbeatable|industry[- ]leading)\b/i },
+  { label: "urgency", pattern: /\b(act now|limited time|ends (today|soon)|spots? left|deadline|before it'?s gone|don'?t miss out)\b/i },
+  { label: "cta", pattern: /\b(sign up|join now|get started|start now|subscribe|buy now|enroll now|claim offer|upgrade now|apply now)\b/i },
+  { label: "pricing", pattern: /\b(price|pricing|plan|plans|subscription|membership|fee|fees|cost|costs|billing|billed|rate|rates|trial)\b/i },
+  { label: "currency", pattern: /[$€£]\s?\d|\b\d+(?:,\d{3})*(?:\.\d+)?\s?(?:usd|eur|gbp|dollars?)\b/i },
+  { label: "percent", pattern: /\b\d+(?:\.\d+)?%\b/i }
+];
+
+function trimBlockText(value: string | null | undefined, maxLength = 700) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trim()}…` : normalized;
+}
+
+function splitFinancialCommercialBlocks(text: string) {
+  const normalized = text
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}|(?<=\.)\s{2,}/)
+    .map((part) => trimBlockText(part, 900))
+    .filter((part): part is string => Boolean(part));
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const fallback = trimBlockText(text, 900);
+  return fallback ? [fallback] : [];
+}
+
+function collectFinancialCommercialCandidateSignals(text: string) {
+  const signals = CLAIM_SIGNAL_PATTERNS.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+  return [...new Set(signals)];
+}
+
+function scoreFinancialCommercialCandidate(signals: string[]) {
+  let score = 0;
+  if (signals.includes("guarantee") || signals.includes("simulated")) {
+    score += 3;
+  }
+  if (signals.includes("earnings") || signals.includes("returns") || signals.includes("superlative")) {
+    score += 2;
+  }
+  if (signals.includes("currency") || signals.includes("percent")) {
+    score += 1;
+  }
+  if (signals.includes("pricing")) {
+    score += 1;
+  }
+  if (signals.includes("urgency") && signals.includes("cta")) {
+    score += 2;
+  }
+  return score;
+}
+
+function isFinancialCommercialDocumentType(pageType: string | null) {
+  const normalized = (pageType ?? "").toLowerCase();
+  return /pricing|offer|product|landing|marketing|promo|checkout|subscription|billing|fees?|terms|legal|home|homepage/.test(normalized);
+}
+
+function buildFinancialCommercialClaimCandidates(input: ValidationArtifactBundle) {
+  const candidates: FinancialCommercialClaimCandidate[] = [];
+
+  for (const row of input.documentSources ?? []) {
+    const documentText = getString(row.document_text) ?? getString(row.documentText);
+    const pageType = getString(row.document_type) ?? getString(row.documentType) ?? getString(row.page_type) ?? getString(row.pageType);
+    if (!documentText || !isFinancialCommercialDocumentType(pageType)) {
+      continue;
+    }
+
+    const blocks = splitFinancialCommercialBlocks(documentText);
+    for (let index = 0; index < blocks.length; index += 1) {
+      const blockText = blocks[index]!;
+      const candidateSignals = collectFinancialCommercialCandidateSignals(blockText);
+      const score = scoreFinancialCommercialCandidate(candidateSignals);
+      if (score < 2) {
+        continue;
+      }
+
+      candidates.push({
+        adjacentAfter: blocks[index + 1] ?? null,
+        adjacentBefore: blocks[index - 1] ?? null,
+        blockHeading: getString(row.title),
+        blockText,
+        candidateSignals,
+        pageType,
+        pageUrl: getString(row.canonical_url) ?? getString(row.canonicalUrl) ?? getString(row.source_url) ?? getString(row.sourceUrl),
+        sourceType: "document_source"
+      });
+    }
+  }
+
+  for (const row of input.pageEvidence) {
+    const blockText = trimBlockText(getStringValue(row, "matched_text"), 500);
+    if (!blockText) {
+      continue;
+    }
+    const candidateSignals = collectFinancialCommercialCandidateSignals(blockText);
+    const score = scoreFinancialCommercialCandidate(candidateSignals);
+    if (score < 2) {
+      continue;
+    }
+
+    const metadata = getRecord(row.metadata);
+    candidates.push({
+      adjacentAfter: null,
+      adjacentBefore: null,
+      blockHeading: getStringValue(metadata, "surroundingHeading") ?? getStringValue(metadata, "surrounding_heading"),
+      blockText,
+      candidateSignals,
+      pageType: getStringValue(row, "page_type"),
+      pageUrl: getStringValue(row, "page_url"),
+      sourceType: "page_evidence"
+    });
+  }
+
+  for (const row of input.signalHits) {
+    const payload = getRecord(row.payload);
+    const blockText = trimBlockText(
+      getStringValue(payload, "matchedSnippet") ??
+        getStringValue(payload, "matched_snippet") ??
+        getStringValue(payload, "matchedPhrase") ??
+        getStringValue(payload, "matched_phrase") ??
+        getStringValue(payload, "matchedTerm") ??
+        getStringValue(payload, "matched_term"),
+      500
+    );
+    if (!blockText) {
+      continue;
+    }
+    const candidateSignals = collectFinancialCommercialCandidateSignals(blockText);
+    const score = scoreFinancialCommercialCandidate(candidateSignals);
+    if (score < 2) {
+      continue;
+    }
+
+    candidates.push({
+      adjacentAfter: null,
+      adjacentBefore: null,
+      blockHeading: null,
+      blockText,
+      candidateSignals,
+      pageType: getStringValue(row, "page_type"),
+      pageUrl: getStringValue(row, "page_url"),
+      sourceType: "signal_hit"
+    });
+  }
+
+  const deduped = new Map<string, FinancialCommercialClaimCandidate>();
+  for (const candidate of candidates) {
+    const key = `${candidate.pageUrl ?? "unknown"}|${candidate.blockText.toLowerCase()}`;
+    const existing = deduped.get(key);
+    if (!existing || scoreFinancialCommercialCandidate(candidate.candidateSignals) > scoreFinancialCommercialCandidate(existing.candidateSignals)) {
+      deduped.set(key, candidate);
+    }
+  }
+
+  return [...deduped.values()]
+    .sort(
+      (left, right) =>
+        scoreFinancialCommercialCandidate(right.candidateSignals) - scoreFinancialCommercialCandidate(left.candidateSignals) ||
+        (right.blockText.length - left.blockText.length)
+    )
+    .slice(0, FINANCIAL_COMMERCIAL_CLAIM_BLOCK_LIMIT);
+}
+
+function buildFinancialCommercialClaimFinding(input: {
+  candidate: FinancialCommercialClaimCandidate;
+  classification: Awaited<ReturnType<typeof classifyFinancialCommercialClaimWithLlm>>;
+  description: string;
+  ruleKey: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+}) {
+  return buildSectionIssueFinding({
+    description: input.description,
+    evidence: {
+      adjacent_disclosure_present: input.classification?.adjacentDisclosurePresent ?? false,
+      adjacent_disclosure_text: input.classification?.adjacentDisclosureText ?? null,
+      adjacent_disclosure_type: input.classification?.adjacentDisclosureType ?? null,
+      candidate_block_heading: input.candidate.blockHeading,
+      candidate_block_text: input.candidate.blockText,
+      candidate_signals: input.candidate.candidateSignals,
+      claim_present: input.classification?.claimPresent ?? false,
+      claim_text: input.classification?.claimText ?? null,
+      claim_type: input.classification?.claimType ?? "none",
+      commercial_context: input.classification?.commercialContext ?? false,
+      context_type: input.classification?.contextType ?? "unknown",
+      fee_disclosure_present: input.classification?.feeDisclosurePresent ?? false,
+      guarantee_language: input.classification?.guaranteeLanguage ?? false,
+      model_confidence: input.classification?.confidence ?? null,
+      page_type: input.candidate.pageType,
+      pricing_present: input.classification?.pricingPresent ?? false,
+      rationale_short: input.classification?.rationaleShort ?? null,
+      simulated_performance_language: input.classification?.simulatedPerformanceLanguage ?? false,
+      source_type: input.candidate.sourceType,
+      superlative_language: input.classification?.superlativeLanguage ?? false,
+      urgency_present: input.classification?.urgencyPresent ?? false,
+      urgency_tied_to_conversion: input.classification?.urgencyTiedToConversion ?? false
+    },
+    pageType: input.candidate.pageType,
+    pageUrl: input.candidate.pageUrl,
+    ruleKey: input.ruleKey,
+    severity: input.severity,
+    title: input.title
+  });
+}
+
+export async function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle) {
+  const candidates = buildFinancialCommercialClaimCandidates(input);
+  if (candidates.length === 0) {
+    return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
+  }
+
+  const classified = await Promise.all(
+    candidates.map(async (candidate) => {
+      try {
+        const classification = await classifyFinancialCommercialClaimWithLlm({
+          adjacentAfter: candidate.adjacentAfter,
+          adjacentBefore: candidate.adjacentBefore,
+          blockHeading: candidate.blockHeading,
+          blockText: candidate.blockText,
+          candidateSignals: candidate.candidateSignals,
+          pageType: candidate.pageType,
+          pageUrl: candidate.pageUrl,
+          sourceType: candidate.sourceType
+        });
+        return { candidate, classification };
+      } catch (error) {
+        console.error("[validation-worker] financial commercial claim classification failed", {
+          error: error instanceof Error ? error.message : String(error),
+          pageUrl: candidate.pageUrl
+        });
+        return { candidate, classification: null };
+      }
+    })
+  );
+
+  const findings: Array<ReturnType<typeof buildSectionIssueFinding>> = [];
+
+  for (const row of classified) {
+    const classification = row.classification;
+    if (
+      !classification ||
+      classification.confidence < FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE ||
+      !classification.commercialContext
+    ) {
+      continue;
+    }
+
+    if (
+      (classification.guaranteeLanguage || classification.claimType === "guaranteed_outcome_claim") &&
+      classification.claimPresent
+    ) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained guarantee-style outcome language on a commercial page. This is surfaced as an observable claim-risk pattern, not a legal conclusion.",
+          ruleKey: "section_review.guaranteed_outcome_claim_detected",
+          severity: "high",
+          title: "Guaranteed outcome claim detected"
+        })
+      );
+    }
+
+    if (
+      classification.claimType === "earnings_claim" &&
+      classification.claimPresent &&
+      !classification.adjacentDisclosurePresent
+    ) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained an earnings-style claim without nearby balancing disclosure in the same local block or adjacent context.",
+          ruleKey: "section_review.earnings_claim_without_adjacent_disclosure",
+          severity: "high",
+          title: "Earnings claim without adjacent disclosure"
+        })
+      );
+    }
+
+    if (
+      (classification.simulatedPerformanceLanguage || classification.claimType === "simulated_performance_claim") &&
+      classification.claimPresent &&
+      !classification.adjacentDisclosurePresent
+    ) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained simulated or hypothetical performance language without nearby qualifying disclosure in the same local block or adjacent context.",
+          ruleKey: "section_review.simulated_performance_without_disclosure",
+          severity: "high",
+          title: "Simulated performance without disclosure"
+        })
+      );
+    }
+
+    if (
+      classification.superlativeLanguage &&
+      classification.claimPresent &&
+      classification.confidence >= FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE
+    ) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained an unqualified superiority-style claim in commercial context. This is surfaced as observable promotional language requiring context review.",
+          ruleKey: "section_review.unqualified_superlative_claim_detected",
+          severity: "medium",
+          title: "Unqualified superlative claim detected"
+        })
+      );
+    }
+
+    if (classification.urgencyPresent && classification.urgencyTiedToConversion) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained urgency language tied to a conversion action such as signup, purchase, or enrollment.",
+          ruleKey: "section_review.financial_urgency_pressure_tactic_detected",
+          severity: "medium",
+          title: "Financial urgency pressure tactic detected"
+        })
+      );
+    }
+
+    if (
+      classification.pricingPresent &&
+      !classification.feeDisclosurePresent &&
+      classification.confidence >= FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE
+    ) {
+      findings.push(
+        buildFinancialCommercialClaimFinding({
+          candidate: row.candidate,
+          classification,
+          description:
+            "The scan retained pricing or fee-oriented commercial language without clearly visible fee or pricing-term disclosure in the same local block or adjacent context.",
+          ruleKey: "section_review.pricing_or_fee_transparency_unclear",
+          severity: "medium",
+          title: "Pricing or fee transparency unclear"
+        })
+      );
+    }
+  }
+
+  return [...new Map(findings.map((finding) => [`${finding.ruleKey}|${finding.pageUrl ?? ""}|${JSON.stringify(finding.evidence.claim_text ?? "")}`, finding])).values()];
 }
 
 type CookieDisclosureRow = {
@@ -2435,6 +2823,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       snapshot: input.snapshot
     }),
     ...deriveFinancialValidationFindings(input),
+    ...(input.financialCommercialClaimFindings ?? []),
     ...deriveRuntimePrivacyFindings({
       policySemanticRows,
       preconsentViolations: input.preconsentViolations,
@@ -3786,8 +4175,13 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       },
       scanId
     }).catch(() => undefined);
+    const financialCommercialClaimFindings = await deriveFinancialCommercialClaimFindings(refreshedArtifacts);
     await deriveUnifiedFindingsWithWorkflowEvents({
-      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+      deriveFindings: () =>
+        deriveValidationFindings({
+          ...refreshedArtifacts,
+          financialCommercialClaimFindings
+        }),
       scanId
     });
   }
@@ -3933,8 +4327,13 @@ export async function processValidationRankJob(validationRunId: string) {
       },
       scanId
     }).catch(() => undefined);
+    const financialCommercialClaimFindings = await deriveFinancialCommercialClaimFindings(refreshedArtifacts);
     const findings = await deriveUnifiedFindingsWithWorkflowEvents({
-      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+      deriveFindings: () =>
+        deriveValidationFindings({
+          ...refreshedArtifacts,
+          financialCommercialClaimFindings
+        }),
       scanId
     });
     await replaceValidationRunFindings(validationRunId, findings);

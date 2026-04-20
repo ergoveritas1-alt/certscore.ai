@@ -815,3 +815,79 @@ test("surfaces possible pre-submit text capture from typing-probe evidence", () 
   assert.equal(finding?.severity, "critical");
   assert.match(finding?.shortSummary ?? "", /before form submission/i);
 });
+
+test("surfaces financial commercial validation findings in cert score summary", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: null,
+    snapshot: {
+      certscore_overall: 71
+    },
+    validationFindings: [
+      {
+        agreementScore: 0.91,
+        category: "section_review",
+        description: "Earn up to $5,000 per month language surfaced near signup copy without nearby disclosure.",
+        evidence: {
+          claimText: "Earn up to $5,000 per month",
+          matchedText: "Join now and earn up to $5,000 per month."
+        },
+        findingFamily: "section_review",
+        findingScope: "page",
+        findingSource: "validation_worker",
+        findingSubject: "financial_claim",
+        id: "vf_1",
+        model: "gpt-5.4-nano",
+        modelConfidence: 0.88,
+        pageUrl: "https://example.com/signup",
+        promptVersion: "financial-commercial-claims-v1",
+        rationale: "High-confidence earnings-style claim without adjacent balancing disclosure.",
+        ruleKey: "section_review.earnings_claim_without_adjacent_disclosure",
+        severity: "high",
+        subtype: "earnings_claim",
+        systemConfidenceBand: "high",
+        systemConfidenceExplanation: "Matched claim pattern and model-supported extraction agreed.",
+        systemConfidenceScore: 0.9,
+        title: "Earnings claim without adjacent disclosure",
+        verdict: "supported"
+      },
+      {
+        agreementScore: 0.8,
+        category: "section_review",
+        description: "Pricing details were not clearly visible near the conversion path.",
+        evidence: {
+          matchedText: "Start now"
+        },
+        findingFamily: "section_review",
+        findingScope: "page",
+        findingSource: "validation_worker",
+        findingSubject: "pricing",
+        id: "vf_2",
+        model: "gpt-5.4-nano",
+        modelConfidence: 0.74,
+        pageUrl: "https://example.com/pricing",
+        promptVersion: "financial-commercial-claims-v1",
+        rationale: "CTA surfaced without clear fee disclosure in the same block.",
+        ruleKey: "section_review.pricing_or_fee_transparency_unclear",
+        severity: "medium",
+        subtype: "pricing_disclosure",
+        systemConfidenceBand: "moderate",
+        systemConfidenceExplanation: "Relevant commercial offer block with weak fee visibility.",
+        systemConfidenceScore: 0.76,
+        title: "Pricing or fee transparency unclear",
+        verdict: "supported"
+      }
+    ],
+    scan: {
+      completedAt: "2026-04-20T18:20:00.000Z",
+      createdAt: "2026-04-20T18:19:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.ok(ids.includes("earnings_claim_without_adjacent_disclosure"));
+  assert.ok(ids.includes("pricing_or_fee_transparency_unclear"));
+
+  const topFindings = selectTopFindings(summary.findings, 5);
+  assert.ok(topFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure"));
+});
