@@ -122,7 +122,7 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
   assert.equal(adaLens?.summary, "Accessibility claims appear inconsistent with observed barriers.");
-  assert.match(adaLens?.findings.join(" "), /27 automated WCAG issues detected/);
+  assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 27/);
   assert.match(adaLens?.findings.join(" "), /Keyboard navigation issues surfaced/);
   assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
   assert.equal(
@@ -158,7 +158,8 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA map
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
   assert.equal(adaLens?.ratingLabel, "Strong");
-  assert.equal(adaLens?.summary, "Observed accessibility signals are comparatively stronger, but this is not a full WCAG determination.");
+  assert.equal(adaLens?.summary, "Observed accessibility signals are relatively strong, but this is not a full WCAG determination.");
+  assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 2/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
@@ -462,7 +463,7 @@ test("ExecutiveSummaryCard renders DOJ / ADA accessibility with accessibility-sp
 
   assert.match(html, /DOJ \/ ADA accessibility/);
   assert.match(html, /Accessibility claims appear inconsistent with observed barriers\./);
-  assert.match(html, /27 automated WCAG issues detected/);
+  assert.match(html, /Automated WCAG issues detected: 27/);
   assert.match(html, /Keyboard navigation issues surfaced/);
   assert.match(html, /Accessibility statement not detected/);
   assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);

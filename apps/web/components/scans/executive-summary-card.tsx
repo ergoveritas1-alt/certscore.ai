@@ -300,7 +300,7 @@ export function buildRegulatoryLenses(
     );
 
   const adaFindings = [
-    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `${wcagErrorCountTotal} automated WCAG issues detected` : null,
+    typeof wcagErrorCountTotal === "number" ? `Automated WCAG issues detected: ${wcagErrorCountTotal}` : null,
     typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0 ? "Keyboard navigation issues surfaced" : null,
     typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0 ? "Form labeling issues surfaced" : null,
     accessibilityStatementPresent === false ? "Accessibility statement not detected" : null,
@@ -325,7 +325,7 @@ export function buildRegulatoryLenses(
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
         ? "Accessibility barriers and disclosure gaps are the main issue."
         : adaScore >= 72
-          ? "Observed accessibility signals are comparatively stronger, but this is not a full WCAG determination."
+          ? "Observed accessibility signals are relatively strong, but this is not a full WCAG determination."
           : "Accessibility support and disclosure posture needs work.";
   const adaTone = buildTone(adaScore);
 
