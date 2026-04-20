@@ -6175,6 +6175,18 @@ export function SharedScanDetailView({
         <>
           <ExecutiveSummaryCard
             accessLimitationNotice={executiveAccessNoticeCardProps}
+            accessibilitySignals={{
+              accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
+              accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
+              accessibilityStatementPresent: getRecordBoolean(snapshot, "accessibility_statement_present"),
+              adaDemandLetterProbability: getRecordNumber(snapshot, "ada_demand_letter_probability"),
+              ecommerceSiteLikely: getRecordBoolean(snapshot, "ecommerce_site_likely"),
+              wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total"),
+              wcagFormLabelErrorCount: getRecordNumber(snapshot, "wcag_form_label_error_count"),
+              wcagKeyboardNavigationIssueCount: getRecordNumber(snapshot, "wcag_keyboard_navigation_issue_count"),
+              wcagMissingAltCount: getRecordNumber(snapshot, "wcag_missing_alt_count")
+            }}
+            agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
             coverageLevel={typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null}
             domainBenchmark={scanRecord.domainBenchmark}
@@ -6187,6 +6199,7 @@ export function SharedScanDetailView({
             posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
+            regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}

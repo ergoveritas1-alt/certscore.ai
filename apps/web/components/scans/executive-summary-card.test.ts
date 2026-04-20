@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildRegulatoryLenses, ExecutiveSummaryCard } from "./executive-summary-card";
@@ -23,6 +24,46 @@ function makeFinding(
     evidenceRefs: [],
     severity: "high",
     shortSummary: label,
+    ...overrides
+  };
+}
+
+function makeRegulatoryRisk(overrides: Partial<RegulatoryRiskAssessment> = {}): RegulatoryRiskAssessment {
+  return {
+    overallScore: 50,
+    riskLevel: "moderate",
+    confidence: 0.8,
+    topRiskDrivers: [],
+    topMitigatingControls: [],
+    trendVsPreviousScan: {
+      delta: null,
+      direction: "unknown",
+      label: "No prior risk baseline"
+    },
+    privacyEnforcementRiskScore: 40,
+    consentEnforcementRiskScore: 42,
+    consumerProtectionRiskScore: 38,
+    accessibilityEnforcementRiskScore: 55,
+    dataExposureRiskScore: 24,
+    ...overrides
+  };
+}
+
+function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMapping {
+  return {
+    agencyKey: "doj_ada",
+    agencyLabel: "U.S. Department of Justice",
+    shortLabel: "DOJ / ADA",
+    category: "accessibility",
+    relevanceLevel: "moderate",
+    relevanceScore: 8,
+    rationale: "This scan surfaced accessibility signals that fit most closely with ADA-related expectations.",
+    helperLabel: "Accessibility and ADA-related web expectations",
+    triggeredSignals: [{ key: "wcagErrorCountTotal", label: "High automated WCAG issue count" }],
+    contributingSubscores: [{ key: "accessibilityEnforcementRiskScore", label: "Accessibility", score: 55 }],
+    topAgencyRiskDrivers: ["High automated WCAG issue count", "Accessibility subscore"],
+    relatedOverallRiskLevel: "moderate",
+    isPrimaryAgency: true,
     ...overrides
   };
 }
@@ -52,6 +93,65 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[1]?.summary, "Third-party collection and disclosure posture drives this score.");
   assert.equal(lenses[2]?.summary, "Choice architecture and disclosure clarity are the main FTC-style concerns.");
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
+});
+
+test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessibility overlay is materially triggered", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityClaimMismatchDetected: true,
+        accessibilityLitigationRiskScore: 61,
+        accessibilityStatementPresent: false,
+        wcagErrorCountTotal: 27,
+        wcagFormLabelErrorCount: 4,
+        wcagKeyboardNavigationIssueCount: 3,
+        wcagMissingAltCount: 7
+      },
+      agencyMappings: [makeAgencyMapping()],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 61
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  assert.ok(adaLens);
+  assert.equal(adaLens?.summary, "Accessibility claims appear inconsistent with observed barriers.");
+  assert.match(adaLens?.findings.join(" "), /27 automated WCAG issues detected/);
+  assert.match(adaLens?.findings.join(" "), /Keyboard navigation issues surfaced/);
+  assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
+});
+
+test("buildRegulatoryLenses does not add DOJ / ADA accessibility when accessibility relevance stays limited", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 2
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  assert.equal(lenses.some((lens) => lens.acronym === "DOJ / ADA accessibility"), false);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
@@ -310,4 +410,53 @@ test("ExecutiveSummaryCard switches to blocked-access language when no reliable 
   assert.match(html, /Access limitation/);
   assert.match(html, /This run was blocked before it established a trustworthy public browsing path/);
   assert.doesNotMatch(html, /Regulatory findings/);
+});
+
+test("ExecutiveSummaryCard renders DOJ / ADA accessibility with accessibility-specific evidence", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      accessibilitySignals: {
+        accessibilityClaimMismatchDetected: true,
+        accessibilityLitigationRiskScore: 61,
+        accessibilityStatementPresent: false,
+        wcagErrorCountTotal: 27,
+        wcagFormLabelErrorCount: 4,
+        wcagKeyboardNavigationIssueCount: 3,
+        wcagMissingAltCount: 7
+      },
+      agencyMappings: [makeAgencyMapping()],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "www.example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-20T17:19:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 61
+      }),
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 73,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /DOJ \/ ADA accessibility/);
+  assert.match(html, /Accessibility claims appear inconsistent with observed barriers\./);
+  assert.match(html, /27 automated WCAG issues detected/);
+  assert.match(html, /Keyboard navigation issues surfaced/);
+  assert.match(html, /Accessibility statement not detected/);
+  assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);
 });

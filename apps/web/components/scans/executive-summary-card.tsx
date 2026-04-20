@@ -1,3 +1,4 @@
+import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import React from "react";
 import {
   deriveExecutiveNarrativePresentation,
@@ -99,6 +100,16 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function buildTone(score: number) {
+  if (score >= 72) {
+    return { label: "Stronger", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  }
+  if (score >= 50) {
+    return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
+  }
+  return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
+}
+
 function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
   return (
     <div className="space-y-3">
@@ -131,10 +142,28 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
   );
 }
 
-export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
-  beforeConsentCookieCount: number;
-  thirdPartyRequestCount: number;
-}) {
+export function buildRegulatoryLenses(
+  findings: CertScoreFinding[],
+  counts: {
+    beforeConsentCookieCount: number;
+    thirdPartyRequestCount: number;
+  },
+  options?: {
+    accessibilitySignals?: {
+      accessibilityClaimMismatchDetected?: boolean | null;
+      accessibilityLitigationRiskScore?: number | null;
+      accessibilityStatementPresent?: boolean | null;
+      adaDemandLetterProbability?: number | null;
+      ecommerceSiteLikely?: boolean | null;
+      wcagErrorCountTotal?: number | null;
+      wcagFormLabelErrorCount?: number | null;
+      wcagKeyboardNavigationIssueCount?: number | null;
+      wcagMissingAltCount?: number | null;
+    } | null;
+    agencyMappings?: AgencyMapping[];
+    regulatoryRisk?: RegulatoryRiskAssessment | null;
+  }
+) {
   const findingIds = new Set(findings.map((finding) => finding.id));
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
@@ -195,21 +224,11 @@ export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
-  const buildTone = (score: number) => {
-    if (score >= 72) {
-      return { label: "Stronger", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
-    }
-    if (score >= 50) {
-      return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
-    }
-    return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
-  };
-
   const gdprTone = buildTone(gdprScore);
   const cpraTone = buildTone(cpraScore);
   const ftcTone = buildTone(ftcScore);
 
-  return [
+  const lenses = [
     {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
@@ -238,6 +257,76 @@ export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       toneClass: ftcTone.toneClass
     }
   ] satisfies RegulatoryLens[];
+
+  const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
+  const accessibilitySignals = options?.accessibilitySignals ?? null;
+  const accessibilityRiskScore = options?.regulatoryRisk?.accessibilityEnforcementRiskScore ?? null;
+  const strongAdaDriverLabels = new Set([
+    "Accessibility claim mismatch",
+    "High automated WCAG issue count",
+    "Keyboard navigation issues",
+    "Form label accessibility issues",
+    "Elevated accessibility risk",
+    "Elevated ADA demand-letter exposure"
+  ]);
+  const hasStrongAdaDriver = Boolean(dojAdaMapping?.triggeredSignals.some((signal) => strongAdaDriverLabels.has(signal.label)));
+  const shouldIncludeAdaLens =
+    dojAdaMapping !== undefined &&
+    (dojAdaMapping.relevanceLevel === "high" ||
+      dojAdaMapping.relevanceLevel === "moderate" ||
+      (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45) ||
+      hasStrongAdaDriver);
+
+  if (!shouldIncludeAdaLens) {
+    return lenses;
+  }
+
+  const wcagErrorCountTotal = accessibilitySignals?.wcagErrorCountTotal ?? null;
+  const wcagFormLabelErrorCount = accessibilitySignals?.wcagFormLabelErrorCount ?? null;
+  const wcagKeyboardNavigationIssueCount = accessibilitySignals?.wcagKeyboardNavigationIssueCount ?? null;
+  const wcagMissingAltCount = accessibilitySignals?.wcagMissingAltCount ?? null;
+  const accessibilityStatementPresent = accessibilitySignals?.accessibilityStatementPresent ?? null;
+  const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
+  const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
+  const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
+
+  const adaFindings = [
+    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `${wcagErrorCountTotal} automated WCAG issues detected` : null,
+    typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0 ? "Keyboard navigation issues surfaced" : null,
+    typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0 ? "Form labeling issues surfaced" : null,
+    accessibilityStatementPresent === false ? "Accessibility statement not detected" : null,
+    accessibilityClaimMismatchDetected === true ? "Accessibility claim mismatch surfaced" : null,
+    typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45
+      ? `Elevated accessibility risk score (${accessibilityLitigationRiskScore})`
+      : null,
+    typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45
+      ? `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`
+      : null,
+    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null
+  ].filter(Boolean) as string[];
+
+  const adaSummary =
+    accessibilityClaimMismatchDetected === true
+      ? "Accessibility claims appear inconsistent with observed barriers."
+      : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+          (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
+          (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
+        ? "Accessibility barriers and disclosure gaps are the main issue."
+        : "Accessibility support and disclosure posture needs work.";
+  const adaScore = clampScore(100 - (accessibilityRiskScore ?? 50));
+  const adaTone = buildTone(adaScore);
+
+  lenses.push({
+    acronym: "DOJ / ADA accessibility",
+    detailTitle: "Accessibility and digital access issues",
+    findings: adaFindings,
+    ratingLabel: adaTone.label,
+    score: adaScore,
+    summary: adaSummary,
+    toneClass: adaTone.toneClass
+  });
+
+  return lenses;
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
@@ -650,6 +739,18 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 
 export function ExecutiveSummaryCard(input: {
   accessLimitationNotice?: ExecutiveAccessLimitationNotice | null;
+  accessibilitySignals?: {
+    accessibilityClaimMismatchDetected?: boolean | null;
+    accessibilityLitigationRiskScore?: number | null;
+    accessibilityStatementPresent?: boolean | null;
+    adaDemandLetterProbability?: number | null;
+    ecommerceSiteLikely?: boolean | null;
+    wcagErrorCountTotal?: number | null;
+    wcagFormLabelErrorCount?: number | null;
+    wcagKeyboardNavigationIssueCount?: number | null;
+    wcagMissingAltCount?: number | null;
+  } | null;
+  agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
   coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
@@ -662,6 +763,7 @@ export function ExecutiveSummaryCard(input: {
   posture: "Clear" | "Watch" | "Action Needed";
   preConsentVendorNames: string[];
   requestedHost: string | null;
+  regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
   scanOutcome?: string | null;
@@ -728,6 +830,10 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
+  }, {
+    accessibilitySignals: input.accessibilitySignals,
+    agencyMappings: input.agencyMappings,
+    regulatoryRisk: input.regulatoryRisk
   });
 
   return (
