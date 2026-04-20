@@ -2,6 +2,7 @@ import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3En
 import { getDatabaseHealth } from "../server/health/get-database-health";
 
 const allowMissingEnv = process.argv.includes("--allow-missing-env");
+const LIVE_VALIDATION_TIMEOUT_MS = 10_000;
 
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
@@ -13,6 +14,25 @@ function fail(label: string, details: string) {
 
 function shouldSkipLiveValidation() {
   return allowMissingEnv;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms.`));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 async function main() {
@@ -29,10 +49,11 @@ async function main() {
     return;
   }
 
-  const [health, storageBucketExists] = await Promise.all([
-    getDatabaseHealth(),
-    checkStorageBucketExists()
-  ]);
+  const [health, storageBucketExists] = await withTimeout(
+    Promise.all([getDatabaseHealth(), checkStorageBucketExists()]),
+    LIVE_VALIDATION_TIMEOUT_MS,
+    "Runtime dependency validation"
+  );
 
   if (!health.ok) {
     if (shouldSkipLiveValidation()) {
