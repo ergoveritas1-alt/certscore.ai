@@ -158,7 +158,7 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA map
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
   assert.equal(adaLens?.ratingLabel, "Strong");
-  assert.equal(adaLens?.summary, "Observed accessibility signals are relatively strong, but this is not a full WCAG determination.");
+  assert.equal(adaLens?.summary, "No significant issues found.");
   assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 2/);
 });
 
