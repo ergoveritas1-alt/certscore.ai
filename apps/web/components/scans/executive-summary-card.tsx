@@ -300,7 +300,7 @@ export function buildRegulatoryLenses(
     );
 
   const adaFindings = [
-    typeof wcagErrorCountTotal === "number" ? `Automated WCAG issues detected: ${wcagErrorCountTotal}` : null,
+    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `Automated WCAG issues detected: ${wcagErrorCountTotal}` : null,
     typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0 ? "Keyboard navigation issues surfaced" : null,
     typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0 ? "Form labeling issues surfaced" : null,
     accessibilityStatementPresent === false ? "Accessibility statement not detected" : null,
