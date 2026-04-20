@@ -47,12 +47,42 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
     workflow.stages.map((stage) => [stage.id, stage.status, stage.durationMs]),
     [
       ["scanner", "completed", 5 * 60 * 1000],
-      ["nano_doc_retrieval", "queued", null],
+      ["nano_doc_retrieval", "completed", null],
       ["nano_doc_signals", "completed", 60 * 1000],
       ["signal_merge", "completed", 60 * 1000],
       ["unified_findings", "completed", 60 * 1000]
     ]
   );
+});
+
+test("deriveSignalEnrichmentWorkflowState recovers nano doc retrieval status from downstream nano completion", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-20T08:25:43.073Z", eventType: SCAN_EVENT_TYPES.fullStarted },
+      { createdAt: "2026-04-20T08:26:03.817Z", eventType: SCAN_EVENT_TYPES.fullCompleted },
+      { createdAt: "2026-04-20T08:26:08.949Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted },
+      { createdAt: "2026-04-20T08:26:08.953Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted },
+      { createdAt: "2026-04-20T08:26:08.955Z", eventType: SCAN_EVENT_TYPES.signalMergeStarted },
+      { createdAt: "2026-04-20T08:26:08.961Z", eventType: SCAN_EVENT_TYPES.signalMergeCompleted },
+      { createdAt: "2026-04-20T08:26:08.962Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted },
+      { createdAt: "2026-04-20T08:26:08.963Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted }
+    ],
+    documentSourceCount: 0,
+    findingsCount: 3,
+    mergedSignalCount: 9,
+    nanoSignalCount: 0,
+    policyDocumentCount: 0,
+    scanCompletedAt: "2026-04-20T08:26:03.817Z",
+    scanStatus: "completed",
+    scannerSignalCount: 9
+  });
+
+  const docRetrievalStage = workflow.stages.find((stage) => stage.id === "nano_doc_retrieval");
+  assert.ok(docRetrievalStage);
+  assert.equal(docRetrievalStage?.status, "completed");
+  assert.equal(docRetrievalStage?.startedAt, null);
+  assert.equal(docRetrievalStage?.durationMs, null);
+  assert.equal(docRetrievalStage?.completedAt, "2026-04-20T08:26:08.953Z");
 });
 
 test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begins before scanner completion", () => {
