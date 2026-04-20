@@ -146,9 +146,17 @@ export function deriveSignalEnrichmentWorkflowState(input: {
           : "queued";
   const hasPersistedMergedSignals = input.mergedSignalCount > 0;
   const hasPersistedFindings = input.findingsCount > 0;
+  const docRetrievalRecoveredFromNanoCompletion =
+    !docRetrievalTimestamps.startedAt &&
+    !docRetrievalTimestamps.completedAt &&
+    !docRetrievalTimestamps.failedAt &&
+    nanoTimestamps.completedAt !== null;
+  const docRetrievalCompletedAt = docRetrievalRecoveredFromNanoCompletion
+    ? nanoTimestamps.completedAt
+    : docRetrievalTimestamps.completedAt;
 
   const docRetrievalStatus = deriveStageStatus({
-    completedAt: docRetrievalTimestamps.completedAt,
+    completedAt: docRetrievalCompletedAt,
     failedAt: docRetrievalTimestamps.failedAt,
     startedAt: docRetrievalTimestamps.startedAt
   });
@@ -198,10 +206,10 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       status: scannerStatus,
     },
     {
-      completedAt: docRetrievalTimestamps.completedAt,
+      completedAt: docRetrievalCompletedAt,
       dependsOn: [],
       description: "Nano-owned legal document retrieval and raw document persistence.",
-      durationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),
+      durationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalCompletedAt),
       id: "nano_doc_retrieval",
       itemCount: input.documentSourceCount ?? input.policyDocumentCount,
       label: "Nano Doc Retrieval",
