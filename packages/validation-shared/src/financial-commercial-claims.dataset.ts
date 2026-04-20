@@ -10,6 +10,7 @@ export type FinancialCommercialClaimsDatasetExample = {
   id: string;
   input: FinancialCommercialClaimCandidateInput;
   notes: string;
+  sourceUrl?: string;
   split: "train" | "eval";
 };
 
@@ -261,6 +262,181 @@ export const FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED: FinancialCommercialClaims
       confidence: 0.93,
       rationaleShort: "Educational descriptive text does not make a commercial or financial outcome claim."
     }
+  }),
+  example({
+    id: "regulator-derived-dfpi-cryptovault-returns",
+    split: "eval",
+    sourceUrl: "https://dfpi.ca.gov/consumers/crypto/crypto-scam-tracker/cryptovaultnc-com-homepage-fraudulent-platform/",
+    notes: "Derived from a March 10, 2026 DFPI tracker entry describing a platform promoted with explicit 30-40% returns and fee demands.",
+    input: {
+      adjacentAfter: "Withdrawals require taxes and commission payment first.",
+      adjacentBefore: "Senior analyst recommendation",
+      blockHeading: "Crypto trading platform",
+      blockText: "Paul promised 30-40% returns using the crypto asset trading platform.",
+      candidateSignals: ["returns", "percentage", "pricing_fee"],
+      pageType: "financial_offer",
+      pageUrl: "https://cryptovaultnc.com",
+      sourceType: "page_evidence"
+    },
+    expected: {
+      claimPresent: true,
+      claimType: "return_performance_claim",
+      claimText: "promised 30-40% returns",
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: false,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: true,
+      feeDisclosurePresent: false,
+      confidence: 0.91,
+      rationaleShort: "Explicit returns language appears in a financial trading context without balancing disclosure."
+    }
+  }),
+  example({
+    id: "regulator-derived-dfpi-lgdbite-return-plus-fee",
+    split: "eval",
+    sourceUrl: "https://dfpi.ca.gov/consumers/crypto/crypto-scam-tracker/lgdbite-com-account-page-fraudulent-platform/",
+    notes: "Derived from an April 16, 2026 DFPI tracker entry describing 10% return claims and later certification-fee demands.",
+    input: {
+      adjacentAfter: "The platform demanded a 25% certification fee before release of funds.",
+      adjacentBefore: "Crypto investment invite",
+      blockHeading: "Account growth",
+      blockText: "The online date said they made a 10% return and convinced the victim to invest.",
+      candidateSignals: ["returns", "percentage", "pricing_fee"],
+      pageType: "financial_offer",
+      pageUrl: "https://lgdbite.com",
+      sourceType: "page_evidence"
+    },
+    expected: {
+      claimPresent: true,
+      claimType: "return_performance_claim",
+      claimText: "made a 10% return",
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: false,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: true,
+      feeDisclosurePresent: false,
+      confidence: 0.89,
+      rationaleShort: "Return claim is paired with later fee demand language but no balancing disclosure."
+    }
+  }),
+  example({
+    id: "regulator-derived-dfpi-credit-score-gains",
+    split: "eval",
+    sourceUrl: "https://dfpi.ca.gov/consumers/crypto/crypto-scam-tracker/creatordbwxq-cc-homepage-fraudulent-platform/",
+    notes: "Derived from a March 10, 2026 DFPI tracker entry describing a platform promising gains after a score threshold.",
+    input: {
+      adjacentAfter: "Deposit funds to increase the score.",
+      adjacentBefore: "Credit score system",
+      blockHeading: "User page",
+      blockText: "The platform promised gains once an investor score reached 100%.",
+      candidateSignals: ["earnings", "guarantee"],
+      pageType: "financial_offer",
+      pageUrl: "https://creatordbwxq.cc",
+      sourceType: "page_evidence"
+    },
+    expected: {
+      claimPresent: true,
+      claimType: "guaranteed_outcome_claim",
+      claimText: "promised gains once an investor score reached 100%",
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: true,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: false,
+      feeDisclosurePresent: false,
+      confidence: 0.88,
+      rationaleShort: "Outcome-dependent gains language implies a guaranteed or certain result."
+    }
+  }),
+  example({
+    id: "regulator-derived-dfpi-digital-finance-academy",
+    split: "eval",
+    sourceUrl: "https://dfpi.ca.gov/consumers/crypto/crypto-scam-tracker/digital-finance-academy-investment-agreement-fraudulent-platform/",
+    notes: "Derived from a DFPI entry describing a 'Stable Trading System 6.0' program pitched as netting 300% with commissions withheld.",
+    input: {
+      adjacentAfter: "Participants would owe 30% for subscription and service-related fees.",
+      adjacentBefore: "Trader Incubation Program",
+      blockHeading: "Stable Trading System 6.0",
+      blockText: "The resident believed they could net 300% through the investment system.",
+      candidateSignals: ["returns", "percentage", "pricing_fee"],
+      pageType: "financial_offer",
+      pageUrl: "https://h5.peabdexapp.vip",
+      sourceType: "document_source"
+    },
+    expected: {
+      claimPresent: true,
+      claimType: "return_performance_claim",
+      claimText: "could net 300%",
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: false,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: true,
+      feeDisclosurePresent: false,
+      confidence: 0.94,
+      rationaleShort: "Extreme return claim appears alongside fee language without balancing disclosure."
+    }
+  }),
+  example({
+    id: "regulator-derived-fca-devbankuk-authorised-claim",
+    split: "eval",
+    sourceUrl: "https://www.fca.org.uk/news/warnings/development-bank-uk-0",
+    notes: "Derived from an FCA warning published April 20, 2026 noting a site claiming to be FCA-authorised.",
+    input: {
+      adjacentAfter: "Apply now.",
+      adjacentBefore: "Development Bank UK",
+      blockHeading: "Authorised lender",
+      blockText: "Claiming to be authorised by the FCA.",
+      candidateSignals: ["superlative", "cta"],
+      pageType: "lead_generation_offer",
+      pageUrl: "https://www.devbankuk.com",
+      sourceType: "signal_hit"
+    },
+    expected: {
+      claimPresent: false,
+      claimType: "none",
+      claimText: null,
+      commercialContext: true,
+      contextType: "financial_offer",
+      adjacentDisclosurePresent: false,
+      adjacentDisclosureType: null,
+      adjacentDisclosureText: null,
+      guaranteeLanguage: false,
+      superlativeLanguage: false,
+      simulatedPerformanceLanguage: false,
+      urgencyPresent: false,
+      urgencyTiedToConversion: false,
+      pricingPresent: false,
+      feeDisclosurePresent: false,
+      confidence: 0.79,
+      rationaleShort: "Authorization-language alone is not one of the v1 financial claims patterns."
+    }
   })
 ];
 
@@ -285,6 +461,7 @@ export function toFinancialCommercialClaimsJsonl() {
       metadata: {
         id: entry.id,
         notes: entry.notes,
+        sourceUrl: entry.sourceUrl ?? null,
         split: entry.split
       }
     })
