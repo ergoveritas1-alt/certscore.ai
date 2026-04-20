@@ -8,6 +8,9 @@ import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type PublicScanDetailPageProps = {
   params: Promise<{
     scanId: string;
