@@ -1,15 +1,13 @@
 # AWS Validation Stack
 
-This Terraform stack provisions the AWS-only validation queue lane:
+This Terraform stack provisions the AWS-only validation worker lane:
 
 - ECS/Fargate cluster for:
   - validation ops web (`apps/web` with `APP_FLAVOR=validation_ops`)
   - validation worker
   - validation scheduler
-- private ElastiCache Redis OSS replication group with TLS and AUTH enabled
 - ALB, Route53, and optional ACM DNS validation for the validation ops hostname
 - ECR repositories for the web and worker images
-- Secrets Manager secret for the generated `VALIDATION_REDIS_URL`
 
 ## Expected inputs
 
@@ -39,7 +37,6 @@ terraform apply
    - `github_actions_deploy_role_arn`
    - `web_ecr_repository_url`
    - `worker_ecr_repository_url`
-   - `validation_redis_secret_arn`
 
 5. Configure the GitHub Actions AWS deploy workflow with those output values.
 
@@ -60,6 +57,6 @@ Required repository configuration for `.github/workflows/validation-aws-deploy.y
 
 ## Notes
 
-- This stack intentionally uses a standard node-based ElastiCache replication group, not serverless, because the validation queue lane uses BullMQ.
-- The main Vercel app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL` while the validation ECS tasks consume the generated `VALIDATION_REDIS_URL` secret directly.
+- The validation worker lane is Postgres-backed and no longer depends on Redis or ElastiCache.
+- The main Vercel app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL`.
 - The stack now creates the GitHub OIDC provider and a dedicated deploy role for this repository. Tighten `github_actions_subjects` if you want to restrict assumption to only `main` or a narrower workflow pattern.

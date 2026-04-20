@@ -42,13 +42,3 @@ output "worker_ecr_repository_url" {
   description = "ECR repository URL for the validation worker image."
   value       = aws_ecr_repository.worker.repository_url
 }
-
-output "validation_redis_secret_arn" {
-  description = "Secrets Manager ARN containing the validation rediss URL."
-  value       = aws_secretsmanager_secret.validation_redis_url.arn
-}
-
-output "validation_redis_primary_endpoint" {
-  description = "ElastiCache primary endpoint address."
-  value       = aws_elasticache_replication_group.validation.primary_endpoint_address
-}

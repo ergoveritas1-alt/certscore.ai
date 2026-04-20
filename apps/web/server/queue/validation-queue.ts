@@ -1,167 +1,103 @@
 import "server-only";
 
-import { Queue, type ConnectionOptions } from "bullmq";
-import { NANO_DOC_RETRIEVAL_JOB, VALIDATION_COLLECT_JOB, QUEUE_NAMES } from "@website-signal-risk-scanner/shared";
-import { getConfiguredWebValidationRedisUrl } from "../../lib/env";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 
-let connection: ConnectionOptions | null = null;
-let collectQueue: Queue<{ validationRunId: string }> | null = null;
-let nanoDocQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
-let nanoSignalQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
-let rankQueue: Queue<{ validationRunId: string }> | null = null;
+type QueueCounts = {
+  active: number;
+  delayed: number;
+  failed: number;
+  paused: number;
+  waiting: number;
+};
 
-function createRedisConnection(redisUrl: string): ConnectionOptions {
-  const url = new URL(redisUrl);
-  const username = decodeURIComponent(url.username);
-  const password = decodeURIComponent(url.password);
+type ValidationQueueHealth = {
+  collect: QueueCounts;
+  nanoDocRetrieval: QueueCounts;
+  nanoSignals: QueueCounts;
+  rank: QueueCounts;
+};
 
-  return {
-    enableReadyCheck: false,
-    host: url.hostname,
-    maxRetriesPerRequest: null,
-    password: password.length > 0 ? password : undefined,
-    port: Number(url.port || 6379),
-    tls: url.protocol === "rediss:" ? {} : undefined,
-    username: username.length > 0 ? username : undefined
-  };
-}
-
-function getRedisConnection() {
-  if (connection) {
-    return connection;
-  }
-
-  const redisUrl = getConfiguredWebValidationRedisUrl();
-  if (!redisUrl) {
-    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL.");
-  }
-
-  connection = createRedisConnection(redisUrl);
-  return connection;
-}
-
-function getCollectQueue() {
-  if (collectQueue) {
-    return collectQueue;
-  }
-
-  collectQueue = new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationCollect, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return collectQueue;
-}
-
-function getRankQueue() {
-  if (rankQueue) {
-    return rankQueue;
-  }
-
-  rankQueue = new Queue<{ validationRunId: string }>(QUEUE_NAMES.validationRank, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return rankQueue;
-}
-
-function getNanoSignalQueue() {
-  if (nanoSignalQueue) {
-    return nanoSignalQueue;
-  }
-
-  nanoSignalQueue = new Queue<{ pollCount?: number; scanId: string }>(QUEUE_NAMES.nanoSignalEnrichment, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return nanoSignalQueue;
-}
-
-function getNanoDocQueue() {
-  if (nanoDocQueue) {
-    return nanoDocQueue;
-  }
-
-  nanoDocQueue = new Queue<{ pollCount?: number; scanId: string }>(QUEUE_NAMES.nanoDocRetrieval, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return nanoDocQueue;
-}
-
-export function getValidationQueueAvailability(env: NodeJS.ProcessEnv = process.env) {
-  const redisUrl = getConfiguredWebValidationRedisUrl(env);
-  if (!redisUrl) {
-    return {
-      enabled: false,
-      reason: "Validation queueing is unavailable until VALIDATION_REDIS_URL is configured."
-    } as const;
-  }
-
-  try {
-    new URL(redisUrl);
-  } catch {
-    return {
-      enabled: false,
-      reason: "Validation queueing is unavailable because the configured validation Redis URL is invalid."
-    } as const;
-  }
-
+export function getValidationQueueAvailability() {
   return {
     enabled: true,
     reason: null
   } as const;
 }
 
-export async function enqueueValidationCollectJob(validationRunId: string) {
-  await getCollectQueue().add(
-    VALIDATION_COLLECT_JOB,
-    { validationRunId },
-    {
-      attempts: 2,
-      jobId: `${validationRunId}--collect`
-    }
-  );
+export async function enqueueValidationCollectJob(_validationRunId: string) {
+  return;
 }
 
 export async function enqueueNanoSignalEnrichmentJob(scanId: string) {
-  await getNanoDocQueue().add(
-    NANO_DOC_RETRIEVAL_JOB,
-    { pollCount: 0, scanId },
-    {
-      attempts: 2,
-      jobId: `${scanId}--nano-doc-retrieval--initial`
-    }
+  await query(
+    `
+      insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+      values ($1, null, null, $2, $3, $4)
+    `,
+    [
+      scanId,
+      SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+      "Nano document signal enrichment requested.",
+      { stage: "nano_doc_signals" }
+    ]
   );
 }
 
-export async function getValidationQueueHealth() {
-  const [collectCounts, nanoDocCounts, nanoSignalCounts, rankCounts] = await Promise.all([
-    getCollectQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
-    getNanoDocQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
-    getNanoSignalQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused"),
-    getRankQueue().getJobCounts("waiting", "active", "failed", "delayed", "paused")
-  ]);
+export async function getValidationQueueHealth(): Promise<ValidationQueueHealth> {
+  const counts = await queryOne<{
+    collecting: number;
+    queued: number;
+    ranking: number;
+    validating: number;
+    waiting_for_scan: number;
+  }>(
+    `
+      select
+        count(*) filter (where status = 'queued')::int as queued,
+        count(*) filter (where status = 'waiting_for_scan')::int as waiting_for_scan,
+        count(*) filter (where status = 'collecting')::int as collecting,
+        count(*) filter (where status = 'ranking')::int as ranking,
+        count(*) filter (where status = 'validating')::int as validating
+      from validation_runs
+      where status in ('queued', 'waiting_for_scan', 'collecting', 'ranking', 'validating')
+    `,
+    [],
+    { readOnly: true }
+  );
+
+  const collectWaiting = (counts?.queued ?? 0) + (counts?.waiting_for_scan ?? 0);
+  const collectActive = counts?.collecting ?? 0;
+  const rankActive = (counts?.ranking ?? 0) + (counts?.validating ?? 0);
 
   return {
-    collect: collectCounts,
-    nanoDocRetrieval: nanoDocCounts,
-    nanoSignals: nanoSignalCounts,
-    rank: rankCounts
+    collect: {
+      active: collectActive,
+      delayed: 0,
+      failed: 0,
+      paused: 0,
+      waiting: collectWaiting
+    },
+    nanoDocRetrieval: {
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      paused: 0,
+      waiting: 0
+    },
+    nanoSignals: {
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      paused: 0,
+      waiting: 0
+    },
+    rank: {
+      active: rankActive,
+      delayed: 0,
+      failed: 0,
+      paused: 0,
+      waiting: 0
+    }
   };
 }

@@ -200,6 +200,49 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "gpc ignored with delta but no reviewer-visible support stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.gpc_signal_not_honored",
+        suggestedUnifiedFindingId: "gpc_signal_not_honored",
+        title: "GPC signal not honored"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        baselineThirdPartyCookieCount: 6,
+        gpcThirdPartyCookieCount: 8,
+        thirdPartyCookieCountDelta: 2,
+        trackerCountDelta: 0
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "gpc ignored with delta and gpc disclosure support stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.gpc_signal_not_honored",
+        suggestedUnifiedFindingId: "gpc_signal_not_honored",
+        title: "GPC signal not honored"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        baselineThirdPartyCookieCount: 6,
+        gpcThirdPartyCookieCount: 8,
+        thirdPartyCookieCountDelta: 2,
+        trackerCountDelta: 0,
+        gpcDisclosurePresent: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "consent surface missing without concrete absence evidence stays audit-only",
       concern: makeConcern({
         originKey: "privacy.consent_surface_missing",

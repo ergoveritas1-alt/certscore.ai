@@ -219,30 +219,6 @@ variable "playwright_browsers_path" {
   default     = "/ms-playwright"
 }
 
-variable "redis_node_type" {
-  description = "ElastiCache node type for the validation queue."
-  type        = string
-  default     = "cache.t4g.small"
-}
-
-variable "redis_engine_version" {
-  description = "Redis OSS engine version for ElastiCache."
-  type        = string
-  default     = "7.1"
-}
-
-variable "redis_port" {
-  description = "ElastiCache port."
-  type        = number
-  default     = 6379
-}
-
-variable "redis_num_cache_clusters" {
-  description = "Number of cache nodes in the replication group."
-  type        = number
-  default     = 2
-}
-
 variable "web_cpu" {
   description = "CPU units for the validation ops web task."
   type        = number

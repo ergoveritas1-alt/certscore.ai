@@ -1,11 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  NANO_DOC_RETRIEVAL_JOB,
-  NANO_SIGNAL_ENRICHMENT_JOB,
   SCAN_EVENT_TYPES,
-  VALIDATION_COLLECT_JOB,
-  VALIDATION_RANK_JOB,
-  VALIDATION_VERDICT_JOB,
   buildFindingComparisonKey,
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
@@ -44,13 +39,6 @@ import {
 } from "./nano-document-extraction";
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
-import {
-  createNanoDocRetrievalQueue,
-  createNanoSignalEnrichmentQueue,
-  createValidationCollectQueue,
-  createValidationRankQueue,
-  createValidationVerdictQueue
-} from "../queue/queues";
 import { getWorkerEnv } from "../env";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
@@ -62,6 +50,10 @@ const NANO_SIGNAL_ENRICHMENT_POLL_MS = 5_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 const VALIDATION_VERDICT_BATCH_SIZE = 3;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -244,6 +236,48 @@ function getRecordBoolean(record: Record<string, unknown> | null, key: string) {
 function getSnapshotNumber(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+type UnifiedFindingsWorkflowEventAppender = (input: {
+  eventType: string;
+  message: string;
+  metadataJson?: Record<string, unknown>;
+  scanId: string;
+}) => Promise<unknown>;
+
+export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding>(input: {
+  appendEvent?: UnifiedFindingsWorkflowEventAppender;
+  deriveFindings: () => TFinding[];
+  scanId: string;
+}) {
+  const appendEvent = input.appendEvent ?? appendScanWorkflowEvent;
+
+  try {
+    const findings = input.deriveFindings();
+
+    await appendEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+      message: "Unified finding derivation completed.",
+      metadataJson: {
+        findingCount: findings.length,
+        stage: "unified_findings"
+      },
+      scanId: input.scanId
+    }).catch(() => undefined);
+
+    return findings;
+  } catch (error) {
+    await appendEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedFailed,
+      message: "Unified finding derivation failed.",
+      metadataJson: {
+        error: error instanceof Error ? error.message : String(error),
+        stage: "unified_findings"
+      },
+      scanId: input.scanId
+    }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function formatPercent(value: number | null) {
@@ -2454,70 +2488,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
 }
 
 export async function enqueueValidationCollect(runId: string) {
-  await enqueueValidationCollectWithDelay(runId, 0);
-}
-
-export async function enqueueNanoDocRetrieval(scanId: string, pollCount = 0, delayMs = 0) {
-  await createNanoDocRetrievalQueue().add(
-    NANO_DOC_RETRIEVAL_JOB,
-    { pollCount, scanId },
-    {
-      attempts: 2,
-      delay: delayMs,
-      removeOnComplete: 50,
-      removeOnFail: 50
-    }
-  );
-}
-
-export async function enqueueNanoSignalEnrichment(scanId: string, pollCount = 0, delayMs = 0) {
-  await createNanoSignalEnrichmentQueue().add(
-    NANO_SIGNAL_ENRICHMENT_JOB,
-    { pollCount, scanId },
-    {
-      attempts: 2,
-      delay: delayMs,
-      removeOnComplete: 50,
-      removeOnFail: 50
-    }
-  );
-}
-
-async function enqueueValidationCollectWithDelay(runId: string, delayMs: number) {
-  await createValidationCollectQueue().add(
-    VALIDATION_COLLECT_JOB,
-    { validationRunId: runId },
-    {
-      attempts: 2,
-      delay: delayMs,
-      removeOnComplete: 50,
-      removeOnFail: 50
-    }
-  );
-}
-
-async function enqueueValidationRank(runId: string) {
-  await createValidationRankQueue().add(
-    VALIDATION_RANK_JOB,
-    { validationRunId: runId },
-    {
-      attempts: 2,
-      removeOnComplete: 50,
-      removeOnFail: 50
-    }
-  );
-}
-
-async function enqueueValidationVerdict(runId: string) {
-  await createValidationVerdictQueue().add(
-    VALIDATION_VERDICT_JOB,
-    { validationRunId: runId },
-    {
-      attempts: 2,
-      removeOnComplete: 50,
-      removeOnFail: 50
-    }
-  );
+  void runId;
 }
 
 export function normalizeDocUrl(url: string | null) {
@@ -3390,7 +3361,8 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
 
   if (pendingCandidates.length === 0) {
     if (shouldReenqueueForDiscovery && !hasExistingReadyPrivacyPolicy && pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
-      await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
+      await sleep(NANO_DOC_RETRIEVAL_POLL_MS);
+      await processNanoDocRetrievalJob({ pollCount: pollCount + 1, scanId });
       return;
     }
   }
@@ -3440,9 +3412,6 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
       rows: priorityRows,
       scanId
     });
-    if (newPriorityReadyRows.length > 0) {
-      await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
-    }
   }
 
   const secondaryFetchedResults = await secondaryFetchPromise;
@@ -3458,9 +3427,6 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
       rows: combinedRows,
       scanId
     });
-    if (newCombinedReadyRows.length > newPriorityReadyRows.length) {
-      await enqueueNanoSignalEnrichment(scanId, 0, 1_000);
-    }
   }
 
   const retrievalSummary = summarizeNanoDocRetrievalResults({
@@ -3489,7 +3455,8 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   }).catch(() => undefined);
 
   if (shouldReenqueueForDiscovery && !hasReadyNanoDocumentOfType(combinedRows, "privacy_policy") && pollCount + 1 < MAX_NANO_DOC_RETRIEVAL_POLLS) {
-    await enqueueNanoDocRetrieval(scanId, pollCount + 1, NANO_DOC_RETRIEVAL_POLL_MS);
+    await sleep(NANO_DOC_RETRIEVAL_POLL_MS);
+    await processNanoDocRetrievalJob({ pollCount: pollCount + 1, scanId });
   }
 }
 
@@ -3738,7 +3705,8 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
 
   if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
     if (pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS) {
-      await enqueueNanoSignalEnrichment(scanId, pollCount + 1, NANO_SIGNAL_ENRICHMENT_POLL_MS);
+      await sleep(NANO_SIGNAL_ENRICHMENT_POLL_MS);
+      await processNanoSignalEnrichmentJob({ pollCount: pollCount + 1, scanId });
       return;
     }
   }
@@ -3818,18 +3786,10 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       },
       scanId
     }).catch(() => undefined);
-
-    const findings = deriveValidationFindings(refreshedArtifacts);
-
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
-      message: "Unified finding derivation completed.",
-      metadataJson: {
-        findingCount: findings.length,
-        stage: "unified_findings"
-      },
+    await deriveUnifiedFindingsWithWorkflowEvents({
+      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
-    }).catch(() => undefined);
+    });
   }
 }
 
@@ -3862,7 +3822,6 @@ export async function processValidationCollectJob(validationRunId: string) {
           status: "waiting_for_scan"
         });
       }
-      await enqueueValidationCollectWithDelay(validationRunId, VALIDATION_SCAN_HANDOFF_POLL_MS);
       return;
     }
 
@@ -3872,7 +3831,6 @@ export async function processValidationCollectJob(validationRunId: string) {
           status: "collecting"
         });
       }
-      await enqueueValidationCollectWithDelay(validationRunId, VALIDATION_SCAN_HANDOFF_POLL_MS);
       return;
     }
 
@@ -3887,7 +3845,6 @@ export async function processValidationCollectJob(validationRunId: string) {
     await updateValidationRun(validationRunId, {
       status: "ranking"
     });
-    await enqueueValidationRank(validationRunId);
   } catch (error) {
     await failValidationRun(validationRunId, error instanceof Error ? error.message : "Validation collect failed.");
     throw error;
@@ -3976,17 +3933,11 @@ export async function processValidationRankJob(validationRunId: string) {
       },
       scanId
     }).catch(() => undefined);
-    const findings = deriveValidationFindings(refreshedArtifacts);
-    await replaceValidationRunFindings(validationRunId, findings);
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
-      message: "Unified finding derivation completed.",
-      metadataJson: {
-        findingCount: findings.length,
-        stage: "unified_findings"
-      },
+    const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
-    }).catch(() => undefined);
+    });
+    await replaceValidationRunFindings(validationRunId, findings);
 
     if (findings.length === 0) {
       await finalizeValidationRun(validationRunId);
@@ -4001,7 +3952,6 @@ export async function processValidationRankJob(validationRunId: string) {
     await updateValidationRun(validationRunId, {
       status: "validating"
     });
-    await enqueueValidationVerdict(validationRunId);
   } catch (error) {
     await failValidationRun(validationRunId, error instanceof Error ? error.message : "Validation ranking failed.");
     throw error;

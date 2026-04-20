@@ -1,11 +1,9 @@
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
-import { Queue, type ConnectionOptions } from "bullmq";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
 import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
-import { getConfiguredValidationRedisUrl } from "../lib/env";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
 import { deriveSignalEnrichmentWorkflowState } from "../../../packages/shared/src/utils/scan-signal-workflow";
@@ -51,75 +49,23 @@ const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_TIMEOUT_MS = 8 * 60_000;
 const DEFAULT_ENRICHMENT_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 5_000;
-const NANO_DOC_RETRIEVAL_QUEUE = "nano_doc_retrieval";
-const NANO_DOC_RETRIEVAL_JOB = "nano_doc_retrieval";
-
-let nanoDocQueue: Queue<{ pollCount?: number; scanId: string }> | null = null;
-
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
 }
 
-function createRedisConnection(redisUrl: string): ConnectionOptions {
-  const url = new URL(redisUrl);
-  const username = decodeURIComponent(url.username);
-  const password = decodeURIComponent(url.password);
-
-  return {
-    enableReadyCheck: false,
-    host: url.hostname,
-    maxRetriesPerRequest: null,
-    password: password.length > 0 ? password : undefined,
-    port: Number(url.port || 6379),
-    tls: url.protocol === "rediss:" ? {} : undefined,
-    username: username.length > 0 ? username : undefined
-  };
-}
-
-function getRedisConnection() {
-  const redisUrl = getConfiguredValidationRedisUrl();
-  if (!redisUrl) {
-    throw new Error("Validation Redis is not configured. Set VALIDATION_REDIS_URL or REDIS_URL.");
-  }
-
-  return createRedisConnection(redisUrl);
-}
-
-function getNanoDocQueue() {
-  if (nanoDocQueue) {
-    return nanoDocQueue;
-  }
-
-  nanoDocQueue = new Queue<{ pollCount?: number; scanId: string }>(NANO_DOC_RETRIEVAL_QUEUE, {
-    connection: getRedisConnection(),
-    defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 100
-    }
-  });
-
-  return nanoDocQueue;
-}
-
-async function closeNanoDocQueue() {
-  if (!nanoDocQueue) {
-    return;
-  }
-
-  const queueToClose = nanoDocQueue;
-  nanoDocQueue = null;
-  await queueToClose.close();
-}
-
 async function enqueueNanoSignalEnrichment(scanId: string) {
-  await getNanoDocQueue().add(
-    NANO_DOC_RETRIEVAL_JOB,
-    { pollCount: 0, scanId },
-    {
-      attempts: 2,
-      jobId: `${scanId}--nano-doc-retrieval--initial`
-    }
+  await query(
+    `
+      insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+      values ($1, null, null, $2, $3, $4)
+    `,
+    [
+      scanId,
+      SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+      "Nano document signal enrichment requested.",
+      { stage: "nano_doc_signals" }
+    ]
   );
 }
 
@@ -844,10 +790,6 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await closeNanoDocQueue().catch((error) => {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    });
     await closePools().catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

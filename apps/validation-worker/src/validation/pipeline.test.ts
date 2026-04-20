@@ -4,6 +4,7 @@ import {
   buildNanoDocumentContentHash,
   buildNanoDocCandidateUrls,
   dedupeNanoDocumentSources,
+  deriveUnifiedFindingsWithWorkflowEvents,
   deriveValidationFindings,
   determineValidationCollectAction,
   getNanoDocumentSourceDedupKeys,
@@ -90,6 +91,51 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("deriveUnifiedFindingsWithWorkflowEvents emits completed event metadata on success", async () => {
+  const events: Array<Record<string, unknown>> = [];
+
+  const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+    appendEvent: async (event) => {
+      events.push(event);
+    },
+    deriveFindings: () => [{ ruleKey: "example.finding" }],
+    scanId: "scan_123"
+  });
+
+  assert.equal(findings.length, 1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.eventType, "findings.unified_derivation_completed");
+  assert.deepEqual(events[0]?.metadataJson, {
+    findingCount: 1,
+    stage: "unified_findings"
+  });
+});
+
+test("deriveUnifiedFindingsWithWorkflowEvents emits failed event metadata on error", async () => {
+  const events: Array<Record<string, unknown>> = [];
+
+  await assert.rejects(
+    () =>
+      deriveUnifiedFindingsWithWorkflowEvents({
+        appendEvent: async (event) => {
+          events.push(event);
+        },
+        deriveFindings: () => {
+          throw new Error("boom");
+        },
+        scanId: "scan_123"
+      }),
+    /boom/
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.eventType, "findings.unified_derivation_failed");
+  assert.deepEqual(events[0]?.metadataJson, {
+    error: "boom",
+    stage: "unified_findings"
+  });
 });
 
 test("emits a blocked-access finding when the public scan is cut short before any verified surfaces", () => {
