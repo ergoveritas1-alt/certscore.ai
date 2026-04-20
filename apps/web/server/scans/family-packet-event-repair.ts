@@ -63,6 +63,8 @@ const CONTACT_PATH_PATTERN =
   /\/t\/contact(?:[_-]us)?(?:\/|$)|\/contact-us(?:\/|$)|\/contact(?:\/|$)|\/support(?:\/|$)|\/help(?:\/|$)|\/contact(?:[-_]?us)?(?:\.html)?(?:\/|$)|\/info\/contact(?:[-_]?us)?\.html(?:\/|$)/;
 const ACCESSIBILITY_PATH_PATTERN =
   /\/accessibility(?:\/|$)|\/accessibility-statement(?:\/|$)|\/accessibility(?:\.html)?(?:\/|$)/;
+const PRIVACY_CHOICES_PATH_PATTERN =
+  /privacy-choices|privacy_choices|your-privacy-choices|do-not-sell|do-not-share|ad-choices|cookie-settings|manage-cookies|opt-?out|\/cookies(?:\/|$)/;
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -665,6 +667,20 @@ function getUrlPathWithFragment(value: string | null | undefined) {
 }
 
 function isStrongRenderedDiscoveryCandidate(candidate: DiscoveryCandidateRecord, pageType: string) {
+  if (pageType === "privacy_choices") {
+    if (!["same_host", "same_brand_subdomain"].includes(candidate.hostRelation)) {
+      return false;
+    }
+
+    const isStrongDiscoverySource = ["rendered_link", "html_link"].includes(candidate.discoveredFrom);
+    const isStrongFooterPrivacyChoicesLink = candidate.discoveredFrom === "footer_link" && candidate.hostRelation === "same_host";
+    return (
+      (isStrongDiscoverySource || isStrongFooterPrivacyChoicesLink) &&
+      candidate.candidateScore >= 70 &&
+      hasExplicitPrivacyChoicesSignal({ url: candidate.candidateUrl })
+    );
+  }
+
   if (candidate.pageType !== pageType) {
     return false;
   }
@@ -737,6 +753,18 @@ function getDiscoveryCandidatePriorityBonus(candidate: DiscoveryCandidateRecord,
   const pathWithFragment = getUrlPathWithFragment(candidate.candidateUrl);
   let bonus = 0;
 
+  if (pageType === "privacy_choices") {
+    if (/\/your-privacy-choices(?:\/|$)|\/privacy-choices(?:\/|$)|\/privacy_choices(?:\/|$)/.test(path)) {
+      bonus += 45;
+    } else if (/\/do-not-sell|\/do-not-share/.test(path) || /#do-not-sell|#do-not-share/i.test(candidate.candidateUrl)) {
+      bonus += 40;
+    } else if (/\/cookie-settings(?:\/|$)|\/manage-cookies(?:\/|$)|\/cookies(?:\/|$)/.test(path)) {
+      bonus += 25;
+    } else if (PRIVACY_CHOICES_PATH_PATTERN.test(pathWithFragment)) {
+      bonus += 20;
+    }
+  }
+
   if (pageType === "privacy_policy") {
     if (/\/privacy-policy(?:\/|$)|\/policy\/privacy(?:\/|$)/.test(path)) {
       bonus += 35;
@@ -792,6 +820,27 @@ function getBestDiscoveryCandidate(candidates: DiscoveryCandidateRecord[], pageT
       const weightedDelta =
         right.candidateScore + getDiscoveryCandidatePriorityBonus(right, pageType) -
         (left.candidateScore + getDiscoveryCandidatePriorityBonus(left, pageType));
+      if (weightedDelta !== 0) {
+        return weightedDelta;
+      }
+
+      return right.candidateScore - left.candidateScore;
+    })[0] ?? null;
+}
+
+function getBestPrivacyChoicesDiscoveryCandidate(candidates: DiscoveryCandidateRecord[]) {
+  return candidates
+    .filter((candidate) => {
+      if (!["privacy_choices", "privacy_policy", "cookie_policy"].includes(candidate.pageType)) {
+        return false;
+      }
+
+      return isStrongRenderedDiscoveryCandidate(candidate, "privacy_choices");
+    })
+    .sort((left, right) => {
+      const weightedDelta =
+        right.candidateScore + getDiscoveryCandidatePriorityBonus(right, "privacy_choices") -
+        (left.candidateScore + getDiscoveryCandidatePriorityBonus(left, "privacy_choices"));
       if (weightedDelta !== 0) {
         return weightedDelta;
       }
@@ -987,6 +1036,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   const hasDiscoveryRepairs =
     Boolean(privacySurfaceRepair) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "privacy_policy")) ||
+    Boolean(getBestPrivacyChoicesDiscoveryCandidate(discoveryCandidates)) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "contact")) ||
     Boolean(getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement")) ||
@@ -1466,11 +1516,26 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
       const hasPrivacyChoicesTarget = repairedTargets.some((target) =>
         getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")
       );
+      const privacyChoicesDiscoveryCandidate = getBestPrivacyChoicesDiscoveryCandidate(discoveryCandidates);
+      if (privacyChoicesDiscoveryCandidate && !hasPrivacyChoicesTarget) {
+        repairedTargets.push(
+          buildDiscoveryRepairTarget({
+            candidate: privacyChoicesDiscoveryCandidate,
+            label: "Your Privacy Choices",
+            surfaceType: "privacy_choices"
+          })
+        );
+        packetsChanged = true;
+      }
+
+      const updatedHasPrivacyChoicesTarget = repairedTargets.some((target) =>
+        getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")
+      );
       const hasTargetedAdvertisingChoicesFinding = repairedFindings.some(
         (finding) => finding.findingId === "targeted_advertising_choices_present"
       );
 
-      if (hasPrivacyChoicesTarget && !hasTargetedAdvertisingChoicesFinding) {
+      if (updatedHasPrivacyChoicesTarget && !hasTargetedAdvertisingChoicesFinding) {
         const privacyChoicesTarget =
           repairedTargets.find((target) => getStringArray(target.supportedSurfaceTypes).includes("privacy_choices")) ?? null;
         const privacyChoicesUrl = typeof privacyChoicesTarget?.canonicalUrl === "string" ? privacyChoicesTarget.canonicalUrl : null;
@@ -1482,7 +1547,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
           repairedFindings.push(
             buildDiscoveryRepairFinding({
               findingId: "targeted_advertising_choices_present",
-              reason: "Verified privacy-controls evidence includes a dedicated privacy choices or do-not-sell/share path.",
+              reason: "Privacy-controls evidence includes a dedicated privacy choices or do-not-sell/share path.",
               sourceSurfaceType: "privacy_choices",
               url: privacyChoicesUrl
             })
@@ -1630,6 +1695,7 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
   const contactCandidate = getBestDiscoveryCandidate(discoveryCandidates, "contact");
   const accessibilityCandidate = getBestDiscoveryCandidate(discoveryCandidates, "accessibility_statement");
   const termsCandidate = getBestDiscoveryCandidate(discoveryCandidates, "terms_of_service");
+  const privacyChoicesCandidate = getBestPrivacyChoicesDiscoveryCandidate(discoveryCandidates);
   const verifiedContactSupport =
     verifiedSurfaceRecoveryResults.find((result) => result.surfaceType === "contact_support") ?? null;
   const verifiedAccessibilitySupport =
@@ -1742,6 +1808,30 @@ export function repairFindingFamilyPacketEvents<TEvent extends ScanEventRecordLi
           reason: "Homepage discovery retained a strong same-brand terms surface.",
           sourceSurfaceType: "terms_of_service",
           url: termsCandidate.candidateUrl
+        })
+      ]
+    });
+  }
+
+  if (privacyChoicesCandidate) {
+    syntheticPackets.push({
+      contract: {
+        id: "privacy_controls"
+      },
+      familyId: "privacy_controls",
+      canonicalTargets: [
+        buildDiscoveryRepairTarget({
+          candidate: privacyChoicesCandidate,
+          label: "Your Privacy Choices",
+          surfaceType: "privacy_choices"
+        })
+      ],
+      supportedUnifiedFindings: [
+        buildDiscoveryRepairFinding({
+          findingId: "targeted_advertising_choices_present",
+          reason: "Privacy-controls evidence includes a dedicated privacy choices or do-not-sell/share path.",
+          sourceSurfaceType: "privacy_choices",
+          url: privacyChoicesCandidate.candidateUrl
         })
       ]
     });

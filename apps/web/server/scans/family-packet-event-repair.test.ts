@@ -1619,6 +1619,102 @@ test("backfills targeted advertising choices from a retained privacy-choices tar
   assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/do-not-sell");
 });
 
+test("backfills targeted advertising choices from a strong discovery privacy-choices route", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_privacy_choices",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 86,
+                candidateUrl: "https://www.example.com/your-privacy-choices",
+                discoveredFrom: "footer_link",
+                hostRelation: "same_host",
+                pageType: "privacy_policy",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      },
+      {
+        createdAt: "2026-03-30T00:00:01.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_family_privacy_choices_discovery",
+        message: "family packet",
+        metadataJson: {
+          packets: [
+            {
+              canonicalTargets: [],
+              familyId: "privacy_controls",
+              supportedUnifiedFindings: []
+            }
+          ],
+          phase: "finding_family_packets"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const targetedChoicesPacket = packets.find((packet) => packet.unifiedFindingId === "targeted_advertising_choices_present");
+  assert.ok(targetedChoicesPacket);
+  assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/your-privacy-choices");
+});
+
+test("synthesizes privacy-controls from discovery-only privacy-choices routes", () => {
+  const events = repairFindingFamilyPacketEvents({
+    events: [
+      {
+        createdAt: "2026-03-30T00:00:00.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        id: "evt_discovery_only_privacy_choices",
+        message: "discovery",
+        metadataJson: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                candidateScore: 91,
+                candidateUrl: "https://www.example.com/do-not-sell-or-share",
+                discoveredFrom: "rendered_link",
+                hostRelation: "same_host",
+                pageType: "privacy_policy",
+                sourceUrl: "https://www.example.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      }
+    ],
+    policyEnrichment: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    scanEvents: events,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const targetedChoicesPacket = packets.find((packet) => packet.unifiedFindingId === "targeted_advertising_choices_present");
+  assert.ok(targetedChoicesPacket);
+  assert.equal(targetedChoicesPacket?.primaryPageUrl, "https://www.example.com/do-not-sell-or-share");
+});
+
 test("does not backfill targeted advertising choices from a generic privacy page without an explicit control signal", () => {
   const events = repairFindingFamilyPacketEvents({
     events: [

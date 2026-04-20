@@ -238,6 +238,48 @@ function getSnapshotNumber(record: Record<string, unknown> | null, key: string) 
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+type UnifiedFindingsWorkflowEventAppender = (input: {
+  eventType: string;
+  message: string;
+  metadataJson?: Record<string, unknown>;
+  scanId: string;
+}) => Promise<unknown>;
+
+export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding>(input: {
+  appendEvent?: UnifiedFindingsWorkflowEventAppender;
+  deriveFindings: () => TFinding[];
+  scanId: string;
+}) {
+  const appendEvent = input.appendEvent ?? appendScanWorkflowEvent;
+
+  try {
+    const findings = input.deriveFindings();
+
+    await appendEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+      message: "Unified finding derivation completed.",
+      metadataJson: {
+        findingCount: findings.length,
+        stage: "unified_findings"
+      },
+      scanId: input.scanId
+    }).catch(() => undefined);
+
+    return findings;
+  } catch (error) {
+    await appendEvent({
+      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedFailed,
+      message: "Unified finding derivation failed.",
+      metadataJson: {
+        error: error instanceof Error ? error.message : String(error),
+        stage: "unified_findings"
+      },
+      scanId: input.scanId
+    }).catch(() => undefined);
+    throw error;
+  }
+}
+
 function formatPercent(value: number | null) {
   if (value === null || !Number.isFinite(value)) {
     return "Not observed";
@@ -3744,18 +3786,10 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       },
       scanId
     }).catch(() => undefined);
-
-    const findings = deriveValidationFindings(refreshedArtifacts);
-
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
-      message: "Unified finding derivation completed.",
-      metadataJson: {
-        findingCount: findings.length,
-        stage: "unified_findings"
-      },
+    await deriveUnifiedFindingsWithWorkflowEvents({
+      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
-    }).catch(() => undefined);
+    });
   }
 }
 
@@ -3899,17 +3933,11 @@ export async function processValidationRankJob(validationRunId: string) {
       },
       scanId
     }).catch(() => undefined);
-    const findings = deriveValidationFindings(refreshedArtifacts);
-    await replaceValidationRunFindings(validationRunId, findings);
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
-      message: "Unified finding derivation completed.",
-      metadataJson: {
-        findingCount: findings.length,
-        stage: "unified_findings"
-      },
+    const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
-    }).catch(() => undefined);
+    });
+    await replaceValidationRunFindings(validationRunId, findings);
 
     if (findings.length === 0) {
       await finalizeValidationRun(validationRunId);

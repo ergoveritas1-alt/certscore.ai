@@ -845,8 +845,20 @@ function hasMeaningfulGpcIgnoredEvidence(rawEvidence: Record<string, unknown> | 
   const trackerCountDelta = getNumberEvidence(rawEvidence, ["trackerCountDelta", "tracker_count_delta"]) ?? 0;
   const thirdPartyCookieCountDelta =
     getNumberEvidence(rawEvidence, ["thirdPartyCookieCountDelta", "third_party_cookie_count_delta"]) ?? 0;
+  const hasMeaningfulDelta = trackerCountDelta !== 0 || thirdPartyCookieCountDelta !== 0;
 
-  return trackerCountDelta !== 0 || thirdPartyCookieCountDelta !== 0;
+  if (!hasMeaningfulDelta) {
+    return false;
+  }
+
+  const hasReviewerVisibleSupport =
+    hasSubstantivePageOrSnippetEvidence(rawEvidence) ||
+    getBooleanEvidence(rawEvidence, ["gpcDisclosurePresent", "gpc_disclosure_present"]) === true ||
+    getStringArrayValues(rawEvidence, ["policyMentions", "policy_mentions"]).some((value) =>
+      /gpc|global privacy control|opt-?out preference/i.test(value)
+    );
+
+  return hasReviewerVisibleSupport;
 }
 
 function hasSubstantivePageOrSnippetEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
