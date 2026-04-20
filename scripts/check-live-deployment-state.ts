@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 
 type VersionPayload = {
+  amplifyAppId?: string | null;
+  amplifyBranch?: string | null;
   appUrl?: string | null;
   gitRef?: string | null;
   gitSha?: string | null;
@@ -82,14 +84,19 @@ function printReport(label: string, report: EndpointReport) {
   console.log(`  git sha: ${formatValue(report.payload?.gitSha)}`);
   console.log(`  git ref: ${formatValue(report.payload?.gitRef)}`);
   console.log(`  runtime target: ${formatValue(report.payload?.runtimeTarget)}`);
+  console.log(`  amplify app id: ${formatValue(report.payload?.amplifyAppId)}`);
+  console.log(`  amplify branch: ${formatValue(report.payload?.amplifyBranch)}`);
   console.log(`  image tag: ${formatValue(report.payload?.imageTag)}`);
   console.log(`  app url: ${formatValue(report.payload?.appUrl)}`);
 }
 
 async function main() {
   const liveBaseUrl = getEnv("LIVE_BASE_URL", "https://certscore.ai");
-  const vercelBaseUrl = getEnv("VERCEL_BASE_URL", "https://consentcheck-site.vercel.app");
-  const expectedLiveRuntimeTarget = getEnv("EXPECTED_LIVE_RUNTIME_TARGET", "gcp-vm");
+  const secondaryBaseUrl = getEnv("SECONDARY_BASE_URL", getEnv("VERCEL_BASE_URL", "https://consentcheck.site"));
+  const liveLabel = getEnv("LIVE_LABEL", "Primary host");
+  const secondaryLabel = getEnv("SECONDARY_LABEL", "Secondary host");
+  const expectedLiveRuntimeTarget = getEnv("EXPECTED_LIVE_RUNTIME_TARGET", "amplify");
+  const expectedSecondaryRuntimeTarget = getEnv("EXPECTED_SECONDARY_RUNTIME_TARGET", "amplify");
   const expectedLiveGitSha = getEnv("EXPECTED_LIVE_GIT_SHA", getGitSha("main") ?? "");
 
   let failures = 0;
@@ -112,22 +119,22 @@ async function main() {
   console.log("Live deployment state audit");
   console.log();
 
-  const [liveReport, vercelReport] = await Promise.all([
+  const [liveReport, secondaryReport] = await Promise.all([
     fetchVersionReport(liveBaseUrl).catch((error) => {
-      fail(`Could not fetch live host version from ${liveBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+      fail(`Could not fetch ${liveLabel.toLowerCase()} version from ${liveBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }),
-    fetchVersionReport(vercelBaseUrl).catch((error) => {
-      warn(`Could not fetch Vercel host version from ${vercelBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    fetchVersionReport(secondaryBaseUrl).catch((error) => {
+      warn(`Could not fetch ${secondaryLabel.toLowerCase()} version from ${secondaryBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     })
   ]);
 
   if (liveReport) {
-    printReport("Live host", liveReport);
+    printReport(liveLabel, liveReport);
   }
-  if (vercelReport) {
-    printReport("Vercel host", vercelReport);
+  if (secondaryReport) {
+    printReport(secondaryLabel, secondaryReport);
   }
 
   console.log();
@@ -135,58 +142,66 @@ async function main() {
   if (!liveReport || !liveReport.ok || !liveReport.payload) {
     fail(`Live host ${liveBaseUrl} did not return a usable /api/version payload`);
   } else {
-    pass(`Live host ${liveBaseUrl} returned version metadata`);
+    pass(`${liveLabel} ${liveBaseUrl} returned version metadata`);
 
     if (expectedLiveRuntimeTarget && liveReport.payload.runtimeTarget !== expectedLiveRuntimeTarget) {
       fail(
-        `Live host runtime target is ${formatValue(liveReport.payload.runtimeTarget)}, expected ${expectedLiveRuntimeTarget}`
+        `${liveLabel} runtime target is ${formatValue(liveReport.payload.runtimeTarget)}, expected ${expectedLiveRuntimeTarget}`
       );
     } else {
-      pass(`Live host runtime target matches ${expectedLiveRuntimeTarget}`);
+      pass(`${liveLabel} runtime target matches ${expectedLiveRuntimeTarget}`);
     }
 
     if (expectedLiveRuntimeTarget === "gcp-vm") {
       const serverHeader = liveReport.headers.server?.toLowerCase() ?? "";
       if (serverHeader.includes("caddy")) {
-        pass("Live host is being served by Caddy as expected for the VM lane");
+        pass(`${liveLabel} is being served by Caddy as expected for the VM lane`);
       } else {
-        fail(`Live host server header is ${formatValue(liveReport.headers.server)}, expected a Caddy-served VM host`);
+        fail(`${liveLabel} server header is ${formatValue(liveReport.headers.server)}, expected a Caddy-served VM host`);
       }
     }
   }
 
-  if (!vercelReport || !vercelReport.ok || !vercelReport.payload) {
-    warn(`Vercel host ${vercelBaseUrl} did not return a usable /api/version payload`);
+  if (!secondaryReport || !secondaryReport.ok || !secondaryReport.payload) {
+    warn(`${secondaryLabel} ${secondaryBaseUrl} did not return a usable /api/version payload`);
   } else {
-    pass(`Vercel host ${vercelBaseUrl} returned version metadata`);
+    pass(`${secondaryLabel} ${secondaryBaseUrl} returned version metadata`);
+
+    if (expectedSecondaryRuntimeTarget && secondaryReport.payload.runtimeTarget !== expectedSecondaryRuntimeTarget) {
+      warn(
+        `${secondaryLabel} runtime target is ${formatValue(secondaryReport.payload.runtimeTarget)}, expected ${expectedSecondaryRuntimeTarget}`
+      );
+    } else if (expectedSecondaryRuntimeTarget) {
+      pass(`${secondaryLabel} runtime target matches ${expectedSecondaryRuntimeTarget}`);
+    }
   }
 
   if (expectedLiveGitSha && liveReport?.payload?.gitSha) {
     if (liveReport.payload.gitSha === expectedLiveGitSha) {
-      pass(`Live host git sha matches expected revision ${expectedLiveGitSha}`);
+      pass(`${liveLabel} git sha matches expected revision ${expectedLiveGitSha}`);
     } else {
-      warn(`Live host git sha is ${liveReport.payload.gitSha}, expected ${expectedLiveGitSha}`);
+      warn(`${liveLabel} git sha is ${liveReport.payload.gitSha}, expected ${expectedLiveGitSha}`);
     }
   } else if (expectedLiveGitSha) {
-    warn(`Expected live git sha is ${expectedLiveGitSha}, but live host did not return a git sha`);
+    warn(`Expected ${liveLabel.toLowerCase()} git sha is ${expectedLiveGitSha}, but the host did not return a git sha`);
   }
 
   if (
     expectedLiveGitSha &&
-    vercelReport?.payload?.gitSha === expectedLiveGitSha &&
+    secondaryReport?.payload?.gitSha === expectedLiveGitSha &&
     liveReport?.payload?.gitSha &&
     liveReport.payload.gitSha !== expectedLiveGitSha
   ) {
     fail(
-      `Vercel is serving expected revision ${expectedLiveGitSha} but live host ${liveBaseUrl} is still on ${liveReport.payload.gitSha}`
+      `${secondaryLabel} is serving expected revision ${expectedLiveGitSha} but ${liveLabel.toLowerCase()} ${liveBaseUrl} is still on ${liveReport.payload.gitSha}`
     );
   }
 
-  if (vercelReport?.payload?.gitSha && liveReport?.payload?.gitSha) {
-    if (vercelReport.payload.gitSha === liveReport.payload.gitSha) {
-      pass(`Vercel and live host agree on git sha ${liveReport.payload.gitSha}`);
+  if (secondaryReport?.payload?.gitSha && liveReport?.payload?.gitSha) {
+    if (secondaryReport.payload.gitSha === liveReport.payload.gitSha) {
+      pass(`${secondaryLabel} and ${liveLabel.toLowerCase()} agree on git sha ${liveReport.payload.gitSha}`);
     } else {
-      warn(`Vercel git sha ${vercelReport.payload.gitSha} differs from live host git sha ${liveReport.payload.gitSha}`);
+      warn(`${secondaryLabel} git sha ${secondaryReport.payload.gitSha} differs from ${liveLabel.toLowerCase()} git sha ${liveReport.payload.gitSha}`);
     }
   }
 

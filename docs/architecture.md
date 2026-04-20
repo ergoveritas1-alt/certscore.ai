@@ -11,7 +11,8 @@
 - One Next.js web app for marketing, auth, dashboard, reports, and download routes
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
 - Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
-- Upstash Redis plus BullMQ for queueing
+- The target web topology is two AWS Amplify Hosting apps that both build from `apps/web`
+- `certscore.ai` and `consentcheck.site` stay separate public hosts with separate env and domain settings even though they share code
 
 ## Execution model
 
@@ -27,6 +28,11 @@
   - persist findings, scores, reports, and regressions
   - generate and upload PDFs
   - enqueue scheduled rescans
+
+## Deployment model
+
+- Web deploys should be promoted through Git-connected Amplify apps rather than ad hoc VM or Vercel pushes
+- Production verification should check each public host directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
 
 ## Data model highlights
 

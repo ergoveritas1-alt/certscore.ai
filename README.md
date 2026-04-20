@@ -204,16 +204,15 @@ Common commands:
 
 ### Web runtime
 
-- the primary production web path is Vercel Git deployment from `main`
-- the canonical Vercel project is `consentcheck-site`
-- the Vercel project root directory must stay `apps/web`
-- prefer pushing reviewed commits to GitHub and letting Vercel create the production deployment from the connected repo
-- do not treat repo-root `.vercel` linkage or the removed `apps/validation-web` path as valid production config
-- run `pnpm ops:check:deploy` before or after deployment changes to catch stale Vercel links, wrong GitHub remote wiring, or missing cloud context
-- use [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) only as a fallback fixed-egress path when Vercel cannot reach required production dependencies and the team explicitly chooses the VM route
-- if the VM route is active, terminate TLS and canonical-host routing with the checked-in [deploy/caddy/Caddyfile](/Users/benmasek/WC01/deploy/caddy/Caddyfile) and configure `/etc/certscore-web.env` on the host
-- ensure Better Auth provider redirects include the production callback alias on `certscore.ai`
-- redirect `www.certscore.ai` to `https://certscore.ai` unless there is a specific reason to serve both hosts directly
+- the preferred web deployment target is two AWS Amplify Hosting apps backed by the same `apps/web` monorepo app:
+  - `certscore.ai`
+  - `consentcheck.site`
+- keep both Amplify apps pointed at the same GitHub repo and branch, with separate per-app environment variables and domains
+- use the checked-in [amplify.yml](/Users/benmasek/WC01/amplify.yml) and root [/.npmrc](/Users/benmasek/WC01/.npmrc) for pnpm monorepo builds
+- run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions and missing Amplify build inputs
+- run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after cutover
+- treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as the primary web deployment runbook
+- keep [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) and the Vercel linkage only as temporary rollback tooling until DNS and Amplify runtime checks are clean
 
 ### GCP worker pool
 

@@ -2,9 +2,7 @@
 set -euo pipefail
 
 expected_remote="${EXPECTED_GIT_REMOTE:-git@github.com:ergoveritas1-alt/certscore.ai.git}"
-expected_vercel_project="${EXPECTED_VERCEL_PROJECT:-consentcheck-site}"
-expected_vercel_root="${EXPECTED_VERCEL_ROOT:-apps/web}"
-expected_vercel_team="${EXPECTED_VERCEL_TEAM_ID:-team_jNJ5Ez1995VpbyUeFMqhF5jo}"
+expected_web_platform="${EXPECTED_WEB_PLATFORM:-amplify}"
 
 failures=0
 
@@ -53,41 +51,32 @@ else
   warn "Working tree has uncommitted changes"
 fi
 
-if [[ -f "apps/web/.vercel/project.json" ]]; then
-  project_name="$(node -p "require('./apps/web/.vercel/project.json').projectName || ''")"
-  project_id="$(node -p "require('./apps/web/.vercel/project.json').projectId || ''")"
-  org_id="$(node -p "require('./apps/web/.vercel/project.json').orgId || ''")"
-  root_dir="$(node -p "((require('./apps/web/.vercel/project.json').settings || {}).rootDirectory) || ''")"
-
-  if [[ "${project_name}" == "${expected_vercel_project}" ]]; then
-    pass "apps/web Vercel link targets ${expected_vercel_project}"
+if [[ "${expected_web_platform}" == "amplify" ]]; then
+  require_file ".npmrc" "pnpm monorepo config for Amplify is present"
+  if [[ -f ".npmrc" ]] && grep -q '^node-linker=hoisted$' .npmrc; then
+    pass ".npmrc config uses hoisted node linker for Amplify builds"
   else
-    fail "apps/web Vercel link targets ${project_name:-<empty>}, expected ${expected_vercel_project}"
+    fail ".npmrc must set node-linker=hoisted for Amplify pnpm monorepo builds"
   fi
 
-  if [[ "${org_id}" == "${expected_vercel_team}" ]]; then
-    pass "apps/web Vercel link uses team ${expected_vercel_team}"
+  require_file "amplify.yml" "Amplify monorepo build spec is present"
+  if [[ -f "amplify.yml" ]] && grep -q 'appRoot: apps/web' amplify.yml; then
+    pass "Amplify build spec targets apps/web"
   else
-    fail "apps/web Vercel link uses team ${org_id:-<empty>}, expected ${expected_vercel_team}"
+    fail "Amplify build spec must target apps/web"
   fi
 
-  if [[ "${root_dir}" == "${expected_vercel_root}" ]]; then
-    pass "apps/web Vercel rootDirectory is ${expected_vercel_root}"
+  if [[ -f "apps/web/.vercel/project.json" ]]; then
+    warn "apps/web/.vercel/project.json still exists; keep it only if Vercel remains a temporary fallback"
   else
-    fail "apps/web Vercel rootDirectory is ${root_dir:-<empty>}, expected ${expected_vercel_root}"
-  fi
-
-  if [[ -n "${project_id}" ]]; then
-    pass "apps/web Vercel project id is present (${project_id})"
-  else
-    fail "apps/web Vercel project id is missing"
+    pass "apps/web Vercel link is absent"
   fi
 else
-  fail "apps/web/.vercel/project.json is missing"
+  warn "EXPECTED_WEB_PLATFORM is ${expected_web_platform}; Amplify-specific checks were skipped"
 fi
 
 if [[ -e ".vercel" ]]; then
-  fail "repo-root .vercel directory should not exist"
+  warn "repo-root .vercel directory exists"
 else
   pass "repo-root .vercel directory is absent"
 fi
@@ -98,11 +87,11 @@ else
   pass "stale apps/validation-web Vercel link is absent"
 fi
 
-require_file "deploy-web-vm.sh" "Fallback web VM deploy script is present"
-require_file "deploy/vm/install-web-deploy-wrapper.sh" "VM web deploy wrapper installer is present"
+require_file "deploy-web-vm.sh" "Legacy fallback web VM deploy script is present"
+require_file "deploy/vm/install-web-deploy-wrapper.sh" "Legacy VM web deploy wrapper installer is present"
 require_file "deploy-validation-worker.sh" "Validation worker Cloud Run deploy script is present"
 require_file ".github/workflows/accessibility-validation.yml" "GitHub Actions validation workflow is present"
-require_file ".github/workflows/web-vm-deploy.yml" "GitHub Actions web VM deploy workflow is present"
+require_file ".github/workflows/web-vm-deploy.yml" "Legacy GitHub Actions web VM deploy workflow is present"
 require_file ".github/workflows/validation-aws-deploy.yml" "GitHub Actions AWS validation deploy workflow is present"
 require_file "infra/aws/validation/main.tf" "AWS validation Terraform stack is present"
 require_file "docs/validation-aws-cutover-runbook.md" "AWS validation cutover runbook is present"
