@@ -231,6 +231,37 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
   assert.match(financialLens?.findings.join(" ") ?? "", /Pricing or fee disclosure remains unclear/);
 });
 
+test("buildRegulatoryLenses keeps financial claims visible with neutral copy when no claim findings are present", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 2
+      },
+      agencyMappings: [makeAgencyMapping()],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  assert.deepEqual(
+    lenses.map((lens) => lens.acronym),
+    ["GDPR / ePrivacy", "CCPA / CPRA", "FTC", "DOJ / ADA accessibility", "Financial & commercial claims"]
+  );
+
+  const financialLens = lenses.at(-1);
+  assert.equal(financialLens?.ratingLabel, "Strong");
+  assert.equal(financialLens?.score, 88);
+  assert.equal(financialLens?.summary, "No significant financial or commercial claims issues found.");
+  assert.deepEqual(financialLens?.findings, []);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
