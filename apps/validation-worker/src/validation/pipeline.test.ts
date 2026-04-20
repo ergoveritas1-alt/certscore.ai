@@ -2003,7 +2003,6 @@ test("deriveFinancialCommercialClaimFindings falls back to homepage fetch when s
     globalThis.fetch = originalFetch;
   }
 });
-
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");
