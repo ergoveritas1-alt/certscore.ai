@@ -49,6 +49,14 @@ async function main() {
     return;
   }
 
+  if (shouldSkipLiveValidation()) {
+    pass(
+      "runtime env",
+      "Required database and S3 environment variables are present. Skipping live runtime validation in this build environment."
+    );
+    return;
+  }
+
   const [health, storageBucketExists] = await withTimeout(
     Promise.all([getDatabaseHealth(), checkStorageBucketExists()]),
     LIVE_VALIDATION_TIMEOUT_MS,
