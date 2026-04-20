@@ -54,7 +54,8 @@ export function DomainScanForm({
       });
 
       const payload = (await response.json()) as { error?: string; previewUrl?: string; scanUrl?: string };
-      const destination = mode === "preview" ? payload.previewUrl : payload.scanUrl;
+      const destination =
+        mode === "preview" ? payload.previewUrl : payload.scanUrl ?? payload.previewUrl;
 
       if (!response.ok || !destination) {
         setErrorMessage(payload.error ?? (mode === "preview" ? "The preview scan could not be started. Please try again." : "The full scan could not be started. Please try again."));

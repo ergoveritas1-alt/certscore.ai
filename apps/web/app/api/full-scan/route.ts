@@ -3,6 +3,7 @@ import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signa
 import { getCurrentUser } from "../../../server/auth";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
+import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 
 export async function POST(request: Request) {
   try {
@@ -40,13 +41,32 @@ export async function POST(request: Request) {
       const anonymousScan = await createAnonymousFullScan({
         hostname: firstDomain.hostname,
         normalizedUrl: firstDomain.normalizedUrl
+      }).catch(async (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (!/healthy scanner service heartbeat/i.test(message)) {
+          throw error;
+        }
+
+        const preview = await createPreviewScan({
+          hostname: firstDomain.hostname,
+          normalizedUrl: firstDomain.normalizedUrl
+        });
+
+        return {
+          mode: "preview" as const,
+          scan: preview.scan
+        };
       });
 
       return NextResponse.json(
         {
           queuedCount: 1,
           scanId: anonymousScan.scan.id,
-          scanUrl: `/scan/${anonymousScan.scan.id}`
+          scanUrl:
+            "mode" in anonymousScan && anonymousScan.mode === "preview"
+              ? `/preview/${anonymousScan.scan.id}`
+              : `/scan/${anonymousScan.scan.id}`
         },
         {
           headers: {
