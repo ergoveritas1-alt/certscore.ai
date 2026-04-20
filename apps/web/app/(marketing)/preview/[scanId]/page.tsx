@@ -4,10 +4,9 @@ import { PreviewScanState } from "../../../../components/marketing/preview-scan-
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import {
-  buildPreviewExecutiveAccessLimitationNotice,
-  deriveUnverifiedHomepageReview,
   SharedScanDetailView
 } from "../../../../components/scans/shared-scan-detail-view";
+import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { getPreviewScan } from "../../../../server/preview-scan/get-preview-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 
@@ -43,20 +42,6 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
       });
     }
   }
-  const previewExecutiveAccessLimitationNotice =
-    scan?.previewPayload?.resultState && fullScanRecord
-      ? buildPreviewExecutiveAccessLimitationNotice({
-          resultState: {
-            code: scan.previewPayload.resultState.code,
-            coverageLevel: scan.previewPayload.resultState.coverageLevel,
-            message: scan.previewPayload.resultState.message,
-            title: scan.previewPayload.resultState.title
-          },
-          review: fullScanRecord.snapshot
-            ? deriveUnverifiedHomepageReview(fullScanRecord.snapshot, fullScanRecord.events, fullScanRecord.policyEnrichment)
-            : null
-        })
-      : null;
   const lightweightPreviewNotice =
     scan?.previewPayload && ((scan?.pagesScanned ?? 0) === 0 || Boolean(scan.previewPayload.fallbackEvidence))
       ? (
@@ -125,22 +110,20 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
             <PreviewScanState initialScan={scan} />
           ) : loginHref && fullScanRecord && hasRenderablePreviewResult ? (
             <SharedScanDetailView
-              createAccountHref={loginHref}
-              executiveAccessLimitationOverride={previewExecutiveAccessLimitationNotice}
+              autoRefresh={<ScanStatusAutoRefresh status={fullScanRecord.scan.status} />}
               headerActions={
-                <div className="w-full max-w-[21rem]">
-                  <DomainScanForm
-                    buttonLabel="Scan"
-                    compact
-                    inputLabel="Scan another website"
-                    inputPlaceholder="Enter another site"
-                    mode="preview"
-                  />
-                </div>
+                fullScanRecord.scan.status === "completed" ? (
+                  <div className="w-full max-w-[21rem]">
+                    <DomainScanForm
+                      buttonLabel="Scan"
+                      compact
+                      inputLabel="Scan another website"
+                      inputPlaceholder="Enter another site"
+                      mode="full"
+                    />
+                  </div>
+                ) : null
               }
-              previewNotice={lightweightPreviewNotice}
-              previewPayload={scan.previewPayload}
-              previewMode="homepage"
               scanRecord={fullScanRecord}
             />
           ) : scan.status === "completed" && hasRenderablePreviewResult && !shouldAttemptDetailedPreviewReport ? (
