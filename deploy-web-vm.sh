@@ -18,6 +18,9 @@ CONTAINER_PORT="${CONTAINER_PORT:-3000}"
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-/etc/certscore-web.env}"
 REMOTE_DEPLOY_WRAPPER="${REMOTE_DEPLOY_WRAPPER:-/usr/local/bin/deploy-certscore-web}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-120}"
+BUILD_GIT_SHA="${BUILD_GIT_SHA:-${IMAGE_TAG}}"
+BUILD_GIT_REF="${BUILD_GIT_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)}"
+BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET:-gcp-vm}"
 cloudbuild_config="$(mktemp /tmp/certscore-web-cloudbuild.XXXXXX)"
 
 cleanup() {
@@ -71,6 +74,14 @@ steps:
       - build
       - -f
       - apps/web/Dockerfile
+      - --build-arg
+      - BUILD_GIT_REF=${BUILD_GIT_REF}
+      - --build-arg
+      - BUILD_GIT_SHA=${BUILD_GIT_SHA}
+      - --build-arg
+      - BUILD_IMAGE_TAG=${IMAGE_TAG}
+      - --build-arg
+      - BUILD_RUNTIME_TARGET=${BUILD_RUNTIME_TARGET}
       - -t
       - ${IMAGE_URI}
       - .
@@ -95,7 +106,13 @@ EOF
   docker)
     require_command docker
     gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null
-    docker build -f apps/web/Dockerfile -t "${IMAGE_URI}" .
+    docker build \
+      -f apps/web/Dockerfile \
+      --build-arg "BUILD_GIT_REF=${BUILD_GIT_REF}" \
+      --build-arg "BUILD_GIT_SHA=${BUILD_GIT_SHA}" \
+      --build-arg "BUILD_IMAGE_TAG=${IMAGE_TAG}" \
+      --build-arg "BUILD_RUNTIME_TARGET=${BUILD_RUNTIME_TARGET}" \
+      -t "${IMAGE_URI}" .
     docker push "${IMAGE_URI}"
     ;;
   *)

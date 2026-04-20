@@ -126,6 +126,20 @@ else
   warn "gcloud CLI is not installed in this shell"
 fi
 
+if [[ "${SKIP_LIVE_DEPLOY_CHECK:-0}" == "1" ]]; then
+  warn "Skipping live deployment state audit because SKIP_LIVE_DEPLOY_CHECK=1"
+else
+  if command -v pnpm >/dev/null 2>&1; then
+    if pnpm exec tsx ./scripts/check-live-deployment-state.ts; then
+      pass "Live deployment state audit passed"
+    else
+      fail "Live deployment state audit failed"
+    fi
+  else
+    warn "pnpm is not installed; skipping live deployment state audit"
+  fi
+fi
+
 echo
 if (( failures > 0 )); then
   echo "Deployment pathway audit failed with ${failures} issue(s)."
