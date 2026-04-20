@@ -102,7 +102,7 @@ function clampScore(value: number) {
 
 function buildTone(score: number) {
   if (score >= 72) {
-    return { label: "Stronger", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+    return { label: "Strong", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
   }
   if (score >= 50) {
     return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
@@ -308,6 +308,7 @@ export function buildRegulatoryLenses(
     ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) => `${subscore.label} subscore ${subscore.score}`))
   ].filter(Boolean) as string[];
 
+  const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
   const adaSummary =
     accessibilityClaimMismatchDetected === true
       ? "Accessibility claims appear inconsistent with observed barriers."
@@ -315,8 +316,9 @@ export function buildRegulatoryLenses(
           (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
         ? "Accessibility barriers and disclosure gaps are the main issue."
-        : "Accessibility support and disclosure posture needs work.";
-  const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
+        : adaScore >= 72
+          ? "Accessibility support posture appears strong based on current scan signals."
+          : "Accessibility support and disclosure posture needs work.";
   const adaTone = buildTone(adaScore);
 
   lenses.push({
@@ -1048,7 +1050,7 @@ export function ExecutiveSummaryCard(input: {
                       <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                            <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{lens.acronym}</p>
                             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
                               {lens.ratingLabel}
                             </span>

@@ -153,7 +153,8 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA map
 
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
-  assert.equal(adaLens?.summary, "Accessibility support and disclosure posture needs work.");
+  assert.equal(adaLens?.ratingLabel, "Strong");
+  assert.equal(adaLens?.summary, "Accessibility support posture appears strong based on current scan signals.");
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
