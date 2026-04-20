@@ -325,7 +325,7 @@ export function buildRegulatoryLenses(
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
         ? "Accessibility barriers and disclosure gaps are the main issue."
         : adaScore >= 72
-          ? "Accessibility support posture is relatively strong, with some gaps still worth review."
+          ? "Observed accessibility signals are comparatively stronger, but this is not a full WCAG determination."
           : "Accessibility support and disclosure posture needs work.";
   const adaTone = buildTone(adaScore);
 
