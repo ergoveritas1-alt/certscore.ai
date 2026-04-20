@@ -290,6 +290,14 @@ export function buildRegulatoryLenses(
   const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
   const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
   const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
+  const hasDirectAccessibilityStatementFinding = accessibilityStatementPresent === false;
+  const normalizedAgencyFindingLabels = (dojAdaMapping?.triggeredSignals ?? [])
+    .map((signal) => signal.label)
+    .filter((label) =>
+      hasDirectAccessibilityStatementFinding
+        ? !/accessibility statement (missing|not detected)/i.test(label)
+        : true
+    );
 
   const adaFindings = [
     typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `${wcagErrorCountTotal} automated WCAG issues detected` : null,
@@ -304,7 +312,7 @@ export function buildRegulatoryLenses(
       ? `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`
       : null,
     typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null,
-    ...((dojAdaMapping?.triggeredSignals ?? []).map((signal) => signal.label)),
+    ...normalizedAgencyFindingLabels,
     ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) => `${subscore.label} subscore ${subscore.score}`))
   ].filter(Boolean) as string[];
 

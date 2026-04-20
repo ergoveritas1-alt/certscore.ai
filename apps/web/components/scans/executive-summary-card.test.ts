@@ -125,6 +125,10 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   assert.match(adaLens?.findings.join(" "), /27 automated WCAG issues detected/);
   assert.match(adaLens?.findings.join(" "), /Keyboard navigation issues surfaced/);
   assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
+  assert.equal(
+    adaLens?.findings.filter((item) => /accessibility statement/i.test(item)).length,
+    1
+  );
 });
 
 test("buildRegulatoryLenses adds DOJ / ADA accessibility for limited DOJ/ADA mappings with softer fallback copy", () => {
