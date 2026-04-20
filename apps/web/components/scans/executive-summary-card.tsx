@@ -1012,7 +1012,6 @@ export function ExecutiveSummaryCard(input: {
             <>
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
-                <p className="text-sm leading-6 text-slate-600">Quick context for vendor footprint, fingerprinting, and regulator-style review.</p>
               </div>
               <div className="space-y-3">
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
