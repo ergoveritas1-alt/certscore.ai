@@ -104,7 +104,15 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
-          docker build -f apps/web/Dockerfile -t "${WEB_IMAGE}:${GITHUB_SHA}" -t "${WEB_IMAGE}:latest" .
+          docker build \
+            -f apps/web/Dockerfile \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            -t "${WEB_IMAGE}:${GITHUB_SHA}" \
+            -t "${WEB_IMAGE}:latest" \
+            .
           docker push "${WEB_IMAGE}:${GITHUB_SHA}"
           docker push "${WEB_IMAGE}:latest"
 
