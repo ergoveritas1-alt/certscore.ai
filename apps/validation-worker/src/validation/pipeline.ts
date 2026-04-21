@@ -89,6 +89,23 @@ function stripHtmlToText(html: string) {
   );
 }
 
+function stripHtmlToBlockText(html: string) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, "\n")
+      .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, "\n")
+      .replace(/<\/(h1|h2|h3|h4|h5|h6|p|section|article|li|ul|ol|div|main|header|footer|aside|nav|blockquote|br)>/gi, "\n\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim()
+  );
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1360,6 +1377,16 @@ function splitFinancialCommercialBlocks(text: string) {
   return fallback ? [fallback] : [];
 }
 
+function extractFinancialCommercialHtmlSegments(html: string) {
+  const segments = [
+    ...html.matchAll(/<(h1|h2|h3|h4|h5|h6|p|li)[^>]*>([\s\S]*?)<\/\1>/gi)
+  ]
+    .map((match) => trimBlockText(stripHtmlToText(match[2] ?? ""), 500))
+    .filter((segment): segment is string => Boolean(segment));
+
+  return [...new Set(segments)];
+}
+
 function collectFinancialCommercialCandidateSignals(text: string) {
   const signals = CLAIM_SIGNAL_PATTERNS.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
   return [...new Set(signals)];
@@ -1412,6 +1439,54 @@ function isEarningsLikeFinancialClaim(input: {
 
   const normalized = `${input.claimText ?? ""} ${input.blockText}`.toLowerCase();
   return /\b(earn|earnings|income|profit|profitable|payout|make money|learn\s*&?\s*profit)\b/.test(normalized);
+}
+
+function hasStrongFinancialCommercialSignalMix(input: {
+  candidateSignals: string[];
+  claimPresent: boolean;
+  claimType: string;
+  claimText: string | null;
+  blockText: string;
+}) {
+  if (!input.claimPresent) {
+    return false;
+  }
+
+  const signalSet = new Set(input.candidateSignals);
+  if (!signalSet.has("investment_context")) {
+    return false;
+  }
+
+  const earningsLikeClaim = isEarningsLikeFinancialClaim({
+    blockText: input.blockText,
+    claimText: input.claimText,
+    claimType: input.claimType
+  });
+
+  return (
+    earningsLikeClaim ||
+    signalSet.has("returns") ||
+    signalSet.has("earnings") ||
+    signalSet.has("results_social_proof")
+  );
+}
+
+function meetsFinancialCommercialBaseConfidenceThreshold(input: {
+  candidateSignals: string[];
+  claimPresent: boolean;
+  claimType: string;
+  claimText: string | null;
+  blockText: string;
+  confidence: number;
+}) {
+  if (input.confidence >= FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE) {
+    return true;
+  }
+
+  return (
+    input.confidence >= FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE &&
+    hasStrongFinancialCommercialSignalMix(input)
+  );
 }
 
 function isFinancialCommercialDocumentType(pageType: string | null) {
@@ -1546,12 +1621,22 @@ async function buildFinancialCommercialHomepageFallbackCandidates(input: Validat
 
     const html = await response.text();
     const title = extractTitle(html);
-    const text = stripHtmlToText(html);
+    const text = stripHtmlToBlockText(html);
     if (text.length < 80 || looksLikeIntermediaryOrBlockPage({ canonicalUrl: response.url || homepageUrl, text, title })) {
       return [] as FinancialCommercialClaimCandidate[];
     }
 
-    const blocks = splitFinancialCommercialBlocks(text).slice(0, 40);
+    const textBlocks = splitFinancialCommercialBlocks(text).slice(0, 40);
+    const htmlSegments = extractFinancialCommercialHtmlSegments(html).slice(0, 60);
+    const htmlWindowBlocks = htmlSegments
+      .map((segment, index) => {
+        const next = htmlSegments[index + 1] ?? null;
+        const afterNext = htmlSegments[index + 2] ?? null;
+        return trimBlockText([segment, next, afterNext].filter(Boolean).join(" "), 900);
+      })
+      .filter((block): block is string => Boolean(block));
+    const blocks = [...new Set([...textBlocks, ...htmlSegments, ...htmlWindowBlocks])].slice(0, 80);
+
     return blocks
       .map((blockText, index) => {
         const candidateSignals = collectFinancialCommercialCandidateSignals(blockText);
@@ -1631,8 +1716,13 @@ function buildFinancialCommercialClaimFinding(input: {
 
 export async function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle) {
   const candidates = buildFinancialCommercialClaimCandidates(input);
-  const effectiveCandidates =
-    candidates.length > 0 ? candidates : await buildFinancialCommercialHomepageFallbackCandidates(input);
+  const homepageFallbackCandidates = await buildFinancialCommercialHomepageFallbackCandidates(input);
+  const effectiveCandidates = [...new Map(
+    [...candidates, ...homepageFallbackCandidates].map((candidate) => [
+      `${candidate.pageUrl ?? "unknown"}|${candidate.blockText.toLowerCase()}`,
+      candidate
+    ])
+  ).values()];
   if (effectiveCandidates.length === 0) {
     return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
   }
@@ -1667,7 +1757,14 @@ export async function deriveFinancialCommercialClaimFindings(input: ValidationAr
     const classification = row.classification;
     if (
       !classification ||
-      classification.confidence < FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE ||
+      !meetsFinancialCommercialBaseConfidenceThreshold({
+        blockText: row.candidate.blockText,
+        candidateSignals: row.candidate.candidateSignals,
+        claimPresent: classification.claimPresent,
+        claimText: classification.claimText,
+        claimType: classification.claimType,
+        confidence: classification.confidence
+      }) ||
       !classification.commercialContext
     ) {
       continue;

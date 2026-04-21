@@ -2003,6 +2003,72 @@ test("deriveFinancialCommercialClaimFindings falls back to homepage fetch when s
     globalThis.fetch = originalFetch;
   }
 });
+
+test("deriveFinancialCommercialClaimFindings accepts strong trading-results blocks slightly below the default confidence floor", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.DATABASE_URL = "postgres://postgres:postgres@localhost:5432/test";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                claimPresent: true,
+                claimType: "return_performance_claim",
+                claimText: "since 2019, I have been consistently profitable",
+                commercialContext: true,
+                contextType: "marketing_page",
+                adjacentDisclosurePresent: false,
+                adjacentDisclosureType: null,
+                adjacentDisclosureText: null,
+                guaranteeLanguage: false,
+                superlativeLanguage: false,
+                simulatedPerformanceLanguage: false,
+                urgencyPresent: false,
+                urgencyTiedToConversion: false,
+                pricingPresent: false,
+                feeDisclosurePresent: false,
+                confidence: 0.74,
+                rationaleShort: "Trading profitability language is presented as a promotional performance claim."
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+
+  try {
+    const findings = await deriveFinancialCommercialClaimFindings(
+      buildArtifacts({
+        documentSources: [
+          {
+            document_type: "homepage",
+            canonical_url: "https://www.example.com/",
+            title: "Trading community",
+            document_text:
+              "Since 2019, I have been consistently profitable in trading and I share my daily trading ideas.\n\nI have built a thriving trading community of over 60,000 members worldwide."
+          }
+        ],
+        snapshot: {}
+      })
+    );
+
+    const earningsFinding = findings.find((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure");
+    assert.ok(earningsFinding);
+    assert.equal(earningsFinding?.evidence.claim_text, "since 2019, I have been consistently profitable");
+    assert.deepEqual(earningsFinding?.evidence.candidate_signals, ["earnings", "investment_context", "results_social_proof"]);
+  } finally {
+    process.env.OPENAI_API_KEY = originalKey;
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");
