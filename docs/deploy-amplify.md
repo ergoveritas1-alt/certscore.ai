@@ -83,6 +83,7 @@ AWS documents that Next.js server-side code does not automatically see Amplify b
 Inference from the docs:
 
 - You should treat secret wiring as a separate cutover checkpoint, not as something the checked-in `amplify.yml` safely solves by itself.
+- Use [docs/amplify-web-runtime-validation.md](/Users/benmasek/WC01/docs/amplify-web-runtime-validation.md) to validate the merged Amplify runtime contract before DNS cutover.
 
 ## Domains and DNS
 
