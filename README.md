@@ -204,15 +204,15 @@ Common commands:
 
 ### Web runtime
 
-- the preferred web deployment target is two AWS Amplify Hosting apps backed by the same `apps/web` monorepo app:
+- the live public web deployment target is the AWS ECS/Fargate path for both hosts:
   - `certscore.ai`
   - `consentcheck.site`
-- keep both Amplify apps pointed at the same GitHub repo and branch, with separate per-app environment variables and domains
-- use the checked-in [amplify.yml](/Users/benmasek/WC01/amplify.yml) and root [/.npmrc](/Users/benmasek/WC01/.npmrc) for pnpm monorepo builds
-- run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions and missing Amplify build inputs
-- run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after cutover
-- treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as the primary web deployment runbook
-- keep [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) and the Vercel linkage only as temporary rollback tooling until DNS and Amplify runtime checks are clean
+- `main` deploys through [/.github/workflows/web-aws-ecs-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-aws-ecs-deploy.yml)
+- run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions
+- run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after deploy
+- treat [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md) as the active web deployment runbook
+- treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as future-state reference material only
+- keep [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) and [/.github/workflows/web-vm-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-vm-deploy.yml) as rollback-only tooling triggered manually or by fallback-specific file changes
 
 ### GCP worker pool
 

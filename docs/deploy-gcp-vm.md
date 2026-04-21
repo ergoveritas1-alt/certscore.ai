@@ -79,6 +79,7 @@ GitHub Actions in this repo uses Workload Identity Federation, not a long-lived 
 - deploy service account: `github-web-deploy-sa@certscore-ai.iam.gserviceaccount.com`
 
 That service account is restricted to the `ergoveritas1-alt/certscore.ai` repository and is intended only for the web VM production workflow.
+The checked-in [/.github/workflows/web-vm-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-vm-deploy.yml) is rollback-only and no longer auto-runs on ordinary `apps/web` pushes to `main`.
 
 The GitHub workflow builds the image directly with Docker on the runner and pushes it to Artifact Registry. Local operators can still use the default Cloud Build path, or force the runner-style path locally with:
 
