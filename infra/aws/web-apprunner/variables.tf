@@ -52,6 +52,12 @@ variable "app_flavor" {
   default     = "certscore"
 }
 
+variable "build_runtime_target" {
+  description = "BUILD_RUNTIME_TARGET value for the App Runner web services."
+  type        = string
+  default     = "app-runner"
+}
+
 variable "database_ssl_mode" {
   description = "DATABASE_SSL_MODE value for the web services."
   type        = string

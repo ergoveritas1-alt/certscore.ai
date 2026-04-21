@@ -15,6 +15,7 @@ consentcheck_domain_name    = "consentcheck.site"
 consentcheck_hosted_zone_id = "Z1234567890"
 
 # Non-secret runtime settings
+build_runtime_target                = "app-runner"
 app_flavor                        = "certscore"
 database_ssl_mode                 = "require"
 next_public_auth_google_enabled   = "false"

@@ -32,6 +32,7 @@ That makes it a better fit than Amplify Hosting for the current `apps/web` runti
 
 Per web service, provide:
 
+- `BUILD_RUNTIME_TARGET=app-runner`
 - `NEXT_PUBLIC_APP_URL`
 - `APP_FLAVOR=certscore`
 - `DATABASE_URL`
@@ -154,6 +155,7 @@ pnpm ops:check:live
 ```
 
 Set `BUILD_RUNTIME_TARGET=app-runner` on the web services so `/api/version` and the deployment checks report the correct runtime.
+AWS App Runner documents a reserved `PORT` environment variable, but that is not a safe runtime-identity signal for this repo, so the runtime target must be set explicitly.
 
 ## DNS cutover sequence
 

@@ -57,6 +57,7 @@ Until those are concrete, pretending to have a finished Terraform stack would be
 
 ### Runtime config inputs
 
+- `BUILD_RUNTIME_TARGET=app-runner`
 - `NEXT_PUBLIC_APP_URL`
 - `APP_FLAVOR`
 - `DATABASE_SSL_MODE`
@@ -94,6 +95,8 @@ After the actual infrastructure exists, the operator flow should be:
 ```bash
 pnpm --filter @website-signal-risk-scanner/web check-env:amplify-runtime
 ```
+
+The runtime config for both services should also set `BUILD_RUNTIME_TARGET=app-runner` so the version and deployment checks report the correct serving platform.
 
 4. validate the App Runner service URLs directly
 5. run host-level checks with `pnpm ops:check:live`
