@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ZodIssueCode } from "zod";
 import { getBetterAuthEnv, isBetterAuthConfigurationError } from "./env";
 
 test("classifies missing Better Auth env as configuration errors", () => {
@@ -18,4 +19,21 @@ test("classifies missing Better Auth env as configuration errors", () => {
 
 test("does not classify unrelated errors as Better Auth configuration errors", () => {
   assert.equal(isBetterAuthConfigurationError(new Error("database unavailable")), false);
+});
+
+test("classifies zod-like errors from another module copy as configuration errors", () => {
+  const thrown = {
+    issues: [
+      {
+        code: ZodIssueCode.invalid_type,
+        expected: "string",
+        message: "Required",
+        path: ["BETTER_AUTH_SECRET"],
+        received: "undefined"
+      }
+    ],
+    name: "ZodError"
+  };
+
+  assert.equal(isBetterAuthConfigurationError(thrown), true);
 });

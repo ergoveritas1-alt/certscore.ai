@@ -123,6 +123,21 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    if (isBetterAuthConfigurationError(error)) {
+      console.error("[full-scan] better auth configuration unavailable during request", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return NextResponse.json(
+        {
+          error: "The full scan could not be started right now. Please try again."
+        },
+        {
+          status: 503
+        }
+      );
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Full scan could not be created."

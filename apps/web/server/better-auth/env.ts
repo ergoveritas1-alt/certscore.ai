@@ -64,10 +64,33 @@ const BETTER_AUTH_ENV_KEYS = new Set([
   "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED"
 ]);
 
-export function isBetterAuthConfigurationError(error: unknown) {
+type ZodLikeIssue = {
+  path?: unknown[];
+};
+
+function getZodLikeIssues(error: unknown): ZodLikeIssue[] {
   if (error instanceof ZodError) {
-    return error.issues.some((issue) => {
-      const [pathSegment] = issue.path;
+    return error.issues;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "issues" in error &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  ) {
+    return (error as { issues: ZodLikeIssue[] }).issues;
+  }
+
+  return [];
+}
+
+export function isBetterAuthConfigurationError(error: unknown) {
+  const issues = getZodLikeIssues(error);
+
+  if (issues.length > 0) {
+    return issues.some((issue) => {
+      const [pathSegment] = Array.isArray(issue.path) ? issue.path : [];
       return typeof pathSegment === "string" && BETTER_AUTH_ENV_KEYS.has(pathSegment);
     });
   }
