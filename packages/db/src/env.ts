@@ -8,12 +8,45 @@ function emptyStringToUndefined(value: unknown) {
   return typeof value === "string" && value.trim().length === 0 ? undefined : value;
 }
 
+function mergeAmplifyEnvironmentSecrets(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const rawSecrets = env.secrets?.trim();
+
+  if (!rawSecrets) {
+    return env;
+  }
+
+  try {
+    const parsed = JSON.parse(rawSecrets);
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return env;
+    }
+
+    const amplifySecrets = Object.entries(parsed).reduce<Record<string, string>>((accumulator, [key, value]) => {
+      if (typeof value === "string") {
+        accumulator[key] = value;
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        accumulator[key] = String(value);
+      }
+
+      return accumulator;
+    }, {});
+
+    return {
+      ...amplifySecrets,
+      ...env
+    };
+  } catch {
+    return env;
+  }
+}
+
 function parseEnvironment<TSchema extends z.ZodTypeAny>(input: {
   env?: NodeJS.ProcessEnv;
   schema: TSchema;
   scope: string;
 }): z.infer<TSchema> {
-  const result = input.schema.safeParse(input.env ?? process.env);
+  const result = input.schema.safeParse(mergeAmplifyEnvironmentSecrets(input.env ?? process.env));
 
   if (result.success) {
     return result.data;
@@ -78,7 +111,7 @@ export function getStorageBucket(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function hasDatabaseEnv(env: NodeJS.ProcessEnv = process.env) {
-  return databaseEnvSchema.safeParse(env).success;
+  return databaseEnvSchema.safeParse(mergeAmplifyEnvironmentSecrets(env)).success;
 }
 
 export function getDatabaseEnv(env: NodeJS.ProcessEnv = process.env): DatabaseEnv {
@@ -90,7 +123,7 @@ export function getDatabaseEnv(env: NodeJS.ProcessEnv = process.env): DatabaseEn
 }
 
 export function hasS3Env(env: NodeJS.ProcessEnv = process.env) {
-  return s3EnvSchema.safeParse(env).success;
+  return s3EnvSchema.safeParse(mergeAmplifyEnvironmentSecrets(env)).success;
 }
 
 export function getS3Env(env: NodeJS.ProcessEnv = process.env): S3Env {

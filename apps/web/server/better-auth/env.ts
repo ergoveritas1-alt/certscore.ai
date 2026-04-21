@@ -1,3 +1,4 @@
+import { mergeAmplifyEnvironmentSecrets } from "@website-signal-risk-scanner/shared";
 import { ZodError, z } from "zod";
 
 function emptyStringToUndefined(value: unknown) {
@@ -53,7 +54,7 @@ const betterAuthEnvSchema = z
 export type BetterAuthEnv = z.infer<typeof betterAuthEnvSchema>;
 
 export function getBetterAuthEnv(env: NodeJS.ProcessEnv = process.env): BetterAuthEnv {
-  return betterAuthEnvSchema.parse(env);
+  return betterAuthEnvSchema.parse(mergeAmplifyEnvironmentSecrets(env));
 }
 
 const BETTER_AUTH_ENV_KEYS = new Set([
