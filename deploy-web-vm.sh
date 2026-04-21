@@ -146,4 +146,12 @@ EOF
 echo "Remote VM rollout succeeded. Running public smoke checks against ${PUBLIC_BASE_URL}"
 curl -fsS -I --max-time 20 "${PUBLIC_BASE_URL}/login" >/dev/null
 curl -fsS --max-time 20 "${PUBLIC_BASE_URL}/api/health/database" >/dev/null
+version_payload="$(curl -fsS --max-time 20 "${PUBLIC_BASE_URL}/api/version")"
+version_git_sha="$(printf '%s' "${version_payload}" | jq -r '.gitSha // empty')"
+
+if [[ "${version_git_sha}" != "${BUILD_GIT_SHA}" ]]; then
+  echo "Live version mismatch after deploy: expected ${BUILD_GIT_SHA}, got ${version_git_sha:-unknown}" >&2
+  exit 1
+fi
+
 echo "Deploy and smoke checks passed for ${PUBLIC_BASE_URL}"

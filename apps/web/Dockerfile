@@ -54,6 +54,13 @@ WORKDIR /app
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+RUN printf '%s\n' \
+  '{' \
+  "  \"gitRef\": \"${BUILD_GIT_REF}\"," \
+  "  \"gitSha\": \"${BUILD_GIT_SHA}\"," \
+  "  \"imageTag\": \"${BUILD_IMAGE_TAG}\"," \
+  "  \"runtimeTarget\": \"${BUILD_RUNTIME_TARGET}\"" \
+  '}' > /app/.build-info.json
 
 EXPOSE 3000
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 type RuntimeTarget = "amplify" | "gcp-vm" | "vercel" | "unknown";
 
 export type RuntimeVersionInfo = {
@@ -25,7 +27,46 @@ function normalizeNonEmptyString(value: string | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+type BuildInfo = {
+  gitRef: string | null;
+  gitSha: string | null;
+  imageTag: string | null;
+  runtimeTarget: RuntimeTarget | null;
+};
+
+let cachedBuildInfo: BuildInfo | null | undefined;
+
+function readBuildInfo(): BuildInfo | null {
+  if (cachedBuildInfo !== undefined) {
+    return cachedBuildInfo;
+  }
+
+  try {
+    const raw = readFileSync("/app/.build-info.json", "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    cachedBuildInfo = {
+      gitRef: typeof parsed.gitRef === "string" && parsed.gitRef.trim().length > 0 ? parsed.gitRef.trim() : null,
+      gitSha: typeof parsed.gitSha === "string" && parsed.gitSha.trim().length > 0 ? parsed.gitSha.trim() : null,
+      imageTag: typeof parsed.imageTag === "string" && parsed.imageTag.trim().length > 0 ? parsed.imageTag.trim() : null,
+      runtimeTarget:
+        parsed.runtimeTarget === "amplify" ||
+        parsed.runtimeTarget === "gcp-vm" ||
+        parsed.runtimeTarget === "vercel" ||
+        parsed.runtimeTarget === "unknown"
+          ? parsed.runtimeTarget
+          : null
+    };
+  } catch {
+    cachedBuildInfo = null;
+  }
+
+  return cachedBuildInfo;
+}
+
 export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): RuntimeTarget {
+  const buildInfo = readBuildInfo();
+
   if (env.VERCEL === "1" || normalizeNonEmptyString(env.VERCEL_ENV)) {
     return "vercel";
   }
@@ -42,18 +83,24 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
     return "gcp-vm";
   }
 
+  if (buildInfo?.runtimeTarget) {
+    return buildInfo.runtimeTarget;
+  }
+
   return "unknown";
 }
 
 export function getRuntimeVersionInfo(env: NodeJS.ProcessEnv = process.env): RuntimeVersionInfo {
+  const buildInfo = readBuildInfo();
+
   return {
     amplifyAppId: normalizeNonEmptyString(env.AWS_APP_ID),
     amplifyBranch: normalizeNonEmptyString(env.AWS_BRANCH),
     appUrl: normalizeNonEmptyString(env.NEXT_PUBLIC_APP_URL),
-    gitRef: normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_REF) ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
-    gitSha: normalizeNonEmptyString(env.BUILD_GIT_SHA) ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_SHA),
+    gitRef: buildInfo?.gitRef ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_REF) ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
+    gitSha: buildInfo?.gitSha ?? normalizeNonEmptyString(env.BUILD_GIT_SHA) ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_SHA),
     hostname: normalizeNonEmptyString(env.HOSTNAME),
-    imageTag: normalizeNonEmptyString(env.BUILD_IMAGE_TAG),
+    imageTag: buildInfo?.imageTag ?? normalizeNonEmptyString(env.BUILD_IMAGE_TAG),
     nodeVersion: process.version,
     runtimeTarget: detectRuntimeTarget(env),
     service: "web",
