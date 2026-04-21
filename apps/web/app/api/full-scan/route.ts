@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
+import { isBetterAuthConfigurationError } from "../../../server/better-auth/env";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
@@ -24,7 +25,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await getCurrentUser();
+    let user = null;
+
+    try {
+      user = await getCurrentUser();
+    } catch (error) {
+      if (!isBetterAuthConfigurationError(error)) {
+        throw error;
+      }
+
+      console.error("[full-scan] better auth configuration unavailable; using anonymous scan flow", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     if (!user) {
       const firstDomain = parsedBatch.valid[0];
