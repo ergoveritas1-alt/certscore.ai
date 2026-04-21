@@ -85,7 +85,7 @@ jobs:
         run: |
           APP_FLAVOR=certscore \
           NEXT_PUBLIC_APP_URL="${CERTSCORE_BASE_URL}" \
-          DATABASE_URL=postgresql://web.example.internal/certscore \
+          DATABASE_URL=postgresql://localhost/certscore \
           BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
           GMAIL_SMTP_USER=ops@example.com \
           GMAIL_SMTP_APP_PASSWORD=placeholder \
@@ -100,7 +100,7 @@ jobs:
         run: |
           APP_FLAVOR=certscore \
           NEXT_PUBLIC_APP_URL="${CONSENTCHECK_BASE_URL}" \
-          DATABASE_URL=postgresql://web.example.internal/certscore \
+          DATABASE_URL=postgresql://localhost/certscore \
           BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
           GMAIL_SMTP_USER=ops@example.com \
           GMAIL_SMTP_APP_PASSWORD=placeholder \
