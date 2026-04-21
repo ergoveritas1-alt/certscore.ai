@@ -125,6 +125,16 @@ require_file "infra/aws/validation/main.tf" "AWS validation Terraform stack is p
 require_file "docs/validation-aws-cutover-runbook.md" "AWS validation cutover runbook is present"
 require_file "${topology_file}" "Deployment topology source of truth is present"
 
+if command -v pnpm >/dev/null 2>&1; then
+  if pnpm exec tsx ./scripts/check-deployment-topology.ts; then
+    pass "Deployment topology config is valid"
+  else
+    fail "Deployment topology config is invalid"
+  fi
+else
+  warn "pnpm is not installed; skipping deployment topology validation"
+fi
+
 if command -v gcloud >/dev/null 2>&1; then
   active_account="$(gcloud config get-value account 2>/dev/null || true)"
   active_project="$(gcloud config get-value project 2>/dev/null || true)"
