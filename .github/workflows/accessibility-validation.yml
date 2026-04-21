@@ -106,6 +106,9 @@ jobs:
       - name: Typecheck validation-worker
         run: pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
 
+      - name: Check financial claims corpus alignment
+        run: pnpm eval:financial-claims:strict
+
       - name: Run scan pipeline tests
         run: pnpm test:scan-pipeline
 
