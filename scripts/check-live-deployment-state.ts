@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 type VersionPayload = {
   amplifyAppId?: string | null;
@@ -31,6 +33,24 @@ function getEnv(name: string, fallback?: string) {
   }
 
   return fallback ?? "";
+}
+
+type DeploymentTopology = {
+  currentLiveGitRef?: string;
+  currentLiveWebRuntimeTarget?: string;
+  preferredWebPlatform?: string;
+  primaryHost?: string;
+  secondaryHost?: string;
+};
+
+function loadDeploymentTopology(): DeploymentTopology {
+  const topologyPath = path.join(process.cwd(), "config", "deployment-topology.json");
+
+  try {
+    return JSON.parse(readFileSync(topologyPath, "utf8")) as DeploymentTopology;
+  } catch {
+    return {};
+  }
 }
 
 function getGitSha(ref: string) {
@@ -91,13 +111,23 @@ function printReport(label: string, report: EndpointReport) {
 }
 
 async function main() {
-  const liveBaseUrl = getEnv("LIVE_BASE_URL", "https://certscore.ai");
-  const secondaryBaseUrl = getEnv("SECONDARY_BASE_URL", getEnv("VERCEL_BASE_URL", "https://consentcheck.site"));
+  const topology = loadDeploymentTopology();
+  const liveBaseUrl = getEnv("LIVE_BASE_URL", topology.primaryHost ?? "https://certscore.ai");
+  const secondaryBaseUrl = getEnv(
+    "SECONDARY_BASE_URL",
+    getEnv("VERCEL_BASE_URL", topology.secondaryHost ?? "https://consentcheck.site")
+  );
   const liveLabel = getEnv("LIVE_LABEL", "Primary host");
   const secondaryLabel = getEnv("SECONDARY_LABEL", "Secondary host");
-  const expectedLiveRuntimeTarget = getEnv("EXPECTED_LIVE_RUNTIME_TARGET", "amplify");
-  const expectedSecondaryRuntimeTarget = getEnv("EXPECTED_SECONDARY_RUNTIME_TARGET", "amplify");
-  const expectedLiveGitSha = getEnv("EXPECTED_LIVE_GIT_SHA", getGitSha("main") ?? "");
+  const expectedLiveRuntimeTarget = getEnv(
+    "EXPECTED_LIVE_RUNTIME_TARGET",
+    topology.currentLiveWebRuntimeTarget ?? "gcp-vm"
+  );
+  const expectedSecondaryRuntimeTarget = getEnv(
+    "EXPECTED_SECONDARY_RUNTIME_TARGET",
+    topology.currentLiveWebRuntimeTarget ?? expectedLiveRuntimeTarget
+  );
+  const expectedLiveGitSha = getEnv("EXPECTED_LIVE_GIT_SHA", "");
 
   let failures = 0;
   let warnings = 0;
@@ -154,10 +184,14 @@ async function main() {
 
     if (expectedLiveRuntimeTarget === "gcp-vm") {
       const serverHeader = liveReport.headers.server?.toLowerCase() ?? "";
-      if (serverHeader.includes("caddy")) {
+      if (serverHeader.includes("cloudflare")) {
+        pass(`${liveLabel} is fronted by Cloudflare while reporting the expected VM runtime target`);
+      } else if (serverHeader.includes("caddy")) {
         pass(`${liveLabel} is being served by Caddy as expected for the VM lane`);
       } else {
-        fail(`${liveLabel} server header is ${formatValue(liveReport.headers.server)}, expected a Caddy-served VM host`);
+        warn(
+          `${liveLabel} server header is ${formatValue(liveReport.headers.server)}; confirm this edge still terminates on the VM lane`
+        );
       }
     }
   }

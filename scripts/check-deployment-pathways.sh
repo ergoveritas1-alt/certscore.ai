@@ -1,8 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+topology_file="config/deployment-topology.json"
+
+read_topology_value() {
+  local key="$1"
+  if [[ -f "${topology_file}" ]]; then
+    node -e '
+      const fs = require("node:fs");
+      const [file, key] = process.argv.slice(1);
+      const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+      const value = payload[key];
+      if (typeof value === "string" && value.length > 0) {
+        process.stdout.write(value);
+      }
+    ' "${topology_file}" "${key}" 2>/dev/null || true
+  fi
+}
+
 expected_remote="${EXPECTED_GIT_REMOTE:-git@github.com:ergoveritas1-alt/certscore.ai.git}"
-expected_web_platform="${EXPECTED_WEB_PLATFORM:-amplify}"
+expected_web_platform="${EXPECTED_WEB_PLATFORM:-$(read_topology_value preferredWebPlatform)}"
+expected_web_platform="${expected_web_platform:-amplify}"
+expected_live_runtime_target="${EXPECTED_LIVE_RUNTIME_TARGET:-$(read_topology_value currentLiveWebRuntimeTarget)}"
+expected_secondary_runtime_target="${EXPECTED_SECONDARY_RUNTIME_TARGET:-${expected_live_runtime_target}}"
+live_base_url="${LIVE_BASE_URL:-$(read_topology_value primaryHost)}"
+secondary_base_url="${SECONDARY_BASE_URL:-$(read_topology_value secondaryHost)}"
 
 failures=0
 
@@ -95,6 +117,7 @@ require_file ".github/workflows/web-vm-deploy.yml" "Legacy GitHub Actions web VM
 require_file ".github/workflows/validation-aws-deploy.yml" "GitHub Actions AWS validation deploy workflow is present"
 require_file "infra/aws/validation/main.tf" "AWS validation Terraform stack is present"
 require_file "docs/validation-aws-cutover-runbook.md" "AWS validation cutover runbook is present"
+require_file "${topology_file}" "Deployment topology source of truth is present"
 
 if command -v gcloud >/dev/null 2>&1; then
   active_account="$(gcloud config get-value account 2>/dev/null || true)"
@@ -119,7 +142,25 @@ if [[ "${SKIP_LIVE_DEPLOY_CHECK:-0}" == "1" ]]; then
   warn "Skipping live deployment state audit because SKIP_LIVE_DEPLOY_CHECK=1"
 else
   if command -v pnpm >/dev/null 2>&1; then
-    if pnpm exec tsx ./scripts/check-live-deployment-state.ts; then
+    live_env=()
+
+    if [[ -n "${expected_live_runtime_target}" ]]; then
+      live_env+=("EXPECTED_LIVE_RUNTIME_TARGET=${expected_live_runtime_target}")
+    fi
+
+    if [[ -n "${expected_secondary_runtime_target}" ]]; then
+      live_env+=("EXPECTED_SECONDARY_RUNTIME_TARGET=${expected_secondary_runtime_target}")
+    fi
+
+    if [[ -n "${live_base_url}" ]]; then
+      live_env+=("LIVE_BASE_URL=${live_base_url}")
+    fi
+
+    if [[ -n "${secondary_base_url}" ]]; then
+      live_env+=("SECONDARY_BASE_URL=${secondary_base_url}")
+    fi
+
+    if env "${live_env[@]}" pnpm exec tsx ./scripts/check-live-deployment-state.ts; then
       pass "Live deployment state audit passed"
     else
       fail "Live deployment state audit failed"
