@@ -108,6 +108,13 @@ pnpm ops:check:deploy
 pnpm ops:check:live
 ```
 
+Use the default live check for lane and host health.
+Use the explicit latest-revision check only when you are validating that public traffic has caught up to local `main`:
+
+```bash
+EXPECTED_LIVE_GIT_SHA=$(git rev-parse main) pnpm ops:check:live
+```
+
 Optional host-specific verification:
 
 ```bash
@@ -119,6 +126,10 @@ EXPECTED_LIVE_RUNTIME_TARGET=amplify \
 EXPECTED_SECONDARY_RUNTIME_TARGET=amplify \
 pnpm ops:check:live
 ```
+
+The default deployment audit reads [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json).
+While the VM lane remains authoritative, that file should continue to say `gcp-vm`.
+Before or during cutover rehearsal, override the runtime targets and host URLs explicitly when validating Amplify-managed URLs.
 
 ## Cutover sequence
 

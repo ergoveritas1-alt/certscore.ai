@@ -1,0 +1,7 @@
+{
+  "preferredWebPlatform": "amplify",
+  "currentLiveWebRuntimeTarget": "gcp-vm",
+  "currentLiveGitRef": "main",
+  "primaryHost": "https://certscore.ai",
+  "secondaryHost": "https://consentcheck.site"
+}

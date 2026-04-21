@@ -7,6 +7,7 @@ Current target topology:
 - `apps/web` should deploy to two AWS Amplify Hosting apps, one for `certscore.ai` and one for `consentcheck.site`.
 - scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
 - validation worker runtime remains a separate worker-style deploy path.
+- the checked-in deployment audit source of truth is [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json)
 
 Legacy topology covered by this document:
 
