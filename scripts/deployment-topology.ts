@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 
 export const deploymentTopologySchema = z.object({
+  acceptedAwsRuntime: z.enum(["amplify", "app-runner"]),
   currentLiveGitRef: z.string().min(1),
   currentLiveWebRuntimeTarget: z.enum(["amplify", "app-runner", "gcp-vm", "vercel", "unknown"]),
   preferredWebPlatform: z.enum(["amplify", "app-runner"]),

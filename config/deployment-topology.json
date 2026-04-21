@@ -1,4 +1,5 @@
 {
+  "acceptedAwsRuntime": "app-runner",
   "preferredWebPlatform": "amplify",
   "currentLiveWebRuntimeTarget": "gcp-vm",
   "currentLiveGitRef": "main",

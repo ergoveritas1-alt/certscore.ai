@@ -12,6 +12,7 @@ The checked-in runtime truth for deployment audits lives in [config/deployment-t
 Keep that file aligned with reality whenever the authoritative live web lane changes.
 Use `pnpm ops:check:live` for lane health and host correctness.
 Use `EXPECTED_LIVE_GIT_SHA=$(git rev-parse main) pnpm ops:check:live` only when you want to assert that public prod has caught up to local `main`.
+That file now distinguishes the long-term preferred web platform from the currently accepted AWS runtime path for the existing SSR dependency shape.
 
 ## Goal
 

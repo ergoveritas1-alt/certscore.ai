@@ -9,6 +9,7 @@ test("deployment topology config matches the expected schema", () => {
 
 test("deployment topology schema accepts both supported preferred web platforms", () => {
   const base = {
+    acceptedAwsRuntime: "app-runner",
     currentLiveGitRef: "main",
     currentLiveWebRuntimeTarget: "gcp-vm",
     primaryHost: "https://certscore.ai",
@@ -17,4 +18,17 @@ test("deployment topology schema accepts both supported preferred web platforms"
 
   assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "amplify" }).success, true);
   assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "app-runner" }).success, true);
+});
+
+test("deployment topology schema accepts both supported accepted AWS runtimes", () => {
+  const base = {
+    currentLiveGitRef: "main",
+    currentLiveWebRuntimeTarget: "gcp-vm",
+    preferredWebPlatform: "amplify",
+    primaryHost: "https://certscore.ai",
+    secondaryHost: "https://consentcheck.site"
+  };
+
+  assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "amplify" }).success, true);
+  assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "app-runner" }).success, true);
 });
