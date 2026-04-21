@@ -320,7 +320,7 @@ export const FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED: FinancialCommercialClaims
       simulatedPerformanceLanguage: false,
       urgencyPresent: false,
       urgencyTiedToConversion: false,
-      pricingPresent: false,
+      pricingPresent: true,
       feeDisclosurePresent: false,
       confidence: 0.78,
       rationaleShort: "Commercial upgrade CTA appears without clear nearby pricing or fee detail."
