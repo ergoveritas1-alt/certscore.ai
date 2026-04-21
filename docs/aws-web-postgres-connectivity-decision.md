@@ -124,6 +124,8 @@ The accepted migration sequence is:
    - report pages load
    - artifact-backed operations work
 
+The concrete execution runbook for the App Runner path lives in [docs/aws-web-apprunner-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-apprunner-cutover-plan.md).
+
 ## What this means right now
 
 Right now, the repo should treat these statements as true:
