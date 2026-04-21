@@ -112,6 +112,17 @@ resource "aws_security_group" "ecs_tasks" {
   tags = merge(local.common_tags, { Name = "${local.prefix}-ecs-sg" })
 }
 
+resource "aws_vpc_security_group_ingress_rule" "database_from_ecs" {
+  count = trimspace(var.database_security_group_id) != "" ? 1 : 0
+
+  security_group_id            = var.database_security_group_id
+  referenced_security_group_id = aws_security_group.ecs_tasks.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+  description                  = "Public web ECS access"
+}
+
 resource "aws_lb" "web" {
   name               = substr(replace("${local.prefix}-alb", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
   internal           = false
@@ -532,7 +543,7 @@ resource "aws_ecs_service" "certscore" {
   enable_execute_command = true
 
   network_configuration {
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
     security_groups  = [aws_security_group.ecs_tasks.id]
     subnets          = local.private_subnets
   }
@@ -564,7 +575,7 @@ resource "aws_ecs_service" "consentcheck" {
   enable_execute_command = true
 
   network_configuration {
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
     security_groups  = [aws_security_group.ecs_tasks.id]
     subnets          = local.private_subnets
   }

@@ -34,7 +34,7 @@ The baseline stack provisions:
 - separate task definitions for `certscore.ai` and `consentcheck.site`
 - IAM roles for ECS runtime and GitHub Actions deploys
 
-The stack expects you to supply an existing VPC and existing public and private subnets. That matches the fastest practical path in the current account, where the validation ECS VPC already exists and is known-good.
+The stack expects you to supply an existing VPC and existing public and private subnets. The current fastest practical path is to place the public web stack in the same VPC as RDS so database access can be granted by security group instead of public IP allowlists.
 
 ## Existing AWS pattern this stack copies
 
@@ -49,17 +49,23 @@ The public web stack reuses that shape where practical instead of inventing a se
 
 ## Known current-account values
 
-The current AWS account already has a usable ECS VPC shape for this stack:
+The current AWS account has two relevant VPCs:
 
-- VPC: `vpc-0d2263b8f7dabdfa4`
-- public subnets:
-  - `subnet-0fb0456b74ccbe112`
-  - `subnet-0d4049ad5b21905b3`
-- private subnets:
-  - `subnet-036b6ce080d5b7deb`
-  - `subnet-0ecacb04207ce9cf8`
+- validation ECS VPC:
+  - `vpc-0d2263b8f7dabdfa4`
+  - this is where the validation stack runs today
+  - it does not have a route to the RDS/default VPC
+- RDS/default VPC:
+  - `vpc-0f249d7ab389f8d1f`
+  - subnets:
+    - `subnet-053d0eaa45152d300`
+    - `subnet-000adac289b27c3ac`
+  - DB security group:
+    - `sg-0f2219d488cc6c482`
 
-Those values are baked into [terraform.tfvars.example](/Users/benmasek/WC01/infra/aws/web-ecs/terraform.tfvars.example) as the default starting point because they match the live validation stack in `us-west-1`.
+There is no VPC peering or transit gateway between those VPCs. Because of that, the validation VPC is the wrong place for the public web stack if the app still needs direct PostgreSQL access.
+
+The default example now targets the RDS/default VPC because that is the fastest route to a working AWS cutover in the current account.
 
 ## Inputs the future stack will require
 
@@ -72,7 +78,9 @@ Those values are baked into [terraform.tfvars.example](/Users/benmasek/WC01/infr
 - public subnet ids for ALB ingress
 - private subnet ids for ECS tasks
 - optional existing ECS cluster name if reusing a cluster instead of creating a new one
+- optional `assign_public_ip` for transitional deployments in public/default subnets
 - security-group ids when reusing existing network controls
+- database security group id for SG-based PostgreSQL access
 
 ### Per-host web service inputs
 
@@ -135,9 +143,9 @@ The runtime config for both services sets `BUILD_RUNTIME_TARGET=ecs-fargate` so 
 
 This stack is not enough by itself. The current account still needs:
 
-- an ACM certificate in `us-west-1` for the public hosts
-- Secrets Manager entries for the Gmail and likely Google OAuth and contact-routing secrets
-- a database security-group rule that allows the ECS task security group instead of the current public-IP allowlist path
+- the ACM certificate in `us-west-1` to finish issuing for `consentcheck.site`
+- a decision on whether to keep the initial ECS tasks in default/public DB-VPC subnets with `assign_public_ip = true` or first build dedicated private app subnets plus NAT
+- Terraform execution from a shell that has `terraform` installed
 
 ## Related repo documents
 

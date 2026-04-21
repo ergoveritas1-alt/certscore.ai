@@ -35,9 +35,15 @@ variable "public_subnet_ids" {
 }
 
 variable "private_subnet_ids" {
-  description = "Private subnet ids for ECS tasks."
+  description = "Subnet ids for ECS tasks. In the current account, this may temporarily point at DB-VPC default subnets until private app subnets exist."
   type        = list(string)
   default     = []
+}
+
+variable "assign_public_ip" {
+  description = "Whether ECS tasks should receive public IPs. This should be false for a hardened private-subnet deployment, but may be true temporarily in the current DB VPC."
+  type        = bool
+  default     = false
 }
 
 variable "certscore_domain_name" {
@@ -66,6 +72,12 @@ variable "consentcheck_hosted_zone_id" {
 
 variable "existing_certificate_arn" {
   description = "Existing ACM certificate ARN for the public hosts when not creating certificates in-stack."
+  type        = string
+  default     = ""
+}
+
+variable "database_security_group_id" {
+  description = "Existing RDS security group id to allow from the ECS task security group."
   type        = string
   default     = ""
 }
