@@ -106,8 +106,20 @@ jobs:
       - name: Typecheck validation-worker
         run: pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
 
+      - name: Generate financial claims corpus report
+        run: |
+          mkdir -p artifacts
+          pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --json > artifacts/financial-claims-corpus-report.json
+
       - name: Check financial claims corpus alignment
         run: pnpm eval:financial-claims:strict
+
+      - name: Upload financial claims corpus report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-claims-corpus-report
+          path: artifacts/financial-claims-corpus-report.json
 
       - name: Run scan pipeline tests
         run: pnpm test:scan-pipeline
