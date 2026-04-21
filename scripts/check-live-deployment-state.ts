@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { loadDeploymentTopology } from "./deployment-topology";
+import { assessGitSha, assessPrimaryRuntime, assessSecondaryRuntime } from "./live-deployment-audit";
 
 type VersionPayload = {
   amplifyAppId?: string | null;
@@ -155,26 +156,14 @@ async function main() {
   } else {
     pass(`${liveLabel} ${liveBaseUrl} returned version metadata`);
 
-    if (expectedLiveRuntimeTarget && liveReport.payload.runtimeTarget !== expectedLiveRuntimeTarget) {
-      fail(
-        `${liveLabel} runtime target is ${formatValue(liveReport.payload.runtimeTarget)}, expected ${expectedLiveRuntimeTarget}`
-      );
-    } else {
-      pass(`${liveLabel} runtime target matches ${expectedLiveRuntimeTarget}`);
-    }
-
-    if (expectedLiveRuntimeTarget === "gcp-vm") {
-      const serverHeader = liveReport.headers.server?.toLowerCase() ?? "";
-      if (serverHeader.includes("cloudflare")) {
-        pass(`${liveLabel} is fronted by Cloudflare while reporting the expected VM runtime target`);
-      } else if (serverHeader.includes("caddy")) {
-        pass(`${liveLabel} is being served by Caddy as expected for the VM lane`);
-      } else {
-        warn(
-          `${liveLabel} server header is ${formatValue(liveReport.headers.server)}; confirm this edge still terminates on the VM lane`
-        );
-      }
-    }
+    const runtimeAssessment = assessPrimaryRuntime({
+      expectedRuntimeTarget: expectedLiveRuntimeTarget,
+      label: liveLabel,
+      report: liveReport
+    });
+    runtimeAssessment.failures.forEach(fail);
+    runtimeAssessment.messages.forEach(pass);
+    runtimeAssessment.warnings.forEach(warn);
   }
 
   if (!secondaryReport || !secondaryReport.ok || !secondaryReport.payload) {
@@ -182,43 +171,26 @@ async function main() {
   } else {
     pass(`${secondaryLabel} ${secondaryBaseUrl} returned version metadata`);
 
-    if (expectedSecondaryRuntimeTarget && secondaryReport.payload.runtimeTarget !== expectedSecondaryRuntimeTarget) {
-      warn(
-        `${secondaryLabel} runtime target is ${formatValue(secondaryReport.payload.runtimeTarget)}, expected ${expectedSecondaryRuntimeTarget}`
-      );
-    } else if (expectedSecondaryRuntimeTarget) {
-      pass(`${secondaryLabel} runtime target matches ${expectedSecondaryRuntimeTarget}`);
-    }
+    const runtimeAssessment = assessSecondaryRuntime({
+      expectedRuntimeTarget: expectedSecondaryRuntimeTarget,
+      label: secondaryLabel,
+      report: secondaryReport
+    });
+    runtimeAssessment.messages.forEach(pass);
+    runtimeAssessment.warnings.forEach(warn);
   }
 
-  if (expectedLiveGitSha && liveReport?.payload?.gitSha) {
-    if (liveReport.payload.gitSha === expectedLiveGitSha) {
-      pass(`${liveLabel} git sha matches expected revision ${expectedLiveGitSha}`);
-    } else {
-      warn(`${liveLabel} git sha is ${liveReport.payload.gitSha}, expected ${expectedLiveGitSha}`);
-    }
-  } else if (expectedLiveGitSha) {
-    warn(`Expected ${liveLabel.toLowerCase()} git sha is ${expectedLiveGitSha}, but the host did not return a git sha`);
-  }
-
-  if (
-    expectedLiveGitSha &&
-    secondaryReport?.payload?.gitSha === expectedLiveGitSha &&
-    liveReport?.payload?.gitSha &&
-    liveReport.payload.gitSha !== expectedLiveGitSha
-  ) {
-    fail(
-      `${secondaryLabel} is serving expected revision ${expectedLiveGitSha} but ${liveLabel.toLowerCase()} ${liveBaseUrl} is still on ${liveReport.payload.gitSha}`
-    );
-  }
-
-  if (secondaryReport?.payload?.gitSha && liveReport?.payload?.gitSha) {
-    if (secondaryReport.payload.gitSha === liveReport.payload.gitSha) {
-      pass(`${secondaryLabel} and ${liveLabel.toLowerCase()} agree on git sha ${liveReport.payload.gitSha}`);
-    } else {
-      warn(`${secondaryLabel} git sha ${secondaryReport.payload.gitSha} differs from ${liveLabel.toLowerCase()} git sha ${liveReport.payload.gitSha}`);
-    }
-  }
+  const gitShaAssessment = assessGitSha({
+    expectedLiveGitSha,
+    liveGitSha: liveReport?.payload?.gitSha,
+    secondaryGitSha: secondaryReport?.payload?.gitSha,
+    liveBaseUrl,
+    liveLabel,
+    secondaryLabel
+  });
+  gitShaAssessment.failures.forEach(fail);
+  gitShaAssessment.messages.forEach(pass);
+  gitShaAssessment.warnings.forEach(warn);
 
   console.log();
   if (failures > 0) {
