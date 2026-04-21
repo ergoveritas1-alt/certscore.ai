@@ -140,6 +140,15 @@ if [[ ! -x "${REMOTE_DEPLOY_WRAPPER}" ]]; then
   exit 1
 fi
 
+if [[ -f "${REMOTE_ENV_FILE}" ]]; then
+  sudo sed -i \
+    -e '/^BUILD_GIT_REF=/d' \
+    -e '/^BUILD_GIT_SHA=/d' \
+    -e '/^BUILD_IMAGE_TAG=/d' \
+    -e '/^BUILD_RUNTIME_TARGET=/d' \
+    "${REMOTE_ENV_FILE}"
+fi
+
 sudo -n "${REMOTE_DEPLOY_WRAPPER}" "${IMAGE_URI}"
 EOF
 

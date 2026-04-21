@@ -30,18 +30,30 @@ image_uri="\$1"
 container_name="${CONTAINER_NAME}"
 container_port="${CONTAINER_PORT}"
 remote_env_file="${REMOTE_ENV_FILE}"
+filtered_env_file=""
+
+cleanup() {
+  if [[ -n "\${filtered_env_file}" && -f "\${filtered_env_file}" ]]; then
+    rm -f "\${filtered_env_file}"
+  fi
+}
+
+trap cleanup EXIT
 
 if [[ ! -f "\${remote_env_file}" ]]; then
   echo "Missing env file: \${remote_env_file}" >&2
   exit 1
 fi
 
+filtered_env_file="\$(mktemp)"
+grep -v -E '^BUILD_(GIT_REF|GIT_SHA|IMAGE_TAG|RUNTIME_TARGET)=' "\${remote_env_file}" > "\${filtered_env_file}"
+
 docker pull "\${image_uri}"
 docker rm -f "\${container_name}" >/dev/null 2>&1 || true
 docker run -d \
   --name "\${container_name}" \
   --restart unless-stopped \
-  --env-file "\${remote_env_file}" \
+  --env-file "\${filtered_env_file}" \
   -p "\${container_port}:3000" \
   "\${image_uri}"
 
