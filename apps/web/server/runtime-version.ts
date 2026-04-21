@@ -18,6 +18,10 @@ export type RuntimeVersionInfo = {
   vercelUrl: string | null;
 };
 
+type RuntimeVersionOverrides = {
+  appUrl?: string | null;
+};
+
 function normalizeNonEmptyString(value: string | undefined) {
   if (!value) {
     return null;
@@ -81,13 +85,16 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
   return "unknown";
 }
 
-export function getRuntimeVersionInfo(env: NodeJS.ProcessEnv = process.env): RuntimeVersionInfo {
+export function getRuntimeVersionInfo(
+  env: NodeJS.ProcessEnv = process.env,
+  overrides: RuntimeVersionOverrides = {}
+): RuntimeVersionInfo {
   const buildInfo = getBuildInfo();
 
   return {
     amplifyAppId: normalizeNonEmptyString(env.AWS_APP_ID),
     amplifyBranch: normalizeNonEmptyString(env.AWS_BRANCH),
-    appUrl: normalizeNonEmptyString(env.NEXT_PUBLIC_APP_URL),
+    appUrl: overrides.appUrl ?? normalizeNonEmptyString(env.NEXT_PUBLIC_APP_URL),
     gitRef: buildInfo?.gitRef ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_REF) ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
     gitSha: buildInfo?.gitSha ?? normalizeNonEmptyString(env.BUILD_GIT_SHA) ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_SHA),
     hostname: normalizeNonEmptyString(env.HOSTNAME),

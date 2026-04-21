@@ -3,8 +3,9 @@ import { getRuntimeVersionInfo } from "../../../server/runtime-version";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  const info = getRuntimeVersionInfo();
+export function GET(request: Request) {
+  const requestUrl = new URL(request.url);
+  const info = getRuntimeVersionInfo(process.env, { appUrl: requestUrl.origin });
 
   return NextResponse.json(info, {
     headers: {
