@@ -3,36 +3,38 @@ aws_region              = "us-west-1"
 github_actions_subjects = ["repo:ergoveritas1-alt/certscore.ai:*"]
 
 # Reuse the existing validation VPC shape in the current account.
-existing_vpc_id          = "vpc-0d2263b8f7dabdfa4"
+existing_vpc_id           = "vpc-0f249d7ab389f8d1f"
 existing_ecs_cluster_name = ""
-public_subnet_ids        = ["subnet-0fb0456b74ccbe112", "subnet-0d4049ad5b21905b3"]
-private_subnet_ids       = ["subnet-036b6ce080d5b7deb", "subnet-0ecacb04207ce9cf8"]
+public_subnet_ids         = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
+private_subnet_ids        = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
+assign_public_ip          = true
+database_security_group_id = "sg-0f2219d488cc6c482"
 
 certscore_domain_name       = "certscore.ai"
 consentcheck_domain_name    = "consentcheck.site"
-existing_certificate_arn    = "arn:aws:acm:us-west-1:123456789012:certificate/replace-me"
+existing_certificate_arn    = "arn:aws:acm:us-west-1:199536052647:certificate/73baf8fe-ae1b-413c-8560-7565d6c76744"
 
 build_runtime_target              = "ecs-fargate"
 app_flavor                        = "certscore"
 database_ssl_mode                 = "require"
 next_public_auth_google_enabled   = "false"
 certscore_admin_emails            = "ops@example.com"
-s3_bucket                         = "scan-artifacts"
+s3_bucket                         = "ws01-scan-artifacts-199536052647-us-west-1"
 s3_region                         = "us-west-1"
 s3_endpoint                       = ""
-s3_force_path_style               = ""
+s3_force_path_style               = "false"
 
-database_url_secret_arn              = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/database-url"
-better_auth_secret_arn               = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/better-auth-secret"
+database_url_secret_arn              = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/database-url-JGGsra"
+better_auth_secret_arn               = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/better-auth-secret-5Dt8Wg"
 google_client_id_secret_arn          = ""
 google_client_secret_secret_arn      = ""
-openai_api_key_secret_arn            = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/openai-api-key"
-s3_access_key_id_secret_arn          = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/s3-access-key-id"
-s3_secret_access_key_secret_arn      = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/s3-secret-access-key"
-gmail_smtp_user_secret_arn           = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/gmail-user"
-gmail_smtp_app_password_secret_arn   = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/gmail-app-password"
-feedback_to_email_secret_arn         = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/feedback-to-email"
-privacy_request_to_email_secret_arn  = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/privacy-request-to-email"
+openai_api_key_secret_arn            = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/openai-api-key-DUFu2x"
+s3_access_key_id_secret_arn          = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/s3-access-key-id-gGSTIw"
+s3_secret_access_key_secret_arn      = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/s3-secret-access-key-qVHWY4"
+gmail_smtp_user_secret_arn           = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/gmail-user-Rj5cb1"
+gmail_smtp_app_password_secret_arn   = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/gmail-app-password-JfvuEX"
+feedback_to_email_secret_arn         = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/feedback-to-email-uleI50"
+privacy_request_to_email_secret_arn  = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/privacy-request-to-email-uleI50"
 
 web_cpu           = 512
 web_memory        = 1024
