@@ -215,7 +215,7 @@ export function buildRegulatoryLenses(
     agencyMappings?: AgencyMapping[];
     regulatoryRisk?: RegulatoryRiskAssessment | null;
   }
-) {
+): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
   const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
   const trackingFinding =
@@ -281,7 +281,7 @@ export function buildRegulatoryLenses(
   const cpraTone = buildTone(cpraScore);
   const ftcTone = buildTone(ftcScore);
 
-  const lenses = [
+  const lenses: RegulatoryLens[] = [
     {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
@@ -309,7 +309,7 @@ export function buildRegulatoryLenses(
       summary: hasConsentConcern ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
-  ] satisfies RegulatoryLens[];
+  ];
 
   const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
   const accessibilitySignals = options?.accessibilitySignals ?? null;
