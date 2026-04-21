@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { loadDeploymentTopology } from "./deployment-topology";
 
 type VersionPayload = {
   amplifyAppId?: string | null;
@@ -33,24 +32,6 @@ function getEnv(name: string, fallback?: string) {
   }
 
   return fallback ?? "";
-}
-
-type DeploymentTopology = {
-  currentLiveGitRef?: string;
-  currentLiveWebRuntimeTarget?: string;
-  preferredWebPlatform?: string;
-  primaryHost?: string;
-  secondaryHost?: string;
-};
-
-function loadDeploymentTopology(): DeploymentTopology {
-  const topologyPath = path.join(process.cwd(), "config", "deployment-topology.json");
-
-  try {
-    return JSON.parse(readFileSync(topologyPath, "utf8")) as DeploymentTopology;
-  } catch {
-    return {};
-  }
 }
 
 function getGitSha(ref: string) {
