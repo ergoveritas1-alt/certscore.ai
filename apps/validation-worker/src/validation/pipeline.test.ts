@@ -1925,6 +1925,85 @@ test("deriveFinancialCommercialClaimFindings treats trading profitability copy a
   }
 });
 
+test("deriveFinancialCommercialClaimFindings falls back to homepage fetch when scan artifacts have no document text", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.DATABASE_URL = "postgres://postgres:postgres@localhost:5432/test";
+  globalThis.fetch = (async (input) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : String(input.url);
+    if (url === "https://www.example.com/") {
+      return new Response(
+        `<!doctype html>
+        <html>
+          <head><title>FX Culture Trading</title></head>
+          <body>
+            <main>
+              <h1>Join my free trading community</h1>
+              <p>Learn & profit from my trading ideas daily.</p>
+              <p>Real students, real results, real success stories.</p>
+            </main>
+          </body>
+        </html>`,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                claimPresent: true,
+                claimType: "return_performance_claim",
+                claimText: "Learn & profit from my trading ideas daily",
+                commercialContext: true,
+                contextType: "financial_offer",
+                adjacentDisclosurePresent: false,
+                adjacentDisclosureType: null,
+                adjacentDisclosureText: null,
+                guaranteeLanguage: false,
+                superlativeLanguage: false,
+                simulatedPerformanceLanguage: false,
+                urgencyPresent: false,
+                urgencyTiedToConversion: false,
+                pricingPresent: false,
+                feeDisclosurePresent: false,
+                confidence: 0.9,
+                rationaleShort: "Trading profitability language is presented as an outcome-oriented promotional claim."
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }) as typeof fetch;
+
+  try {
+    const findings = await deriveFinancialCommercialClaimFindings(
+      buildArtifacts({
+        documentSources: [],
+        pages: [{ page_type: "homepage", page_url: "https://www.example.com/", fetch_status: "ok" }],
+        snapshot: {}
+      })
+    );
+
+    const earningsFinding = findings.find((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure");
+    assert.ok(earningsFinding);
+    assert.equal(earningsFinding?.pageUrl, "https://www.example.com/");
+    assert.equal(earningsFinding?.evidence.claim_text, "Learn & profit from my trading ideas daily");
+    assert.equal(earningsFinding?.evidence.page_type, "homepage");
+  } finally {
+    process.env.OPENAI_API_KEY = originalKey;
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");

@@ -1525,6 +1525,68 @@ function buildFinancialCommercialClaimCandidates(input: ValidationArtifactBundle
     .slice(0, FINANCIAL_COMMERCIAL_CLAIM_BLOCK_LIMIT);
 }
 
+async function buildFinancialCommercialHomepageFallbackCandidates(input: ValidationArtifactBundle) {
+  const homepageRow = input.pages.find((row) => getStringValue(row, "page_type") === "homepage") ?? null;
+  const homepageUrl = getStringValue(homepageRow, "page_url");
+  const fetchStatus = getStringValue(homepageRow, "fetch_status");
+  if (!homepageUrl || fetchStatus === "forbidden" || fetchStatus === "failed" || fetchStatus === "skipped") {
+    return [] as FinancialCommercialClaimCandidate[];
+  }
+
+  try {
+    const request = buildValidationWorkerDocumentHeaders({ url: homepageUrl });
+    const response = await fetch(homepageUrl, {
+      headers: request.headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) {
+      return [] as FinancialCommercialClaimCandidate[];
+    }
+
+    const html = await response.text();
+    const title = extractTitle(html);
+    const text = stripHtmlToText(html);
+    if (text.length < 80 || looksLikeIntermediaryOrBlockPage({ canonicalUrl: response.url || homepageUrl, text, title })) {
+      return [] as FinancialCommercialClaimCandidate[];
+    }
+
+    const blocks = splitFinancialCommercialBlocks(text).slice(0, 40);
+    return blocks
+      .map((blockText, index) => {
+        const candidateSignals = collectFinancialCommercialCandidateSignals(blockText);
+        const score = scoreFinancialCommercialCandidate(candidateSignals);
+        if (score < 2) {
+          return null;
+        }
+
+        return {
+          adjacentAfter: blocks[index + 1] ?? null,
+          adjacentBefore: blocks[index - 1] ?? null,
+          blockHeading: title,
+          blockText,
+          candidateSignals,
+          pageType: "homepage",
+          pageUrl: response.url || homepageUrl,
+          sourceType: "document_source" as const
+        };
+      })
+      .filter((candidate): candidate is FinancialCommercialClaimCandidate => Boolean(candidate))
+      .sort(
+        (left, right) =>
+          scoreFinancialCommercialCandidate(right.candidateSignals) - scoreFinancialCommercialCandidate(left.candidateSignals) ||
+          (right.blockText.length - left.blockText.length)
+      )
+      .slice(0, FINANCIAL_COMMERCIAL_CLAIM_BLOCK_LIMIT);
+  } catch (error) {
+    console.error("[validation-worker] financial commercial homepage fallback fetch failed", {
+      error: error instanceof Error ? error.message : String(error),
+      pageUrl: homepageUrl
+    });
+    return [] as FinancialCommercialClaimCandidate[];
+  }
+}
+
 function buildFinancialCommercialClaimFinding(input: {
   candidate: FinancialCommercialClaimCandidate;
   classification: Awaited<ReturnType<typeof classifyFinancialCommercialClaimWithLlm>>;
@@ -1569,12 +1631,14 @@ function buildFinancialCommercialClaimFinding(input: {
 
 export async function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle) {
   const candidates = buildFinancialCommercialClaimCandidates(input);
-  if (candidates.length === 0) {
+  const effectiveCandidates =
+    candidates.length > 0 ? candidates : await buildFinancialCommercialHomepageFallbackCandidates(input);
+  if (effectiveCandidates.length === 0) {
     return [] as Array<ReturnType<typeof buildSectionIssueFinding>>;
   }
 
   const classified = await Promise.all(
-    candidates.map(async (candidate) => {
+    effectiveCandidates.map(async (candidate) => {
       try {
         const classification = await classifyFinancialCommercialClaimWithLlm({
           adjacentAfter: candidate.adjacentAfter,
