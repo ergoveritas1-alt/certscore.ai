@@ -17,7 +17,7 @@ applications:
           commands:
             - rm -f apps/web/.env.production
             - env | grep -e '^NEXT_PUBLIC_' >> apps/web/.env.production || true
-            - env | grep -e '^APP_FLAVOR=' -e '^VALIDATION_OPS_BASE_URL=' -e '^BUILD_RUNTIME_TARGET=' -e '^S3_BUCKET=' -e '^S3_REGION=' -e '^S3_ENDPOINT=' -e '^S3_FORCE_PATH_STYLE=' -e '^DATABASE_SSL_MODE=' >> apps/web/.env.production || true
+            - env | grep -e '^APP_FLAVOR=' -e '^VALIDATION_OPS_BASE_URL=' -e '^BUILD_RUNTIME_TARGET=' -e '^S3_BUCKET=' -e '^S3_REGION=' -e '^S3_ENDPOINT=' -e '^S3_FORCE_PATH_STYLE=' -e '^DATABASE_SSL_MODE=' -e '^DATABASE_URL=' -e '^DATABASE_READ_URL=' -e '^BETTER_AUTH_SECRET=' -e '^S3_ACCESS_KEY_ID=' -e '^S3_SECRET_ACCESS_KEY=' -e '^OPENAI_API_KEY=' >> apps/web/.env.production || true
             - |
               node <<'EOF'
               const fs = require("node:fs");
