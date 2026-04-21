@@ -1,0 +1,138 @@
+name: Public Web AWS ECS Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/web-aws-ecs-deploy.yml"
+      - "apps/web/**"
+      - "infra/aws/web-ecs/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "packages/ui/**"
+      - "packages/validation-shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "turbo.json"
+  workflow_dispatch:
+
+concurrency:
+  group: public-web-aws-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-public-web-aws:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      ECR_WEB_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
+      ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
+      ECS_CONSENTCHECK_SERVICE_NAME: ${{ vars.AWS_WEB_CONSENTCHECK_SERVICE }}
+      CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
+      CONSENTCHECK_BASE_URL: ${{ vars.AWS_WEB_CONSENTCHECK_BASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${ECR_WEB_REPOSITORY}" || (echo "Missing var AWS_WEB_ECR_REPOSITORY" && exit 1)
+          test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_WEB_ECS_CLUSTER" && exit 1)
+          test -n "${ECS_CERTSCORE_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CERTSCORE_SERVICE" && exit 1)
+          test -n "${ECS_CONSENTCHECK_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CONSENTCHECK_SERVICE" && exit 1)
+          test -n "${CERTSCORE_BASE_URL}" || (echo "Missing var AWS_WEB_CERTSCORE_BASE_URL" && exit 1)
+          test -n "${CONSENTCHECK_BASE_URL}" || (echo "Missing var AWS_WEB_CONSENTCHECK_BASE_URL" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck web
+        run: pnpm --filter @website-signal-risk-scanner/web typecheck
+
+      - name: Validate certscore web runtime contract
+        run: |
+          APP_FLAVOR=certscore \
+          NEXT_PUBLIC_APP_URL="${CERTSCORE_BASE_URL}" \
+          DATABASE_URL=postgresql://web.example.internal/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          GMAIL_SMTP_USER=ops@example.com \
+          GMAIL_SMTP_APP_PASSWORD=placeholder \
+          FEEDBACK_TO_EMAIL=ops@example.com \
+          S3_BUCKET=placeholder-bucket \
+          S3_REGION=us-west-1 \
+          S3_ACCESS_KEY_ID=placeholder \
+          S3_SECRET_ACCESS_KEY=placeholder \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
+
+      - name: Validate consentcheck web runtime contract
+        run: |
+          APP_FLAVOR=certscore \
+          NEXT_PUBLIC_APP_URL="${CONSENTCHECK_BASE_URL}" \
+          DATABASE_URL=postgresql://web.example.internal/certscore \
+          BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
+          GMAIL_SMTP_USER=ops@example.com \
+          GMAIL_SMTP_APP_PASSWORD=placeholder \
+          FEEDBACK_TO_EMAIL=ops@example.com \
+          S3_BUCKET=placeholder-bucket \
+          S3_REGION=us-west-1 \
+          S3_ACCESS_KEY_ID=placeholder \
+          S3_SECRET_ACCESS_KEY=placeholder \
+          node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
+
+      - name: Build and push public web image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
+          docker build \
+            -f apps/web/Dockerfile \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            -t "${WEB_IMAGE}:${GITHUB_SHA}" \
+            -t "${WEB_IMAGE}:latest" \
+            .
+          docker push "${WEB_IMAGE}:${GITHUB_SHA}"
+          docker push "${WEB_IMAGE}:latest"
+
+      - name: Force ECS deployments
+        run: |
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_CERTSCORE_SERVICE_NAME}" --force-new-deployment >/dev/null
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_CONSENTCHECK_SERVICE_NAME}" --force-new-deployment >/dev/null
+
+      - name: Wait for ECS services to stabilize
+        run: |
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_CERTSCORE_SERVICE_NAME}" "${ECS_CONSENTCHECK_SERVICE_NAME}"

@@ -2,16 +2,15 @@ project_name            = "certscore-web"
 aws_region              = "us-west-1"
 github_actions_subjects = ["repo:ergoveritas1-alt/certscore.ai:*"]
 
-# Reuse the existing ECS-style network shape where possible.
-existing_vpc_id    = "vpc-xxxxxxxx"
-public_subnet_ids  = ["subnet-public-a", "subnet-public-b"]
-private_subnet_ids = ["subnet-private-a", "subnet-private-b"]
+# Reuse the existing validation VPC shape in the current account.
+existing_vpc_id          = "vpc-0d2263b8f7dabdfa4"
+existing_ecs_cluster_name = ""
+public_subnet_ids        = ["subnet-0fb0456b74ccbe112", "subnet-0d4049ad5b21905b3"]
+private_subnet_ids       = ["subnet-036b6ce080d5b7deb", "subnet-0ecacb04207ce9cf8"]
 
 certscore_domain_name       = "certscore.ai"
-certscore_hosted_zone_id    = "Z1234567890"
 consentcheck_domain_name    = "consentcheck.site"
-consentcheck_hosted_zone_id = "Z1234567890"
-existing_certificate_arn    = ""
+existing_certificate_arn    = "arn:aws:acm:us-west-1:123456789012:certificate/replace-me"
 
 build_runtime_target              = "ecs-fargate"
 app_flavor                        = "certscore"

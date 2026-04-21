@@ -22,6 +22,12 @@ variable "existing_vpc_id" {
   default     = ""
 }
 
+variable "existing_ecs_cluster_name" {
+  description = "Optional existing ECS cluster name to reuse for the public web stack."
+  type        = string
+  default     = ""
+}
+
 variable "public_subnet_ids" {
   description = "Public subnet ids for ALB ingress."
   type        = list(string)
@@ -62,6 +68,12 @@ variable "existing_certificate_arn" {
   description = "Existing ACM certificate ARN for the public hosts when not creating certificates in-stack."
   type        = string
   default     = ""
+}
+
+variable "image_tag" {
+  description = "Container image tag to deploy for both public web services."
+  type        = string
+  default     = "latest"
 }
 
 variable "app_flavor" {
