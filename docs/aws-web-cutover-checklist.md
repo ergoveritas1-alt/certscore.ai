@@ -1,12 +1,12 @@
 # AWS Web Cutover Checklist
 
-This checklist is the concrete follow-on to the now-stable GCP VM web lane.
+This checklist is historical cutover material for the public web migration. The public web cutover is complete.
 
 Current truth:
 
-- public web production is healthy on the fixed-egress GCP VM path
-- the intended steady-state web topology is two AWS Amplify Hosting apps
-- the main unresolved cutover risk is server-side connectivity from Amplify-hosted SSR to production dependencies, especially PostgreSQL
+- public web production is healthy on AWS ECS/Fargate
+- `certscore.ai` and `consentcheck.site` both serve from the AWS web stack
+- Amplify is not the active production topology for the current SSR dependency shape
 
 The checked-in runtime truth for deployment audits lives in [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json).
 Keep that file aligned with reality whenever the authoritative live web lane changes.
@@ -17,7 +17,9 @@ In the current AWS account and region, the accepted runtime path is `ecs-fargate
 
 ## Goal
 
-Move the public web hosts from the current GCP VM lane to two AWS Amplify apps without breaking:
+This checklist originally tracked the move off the GCP VM lane. That migration goal has been completed with ECS/Fargate rather than Amplify.
+
+The equivalent goal that was achieved was:
 
 - login and session handling
 - scan queue submission
@@ -27,6 +29,8 @@ Move the public web hosts from the current GCP VM lane to two AWS Amplify apps w
 - operational email flows
 
 ## Target apps
+
+Historical note: this section reflects the earlier Amplify proposal, not the final production outcome.
 
 Create two separate Amplify apps that both build from `apps/web`:
 
@@ -111,8 +115,8 @@ Keep `AMPLIFY_MONOREPO_APP_ROOT=apps/web`.
 
 The repo and recent production work make the blocker explicit:
 
-- the current GCP VM web lane is still authoritative while the database ingress model requires fixed egress
-- Amplify-hosted SSR was not accepted as production because it could not safely satisfy that requirement
+- Amplify-hosted SSR was not accepted as production because it could not safely satisfy the PostgreSQL connectivity requirement
+- ECS/Fargate became the accepted AWS runtime because it could satisfy that requirement in the current account and region
 
 Before DNS cutover, decide and implement one of these paths:
 
@@ -120,7 +124,7 @@ Before DNS cutover, decide and implement one of these paths:
 2. move PostgreSQL behind private connectivity that the AWS-hosted runtime can use
 3. redesign the web-serving path so public SSR no longer needs direct Postgres access for the critical routes
 
-If none of those is complete, do not cut DNS from the VM to Amplify.
+That decision has now been resolved in favor of ECS/Fargate.
 
 ## Amplify secret wiring checkpoint
 
@@ -154,11 +158,13 @@ For each Amplify app, verify:
 
 ## DNS cutover gate
 
-Only switch public DNS when all of the following are true for both Amplify apps:
+Historical note: DNS has already been switched to the AWS ECS/Fargate web stack.
+
+Only switch public DNS when all of the following are true for both target runtimes:
 
 1. server-side secrets are confirmed wired
 2. SSR can reach PostgreSQL safely
-3. `/api/version` shows `runtimeTarget: amplify`
+3. `/api/version` shows the expected runtime target for the lane being tested
 4. `/api/full-scan` succeeds
 5. login and auth callback flows succeed
 
@@ -166,15 +172,14 @@ Only switch public DNS when all of the following are true for both Amplify apps:
 
 If Amplify fails any gate above:
 
-- leave DNS on the current VM host
-- keep using the working VM web lane
+- move DNS back only if the active AWS web lane fails a critical gate
+- use the current AWS web lane as the authoritative default unless an explicit rollback is required
 - use `docs/deploy-gcp-vm.md` as the rollback path
 
 ## Immediate next step
 
-The next implementation step is infrastructure, not more app debugging:
+The next implementation step is no longer public web cutover. It is broader AWS consolidation:
 
-1. prove a production-safe PostgreSQL connectivity path for Amplify SSR
-2. wire the required server secrets into both Amplify apps
-3. deploy both Amplify apps on their Amplify-managed URLs
-4. run the verification gates before any DNS change
+1. finish migrating remaining non-web runtime lanes to AWS where appropriate
+2. retire legacy GCP and VM-only operational paths when rollback confidence is sufficient
+3. keep [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json) aligned with the actual live runtime

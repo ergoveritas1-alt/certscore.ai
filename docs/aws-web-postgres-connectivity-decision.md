@@ -1,10 +1,10 @@
 # AWS Web PostgreSQL Connectivity Decision
 
-This document records the current decision for moving the public web tier off the fixed-egress GCP VM lane.
+This document records the decision that justified moving the public web tier off the legacy fixed-egress GCP VM lane and onto AWS.
 
 ## Decision
 
-Do not cut `certscore.ai` or `consentcheck.site` from the current GCP VM lane to AWS Amplify Hosting while the web SSR runtime still requires direct PostgreSQL access.
+Do not use AWS Amplify Hosting as the production web target while the web SSR runtime still requires direct PostgreSQL access.
 
 If the steady-state AWS target must preserve direct server-side PostgreSQL access for auth, dashboard reads, scan enqueue, and report rendering, the recommended AWS target in the current AWS account and region is:
 
@@ -15,7 +15,7 @@ If the steady-state AWS target must preserve direct server-side PostgreSQL acces
 The preferred current-region runtime for that shape is ECS/Fargate behind the appropriate edge layer.
 App Runner is only a candidate if the web runtime is moved to a region that actually supports App Runner.
 
-Until that exists, keep the public web lane on the hardened GCP VM path.
+That requirement is now satisfied by the AWS ECS/Fargate production web stack.
 
 ## Why this decision exists
 
@@ -113,14 +113,13 @@ Why:
 
 ## Accepted path
 
-The accepted migration sequence is:
+The accepted migration sequence was:
 
-1. keep public web production on the GCP VM lane
-2. define the AWS private connectivity model for PostgreSQL
-3. choose an AWS web-serving runtime with explicit VPC egress if direct PostgreSQL access remains required
-4. wire secrets using the runtime's proper secret mechanism
-5. run the Amplify or runtime validation gates on the target host
-6. cut DNS only after the target host proves:
+1. define the AWS private connectivity model for PostgreSQL
+2. choose an AWS web-serving runtime with explicit VPC egress if direct PostgreSQL access remains required
+3. wire secrets using the runtime's proper secret mechanism
+4. run the runtime validation gates on the target host
+5. cut DNS only after the target host proves:
    - auth works
    - `/api/full-scan` returns `202`
    - dashboard pages load
@@ -133,9 +132,9 @@ The concrete execution runbook for the current-region AWS path lives in [docs/aw
 
 Right now, the repo should treat these statements as true:
 
-- AWS Amplify Hosting is still the preferred aspirational topology for simple web hosting in this repo
-- it is not yet the accepted production target for the current SSR-plus-PostgreSQL dependency shape
-- the current production-safe lane remains the fixed-egress GCP VM
+- AWS Amplify Hosting remains an aspirational topology only if the SSR dependency shape changes
+- it is not the accepted production target for the current SSR-plus-PostgreSQL dependency shape
+- the current production web lane is AWS ECS/Fargate for both `certscore.ai` and `consentcheck.site`
 
 ## Trigger to revisit this decision
 

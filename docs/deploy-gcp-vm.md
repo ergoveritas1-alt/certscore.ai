@@ -4,15 +4,15 @@ This document is now the rollback path, not the preferred web deploy path.
 
 Current target topology:
 
-- `apps/web` should deploy to two AWS Amplify Hosting apps, one for `certscore.ai` and one for `consentcheck.site`.
+- `apps/web` now serves production from the AWS ECS/Fargate web stack for both `certscore.ai` and `consentcheck.site`.
 - scanner runtime now lives in the standalone `WS01` repo and deploys through its own GCP VM flow.
 - validation worker runtime remains a separate worker-style deploy path.
 - the checked-in deployment audit source of truth is [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json)
 
 Legacy topology covered by this document:
 
-- `apps/web` still builds in Vercel for parity and review, but the active hardened production host for `consentcheck.site` is the fixed-egress GCP VM.
-- the GCP VM path in this document is the authoritative production lane for `apps/web` while the database ingress policy still requires fixed egress.
+- the GCP VM path in this document is a fallback rollback path only for `apps/web`
+- it is no longer the authoritative production lane for the public web hosts
 
 ## 1. Push the monorepo to Git
 
@@ -34,6 +34,8 @@ git push -u origin codex/init-deploy
 
 ## 2. Deploy the web app to the fixed-egress VM
 
+Use this section only if an AWS web rollback is required.
+
 Build and publish the standalone web image for the VM lane:
 
 ```bash
@@ -52,7 +54,7 @@ The preferred production path is now:
 2. `git add` the intended files
 3. commit with a clear message
 4. push to `main`
-5. let `.github/workflows/web-vm-deploy.yml` build the image, update `certscore-web-prod`, and run smoke checks
+5. let `.github/workflows/web-aws-ecs-deploy.yml` build the image, update the ECS web services, and run stabilization checks
 
 For local operator-driven rollout, run:
 
@@ -164,6 +166,8 @@ The scanner scheduler also lives in `WS01`, not in this repo. `WC01` should trea
 
 ## 5. Point the production domain to the web VM
 
+This is rollback-only guidance.
+
 Update DNS so:
 
 - `A @` points to the web VM public IP
@@ -176,6 +180,8 @@ Then update:
 - Google OAuth redirect settings if Google login is enabled
 
 ## 6. Validate production
+
+This validates the fallback VM lane, not the current primary production lane.
 
 Validate in this order:
 

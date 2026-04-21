@@ -1,6 +1,12 @@
 # Deploy `certscore.ai` And `consentcheck.site` With AWS Amplify
 
-This is the preferred web deployment path for `apps/web`.
+This is a reference path for a possible future Amplify-based topology. It is not the active production web deployment path.
+
+Current production truth:
+
+- `certscore.ai` and `consentcheck.site` now run on AWS ECS/Fargate
+- `main` deploys through [/.github/workflows/web-aws-ecs-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-aws-ecs-deploy.yml)
+- this Amplify document should be treated as architectural reference material, not the current operator runbook
 
 ## Topology
 
@@ -129,10 +135,12 @@ pnpm ops:check:live
 ```
 
 The default deployment audit reads [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json).
-While the VM lane remains authoritative, that file should continue to say `gcp-vm`.
-Before or during cutover rehearsal, override the runtime targets and host URLs explicitly when validating Amplify-managed URLs.
+That file should stay aligned with the actual live production lane, which is currently `ecs-fargate`.
+If you use Amplify for rehearsal in the future, override the runtime targets and host URLs explicitly when validating Amplify-managed URLs.
 
 ## Cutover sequence
+
+This section is now a future-state rehearsal sequence, not the current production path.
 
 1. Deploy both Amplify apps from the desired Git revision.
 2. Verify both apps are healthy on their Amplify-managed URLs.
@@ -145,6 +153,6 @@ Before or during cutover rehearsal, override the runtime targets and host URLs e
 
 If Amplify cutover fails:
 
-- keep DNS on the current serving hosts
+- keep DNS on the current ECS-serving hosts
 - use [docs/deploy-gcp-vm.md](/Users/benmasek/WC01/docs/deploy-gcp-vm.md) for the legacy VM rollback path
 - keep any Vercel linkage only as a temporary fallback, not the preferred steady state
