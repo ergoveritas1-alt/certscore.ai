@@ -1,8 +1,8 @@
 # AWS Web ECS/Fargate Scaffold
 
-This directory is the infrastructure scaffold for the public web ECS/Fargate cutover path documented in [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md).
+This directory is the infrastructure entry point for the public web ECS/Fargate cutover path documented in [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md).
 
-It is intentionally a planning scaffold, not a finished production stack.
+It now contains a deployable baseline stack, but it still needs real account inputs before apply.
 
 ## Purpose
 
@@ -23,28 +23,43 @@ using:
 - private PostgreSQL connectivity
 - runtime secret injection
 
-## Why this is a scaffold and not a finished Terraform stack
+## What this stack does
 
-The repo now has enough evidence to prefer ECS/Fargate over App Runner, but it still does not have enough checked-in cloud facts to safely create the full public web stack automatically, including:
+The baseline stack provisions:
 
-- the final VPC and subnet reuse decision
-- the final ALB and listener layout
-- the exact RDS security-group migration sequence
-- the full set of Secrets Manager ARNs for the public web hosts
-- the final Route53 and ACM ownership plan
+- one ALB for the public web surface
+- one ECS security group for web tasks
+- one ECR repository for the shared `apps/web` image
+- one or two ECS services, one per host
+- separate task definitions for `certscore.ai` and `consentcheck.site`
+- IAM roles for ECS runtime and GitHub Actions deploys
 
-Until those are concrete, pretending to have a finished Terraform stack would be noise.
+The stack expects you to supply an existing VPC and existing public and private subnets. That matches the fastest practical path in the current account, where the validation ECS VPC already exists and is known-good.
 
-## Existing AWS pattern to copy
+## Existing AWS pattern this stack copies
 
-The first implementation reference should be the existing validation stack in [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation), which already proves:
+The first implementation reference is the existing validation stack in [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation), which already proves:
 
 - ECS/Fargate works in the WC01 AWS account
 - ECR-backed deploys work
 - private-subnet task networking works
 - task-definition secrets are the right runtime injection mechanism
 
-The public web stack should reuse that shape where practical instead of inventing a second pattern.
+The public web stack reuses that shape where practical instead of inventing a second pattern.
+
+## Known current-account values
+
+The current AWS account already has a usable ECS VPC shape for this stack:
+
+- VPC: `vpc-0d2263b8f7dabdfa4`
+- public subnets:
+  - `subnet-0fb0456b74ccbe112`
+  - `subnet-0d4049ad5b21905b3`
+- private subnets:
+  - `subnet-036b6ce080d5b7deb`
+  - `subnet-0ecacb04207ce9cf8`
+
+Those values are baked into [terraform.tfvars.example](/Users/benmasek/WC01/infra/aws/web-ecs/terraform.tfvars.example) as the default starting point because they match the live validation stack in `us-west-1`.
 
 ## Inputs the future stack will require
 
@@ -56,6 +71,7 @@ The public web stack should reuse that shape where practical instead of inventin
 - VPC selection inputs or CIDR for a new VPC
 - public subnet ids for ALB ingress
 - private subnet ids for ECS tasks
+- optional existing ECS cluster name if reusing a cluster instead of creating a new one
 - security-group ids when reusing existing network controls
 
 ### Per-host web service inputs
@@ -63,8 +79,7 @@ The public web stack should reuse that shape where practical instead of inventin
 - service name for `certscore.ai`
 - service name for `consentcheck.site`
 - custom domain name
-- Route53 hosted zone id
-- existing ACM certificate ARN if not creating certificates in-stack
+- existing ACM certificate ARN for the public hosts
 
 ### Runtime config inputs
 
@@ -84,12 +99,13 @@ The public web stack should reuse that shape where practical instead of inventin
 - optional Google OAuth secrets
 - S3 credentials
 - Gmail credentials
+- `FEEDBACK_TO_EMAIL`
+- optional `PRIVACY_REQUEST_TO_EMAIL`
 - optional model API keys
 
 ## Minimum outputs the finished stack should produce
 
-- ALB or service URL for `certscore.ai`
-- ALB or service URL for `consentcheck.site`
+- ALB DNS name for the public web surface
 - ECS cluster name
 - ECS service names for both public hosts
 - deploy role ARN for GitHub Actions
@@ -100,20 +116,28 @@ The public web stack should reuse that shape where practical instead of inventin
 
 After the actual infrastructure exists, the operator flow should be:
 
-1. build and push a web image revision
-2. update the ECS task definition with runtime config and secrets
-3. roll both ECS services
+1. apply this stack with real ACM and secret inputs
+2. build and push a web image revision
+3. update or force-roll both ECS services
 4. run:
 
 ```bash
 pnpm --filter @website-signal-risk-scanner/web check-env:amplify-runtime
 ```
 
-The runtime config for both services should also set `BUILD_RUNTIME_TARGET=ecs-fargate` so the version and deployment checks report the correct serving platform.
+The runtime config for both services sets `BUILD_RUNTIME_TARGET=ecs-fargate` so the version and deployment checks report the correct serving platform.
 
 5. validate the ECS target URLs directly
 6. run host-level checks with `pnpm ops:check:live`
 7. cut DNS only after the ECS services pass the same gates as the current VM lane
+
+## What is still missing before apply
+
+This stack is not enough by itself. The current account still needs:
+
+- an ACM certificate in `us-west-1` for the public hosts
+- Secrets Manager entries for the Gmail and likely Google OAuth and contact-routing secrets
+- a database security-group rule that allows the ECS task security group instead of the current public-IP allowlist path
 
 ## Related repo documents
 
