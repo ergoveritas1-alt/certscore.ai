@@ -14,8 +14,6 @@ type VersionPayload = {
   runtimeTarget?: string | null;
   service?: string | null;
   timestamp?: string | null;
-  vercelDeploymentId?: string | null;
-  vercelUrl?: string | null;
 };
 
 type EndpointReport = {
@@ -95,10 +93,7 @@ function printReport(label: string, report: EndpointReport) {
 async function main() {
   const topology = loadDeploymentTopology();
   const liveBaseUrl = getEnv("LIVE_BASE_URL", topology.primaryHost ?? "https://certscore.ai");
-  const secondaryBaseUrl = getEnv(
-    "SECONDARY_BASE_URL",
-    getEnv("VERCEL_BASE_URL", topology.secondaryHost ?? "https://consentcheck.site")
-  );
+  const secondaryBaseUrl = getEnv("SECONDARY_BASE_URL", topology.secondaryHost ?? "https://consentcheck.site");
   const liveLabel = getEnv("LIVE_LABEL", "Primary host");
   const secondaryLabel = getEnv("SECONDARY_LABEL", "Secondary host");
   const expectedLiveRuntimeTarget = getEnv(

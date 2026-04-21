@@ -1,5 +1,5 @@
 import { generatedBuildInfo } from "./generated-build-info";
-type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
+type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "unknown";
 
 export type RuntimeVersionInfo = {
   amplifyAppId: string | null;
@@ -13,8 +13,6 @@ export type RuntimeVersionInfo = {
   runtimeTarget: RuntimeTarget;
   service: "web";
   timestamp: string;
-  vercelDeploymentId: string | null;
-  vercelUrl: string | null;
 };
 
 type RuntimeVersionOverrides = {
@@ -43,7 +41,6 @@ function normalizeRuntimeTarget(value: unknown): RuntimeTarget | null {
     case "app-runner":
     case "ecs-fargate":
     case "gcp-vm":
-    case "vercel":
     case "unknown":
       return value;
     default:
@@ -62,10 +59,6 @@ function getBuildInfo(): BuildInfo {
 
 export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): RuntimeTarget {
   const buildInfo = getBuildInfo();
-
-  if (env.VERCEL === "1" || normalizeNonEmptyString(env.VERCEL_ENV)) {
-    return "vercel";
-  }
 
   if (
     env.BUILD_RUNTIME_TARGET === "amplify" ||
@@ -103,15 +96,13 @@ export function getRuntimeVersionInfo(
     amplifyAppId: normalizeNonEmptyString(env.AWS_APP_ID),
     amplifyBranch: normalizeNonEmptyString(env.AWS_BRANCH),
     appUrl: overrides.appUrl ?? normalizeNonEmptyString(env.NEXT_PUBLIC_APP_URL),
-    gitRef: buildInfo?.gitRef ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_REF) ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
-    gitSha: buildInfo?.gitSha ?? normalizeNonEmptyString(env.BUILD_GIT_SHA) ?? normalizeNonEmptyString(env.VERCEL_GIT_COMMIT_SHA),
+    gitRef: buildInfo?.gitRef ?? normalizeNonEmptyString(env.BUILD_GIT_REF),
+    gitSha: buildInfo?.gitSha ?? normalizeNonEmptyString(env.BUILD_GIT_SHA),
     hostname: normalizeNonEmptyString(env.HOSTNAME),
     imageTag: buildInfo?.imageTag ?? normalizeNonEmptyString(env.BUILD_IMAGE_TAG),
     nodeVersion: process.version,
     runtimeTarget: detectRuntimeTarget(env),
     service: "web",
-    timestamp: new Date().toISOString(),
-    vercelDeploymentId: normalizeNonEmptyString(env.VERCEL_DEPLOYMENT_ID),
-    vercelUrl: normalizeNonEmptyString(env.VERCEL_PROJECT_PRODUCTION_URL) ?? normalizeNonEmptyString(env.VERCEL_URL)
+    timestamp: new Date().toISOString()
   };
 }

@@ -6,7 +6,6 @@
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS Amplify apps where possible, but verify which runtime is actually serving `certscore.ai` and `consentcheck.site` before claiming production is updated.
-- Do not run `npx vercel deploy --prod` unless the user explicitly asks for a direct Vercel CLI deploy or the Git-based Amplify path is unavailable.
 
 ## Production expectation
 
@@ -17,7 +16,7 @@
 - If the active production host is uncertain, call it out before claiming a change is live in production.
 - `apps/web` remains the canonical root for both web hosts in Amplify.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local assumptions and wrong remotes before treating the path as healthy.
-- Legacy GCP VM and Vercel files may remain temporarily as rollback tooling, but they are not the preferred steady-state web deployment path.
+- Legacy GCP VM files may remain temporarily as rollback tooling, but they are not the preferred steady-state web deployment path.
 
 ## Scope note
 

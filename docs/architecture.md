@@ -32,7 +32,7 @@
 
 ## Deployment model
 
-- Web deploys should be promoted through Git-connected Amplify apps rather than ad hoc VM or Vercel pushes
+- Web deploys should be promoted through the Git-connected production AWS path rather than ad hoc VM pushes
 - While direct PostgreSQL access remains part of the critical SSR contract, the practical AWS cutover path in the current account/region is an ECS/Fargate-style runtime rather than Amplify Hosting
 - Production verification should check each public host directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
 

@@ -797,9 +797,9 @@ test("deriveValidationFindings does not emit transfer-mechanism finding when one
 test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout interstitial pages", () => {
   assert.equal(
     looksLikeIntermediaryOrBlockPage({
-      canonicalUrl: "https://vercel.com/login?next=%2Fprivacy-policy",
-      text: "Log in to continue to Vercel.",
-      title: "Login - Vercel"
+      canonicalUrl: "https://example-auth.com/login?next=%2Fprivacy-policy",
+      text: "Log in to continue to Example Auth.",
+      title: "Login - Example Auth"
     }),
     true
   );
@@ -824,8 +824,8 @@ test("looksLikeIntermediaryOrBlockPage rejects obvious login and checkout inters
 
   assert.equal(
     looksLikeIntermediaryOrBlockPage({
-      canonicalUrl: "https://vercel.com/legal/privacy-policy",
-      text: "Privacy Policy Sign in Contact Sales This Privacy Policy explains how Vercel collects and uses personal data.",
+      canonicalUrl: "https://example-auth.com/legal/privacy-policy",
+      text: "Privacy Policy Sign in Contact Sales This Privacy Policy explains how Example Auth collects and uses personal data.",
       title: "Privacy Policy"
     }),
     false

@@ -58,5 +58,5 @@ Required repository configuration for `.github/workflows/validation-aws-deploy.y
 ## Notes
 
 - The validation worker lane is Postgres-backed and no longer depends on Redis or ElastiCache.
-- The main Vercel app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL`.
+- The main web app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL`.
 - The stack now creates the GitHub OIDC provider and a dedicated deploy role for this repository. Tighten `github_actions_subjects` if you want to restrict assumption to only `main` or a narrower workflow pattern.

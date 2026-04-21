@@ -89,11 +89,6 @@ if [[ "${expected_web_platform}" == "amplify" ]]; then
     fail "Amplify build spec must target apps/web"
   fi
 
-  if [[ -f "apps/web/.vercel/project.json" ]]; then
-    warn "apps/web/.vercel/project.json still exists; keep it only if Vercel remains a temporary fallback"
-  else
-    pass "apps/web Vercel link is absent"
-  fi
 else
   warn "EXPECTED_WEB_PLATFORM is ${expected_web_platform}; Amplify-specific checks were skipped"
 fi
@@ -110,18 +105,6 @@ elif [[ "${accepted_aws_runtime}" == "amplify" ]]; then
   pass "Accepted AWS runtime is Amplify"
 elif [[ -n "${accepted_aws_runtime}" ]]; then
   warn "ACCEPTED_AWS_RUNTIME is ${accepted_aws_runtime}; runtime-specific AWS checks were skipped"
-fi
-
-if [[ -e ".vercel" ]]; then
-  warn "repo-root .vercel directory exists"
-else
-  pass "repo-root .vercel directory is absent"
-fi
-
-if [[ -e "apps/validation-web/.vercel" ]]; then
-  fail "apps/validation-web/.vercel should not exist"
-else
-  pass "stale apps/validation-web Vercel link is absent"
 fi
 
 require_file "deploy-web-vm.sh" "Legacy fallback web VM deploy script is present"

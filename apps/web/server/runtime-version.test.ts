@@ -9,11 +9,6 @@ function env(overrides: Record<string, string>): NodeJS.ProcessEnv {
   };
 }
 
-test("detectRuntimeTarget identifies Vercel runtime", () => {
-  assert.equal(detectRuntimeTarget(env({ VERCEL: "1" })), "vercel");
-  assert.equal(detectRuntimeTarget(env({ VERCEL_ENV: "production" })), "vercel");
-});
-
 test("detectRuntimeTarget identifies Amplify runtime", () => {
   assert.equal(detectRuntimeTarget(env({ BUILD_RUNTIME_TARGET: "amplify" })), "amplify");
   assert.equal(detectRuntimeTarget(env({ AWS_APP_ID: "d123example" })), "amplify");
@@ -38,8 +33,7 @@ test("getRuntimeVersionInfo prefers baked VM git sha when present", () => {
     BUILD_IMAGE_TAG: "abc123",
     BUILD_RUNTIME_TARGET: "gcp-vm",
     HOSTNAME: "certscore-web-prod",
-    NEXT_PUBLIC_APP_URL: "https://certscore.ai",
-    VERCEL_GIT_COMMIT_SHA: "vercel-sha"
+    NEXT_PUBLIC_APP_URL: "https://certscore.ai"
   }));
 
   assert.equal(info.runtimeTarget, "gcp-vm");

@@ -16,7 +16,7 @@ Current production truth:
 - Keep the public hosts separate:
   - `certscore.ai`
   - `consentcheck.site`
-- Let Amplify deploy on Git push instead of running direct VM or Vercel production deploys.
+- Let Amplify deploy on Git push instead of running direct VM production deploys.
 
 This matches AWS Amplify's monorepo support, which requires `appRoot` and `AMPLIFY_MONOREPO_APP_ROOT` to match for monorepo apps, and its unified-webhook model, which supports multiple Amplify apps from one repository in the same region. Sources:
 
@@ -147,7 +147,7 @@ This section is now a future-state rehearsal sequence, not the current productio
 3. Verify `/api/version` on both apps reports the intended git sha.
 4. Update custom domain associations and DNS.
 5. Re-run live checks against `certscore.ai` and `consentcheck.site`.
-6. Keep the legacy GCP VM and Vercel paths available only until rollback confidence is no longer needed.
+6. Keep the legacy GCP VM path available only until rollback confidence is no longer needed.
 
 ## Rollback
 
@@ -155,4 +155,3 @@ If Amplify cutover fails:
 
 - keep DNS on the current ECS-serving hosts
 - use [docs/deploy-gcp-vm.md](/Users/benmasek/WC01/docs/deploy-gcp-vm.md) for the legacy VM rollback path
-- keep any Vercel linkage only as a temporary fallback, not the preferred steady state
