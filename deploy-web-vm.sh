@@ -21,6 +21,7 @@ SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-120}"
 BUILD_GIT_SHA="${BUILD_GIT_SHA:-${IMAGE_TAG}}"
 BUILD_GIT_REF="${BUILD_GIT_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)}"
 BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET:-gcp-vm}"
+REMOTE_WRAPPER_INSTALLER_PATH="${REMOTE_WRAPPER_INSTALLER_PATH:-~/install-web-deploy-wrapper.sh}"
 cloudbuild_config="$(mktemp /tmp/certscore-web-cloudbuild.XXXXXX)"
 
 cleanup() {
@@ -131,6 +132,18 @@ if [[ "${DEPLOY_TO_VM}" != "1" ]]; then
 fi
 
 echo "Deploying ${IMAGE_URI} to ${VM_NAME} (${VM_ZONE})"
+
+echo "Refreshing deploy wrapper on ${VM_NAME}"
+gcloud compute scp \
+  "deploy/vm/install-web-deploy-wrapper.sh" \
+  "${VM_NAME}:${REMOTE_WRAPPER_INSTALLER_PATH}" \
+  --zone "${VM_ZONE}" \
+  --project "${PROJECT_ID}"
+
+gcloud compute ssh "${VM_NAME}" \
+  --zone "${VM_ZONE}" \
+  --project "${PROJECT_ID}" \
+  --command "bash ${REMOTE_WRAPPER_INSTALLER_PATH}"
 
 run_remote_script <<EOF
 set -euo pipefail
