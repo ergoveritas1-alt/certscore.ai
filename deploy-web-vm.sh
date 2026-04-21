@@ -152,6 +152,16 @@ fi
 sudo -n "${REMOTE_DEPLOY_WRAPPER}" "${IMAGE_URI}"
 EOF
 
+echo "Inspecting runtime metadata on ${VM_NAME}"
+run_remote_script <<'EOF'
+set -euo pipefail
+
+sudo docker exec certscore-web cat /app/.build-info.json || true
+echo
+sudo docker exec certscore-web curl -fsS http://127.0.0.1:3000/api/version || true
+echo
+EOF
+
 echo "Remote VM rollout succeeded. Running public smoke checks against ${PUBLIC_BASE_URL}"
 curl -fsS -I --max-time 20 "${PUBLIC_BASE_URL}/login" >/dev/null
 curl -fsS --max-time 20 "${PUBLIC_BASE_URL}/api/health/database" >/dev/null
