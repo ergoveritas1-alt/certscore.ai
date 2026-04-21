@@ -4,6 +4,8 @@ This runbook is the concrete execution path if the team wants the public web tie
 
 It follows the accepted decision in [docs/aws-web-postgres-connectivity-decision.md](/Users/benmasek/WC01/docs/aws-web-postgres-connectivity-decision.md).
 
+The repo scaffold for this path lives in [infra/aws/web-apprunner/README.md](/Users/benmasek/WC01/infra/aws/web-apprunner/README.md).
+
 ## Target shape
 
 Use an AWS web-serving runtime with explicit VPC egress and keep PostgreSQL private.

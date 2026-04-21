@@ -1,0 +1,42 @@
+project_name            = "certscore-web"
+aws_region              = "us-east-1"
+github_actions_subjects = ["repo:ergoveritas1-alt/certscore.ai:*"]
+
+# Choose one model:
+# 1. provide vpc_cidr and let the stack create network primitives
+# 2. provide existing private subnet and security-group ids in the future stack
+vpc_cidr = "10.52.0.0/16"
+
+# Per-host public domain settings
+certscore_domain_name    = "certscore.ai"
+certscore_hosted_zone_id = "Z1234567890"
+
+consentcheck_domain_name    = "consentcheck.site"
+consentcheck_hosted_zone_id = "Z1234567890"
+
+# Non-secret runtime settings
+app_flavor                        = "certscore"
+database_ssl_mode                 = "require"
+next_public_auth_google_enabled   = "false"
+certscore_admin_emails            = "ops@example.com"
+s3_bucket                         = "scan-artifacts"
+s3_region                         = "us-east-1"
+s3_endpoint                       = ""
+s3_force_path_style               = ""
+
+# Secret ARNs or equivalent runtime-secret references for the future stack
+database_url_secret_arn              = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/database-url"
+better_auth_secret_arn               = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/better-auth-secret"
+google_client_id_secret_arn          = ""
+google_client_secret_secret_arn      = ""
+s3_access_key_id_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-access-key-id"
+s3_secret_access_key_secret_arn      = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-secret-access-key"
+gmail_smtp_user_secret_arn           = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/gmail-user"
+gmail_smtp_app_password_secret_arn   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/gmail-app-password"
+feedback_to_email_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/feedback-to-email"
+privacy_request_to_email_secret_arn  = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/privacy-request-to-email"
+
+tags = {
+  Environment = "production"
+  Service     = "web"
+}
