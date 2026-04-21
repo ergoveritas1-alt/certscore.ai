@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { z } from "zod";
-import { mergeAmplifyEnvironmentSecrets } from "@website-signal-risk-scanner/shared";
+import { mergeAmplifyEnvironmentSecrets } from "../../../packages/shared/src/utils/amplify-secrets";
 
 const amplifyRuntimeSchema = z.object({
   APP_FLAVOR: z.enum(["certscore", "validation_ops"]).optional(),
