@@ -93,8 +93,14 @@ if [[ "${expected_web_platform}" == "amplify" ]]; then
   else
     pass "apps/web Vercel link is absent"
   fi
+elif [[ "${expected_web_platform}" == "app-runner" ]]; then
+  require_file "infra/aws/web-apprunner/README.md" "App Runner web infrastructure scaffold is present"
+  require_file "infra/aws/web-apprunner/variables.tf" "App Runner web infrastructure variables are present"
+  require_file "infra/aws/web-apprunner/terraform.tfvars.example" "App Runner web infrastructure example vars are present"
+  require_file "docs/aws-web-apprunner-cutover-plan.md" "App Runner web cutover runbook is present"
+  require_file "docs/aws-web-postgres-connectivity-decision.md" "AWS web connectivity decision record is present"
 else
-  warn "EXPECTED_WEB_PLATFORM is ${expected_web_platform}; Amplify-specific checks were skipped"
+  warn "EXPECTED_WEB_PLATFORM is ${expected_web_platform}; platform-specific web checks were skipped"
 fi
 
 if [[ -e ".vercel" ]]; then
