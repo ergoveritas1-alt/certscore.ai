@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { ZodError, z } from "zod";
 
 function emptyStringToUndefined(value: unknown) {
   return typeof value === "string" && value.trim().length === 0 ? undefined : value;
@@ -54,4 +54,50 @@ export type BetterAuthEnv = z.infer<typeof betterAuthEnvSchema>;
 
 export function getBetterAuthEnv(env: NodeJS.ProcessEnv = process.env): BetterAuthEnv {
   return betterAuthEnvSchema.parse(env);
+}
+
+const BETTER_AUTH_ENV_KEYS = new Set([
+  "BETTER_AUTH_SECRET",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED"
+]);
+
+type ZodLikeIssue = {
+  path?: unknown[];
+};
+
+function getZodLikeIssues(error: unknown): ZodLikeIssue[] {
+  if (error instanceof ZodError) {
+    return error.issues;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "issues" in error &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  ) {
+    return (error as { issues: ZodLikeIssue[] }).issues;
+  }
+
+  return [];
+}
+
+export function isBetterAuthConfigurationError(error: unknown) {
+  const issues = getZodLikeIssues(error);
+
+  if (issues.length > 0) {
+    return issues.some((issue) => {
+      const [pathSegment] = Array.isArray(issue.path) ? issue.path : [];
+      return typeof pathSegment === "string" && BETTER_AUTH_ENV_KEYS.has(pathSegment);
+    });
+  }
+
+  if (error instanceof Error) {
+    return Array.from(BETTER_AUTH_ENV_KEYS).some((key) => error.message.includes(key));
+  }
+
+  return false;
 }
