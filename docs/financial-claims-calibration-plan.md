@@ -70,9 +70,12 @@ Use the repo-level corpus checks while tuning:
 
 - `pnpm eval:financial-claims`
 - `pnpm eval:financial-claims:strict`
+- `pnpm export:financial-claims-corpus`
 - `pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --json`
+- `pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --jsonl`
 
 Use strict mode in CI or pre-merge checks when the seeded corpus is expected to stay fully aligned with the current deterministic logic.
+Use the JSONL export when you want to review or reuse the seeded corpus outside the repo runtime.
 
 ## Minimum reviewer standard
 

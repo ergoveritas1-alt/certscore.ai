@@ -27,6 +27,7 @@
     "ops:check:live": "pnpm exec tsx ./scripts/check-live-deployment-state.ts",
     "eval:financial-claims": "pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts",
     "eval:financial-claims:strict": "pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --strict",
+    "export:financial-claims-corpus": "pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --jsonl",
     "db:migrate": "pnpm exec tsx ./scripts/apply-db-migrations.ts",
     "db:import-json": "pnpm exec tsx ./scripts/import-json-to-postgres.ts",
     "ops:monitor:prod": "pnpm exec tsx ./scripts/monitor-prod-ops.ts",

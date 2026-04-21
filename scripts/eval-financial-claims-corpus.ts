@@ -1,7 +1,8 @@
 import {
   evaluateFinancialCommercialClaimsDataset,
   FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED,
-  summarizeFinancialCommercialClaimsDataset
+  summarizeFinancialCommercialClaimsDataset,
+  toFinancialCommercialClaimsJsonl
 } from "../packages/validation-shared/src";
 
 function percent(part: number, whole: number) {
@@ -19,9 +20,22 @@ function hasFlag(flag: string) {
 function main() {
   const strict = hasFlag("--strict");
   const json = hasFlag("--json");
+  const jsonl = hasFlag("--jsonl");
   const corpus = summarizeFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const evaluation = evaluateFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const aligned = evaluation.overallMatchCount === evaluation.evaluatedCount;
+
+  if (jsonl) {
+    const jsonlOutput = toFinancialCommercialClaimsJsonl();
+    process.stdout.write(jsonlOutput);
+    if (!jsonlOutput.endsWith("\n")) {
+      process.stdout.write("\n");
+    }
+    if (strict && !aligned) {
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   if (json) {
     console.log(
