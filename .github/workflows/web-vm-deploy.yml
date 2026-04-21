@@ -1,15 +1,6 @@
 name: Web VM Deploy
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/web-vm-deploy.yml"
-      - "deploy-web-vm.sh"
-      - "deploy/caddy/Caddyfile"
-      - "deploy/vm/**"
-      - "docs/deploy-gcp-vm.md"
   workflow_dispatch:
 
 concurrency:
