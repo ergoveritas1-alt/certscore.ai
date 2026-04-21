@@ -12,7 +12,7 @@ export function ValidationOpsHostNotice({ destinationUrl, title }: ValidationOps
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         <p className="max-w-3xl text-slate-600">
-          Validation controls for this environment are hosted on the dedicated validation operations surface so the primary app does not need direct BullMQ queue access.
+          Validation controls for this environment are hosted on the dedicated validation operations surface instead of the primary app.
         </p>
       </div>
 

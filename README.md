@@ -73,7 +73,6 @@ Required for the web app:
 - `BETTER_AUTH_SECRET`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `REDIS_URL`
 - `S3_BUCKET`
 - `S3_REGION`
 - `S3_ACCESS_KEY_ID`
@@ -82,7 +81,6 @@ Required for the web app:
 Required for the validation runtime in `WC01`:
 
 - `DATABASE_URL`
-- `VALIDATION_REDIS_URL` or `REDIS_URL`
 - `OPENAI_API_KEY`
 
 Optional but recommended:
@@ -120,23 +118,18 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - local database and auth secrets should come from the dev environment
    - production secrets should exist only in the active AWS/web or worker deployment settings
 9. Create the S3-compatible bucket referenced by `S3_BUCKET`.
-10. Provision Redis for app queues:
-   - set `REDIS_URL` for the web runtime
-   - set `VALIDATION_REDIS_URL` for the validation worker
-   - set `VALIDATION_REDIS_URL` for a web deployment only when that deployment should have validation BullMQ access
-   - the main production app should prefer `VALIDATION_OPS_BASE_URL` for validation operations instead of direct BullMQ access
-11. Install Playwright Chromium for the validation runtime:
+10. Install Playwright Chromium for the validation runtime:
    - `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium`
-12. Start validation local development with a watched validation worker:
+11. Start validation local development with a watched validation worker:
    - `pnpm dev:validation`
-13. Start the main local app by itself when needed:
+12. Start the main local app by itself when needed:
    - `pnpm --filter @website-signal-risk-scanner/web dev`
-14. Use `WS01` when you need the standalone scanner locally.
-15. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
+13. Use `WS01` when you need the standalone scanner locally.
+14. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
    - `pnpm dev:scanner:local`
-16. Use the combined local runner only when you want web + validation together in `WC01`:
+15. Use the combined local runner only when you want web + validation together in `WC01`:
    - `pnpm dev:all`
-17. Run a validation scheduler sweep manually when needed:
+16. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 
 ## Development verification
@@ -228,13 +221,6 @@ Common commands:
 - configure the production site URL and production redirect URLs only
 - create the report storage bucket referenced by `S3_BUCKET`
 
-### Redis
-
-- create a Redis database
-- set `REDIS_URL` for the web runtime
-- set `VALIDATION_REDIS_URL` for the validation worker
-- set `VALIDATION_REDIS_URL` for a web deployment only when that web deployment should have validation BullMQ access
-
 ### Scheduler
 
 Recommended production trigger:
@@ -254,7 +240,6 @@ The primary scanner scheduler now lives in `WS01`.
 - database migrations applied
 - Better Auth providers configured
 - S3-compatible storage bucket created
-- Redis connection working
 - Playwright browsers installed
 - Worker process running
 - Scheduler cron configured

@@ -30,7 +30,6 @@ The validation system should run as a separate operational lane:
 
 - `apps/web` deployed with `APP_FLAVOR=validation_ops`
 - separate validation worker and scheduler processes
-- separate Redis for validation queues
 - shared PostgreSQL database initially
 
 The public root page on the validation domain should expose crawler identity and contact information. The authenticated `/app` surface should be restricted to validation admins.
@@ -46,7 +45,7 @@ Each validation run moves through three stages:
 3. `verdict`
    Send each ranked finding plus its supporting scan evidence to the LLM and store a verdict of `supported`, `inconclusive`, or `not_supported` with confidence, rationale, and agreement score.
 
-This is intentionally queue-backed rather than synchronous so that:
+This is intentionally stage-driven rather than fully synchronous so that:
 
 - runs survive process restarts
 - failures can be retried by stage
@@ -115,7 +114,7 @@ This is an operational console, not a marketing surface.
 ## Deployment Plan
 
 1. Apply the validation schema migration.
-2. Provision dedicated validation Redis.
+2. Provision the dedicated validation AWS infrastructure.
 3. Deploy the validation web flavor to its own domain.
 4. Build and deploy the validation worker image.
 5. Run separate worker and scheduler processes on the validation VM.
@@ -135,7 +134,7 @@ The first version is successful when:
 
 ## Risks And Controls
 
-- Queue or worker failure
+- Worker or scheduler failure
   Mitigate with stage isolation, retries, and persisted run state.
 - Runaway automation
   Mitigate with env kill switch, admin pause, cooldown, and backoff.
@@ -148,5 +147,5 @@ The first version is successful when:
 
 - richer benchmark suites for accessibility and regression checks
 - more sophisticated target sampling policy
-- stronger observability around scheduler and queue health
+- stronger observability around scheduler and worker health
 - possible separation into a dedicated PostgreSQL cluster or isolated auth/storage resources if operational isolation becomes necessary

@@ -5,7 +5,6 @@ This runbook covers the validation runtime lane only. It is not the primary `cer
 Preferred production target:
 
 - AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
-- AWS ElastiCache for the validation BullMQ lane
 - AWS ECS/Fargate remains the primary public web host for `certscore.ai` and `consentcheck.site`
 
 The active validation path is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with rollout steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
@@ -13,13 +12,11 @@ The active validation path is the AWS stack under [infra/aws/validation](/Users/
 - primary product web production stays on the ECS/Fargate public web lane with root `apps/web`
 - validation uses a separate AWS validation ops surface with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler run outside the primary web deployment lane
-- separate Redis for validation queues
 - shared PostgreSQL database initially
 
 ## 1. Prerequisites
 
 - apply migration [0045_validation_pipeline.sql](/Users/benmasek/WC01/packages/db/migrations/0045_validation_pipeline.sql)
-- provision a separate Redis instance for validation
 - create the validation domain and keep it separate from the primary `certscore.ai` production host
 - prepare AWS validation infrastructure, task definitions, and Secrets Manager bindings
 - set the validation crawler contact/identity copy you want exposed on the public root page
@@ -33,7 +30,6 @@ Deploy the same `apps/web` app to the dedicated AWS validation ops surface, with
 - `DATABASE_URL`
 - `BETTER_AUTH_SECRET`
 - provider credentials as needed for Better Auth
-- `VALIDATION_REDIS_URL`
 - `CERTSCORE_ADMIN_EMAILS`
 - optional `WEB_BOT_AUTH_PRIVATE_KEY_PEM`
 - optional `WEB_BOT_AUTH_SIGNATURE_AGENT_URL`
@@ -72,7 +68,6 @@ Configure the worker and scheduler ECS task definitions with:
 - `DATABASE_URL`
 - `DATABASE_SSL_MODE` when your Postgres provider requires non-default SSL behavior
 - `OPENAI_API_KEY`
-- `VALIDATION_REDIS_URL`
 - `S3_BUCKET`
 - `S3_REGION`
 - `S3_ACCESS_KEY_ID`
@@ -118,15 +113,13 @@ Run these before trusting the deployment:
 Expected results:
 
 - validation worker env is complete
-- validation Redis connectivity passes
 - validation tables are reachable in PostgreSQL
 - Playwright Chromium launches
 
 Main-app production note:
 
 - the primary web app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
-- the primary web app should not keep `VALIDATION_REDIS_URL`
-- web-side validation BullMQ access now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`
+- the primary web app should use host-based routing to the dedicated validation surface instead of local validation controls
 
 ## 6. First-Run Validation
 

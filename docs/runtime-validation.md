@@ -23,7 +23,6 @@ Expected result:
 - web env check passes
 - web runtime check passes
 - validation env check passes in `WC01`
-- Redis connectivity passes
 - PostgreSQL access passes
 - S3-compatible storage access passes
 - Playwright Chromium launch passes
@@ -33,7 +32,6 @@ Expected result:
 If a check fails:
 
 - missing env var: update `apps/web/.env.local` or deployment settings
-- Redis failure: verify `REDIS_URL` and network access
 - database failure: verify `DATABASE_URL` and apply migrations
 - storage failure: create the bucket referenced by `S3_BUCKET`
 - auth-table failure: apply the latest migrations and confirm the Better Auth tables exist in the active PostgreSQL database

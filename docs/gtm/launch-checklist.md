@@ -3,7 +3,6 @@
 ## Technical Launch
 - Deploy the web app
 - Deploy the worker
-- Configure Upstash Redis
 - Configure PostgreSQL, Better Auth providers, and S3-compatible storage
 - Apply database migrations
 - Install Playwright Chromium in the worker environment
