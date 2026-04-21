@@ -1,21 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { z } from "zod";
-
-const deploymentTopologySchema = z.object({
-  currentLiveGitRef: z.string().min(1),
-  currentLiveWebRuntimeTarget: z.enum(["amplify", "app-runner", "gcp-vm", "vercel", "unknown"]),
-  preferredWebPlatform: z.enum(["amplify", "app-runner"]),
-  primaryHost: z.string().url(),
-  secondaryHost: z.string().url()
-});
+import { deploymentTopologySchema, loadDeploymentTopology } from "./deployment-topology";
 
 test("deployment topology config matches the expected schema", () => {
-  const topologyPath = path.join(process.cwd(), "config", "deployment-topology.json");
-  const result = deploymentTopologySchema.safeParse(JSON.parse(readFileSync(topologyPath, "utf8")));
-
+  const result = deploymentTopologySchema.safeParse(loadDeploymentTopology());
   assert.equal(result.success, true);
 });
 
