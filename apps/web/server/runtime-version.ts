@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 import { generatedBuildInfo } from "./generated-build-info";
 type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
-=======
-type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
->>>>>>> 1136848 (Add ECS web cutover path for AWS)
 
 export type RuntimeVersionInfo = {
   amplifyAppId: string | null;

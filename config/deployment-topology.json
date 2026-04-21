@@ -1,8 +1,8 @@
 {
   "acceptedAwsRuntime": "ecs-fargate",
   "preferredWebPlatform": "amplify",
-  "currentLiveWebRuntimeTarget": "gcp-vm",
-  "currentLiveGitRef": "main",
+  "currentLiveWebRuntimeTarget": "ecs-fargate",
+  "currentLiveGitRef": "codex/aws-validation-elasticache-migration",
   "primaryHost": "https://certscore.ai",
   "secondaryHost": "https://consentcheck.site"
 }
