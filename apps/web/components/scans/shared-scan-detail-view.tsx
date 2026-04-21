@@ -6200,6 +6200,7 @@ export function SharedScanDetailView({
             posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
+            regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}

@@ -1,3 +1,4 @@
+import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import React from "react";
 import {
   deriveExecutiveNarrativePresentation,
@@ -82,7 +83,36 @@ type RegulatoryLens = {
   summary: string;
   toneClass: string;
   findings: string[];
+  minimal?: boolean;
 };
+
+const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
+  "guaranteed_outcome_claim_detected",
+  "earnings_claim_without_adjacent_disclosure",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "pricing_or_fee_transparency_unclear"
+]);
+
+function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
+  switch (finding.id) {
+    case "guaranteed_outcome_claim_detected":
+      return "Guaranteed or certain-outcome claim surfaced.";
+    case "earnings_claim_without_adjacent_disclosure":
+      return "Earnings-style claim surfaced without nearby balancing disclosure.";
+    case "simulated_performance_without_disclosure":
+      return "Simulated or hypothetical performance language surfaced without nearby disclosure.";
+    case "unqualified_superlative_claim_detected":
+      return "Unqualified superiority or best-in-class claim surfaced.";
+    case "financial_urgency_pressure_tactic_detected":
+      return "Urgency language appears tied to a conversion step.";
+    case "pricing_or_fee_transparency_unclear":
+      return "Pricing or fee disclosure remains unclear near the offer path.";
+    default:
+      return finding.shortSummary;
+  }
+}
 
 export type ExecutiveAccessLimitationNotice = {
   coverageLabel: string;
@@ -97,6 +127,39 @@ export type ExecutiveAccessLimitationNotice = {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+function buildTone(score: number) {
+  if (score >= 72) {
+    return { label: "Strong", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  }
+  if (score >= 50) {
+    return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
+  }
+  return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
+}
+
+function buildMinimalRegulatoryLens(input: {
+  acronym: string;
+  detailTitle: string;
+  ratingLabel?: string;
+  score?: number;
+  summary: string;
+  toneClass?: string;
+}) {
+  const score = input.score ?? 88;
+  const tone = buildTone(score);
+
+  return {
+    acronym: input.acronym,
+    detailTitle: input.detailTitle,
+    findings: [],
+    minimal: true,
+    ratingLabel: input.ratingLabel ?? tone.label,
+    score,
+    summary: input.summary,
+    toneClass: input.toneClass ?? tone.toneClass
+  } satisfies RegulatoryLens;
 }
 
 function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
@@ -131,11 +194,30 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
   );
 }
 
-export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
-  beforeConsentCookieCount: number;
-  thirdPartyRequestCount: number;
-}) {
+export function buildRegulatoryLenses(
+  findings: CertScoreFinding[],
+  counts: {
+    beforeConsentCookieCount: number;
+    thirdPartyRequestCount: number;
+  },
+  options?: {
+    accessibilitySignals?: {
+      accessibilityClaimMismatchDetected?: boolean | null;
+      accessibilityLitigationRiskScore?: number | null;
+      accessibilityStatementPresent?: boolean | null;
+      adaDemandLetterProbability?: number | null;
+      ecommerceSiteLikely?: boolean | null;
+      wcagErrorCountTotal?: number | null;
+      wcagFormLabelErrorCount?: number | null;
+      wcagKeyboardNavigationIssueCount?: number | null;
+      wcagMissingAltCount?: number | null;
+    } | null;
+    agencyMappings?: AgencyMapping[];
+    regulatoryRisk?: RegulatoryRiskAssessment | null;
+  }
+): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
+  const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
     findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
@@ -195,21 +277,11 @@ export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
-  const buildTone = (score: number) => {
-    if (score >= 72) {
-      return { label: "Stronger", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
-    }
-    if (score >= 50) {
-      return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
-    }
-    return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
-  };
-
   const gdprTone = buildTone(gdprScore);
   const cpraTone = buildTone(cpraScore);
   const ftcTone = buildTone(ftcScore);
 
-  return [
+  const lenses: RegulatoryLens[] = [
     {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
@@ -237,7 +309,203 @@ export function buildRegulatoryLenses(findings: CertScoreFinding[], counts: {
       summary: hasConsentConcern ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
-  ] satisfies RegulatoryLens[];
+  ];
+
+  const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
+  const accessibilitySignals = options?.accessibilitySignals ?? null;
+  const accessibilityRiskScore = options?.regulatoryRisk?.accessibilityEnforcementRiskScore ?? null;
+  const wcagErrorCountTotal = accessibilitySignals?.wcagErrorCountTotal ?? null;
+  const wcagFormLabelErrorCount = accessibilitySignals?.wcagFormLabelErrorCount ?? null;
+  const wcagKeyboardNavigationIssueCount = accessibilitySignals?.wcagKeyboardNavigationIssueCount ?? null;
+  const wcagMissingAltCount = accessibilitySignals?.wcagMissingAltCount ?? null;
+  const accessibilityStatementPresent = accessibilitySignals?.accessibilityStatementPresent ?? null;
+  const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
+  const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
+  const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
+  const strongAdaDriverLabels = new Set([
+    "Accessibility claim mismatch",
+    "High automated WCAG issue count",
+    "Keyboard navigation issues",
+    "Form label accessibility issues",
+    "Elevated accessibility risk",
+    "Elevated ADA demand-letter exposure"
+  ]);
+  const hasStrongAdaDriver = Boolean(dojAdaMapping?.triggeredSignals.some((signal) => strongAdaDriverLabels.has(signal.label)));
+  const hasOnlyAccessibilityStatementMissingSignal =
+    accessibilityStatementPresent === false &&
+    accessibilityClaimMismatchDetected !== true &&
+    !((typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20)) &&
+    !((typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0)) &&
+    !((typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)) &&
+    !((typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5)) &&
+    !((typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45)) &&
+    !((typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45)) &&
+    !((typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45)) &&
+    !hasStrongAdaDriver;
+  const hasSignificantAccessibilitySignals =
+    accessibilityClaimMismatchDetected === true ||
+    (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+    (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
+    (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0) ||
+    (typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5) ||
+    (typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45) ||
+    (typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45) ||
+    (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45);
+  const shouldIncludeAdaLens =
+    dojAdaMapping !== undefined &&
+    (hasSignificantAccessibilitySignals || (hasStrongAdaDriver && !hasOnlyAccessibilityStatementMissingSignal));
+
+  if (!shouldIncludeAdaLens) {
+    lenses.push(
+      buildMinimalRegulatoryLens({
+        acronym: "DOJ / ADA accessibility",
+        detailTitle: "Accessibility and digital access issues",
+        ratingLabel: "Not applicable",
+        score: 88,
+        summary: "",
+        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
+      })
+    );
+
+    if (financialClaimFindings.length > 0) {
+      const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
+      const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
+        switch (finding.severity) {
+          case "critical":
+            return total + 24;
+          case "high":
+            return total + 20;
+          case "medium":
+            return total + 14;
+          default:
+            return total + 8;
+        }
+      }, 0);
+      const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialClaimFindings.length - 1) * 6);
+      const financialTone = buildTone(financialScore);
+
+      lenses.push({
+        acronym: "Financial & commercial claims",
+        detailTitle: "Claims, urgency, and pricing disclosures",
+        findings: financialFindings,
+        ratingLabel: financialTone.label,
+        score: financialScore,
+        summary:
+          financialClaimFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
+          financialClaimFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+            ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
+            : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+        toneClass: financialTone.toneClass
+      });
+    } else {
+      lenses.push(
+        buildMinimalRegulatoryLens({
+          acronym: "Financial & commercial claims",
+          detailTitle: "Claims, urgency, and pricing disclosures",
+          ratingLabel: "Not applicable",
+          score: 88,
+          summary: "",
+          toneClass: "border-slate-200 bg-slate-50 text-slate-700"
+        })
+      );
+    }
+
+    return lenses;
+  }
+
+  const hasDirectAccessibilityStatementFinding = accessibilityStatementPresent === false;
+  const normalizedAgencyFindingLabels = (dojAdaMapping?.triggeredSignals ?? [])
+    .map((signal) => signal.label)
+    .filter((label) =>
+      hasDirectAccessibilityStatementFinding
+        ? !/accessibility statement (missing|not detected)/i.test(label)
+        : true
+    );
+
+  const adaFindings = [
+    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `Automated WCAG issues detected: ${wcagErrorCountTotal}` : null,
+    typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0 ? "Keyboard navigation issues surfaced" : null,
+    typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0 ? "Form labeling issues surfaced" : null,
+    accessibilityStatementPresent === false ? "Accessibility statement not detected" : null,
+    accessibilityClaimMismatchDetected === true ? "Accessibility claim mismatch surfaced" : null,
+    typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45
+      ? `Elevated accessibility risk score (${accessibilityLitigationRiskScore})`
+      : null,
+    typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45
+      ? `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`
+      : null,
+    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null,
+    ...normalizedAgencyFindingLabels,
+    ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) => `${subscore.label} subscore ${subscore.score}`))
+  ].filter(Boolean) as string[];
+
+  const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
+  const adaSummary =
+    accessibilityClaimMismatchDetected === true
+      ? "Accessibility claims appear inconsistent with observed barriers."
+      : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+          (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
+          (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
+        ? "Accessibility barriers and disclosure gaps are the main issue."
+        : adaScore >= 72
+          ? "No significant issues found."
+          : "Accessibility support and disclosure posture needs work.";
+  const adaTone = buildTone(adaScore);
+
+  lenses.push({
+    acronym: "DOJ / ADA accessibility",
+    detailTitle: "Accessibility and digital access issues",
+    findings: adaFindings,
+    ratingLabel: adaTone.label,
+    score: adaScore,
+    summary: adaSummary,
+    toneClass: adaTone.toneClass
+  });
+
+  if (financialClaimFindings.length > 0) {
+    const financialFindings = financialClaimFindings.map((finding) => getFinancialClaimsFindingSummary(finding));
+    const financialSeverityPenalty = financialClaimFindings.reduce((total, finding) => {
+      switch (finding.severity) {
+        case "critical":
+          return total + 24;
+        case "high":
+          return total + 20;
+        case "medium":
+          return total + 14;
+        default:
+          return total + 8;
+      }
+    }, 0);
+    const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialClaimFindings.length - 1) * 6);
+    const financialTone = buildTone(financialScore);
+
+    lenses.push({
+      acronym: "Financial & commercial claims",
+      detailTitle: "Claims, urgency, and pricing disclosures",
+      findings: financialFindings,
+      ratingLabel: financialTone.label,
+      score: financialScore,
+      summary:
+        financialClaimFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
+        financialClaimFindings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+          ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
+          : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+      toneClass: financialTone.toneClass
+    });
+  } else {
+    lenses.push(
+      buildMinimalRegulatoryLens({
+        acronym: "Financial & commercial claims",
+        detailTitle: "Claims, urgency, and pricing disclosures",
+        ratingLabel: "Not applicable",
+        score: 88,
+        summary: "",
+        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
+      })
+    );
+  }
+
+  return lenses;
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
@@ -675,6 +943,7 @@ export function ExecutiveSummaryCard(input: {
   posture: "Clear" | "Watch" | "Action Needed";
   preConsentVendorNames: string[];
   requestedHost: string | null;
+  regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
   scanOutcome?: string | null;

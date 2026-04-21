@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildRegulatoryLenses, ExecutiveSummaryCard } from "./executive-summary-card";
@@ -23,6 +24,46 @@ function makeFinding(
     evidenceRefs: [],
     severity: "high",
     shortSummary: label,
+    ...overrides
+  };
+}
+
+function makeRegulatoryRisk(overrides: Partial<RegulatoryRiskAssessment> = {}): RegulatoryRiskAssessment {
+  return {
+    overallScore: 50,
+    riskLevel: "moderate",
+    confidence: 0.8,
+    topRiskDrivers: [],
+    topMitigatingControls: [],
+    trendVsPreviousScan: {
+      delta: null,
+      direction: "unknown",
+      label: "No prior risk baseline"
+    },
+    privacyEnforcementRiskScore: 40,
+    consentEnforcementRiskScore: 42,
+    consumerProtectionRiskScore: 38,
+    accessibilityEnforcementRiskScore: 55,
+    dataExposureRiskScore: 24,
+    ...overrides
+  };
+}
+
+function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMapping {
+  return {
+    agencyKey: "doj_ada",
+    agencyLabel: "U.S. Department of Justice",
+    shortLabel: "DOJ / ADA",
+    category: "accessibility",
+    relevanceLevel: "moderate",
+    relevanceScore: 8,
+    rationale: "This scan surfaced accessibility signals that fit most closely with ADA-related expectations.",
+    helperLabel: "Accessibility and ADA-related web expectations",
+    triggeredSignals: [{ key: "wcagErrorCountTotal", label: "High automated WCAG issue count" }],
+    contributingSubscores: [{ key: "accessibilityEnforcementRiskScore", label: "Accessibility", score: 55 }],
+    topAgencyRiskDrivers: ["High automated WCAG issue count", "Accessibility subscore"],
+    relatedOverallRiskLevel: "moderate",
+    isPrimaryAgency: true,
     ...overrides
   };
 }
@@ -243,7 +284,7 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
       accessLimitationNotice: null,
       allFindings: [
         makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
-          section: "Commercial Claims & Pricing",
+          section: "Privacy & Tracking",
           defaultSurfacePriority: 97,
           severity: "high",
           shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
