@@ -435,6 +435,48 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     ]
   }),
   defineReportUnifiedFinding({
+    id: "guaranteed_outcome_claim_detected",
+    label: "Guaranteed outcome claim detected",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.guaranteed_outcome_claim_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "earnings_claim_without_adjacent_disclosure",
+    label: "Earnings claim without adjacent disclosure",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.earnings_claim_without_adjacent_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "simulated_performance_without_disclosure",
+    label: "Simulated performance without disclosure",
+    owner: "performance_claim_context_and_risk_disclosure",
+    mirrors: ["consumer_financial_marketing_claims", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.simulated_performance_without_disclosure"]
+  }),
+  defineReportUnifiedFinding({
+    id: "unqualified_superlative_claim_detected",
+    label: "Unqualified superlative claim detected",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.unqualified_superlative_claim_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "financial_urgency_pressure_tactic_detected",
+    label: "Financial urgency pressure tactic detected",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["urgency_scarcity_pressure_tactics", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.financial_urgency_pressure_tactic_detected"]
+  }),
+  defineReportUnifiedFinding({
+    id: "pricing_or_fee_transparency_unclear",
+    label: "Pricing or fee transparency unclear",
+    owner: "fee_disclosure_clarity",
+    mirrors: ["consumer_choice_and_cost_transparency", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.pricing_or_fee_transparency_unclear"]
+  }),
+  defineReportUnifiedFinding({
     id: "investment_risk_disclosure_missing",
     label: "Investment risk disclosure missing",
     owner: "performance_claim_context_and_risk_disclosure",

@@ -10,6 +10,7 @@
     "check-runtime": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-runtime.ts",
     "dev": "node --env-file=../web/.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
     "inspect:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts",
+    "smoke:validation:financial": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/run-financial-validation-smoke.ts",
     "smoke:validation": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/run-validation-smoke.ts",
     "smoke:validation:fresh": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/run-validation-fresh-smoke.ts",
     "start": "node --enable-source-maps ./dist/apps/validation-worker/src/index.js",

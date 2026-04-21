@@ -686,6 +686,48 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "main"
   },
+  guaranteed_outcome_claim_detected: {
+    findingId: "guaranteed_outcome_claim_detected",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "headline",
+    initialLane: "main"
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    findingId: "earnings_claim_without_adjacent_disclosure",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  simulated_performance_without_disclosure: {
+    findingId: "simulated_performance_without_disclosure",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  unqualified_superlative_claim_detected: {
+    findingId: "unqualified_superlative_claim_detected",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  financial_urgency_pressure_tactic_detected: {
+    findingId: "financial_urgency_pressure_tactic_detected",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  pricing_or_fee_transparency_unclear: {
+    findingId: "pricing_or_fee_transparency_unclear",
+    family: "financial_promotion",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
   investment_risk_disclosure_missing: {
     findingId: "investment_risk_disclosure_missing",
     family: "financial_promotion",

@@ -1789,6 +1789,212 @@ test("deriveValidationFindings emits pilot financial review rows from retained s
   assert.equal(finding?.evidence.unifiedFindingId, "fee_disclosure_present");
 });
 
+test("deriveValidationFindings promotes guaranteed financial claims into restored commercial-claims findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-1",
+          matched_text: "Guaranteed returns of 15% a year. Join now to open your account.",
+          metadata: {
+            surroundingHeading: "Performance"
+          },
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/invest"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-1",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/invest",
+          payload: {},
+          signal_key: "financial.guaranteed_return_language_present"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-2",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/invest",
+          payload: {},
+          signal_key: "financial.claim_cta_block_present"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-3",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/invest",
+          payload: {},
+          signal_key: "financial.return_or_yield_percentage_present"
+        }
+      ]
+    })
+  );
+
+  const guaranteedFinding = findings.find((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected");
+
+  assert.ok(guaranteedFinding);
+  assert.equal(guaranteedFinding?.evidence.unifiedFindingId, "guaranteed_outcome_claim_detected");
+  assert.deepEqual(guaranteedFinding?.evidence.supportingSignals, [
+    "financial.guaranteed_return_language_present",
+    "financial.claim_cta_block_present",
+    "financial.return_or_yield_percentage_present"
+  ]);
+});
+
+test("deriveValidationFindings promotes simulated performance and fee-opacity financial claims", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-1",
+          matched_text: "Backtested strategies delivered 50% annual returns. Limited spots left. Subscribe now.",
+          metadata: {
+            surroundingHeading: "Quant performance"
+          },
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/quant"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-1",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/quant",
+          payload: {},
+          signal_key: "financial.hypothetical_or_backtest_language_present"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-2",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/quant",
+          payload: {},
+          signal_key: "commercial.variable_fee_language_present_without_explanation"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-3",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/quant",
+          payload: {},
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-4",
+          page_role: "primary",
+          page_type: "pricing_page",
+          page_url: "https://www.example.com/quant",
+          payload: {},
+          signal_key: "financial.claim_cta_block_present"
+        }
+      ]
+    })
+  );
+
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"));
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.financial_urgency_pressure_tactic_detected"));
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"));
+});
+
+test("deriveValidationFindings merges page-level financial signals into earnings and pricing risk findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-profit",
+          matched_text: "Profit",
+          metadata: {
+            matchedPattern: "\\b(?:apy|apr|annual percentage yield|yield|return(?:s)?|roi|profit(?:s)?|alpha|outperform(?:ance)?)\\b"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/"
+        },
+        {
+          evidence_id: "ev-return",
+          matched_text: "return",
+          metadata: {
+            matchedPattern: "\\b(?:apy|apr|annual percentage yield|yield|return(?:s)?|roi|profit(?:s)?|alpha|outperform(?:ance)?)\\b"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/"
+        },
+        {
+          evidence_id: "ev-free",
+          matched_text: "Free",
+          metadata: {
+            matchedPattern: "\\b(?:free|zero fees?|no fees?|bonus|promo(?:tional)?|save\\s+\\$?\\d+|\\d{1,3}%\\s+off)\\b"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/"
+        },
+        {
+          evidence_id: "ev-commission",
+          matched_text: "commission",
+          metadata: {
+            matchedPattern: "\\b(?:fee|fees|commission|spread|pricing|charges|expense ratio|maker[- ]taker)\\b"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-profit", "ev-return"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/",
+          payload: {
+            matchedTexts: ["Profit", "return"]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-free"],
+          id: "sig-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/",
+          payload: {
+            matchedTexts: ["Free"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-commission"],
+          id: "sig-fee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fxculturetrading.com/",
+          payload: {
+            matchedTexts: ["commission"]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"));
+});
+
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");

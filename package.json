@@ -27,6 +27,7 @@
     "db:migrate": "pnpm exec tsx ./scripts/apply-db-migrations.ts",
     "db:import-json": "pnpm exec tsx ./scripts/import-json-to-postgres.ts",
     "ops:monitor:prod": "pnpm exec tsx ./scripts/monitor-prod-ops.ts",
+    "smoke:validation:financial": "pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation:financial",
     "test:web-bot-auth": "pnpm --filter @website-signal-risk-scanner/web-bot-auth build && npx -y node@22 --import tsx --test packages/web-bot-auth/src/index.test.ts",
     "web-bot-auth:generate": "npx -y node@22 --import tsx ./scripts/generate-web-bot-auth-key.ts",
     "web-bot-auth:print": "npx -y node@22 --import tsx ./scripts/print-web-bot-auth-status.ts",

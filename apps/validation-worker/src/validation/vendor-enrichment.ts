@@ -766,8 +766,33 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   if (trackerRows.length > 0) {
     await query(
       `
-        insert into scan_tracker_vendors
-        select *
+        insert into scan_tracker_vendors (
+          scan_id,
+          organization_id,
+          domain_id,
+          vendor_name,
+          vendor_category,
+          detection_source,
+          confidence,
+          first_party_or_third_party,
+          before_consent,
+          script_host,
+          matched_signature_id,
+          collection_endpoint_type
+        )
+        select
+          scan_id,
+          organization_id,
+          domain_id,
+          vendor_name,
+          vendor_category,
+          detection_source,
+          confidence,
+          first_party_or_third_party,
+          before_consent,
+          script_host,
+          matched_signature_id,
+          collection_endpoint_type
         from jsonb_populate_recordset(null::scan_tracker_vendors, $1::jsonb)
       `,
       [JSON.stringify(trackerRows)]
@@ -833,8 +858,33 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   if (preconsentRows.size > 0) {
     await query(
       `
-        insert into scan_preconsent_violations
-        select *
+        insert into scan_preconsent_violations (
+          scan_id,
+          organization_id,
+          domain_id,
+          vendor_name,
+          vendor_category,
+          detection_source,
+          confidence,
+          first_party_or_third_party,
+          collection_endpoint_type,
+          script_host,
+          matched_signature_id,
+          evidence_urls
+        )
+        select
+          scan_id,
+          organization_id,
+          domain_id,
+          vendor_name,
+          vendor_category,
+          detection_source,
+          confidence,
+          first_party_or_third_party,
+          collection_endpoint_type,
+          script_host,
+          matched_signature_id,
+          evidence_urls
         from jsonb_populate_recordset(null::scan_preconsent_violations, $1::jsonb)
       `,
       [JSON.stringify([...preconsentRows.values()])]

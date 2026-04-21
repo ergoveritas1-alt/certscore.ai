@@ -422,8 +422,11 @@ const CONTRADICTORY_SURFACE_FINDING_PAIRS: ReadonlyMap<string, string> = new Map
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
   "apr_or_interest_rate_disclosure_present",
+  "earnings_claim_without_adjacent_disclosure",
   "fee_disclosure_missing_or_opaque",
   "fee_disclosure_present",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
   "guaranteed_or_high_return_claims_present",
   "high_risk_product_risk_disclosure_missing",
   "hypothetical_performance_disclosure_missing",
@@ -437,27 +440,36 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "operator_contact_path_present",
   "past_performance_disclaimer_present",
   "performance_claims_without_context",
+  "pricing_or_fee_transparency_unclear",
   "promo_to_terms_conflict",
   "pump_and_dump_language_present",
   "registration_claim_support_missing",
   "registration_identifier_missing",
   "regulatory_compliance_claim_present",
+  "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
 ]);
 
 const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
+  "earnings_claim_without_adjacent_disclosure",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
   "guaranteed_or_high_return_claims_present",
   "high_risk_product_risk_disclosure_missing",
   "investment_purchase_by_credit_card_present",
   "investment_risk_disclosure_missing",
   "investment_urgency_countdown_present",
   "performance_claims_without_context",
+  "pricing_or_fee_transparency_unclear",
   "pump_and_dump_language_present",
   "regulatory_compliance_claim_present",
+  "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
 ]);
@@ -3228,6 +3240,42 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   guaranteed_or_high_return_claims_present: {
     suggestedFix: "Review return language anywhere the site promotes an investment and remove or qualify claims that imply guaranteed, unusually high, or low-risk returns without strong substantiation and nearby risk context.",
     whyThisMatters: "Guaranteed or unusually high return claims are a core financial-promotion risk signal because they can overstate likely outcomes and understate investor risk."
+  },
+  guaranteed_outcome_claim_detected: {
+    suggestedFix:
+      "Remove or tightly qualify any language that frames financial outcomes as guaranteed, assured, protected from loss, or otherwise effectively certain.",
+    whyThisMatters:
+      "Guaranteed-outcome framing can materially distort how users judge risk because it implies certainty where real financial offers usually carry variability and downside."
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    suggestedFix:
+      "Keep earnings or performance-style claims close to concrete balancing context, including risk, variability, eligibility, and any material assumptions needed to interpret the promoted outcome.",
+    whyThisMatters:
+      "When earnings-style claims appear without nearby balancing context, users may overread the promoted outcome as typical, easy, or likely."
+  },
+  simulated_performance_without_disclosure: {
+    suggestedFix:
+      "Qualify simulated, hypothetical, or backtested performance language where it appears and keep clear disclosure nearby that the results are not live realized outcomes.",
+    whyThisMatters:
+      "Simulated or backtested performance can overstate likely outcomes if users are not shown clear nearby context about methodology and real-world limits."
+  },
+  unqualified_superlative_claim_detected: {
+    suggestedFix:
+      "Review broad superiority language such as best, highest, leading, or number one and either substantiate it clearly or narrow the wording to what the page can actually support.",
+    whyThisMatters:
+      "Unqualified superlatives can inflate perceived credibility or expected performance when they are not tied to a clear comparison basis."
+  },
+  financial_urgency_pressure_tactic_detected: {
+    suggestedFix:
+      "Reduce deadline, scarcity, or act-now language around financial promotions unless the page also gives users enough room to review risks, terms, and limitations.",
+    whyThisMatters:
+      "Urgency tactics can push users toward faster decisions on higher-risk financial offers before they absorb material disclosures."
+  },
+  pricing_or_fee_transparency_unclear: {
+    suggestedFix:
+      "Retain clearer nearby fee terms, pricing conditions, and cost qualifiers wherever a financial or quasi-financial offer promotes affordability, plans, or account pricing.",
+    whyThisMatters:
+      "Opaque pricing or fee framing makes it harder for users and reviewers to understand the real cost of the promoted offer."
   },
   operator_contact_path_present: {
     suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",

@@ -40,6 +40,7 @@ import {
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import { getWorkerEnv } from "../env";
+import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
@@ -50,6 +51,34 @@ const NANO_SIGNAL_ENRICHMENT_POLL_MS = 5_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 const VALIDATION_VERDICT_BATCH_SIZE = 3;
+const FINANCIAL_JUDGE_CANDIDATE_IDS = new Set([
+  "fee_disclosure_present",
+  "apr_or_interest_rate_disclosure_present",
+  "past_performance_disclaimer_present"
+]);
+
+const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
+  "financial.performance_claim_text_present",
+  "financial.return_or_yield_percentage_present",
+  "financial.investment_outperformance_language_present",
+  "financial.guaranteed_return_language_present",
+  "financial.low_risk_high_return_language_present",
+  "financial.hypothetical_or_backtest_language_present",
+  "financial.testimonial_or_review_block_near_financial_claim_present",
+  "financial.risk_disclosure_text_present",
+  "financial.claim_cta_block_present",
+  "financial.apr_or_interest_rate_disclosure_text_present",
+  "financial.past_performance_disclaimer_text_present",
+  "commercial.pricing_page_present",
+  "commercial.fee_related_text_present",
+  "commercial.explicit_fee_disclosure_text_present",
+  "commercial.fee_schedule_table_present",
+  "commercial.withdrawal_redemption_terms_text_present",
+  "commercial.cancellation_terms_text_present",
+  "commercial.account_closure_terms_text_present",
+  "commercial.promo_price_or_free_claim_present",
+  "commercial.variable_fee_language_present_without_explanation"
+]);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1182,6 +1211,393 @@ function getFinancialValidationDefinition(signalKey: string) {
     default:
       return null;
   }
+}
+
+function getFinancialCommercialDefinition(findingId: string) {
+  switch (findingId) {
+    case "guaranteed_outcome_claim_detected":
+      return {
+        description:
+          "The scan retained guaranteed-outcome or low-risk/high-return marketing language in a public-facing financial promotion context.",
+        ruleKey: "financial_review.guaranteed_outcome_claim_detected",
+        severity: "high" as const,
+        title: "Guaranteed outcome claim detected"
+      };
+    case "earnings_claim_without_adjacent_disclosure":
+      return {
+        description:
+          "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
+        ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+        severity: "high" as const,
+        title: "Earnings claim without adjacent disclosure"
+      };
+    case "simulated_performance_without_disclosure":
+      return {
+        description:
+          "The scan retained hypothetical, simulated, or backtest-style performance language without nearby qualifying disclosure evidence.",
+        ruleKey: "financial_review.simulated_performance_without_disclosure",
+        severity: "high" as const,
+        title: "Simulated performance without disclosure"
+      };
+    case "unqualified_superlative_claim_detected":
+      return {
+        description:
+          "The scan retained unqualified superlative financial-promotion language that appears to overstate comparative or performance superiority.",
+        ruleKey: "financial_review.unqualified_superlative_claim_detected",
+        severity: "medium" as const,
+        title: "Unqualified superlative claim detected"
+      };
+    case "financial_urgency_pressure_tactic_detected":
+      return {
+        description:
+          "The scan retained urgency or scarcity language tied to a financial conversion prompt without nearby balancing disclosure evidence.",
+        ruleKey: "financial_review.financial_urgency_pressure_tactic_detected",
+        severity: "medium" as const,
+        title: "Financial urgency pressure tactic detected"
+      };
+    case "pricing_or_fee_transparency_unclear":
+      return {
+        description:
+          "The scan retained pricing or fee-promotion language on a financial offer surface without clear nearby fee-term disclosure evidence.",
+        ruleKey: "financial_review.pricing_or_fee_transparency_unclear",
+        severity: "medium" as const,
+        title: "Pricing or fee transparency unclear"
+      };
+    default:
+      return null;
+  }
+}
+
+function hasKeyword(value: string | null, pattern: RegExp) {
+  return value ? pattern.test(value) : false;
+}
+
+function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], blockText: string | null) {
+  const candidateSignals = new Set<string>();
+
+  for (const signalKey of signalKeys) {
+    switch (signalKey) {
+      case "financial.performance_claim_text_present":
+        candidateSignals.add("returns");
+        break;
+      case "financial.return_or_yield_percentage_present":
+        candidateSignals.add("returns");
+        candidateSignals.add("percentage");
+        break;
+      case "financial.investment_outperformance_language_present":
+        candidateSignals.add("returns");
+        candidateSignals.add("superlative");
+        candidateSignals.add("investment_context");
+        break;
+      case "financial.guaranteed_return_language_present":
+      case "financial.low_risk_high_return_language_present":
+        candidateSignals.add("guarantee");
+        candidateSignals.add("returns");
+        candidateSignals.add("investment_context");
+        break;
+      case "financial.hypothetical_or_backtest_language_present":
+        candidateSignals.add("simulated");
+        candidateSignals.add("returns");
+        candidateSignals.add("investment_context");
+        break;
+      case "financial.testimonial_or_review_block_near_financial_claim_present":
+        candidateSignals.add("results_social_proof");
+        candidateSignals.add("investment_context");
+        break;
+      case "financial.claim_cta_block_present":
+        candidateSignals.add("cta");
+        candidateSignals.add("investment_context");
+        break;
+      case "commercial.pricing_page_present":
+        candidateSignals.add("pricing");
+        break;
+      case "commercial.fee_related_text_present":
+        candidateSignals.add("pricing_fee");
+        break;
+      case "commercial.promo_price_or_free_claim_present":
+        candidateSignals.add("pricing");
+        candidateSignals.add("cta");
+        break;
+      case "commercial.variable_fee_language_present_without_explanation":
+        candidateSignals.add("pricing");
+        candidateSignals.add("pricing_fee");
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (hasKeyword(blockText, /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income)\b/i)) {
+    candidateSignals.add("earnings");
+  }
+  if (hasKeyword(blockText, /\b(?:\$|usd|eur|gbp)\s?\d|\b\d+(?:\.\d+)?%\b/i)) {
+    candidateSignals.add("currency");
+    candidateSignals.add("percentage");
+  }
+  if (hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i)) {
+    candidateSignals.add("superlative");
+  }
+  if (hasKeyword(blockText, /\b(now|today|join|sign up|subscribe|apply|open account|get started|start now|claim)\b/i)) {
+    candidateSignals.add("cta");
+  }
+  if (hasKeyword(blockText, /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i)) {
+    candidateSignals.add("urgency");
+  }
+  if (hasKeyword(blockText, /\b(invest|investing|trading|crypto|yield|apy|apr|portfolio|fund|returns?)\b/i)) {
+    candidateSignals.add("investment_context");
+  }
+
+  return [...candidateSignals];
+}
+
+function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle) {
+  const evidenceById = new Map(
+    input.pageEvidence.map((row) => [String(row.evidence_id ?? ""), row])
+  );
+  const groupedHits = new Map<string, Array<Record<string, unknown>>>();
+
+  for (const hit of input.signalHits) {
+    const signalKey = getStringValue(hit, "signal_key");
+    if (!signalKey || !FINANCIAL_COMMERCIAL_SIGNAL_KEYS.has(signalKey)) {
+      continue;
+    }
+
+    const pageUrl = getStringValue(hit, "page_url") ?? "unknown";
+    const pageType = getStringValue(hit, "page_type") ?? "unknown";
+    const groupKey = `${pageUrl}::${pageType}`;
+    const existing = groupedHits.get(groupKey) ?? [];
+    existing.push(hit);
+    groupedHits.set(groupKey, existing);
+  }
+
+  const findings: Array<{
+    category: "scan_report_review";
+    description: string;
+    evidence: Record<string, unknown>;
+    findingFamily: string;
+    findingScope: string;
+    findingSource: string;
+    findingSubject: string;
+    pageUrl: string | null;
+    rank: number;
+    ruleKey: string;
+    severity: "high" | "medium" | "low";
+    subtype: string | null;
+    title: string;
+  }> = [];
+
+  for (const hits of groupedHits.values()) {
+    const evidenceRows = hits
+      .flatMap((hit) => getStringArray(hit, "evidence_refs").map((evidenceId) => evidenceById.get(evidenceId) ?? null))
+      .filter((row): row is Record<string, unknown> => Boolean(row));
+    const signalKeys = [...new Set(
+      hits
+        .map((hit) => getStringValue(hit, "signal_key"))
+        .filter((value): value is string => Boolean(value))
+    )];
+    const payloadMatchedTexts = [...new Set(
+      hits.flatMap((hit) => {
+        const payload = getRecord(hit.payload);
+        const explicitMatches = Array.isArray(payload?.matchedTexts)
+          ? (payload?.matchedTexts as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          : [];
+        const singleMatch = [
+          getStringValue(payload, "matchedText"),
+          getStringValue(payload, "matchedTerm"),
+          getStringValue(payload, "matchedPhrase")
+        ].filter((value): value is string => Boolean(value));
+        return [...explicitMatches, ...singleMatch];
+      })
+    )];
+    const matchedTexts = [...new Set([
+      ...payloadMatchedTexts,
+      ...evidenceRows
+        .map((row) => getStringValue(row, "matched_text"))
+        .filter((value): value is string => Boolean(value))
+    ])];
+    const blockText = matchedTexts.join(" ").trim() || null;
+    const matchedText =
+      matchedTexts.find((value) =>
+        /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi|free|fee|commission|pricing|charge|cost)\b/i.test(
+          value
+        )
+      ) ??
+      matchedTexts[0] ??
+      null;
+    const pageType =
+      hits.map((hit) => getStringValue(hit, "page_type")).find((value): value is string => Boolean(value)) ??
+      evidenceRows.map((row) => getStringValue(row, "page_type")).find((value): value is string => Boolean(value)) ??
+      null;
+    const pageUrl =
+      hits.map((hit) => getStringValue(hit, "page_url")).find((value): value is string => Boolean(value)) ??
+      evidenceRows.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
+      null;
+    const supportingHeadings = [...new Set(
+      evidenceRows
+        .map((row) => {
+          const metadata = getRecord(row.metadata);
+          return getStringValue(metadata, "surroundingHeading") ?? getStringValue(metadata, "surrounding_heading");
+        })
+        .filter((value): value is string => Boolean(value))
+    )];
+    const candidateSignals = normalizeFinancialCommercialCandidateSignals(signalKeys, blockText);
+    const classification = {
+      adjacentDisclosurePresent:
+        signalKeys.includes("financial.risk_disclosure_text_present") ||
+        signalKeys.includes("financial.past_performance_disclaimer_text_present") ||
+        signalKeys.includes("commercial.explicit_fee_disclosure_text_present") ||
+        signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present"),
+      adjacentDisclosureText: null,
+      adjacentDisclosureType: signalKeys.includes("commercial.explicit_fee_disclosure_text_present")
+        ? "fee_schedule"
+        : signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present")
+          ? "pricing_terms"
+          : signalKeys.includes("financial.past_performance_disclaimer_text_present")
+            ? "simulation_disclaimer"
+            : signalKeys.includes("financial.risk_disclosure_text_present")
+              ? "risk_disclosure"
+              : null,
+      claimPresent:
+        signalKeys.some((signalKey) =>
+          [
+            "financial.performance_claim_text_present",
+            "financial.return_or_yield_percentage_present",
+            "financial.investment_outperformance_language_present",
+            "financial.guaranteed_return_language_present",
+            "financial.low_risk_high_return_language_present",
+            "financial.hypothetical_or_backtest_language_present",
+            "financial.claim_cta_block_present",
+            "commercial.promo_price_or_free_claim_present",
+            "commercial.variable_fee_language_present_without_explanation"
+          ].includes(signalKey)
+        ) || matchedText !== null,
+      claimText: matchedText,
+      claimType: signalKeys.includes("financial.guaranteed_return_language_present") ||
+        signalKeys.includes("financial.low_risk_high_return_language_present")
+        ? "guaranteed_outcome_claim"
+        : signalKeys.includes("financial.hypothetical_or_backtest_language_present")
+          ? "simulated_performance_claim"
+            : hasKeyword(blockText, /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income)\b/i)
+              ? "earnings_claim"
+              : signalKeys.includes("financial.investment_outperformance_language_present") ||
+                hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i)
+              ? "superlative_claim"
+              : signalKeys.includes("commercial.variable_fee_language_present_without_explanation")
+                ? "pricing_fee_claim"
+                : signalKeys.includes("financial.performance_claim_text_present") ||
+                    signalKeys.includes("financial.return_or_yield_percentage_present")
+                  ? "return_performance_claim"
+                  : signalKeys.includes("financial.claim_cta_block_present") &&
+                      hasKeyword(blockText, /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i)
+                    ? "urgency_conversion_claim"
+                    : "other",
+      commercialContext:
+        candidateSignals.includes("investment_context") ||
+        candidateSignals.includes("pricing") ||
+        Boolean(pageType && /pricing|offer|checkout|product|invest|trading|loan|account|subscription/i.test(pageType)),
+      confidence: signalKeys.length >= 3 ? 0.88 : signalKeys.length === 2 ? 0.8 : 0.74,
+      contextType:
+        pageType && /pricing/i.test(pageType)
+          ? "pricing_page"
+          : pageType && /checkout/i.test(pageType)
+            ? "checkout_offer"
+            : pageType && /offer|product|account|invest|trading|loan/i.test(pageType)
+              ? "financial_offer"
+              : pageType && /legal|policy|terms|privacy/i.test(pageType)
+                ? "legal_disclosure"
+                : candidateSignals.includes("pricing")
+                  ? "pricing_page"
+                  : candidateSignals.includes("investment_context")
+                    ? "financial_offer"
+                    : "unknown",
+      feeDisclosurePresent:
+        signalKeys.includes("commercial.explicit_fee_disclosure_text_present") ||
+        signalKeys.includes("commercial.fee_schedule_table_present") ||
+        signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present"),
+      guaranteeLanguage:
+        signalKeys.includes("financial.guaranteed_return_language_present") ||
+        signalKeys.includes("financial.low_risk_high_return_language_present"),
+      pricingPresent:
+        signalKeys.includes("commercial.pricing_page_present") ||
+        signalKeys.includes("commercial.fee_related_text_present") ||
+        signalKeys.includes("commercial.promo_price_or_free_claim_present") ||
+        signalKeys.includes("commercial.variable_fee_language_present_without_explanation") ||
+        hasKeyword(blockText, /\b(price|pricing|fee|fees|cost|billing|rate|charge|commission|spread)\b/i),
+      rationaleShort: "Deterministic financial-commercial claim derivation from retained scan signals and page evidence.",
+      simulatedPerformanceLanguage: signalKeys.includes("financial.hypothetical_or_backtest_language_present"),
+      superlativeLanguage:
+        signalKeys.includes("financial.investment_outperformance_language_present") ||
+        hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i),
+      urgencyPresent:
+        signalKeys.includes("financial.claim_cta_block_present") &&
+          hasKeyword(blockText, /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i) ||
+        hasKeyword(blockText, /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i),
+      urgencyTiedToConversion:
+        signalKeys.includes("financial.claim_cta_block_present") ||
+        hasKeyword(blockText, /\b(join|sign up|subscribe|apply|open account|get started|start now|claim|buy now|free)\b/i)
+    } as const;
+
+    const derivedFindingIds = deriveFinancialCommercialExpectedFindingIds({
+      candidate: {
+        adjacentAfter: null,
+        adjacentBefore: null,
+        blockHeading: supportingHeadings[0] ?? null,
+        blockText: blockText ?? matchedText ?? signalKeys.join(" "),
+        candidateSignals,
+        pageType,
+        pageUrl,
+        sourceType: "signal_hit"
+      },
+      classification
+    });
+
+    for (const findingId of derivedFindingIds) {
+      const definition = getFinancialCommercialDefinition(findingId);
+      if (!definition) {
+        continue;
+      }
+
+      const taxonomy = deriveValidationFindingTaxonomy({
+        category: "scan_report_review",
+        ruleKey: definition.ruleKey,
+        subtype: "financial_review"
+      });
+
+      findings.push({
+        category: "scan_report_review",
+        description: definition.description,
+        evidence: {
+          adjacentDisclosurePresent: classification.adjacentDisclosurePresent,
+          candidateSignals,
+          claimText: matchedText,
+          confidence: classification.confidence,
+          matchedPhrase: matchedText,
+          matchedSnippet: matchedText,
+          pageClassification: classifyFinancialValidationPage(pageType),
+          pageType,
+          pageUrl,
+          policySnippets: matchedTexts,
+          signalKey: signalKeys[0] ?? null,
+          sourceUrls: pageUrl ? [pageUrl] : [],
+          supportingHeadings,
+          supportingSignals: signalKeys,
+          unifiedFindingId: findingId
+        },
+        findingFamily: taxonomy.familyId,
+        findingScope: "page",
+        findingSource: "supplemental_validation",
+        findingSubject: "disclosure",
+        pageUrl,
+        rank: 0,
+        ruleKey: definition.ruleKey,
+        severity: definition.severity,
+        subtype: "financial_review",
+        title: definition.title
+      });
+    }
+  }
+
+  return findings;
 }
 
 function deriveFinancialValidationFindings(input: ValidationArtifactBundle) {
@@ -2435,6 +2851,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       snapshot: input.snapshot
     }),
     ...deriveFinancialValidationFindings(input),
+    ...deriveFinancialCommercialClaimFindings(input),
     ...deriveRuntimePrivacyFindings({
       policySemanticRows,
       preconsentViolations: input.preconsentViolations,
@@ -3984,7 +4401,9 @@ export async function processValidationVerdictJob(validationRunId: string) {
           const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
           const ruleKey = typeof finding.rule_key === "string" ? finding.rule_key : "";
           const verdict =
-            ruleKey.startsWith("financial_review.") && typeof rawEvidence.unifiedFindingId === "string"
+            ruleKey.startsWith("financial_review.") &&
+            typeof rawEvidence.unifiedFindingId === "string" &&
+            FINANCIAL_JUDGE_CANDIDATE_IDS.has(rawEvidence.unifiedFindingId)
               ? await validateFinancialFindingWithLlm({
                   candidateFindingId: rawEvidence.unifiedFindingId as
                     | "fee_disclosure_present"

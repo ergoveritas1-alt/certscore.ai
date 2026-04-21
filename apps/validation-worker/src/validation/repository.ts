@@ -1270,7 +1270,24 @@ export async function loadCompletedScanArtifacts(scanId: string) {
         [
           scanId,
           [
+            "financial.performance_claim_text_present",
+            "financial.return_or_yield_percentage_present",
+            "financial.investment_outperformance_language_present",
+            "financial.guaranteed_return_language_present",
+            "financial.low_risk_high_return_language_present",
+            "financial.hypothetical_or_backtest_language_present",
+            "financial.testimonial_or_review_block_near_financial_claim_present",
+            "financial.risk_disclosure_text_present",
+            "financial.claim_cta_block_present",
+            "commercial.pricing_page_present",
+            "commercial.fee_related_text_present",
             "commercial.explicit_fee_disclosure_text_present",
+            "commercial.fee_schedule_table_present",
+            "commercial.withdrawal_redemption_terms_text_present",
+            "commercial.cancellation_terms_text_present",
+            "commercial.account_closure_terms_text_present",
+            "commercial.promo_price_or_free_claim_present",
+            "commercial.variable_fee_language_present_without_explanation",
             "financial.apr_or_interest_rate_disclosure_text_present",
             "financial.past_performance_disclaimer_text_present"
           ]
