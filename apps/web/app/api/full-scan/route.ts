@@ -6,6 +6,12 @@ import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 
+function isPublicFullScanAvailabilityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return /DATABASE_URL|Invalid environment configuration|Scanner health check failed/i.test(message);
+}
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
@@ -123,8 +129,8 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
-    if (isBetterAuthConfigurationError(error)) {
-      console.error("[full-scan] better auth configuration unavailable during request", {
+    if (isBetterAuthConfigurationError(error) || isPublicFullScanAvailabilityError(error)) {
+      console.error("[full-scan] public full scan unavailable during request", {
         error: error instanceof Error ? error.message : String(error)
       });
 
