@@ -17,6 +17,10 @@ test("detectRuntimeTarget identifies VM runtime", () => {
   assert.equal(detectRuntimeTarget({ BUILD_RUNTIME_TARGET: "gcp-vm" } as NodeJS.ProcessEnv), "gcp-vm");
 });
 
+test("detectRuntimeTarget identifies App Runner runtime", () => {
+  assert.equal(detectRuntimeTarget({ BUILD_RUNTIME_TARGET: "app-runner" } as NodeJS.ProcessEnv), "app-runner");
+});
+
 test("getRuntimeVersionInfo prefers baked VM git sha when present", () => {
   const info = getRuntimeVersionInfo({
     BUILD_GIT_REF: "main",
@@ -47,4 +51,18 @@ test("getRuntimeVersionInfo exposes Amplify metadata when present", () => {
   assert.equal(info.amplifyAppId, "d123example");
   assert.equal(info.amplifyBranch, "main");
   assert.equal(info.appUrl, "https://consentcheck.site");
+});
+
+test("getRuntimeVersionInfo exposes App Runner runtime target when configured", () => {
+  const info = getRuntimeVersionInfo({
+    BUILD_GIT_REF: "main",
+    BUILD_GIT_SHA: "def456",
+    BUILD_RUNTIME_TARGET: "app-runner",
+    NEXT_PUBLIC_APP_URL: "https://certscore.ai"
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(info.runtimeTarget, "app-runner");
+  assert.equal(info.gitRef, "main");
+  assert.equal(info.gitSha, "def456");
+  assert.equal(info.appUrl, "https://certscore.ai");
 });

@@ -148,12 +148,12 @@ Then run host-level checks against the App Runner service URLs:
 ```bash
 LIVE_BASE_URL=<certscore-service-url> \
 SECONDARY_BASE_URL=<consentcheck-service-url> \
-EXPECTED_LIVE_RUNTIME_TARGET=unknown \
-EXPECTED_SECONDARY_RUNTIME_TARGET=unknown \
+EXPECTED_LIVE_RUNTIME_TARGET=app-runner \
+EXPECTED_SECONDARY_RUNTIME_TARGET=app-runner \
 pnpm ops:check:live
 ```
 
-If `/api/version` is extended later to recognize the chosen AWS runtime explicitly, update the expected runtime target at that time.
+Set `BUILD_RUNTIME_TARGET=app-runner` on the web services so `/api/version` and the deployment checks report the correct runtime.
 
 ## DNS cutover sequence
 
