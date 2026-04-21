@@ -134,8 +134,8 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
 14. Use `WS01` when you need the standalone scanner locally.
 15. Start the standalone scanner locally against the same dev database and storage env as `localhost:3000`:
    - `pnpm dev:scanner:local`
-16. Use the combined local runner only when you want web + validation together in `WC01`:
-   - `pnpm dev:all`
+16. `pnpm dev:all` now starts web, validation, and the WS01 scanner together by default.
+   - set `DEV_ALL_SKIP_SCANNER=1` only when you intentionally want to run without local scan pickup
 17. Run a validation scheduler sweep manually when needed:
    - `pnpm dev:validation:scheduler`
 

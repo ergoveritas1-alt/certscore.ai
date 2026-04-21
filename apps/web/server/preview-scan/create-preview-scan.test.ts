@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getPreviewScanAvailability } from "./preview-scan-availability";
 
-test("preview scans stay available when unrelated legacy env is present", () => {
-  const availability = getPreviewScanAvailability(({
-    UNUSED_LEGACY_FLAG: "1"
-  } as unknown) as NodeJS.ProcessEnv);
+test("preview scans stay available when the queue heartbeat is healthy", async () => {
+  const availability = await getPreviewScanAvailability({
+    getQueueAvailability: async () => ({
+      enabled: true,
+      reason: null
+    })
+  });
 
   assert.deepEqual(availability, {
     enabled: true,
@@ -13,11 +16,16 @@ test("preview scans stay available when unrelated legacy env is present", () => 
   });
 });
 
-test("preview scans stay available without validation queue configuration", () => {
-  const availability = getPreviewScanAvailability(({} as unknown) as NodeJS.ProcessEnv);
+test("preview scans are unavailable when the scanner heartbeat is stale", async () => {
+  const availability = await getPreviewScanAvailability({
+    getQueueAvailability: async () => ({
+      enabled: false,
+      reason: "Scanning is unavailable because no healthy scanner service heartbeat was detected."
+    })
+  });
 
   assert.deepEqual(availability, {
-    enabled: true,
-    reason: null
+    enabled: false,
+    reason: "Scanning is unavailable because no healthy scanner service heartbeat was detected."
   });
 });
