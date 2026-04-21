@@ -1,6 +1,38 @@
 import { lookup } from "node:dns/promises";
 import { z } from "zod";
-import { mergeAmplifyEnvironmentSecrets } from "@website-signal-risk-scanner/shared";
+
+function mergeAmplifyEnvironmentSecrets(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const rawSecrets = env.secrets?.trim();
+
+  if (!rawSecrets) {
+    return env;
+  }
+
+  try {
+    const parsed = JSON.parse(rawSecrets);
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return env;
+    }
+
+    const amplifySecrets = Object.entries(parsed).reduce<Record<string, string>>((accumulator, [key, value]) => {
+      if (typeof value === "string") {
+        accumulator[key] = value;
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        accumulator[key] = String(value);
+      }
+
+      return accumulator;
+    }, {});
+
+    return {
+      ...amplifySecrets,
+      ...env
+    };
+  } catch {
+    return env;
+  }
+}
 
 const amplifyRuntimeSchema = z.object({
   APP_FLAVOR: z.enum(["certscore", "validation_ops"]).optional(),
