@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { generatedBuildInfo } from "./generated-build-info";
 
 type RuntimeTarget = "amplify" | "gcp-vm" | "vercel" | "unknown";
 
@@ -34,38 +34,23 @@ type BuildInfo = {
   runtimeTarget: RuntimeTarget | null;
 };
 
-let cachedBuildInfo: BuildInfo | null | undefined;
-
-function readBuildInfo(): BuildInfo | null {
-  if (cachedBuildInfo !== undefined) {
-    return cachedBuildInfo;
-  }
-
-  try {
-    const raw = readFileSync("/app/.build-info.json", "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-
-    cachedBuildInfo = {
-      gitRef: typeof parsed.gitRef === "string" && parsed.gitRef.trim().length > 0 ? parsed.gitRef.trim() : null,
-      gitSha: typeof parsed.gitSha === "string" && parsed.gitSha.trim().length > 0 ? parsed.gitSha.trim() : null,
-      imageTag: typeof parsed.imageTag === "string" && parsed.imageTag.trim().length > 0 ? parsed.imageTag.trim() : null,
-      runtimeTarget:
-        parsed.runtimeTarget === "amplify" ||
-        parsed.runtimeTarget === "gcp-vm" ||
-        parsed.runtimeTarget === "vercel" ||
-        parsed.runtimeTarget === "unknown"
-          ? parsed.runtimeTarget
-          : null
-    };
-  } catch {
-    cachedBuildInfo = null;
-  }
-
-  return cachedBuildInfo;
+function getBuildInfo(): BuildInfo {
+  return {
+    gitRef: normalizeNonEmptyString(generatedBuildInfo.gitRef ?? undefined),
+    gitSha: normalizeNonEmptyString(generatedBuildInfo.gitSha ?? undefined),
+    imageTag: normalizeNonEmptyString(generatedBuildInfo.imageTag ?? undefined),
+    runtimeTarget:
+      generatedBuildInfo.runtimeTarget === "amplify" ||
+      generatedBuildInfo.runtimeTarget === "gcp-vm" ||
+      generatedBuildInfo.runtimeTarget === "vercel" ||
+      generatedBuildInfo.runtimeTarget === "unknown"
+        ? generatedBuildInfo.runtimeTarget
+        : null
+  };
 }
 
 export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): RuntimeTarget {
-  const buildInfo = readBuildInfo();
+  const buildInfo = getBuildInfo();
 
   if (env.VERCEL === "1" || normalizeNonEmptyString(env.VERCEL_ENV)) {
     return "vercel";
@@ -91,7 +76,7 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
 }
 
 export function getRuntimeVersionInfo(env: NodeJS.ProcessEnv = process.env): RuntimeVersionInfo {
-  const buildInfo = readBuildInfo();
+  const buildInfo = getBuildInfo();
 
   return {
     amplifyAppId: normalizeNonEmptyString(env.AWS_APP_ID),

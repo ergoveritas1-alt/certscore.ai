@@ -20,6 +20,12 @@ COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
 
+RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imageTag":"%s","runtimeTarget":"%s"} as const;\n' \
+  "${BUILD_GIT_REF}" \
+  "${BUILD_GIT_SHA}" \
+  "${BUILD_IMAGE_TAG}" \
+  "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
+
 RUN rm -rf \
   ./apps/web/.next \
   ./packages/shared/dist \
@@ -44,21 +50,12 @@ ARG BUILD_RUNTIME_TARGET="gcp-vm"
 ENV NODE_ENV="production"
 ENV PORT="3000"
 ENV HOSTNAME="0.0.0.0"
-ENV BUILD_GIT_REF="${BUILD_GIT_REF}"
-ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}"
-ENV BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}"
-ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 WORKDIR /app
 
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-RUN printf '{"gitRef":"%s","gitSha":"%s","imageTag":"%s","runtimeTarget":"%s"}\n' \
-  "${BUILD_GIT_REF}" \
-  "${BUILD_GIT_SHA}" \
-  "${BUILD_IMAGE_TAG}" \
-  "${BUILD_RUNTIME_TARGET}" > /app/.build-info.json
 
 EXPOSE 3000
 
