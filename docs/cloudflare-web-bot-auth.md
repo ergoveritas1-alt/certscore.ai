@@ -23,7 +23,7 @@ Store the private key as `WEB_BOT_AUTH_PRIVATE_KEY_PEM`. If you use an env file,
 ## Production setup
 
 1. Generate an Ed25519 keypair.
-2. Store `WEB_BOT_AUTH_PRIVATE_KEY_PEM` in Vercel and any worker runtime secret store.
+2. Store `WEB_BOT_AUTH_PRIVATE_KEY_PEM` in the active web runtime secret store and any worker runtime secret store.
 3. Set `WEB_BOT_AUTH_SIGNATURE_AGENT_URL=https://consentcheck.site/.well-known/http-message-signatures-directory` unless a different public hostname is required.
 4. Keep `WEB_BOT_AUTH_EXPIRES_SECONDS` short. `300` seconds is the current default.
 5. Keep `WEB_BOT_AUTH_ENABLED=0` until the public key directory is deployed and verified if you want a staged rollout.

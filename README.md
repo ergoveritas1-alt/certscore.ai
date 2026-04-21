@@ -118,7 +118,7 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
 8. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
    - local database and auth secrets should come from the dev environment
-   - production secrets should exist only in Vercel / worker deployment settings
+   - production secrets should exist only in the active AWS/web or worker deployment settings
 9. Create the S3-compatible bucket referenced by `S3_BUCKET`.
 10. Provision Redis for app queues:
    - set `REDIS_URL` for the web runtime

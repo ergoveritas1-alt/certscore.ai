@@ -44,8 +44,8 @@ Push to `main` or manually dispatch `Validation AWS Deploy`.
 
 ## 3. Switch the main app to the dedicated validation host
 
-1. Set `VALIDATION_OPS_BASE_URL` on the primary Vercel deployment to the AWS validation ops hostname.
-2. Remove `VALIDATION_REDIS_URL` from the primary Vercel deployment so validation BullMQ is no longer reachable from the main app.
+1. Set `VALIDATION_OPS_BASE_URL` on the primary public web deployment to the AWS validation ops hostname.
+2. Remove `VALIDATION_REDIS_URL` from the primary public web deployment so validation BullMQ is no longer reachable from the main app.
 3. Keep `REDIS_URL` scoped to non-validation web needs only. The main web validation queue path now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`.
 4. Confirm `/app/validation`, `/app/validation/scans`, and `/app/validation/issues` on the main app now send admins to the dedicated validation ops host instead of exposing local queue controls.
 5. Confirm public preview/full scans still queue normally even when validation-side nano enrichment is unavailable; those sidecars should degrade gracefully instead of failing scan creation.

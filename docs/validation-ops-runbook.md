@@ -6,12 +6,12 @@ Preferred production target:
 
 - AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
 - AWS ElastiCache for the validation BullMQ lane
-- Vercel remains the primary `certscore.ai` public web host
+- AWS ECS/Fargate remains the primary public web host for `certscore.ai` and `consentcheck.site`
 
 Legacy paths in this document remain useful for debugging and rollback, but the active replacement plan is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with cutover steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
 
-- primary product web production stays on the Vercel `consentcheck-site` project with root `apps/web`
-- validation can use a separate Vercel surface with `APP_FLAVOR=validation_ops`
+- primary product web production stays on the ECS/Fargate public web lane with root `apps/web`
+- validation uses a separate AWS validation ops surface with `APP_FLAVOR=validation_ops`
 - validation worker and scheduler run outside the primary web deployment lane
 - separate Redis for validation queues
 - shared PostgreSQL database initially
@@ -26,7 +26,7 @@ Legacy paths in this document remain useful for debugging and rollback, but the 
 
 ## 2. Validation Surface Deploy
 
-Deploy the same `apps/web` app to a separate Vercel project or environment intended for validation operations, with:
+Deploy the same `apps/web` app to the dedicated AWS validation ops surface, with:
 
 - `APP_FLAVOR=validation_ops`
 - `NEXT_PUBLIC_APP_URL=https://<validation-domain>`
@@ -147,8 +147,8 @@ Expected results:
 
 Main-app production note:
 
-- the primary Vercel app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
-- the primary Vercel app should not keep `VALIDATION_REDIS_URL` after AWS cutover
+- the primary web app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
+- the primary web app should not keep `VALIDATION_REDIS_URL` after AWS cutover
 - web-side validation BullMQ access now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`
 
 ## 6. First-Run Validation
