@@ -4,6 +4,7 @@ import { loadDeploymentTopology } from "./deployment-topology";
 function main() {
   try {
     const topology = loadDeploymentTopology();
+    console.info(`PASS acceptedAwsRuntime: ${topology.acceptedAwsRuntime}`);
     console.info(`PASS preferredWebPlatform: ${topology.preferredWebPlatform}`);
     console.info(`PASS currentLiveWebRuntimeTarget: ${topology.currentLiveWebRuntimeTarget}`);
     console.info(`PASS currentLiveGitRef: ${topology.currentLiveGitRef}`);
