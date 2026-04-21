@@ -54,6 +54,246 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
 });
 
+test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessibility overlay is materially triggered", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityClaimMismatchDetected: true,
+        accessibilityLitigationRiskScore: 61,
+        accessibilityStatementPresent: false,
+        wcagErrorCountTotal: 27,
+        wcagFormLabelErrorCount: 4,
+        wcagKeyboardNavigationIssueCount: 3,
+        wcagMissingAltCount: 7
+      },
+      agencyMappings: [makeAgencyMapping()],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 61
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  assert.ok(adaLens);
+  assert.equal(adaLens?.summary, "Accessibility claims appear inconsistent with observed barriers.");
+  assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 27/);
+  assert.match(adaLens?.findings.join(" "), /Keyboard navigation issues surfaced/);
+  assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
+  assert.equal(
+    adaLens?.findings.filter((item) => /accessibility statement/i.test(item)).length,
+    1
+  );
+});
+
+test("buildRegulatoryLenses keeps ADA minimal when accessibility statement is the only missing signal", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: false,
+        wcagErrorCountTotal: 0,
+        wcagFormLabelErrorCount: 0,
+        wcagKeyboardNavigationIssueCount: 0,
+        wcagMissingAltCount: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  assert.ok(adaLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.summary, "");
+});
+
+test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when no significant findings are present", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 2
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(adaLens);
+  assert.ok(financialLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(financialLens?.minimal, true);
+  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.summary, "");
+  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.summary, "");
+});
+
+test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessibility signals remain low-signal", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: []
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(adaLens);
+  assert.ok(financialLens);
+  assert.equal(adaLens?.minimal, true);
+  assert.equal(financialLens?.minimal, true);
+  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.summary, "");
+  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.summary, "");
+});
+
+test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
+        severity: "high",
+        shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
+      }),
+      makeFinding("pricing_or_fee_transparency_unclear", "Pricing or fee transparency unclear", {
+        severity: "medium",
+        shortSummary: "Pricing details were not clearly visible near the conversion path."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 2
+      },
+      agencyMappings: [makeAgencyMapping()],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  assert.deepEqual(
+    lenses.map((lens) => lens.acronym),
+    ["GDPR / ePrivacy", "CCPA / CPRA", "FTC", "DOJ / ADA accessibility", "Financial & commercial claims"]
+  );
+
+  const financialLens = lenses.at(-1);
+  assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
+  assert.match(financialLens?.summary ?? "", /claims|pricing/i);
+  assert.equal(financialLens?.minimal, undefined);
+  assert.match(financialLens?.findings.join(" ") ?? "", /Earnings-style claim surfaced/);
+  assert.match(financialLens?.findings.join(" ") ?? "", /Pricing or fee disclosure remains unclear/);
+});
+
+test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of only top findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [
+        makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
+          section: "Commercial Claims & Pricing",
+          defaultSurfacePriority: 97,
+          severity: "high",
+          shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
+        })
+      ],
+      beforeConsentCookieCount: 12,
+      domainBenchmark: null,
+      finalHost: "fxculturetrading.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "Possible",
+      fingerprintNarrative: "Identity-rich telemetry observed.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Meta Pixel"],
+      requestedHost: "fxculturetrading.com",
+      resolvedVendorNames: ["Meta Pixel"],
+      score: 62,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["connect.facebook.net"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "12 third-party requests fired before any consent action."
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: []
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      }),
+      topObservedEntities: [{ label: "Meta Pixel", category: "ads", requestCount: 12 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /Financial &amp; commercial claims/);
+  assert.match(html, /Earnings-style claim surfaced without nearby balancing disclosure\./);
+});
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

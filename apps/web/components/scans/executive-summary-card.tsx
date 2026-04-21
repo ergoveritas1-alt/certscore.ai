@@ -650,6 +650,19 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 
 export function ExecutiveSummaryCard(input: {
   accessLimitationNotice?: ExecutiveAccessLimitationNotice | null;
+  allFindings?: CertScoreFinding[];
+  accessibilitySignals?: {
+    accessibilityClaimMismatchDetected?: boolean | null;
+    accessibilityLitigationRiskScore?: number | null;
+    accessibilityStatementPresent?: boolean | null;
+    adaDemandLetterProbability?: number | null;
+    ecommerceSiteLikely?: boolean | null;
+    wcagErrorCountTotal?: number | null;
+    wcagFormLabelErrorCount?: number | null;
+    wcagKeyboardNavigationIssueCount?: number | null;
+    wcagMissingAltCount?: number | null;
+  } | null;
+  agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
   coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
@@ -696,6 +709,8 @@ export function ExecutiveSummaryCard(input: {
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const filteredTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const regulatoryFindingInput =
+    Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const primaryFindings = filteredTopFindings.slice(0, 5);
   const secondaryFindings = filteredTopFindings
     .slice(5, 8);
@@ -725,9 +740,13 @@ export function ExecutiveSummaryCard(input: {
     scanOutcome: input.scanOutcome,
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
-  const regulatoryLenses = buildRegulatoryLenses(input.topFindings, {
+  const regulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
+  }, {
+    accessibilitySignals: input.accessibilitySignals,
+    agencyMappings: input.agencyMappings,
+    regulatoryRisk: input.regulatoryRisk
   });
 
   return (
