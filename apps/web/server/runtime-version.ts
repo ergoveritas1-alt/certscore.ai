@@ -34,18 +34,24 @@ type BuildInfo = {
   runtimeTarget: RuntimeTarget | null;
 };
 
+function normalizeRuntimeTarget(value: unknown): RuntimeTarget | null {
+  switch (value) {
+    case "amplify":
+    case "gcp-vm":
+    case "vercel":
+    case "unknown":
+      return value;
+    default:
+      return null;
+  }
+}
+
 function getBuildInfo(): BuildInfo {
   return {
     gitRef: normalizeNonEmptyString(generatedBuildInfo.gitRef ?? undefined),
     gitSha: normalizeNonEmptyString(generatedBuildInfo.gitSha ?? undefined),
     imageTag: normalizeNonEmptyString(generatedBuildInfo.imageTag ?? undefined),
-    runtimeTarget:
-      generatedBuildInfo.runtimeTarget === "amplify" ||
-      generatedBuildInfo.runtimeTarget === "gcp-vm" ||
-      generatedBuildInfo.runtimeTarget === "vercel" ||
-      generatedBuildInfo.runtimeTarget === "unknown"
-        ? generatedBuildInfo.runtimeTarget
-        : null
+    runtimeTarget: normalizeRuntimeTarget(generatedBuildInfo.runtimeTarget)
   };
 }
 
