@@ -17,13 +17,50 @@ function hasFlag(flag: string) {
   return process.argv.includes(flag);
 }
 
+function getCorpusHealthIssues(input: {
+  corpus: ReturnType<typeof summarizeFinancialCommercialClaimsDataset>;
+}) {
+  const issues: string[] = [];
+  const { corpus } = input;
+
+  for (const [bucket, count] of Object.entries(corpus.bucketCounts)) {
+    if (count < 1) {
+      issues.push(`missing bucket coverage: ${bucket}`);
+    }
+  }
+
+  for (const [mode, count] of Object.entries(corpus.cardModeCounts)) {
+    if (count < 1) {
+      issues.push(`missing card-mode coverage: ${mode}`);
+    }
+  }
+
+  for (const [findingId, count] of Object.entries(corpus.emittableFindingCounts)) {
+    if (count < 1) {
+      issues.push(`missing finding coverage: ${findingId}`);
+    }
+  }
+
+  if (corpus.examplesWithSourceUrlCount < 1) {
+    issues.push("missing source-backed examples");
+  }
+
+  if (corpus.trainCount < 1 || corpus.evalCount < 1) {
+    issues.push("corpus must include both train and eval examples");
+  }
+
+  return issues;
+}
+
 function main() {
   const strict = hasFlag("--strict");
   const json = hasFlag("--json");
   const jsonl = hasFlag("--jsonl");
   const corpus = summarizeFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const evaluation = evaluateFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
+  const corpusHealthIssues = getCorpusHealthIssues({ corpus });
   const aligned = evaluation.overallMatchCount === evaluation.evaluatedCount;
+  const healthy = corpusHealthIssues.length === 0;
 
   if (jsonl) {
     const jsonlOutput = toFinancialCommercialClaimsJsonl();
@@ -31,7 +68,7 @@ function main() {
     if (!jsonlOutput.endsWith("\n")) {
       process.stdout.write("\n");
     }
-    if (strict && !aligned) {
+    if (strict && (!aligned || !healthy)) {
       process.exitCode = 1;
     }
     return;
@@ -43,7 +80,9 @@ function main() {
         {
           aligned,
           corpus,
+          corpusHealthIssues,
           evaluation,
+          healthy,
           strict
         },
         null,
@@ -51,7 +90,7 @@ function main() {
       )
     );
 
-    if (strict && !aligned) {
+    if (strict && (!aligned || !healthy)) {
       process.exitCode = 1;
     }
     return;
@@ -73,6 +112,14 @@ function main() {
   console.log(`not_applicable: ${corpus.cardModeCounts.not_applicable}`);
   console.log(`omit: ${corpus.cardModeCounts.omit}`);
   console.log("");
+  console.log("Corpus health");
+  console.log(healthy ? "ok" : "issues detected");
+  if (!healthy) {
+    for (const issue of corpusHealthIssues) {
+      console.log(`- ${issue}`);
+    }
+    console.log("");
+  }
   console.log("Deterministic eval alignment");
   console.log(`overall: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.overallMatchCount, evaluation.evaluatedCount)})`);
   console.log(`finding ids: ${evaluation.findingIdsMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.findingIdsMatchCount, evaluation.evaluatedCount)})`);
@@ -87,11 +134,19 @@ function main() {
     }
   }
 
-  if (strict && !aligned) {
+  if (strict && (!aligned || !healthy)) {
     console.error("");
-    console.error(
-      `financial claims corpus regression: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} examples aligned`
-    );
+    if (!healthy) {
+      console.error("financial claims corpus health regression:");
+      for (const issue of corpusHealthIssues) {
+        console.error(`- ${issue}`);
+      }
+    }
+    if (!aligned) {
+      console.error(
+        `financial claims corpus alignment regression: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} examples aligned`
+      );
+    }
     process.exitCode = 1;
   }
 }
