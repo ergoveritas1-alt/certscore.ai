@@ -64,6 +64,16 @@ Track these separately:
 - evidence quality pass rate
 - card surfacing agreement rate
 
+## Repo commands
+
+Use the repo-level corpus checks while tuning:
+
+- `pnpm eval:financial-claims`
+- `pnpm eval:financial-claims:strict`
+- `pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --json`
+
+Use strict mode in CI or pre-merge checks when the seeded corpus is expected to stay fully aligned with the current deterministic logic.
+
 ## Minimum reviewer standard
 
 Every surfaced finding should satisfy this standard:

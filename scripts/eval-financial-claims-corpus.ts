@@ -18,8 +18,30 @@ function hasFlag(flag: string) {
 
 function main() {
   const strict = hasFlag("--strict");
+  const json = hasFlag("--json");
   const corpus = summarizeFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const evaluation = evaluateFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
+  const aligned = evaluation.overallMatchCount === evaluation.evaluatedCount;
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          aligned,
+          corpus,
+          evaluation,
+          strict
+        },
+        null,
+        2
+      )
+    );
+
+    if (strict && !aligned) {
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   console.log("Financial claims corpus summary");
   console.log(`examples: ${corpus.trainCount + corpus.evalCount} (${corpus.trainCount} train / ${corpus.evalCount} eval)`);
@@ -51,7 +73,7 @@ function main() {
     }
   }
 
-  if (strict && evaluation.overallMatchCount !== evaluation.evaluatedCount) {
+  if (strict && !aligned) {
     console.error("");
     console.error(
       `financial claims corpus regression: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} examples aligned`
