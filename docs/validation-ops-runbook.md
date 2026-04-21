@@ -8,7 +8,7 @@ Preferred production target:
 - AWS ElastiCache for the validation BullMQ lane
 - AWS ECS/Fargate remains the primary public web host for `certscore.ai` and `consentcheck.site`
 
-Legacy paths in this document remain useful for debugging and rollback, but the active replacement plan is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with cutover steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
+The active validation path is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with rollout steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
 
 - primary product web production stays on the ECS/Fargate public web lane with root `apps/web`
 - validation uses a separate AWS validation ops surface with `APP_FLAVOR=validation_ops`
@@ -21,7 +21,7 @@ Legacy paths in this document remain useful for debugging and rollback, but the 
 - apply migration [0045_validation_pipeline.sql](/Users/benmasek/WC01/packages/db/migrations/0045_validation_pipeline.sql)
 - provision a separate Redis instance for validation
 - create the validation domain and keep it separate from the primary `certscore.ai` production host
-- prepare a VM with Docker or Node 20 + pnpm
+- prepare AWS validation infrastructure, task definitions, and Secrets Manager bindings
 - set the validation crawler contact/identity copy you want exposed on the public root page
 
 ## 2. Validation Surface Deploy
@@ -58,17 +58,16 @@ After deploy:
 Build and publish the validation worker image:
 
 ```bash
-set -a
-source apps/web/.env.local
-set +a
-PROJECT_ID=<project-id> REGION=us-central1 ./deploy-validation.sh
+pnpm --filter @website-signal-risk-scanner/validation-worker typecheck
+pnpm test:scan-pipeline
+git push origin main
 ```
 
-This builds the validation-worker Dockerfile and pushes an image intended for the validation VM.
+The active deploy path publishes the validation worker image through the AWS validation deployment workflow.
 
-## 4. Validation Worker VM
+## 4. Validation Worker ECS Services
 
-Create an env file on the VM such as `/etc/validation-worker.env` with:
+Configure the worker and scheduler ECS task definitions with:
 
 - `DATABASE_URL`
 - `DATABASE_SSL_MODE` when your Postgres provider requires non-default SSL behavior
@@ -96,39 +95,17 @@ Create an env file on the VM such as `/etc/validation-worker.env` with:
 - optional `WEB_BOT_AUTH_INCLUDE_NONCE=0`
 - optional `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
 
-If using Docker:
-
-```bash
-docker pull <image-uri>
-
-  docker run -d \
-  --name validation-worker \
-  --restart unless-stopped \
-  --env-file /etc/validation-worker.env \
-  <image-uri> \
-  pnpm --filter @website-signal-risk-scanner/validation-worker start
-
-docker run -d \
-  --name validation-scheduler \
-  --restart unless-stopped \
-  --env-file /etc/validation-worker.env \
-  <image-uri> \
-  pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
-```
-
-If running directly on the VM:
+Run the worker and scheduler as separate ECS services that start:
 
 ```bash
 pnpm --filter @website-signal-risk-scanner/validation-worker start
 pnpm --filter @website-signal-risk-scanner/validation-worker start:scheduler
 ```
 
-For the Cloud Run worker-pool path, prefer `deploy-validation-worker.sh` over hand-built commands. Keep the revision environment aligned to the portable storage and database contract so a fresh rollout does not inherit stale bindings.
-
 Before trusting any validation deployment change, run:
 
 - `pnpm ops:check:deploy`
-- `bash ./deploy-validation-worker.sh` only from an authenticated GCloud shell with the intended project selected
+- `pnpm check-env:validation-cutover`
 
 ## 5. Validation Runtime Checks
 
@@ -148,7 +125,7 @@ Expected results:
 Main-app production note:
 
 - the primary web app should use `VALIDATION_OPS_BASE_URL` to link admins to the dedicated validation host
-- the primary web app should not keep `VALIDATION_REDIS_URL` after AWS cutover
+- the primary web app should not keep `VALIDATION_REDIS_URL`
 - web-side validation BullMQ access now requires `VALIDATION_REDIS_URL` explicitly and does not fall back to `REDIS_URL`
 
 ## 6. First-Run Validation

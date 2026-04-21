@@ -98,7 +98,7 @@ async function main() {
   const secondaryLabel = getEnv("SECONDARY_LABEL", "Secondary host");
   const expectedLiveRuntimeTarget = getEnv(
     "EXPECTED_LIVE_RUNTIME_TARGET",
-    topology.currentLiveWebRuntimeTarget ?? "gcp-vm"
+    topology.currentLiveWebRuntimeTarget ?? "unknown"
   );
   const expectedSecondaryRuntimeTarget = getEnv(
     "EXPECTED_SECONDARY_RUNTIME_TARGET",

@@ -107,11 +107,7 @@ elif [[ -n "${accepted_aws_runtime}" ]]; then
   warn "ACCEPTED_AWS_RUNTIME is ${accepted_aws_runtime}; runtime-specific AWS checks were skipped"
 fi
 
-require_file "deploy-web-vm.sh" "Legacy fallback web VM deploy script is present"
-require_file "deploy/vm/install-web-deploy-wrapper.sh" "Legacy VM web deploy wrapper installer is present"
-require_file "deploy-validation-worker.sh" "Validation worker Cloud Run deploy script is present"
 require_file ".github/workflows/accessibility-validation.yml" "GitHub Actions validation workflow is present"
-require_file ".github/workflows/web-vm-deploy.yml" "Legacy GitHub Actions web VM deploy workflow is present"
 require_file ".github/workflows/validation-aws-deploy.yml" "GitHub Actions AWS validation deploy workflow is present"
 require_file "infra/aws/validation/main.tf" "AWS validation Terraform stack is present"
 require_file "docs/validation-aws-cutover-runbook.md" "AWS validation cutover runbook is present"
@@ -125,25 +121,6 @@ if command -v pnpm >/dev/null 2>&1; then
   fi
 else
   warn "pnpm is not installed; skipping deployment topology validation"
-fi
-
-if command -v gcloud >/dev/null 2>&1; then
-  active_account="$(gcloud config get-value account 2>/dev/null || true)"
-  active_project="$(gcloud config get-value project 2>/dev/null || true)"
-
-  if [[ -n "${active_account}" && "${active_account}" != "(unset)" ]]; then
-    pass "gcloud active account is ${active_account}"
-  else
-    warn "gcloud active account is not set"
-  fi
-
-  if [[ -n "${active_project}" && "${active_project}" != "(unset)" ]]; then
-    pass "gcloud active project is ${active_project}"
-  else
-    warn "gcloud active project is not set"
-  fi
-else
-  warn "gcloud CLI is not installed in this shell"
 fi
 
 if [[ "${SKIP_LIVE_DEPLOY_CHECK:-0}" == "1" ]]; then

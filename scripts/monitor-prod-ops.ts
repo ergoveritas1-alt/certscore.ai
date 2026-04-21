@@ -1,48 +1,10 @@
-import { execFileSync } from "node:child_process";
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
 import { getLastScannerServiceHeartbeat } from "../apps/web/server/queue/full-scan-queue";
 
-const DEFAULT_PROJECT_ID = "certscore-ai";
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_ENVIRONMENT = "production";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
 const VALIDATION_SETTINGS_KEY = "default";
-
-type WorkerPoolDescription = {
-  spec?: {
-    template?: {
-      spec?: {
-        serviceAccountName?: string;
-      };
-    };
-  };
-  status?: {
-    conditions?: Array<{
-      message?: string;
-      status?: string;
-      type?: string;
-    }>;
-    latestCreatedRevisionName?: string;
-    latestReadyRevisionName?: string;
-  };
-};
-
-function parseBooleanEnv(value: string | undefined, defaultValue: boolean) {
-  if (!value) {
-    return defaultValue;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return defaultValue;
-}
 
 type ValidationSettingsRow = {
   last_worker_heartbeat_at: string | null;
@@ -55,54 +17,6 @@ function getAlertRecipients() {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-}
-
-function describeWorkerPool(projectId: string, region: string, workerPoolName: string) {
-  const raw = execFileSync(
-    "gcloud",
-    [
-      "beta",
-      "run",
-      "worker-pools",
-      "describe",
-      workerPoolName,
-      "--project",
-      projectId,
-      "--region",
-      region,
-      "--format=json"
-    ],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  );
-
-  return JSON.parse(raw) as WorkerPoolDescription;
-}
-
-function accessSecret(projectId: string, secretName: string) {
-  return execFileSync(
-    "gcloud",
-    ["secrets", "versions", "access", "latest", "--project", projectId, "--secret", secretName],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    }
-  ).trim();
-}
-
-function summarizeWorkerPool(workerPoolName: string, description: WorkerPoolDescription) {
-  const readyCondition = description.status?.conditions?.find((condition) => condition.type === "Ready");
-
-  return {
-    latestCreatedRevisionName: description.status?.latestCreatedRevisionName ?? null,
-    latestReadyRevisionName: description.status?.latestReadyRevisionName ?? null,
-    message: readyCondition?.message ?? null,
-    ready: readyCondition?.status === "True",
-    serviceAccountName: description.spec?.template?.spec?.serviceAccountName ?? null,
-    workerPoolName
-  };
 }
 
 async function sendAlertEmail(subject: string, lines: string[]) {
@@ -126,22 +40,10 @@ async function sendAlertEmail(subject: string, lines: string[]) {
 
 async function main() {
   const environment = process.env.OPS_ALERT_ENVIRONMENT?.trim() || DEFAULT_ENVIRONMENT;
-  const projectId = process.env.GCP_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID;
-  const region = process.env.GCP_REGION?.trim() || DEFAULT_REGION;
-  const validationWorkerPoolChecksEnabled = parseBooleanEnv(
-    process.env.OPS_CHECK_VALIDATION_WORKER_POOL,
-    false
-  );
-  const databaseUrl =
-    process.env.DATABASE_URL?.trim() ||
-    (() => {
-      const databaseUrlSecretName = process.env.DATABASE_URL_SECRET_NAME?.trim();
-      if (!databaseUrlSecretName) {
-        throw new Error("Set DATABASE_URL or DATABASE_URL_SECRET_NAME before running the ops monitor.");
-      }
-
-      return accessSecret(projectId, databaseUrlSecretName);
-    })();
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error("Set DATABASE_URL before running the ops monitor.");
+  }
   const staleMinutes = Number(process.env.OPS_HEARTBEAT_STALE_MINUTES ?? DEFAULT_HEARTBEAT_STALE_MINUTES);
   const staleThresholdMs = staleMinutes * 60_000;
   const findings: string[] = [];
@@ -192,31 +94,13 @@ async function main() {
     }
   }
 
-  const workerPools = validationWorkerPoolChecksEnabled
-    ? [
-        summarizeWorkerPool(
-          "certscore-validation-worker",
-          describeWorkerPool(projectId, region, "certscore-validation-worker")
-        )
-      ]
-    : [];
-
-  for (const workerPool of workerPools) {
-    if (!workerPool.ready) {
-      findings.push(
-        `${workerPool.workerPoolName} is not ready (ready revision ${workerPool.latestReadyRevisionName ?? "none"}, latest created ${workerPool.latestCreatedRevisionName ?? "none"}). ${workerPool.message ?? ""}`.trim()
-      );
-    }
-  }
-
   if (findings.length === 0) {
     console.log(
       JSON.stringify(
         {
           environment,
           status: "ok",
-          validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null,
-          workerPools
+          validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null
         },
         null,
         2
@@ -228,7 +112,6 @@ async function main() {
   const subject = `[CertScore.ai Ops] ${environment} worker alert`;
   const lines = [
     `Environment: ${environment}`,
-    `Project: ${projectId}/${region}`,
     "",
     "Findings:",
     ...findings.map((finding) => `- ${finding}`)

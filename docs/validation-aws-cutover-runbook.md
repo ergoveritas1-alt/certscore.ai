@@ -1,6 +1,6 @@
 # Validation AWS Cutover Runbook
 
-This runbook moves the validation queue lane from the current Redis Cloud and GCP worker path to the AWS ECS + ElastiCache stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation).
+This runbook defines the active AWS ECS + ElastiCache validation queue lane under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation).
 
 ## 1. Prepare AWS infrastructure
 
@@ -55,7 +55,7 @@ Push to `main` or manually dispatch `Validation AWS Deploy`.
 
 ## 4. Validate AWS runtime health
 
-Run these checks before draining the old worker pool:
+Run these checks before treating the AWS lane as authoritative:
 
 1. Open the validation ops host and confirm `/crawler` and `/app/validation` load.
 2. Start a manual validation run from the AWS validation ops UI.
@@ -69,14 +69,13 @@ Run these checks before draining the old worker pool:
    - `rediss://` is in use
    - DNS/TLS reachability to ElastiCache is healthy
 
-## 5. Drain the legacy queue path
+## 5. Remove Any Legacy Queue Consumers
 
 Only after the AWS validation lane passes end-to-end:
 
-1. Pause the old GCP validation worker pool or scale desired capacity to zero.
-2. Confirm no new validation jobs are being consumed by the old worker path.
-3. Re-run three fresh validation sites from the AWS ops surface.
-4. Verify the old Redis Cloud endpoint is no longer receiving validation traffic from either the main web app or the legacy worker path.
+1. Confirm no non-AWS worker is still consuming validation jobs.
+2. Re-run three fresh validation sites from the AWS ops surface.
+3. Verify the old Redis Cloud endpoint is no longer receiving validation traffic from either the main web app or any retired worker path.
 
 ## 6. Post-cutover cleanup
 

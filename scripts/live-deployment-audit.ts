@@ -26,19 +26,6 @@ export function assessPrimaryRuntime(params: {
     messages.push(`${params.label} runtime target matches ${params.expectedRuntimeTarget}`);
   }
 
-  if (params.expectedRuntimeTarget === "gcp-vm") {
-    const serverHeader = params.report.headers.server?.toLowerCase() ?? "";
-    if (serverHeader.includes("cloudflare")) {
-      messages.push(`${params.label} is fronted by Cloudflare while reporting the expected VM runtime target`);
-    } else if (serverHeader.includes("caddy")) {
-      messages.push(`${params.label} is being served by Caddy as expected for the VM lane`);
-    } else {
-      warnings.push(
-        `${params.label} server header is ${params.report.headers.server ?? "unknown"}; confirm this edge still terminates on the VM lane`
-      );
-    }
-  }
-
   return { failures, messages, warnings };
 }
 

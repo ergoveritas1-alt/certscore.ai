@@ -184,18 +184,18 @@ Set `BUILD_RUNTIME_TARGET=ecs-fargate` on both ECS services so `/api/version` an
 4. deploy the image revision to both ECS services
 5. validate the ALB or target URLs directly
 6. run runtime env validation
-7. cut DNS only after both services pass the same gates as the current VM lane
+7. treat both services as production-ready only after they pass the same host and revision gates as the public domains
 8. re-run host checks against `certscore.ai` and `consentcheck.site`
 
 ## Rollback
 
 If any gate fails:
 
-- leave DNS on the current GCP VM host, or
-- if already cut, move DNS back immediately
+- keep the current public ECS deployment serving traffic, or
+- if a bad rollout already reached production, move traffic back to the last healthy ECS revision immediately
 - keep the ECS services as rehearsal targets until the failure is fixed
 
-Use [docs/deploy-gcp-vm.md](/Users/benmasek/WC01/docs/deploy-gcp-vm.md) as the current web rollback path.
+Use ECS service rollback or task definition promotion as the current web rollback path.
 
 ## Operator checklist
 

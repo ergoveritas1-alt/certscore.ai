@@ -212,15 +212,14 @@ Common commands:
 - run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after deploy
 - treat [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md) as the active web deployment runbook
 - treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as future-state reference material only
-- keep [deploy-web-vm.sh](/Users/benmasek/WC01/deploy-web-vm.sh) and [/.github/workflows/web-vm-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-vm-deploy.yml) as rollback-only tooling triggered manually or by fallback-specific file changes
 
-### GCP worker pool
+### Validation And Scanner Runtime
 
 - do not use `WC01` for the primary scanner deploy path
 - use `WS01` for scanner runtime deployment
 - keep `WC01` deployment guidance scoped to web and validation only
-- use `deploy-validation-worker.sh` for the validation worker Cloud Run worker-pool lane
 - keep web production, validation worker, and scanner runtime as three distinct deployment paths
+- use the AWS validation deployment lane for `WC01` validation runtime changes
 
 ### Database, Auth, and Storage
 

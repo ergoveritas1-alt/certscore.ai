@@ -5,23 +5,22 @@
 - Make changes in the repo, then stage the relevant files with `git add`.
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
-- Prefer Git-based deploy promotion through the connected AWS Amplify apps where possible, but verify which runtime is actually serving `certscore.ai` and `consentcheck.site` before claiming production is updated.
+- Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` and `consentcheck.site` before claiming production is updated.
 
 ## Production expectation
 
-- Treat dual AWS Amplify apps as the preferred target web topology:
+- Treat dual AWS ECS/Fargate services as the preferred target web topology:
   1. `certscore.ai`
   2. `consentcheck.site`
-- A push to `main` is not enough to claim either host is live; for web changes, confirm the intended Amplify app has completed a healthy build and the public host is serving the expected revision.
+- A push to `main` is not enough to claim either host is live; for web changes, confirm the intended ECS deployment has completed successfully and the public host is serving the expected revision.
 - If the active production host is uncertain, call it out before claiming a change is live in production.
-- `apps/web` remains the canonical root for both web hosts in Amplify.
+- `apps/web` remains the canonical root for both public web hosts.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local assumptions and wrong remotes before treating the path as healthy.
-- Legacy GCP VM files may remain temporarily as rollback tooling, but they are not the preferred steady-state web deployment path.
 
 ## Scope note
 
 - These instructions apply to the web app deployment path.
-- Worker deployments still use the existing GCP deployment flow and helper scripts unless the user asks to change that setup.
+- Worker deployments in `WC01` should follow the AWS validation deployment path and helper scripts.
 
 ## Finding flow note
 

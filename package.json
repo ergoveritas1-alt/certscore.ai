@@ -22,7 +22,6 @@
     "dev:validation:local": "pnpm --parallel --stream --filter @website-signal-risk-scanner/web --filter @website-signal-risk-scanner/validation-worker run dev",
     "dev:validation:worker": "pnpm --filter @website-signal-risk-scanner/validation-worker dev",
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/validation-worker scheduler",
-    "gcloud:auth": "bash ./scripts/gcloud-auth-login.sh",
     "ops:check:deploy": "bash ./scripts/check-deployment-pathways.sh",
     "ops:check:live": "pnpm exec tsx ./scripts/check-live-deployment-state.ts",
     "db:migrate": "pnpm exec tsx ./scripts/apply-db-migrations.ts",

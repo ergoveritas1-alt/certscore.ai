@@ -75,4 +75,4 @@ pnpm ops:check:live
 5. Confirm `/api/full-scan` returns `202`.
 6. Confirm login, dashboard, report pages, and artifact-backed routes work.
 
-Only after those pass should DNS move off the GCP VM lane.
+Only after those pass should traffic move away from the current ECS production lane.

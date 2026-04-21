@@ -147,11 +147,11 @@ This section is now a future-state rehearsal sequence, not the current productio
 3. Verify `/api/version` on both apps reports the intended git sha.
 4. Update custom domain associations and DNS.
 5. Re-run live checks against `certscore.ai` and `consentcheck.site`.
-6. Keep the legacy GCP VM path available only until rollback confidence is no longer needed.
+6. Keep the current ECS deployment workflow available until the Amplify rehearsal has proven equivalent operational coverage.
 
 ## Rollback
 
 If Amplify cutover fails:
 
 - keep DNS on the current ECS-serving hosts
-- use [docs/deploy-gcp-vm.md](/Users/benmasek/WC01/docs/deploy-gcp-vm.md) for the legacy VM rollback path
+- use ECS deployment rollback to return to the last healthy production revision

@@ -1,5 +1,5 @@
 import { generatedBuildInfo } from "./generated-build-info";
-type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "unknown";
+type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "unknown";
 
 export type RuntimeVersionInfo = {
   amplifyAppId: string | null;
@@ -40,7 +40,6 @@ function normalizeRuntimeTarget(value: unknown): RuntimeTarget | null {
     case "amplify":
     case "app-runner":
     case "ecs-fargate":
-    case "gcp-vm":
     case "unknown":
       return value;
     default:
@@ -75,10 +74,6 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
   if (env.BUILD_RUNTIME_TARGET === "ecs-fargate") {
     return "ecs-fargate";
   }
-  if (env.BUILD_RUNTIME_TARGET === "gcp-vm") {
-    return "gcp-vm";
-  }
-
   if (buildInfo?.runtimeTarget) {
     return buildInfo.runtimeTarget;
   }

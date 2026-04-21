@@ -15,10 +15,6 @@ test("detectRuntimeTarget identifies Amplify runtime", () => {
   assert.equal(detectRuntimeTarget(env({ AWS_BRANCH: "main" })), "amplify");
 });
 
-test("detectRuntimeTarget identifies VM runtime", () => {
-  assert.equal(detectRuntimeTarget(env({ BUILD_RUNTIME_TARGET: "gcp-vm" })), "gcp-vm");
-});
-
 test("detectRuntimeTarget identifies App Runner runtime", () => {
   assert.equal(detectRuntimeTarget(env({ BUILD_RUNTIME_TARGET: "app-runner" })), "app-runner");
 });
@@ -26,17 +22,17 @@ test("detectRuntimeTarget identifies App Runner runtime", () => {
 test("detectRuntimeTarget identifies ECS/Fargate runtime", () => {
   assert.equal(detectRuntimeTarget(env({ BUILD_RUNTIME_TARGET: "ecs-fargate" })), "ecs-fargate");
 });
-test("getRuntimeVersionInfo prefers baked VM git sha when present", () => {
+test("getRuntimeVersionInfo prefers baked ECS git sha when present", () => {
   const info = getRuntimeVersionInfo(env({
     BUILD_GIT_REF: "main",
     BUILD_GIT_SHA: "abc123",
     BUILD_IMAGE_TAG: "abc123",
-    BUILD_RUNTIME_TARGET: "gcp-vm",
-    HOSTNAME: "certscore-web-prod",
+    BUILD_RUNTIME_TARGET: "ecs-fargate",
+    HOSTNAME: "certscore-web",
     NEXT_PUBLIC_APP_URL: "https://certscore.ai"
   }));
 
-  assert.equal(info.runtimeTarget, "gcp-vm");
+  assert.equal(info.runtimeTarget, "ecs-fargate");
   assert.equal(info.gitSha, "abc123");
   assert.equal(info.gitRef, "main");
   assert.equal(info.imageTag, "abc123");

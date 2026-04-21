@@ -1,6 +1,6 @@
 # AWS Web PostgreSQL Connectivity Decision
 
-This document records the decision that justified moving the public web tier off the legacy fixed-egress GCP VM lane and onto AWS.
+This document records the decision that justified moving the public web tier off the legacy VM-hosted lane and onto AWS.
 
 ## Decision
 

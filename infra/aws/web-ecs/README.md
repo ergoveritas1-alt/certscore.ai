@@ -8,8 +8,8 @@ It now contains a deployable baseline stack, but it still needs real account inp
 
 The current repo decision is:
 
-- keep public web production on the GCP VM lane
-- if the web tier must move to AWS before the SSR workload is redesigned away from direct PostgreSQL access, target ECS/Fargate in `us-west-1`
+- keep public web production on AWS ECS/Fargate
+- use this stack as the checked-in infrastructure path for `certscore.ai` and `consentcheck.site` in `us-west-1`
 
 This directory exists to hold the eventual AWS infrastructure for:
 
@@ -137,7 +137,7 @@ The runtime config for both services sets `BUILD_RUNTIME_TARGET=ecs-fargate` so 
 
 5. validate the ECS target URLs directly
 6. run host-level checks with `pnpm ops:check:live`
-7. cut DNS only after the ECS services pass the same gates as the current VM lane
+7. treat the ECS services as the production lane only after they pass the same host and revision gates as the public domains
 
 ## What is still missing before apply
 

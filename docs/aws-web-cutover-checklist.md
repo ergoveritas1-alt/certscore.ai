@@ -17,7 +17,7 @@ In the current AWS account and region, the accepted runtime path is `ecs-fargate
 
 ## Goal
 
-This checklist originally tracked the move off the GCP VM lane. That migration goal has been completed with ECS/Fargate rather than Amplify.
+This checklist originally tracked the move onto AWS from the prior VM-hosted path. That migration goal has been completed with ECS/Fargate rather than Amplify.
 
 The equivalent goal that was achieved was:
 
@@ -174,12 +174,12 @@ If Amplify fails any gate above:
 
 - move DNS back only if the active AWS web lane fails a critical gate
 - use the current AWS web lane as the authoritative default unless an explicit rollback is required
-- use `docs/deploy-gcp-vm.md` as the rollback path
+- use the current ECS task definition history and deployment workflow as the rollback path
 
 ## Immediate next step
 
 The next implementation step is no longer public web cutover. It is broader AWS consolidation:
 
 1. finish migrating remaining non-web runtime lanes to AWS where appropriate
-2. retire legacy GCP and VM-only operational paths when rollback confidence is sufficient
+2. retire legacy non-AWS operational paths when rollback confidence is sufficient
 3. keep [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json) aligned with the actual live runtime
