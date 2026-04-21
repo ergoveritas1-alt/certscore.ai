@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { generatedBuildInfo } from "./generated-build-info";
-type RuntimeTarget = "amplify" | "gcp-vm" | "vercel" | "unknown";
+type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
+=======
+type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
+>>>>>>> 1136848 (Add ECS web cutover path for AWS)
 
 export type RuntimeVersionInfo = {
   amplifyAppId: string | null;
@@ -40,6 +44,8 @@ type BuildInfo = {
 function normalizeRuntimeTarget(value: unknown): RuntimeTarget | null {
   switch (value) {
     case "amplify":
+    case "app-runner":
+    case "ecs-fargate":
     case "gcp-vm":
     case "vercel":
     case "unknown":
@@ -73,6 +79,13 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
     return "amplify";
   }
 
+  if (env.BUILD_RUNTIME_TARGET === "app-runner") {
+    return "app-runner";
+  }
+
+  if (env.BUILD_RUNTIME_TARGET === "ecs-fargate") {
+    return "ecs-fargate";
+  }
   if (env.BUILD_RUNTIME_TARGET === "gcp-vm") {
     return "gcp-vm";
   }

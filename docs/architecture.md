@@ -12,6 +12,7 @@
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
 - Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
 - The target web topology is two AWS Amplify Hosting apps that both build from `apps/web`
+- If the web SSR workload still requires direct PostgreSQL access, the accepted AWS runtime path is ECS/Fargate in `us-west-1` until that dependency shape changes
 - `certscore.ai` and `consentcheck.site` stay separate public hosts with separate env and domain settings even though they share code
 
 ## Execution model
@@ -32,6 +33,7 @@
 ## Deployment model
 
 - Web deploys should be promoted through Git-connected Amplify apps rather than ad hoc VM or Vercel pushes
+- While direct PostgreSQL access remains part of the critical SSR contract, the practical AWS cutover path in the current account/region is an ECS/Fargate-style runtime rather than Amplify Hosting
 - Production verification should check each public host directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
 
 ## Data model highlights

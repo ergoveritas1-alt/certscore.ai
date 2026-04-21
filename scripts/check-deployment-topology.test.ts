@@ -31,4 +31,5 @@ test("deployment topology schema accepts both supported accepted AWS runtimes", 
 
   assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "amplify" }).success, true);
   assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "app-runner" }).success, true);
+  assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "ecs-fargate" }).success, true);
 });

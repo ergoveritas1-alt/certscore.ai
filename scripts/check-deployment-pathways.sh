@@ -21,6 +21,7 @@ read_topology_value() {
 expected_remote="${EXPECTED_GIT_REMOTE:-git@github.com:ergoveritas1-alt/certscore.ai.git}"
 expected_web_platform="${EXPECTED_WEB_PLATFORM:-$(read_topology_value preferredWebPlatform)}"
 expected_web_platform="${expected_web_platform:-amplify}"
+accepted_aws_runtime="${ACCEPTED_AWS_RUNTIME:-$(read_topology_value acceptedAwsRuntime)}"
 expected_live_runtime_target="${EXPECTED_LIVE_RUNTIME_TARGET:-$(read_topology_value currentLiveWebRuntimeTarget)}"
 expected_secondary_runtime_target="${EXPECTED_SECONDARY_RUNTIME_TARGET:-${expected_live_runtime_target}}"
 live_base_url="${LIVE_BASE_URL:-$(read_topology_value primaryHost)}"
@@ -95,6 +96,20 @@ if [[ "${expected_web_platform}" == "amplify" ]]; then
   fi
 else
   warn "EXPECTED_WEB_PLATFORM is ${expected_web_platform}; Amplify-specific checks were skipped"
+fi
+
+if [[ "${accepted_aws_runtime}" == "ecs-fargate" ]]; then
+  require_file "infra/aws/web-ecs/README.md" "ECS/Fargate web infrastructure scaffold is present"
+  require_file "infra/aws/web-ecs/variables.tf" "ECS/Fargate web infrastructure variables are present"
+  require_file "infra/aws/web-ecs/terraform.tfvars.example" "ECS/Fargate web infrastructure example vars are present"
+  require_file "docs/aws-web-ecs-cutover-plan.md" "ECS/Fargate web cutover runbook is present"
+elif [[ "${accepted_aws_runtime}" == "app-runner" ]]; then
+  require_file "infra/aws/web-apprunner/README.md" "Accepted AWS runtime scaffold for App Runner is present"
+  require_file "docs/aws-web-apprunner-cutover-plan.md" "Accepted AWS runtime runbook for App Runner is present"
+elif [[ "${accepted_aws_runtime}" == "amplify" ]]; then
+  pass "Accepted AWS runtime is Amplify"
+elif [[ -n "${accepted_aws_runtime}" ]]; then
+  warn "ACCEPTED_AWS_RUNTIME is ${accepted_aws_runtime}; runtime-specific AWS checks were skipped"
 fi
 
 if [[ -e ".vercel" ]]; then

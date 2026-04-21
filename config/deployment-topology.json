@@ -1,5 +1,5 @@
 {
-  "acceptedAwsRuntime": "app-runner",
+  "acceptedAwsRuntime": "ecs-fargate",
   "preferredWebPlatform": "amplify",
   "currentLiveWebRuntimeTarget": "gcp-vm",
   "currentLiveGitRef": "main",
