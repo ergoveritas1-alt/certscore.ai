@@ -156,9 +156,9 @@ echo "Inspecting runtime metadata on ${VM_NAME}"
 run_remote_script <<'EOF'
 set -euo pipefail
 
-sudo docker exec certscore-web cat /app/.build-info.json || true
+sudo docker ps --filter "name=^/certscore-web$" --format 'container={{.ID}} image={{.Image}} status={{.Status}}' || true
 echo
-sudo docker exec certscore-web curl -fsS http://127.0.0.1:3000/api/version || true
+curl -fsS http://127.0.0.1:3000/api/version || true
 echo
 EOF
 
