@@ -120,6 +120,8 @@ Before DNS cutover, decide and implement one of these paths:
 
 If none of those is complete, do not cut DNS from the VM to Amplify.
 
+The current accepted decision for this repo is recorded in [docs/aws-web-postgres-connectivity-decision.md](/Users/benmasek/WC01/docs/aws-web-postgres-connectivity-decision.md).
+
 ## Amplify secret wiring checkpoint
 
 The checked-in `amplify.yml` intentionally only writes non-secret values into `apps/web/.env.production`.

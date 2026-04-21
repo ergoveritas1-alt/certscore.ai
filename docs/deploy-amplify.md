@@ -2,6 +2,8 @@
 
 This is the preferred web deployment path for `apps/web`.
 
+Before treating Amplify as the accepted production target for the current SSR workload, read [docs/aws-web-postgres-connectivity-decision.md](/Users/benmasek/WC01/docs/aws-web-postgres-connectivity-decision.md).
+
 ## Topology
 
 - Create two separate AWS Amplify Hosting apps in the same AWS region.
