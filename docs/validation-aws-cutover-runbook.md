@@ -35,6 +35,11 @@ Set these GitHub repository values before the first AWS deploy:
 - variable `AWS_VALIDATION_ECS_WORKER_SERVICE`
 - variable `AWS_VALIDATION_ECS_SCHEDULER_SERVICE`
 
+The role behind `AWS_ROLE_TO_ASSUME` must also be allowed to push to both validation ECR repositories:
+
+- `certscore-validation-ops-web`
+- `certscore-validation-worker`
+
 Push to `main` or manually dispatch `Validation AWS Deploy`.
 
 ## 3. Switch the main app to the dedicated validation host

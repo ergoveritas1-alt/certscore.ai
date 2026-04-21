@@ -32,7 +32,7 @@ jobs:
       id-token: write
 
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       ECR_WEB_REPOSITORY: ${{ vars.AWS_VALIDATION_WEB_ECR_REPOSITORY }}
       ECR_WORKER_REPOSITORY: ${{ vars.AWS_VALIDATION_WORKER_ECR_REPOSITORY }}
@@ -94,7 +94,7 @@ jobs:
         run: |
           APP_FLAVOR=validation_ops \
           NEXT_PUBLIC_APP_URL="${VALIDATION_OPS_BASE_URL}" \
-          DATABASE_URL=postgresql://validation.example.internal/certscore \
+          DATABASE_URL=postgresql://localhost/certscore \
           BETTER_AUTH_SECRET=abcdefghijklmnopqrstuvwxyz123456 \
           CERTSCORE_ADMIN_EMAILS=ops@example.com \
           node --enable-source-maps --import tsx ./apps/web/scripts/check-validation-cutover-env.ts
