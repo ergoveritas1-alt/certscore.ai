@@ -2069,6 +2069,75 @@ test("deriveFinancialCommercialClaimFindings accepts strong trading-results bloc
     globalThis.fetch = originalFetch;
   }
 });
+
+test("deriveFinancialCommercialClaimFindings treats explicit returns claims without adjacent disclosure as claim-risk findings", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.DATABASE_URL = "postgres://postgres:postgres@localhost:5432/test";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                claimPresent: true,
+                claimType: "return_performance_claim",
+                claimText: "promised 30-40% returns",
+                commercialContext: true,
+                contextType: "financial_offer",
+                adjacentDisclosurePresent: false,
+                adjacentDisclosureType: null,
+                adjacentDisclosureText: null,
+                guaranteeLanguage: false,
+                superlativeLanguage: false,
+                simulatedPerformanceLanguage: false,
+                urgencyPresent: false,
+                urgencyTiedToConversion: false,
+                pricingPresent: true,
+                feeDisclosurePresent: false,
+                confidence: 0.91,
+                rationaleShort: "Explicit return claim appears in trading-offer context without balancing disclosure."
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+
+  try {
+    const findings = await deriveFinancialCommercialClaimFindings(
+      buildArtifacts({
+        documentSources: [
+          {
+            document_type: "financial_offer",
+            canonical_url: "https://www.example.com/returns",
+            title: "Crypto trading platform",
+            document_text:
+              "Paul promised 30-40% returns using the crypto asset trading platform. Withdrawals require taxes and commission payment first."
+          }
+        ],
+        snapshot: {}
+      })
+    );
+
+    assert.ok(findings.some((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure"));
+    assert.ok(findings.some((finding) => finding.ruleKey === "section_review.pricing_or_fee_transparency_unclear"));
+
+    const returnFinding = findings.find((finding) => finding.ruleKey === "section_review.earnings_claim_without_adjacent_disclosure");
+    assert.equal(returnFinding?.pageUrl, "https://www.example.com/returns");
+    assert.equal(returnFinding?.evidence.claim_text, "promised 30-40% returns");
+    assert.equal(returnFinding?.evidence.claim_type, "return_performance_claim");
+  } finally {
+    process.env.OPENAI_API_KEY = originalKey;
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    globalThis.fetch = originalFetch;
+  }
+});
 test("validation collect hands off queued and running scans to WS01 execution", () => {
   assert.equal(determineValidationCollectAction("queued"), "wait_for_scan");
   assert.equal(determineValidationCollectAction("running"), "wait_for_completion");

@@ -487,7 +487,10 @@ export const FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED: FinancialCommercialClaims
       rationaleShort: "Explicit returns language appears in a financial trading context without balancing disclosure."
     },
     pageExpectation: {
-      expectedFindingIds: ["earnings_claim_without_adjacent_disclosure"],
+      expectedFindingIds: [
+        "earnings_claim_without_adjacent_disclosure",
+        "pricing_or_fee_transparency_unclear"
+      ],
       expectedCardMode: "findings",
       shouldShowFinancialCard: true
     }

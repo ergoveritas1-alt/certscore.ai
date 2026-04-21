@@ -48,20 +48,13 @@ test("evaluateFinancialCommercialClaimsDatasetExample matches declared expectati
   assert.equal(result.derivedCardMode, "findings");
 });
 
-test("evaluateFinancialCommercialClaimsDataset highlights the known return-claim calibration gaps", () => {
+test("evaluateFinancialCommercialClaimsDataset keeps the seeded corpus aligned with current deterministic logic", () => {
   const summary = evaluateFinancialCommercialClaimsDataset();
 
   assert.equal(summary.evaluatedCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
-  assert.equal(summary.overallMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length - 3);
-  assert.equal(summary.findingIdsMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length - 3);
+  assert.equal(summary.overallMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
+  assert.equal(summary.findingIdsMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
   assert.equal(summary.cardModeMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
   assert.equal(summary.shouldShowCardMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
-  assert.deepEqual(
-    summary.mismatches.map((entry) => entry.exampleId).sort(),
-    [
-      "regulator-derived-dfpi-cryptovault-returns",
-      "regulator-derived-dfpi-digital-finance-academy",
-      "regulator-derived-dfpi-lgdbite-return-plus-fee"
-    ]
-  );
+  assert.deepEqual(summary.mismatches, []);
 });

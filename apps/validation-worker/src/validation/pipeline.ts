@@ -1328,7 +1328,7 @@ const FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE = 0.72;
 
 const CLAIM_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "earnings", pattern: /\b(earn(?:ings?|ed)?|income|profit|profitable|passive income|make \$|make up to|per month|payouts?)\b/i },
-  { label: "returns", pattern: /\b(return|yield|apy|apr|roi|gain|grow your money|double your money|high return)\b/i },
+  { label: "returns", pattern: /\b(returns?|yields?|apy|apr|roi|gain|gains|grow your money|double your money|high returns?)\b/i },
   { label: "guarantee", pattern: /\b(guarantee(?:d)?|risk[- ]free|surefire|certain returns?|can't lose|never lose)\b/i },
   { label: "simulated", pattern: /\b(backtest(?:ed)?|simulated?|hypothetical|paper trading|demo results?)\b/i },
   { label: "superlative", pattern: /\b(best|#1|top[- ]rated|highest returns?|safest|lowest fees?|unbeatable|industry[- ]leading|premium)\b/i },
@@ -1336,7 +1336,7 @@ const CLAIM_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "cta", pattern: /\b(sign up|join now|join for free|get started|start now|subscribe|buy now|enroll now|claim offer|upgrade now|apply now|start your trading journey today|get access now)\b/i },
   { label: "pricing", pattern: /\b(price|pricing|plan|plans|subscription|membership|fee|fees|cost|costs|billing|billed|rate|rates|trial)\b/i },
   { label: "currency", pattern: /[$€£]\s?\d|\b\d+(?:,\d{3})*(?:\.\d+)?\s?(?:usd|eur|gbp|dollars?)\b/i },
-  { label: "percent", pattern: /\b\d+(?:\.\d+)?%\b/i },
+  { label: "percent", pattern: /\b\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?%\b/i },
   {
     label: "investment_context",
     pattern:
@@ -1424,21 +1424,12 @@ function scoreFinancialCommercialCandidate(signals: string[]) {
   return score;
 }
 
-function isEarningsLikeFinancialClaim(input: {
+function isReturnOrEarningsLikeFinancialClaim(input: {
   blockText: string;
   claimText: string | null;
   claimType: string;
 }) {
-  if (input.claimType === "earnings_claim") {
-    return true;
-  }
-
-  if (input.claimType !== "return_performance_claim") {
-    return false;
-  }
-
-  const normalized = `${input.claimText ?? ""} ${input.blockText}`.toLowerCase();
-  return /\b(earn|earnings|income|profit|profitable|payout|make money|learn\s*&?\s*profit)\b/.test(normalized);
+  return input.claimType === "earnings_claim" || input.claimType === "return_performance_claim";
 }
 
 function hasStrongFinancialCommercialSignalMix(input: {
@@ -1457,7 +1448,7 @@ function hasStrongFinancialCommercialSignalMix(input: {
     return false;
   }
 
-  const earningsLikeClaim = isEarningsLikeFinancialClaim({
+  const earningsLikeClaim = isReturnOrEarningsLikeFinancialClaim({
     blockText: input.blockText,
     claimText: input.claimText,
     claimType: input.claimType
@@ -1788,7 +1779,7 @@ export async function deriveFinancialCommercialClaimFindings(input: ValidationAr
     }
 
     if (
-      isEarningsLikeFinancialClaim({
+      isReturnOrEarningsLikeFinancialClaim({
         blockText: row.candidate.blockText,
         claimText: classification.claimText,
         claimType: classification.claimType

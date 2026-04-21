@@ -12,21 +12,12 @@ import { FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED } from "./financial-commercial
 const FINANCIAL_COMMERCIAL_CLAIM_MIN_CONFIDENCE = 0.78;
 const FINANCIAL_COMMERCIAL_STRONG_SIGNAL_MIN_CONFIDENCE = 0.72;
 
-function isEarningsLikeFinancialClaim(input: {
+function isReturnOrEarningsLikeFinancialClaim(input: {
   blockText: string;
   claimText: string | null;
   claimType: string;
 }) {
-  if (input.claimType === "earnings_claim") {
-    return true;
-  }
-
-  if (input.claimType !== "return_performance_claim") {
-    return false;
-  }
-
-  const normalized = `${input.claimText ?? ""} ${input.blockText}`.toLowerCase();
-  return /\b(earn|earnings|income|profit|profitable|payout|make money|learn\s*&?\s*profit)\b/.test(normalized);
+  return input.claimType === "earnings_claim" || input.claimType === "return_performance_claim";
 }
 
 function hasStrongFinancialCommercialSignalMix(input: {
@@ -45,7 +36,7 @@ function hasStrongFinancialCommercialSignalMix(input: {
     return false;
   }
 
-  const earningsLikeClaim = isEarningsLikeFinancialClaim({
+  const earningsLikeClaim = isReturnOrEarningsLikeFinancialClaim({
     blockText: input.blockText,
     claimText: input.claimText,
     claimType: input.claimType
@@ -104,7 +95,7 @@ export function deriveFinancialCommercialExpectedFindingIds(input: {
   }
 
   if (
-    isEarningsLikeFinancialClaim({
+    isReturnOrEarningsLikeFinancialClaim({
       blockText: candidate.blockText,
       claimText: classification.claimText,
       claimType: classification.claimType
