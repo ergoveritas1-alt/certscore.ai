@@ -17,6 +17,61 @@ function hasFlag(flag: string) {
   return process.argv.includes(flag);
 }
 
+function renderMarkdownSummary(input: {
+  aligned: boolean;
+  corpus: ReturnType<typeof summarizeFinancialCommercialClaimsDataset>;
+  corpusHealthIssues: string[];
+  evaluation: ReturnType<typeof evaluateFinancialCommercialClaimsDataset>;
+  healthy: boolean;
+}) {
+  const { aligned, corpus, corpusHealthIssues, evaluation, healthy } = input;
+  const lines = [
+    "## Financial Claims Corpus",
+    "",
+    `- Alignment: ${aligned ? "pass" : "fail"} (${evaluation.overallMatchCount}/${evaluation.evaluatedCount})`,
+    `- Corpus health: ${healthy ? "pass" : "fail"}`,
+    `- Train / eval: ${corpus.trainCount} / ${corpus.evalCount}`,
+    `- Source-backed examples: ${corpus.examplesWithSourceUrlCount}`,
+    "",
+    "### Buckets",
+    "",
+    `- positive_high_confidence: ${corpus.positiveHighConfidenceCount}`,
+    `- positive_borderline: ${corpus.positiveBorderlineCount}`,
+    `- negative_financial: ${corpus.negativeFinancialCount}`,
+    `- negative_nonfinancial: ${corpus.negativeNonfinancialCount}`,
+    `- adversarial_negative: ${corpus.adversarialNegativeCount}`,
+    "",
+    "### Card Modes",
+    "",
+    `- findings: ${corpus.cardModeCounts.findings}`,
+    `- not_applicable: ${corpus.cardModeCounts.not_applicable}`,
+    `- omit: ${corpus.cardModeCounts.omit}`,
+    "",
+    "### Deterministic Eval",
+    "",
+    `- overall: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.overallMatchCount, evaluation.evaluatedCount)})`,
+    `- finding ids: ${evaluation.findingIdsMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.findingIdsMatchCount, evaluation.evaluatedCount)})`,
+    `- card mode: ${evaluation.cardModeMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.cardModeMatchCount, evaluation.evaluatedCount)})`,
+    `- card visibility: ${evaluation.shouldShowCardMatchCount}/${evaluation.evaluatedCount} (${percent(evaluation.shouldShowCardMatchCount, evaluation.evaluatedCount)})`
+  ];
+
+  if (corpusHealthIssues.length > 0) {
+    lines.push("", "### Corpus Health Issues", "");
+    for (const issue of corpusHealthIssues) {
+      lines.push(`- ${issue}`);
+    }
+  }
+
+  if (evaluation.mismatches.length > 0) {
+    lines.push("", "### Mismatches", "");
+    for (const mismatch of evaluation.mismatches) {
+      lines.push(`- ${mismatch.exampleId}: findings=${mismatch.derivedFindingIds.join(", ") || "(none)"} card=${mismatch.derivedCardMode}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 function getCorpusHealthIssues(input: {
   corpus: ReturnType<typeof summarizeFinancialCommercialClaimsDataset>;
 }) {
@@ -56,6 +111,7 @@ function main() {
   const strict = hasFlag("--strict");
   const json = hasFlag("--json");
   const jsonl = hasFlag("--jsonl");
+  const markdown = hasFlag("--markdown");
   const corpus = summarizeFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const evaluation = evaluateFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const corpusHealthIssues = getCorpusHealthIssues({ corpus });
@@ -68,6 +124,22 @@ function main() {
     if (!jsonlOutput.endsWith("\n")) {
       process.stdout.write("\n");
     }
+    if (strict && (!aligned || !healthy)) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (markdown) {
+    process.stdout.write(
+      renderMarkdownSummary({
+        aligned,
+        corpus,
+        corpusHealthIssues,
+        evaluation,
+        healthy
+      })
+    );
     if (strict && (!aligned || !healthy)) {
       process.exitCode = 1;
     }

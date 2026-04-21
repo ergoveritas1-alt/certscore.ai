@@ -91,6 +91,7 @@ jobs:
         run: |
           mkdir -p artifacts
           pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --json > artifacts/financial-claims-corpus-report.json
+          pnpm exec tsx ./scripts/eval-financial-claims-corpus.ts --markdown >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Check financial claims corpus alignment
         run: pnpm eval:financial-claims:strict
