@@ -6,13 +6,14 @@ This document records the current decision for moving the public web tier off th
 
 Do not cut `certscore.ai` or `consentcheck.site` from the current GCP VM lane to AWS Amplify Hosting while the web SSR runtime still requires direct PostgreSQL access.
 
-If the steady-state AWS target must preserve direct server-side PostgreSQL access for auth, dashboard reads, scan enqueue, and report rendering, the recommended AWS target is:
+If the steady-state AWS target must preserve direct server-side PostgreSQL access for auth, dashboard reads, scan enqueue, and report rendering, the recommended AWS target in the current AWS account and region is:
 
 1. private PostgreSQL access inside AWS
 2. a web-serving runtime with explicit VPC egress controls
 3. secret injection that does not depend on build artifacts
 
-The preferred AWS runtime for that shape is an application service that supports VPC egress, such as AWS App Runner with a VPC connector, or ECS/Fargate behind the appropriate edge layer.
+The preferred current-region runtime for that shape is ECS/Fargate behind the appropriate edge layer.
+App Runner is only a candidate if the web runtime is moved to a region that actually supports App Runner.
 
 Until that exists, keep the public web lane on the hardened GCP VM path.
 
@@ -62,7 +63,7 @@ Repo implication:
 - a production cutover that depends on broad public ingress to PostgreSQL is the wrong target shape
 - a migration should move toward private database connectivity, not away from it
 
-### 3. AWS App Runner explicitly supports VPC egress for private resources
+### 3. AWS App Runner explicitly supports VPC egress for private resources, but not in the current region
 
 AWS App Runner documents outbound VPC access through a VPC connector.
 
@@ -73,7 +74,8 @@ Source:
 
 Repo implication:
 
-- if direct PostgreSQL access remains part of the SSR contract, a runtime with explicit VPC egress support is the cleaner fit than Amplify Hosting for the web-serving layer
+- App Runner is not currently available in `us-west-1`, which is where the existing WC01 AWS resources live
+- if direct PostgreSQL access remains part of the SSR contract, the current-region fit is ECS/Fargate rather than Amplify Hosting
 
 ## Options considered
 
@@ -98,7 +100,7 @@ Why:
 - if auth, dashboard, and report-critical paths moved behind API surfaces that do not require direct DB access from the SSR host, Amplify becomes more plausible again
 - that is a product and architecture change, not a deployment-only change
 
-### Option C: move the web SSR runtime to an AWS service with VPC egress and keep PostgreSQL private
+### Option C: move the web SSR runtime to ECS/Fargate in `us-west-1` and keep PostgreSQL private
 
 Decision: recommended if AWS cutover must happen before a deeper app redesign
 
@@ -107,6 +109,7 @@ Why:
 - it matches the current server-side dependency shape
 - it preserves a stronger DB security model
 - it is operationally more defensible than public database ingress for an SSR app
+- it is available in the same region as the existing WC01 RDS and ECS validation resources
 
 ## Accepted path
 
@@ -124,7 +127,7 @@ The accepted migration sequence is:
    - report pages load
    - artifact-backed operations work
 
-The concrete execution runbook for the App Runner path lives in [docs/aws-web-apprunner-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-apprunner-cutover-plan.md).
+The concrete execution runbook for the current-region AWS path lives in [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md).
 
 ## What this means right now
 
@@ -140,4 +143,4 @@ Revisit this document only if one of these becomes true:
 
 1. the public web app no longer needs direct PostgreSQL access for critical SSR flows
 2. AWS Amplify Hosting gains a documented, production-acceptable private connectivity model for this workload
-3. the team chooses App Runner or ECS/Fargate as the actual AWS web-serving target
+3. the AWS account, region, or dependency shape changes enough to justify a different web-serving target

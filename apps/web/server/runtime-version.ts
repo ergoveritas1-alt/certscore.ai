@@ -1,4 +1,4 @@
-type RuntimeTarget = "amplify" | "app-runner" | "gcp-vm" | "vercel" | "unknown";
+type RuntimeTarget = "amplify" | "app-runner" | "ecs-fargate" | "gcp-vm" | "vercel" | "unknown";
 
 export type RuntimeVersionInfo = {
   amplifyAppId: string | null;
@@ -40,6 +40,10 @@ export function detectRuntimeTarget(env: NodeJS.ProcessEnv = process.env): Runti
 
   if (env.BUILD_RUNTIME_TARGET === "app-runner") {
     return "app-runner";
+  }
+
+  if (env.BUILD_RUNTIME_TARGET === "ecs-fargate") {
+    return "ecs-fargate";
   }
 
   if (env.BUILD_RUNTIME_TARGET === "gcp-vm") {

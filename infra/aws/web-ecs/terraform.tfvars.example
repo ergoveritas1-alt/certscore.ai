@@ -1,0 +1,45 @@
+project_name            = "certscore-web"
+aws_region              = "us-west-1"
+github_actions_subjects = ["repo:ergoveritas1-alt/certscore.ai:*"]
+
+# Reuse the existing ECS-style network shape where possible.
+existing_vpc_id    = "vpc-xxxxxxxx"
+public_subnet_ids  = ["subnet-public-a", "subnet-public-b"]
+private_subnet_ids = ["subnet-private-a", "subnet-private-b"]
+
+certscore_domain_name       = "certscore.ai"
+certscore_hosted_zone_id    = "Z1234567890"
+consentcheck_domain_name    = "consentcheck.site"
+consentcheck_hosted_zone_id = "Z1234567890"
+existing_certificate_arn    = ""
+
+build_runtime_target              = "ecs-fargate"
+app_flavor                        = "certscore"
+database_ssl_mode                 = "require"
+next_public_auth_google_enabled   = "false"
+certscore_admin_emails            = "ops@example.com"
+s3_bucket                         = "scan-artifacts"
+s3_region                         = "us-west-1"
+s3_endpoint                       = ""
+s3_force_path_style               = ""
+
+database_url_secret_arn              = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/database-url"
+better_auth_secret_arn               = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/better-auth-secret"
+google_client_id_secret_arn          = ""
+google_client_secret_secret_arn      = ""
+openai_api_key_secret_arn            = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/openai-api-key"
+s3_access_key_id_secret_arn          = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/s3-access-key-id"
+s3_secret_access_key_secret_arn      = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/s3-secret-access-key"
+gmail_smtp_user_secret_arn           = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/gmail-user"
+gmail_smtp_app_password_secret_arn   = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/gmail-app-password"
+feedback_to_email_secret_arn         = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/feedback-to-email"
+privacy_request_to_email_secret_arn  = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/privacy-request-to-email"
+
+web_cpu           = 512
+web_memory        = 1024
+web_desired_count = 1
+
+tags = {
+  Environment = "production"
+  Service     = "web"
+}
