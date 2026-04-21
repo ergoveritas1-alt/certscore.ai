@@ -12,7 +12,12 @@ function percent(part: number, whole: number) {
   return `${((part / whole) * 100).toFixed(1)}%`;
 }
 
+function hasFlag(flag: string) {
+  return process.argv.includes(flag);
+}
+
 function main() {
+  const strict = hasFlag("--strict");
   const corpus = summarizeFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
   const evaluation = evaluateFinancialCommercialClaimsDataset(FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED);
 
@@ -44,6 +49,14 @@ function main() {
     for (const mismatch of evaluation.mismatches) {
       console.log(`- ${mismatch.exampleId}: findings=${mismatch.derivedFindingIds.join(", ") || "(none)"} card=${mismatch.derivedCardMode}`);
     }
+  }
+
+  if (strict && evaluation.overallMatchCount !== evaluation.evaluatedCount) {
+    console.error("");
+    console.error(
+      `financial claims corpus regression: ${evaluation.overallMatchCount}/${evaluation.evaluatedCount} examples aligned`
+    );
+    process.exitCode = 1;
   }
 }
 
