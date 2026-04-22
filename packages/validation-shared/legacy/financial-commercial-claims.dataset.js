@@ -1297,6 +1297,250 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
         }
     }),
     example({
+        bucket: "positive_high_confidence",
+        id: "source-backed-fxculturetrading-homepage-profit-and-fee-opacity",
+        split: "eval",
+        sourceUrl: "https://fxculturetrading.com/",
+        notes: "Derived from a homepage-led trading site that promises profit from forex moves while also advertising commission-free access without adjacent fee detail or earnings disclosure.",
+        input: {
+            adjacentAfter: "Get funded and start now with commission-free access.",
+            adjacentBefore: "FX Culture Trading",
+            blockHeading: "Profit from forex moves",
+            blockText: "Profit from forex moves with high leverage strategies, free signals, and copy trading insights.",
+            candidateSignals: ["earnings", "pricing", "pricing_fee", "cta", "investment_context", "returns"],
+            pageType: "homepage",
+            pageUrl: "https://fxculturetrading.com/",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "earnings_claim",
+            claimText: "Profit from forex moves",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: true,
+            feeDisclosurePresent: false,
+            confidence: 0.93,
+            rationaleShort: "Homepage trading-profit language is paired with fee-style promotion and a conversion prompt without balancing disclosure."
+        },
+        pageExpectation: {
+            expectedFindingIds: [
+                "earnings_claim_without_adjacent_disclosure",
+                "pricing_or_fee_transparency_unclear"
+            ],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "positive_borderline",
+        id: "homepage-copy-trading-free-signals-no-fee-detail",
+        split: "eval",
+        notes: "Homepage copy-trading promo with free-signals language should still surface the pricing-opacity lane when it invites signups but omits concrete fee terms.",
+        input: {
+            adjacentAfter: "Create your account today.",
+            adjacentBefore: "Starter plan",
+            blockHeading: "Free signals and copy trading",
+            blockText: "Get free signals and copy trading access from one dashboard.",
+            candidateSignals: ["pricing", "cta", "investment_context", "pricing_fee"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/copy-trading-home",
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "pricing_fee_claim",
+            claimText: "Get free signals and copy trading access from one dashboard.",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: true,
+            feeDisclosurePresent: false,
+            confidence: 0.79,
+            rationaleShort: "Homepage free-access trading promotion invites signups without concrete fee or pricing detail."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["pricing_or_fee_transparency_unclear"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "negative_financial",
+        id: "homepage-backtest-results-with-prominent-disclaimer",
+        split: "eval",
+        notes: "Homepage backtest marketing copy can stay in-card but out of findings when the simulation caveat is explicit and adjacent.",
+        input: {
+            adjacentAfter: "Hypothetical backtest results do not reflect live trading and are not guarantees of future performance.",
+            adjacentBefore: "Strategy lab",
+            blockHeading: "Backtested ideas",
+            blockText: "Build profitable strategies with backtested performance examples from prior market data.",
+            candidateSignals: ["simulated", "returns", "investment_context", "cta"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/backtest-home",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "simulated_performance_claim",
+            claimText: "backtested performance examples",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: true,
+            adjacentDisclosureType: "simulation_disclaimer",
+            adjacentDisclosureText: "Hypothetical backtest results do not reflect live trading and are not guarantees of future performance.",
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: true,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.88,
+            rationaleShort: "Homepage simulated-performance language is paired with a direct hypothetical-results disclaimer."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: "not_applicable",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "negative_nonfinancial",
+        id: "nonfinancial-profitability-language-saas",
+        split: "eval",
+        notes: "Generic business-SaaS profitability copy should not surface in the financial claims lane without investment context.",
+        input: {
+            adjacentAfter: "Book a demo today.",
+            adjacentBefore: "Operations platform",
+            blockHeading: "Profitable stores",
+            blockText: "Help your ecommerce team build more profitable stores with faster merchandising workflows.",
+            candidateSignals: ["earnings", "cta"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/merchandising",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: false,
+            claimType: "none",
+            claimText: null,
+            commercialContext: false,
+            contextType: "unknown",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.81,
+            rationaleShort: "Profitability language is generic SaaS marketing rather than a financial or investment outcome claim."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: "omit",
+            shouldShowFinancialCard: false
+        }
+    }),
+    example({
+        bucket: "adversarial_negative",
+        id: "homepage-account-unlock-fee-pressure-no-performance-claim",
+        split: "eval",
+        notes: "Homepage-style release-fee pressure without an earnings or performance representation should remain out of the claims-finding lane.",
+        input: {
+            adjacentAfter: "Pay the review charge today to unlock transfers.",
+            adjacentBefore: "Account notice",
+            blockHeading: "Compliance review",
+            blockText: "Your account is pending review and requires a release fee before withdrawals can resume.",
+            candidateSignals: ["pricing", "pricing_fee", "cta", "investment_context", "urgency"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/release-fee-home",
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: false,
+            claimType: "none",
+            claimText: null,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: true,
+            urgencyTiedToConversion: true,
+            pricingPresent: true,
+            feeDisclosurePresent: false,
+            confidence: 0.84,
+            rationaleShort: "Release-fee pressure alone is not enough for a v1 financial-claims finding without a qualifying earnings, return, or pricing-promo claim."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: "not_applicable",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "positive_high_confidence",
+        id: "homepage-guaranteed-signals-join-now",
+        split: "eval",
+        notes: "Homepage guarantee language tied to trading signals and a signup prompt should remain a strong surfaced case.",
+        input: {
+            adjacentAfter: "Join now to unlock the private room.",
+            adjacentBefore: "Elite analysts",
+            blockHeading: "Guaranteed signals",
+            blockText: "Get guaranteed forex signals from our elite analysts every week.",
+            candidateSignals: ["guarantee", "investment_context", "cta", "earnings"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/guaranteed-signals-home",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "guaranteed_outcome_claim",
+            claimText: "guaranteed forex signals",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: true,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.94,
+            rationaleShort: "Homepage guarantee-style trading-signal language is used as a signup driver without balancing disclosure."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["guaranteed_outcome_claim_detected"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
         bucket: "adversarial_negative",
         id: "regulator-derived-dfpi-sannlt-recovery-wallet-ui",
         split: "eval",
@@ -1418,7 +1662,162 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
             expectedCardMode: "not_applicable",
             shouldShowFinancialCard: true
         }
-    })
+    }),
+    example({
+          id: "backtestr-home-backtest-turn-trading",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on backtestr.xyz. Pricing or fee transparency unclear scan 6f8aab47-9bda-4ee4-83f9-c222655ae576 run 9e0f3eb3-d1bf-445d-8a32-e343166b650f Auto-drafted from financial_review.simulated_performance_without_disclosure on backtestr.xyz. Simulated performance without disclosure scan 6f8aab47-9bda-4ee4-83f9-c222655ae576 run 9e0f3eb3-d1bf-445d-8a32-e343166b650f",
+          sourceUrl: "https://backtestr.xyz/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "backtestr.xyz",
+              blockHeading: null,
+              blockText: "Turn any trading idea into a backtested strategy in 30 seconds. Discover winning patterns across crypto, commodities, and forex.",
+              candidateSignals: [
+                  "pricing",
+                  "cta",
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "earnings"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://backtestr.xyz/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Turn any trading idea into a backtested strategy in 30 seconds",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on backtestr.xyz. Pricing or fee transparency unclear scan 6f8aab47-9bda-4ee4-83f9-c222655ae576 run 9e0f3eb3-d1bf-445d-8a32-e343166b650f Auto-drafted from financial_review.simulated_performance_without_disclosure on backtestr.xyz. Simulated performance without disclosure scan 6f8aab47-9bda-4ee4-83f9-c222655ae576 run 9e0f3eb3-d1bf-445d-8a32-e343166b650f"
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "fxculturetrading-home-profit-join-free",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Auto-drafted from financial_review.earnings_claim_without_adjacent_disclosure on fxculturetrading.com. Earnings claim without adjacent disclosure scan 933f0d2c-ff7f-4e15-97b3-0322f92ad48f run 0dd3c83a-c72d-424b-9a33-57bc9c558971 Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on fxculturetrading.com. Pricing or fee transparency unclear scan 933f0d2c-ff7f-4e15-97b3-0322f92ad48f run 0dd3c83a-c72d-424b-9a33-57bc9c558971",
+          sourceUrl: "https://fxculturetrading.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "fxculturetrading.com",
+              blockHeading: null,
+              blockText: "Join My Free Trading Community And Learn & Profit From My Trading Ideas Daily",
+              candidateSignals: [
+                  "pricing_fee",
+                  "pricing",
+                  "cta",
+                  "returns",
+                  "earnings",
+                  "investment_context"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://fxculturetrading.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Join My Free Trading Community And Learn & Profit From My Trading Ideas Daily",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Auto-drafted from financial_review.earnings_claim_without_adjacent_disclosure on fxculturetrading.com. Earnings claim without adjacent disclosure scan 933f0d2c-ff7f-4e15-97b3-0322f92ad48f run 0dd3c83a-c72d-424b-9a33-57bc9c558971 Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on fxculturetrading.com. Pricing or fee transparency unclear scan 933f0d2c-ff7f-4e15-97b3-0322f92ad48f run 0dd3c83a-c72d-424b-9a33-57bc9c558971"
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "learn2-home-backtest-profitable-profit",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on learn2.trade. Pricing or fee transparency unclear scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79 Auto-drafted from financial_review.simulated_performance_without_disclosure on learn2.trade. Simulated performance without disclosure scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79 Auto-drafted from financial_review.unqualified_superlative_claim_detected on learn2.trade. Unqualified superlative claim detected scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79",
+          sourceUrl: "https://learn2.trade/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "learn2.trade",
+              blockHeading: null,
+              blockText: "Profitable. profitable. Profit. profits. profit. outperform. Paper Trading. Spread. spread. fees. Fees. fee. commission. charges. pricing. withdrawal. withdraw. Free. free. I am a free signal user, and I have to say how much I appreciate that Learn to Trade sends out full signals for free users. I have checked a few other signal services, and most of them always mask out some part of the signals forcing the users to sign up for premium to make any t",
+              candidateSignals: [
+                  "returns",
+                  "superlative",
+                  "investment_context",
+                  "simulated",
+                  "pricing_fee",
+                  "pricing",
+                  "cta",
+                  "earnings"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://learn2.trade/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Profitable. profitable. Profit. profits. profit. outperform. Paper Trading. Spread. spread. fees. Fees. fee. commission. charges. pricing. withdrawal. withdraw. Free. free. I am a free signal user, and I have to say how much I appreciate that Learn to Trade sends out full signals for free users. I have checked a few other signal services, and most of them always mask out some part of the signals forcing the users to sign up for premium to make any t",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Auto-drafted from financial_review.pricing_or_fee_transparency_unclear on learn2.trade. Pricing or fee transparency unclear scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79 Auto-drafted from financial_review.simulated_performance_without_disclosure on learn2.trade. Simulated performance without disclosure scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79 Auto-drafted from financial_review.unqualified_superlative_claim_detected on learn2.trade. Unqualified superlative claim detected scan 3bc6b17d-a40c-4910-a309-f1ddbb8e1ffa run 573c3f4d-9d6d-4707-9706-8fe2374e6b79"
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure",
+                  "unqualified_superlative_claim_detected",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      })
 ];
 function summarizeFinancialCommercialClaimsDataset(examples = exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED) {
     const bucketCounts = Object.fromEntries(DATASET_BUCKETS.map((bucket) => [bucket, 0]));

@@ -974,8 +974,16 @@ function buildPolicyRuntimeFinding(input: {
   };
 }
 
-function classifyFinancialValidationPage(pageType: string | null) {
+function classifyFinancialValidationPage(
+  pageType: string | null,
+  input?: {
+    blockText?: string | null;
+    candidateSignals?: string[];
+  }
+) {
   const raw = (pageType ?? "").toLowerCase();
+  const candidateSignals = new Set((input?.candidateSignals ?? []).map((value) => value.toLowerCase()));
+  const blockText = input?.blockText ?? "";
 
   if (/pricing|fee/.test(raw)) {
     return "pricing_or_fees" as const;
@@ -992,8 +1000,174 @@ function classifyFinancialValidationPage(pageType: string | null) {
   if (/checkout|bnpl|installment|finance/.test(raw)) {
     return "quasi_financial_offer" as const;
   }
+  if (/homepage|landing/.test(raw)) {
+    if (
+      candidateSignals.has("investment_context") ||
+      candidateSignals.has("returns") ||
+      candidateSignals.has("simulated") ||
+      candidateSignals.has("earnings") ||
+      /\b(apy|apr|yield|return|returns|profit|profits|trading|invest|copy trading|backtest|backtested|capital at risk)\b/i.test(
+        blockText
+      )
+    ) {
+      return "financial_offer" as const;
+    }
+    if (
+      candidateSignals.has("pricing") ||
+      candidateSignals.has("pricing_fee") ||
+      /\b(price|pricing|fee|fees|commission|spread|charges?)\b/i.test(blockText)
+    ) {
+      return "pricing_or_fees" as const;
+    }
+  }
 
   return "unknown" as const;
+}
+
+type ValidationFindingRow = {
+  category: "scan_report_review";
+  description: string;
+  evidence: Record<string, unknown>;
+  findingFamily: string;
+  findingScope: string;
+  findingSource: string;
+  findingSubject: string;
+  pageUrl: string | null;
+  rank: number;
+  ruleKey: string;
+  severity: "high" | "medium" | "low";
+  subtype: string | null;
+  title: string;
+};
+
+const SECTION_FINANCIAL_REVIEW_SUFFIXES = new Set([
+  "earnings_claim_without_adjacent_disclosure",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "pricing_or_fee_transparency_unclear"
+]);
+
+function getEvidenceBoolean(evidence: Record<string, unknown>, key: string) {
+  return evidence[key] === true;
+}
+
+function getEvidenceStringArray(evidence: Record<string, unknown>, key: string) {
+  return Array.isArray(evidence[key])
+    ? (evidence[key] as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+}
+
+function getPromotableFinancialSectionSuffix(finding: ValidationFindingRow) {
+  if (!finding.ruleKey.startsWith("section_review.")) {
+    return null;
+  }
+
+  const suffix = finding.ruleKey.replace(/^section_review\./, "");
+  if (!SECTION_FINANCIAL_REVIEW_SUFFIXES.has(suffix)) {
+    return null;
+  }
+
+  const evidence = getRecord(finding.evidence) ?? {};
+  const candidateSignals = getEvidenceStringArray(evidence, "candidate_signals");
+  const blockText =
+    getString(evidence.candidate_block_text) ??
+    getString(evidence.claim_text) ??
+    getString(evidence.matchedSnippet) ??
+    null;
+  const pageType = getString(evidence.page_type);
+  const pageClassification = classifyFinancialValidationPage(pageType, {
+    blockText,
+    candidateSignals
+  });
+  const commercialContext = getEvidenceBoolean(evidence, "commercial_context");
+  const claimPresent = getEvidenceBoolean(evidence, "claim_present") || Boolean(blockText);
+  const pricingPresent =
+    getEvidenceBoolean(evidence, "pricing_present") ||
+    candidateSignals.includes("pricing") ||
+    candidateSignals.includes("pricing_fee");
+
+  if (!commercialContext || !claimPresent) {
+    return null;
+  }
+
+  if (!["financial_offer", "quasi_financial_offer", "pricing_or_fees"].includes(pageClassification)) {
+    return null;
+  }
+
+  if (suffix === "pricing_or_fee_transparency_unclear" && !pricingPresent) {
+    return null;
+  }
+
+  return suffix;
+}
+
+export function promoteSectionFinancialReviewFindings(findings: ValidationFindingRow[]) {
+  const promoted = [...findings];
+  const existingRuleKeys = new Set(findings.map((finding) => finding.ruleKey));
+
+  for (const finding of findings) {
+    const suffix = getPromotableFinancialSectionSuffix(finding);
+    if (!suffix) {
+      continue;
+    }
+
+    const definition = getFinancialCommercialDefinition(suffix);
+    if (!definition || existingRuleKeys.has(definition.ruleKey)) {
+      continue;
+    }
+
+    const evidence = getRecord(finding.evidence) ?? {};
+    const candidateSignals = getEvidenceStringArray(evidence, "candidate_signals");
+    const blockText =
+      getString(evidence.candidate_block_text) ??
+      getString(evidence.claim_text) ??
+      getString(evidence.matchedSnippet) ??
+      null;
+    const pageType = getString(evidence.page_type);
+    const pageClassification = classifyFinancialValidationPage(pageType, {
+      blockText,
+      candidateSignals
+    });
+    const pageUrl = finding.pageUrl ?? getString(evidence.page_url);
+    const taxonomy = deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: definition.ruleKey,
+      subtype: "financial_review"
+    });
+
+    promoted.push({
+      category: "scan_report_review",
+      description: definition.description,
+      evidence: {
+        ...evidence,
+        claimText: getString(evidence.claim_text) ?? blockText,
+        matchedPhrase: getString(evidence.claim_text) ?? blockText,
+        matchedSnippet: blockText,
+        pageClassification,
+        pageType,
+        pageUrl,
+        policySnippets: blockText ? [blockText] : [],
+        sourceUrls: pageUrl ? [pageUrl] : [],
+        supportingHeadings: getString(evidence.candidate_block_heading) ? [getString(evidence.candidate_block_heading)] : [],
+        supportingSignals: candidateSignals,
+        unifiedFindingId: suffix
+      },
+      findingFamily: taxonomy.familyId,
+      findingScope: taxonomy.scope,
+      findingSource: taxonomy.source,
+      findingSubject: taxonomy.subject,
+      pageUrl,
+      rank: 0,
+      ruleKey: definition.ruleKey,
+      severity: definition.severity,
+      subtype: "financial_review",
+      title: definition.title
+    });
+    existingRuleKeys.add(definition.ruleKey);
+  }
+
+  return promoted;
 }
 
 type ValidationArtifactBundle = {
@@ -1572,8 +1746,11 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
           claimText: matchedText,
           confidence: classification.confidence,
           matchedPhrase: matchedText,
-          matchedSnippet: matchedText,
-          pageClassification: classifyFinancialValidationPage(pageType),
+        matchedSnippet: matchedText,
+          pageClassification: classifyFinancialValidationPage(pageType, {
+            blockText,
+            candidateSignals
+          }),
           pageType,
           pageUrl,
           policySnippets: matchedTexts,
@@ -2739,21 +2916,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
   const policyEnrichmentsById = new Map(
     rawPolicyEnrichmentRows.map((row) => [String(row.id ?? ""), row])
   );
-  const findings: Array<{
-    category: "scan_report_review";
-    description: string;
-    evidence: Record<string, unknown>;
-    findingFamily: string;
-    findingScope: string;
-    findingSource: string;
-    findingSubject: string;
-    pageUrl: string | null;
-    rank: number;
-    ruleKey: string;
-    severity: "high" | "medium" | "low";
-    subtype: string | null;
-    title: string;
-  }> = [];
+  const findings: ValidationFindingRow[] = [];
 
   const findSemanticRowForReview = (reviewItem: Record<string, unknown>) => {
     const enrichment = policyEnrichmentsById.get(String(reviewItem.policy_enrichment_id ?? "")) ?? null;
@@ -2874,7 +3037,8 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     })
   );
 
-  const deduped = [...new Map(findings.map((finding) => [buildFindingComparisonKey({
+  const promotedFinancialSectionFindings = promoteSectionFinancialReviewFindings(findings);
+  const deduped = [...new Map(promotedFinancialSectionFindings.map((finding) => [buildFindingComparisonKey({
     category: finding.category,
     page_url: finding.pageUrl,
     rule_key: finding.ruleKey

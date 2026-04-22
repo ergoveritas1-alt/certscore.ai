@@ -137,7 +137,11 @@ export type AccessLimitationOutcome = {
 };
 
 export type RetryPolicyInput = {
+  accessPostureClass?: string | null;
   homepageHttpStatus?: number | null;
+  homepageFetchStatus?: string | null;
+  normalizedBodyMissing?: boolean | null;
+  pagesScanned?: number | null;
   transportFailure?: boolean | null;
   challengeSuspected?: boolean | null;
   repeated403Cluster?: boolean | null;
@@ -546,6 +550,24 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
 }
 
 export function deriveRetryPolicy(input: RetryPolicyInput): RetryPolicyDecision {
+  const cleanHomepageButMissingBody =
+    input.normalizedBodyMissing === true &&
+    (input.pagesScanned ?? 0) > 0 &&
+    normalizeStatus(input.homepageFetchStatus) === "ok" &&
+    input.homepageHttpStatus !== 401 &&
+    input.homepageHttpStatus !== 403 &&
+    input.homepageHttpStatus !== 429 &&
+    input.accessPostureClass === "tolerant";
+
+  if (cleanHomepageButMissingBody) {
+    return {
+      cooldownHours: 2,
+      maxPassiveVerificationUrls: 4,
+      retryRecommended: true,
+      stopHomepageRetry: false
+    };
+  }
+
   if (input.transportFailure === true) {
     return {
       cooldownHours: 2,

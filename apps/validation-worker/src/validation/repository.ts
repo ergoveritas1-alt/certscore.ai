@@ -1872,20 +1872,28 @@ export async function finalizeValidationRun(runId: string) {
 
   const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
   const snapshot = await queryOne<{
+    access_posture_class: string | null;
     blocked_flag: boolean | null;
     captcha_flag: boolean | null;
     challenge_suspected: boolean | null;
     cooldown_hours: number | null;
+    homepage_fetch_status: string | null;
     homepage_fetch_http_status: number | null;
+    normalized_body_hash: string | null;
+    pages_scanned: number | null;
     rate_limit_suspected: boolean | null;
     robots_fetch_http_status: number | null;
     scan_outcome: string | null;
   }>(
     `
       select
+        access_posture_class,
         blocked_flag,
         captcha_flag,
+        homepage_fetch_status,
         homepage_fetch_http_status,
+        normalized_body_hash,
+        pages_scanned,
         robots_fetch_http_status,
         challenge_suspected,
         rate_limit_suspected,
@@ -1908,7 +1916,11 @@ export async function finalizeValidationRun(runId: string) {
     snapshot?.scan_outcome === "robots_restricted" ||
     snapshot?.scan_outcome === "unknown_access_limitation";
   const retryPolicy = deriveRetryPolicy({
+    accessPostureClass: snapshot?.access_posture_class ?? null,
+    homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
     homepageHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+    normalizedBodyMissing: !snapshot?.normalized_body_hash,
+    pagesScanned: snapshot?.pages_scanned ?? null,
     transportFailure: snapshot?.scan_outcome === "transport_failure" || snapshot?.scan_outcome === "timeout_navigation",
     challengeSuspected: snapshot?.challenge_suspected === true,
     rateLimitSuspected: snapshot?.rate_limit_suspected === true
@@ -1933,6 +1945,8 @@ export async function finalizeValidationRun(runId: string) {
       blocked ? addDays(completedAt, 90).toISOString() : null,
       blocked
         ? new Date(completedAt.getTime() + blockedCooldownHours * 60 * 60 * 1000).toISOString()
+        : retryPolicy.retryRecommended
+          ? new Date(completedAt.getTime() + retryPolicy.cooldownHours * 60 * 60 * 1000).toISOString()
         : addDays(completedAt, cooldownDays).toISOString(),
       completedAt.toISOString()
     ]

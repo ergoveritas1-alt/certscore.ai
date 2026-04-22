@@ -10,6 +10,7 @@ import {
   getNanoDocumentSourceDedupKeys,
   isolateLikelyLegalDocumentText,
   looksLikeIntermediaryOrBlockPage,
+  promoteSectionFinancialReviewFindings,
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
   selectNanoDocCandidates,
@@ -91,6 +92,46 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("promoteSectionFinancialReviewFindings upgrades section-level earnings claims into financial review findings", () => {
+  const promoted = promoteSectionFinancialReviewFindings([
+    {
+      category: "scan_report_review",
+      description: "Section-level earnings claim without nearby disclosure.",
+      evidence: {
+        adjacent_disclosure_present: false,
+        candidate_block_heading: "Homepage New 1 - thefxculture",
+        candidate_block_text: "Join My Free Trading Community And Learn & Profit From My Trading Ideas Daily",
+        candidate_signals: ["earnings", "investment_context"],
+        claim_present: true,
+        claim_text: "Learn & Profit From My Trading Ideas Daily",
+        commercial_context: true,
+        page_type: "homepage",
+        pricing_present: false
+      },
+      findingFamily: "section_review",
+      findingScope: "page",
+      findingSource: "section_review",
+      findingSubject: "disclosure",
+      pageUrl: "https://fxculturetrading.com/",
+      rank: 1,
+      ruleKey: "section_review.earnings_claim_without_adjacent_disclosure",
+      severity: "high",
+      subtype: "section_review",
+      title: "Earnings claim without adjacent disclosure"
+    }
+  ]);
+
+  assert.equal(promoted.length, 2);
+  const finding = promoted.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.pageUrl, "https://fxculturetrading.com/");
+  assert.equal(finding?.evidence.pageClassification, "financial_offer");
+  assert.deepEqual(finding?.evidence.policySnippets, [
+    "Join My Free Trading Community And Learn & Profit From My Trading Ideas Daily"
+  ]);
 });
 
 test("deriveUnifiedFindingsWithWorkflowEvents emits completed event metadata on success", async () => {
@@ -1906,6 +1947,8 @@ test("deriveValidationFindings promotes simulated performance and fee-opacity fi
   assert.ok(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"));
   assert.ok(findings.some((item) => item.ruleKey === "financial_review.financial_urgency_pressure_tactic_detected"));
   assert.ok(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"));
+  const simulatedFinding = findings.find((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure");
+  assert.equal(simulatedFinding?.evidence.pageClassification, "pricing_or_fees");
 });
 
 test("deriveValidationFindings merges page-level financial signals into earnings and pricing risk findings", () => {
@@ -1991,8 +2034,13 @@ test("deriveValidationFindings merges page-level financial signals into earnings
     })
   );
 
-  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
-  assert.ok(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"));
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  const pricingFinding = findings.find((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear");
+
+  assert.ok(earningsFinding);
+  assert.ok(pricingFinding);
+  assert.equal(earningsFinding?.evidence.pageClassification, "financial_offer");
+  assert.equal(pricingFinding?.evidence.pageClassification, "financial_offer");
 });
 
 test("validation collect hands off queued and running scans to WS01 execution", () => {
