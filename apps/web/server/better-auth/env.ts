@@ -52,9 +52,34 @@ const betterAuthEnvSchema = z
   });
 
 export type BetterAuthEnv = z.infer<typeof betterAuthEnvSchema>;
+type BetterAuthEnvInput = Record<string, string | boolean | undefined>;
 
-export function getBetterAuthEnv(env: NodeJS.ProcessEnv = process.env): BetterAuthEnv {
-  return betterAuthEnvSchema.parse(mergeAmplifyEnvironmentSecrets(env));
+const BETTER_AUTH_KNOWN_ALLOWED_HOSTS = [
+  "certscore.ai",
+  "www.certscore.ai",
+  "consentcheck.site",
+  "www.consentcheck.site",
+  "localhost:3000",
+  "127.0.0.1:3000",
+  "localhost:3003",
+  "127.0.0.1:3003"
+] as const;
+
+export function getBetterAuthEnv(env: BetterAuthEnvInput = process.env): BetterAuthEnv {
+  return betterAuthEnvSchema.parse(mergeAmplifyEnvironmentSecrets(env as NodeJS.ProcessEnv));
+}
+
+export function getBetterAuthBaseURLConfig(env: BetterAuthEnvInput = process.env) {
+  const values = getBetterAuthEnv(env);
+  const allowedHosts = new Set<string>(BETTER_AUTH_KNOWN_ALLOWED_HOSTS);
+
+  allowedHosts.add(new URL(values.NEXT_PUBLIC_APP_URL).host);
+
+  return {
+    allowedHosts: Array.from(allowedHosts),
+    fallback: values.NEXT_PUBLIC_APP_URL,
+    protocol: "auto" as const
+  };
 }
 
 const BETTER_AUTH_ENV_KEYS = new Set([

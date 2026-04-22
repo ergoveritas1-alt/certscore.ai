@@ -5,7 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { getWritePool } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./constants";
-import { getBetterAuthEnv } from "./env";
+import { getBetterAuthBaseURLConfig, getBetterAuthEnv } from "./env";
 
 function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
   if (!env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -46,9 +46,10 @@ function createAuth() {
       },
       database: {
         generateId: () => crypto.randomUUID()
-      }
+      },
+      trustedProxyHeaders: true
     },
-    baseURL: env.NEXT_PUBLIC_APP_URL,
+    baseURL: getBetterAuthBaseURLConfig(env),
     database: getWritePool(),
     emailAndPassword: {
       enabled: true,
@@ -124,7 +125,6 @@ function createAuth() {
     socialProviders: {
       google: getGoogleProviderConfig(env)
     },
-    trustedOrigins: [env.NEXT_PUBLIC_APP_URL],
     user: {
       fields: {
         createdAt: "created_at",
