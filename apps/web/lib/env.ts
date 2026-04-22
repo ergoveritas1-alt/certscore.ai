@@ -62,3 +62,17 @@ export function isGoogleAuthEnabled(env: NodeJS.ProcessEnv = process.env) {
   const value = env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED?.trim().toLowerCase();
   return value === "1" || value === "true";
 }
+
+const GOOGLE_AUTH_ALLOWED_HOSTS = new Set([
+  "certscore.ai",
+  "localhost:3000",
+  "127.0.0.1:3000"
+]);
+
+function normalizeHost(host: string | null | undefined) {
+  return host?.split(",")[0]?.trim().toLowerCase() ?? "";
+}
+
+export function isGoogleAuthAllowedForHost(host: string | null | undefined) {
+  return GOOGLE_AUTH_ALLOWED_HOSTS.has(normalizeHost(host));
+}

@@ -1,8 +1,9 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { LoginForm } from "../../../components/auth/login-form";
 import { SiteHeader } from "../../../components/layout/site-header";
-import { isGoogleAuthEnabled } from "../../../lib/env";
+import { isGoogleAuthAllowedForHost, isGoogleAuthEnabled } from "../../../lib/env";
 import { getCurrentUser } from "../../../server/auth";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,9 @@ export default async function LoginPage() {
     redirect("/app");
   }
 
-  const allowGoogle = isGoogleAuthEnabled();
+  const requestHeaders = await headers();
+  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const allowGoogle = isGoogleAuthEnabled() && isGoogleAuthAllowedForHost(requestHost);
 
   return (
     <main className="min-h-screen bg-slate-50">

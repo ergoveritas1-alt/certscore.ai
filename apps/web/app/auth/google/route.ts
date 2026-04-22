@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isGoogleAuthAllowedForHost, isGoogleAuthEnabled } from "../../../lib/env";
 import { getAuth } from "../../../server/better-auth/auth";
 
 function getSafeRedirectPath(nextPath: string | null) {
@@ -11,6 +12,12 @@ function getSafeRedirectPath(nextPath: string | null) {
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
+  const requestHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? requestUrl.host;
+
+  if (!isGoogleAuthEnabled() || !isGoogleAuthAllowedForHost(requestHost)) {
+    return NextResponse.redirect(new URL("/login?error=google_sign_in_unavailable", requestUrl.origin));
+  }
+
   const nextPath = getSafeRedirectPath(requestUrl.searchParams.get("next"));
   const callbackURL = new URL(nextPath, requestUrl.origin).toString();
   const errorCallbackURL = new URL("/login?error=google_sign_in_failed", requestUrl.origin).toString();
