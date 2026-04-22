@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "draft:financial-claims-example": "node --import tsx ./src/financial-commercial-claims-draft.ts",
+    "promote:financial-claims": "node --import tsx ./src/financial-commercial-claims-promote.ts"
   }
 }

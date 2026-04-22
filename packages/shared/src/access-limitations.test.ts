@@ -72,6 +72,23 @@ test("keeps transport failures retryable with short cooldown", () => {
   assert.equal(policy.cooldownHours, 2);
 });
 
+test("treats successful homepage fetches with missing normalized body as retryable degradation", () => {
+  const policy = deriveRetryPolicy({
+    accessPostureClass: "tolerant",
+    homepageFetchStatus: "ok",
+    homepageHttpStatus: 200,
+    normalizedBodyMissing: true,
+    pagesScanned: 1
+  });
+
+  assert.deepEqual(policy, {
+    cooldownHours: 2,
+    maxPassiveVerificationUrls: 4,
+    retryRecommended: true,
+    stopHomepageRetry: false
+  });
+});
+
 test("escalates egress risk after repeated distinct-domain 403 blocks", () => {
   const decision = deriveEgressRiskDecision(
     egressRiskFixtures.repeated403ClusterTriggeringHighBlockRiskMode!
