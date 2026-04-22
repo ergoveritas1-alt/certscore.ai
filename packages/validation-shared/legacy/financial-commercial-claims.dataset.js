@@ -278,6 +278,126 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
         }
     }),
     example({
+        bucket: "positive_borderline",
+        id: "financial-offer-backtest-teaser-no-disclaimer",
+        split: "eval",
+        notes: "Borderline financial-offer backtest teaser should still surface when it invites conversion without a simulation disclaimer.",
+        input: {
+            adjacentAfter: "Open your account to unlock the full model.",
+            adjacentBefore: "Strategy preview",
+            blockHeading: "Backtested signal engine",
+            blockText: "See how our backtested signal engine would have returned 18% using prior market data.",
+            candidateSignals: ["simulated", "returns", "investment_context", "cta", "percentage"],
+            pageType: "financial_offer",
+            pageUrl: "https://example.com/backtest-offer",
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "simulated_performance_claim",
+            claimText: "backtested signal engine would have returned 18%",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: true,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.8,
+            rationaleShort: "Backtested performance teaser appears in a conversion-oriented financial offer without a nearby hypothetical-results disclaimer."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["simulated_performance_without_disclosure"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "positive_borderline",
+        id: "financial-offer-superlative-signals-claim",
+        split: "eval",
+        notes: "Borderline superlative signals copy should still surface when it ranks the product without qualification.",
+        input: {
+            adjacentAfter: "Join the desk today.",
+            adjacentBefore: "Forex signals",
+            blockHeading: "Top-ranked analyst desk",
+            blockText: "The highest-rated forex signals desk for active traders.",
+            candidateSignals: ["superlative", "investment_context", "cta"],
+            pageType: "financial_offer",
+            pageUrl: "https://example.com/top-signals",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "superlative_claim",
+            claimText: "highest-rated forex signals desk",
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: true,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.79,
+            rationaleShort: "Signals-offer copy uses an unqualified ranking claim in a financial offer context."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["unqualified_superlative_claim_detected"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "positive_borderline",
+        id: "lead-gen-crypto-enrollment-closes-tonight",
+        split: "eval",
+        notes: "Borderline lead-gen urgency copy should still surface when financial-enrollment pressure is tied to same-day signup.",
+        input: {
+            adjacentAfter: "Reserve your seat now.",
+            adjacentBefore: "Crypto income workshop",
+            blockHeading: "Enrollment closes tonight",
+            blockText: "Enrollment closes tonight for traders who want access to our crypto income workshop.",
+            candidateSignals: ["urgency", "cta", "investment_context", "earnings"],
+            pageType: "lead_generation_offer",
+            pageUrl: "https://example.com/crypto-workshop",
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "urgency_conversion_claim",
+            claimText: "Enrollment closes tonight",
+            commercialContext: true,
+            contextType: "lead_generation_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: true,
+            urgencyTiedToConversion: true,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.77,
+            rationaleShort: "Enrollment-deadline language is tied to a financial lead-generation CTA without balancing context."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["financial_urgency_pressure_tactic_detected"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
         bucket: "negative_financial",
         id: "staking-apy-with-disclosure",
         split: "eval",
@@ -592,6 +712,86 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
             feeDisclosurePresent: false,
             confidence: 0.85,
             rationaleShort: "Generic commerce superlative language lacks the finance or investment context required for this lane."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: "not_applicable",
+            shouldShowFinancialCard: true
+        }
+    }),
+    example({
+        bucket: "negative_nonfinancial",
+        id: "saas-margin-improvement-negative",
+        split: "eval",
+        notes: "Margin-improvement SaaS copy should not become a financial claim when it is clearly about business operations tooling.",
+        input: {
+            adjacentAfter: "Talk to sales.",
+            adjacentBefore: "Revenue operations suite",
+            blockHeading: "Improve profit margins",
+            blockText: "Improve profit margins with automated inventory planning and demand forecasting.",
+            candidateSignals: ["earnings", "cta"],
+            pageType: "marketing_page",
+            pageUrl: "https://example.com/inventory-ops",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: false,
+            claimType: "none",
+            claimText: null,
+            commercialContext: false,
+            contextType: "unknown",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.84,
+            rationaleShort: "Margin-improvement language is operational SaaS marketing, not a financial or investment offer."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: "omit",
+            shouldShowFinancialCard: false
+        }
+    }),
+    example({
+        bucket: "negative_nonfinancial",
+        id: "generic-growth-platform-performance-negative",
+        split: "eval",
+        notes: "Performance superlatives for ad-tech or growth software should stay out of the financial lane without investment context.",
+        input: {
+            adjacentAfter: "Start your free trial.",
+            adjacentBefore: "Growth platform",
+            blockHeading: "Best-performing campaigns",
+            blockText: "Launch best-performing campaigns with AI creative testing and audience automation.",
+            candidateSignals: ["superlative", "returns", "cta"],
+            pageType: "homepage",
+            pageUrl: "https://example.com/growth-platform",
+            sourceType: "document_source"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "superlative_claim",
+            claimText: "best-performing campaigns",
+            commercialContext: true,
+            contextType: "marketing_page",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: true,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.82,
+            rationaleShort: "Performance superlative language is present, but the copy is ordinary marketing-tech promotion rather than a financial offer."
         },
         pageExpectation: {
             expectedFindingIds: [],

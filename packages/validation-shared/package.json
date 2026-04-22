@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "draft:financial-claims-example": "node --import tsx ./src/financial-commercial-claims-draft.ts",
-    "promote:financial-claims": "node --import tsx ./src/financial-commercial-claims-promote.ts"
+    "promote:financial-claims": "node --import tsx ./src/financial-commercial-claims-promote.ts",
+    "report:financial-claims-coverage": "node --import tsx ./src/financial-commercial-claims-coverage.ts"
   }
 }
