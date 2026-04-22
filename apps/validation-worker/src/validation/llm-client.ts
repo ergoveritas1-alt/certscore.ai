@@ -10,6 +10,27 @@ import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
+type OpenAiJsonPayload = {
+  messages: Array<{
+    content: string;
+    role: "system" | "user" | "assistant";
+  }>;
+  model?: string;
+  response_format?: {
+    type: "json_object";
+  };
+  temperature?: number;
+};
+
+type OpenAiJsonResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  model?: string;
+};
+
 function agreementScoreForVerdict(verdict: "supported" | "inconclusive" | "not_supported"): ValidationAgreementScore {
   if (verdict === "supported") {
     return 100;
@@ -32,6 +53,70 @@ function extractJson(raw: string) {
   return candidate;
 }
 
+async function callOpenAiJson(input: { apiKey: string; payload: OpenAiJsonPayload }) {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input.payload)
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`OpenAI call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+  }
+
+  return (await response.json()) as OpenAiJsonResponse;
+}
+
+function errorLooksLikeQuotaFailure(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("429") || message.includes("insufficient_quota") || message.includes("quota");
+}
+
+async function callOpenAiJsonWithQuotaFallback(input: { apiKey: string; payload: OpenAiJsonPayload; fallbackModel?: string }) {
+  try {
+    return await callOpenAiJson(input);
+  } catch (error) {
+    const fallbackModel = input.fallbackModel?.trim();
+    const primaryModel = input.payload.model?.trim();
+    const canRetryWithFallback =
+      Boolean(fallbackModel) && Boolean(primaryModel) && fallbackModel !== primaryModel && errorLooksLikeQuotaFailure(error);
+
+    if (!canRetryWithFallback) {
+      throw error;
+    }
+
+    return await callOpenAiJson({
+      apiKey: input.apiKey,
+      payload: {
+        ...input.payload,
+        model: fallbackModel
+      }
+    });
+  }
+}
+
+function buildFallbackValidationVerdict(input: { model: string; note: string }) {
+  return {
+    agreementScore: 50 as ValidationAgreementScore,
+    confidence: 0.2,
+    evidence: {
+      note: input.note
+    },
+    model: input.model,
+    promptVersion: VALIDATION_PROMPT_VERSION,
+    rationale: input.note,
+    verdict: "inconclusive" as const
+  };
+}
+
 export async function validateFindingWithLlm(input: {
   domain: string;
   finding: Record<string, unknown>;
@@ -40,66 +125,51 @@ export async function validateFindingWithLlm(input: {
   const env = getWorkerEnv();
 
   if (!env.OPENAI_API_KEY) {
-    return {
-      agreementScore: 50 as ValidationAgreementScore,
-      confidence: 0.2,
-      evidence: {
-        note: "OPENAI_API_KEY not configured"
-      },
+    return buildFallbackValidationVerdict({
       model: env.VALIDATION_OPENAI_MODEL,
-      promptVersion: VALIDATION_PROMPT_VERSION,
-      rationale: "The validation worker could not call the model because OPENAI_API_KEY is not configured.",
-      verdict: "inconclusive" as const
-    };
+      note: "The validation worker could not call the model because OPENAI_API_KEY is not configured."
+    });
   }
 
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: env.VALIDATION_OPENAI_MODEL,
-      temperature: 0,
-      response_format: {
-        type: "json_object"
-      },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You validate website compliance scan findings. Return JSON with keys verdict, confidence, rationale, and evidence. Verdict must be supported, inconclusive, or not_supported. Use inconclusive when evidence is weak. Do not invent evidence. Use the narrowest conclusion supported by the record. Prefer direct, specific evidence over indirect, adjacent, or generic signals. Do not upgrade generic indicators, heuristic flags, or evidence from another page into a stronger substantive conclusion unless the record explicitly supports that conclusion. When direct and indirect evidence conflict, prefer the direct evidence. When evidence is mixed, scope is unclear, or support is indirect, default to inconclusive rather than a stronger claim. Distinguish what the evidence directly supports from what it does not clearly establish."
+  let payload: OpenAiJsonResponse;
+  try {
+    payload = await callOpenAiJsonWithQuotaFallback({
+      apiKey: env.OPENAI_API_KEY,
+      fallbackModel: env.VALIDATION_NANO_MODEL,
+      payload: {
+        model: env.VALIDATION_OPENAI_MODEL,
+        temperature: 0,
+        response_format: {
+          type: "json_object"
         },
-        {
-          role: "user",
-          content: JSON.stringify(
-            {
-              domain: input.domain,
-              finding: input.finding,
-              scanEvidence: input.scanEvidence
-            },
-            null,
-            2
-          )
-        }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI validation call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+        messages: [
+          {
+            role: "system",
+            content:
+              "You validate website compliance scan findings. Return JSON with keys verdict, confidence, rationale, and evidence. Verdict must be supported, inconclusive, or not_supported. Use inconclusive when evidence is weak. Do not invent evidence. Use the narrowest conclusion supported by the record. Prefer direct, specific evidence over indirect, adjacent, or generic signals. Do not upgrade generic indicators, heuristic flags, or evidence from another page into a stronger substantive conclusion unless the record explicitly supports that conclusion. When direct and indirect evidence conflict, prefer the direct evidence. When evidence is mixed, scope is unclear, or support is indirect, default to inconclusive rather than a stronger claim. Distinguish what the evidence directly supports from what it does not clearly establish."
+          },
+          {
+            role: "user",
+            content: JSON.stringify(
+              {
+                domain: input.domain,
+                finding: input.finding,
+                scanEvidence: input.scanEvidence
+              },
+              null,
+              2
+            )
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Unknown OpenAI validation error.";
+    return buildFallbackValidationVerdict({
+      model: env.VALIDATION_NANO_MODEL || env.VALIDATION_OPENAI_MODEL,
+      note: `The validation worker could not complete the model call and fell back to inconclusive review. ${reason}`
+    });
   }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string;
-      };
-    }>;
-    model?: string;
-  };
 
   const rawContent = payload.choices?.[0]?.message?.content ?? "";
   const parsed = JSON.parse(extractJson(rawContent)) as {
@@ -135,6 +205,7 @@ function validationVerdictForFinancialJudge(verdict: "confirm" | "keep_audit_onl
 }
 
 function buildFallbackFinancialJudgeVerdict(note: string) {
+  const env = getWorkerEnv();
   const fallbackVerdict = {
     buyerFacingEligible: false,
     confidence: 0.2,
@@ -151,7 +222,7 @@ function buildFallbackFinancialJudgeVerdict(note: string) {
       financialJudgeVerdict: fallbackVerdict,
       note
     },
-    model: getWorkerEnv().VALIDATION_OPENAI_MODEL,
+    model: env.VALIDATION_NANO_MODEL || env.VALIDATION_OPENAI_MODEL,
     promptVersion: VALIDATION_PROMPT_VERSION,
     rationale: note,
     verdict: validationVerdictForFinancialJudge(fallbackVerdict.verdict)
@@ -168,40 +239,31 @@ export async function validateFinancialFindingWithLlm(input: FinancialJudgeInput
     );
   }
 
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: env.VALIDATION_OPENAI_MODEL,
-      temperature: 0,
-      response_format: {
-        type: "json_object"
-      },
-      messages: [
-        {
-          role: "user",
-          content: buildFinancialJudgePrompt(parsedInput)
-        }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI financial judge call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+  let payload: OpenAiJsonResponse;
+  try {
+    payload = await callOpenAiJsonWithQuotaFallback({
+      apiKey: env.OPENAI_API_KEY,
+      fallbackModel: env.VALIDATION_NANO_MODEL,
+      payload: {
+        model: env.VALIDATION_OPENAI_MODEL,
+        temperature: 0,
+        response_format: {
+          type: "json_object"
+        },
+        messages: [
+          {
+            role: "user",
+            content: buildFinancialJudgePrompt(parsedInput)
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Unknown OpenAI financial judge error.";
+    return buildFallbackFinancialJudgeVerdict(
+      `The financial judge could not complete the model call and was downgraded to audit-only. ${reason}`
+    );
   }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string;
-      };
-    }>;
-    model?: string;
-  };
 
   const rawContent = payload.choices?.[0]?.message?.content ?? "";
   let judge;

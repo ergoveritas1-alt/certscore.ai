@@ -5,6 +5,18 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const ENRICHMENT_SOURCE = "llm_vendor_enrichment";
 const RUNTIME_VENDOR_SOURCE = "hybrid_runtime_signature";
 
+type OpenAiVendorPayload = {
+  messages: Array<{
+    content: string;
+    role: "system" | "user";
+  }>;
+  model?: string;
+  response_format?: {
+    type: "json_object";
+  };
+  temperature?: number;
+};
+
 type VendorCandidate = {
   beforeConsent: boolean;
   collectionEndpointType: string;
@@ -144,6 +156,39 @@ function extractJson(raw: string) {
     return candidate.slice(firstBrace, lastBrace + 1);
   }
   return candidate;
+}
+
+async function callOpenAiVendorJson(input: { apiKey: string; payload: OpenAiVendorPayload }) {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input.payload)
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`OpenAI vendor enrichment call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+  }
+
+  return (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  };
+}
+
+function errorLooksLikeQuotaFailure(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("429") || message.includes("insufficient_quota") || message.includes("quota");
 }
 
 function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -375,51 +420,60 @@ async function inferVendorsWithLlm(input: { candidates: VendorCandidate[]; domai
     return [];
   }
 
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
+  const payloadBody: OpenAiVendorPayload = {
+    model: env.VALIDATION_OPENAI_MODEL,
+    temperature: 0,
+    response_format: {
+      type: "json_object"
     },
-    body: JSON.stringify({
-      model: env.VALIDATION_OPENAI_MODEL,
-      temperature: 0,
-      response_format: {
-        type: "json_object"
+    messages: [
+      {
+        role: "system",
+        content:
+          "You classify unresolved website vendors from hostnames, sample URLs, and cookie names. Return JSON with key vendors. Each item must include canonicalName, vendorCategory, domains, cookieNames, aliases, confidence, and rationale. Prefer precise product or company names. If the evidence looks first-party owned, name the site owner service cluster instead of inventing a third-party vendor. Allowed vendorCategory values: advertising, analytics, functional, social, identity, session_replay, personalization, unknown."
       },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You classify unresolved website vendors from hostnames, sample URLs, and cookie names. Return JSON with key vendors. Each item must include canonicalName, vendorCategory, domains, cookieNames, aliases, confidence, and rationale. Prefer precise product or company names. If the evidence looks first-party owned, name the site owner service cluster instead of inventing a third-party vendor. Allowed vendorCategory values: advertising, analytics, functional, social, identity, session_replay, personalization, unknown."
-        },
-        {
-          role: "user",
-          content: JSON.stringify(
-            {
-              domain: input.domain,
-              unresolvedCandidates: input.candidates
-            },
-            null,
-            2
-          )
-        }
-      ]
-    })
-  });
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            domain: input.domain,
+            unresolvedCandidates: input.candidates
+          },
+          null,
+          2
+        )
+      }
+    ]
+  };
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI vendor enrichment call failed with ${response.status}${errorBody ? `: ${errorBody}` : ""}`);
+  let payload;
+  try {
+    payload = await callOpenAiVendorJson({
+      apiKey: env.OPENAI_API_KEY,
+      payload: payloadBody
+    });
+  } catch (error) {
+    const fallbackModel = env.VALIDATION_NANO_MODEL?.trim();
+    const primaryModel = env.VALIDATION_OPENAI_MODEL?.trim();
+    const canRetryWithFallback =
+      Boolean(fallbackModel) &&
+      Boolean(primaryModel) &&
+      fallbackModel !== primaryModel &&
+      errorLooksLikeQuotaFailure(error);
+
+    if (!canRetryWithFallback) {
+      throw error;
+    }
+
+    payload = await callOpenAiVendorJson({
+      apiKey: env.OPENAI_API_KEY,
+      payload: {
+        ...payloadBody,
+        model: fallbackModel
+      }
+    });
   }
 
-  const payload = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string;
-      };
-    }>;
-  };
   const rawContent = payload.choices?.[0]?.message?.content ?? "";
   const parsed = JSON.parse(extractJson(rawContent)) as {
     vendors?: Array<{
@@ -668,11 +722,19 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
         });
       } catch (error) {
         llmSkippedReason = error instanceof Error ? error.message : "llm_enrichment_failed";
-        console.warn("Vendor enrichment LLM inference failed; continuing with registry-only matches.", {
-          error: llmSkippedReason,
-          hostname: input.hostname,
-          scanId: input.scanId
-        });
+        if (errorLooksLikeQuotaFailure(error)) {
+          console.info("Vendor enrichment LLM quota exhausted; continuing with registry-only matches.", {
+            error: llmSkippedReason,
+            hostname: input.hostname,
+            scanId: input.scanId
+          });
+        } else {
+          console.warn("Vendor enrichment LLM inference failed; continuing with registry-only matches.", {
+            error: llmSkippedReason,
+            hostname: input.hostname,
+            scanId: input.scanId
+          });
+        }
       }
     }
 
