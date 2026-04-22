@@ -24,7 +24,7 @@ export async function sendFeedbackAction(
   }
 
   const gmailConfig = getGmailConfig();
-  const toEmail = process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@ergoveritas.com";
+  const toEmail = process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@certscore.ai";
 
   if (!gmailConfig) {
     return {

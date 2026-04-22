@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getDashboardContext } from "../auth";
 
-const DEFAULT_PLATFORM_ADMIN_EMAILS = new Set(["bmasek@gmail.com", "ben@ergoveritas.com"]);
+const DEFAULT_PLATFORM_ADMIN_EMAILS = new Set(["bmasek@gmail.com", "ben@certscore.ai"]);
 
 function parseAdminEmails(value: string | undefined) {
   return new Set([
