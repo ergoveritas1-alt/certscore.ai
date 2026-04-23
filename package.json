@@ -17,6 +17,7 @@
     "dev:control-plane": "bash ./scripts/run-validation-dev.sh",
     "dev:all": "bash ./scripts/run-all-dev.sh",
     "dev:certscore:web": "pnpm --filter @website-signal-risk-scanner/web dev",
+    "dev:storage:local": "bash ./scripts/run-local-minio.sh",
     "dev:scanner:local": "bash ./scripts/run-ws01-scanner-dev.sh",
     "dev:validation": "bash ./scripts/run-validation-dev.sh",
     "dev:validation:local": "pnpm --parallel --stream --filter @website-signal-risk-scanner/web --filter @website-signal-risk-scanner/validation-worker run dev",

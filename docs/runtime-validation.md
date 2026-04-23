@@ -13,6 +13,7 @@ Use `WS01` for scanner-runtime-specific deploy and operational validation.
 
 Run these first:
 
+- `pnpm dev:storage:local`
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
 - `pnpm --filter @website-signal-risk-scanner/web check-runtime`
 - `pnpm --filter @website-signal-risk-scanner/validation-worker check-env`
@@ -20,6 +21,8 @@ Run these first:
 
 Expected result:
 
+- local MinIO starts against the `apps/web/.env.local` S3 endpoint when that endpoint is local
+- the configured `S3_BUCKET` exists in local MinIO
 - web env check passes
 - web runtime check passes
 - validation env check passes in `WC01`
@@ -33,9 +36,15 @@ If a check fails:
 
 - missing env var: update `apps/web/.env.local` or deployment settings
 - database failure: verify `DATABASE_URL` and apply migrations
-- storage failure: create the bucket referenced by `S3_BUCKET`
+- storage failure with `ECONNREFUSED` on `127.0.0.1:9000`: start `pnpm dev:storage:local`
+- storage failure after MinIO is live: verify the bucket referenced by `S3_BUCKET`
 - auth-table failure: apply the latest migrations and confirm the Better Auth tables exist in the active PostgreSQL database
 - Chromium failure: run `pnpm --filter @website-signal-risk-scanner/validation-worker exec playwright install chromium` for `WC01` validation, or the equivalent `WS01` install flow for the standalone scanner
+
+Local validation execution also requires the standalone scanner service from `WS01`:
+
+- `pnpm dev:scanner:local`
+- `pnpm dev:validation:worker`
 
 ## 2. Auth validation
 

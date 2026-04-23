@@ -29,11 +29,43 @@ export function getS3Client() {
   return s3Client;
 }
 
-export async function checkStorageBucketExists(bucket = getStorageBucketName()) {
+export async function inspectStorageBucketAccess(bucket = getStorageBucketName()) {
   try {
-    await getS3Client().send(new HeadBucketCommand({ Bucket: bucket }));
-    return true;
-  } catch {
-    return false;
+    const result = await getS3Client().send(new HeadBucketCommand({ Bucket: bucket }));
+    return {
+      bucket,
+      details: {
+        extendedRequestId: result.$metadata.extendedRequestId ?? null,
+        httpStatusCode: result.$metadata.httpStatusCode ?? null,
+        requestId: result.$metadata.requestId ?? null
+      },
+      ok: true as const
+    };
+  } catch (error) {
+    const candidate = error as {
+      $metadata?: { extendedRequestId?: string; httpStatusCode?: number; requestId?: string };
+      Code?: string;
+      code?: string;
+      message?: string;
+      name?: string;
+    };
+
+    return {
+      bucket,
+      details: {
+        code: candidate.Code ?? candidate.code ?? null,
+        extendedRequestId: candidate.$metadata?.extendedRequestId ?? null,
+        httpStatusCode: candidate.$metadata?.httpStatusCode ?? null,
+        message: candidate.message ?? String(error),
+        name: candidate.name ?? null,
+        requestId: candidate.$metadata?.requestId ?? null
+      },
+      ok: false as const
+    };
   }
+}
+
+export async function checkStorageBucketExists(bucket = getStorageBucketName()) {
+  const inspection = await inspectStorageBucketAccess(bucket);
+  return inspection.ok;
 }

@@ -1,4 +1,4 @@
-import { checkStorageBucketExists, getStorageBucketName, hasDatabaseEnv, hasS3Env, query } from "@website-signal-risk-scanner/db";
+import { getS3Env, hasDatabaseEnv, hasS3Env, inspectStorageBucketAccess, query } from "@website-signal-risk-scanner/db";
 import { chromium } from "playwright";
 import { z } from "zod";
 
@@ -36,16 +36,23 @@ async function checkDatabase() {
 
 async function checkStorage() {
   try {
-    const bucketExists = await checkStorageBucketExists();
-    if (!bucketExists) {
+    const env = getS3Env();
+    const inspection = await inspectStorageBucketAccess(env.S3_BUCKET);
+    if (!inspection.ok) {
+      const endpointDetail = env.S3_ENDPOINT ? ` endpoint=${env.S3_ENDPOINT}` : "";
+      const codeDetail = inspection.details.code ? ` code=${inspection.details.code}` : "";
+      const statusDetail =
+        typeof inspection.details.httpStatusCode === "number"
+          ? ` http=${inspection.details.httpStatusCode}`
+          : "";
       fail(
         "validation storage",
-        `Could not access configured S3 bucket ${getStorageBucketName()}. Check bucket existence, credentials, and endpoint configuration.`
+        `Could not access configured S3 bucket ${env.S3_BUCKET}.${endpointDetail}${codeDetail}${statusDetail} ${inspection.details.message}`.trim()
       );
       return false;
     }
 
-    pass("validation storage", `Connected to S3-compatible storage bucket ${getStorageBucketName()}.`);
+    pass("validation storage", `Connected to S3-compatible storage bucket ${env.S3_BUCKET}.`);
     return true;
   } catch (error) {
     fail("validation storage", error instanceof Error ? error.message : "Unknown error");

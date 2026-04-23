@@ -108,11 +108,12 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - Google OAuth if enabled
    - email/password and verification settings as needed
 7. Configure auth redirect URLs:
-   - use the stable callback alias exposed by the app:
-   - `http://localhost:3000/auth/callback`
-   - `http://127.0.0.1:3000/auth/callback`
-   - `https://certscore.ai/auth/callback`
-   - the app forwards that route to Better Auth's internal callback handler
+   - Google OAuth must allow Better Auth's provider callback route:
+   - `http://localhost:3000/api/auth/callback/google`
+   - `http://127.0.0.1:3000/api/auth/callback/google`
+   - `https://certscore.ai/api/auth/callback/google`
+   - `https://consentcheck.site/api/auth/callback/google`
+   - `/auth/callback` is only an app alias route; it is not the redirect URI Better Auth initiates with Google
 8. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
    - local database and auth secrets should come from the dev environment
@@ -160,10 +161,14 @@ GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users
 
 Use these lightweight checks before first deployment validation:
 
+- `pnpm dev:storage:local`
 - `pnpm --filter @website-signal-risk-scanner/web check-env`
 - `pnpm check-env:validation`
 - `pnpm --filter @website-signal-risk-scanner/validation-worker check-env`
 - `pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime`
+
+For local validation runs, `pnpm dev:storage:local` starts MinIO against the `apps/web/.env.local` S3 settings and creates the configured bucket when needed.
+Run it alongside `pnpm dev:scanner:local` and `pnpm dev:validation:worker`.
 
 Use this runtime smoke helper:
 

@@ -135,6 +135,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 const DEFAULT_QUEUED_TIMEOUT_MS = 2 * 60_000;
+const WORKER_HEARTBEAT_WINDOW_MS = 90_000;
 
 function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
@@ -294,6 +295,52 @@ async function loadScanState(scanId: string) {
   };
 }
 
+async function hasHealthyValidationWorker() {
+  const settings = await queryOne<{ last_worker_heartbeat_at: string | null }>(
+    `
+      select last_worker_heartbeat_at
+      from validation_settings
+      where singleton_key = 'default'
+    `,
+    [],
+    { readOnly: true }
+  );
+
+  if (!settings?.last_worker_heartbeat_at) {
+    return false;
+  }
+
+  const heartbeatAt = Date.parse(settings.last_worker_heartbeat_at);
+  return Number.isFinite(heartbeatAt) && Date.now() - heartbeatAt <= WORKER_HEARTBEAT_WINDOW_MS;
+}
+
+async function waitForValidationCompletion(runId: string, input: { pollMs: number; timeoutMs: number }) {
+  const deadline = Date.now() + input.timeoutMs;
+  let lastStatus: string | null = null;
+
+  while (Date.now() < deadline) {
+    const run = await getValidationRun(runId);
+    if (!run) {
+      throw new Error(`Validation run ${runId} disappeared while waiting for completion.`);
+    }
+
+    if (run.status !== lastStatus) {
+      console.error(
+        `[fresh-smoke] validation ${runId} status=${run.status} started_at=${run.started_at ?? "null"} completed_at=${run.completed_at ?? "null"}`
+      );
+      lastStatus = run.status;
+    }
+
+    if (run.status === "completed" || run.status === "failed") {
+      return run;
+    }
+
+    await sleep(input.pollMs);
+  }
+
+  throw new Error(`Timed out waiting for validation run ${runId} after ${formatDurationMs(input.timeoutMs)}.`);
+}
+
 async function waitForScanCompletion(scanId: string, input: { pollMs: number; timeoutMs: number }) {
   const deadline = Date.now() + input.timeoutMs;
   const queuedDeadline = Date.now() + DEFAULT_QUEUED_TIMEOUT_MS;
@@ -363,24 +410,31 @@ async function runFreshSmokeForTarget(
   }
 
   const validationStartedAtIso = new Date().toISOString();
-  await updateValidationRun(run.id, {
-    started_at: validationStartedAtIso,
-    status: "ranking"
-  });
-  await processValidationRankJob(run.id);
+  const workerHealthy = await hasHealthyValidationWorker();
 
-  let refreshedRun = await getValidationRun(run.id);
-  if (!refreshedRun) {
-    throw new Error(`Validation run ${run.id} disappeared after ranking.`);
-  }
+  let refreshedRun;
+  if (workerHealthy) {
+    refreshedRun = await waitForValidationCompletion(run.id, options);
+  } else {
+    await updateValidationRun(run.id, {
+      started_at: validationStartedAtIso,
+      status: "ranking"
+    });
+    await processValidationRankJob(run.id);
 
-  if (refreshedRun.status === "validating") {
-    await processValidationVerdictJob(run.id);
     refreshedRun = await getValidationRun(run.id);
-  }
+    if (!refreshedRun) {
+      throw new Error(`Validation run ${run.id} disappeared after ranking.`);
+    }
 
-  if (!refreshedRun) {
-    throw new Error(`Validation run ${run.id} disappeared after verdicting.`);
+    if (refreshedRun.status === "validating") {
+      await processValidationVerdictJob(run.id);
+      refreshedRun = await getValidationRun(run.id);
+    }
+
+    if (!refreshedRun) {
+      throw new Error(`Validation run ${run.id} disappeared after verdicting.`);
+    }
   }
 
   const findings = await loadValidationRunFindings(run.id);
