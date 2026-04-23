@@ -1888,6 +1888,70 @@ test("deriveValidationFindings promotes guaranteed financial claims into restore
   ]);
 });
 
+test("deriveValidationFindings suppresses faq-style guarantee questions as earnings or guaranteed-outcome claims", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-guarantee-faq",
+          matched_text: "Do VIP Indicators guarantee profits?",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        },
+        {
+          evidence_id: "ev-guarantee-answer",
+          matched_text:
+            "No trading indicator can guarantee profits. VIP Indicators are designed to support better analysis and decision-making, but trading always involves risk.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        },
+        {
+          evidence_id: "ev-pricing",
+          matched_text: "Simple & Transparent Pricing",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-guarantee-faq", "ev-guarantee-answer"],
+          id: "sig-guarantee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com",
+          payload: {
+            matchedTexts: [
+              "Do VIP Indicators guarantee profits?",
+              "No trading indicator can guarantee profits. VIP Indicators are designed to support better analysis and decision-making, but trading always involves risk."
+            ]
+          },
+          signal_key: "financial.guaranteed_return_language_present"
+        },
+        {
+          evidence_refs: ["ev-pricing"],
+          id: "sig-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com",
+          payload: {
+            matchedTexts: ["Simple & Transparent Pricing"]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected"), false);
+});
+
 test("deriveValidationFindings promotes simulated performance and fee-opacity financial claims", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
@@ -1957,7 +2021,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
       pageEvidence: [
         {
           evidence_id: "ev-profit",
-          matched_text: "Profit",
+          matched_text: "Profit from our forex trading ideas with stronger weekly returns.",
           metadata: {
             matchedPattern: "\\b(?:apy|apr|annual percentage yield|yield|return(?:s)?|roi|profit(?:s)?|alpha|outperform(?:ance)?)\\b"
           },
@@ -1967,7 +2031,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
         },
         {
           evidence_id: "ev-return",
-          matched_text: "return",
+          matched_text: "Return targets are highlighted for active forex members.",
           metadata: {
             matchedPattern: "\\b(?:apy|apr|annual percentage yield|yield|return(?:s)?|roi|profit(?:s)?|alpha|outperform(?:ance)?)\\b"
           },
@@ -1977,7 +2041,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
         },
         {
           evidence_id: "ev-free",
-          matched_text: "Free",
+          matched_text: "Free community access is promoted before the premium upgrade.",
           metadata: {
             matchedPattern: "\\b(?:free|zero fees?|no fees?|bonus|promo(?:tional)?|save\\s+\\$?\\d+|\\d{1,3}%\\s+off)\\b"
           },
@@ -1987,7 +2051,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
         },
         {
           evidence_id: "ev-commission",
-          matched_text: "commission",
+          matched_text: "Commission and platform fees may apply after signup.",
           metadata: {
             matchedPattern: "\\b(?:fee|fees|commission|spread|pricing|charges|expense ratio|maker[- ]taker)\\b"
           },
@@ -2004,7 +2068,10 @@ test("deriveValidationFindings merges page-level financial signals into earnings
           page_type: "homepage",
           page_url: "https://fxculturetrading.com/",
           payload: {
-            matchedTexts: ["Profit", "return"]
+            matchedTexts: [
+              "Profit from our forex trading ideas with stronger weekly returns.",
+              "Return targets are highlighted for active forex members."
+            ]
           },
           signal_key: "financial.performance_claim_text_present"
         },
@@ -2015,7 +2082,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
           page_type: "homepage",
           page_url: "https://fxculturetrading.com/",
           payload: {
-            matchedTexts: ["Free"]
+            matchedTexts: ["Free community access is promoted before the premium upgrade."]
           },
           signal_key: "commercial.promo_price_or_free_claim_present"
         },
@@ -2026,7 +2093,7 @@ test("deriveValidationFindings merges page-level financial signals into earnings
           page_type: "homepage",
           page_url: "https://fxculturetrading.com/",
           payload: {
-            matchedTexts: ["commission"]
+            matchedTexts: ["Commission and platform fees may apply after signup."]
           },
           signal_key: "commercial.fee_related_text_present"
         }
@@ -2041,6 +2108,2132 @@ test("deriveValidationFindings merges page-level financial signals into earnings
   assert.ok(pricingFinding);
   assert.equal(earningsFinding?.evidence.pageClassification, "financial_offer");
   assert.equal(pricingFinding?.evidence.pageClassification, "financial_offer");
+});
+
+test("deriveValidationFindings prefers substantive financial claim snippets over bare free-price tokens", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-profit",
+          matched_text: "Start making profit with our forex system and target 8.9% monthly profit.",
+          metadata: {
+            surroundingHeading: "Copy Trading Platform"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com"
+        },
+        {
+          evidence_id: "ev-free",
+          matched_text: "Free",
+          metadata: {
+            matchedPattern: "\\b(?:free|zero fees?|no fees?)\\b"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-profit"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com",
+          payload: {
+            matchedTexts: ["Start making profit with our forex system and target 8.9% monthly profit."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-free"],
+          id: "sig-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com",
+          payload: {
+            matchedTexts: ["Free"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  assert.ok(earningsFinding);
+  assert.equal(
+    earningsFinding?.evidence.matchedSnippet,
+    "Start making profit with our forex system and target 8.9% monthly profit."
+  );
+  assert.deepEqual(earningsFinding?.evidence.policySnippets, [
+    "Start making profit with our forex system and target 8.9% monthly profit.",
+    "Free"
+  ]);
+});
+
+test("deriveValidationFindings prefers the stronger suspicious finance page for duplicated financial claims", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-home-free",
+          matched_text: "Free",
+          metadata: {
+            surroundingHeading: "Home"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://example.com"
+        },
+        {
+          evidence_id: "ev-product-profit",
+          matched_text: "Our funded trader package delivered 12% monthly profit for active forex clients.",
+          metadata: {
+            surroundingHeading: "Performance"
+          },
+          page_role: "primary",
+          page_type: "product_page",
+          page_url: "https://example.com/funded-trader"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-home-free"],
+          id: "sig-home-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://example.com",
+          payload: {
+            matchedTexts: ["Free"]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-home-free"],
+          id: "sig-home-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://example.com",
+          payload: {
+            matchedTexts: ["Free"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-product-profit"],
+          id: "sig-product-performance",
+          page_role: "primary",
+          page_type: "product_page",
+          page_url: "https://example.com/funded-trader",
+          payload: {
+            matchedTexts: ["Our funded trader package delivered 12% monthly profit for active forex clients."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-product-profit"],
+          id: "sig-product-cta",
+          page_role: "primary",
+          page_type: "product_page",
+          page_url: "https://example.com/funded-trader",
+          payload: {
+            matchedTexts: ["Apply now"]
+          },
+          signal_key: "financial.claim_cta_block_present"
+        }
+      ]
+    })
+  );
+
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  assert.ok(earningsFinding);
+  assert.equal(earningsFinding?.pageUrl, "https://example.com/funded-trader");
+  assert.equal(
+    earningsFinding?.evidence.matchedSnippet,
+    "Our funded trader package delivered 12% monthly profit for active forex clients."
+  );
+});
+
+test("deriveValidationFindings suppresses token-only financial evidence fragments", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-profit",
+          matched_text: "Profit",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://tokens-only.example"
+        },
+        {
+          evidence_id: "ev-free",
+          matched_text: "Free",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://tokens-only.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-profit"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://tokens-only.example",
+          payload: {
+            matchedTexts: ["Profit"]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-free"],
+          id: "sig-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://tokens-only.example",
+          payload: {
+            matchedTexts: ["Free"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey.startsWith("financial_review.")), false);
+});
+
+test("deriveValidationFindings requires finding-specific evidence for simulated and superlative financial findings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-profit",
+          matched_text:
+            "If you’re interested in profiting from the multi-trillion pound forex space, then you’ll be buying and selling currencies.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        },
+        {
+          evidence_id: "ev-paper",
+          matched_text: "Paper Trading",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        },
+        {
+          evidence_id: "ev-outperform",
+          matched_text:
+            "In this example, we are going to place a sell order. This means that you believe the USD will outperform GBP.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        },
+        {
+          evidence_id: "ev-fees",
+          matched_text: "On top of trading commissions, the spread ensures that online brokers make money.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-profit"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: [
+              "If you’re interested in profiting from the multi-trillion pound forex space, then you’ll be buying and selling currencies."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-paper"],
+          id: "sig-simulated",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: ["Paper Trading"]
+          },
+          signal_key: "financial.hypothetical_or_backtest_language_present"
+        },
+        {
+          evidence_refs: ["ev-outperform"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: [
+              "In this example, we are going to place a sell order. This means that you believe the USD will outperform GBP."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        },
+        {
+          evidence_refs: ["ev-fees"],
+          id: "sig-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: ["On top of trading commissions, the spread ensures that online brokers make money."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+});
+
+test("deriveValidationFindings suppresses educational best-chance superlatives for finance explainers", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-educational-best",
+          matched_text:
+            "Such tools allow you to analyze historical pricing trends in an advanced matter. In doing so, you stand the best chance possible of evaluating where the future direction of your chosen asset will go.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        },
+        {
+          evidence_id: "ev-fees",
+          matched_text: "On top of trading commissions, the spread ensures that online brokers make money.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-educational-best"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: [
+              "Such tools allow you to analyze historical pricing trends in an advanced matter. In doing so, you stand the best chance possible of evaluating where the future direction of your chosen asset will go."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        },
+        {
+          evidence_refs: ["ev-fees"],
+          id: "sig-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: ["On top of trading commissions, the spread ensures that online brokers make money."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+});
+
+test("deriveValidationFindings suppresses bare most-common educational phrasing for finance explainers", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-most-common",
+          matched_text:
+            "When it comes to funding your brokerage account, you should be offered a number of different payment methods. We’ve listed the most common deposit and withdrawal methods below.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-most-common"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: [
+              "When it comes to funding your brokerage account, you should be offered a number of different payment methods. We’ve listed the most common deposit and withdrawal methods below."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+});
+
+test("deriveValidationFindings suppresses fastest-timeframe payment copy for finance explainers", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-fastest-timeframe",
+          matched_text:
+            "E-Wallet deposits are not only free of charge, but in most cases, they allow you to withdraw your funds in the fastest timeframe.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-fastest-timeframe"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://learn2.trade",
+          payload: {
+            matchedTexts: [
+              "E-Wallet deposits are not only free of charge, but in most cases, they allow you to withdraw your funds in the fastest timeframe."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+});
+
+test("deriveValidationFindings prefers affirmative earnings copy over loss-mitigation wording for suspicious finance pages", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-loss",
+          matched_text:
+            "By doing so, you can limit your losses in case that one of the strategy providers or some other your investments will not yield you expected profit.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com"
+        },
+        {
+          evidence_id: "ev-profit",
+          matched_text:
+            "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit.",
+          metadata: {
+            surroundingHeading: "Copy Trading Platform"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com"
+        },
+        {
+          evidence_id: "ev-free",
+          matched_text: "Free demo account",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-loss", "ev-profit"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com",
+          payload: {
+            matchedTexts: [
+              "By doing so, you can limit your losses in case that one of the strategy providers or some other your investments will not yield you expected profit.",
+              "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-free"],
+          id: "sig-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com",
+          payload: {
+            matchedTexts: ["Free demo account"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-loss"],
+          id: "sig-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://mydigitrade.com",
+          payload: {
+            matchedTexts: [
+              "By doing so, you can limit your losses in case that one of the strategy providers or some other your investments will not yield you expected profit."
+            ]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  const pricingFinding = findings.find((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear");
+
+  assert.equal(
+    earningsFinding?.evidence.matchedSnippet,
+    "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit."
+  );
+  assert.equal(pricingFinding?.evidence.matchedSnippet, "Free demo account");
+});
+
+test("deriveValidationFindings does not upgrade ordinary profitable-trader copy into guaranteed outcomes", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-earnings",
+          matched_text:
+            "Join Marco Trading’s community for free and start earning from proven Forex strategies -no prior knowledge needed.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com"
+        },
+        {
+          evidence_id: "ev-negative-guarantee",
+          matched_text: "No guaranteed returns after extensive effort",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com"
+        },
+        {
+          evidence_id: "ev-free",
+          matched_text: "Join My Free Community Today",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com"
+        },
+        {
+          evidence_id: "ev-fee",
+          matched_text: "Note that the 350€ is entirely for trading; neither I nor the broker charges any fees.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-earnings"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com",
+          payload: {
+            matchedTexts: ["Join Marco Trading’s community for free and start earning from proven Forex strategies -no prior knowledge needed."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-negative-guarantee"],
+          id: "sig-guarantee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com",
+          payload: {
+            matchedTexts: ["No guaranteed returns after extensive effort"]
+          },
+          signal_key: "financial.guaranteed_return_language_present"
+        },
+        {
+          evidence_refs: ["ev-free"],
+          id: "sig-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com",
+          payload: {
+            matchedTexts: ["Join My Free Community Today"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-fee"],
+          id: "sig-fee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://marcosignals.com",
+          payload: {
+            matchedTexts: ["Note that the 350€ is entirely for trading; neither I nor the broker charges any fees."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected"), false);
+});
+
+test("deriveValidationFindings suppresses pricing-unclear findings when pricing is explicitly transparent", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-refund",
+          matched_text:
+            "If you’re not satisfied with the benefits of VIP Indicators, you can request a full refund within our 30-day money-back guarantee. This gives you time to explore the service risk-free and decide if it’s the right fit for your trading needs.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        },
+        {
+          evidence_id: "ev-transparent",
+          matched_text: "There are no hidden charges - just a secure, simple, and transparent payment process.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        },
+        {
+          evidence_id: "ev-pricing",
+          matched_text: "Simple & Transparent Pricing",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-refund"],
+          id: "sig-cancel",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com",
+          payload: {
+            matchedTexts: [
+              "If you’re not satisfied with the benefits of VIP Indicators, you can request a full refund within our 30-day money-back guarantee. This gives you time to explore the service risk-free and decide if it’s the right fit for your trading needs."
+            ]
+          },
+          signal_key: "commercial.cancellation_terms_text_present"
+        },
+        {
+          evidence_refs: ["ev-transparent"],
+          id: "sig-fee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com",
+          payload: {
+            matchedTexts: ["There are no hidden charges - just a secure, simple, and transparent payment process."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-pricing"],
+          id: "sig-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://vip-indicators.com",
+          payload: {
+            matchedTexts: ["Simple & Transparent Pricing"]
+          },
+          signal_key: "commercial.pricing_page_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings prefers commercial package claims over educational strategy explainers", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-educational",
+          matched_text:
+            "Swing trading is a type of trading strategy where traders aim to capitalize on short to medium-term price movements in a stock or other financial asset. The goal is to identify and profit from changing environments in the market.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro"
+        },
+        {
+          evidence_id: "ev-package",
+          matched_text: "One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-educational", "ev-package"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: [
+              "Swing trading is a type of trading strategy where traders aim to capitalize on short to medium-term price movements in a stock or other financial asset. The goal is to identify and profit from changing environments in the market.",
+              "One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-package"],
+          id: "sig-fee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: ["One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-package"],
+          id: "sig-guarantee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: ["One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"]
+          },
+          signal_key: "financial.guaranteed_return_language_present"
+        }
+      ]
+    })
+  );
+
+  const surfacedFinancialFindings = findings.filter((item) => item.ruleKey.startsWith("financial_review."));
+
+  assert.ok(surfacedFinancialFindings.length > 0);
+  assert.equal(
+    surfacedFinancialFindings.some(
+      (item) =>
+        item.evidence.matchedSnippet ===
+        "One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
+    ),
+    true
+  );
+  assert.equal(
+    surfacedFinancialFindings.some((item) =>
+      String(item.evidence.matchedSnippet).includes("Swing trading is a type of trading strategy")
+    ),
+    false
+  );
+});
+
+test("deriveValidationFindings prefers package claims over testimonial praise on suspicious finance homepages", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-testimonial",
+          matched_text:
+            "I’m reaching out to you guys to thank you for helping me bring my account to the initial capital and profit. God bless you! I’m speechless as far as the accuracy of your signals is concerned.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro"
+        },
+        {
+          evidence_id: "ev-package",
+          matched_text:
+            "One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-testimonial", "ev-package"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: [
+              "I’m reaching out to you guys to thank you for helping me bring my account to the initial capital and profit. God bless you! I’m speechless as far as the accuracy of your signals is concerned.",
+              "One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-package"],
+          id: "sig-fee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: [
+              "One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
+            ]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-package"],
+          id: "sig-guarantee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexbanksignal.pro",
+          payload: {
+            matchedTexts: [
+              "One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
+            ]
+          },
+          signal_key: "financial.guaranteed_return_language_present"
+        }
+      ]
+    })
+  );
+
+  const surfacedFinancialFindings = findings.filter((item) => item.ruleKey.startsWith("financial_review."));
+
+  assert.ok(surfacedFinancialFindings.length > 0);
+  assert.equal(
+    surfacedFinancialFindings.some((item) =>
+      String(item.evidence.matchedSnippet).includes("One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed")
+    ),
+    true
+  );
+  assert.equal(
+    surfacedFinancialFindings.some((item) =>
+      String(item.evidence.matchedSnippet).includes("I’m reaching out to you guys to thank you")
+    ),
+    false
+  );
+});
+
+test("deriveValidationFindings treats strong returns language as an earnings claim even when superlatives are present", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-returns",
+          matched_text:
+            "Learn the exact systems top-performing traders use to generate consistent 6-7 figure returns. It's as simple as copy and paste.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-accuracy",
+          matched_text:
+            "We achieved an average of 82% accuracy in our signals due to our team's detailed analyses.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-returns", "ev-accuracy"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "Learn the exact systems top-performing traders use to generate consistent 6-7 figure returns. It's as simple as copy and paste.",
+              "We achieved an average of 82% accuracy in our signals due to our team's detailed analyses."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-returns"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "Learn the exact systems top-performing traders use to generate consistent 6-7 figure returns. It's as simple as copy and paste."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+});
+
+test("deriveValidationFindings prefers structured performance snippets over title-like superlatives", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-title",
+          matched_text: "Accurate Forex Signals for Profitable Trading | Best Forex Signals Provider",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-accuracy",
+          matched_text: "We achieved an average of 82% accuracy in our signals due to our team's detailed analyses.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-pips",
+          matched_text: "4000-5000 pips per month",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-title", "ev-accuracy", "ev-pips"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "Accurate Forex Signals for Profitable Trading | Best Forex Signals Provider",
+              "We achieved an average of 82% accuracy in our signals due to our team's detailed analyses.",
+              "4000-5000 pips per month"
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-title"],
+          id: "sig-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: ["Accurate Forex Signals for Profitable Trading | Best Forex Signals Provider"]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+});
+
+test("deriveValidationFindings preserves earnings findings on mixed suspicious finance pages with simulated-proof snippets", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-returns",
+          matched_text:
+            "Learn the exact systems top-performing traders use to generate consistent 6–7 figure returns. It's a simple as copy & paste - so even a complete beginner can take advantage.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-accuracy",
+          matched_text:
+            "When it comes to trading it’s important to catch the right moment. A highly experienced team of forex traders is taking care that every trade sent to clients is a profitable one. We achieved an average of 82% accuracy in our signals due to our team’s detailed analyses.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-pips",
+          matched_text: "4000-5000 pips per month",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-backtest",
+          matched_text:
+            "I have backtested all their signals from the last year and they are the most accurate I’ve seen by far at 75%-90% with a 1:3 Risk to reward ratio.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        },
+        {
+          evidence_id: "ev-risk",
+          matched_text:
+            "Only trade with money that you are prepared to lose, you must recognize that for factors outside your control, you may lose all of the money in your trading account.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-returns", "ev-accuracy", "ev-pips"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "Learn the exact systems top-performing traders use to generate consistent 6–7 figure returns. It's a simple as copy & paste - so even a complete beginner can take advantage.",
+              "When it comes to trading it’s important to catch the right moment. A highly experienced team of forex traders is taking care that every trade sent to clients is a profitable one. We achieved an average of 82% accuracy in our signals due to our team’s detailed analyses.",
+              "4000-5000 pips per month"
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-backtest"],
+          id: "sig-backtest",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "I have backtested all their signals from the last year and they are the most accurate I’ve seen by far at 75%-90% with a 1:3 Risk to reward ratio."
+            ]
+          },
+          signal_key: "financial.hypothetical_or_backtest_language_present"
+        },
+        {
+          evidence_refs: ["ev-risk"],
+          id: "sig-risk",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: [
+              "Only trade with money that you are prepared to lose, you must recognize that for factors outside your control, you may lose all of the money in your trading account."
+            ]
+          },
+          signal_key: "financial.risk_disclosure_text_present"
+        },
+        {
+          evidence_refs: ["ev-pips"],
+          id: "sig-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bestforex-signals.com",
+          payload: {
+            matchedTexts: ["4000-5000 pips per month"]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"), true);
+});
+
+test("deriveValidationFindings keeps locality-sensitive homepage findings separate when sibling metadata is present", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-home-earnings",
+          matched_text: "Earn 50 to 100 pips average profit per day from one forex trading signal.",
+          metadata: {
+            surroundingHeading: "VIP signals"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          sibling_index: 1,
+          token_start: 20,
+          token_end: 34
+        },
+        {
+          evidence_id: "ev-home-pricing",
+          matched_text: "VIP access only 99 EUR per month.",
+          metadata: {
+            surroundingHeading: "VIP signals"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          sibling_index: 2,
+          token_start: 35,
+          token_end: 44
+        },
+        {
+          evidence_id: "ev-home-risk",
+          matched_text:
+            "Only trade with money that you are prepared to lose, and remember that you may lose all of the funds in your trading account.",
+          metadata: {
+            surroundingHeading: "Risk warning"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          sibling_index: 8,
+          token_start: 160,
+          token_end: 184
+        },
+        {
+          evidence_id: "ev-home-simulated",
+          matched_text:
+            "I backtested these signals over the last year and saw 75%-90% accuracy with a 1:3 risk to reward ratio.",
+          metadata: {
+            surroundingHeading: "Customer review"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          sibling_index: 9,
+          token_start: 185,
+          token_end: 205
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-home-earnings"],
+          id: "sig-home-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          payload: {
+            matchedTexts: ["Earn 50 to 100 pips average profit per day from one forex trading signal."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-home-pricing"],
+          id: "sig-home-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          payload: {
+            matchedTexts: ["VIP access only 99 EUR per month."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-home-risk"],
+          id: "sig-home-risk",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          payload: {
+            matchedTexts: [
+              "Only trade with money that you are prepared to lose, and remember that you may lose all of the funds in your trading account."
+            ]
+          },
+          signal_key: "financial.risk_disclosure_text_present"
+        },
+        {
+          evidence_refs: ["ev-home-simulated"],
+          id: "sig-home-simulated",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://signals.example",
+          payload: {
+            matchedTexts: [
+              "I backtested these signals over the last year and saw 75%-90% accuracy with a 1:3 risk to reward ratio."
+            ]
+          },
+          signal_key: "financial.hypothetical_or_backtest_language_present"
+        }
+      ]
+    })
+  );
+
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  const simulatedFinding = findings.find((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure");
+
+  assert.ok(earningsFinding);
+  assert.equal(
+    earningsFinding?.evidence.matchedSnippet,
+    "Earn 50 to 100 pips average profit per day from one forex trading signal."
+  );
+  assert.deepEqual(earningsFinding?.evidence.policySnippets, [
+    "Earn 50 to 100 pips average profit per day from one forex trading signal.",
+    "VIP access only 99 EUR per month."
+  ]);
+  assert.ok(simulatedFinding);
+  assert.equal(
+    simulatedFinding?.evidence.matchedSnippet,
+    "I backtested these signals over the last year and saw 75%-90% accuracy with a 1:3 risk to reward ratio."
+  );
+});
+
+test("deriveValidationFindings does not let global risk boilerplate suppress a local earnings claim", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-earnings",
+          matched_text: "Earn 12% monthly profit with our forex signal package.",
+          metadata: {
+            surroundingHeading: "Signal performance"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://boilerplate-risk.example"
+        },
+        {
+          evidence_id: "ev-risk",
+          matched_text:
+            "Only trade with money you are prepared to lose, and remember that you may lose all the funds in your trading account.",
+          metadata: {
+            surroundingHeading: "Risk warning"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://boilerplate-risk.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-earnings"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://boilerplate-risk.example",
+          payload: {
+            matchedTexts: ["Earn 12% monthly profit with our forex signal package."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-risk"],
+          id: "sig-risk",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://boilerplate-risk.example",
+          payload: {
+            matchedTexts: [
+              "Only trade with money you are prepared to lose, and remember that you may lose all the funds in your trading account."
+            ]
+          },
+          signal_key: "financial.risk_disclosure_text_present"
+        }
+      ]
+    })
+  );
+
+  const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
+  assert.ok(earningsFinding);
+});
+
+test("deriveValidationFindings lets fee-term disclosure suppress pricing opacity without suppressing earnings", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-earnings",
+          matched_text: "Earn 8% monthly profit with our managed forex account.",
+          metadata: {
+            surroundingHeading: "Managed account"
+          },
+          page_role: "primary",
+          page_type: "pricing",
+          page_url: "https://fee-terms.example/pricing"
+        },
+        {
+          evidence_id: "ev-fee",
+          matched_text: "A monthly fee of $25 applies to premium managed accounts.",
+          metadata: {
+            surroundingHeading: "Managed account"
+          },
+          page_role: "primary",
+          page_type: "pricing",
+          page_url: "https://fee-terms.example/pricing"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-earnings"],
+          id: "sig-performance",
+          page_role: "primary",
+          page_type: "pricing",
+          page_url: "https://fee-terms.example/pricing",
+          payload: {
+            matchedTexts: ["Earn 8% monthly profit with our managed forex account."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-fee"],
+          id: "sig-fee-disclosure",
+          page_role: "primary",
+          page_type: "pricing",
+          page_url: "https://fee-terms.example/pricing",
+          payload: {
+            matchedTexts: ["A monthly fee of $25 applies to premium managed accounts."]
+          },
+          signal_key: "commercial.explicit_fee_disclosure_text_present"
+        },
+        {
+          evidence_refs: ["ev-fee"],
+          id: "sig-fee-related",
+          page_role: "primary",
+          page_type: "pricing",
+          page_url: "https://fee-terms.example/pricing",
+          payload: {
+            matchedTexts: ["A monthly fee of $25 applies to premium managed accounts."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+});
+
+test("deriveValidationFindings suppresses mainstream investment account growth copy without speculative marketing cues", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-mainstream-growth",
+          matched_text:
+            "Open an investment account and put your money to work with a diversified portfolio built for long-term retirement goals.",
+          metadata: {
+            surroundingHeading: "Brokerage account"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://invest.example"
+        },
+        {
+          evidence_id: "ev-mainstream-pricing",
+          matched_text: "See how our brokerage account compares on pricing and account features.",
+          metadata: {
+            surroundingHeading: "Brokerage account"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://invest.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-mainstream-growth"],
+          id: "sig-mainstream-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://invest.example",
+          payload: {
+            matchedTexts: [
+              "Open an investment account and put your money to work with a diversified portfolio built for long-term retirement goals."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-mainstream-pricing"],
+          id: "sig-mainstream-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://invest.example",
+          payload: {
+            matchedTexts: ["See how our brokerage account compares on pricing and account features."]
+          },
+          signal_key: "commercial.pricing_page_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings suppresses institutional investment platform copy without speculative trading cues", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-institutional-growth",
+          matched_text:
+            "Our investment platform helps institutional investors optimize portfolio construction and long-term returns across asset classes.",
+          metadata: {
+            surroundingHeading: "Asset management platform"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://platform.example"
+        },
+        {
+          evidence_id: "ev-institutional-pricing",
+          matched_text: "Compare platform features and account options for your investment process.",
+          metadata: {
+            surroundingHeading: "Asset management platform"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://platform.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-institutional-growth"],
+          id: "sig-institutional-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://platform.example",
+          payload: {
+            matchedTexts: [
+              "Our investment platform helps institutional investors optimize portfolio construction and long-term returns across asset classes."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-institutional-growth"],
+          id: "sig-institutional-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://platform.example",
+          payload: {
+            matchedTexts: [
+              "Our investment platform helps institutional investors optimize portfolio construction and long-term returns across asset classes."
+            ]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        },
+        {
+          evidence_refs: ["ev-institutional-pricing"],
+          id: "sig-institutional-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://platform.example",
+          payload: {
+            matchedTexts: ["Compare platform features and account options for your investment process."]
+          },
+          signal_key: "commercial.pricing_page_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+});
+
+test("deriveValidationFindings suppresses APY deposit-account marketing with explicit banking disclosures", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-apy-offer",
+          matched_text: "Earn a boosted 4.00% APY for six months on our premium savings account.",
+          metadata: {
+            surroundingHeading: "Premium savings account"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example"
+        },
+        {
+          evidence_id: "ev-apy-disclosure",
+          matched_text:
+            "Annual Percentage Yield (APY) may change at any time and fees may reduce earnings. Bank accounts offered by a Member FDIC institution.",
+          metadata: {
+            surroundingHeading: "Rates and disclosures"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example"
+        },
+        {
+          evidence_id: "ev-apy-award",
+          matched_text: "\"Best Savings Account for Investors 2025\" by Buy Side from Wall Street Journal.",
+          metadata: {
+            surroundingHeading: "Awards"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-apy-offer", "ev-apy-disclosure", "ev-apy-award"],
+          id: "sig-apy-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example",
+          payload: {
+            matchedTexts: [
+              "Earn a boosted 4.00% APY for six months on our premium savings account.",
+              "Annual Percentage Yield (APY) may change at any time and fees may reduce earnings. Bank accounts offered by a Member FDIC institution.",
+              "\"Best Savings Account for Investors 2025\" by Buy Side from Wall Street Journal."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-apy-award"],
+          id: "sig-apy-review",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example",
+          payload: {
+            matchedTexts: ["\"Best Savings Account for Investors 2025\" by Buy Side from Wall Street Journal."]
+          },
+          signal_key: "financial.testimonial_or_review_block_near_financial_claim_present"
+        },
+        {
+          evidence_refs: ["ev-apy-offer", "ev-apy-disclosure"],
+          id: "sig-apy-rate",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example",
+          payload: {
+            matchedTexts: [
+              "Earn a boosted 4.00% APY for six months on our premium savings account.",
+              "Annual Percentage Yield (APY) may change at any time and fees may reduce earnings. Bank accounts offered by a Member FDIC institution."
+            ]
+          },
+          signal_key: "financial.return_or_yield_percentage_present"
+        },
+        {
+          evidence_refs: ["ev-apy-award"],
+          id: "sig-apy-superlative",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example",
+          payload: {
+            matchedTexts: ["\"Best Savings Account for Investors 2025\" by Buy Side from Wall Street Journal."]
+          },
+          signal_key: "financial.investment_outperformance_language_present"
+        },
+        {
+          evidence_refs: ["ev-apy-disclosure"],
+          id: "sig-apy-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example",
+          payload: {
+            matchedTexts: [
+              "Annual Percentage Yield (APY) may change at any time and fees may reduce earnings. Bank accounts offered by a Member FDIC institution."
+            ]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.unqualified_superlative_claim_detected"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings suppresses ecommerce shipping and return copy from financial claims", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-shop-promo",
+          matched_text: "Free shipping on all orders over $99 and 15% off your first order.",
+          metadata: {
+            surroundingHeading: "Exclusive offers"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://shop.example"
+        },
+        {
+          evidence_id: "ev-shop-returns",
+          matched_text: "Returns & Exchanges",
+          metadata: {
+            surroundingHeading: "Customer service"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://shop.example"
+        },
+        {
+          evidence_id: "ev-shop-terms-returns",
+          matched_text: "Returns accepted within 30 days of purchase and a $7.95 return shipping fee applies.",
+          metadata: {
+            surroundingHeading: "Returns & Exchanges"
+          },
+          page_role: "primary",
+          page_type: "terms_of_service",
+          page_url: "https://shop.example/terms"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-shop-returns"],
+          id: "sig-shop-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://shop.example",
+          payload: {
+            matchedTexts: ["Returns & Exchanges"]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-shop-promo", "ev-shop-terms-returns"],
+          id: "sig-shop-pricing",
+          page_role: "primary",
+          page_type: "terms_of_service",
+          page_url: "https://shop.example/terms",
+          payload: {
+            matchedTexts: [
+              "Free shipping on all orders over $99 and 15% off your first order.",
+              "Returns accepted within 30 days of purchase and a $7.95 return shipping fee applies."
+            ]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey.startsWith("financial_review.")), false);
+});
+
+test("deriveValidationFindings suppresses tax-advantaged account benefit copy on mainstream investing homepages", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-tax-advantaged",
+          matched_text: "Get tax-deductible contributions, no immediate tax on earnings, and tax-free withdrawals for qualified medical expenses.",
+          metadata: {
+            surroundingHeading: "Health savings account"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://retirement.example"
+        },
+        {
+          evidence_id: "ev-tax-fees",
+          matched_text: "No minimums to open and no account fees.",
+          metadata: {
+            surroundingHeading: "Account benefits"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://retirement.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-tax-advantaged"],
+          id: "sig-tax-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://retirement.example",
+          payload: {
+            matchedTexts: [
+              "Get tax-deductible contributions, no immediate tax on earnings, and tax-free withdrawals for qualified medical expenses."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-tax-advantaged", "ev-tax-fees"],
+          id: "sig-tax-pricing",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://retirement.example",
+          payload: {
+            matchedTexts: [
+              "Get tax-deductible contributions, no immediate tax on earnings, and tax-free withdrawals for qualified medical expenses.",
+              "No minimums to open and no account fees."
+            ]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-tax-fees"],
+          id: "sig-tax-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://retirement.example",
+          payload: {
+            matchedTexts: ["No minimums to open and no account fees."]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings suppresses illustrative hypothetical retirement calculator copy with clear qualifiers", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-hypothetical",
+          matched_text:
+            "Your total Potential hypothetical calculation is for illustrative purposes only and assumes an initial $15,000 investment and an 8% fixed annual rate of return with $5 daily contributions over a 45-year period.",
+          metadata: {
+            surroundingHeading: "Retirement calculator"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example"
+        },
+        {
+          evidence_id: "ev-hypothetical-risk",
+          matched_text: "No guarantee investment return will achieve 8% or any annual returns.",
+          metadata: {
+            surroundingHeading: "Important disclosures"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example"
+        },
+        {
+          evidence_id: "ev-hypothetical-fee",
+          matched_text: "Does not include monthly subscription fees, which would reduce returns over time.",
+          metadata: {
+            surroundingHeading: "Important disclosures"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-hypothetical", "ev-hypothetical-risk", "ev-hypothetical-fee"],
+          id: "sig-hypothetical-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example",
+          payload: {
+            matchedTexts: [
+              "Your total Potential hypothetical calculation is for illustrative purposes only and assumes an initial $15,000 investment and an 8% fixed annual rate of return with $5 daily contributions over a 45-year period.",
+              "No guarantee investment return will achieve 8% or any annual returns.",
+              "Does not include monthly subscription fees, which would reduce returns over time."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-hypothetical"],
+          id: "sig-hypothetical-simulated",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example",
+          payload: {
+            matchedTexts: [
+              "Your total Potential hypothetical calculation is for illustrative purposes only and assumes an initial $15,000 investment and an 8% fixed annual rate of return with $5 daily contributions over a 45-year period."
+            ]
+          },
+          signal_key: "financial.hypothetical_or_backtest_language_present"
+        },
+        {
+          evidence_refs: ["ev-hypothetical-fee"],
+          id: "sig-hypothetical-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://calculator.example",
+          payload: {
+            matchedTexts: ["Does not include monthly subscription fees, which would reduce returns over time."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings suppresses advisory disclosure copy that mentions fees and conflicts", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-adv-disclosure",
+          matched_text:
+            "Please refer to the Form ADV for Principal SimpleInvest and other applicable disclosures and agreements for important information about its services, fees and related conflicts of interest.",
+          metadata: {
+            surroundingHeading: "Important disclosures"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example"
+        },
+        {
+          evidence_id: "ev-adv-risk",
+          matched_text: "Investing in SimpleInvest portfolios does not guarantee profit or protect against loss.",
+          metadata: {
+            surroundingHeading: "Important disclosures"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example"
+        },
+        {
+          evidence_id: "ev-adv-free",
+          matched_text: "Free tools to help with your financial planning needs.",
+          metadata: {
+            surroundingHeading: "Planning tools"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-adv-risk"],
+          id: "sig-adv-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example",
+          payload: {
+            matchedTexts: ["Investing in SimpleInvest portfolios does not guarantee profit or protect against loss."]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-adv-disclosure"],
+          id: "sig-adv-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example",
+          payload: {
+            matchedTexts: [
+              "Please refer to the Form ADV for Principal SimpleInvest and other applicable disclosures and agreements for important information about its services, fees and related conflicts of interest."
+            ]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        },
+        {
+          evidence_refs: ["ev-adv-free"],
+          id: "sig-adv-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://advisor.example",
+          payload: {
+            matchedTexts: ["Free tools to help with your financial planning needs."]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+});
+
+test("deriveValidationFindings suppresses money-market and CD yield copy from mainstream institutions", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-money-market",
+          matched_text:
+            "If you're looking for better rates of return on deposits than you would get in an ordinary bank account, cash funds may be an option to consider.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://assetmanager.example"
+        },
+        {
+          evidence_id: "ev-cd",
+          matched_text: "High Yield CD",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://bank.example"
+        },
+        {
+          evidence_id: "ev-prospectus",
+          matched_text: "Carefully consider the Funds' investment objectives, risk factors, charges and expenses before investing.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://assetmanager.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-money-market", "ev-cd"],
+          id: "sig-yield",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://assetmanager.example",
+          payload: {
+            matchedTexts: [
+              "If you're looking for better rates of return on deposits than you would get in an ordinary bank account, cash funds may be an option to consider.",
+              "High Yield CD"
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-prospectus"],
+          id: "sig-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://assetmanager.example",
+          payload: {
+            matchedTexts: ["Carefully consider the Funds' investment objectives, risk factors, charges and expenses before investing."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+});
+
+test("deriveValidationFindings suppresses consumer credit reward and APR offer disclosures", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-cash-back",
+          matched_text:
+            "Earn 5% cash back with your credit card at restaurants and home improvement stores, now-June 30, on up to $1,500 in purchases, when you activate.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example"
+        },
+        {
+          evidence_id: "ev-apr-offer",
+          matched_text:
+            "Receiving a pre-approval offer does not guarantee approval, and any pre-approved offers you receive may have offer terms, including APR rates, that vary from other offers.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example"
+        },
+        {
+          evidence_id: "ev-loan-fees",
+          matched_text: "$0 origination fees, a fixed monthly payment and no prepayment penalty. Estimate your payments today.",
+          metadata: null,
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-cash-back", "ev-apr-offer"],
+          id: "sig-consumer-performance",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example",
+          payload: {
+            matchedTexts: [
+              "Earn 5% cash back with your credit card at restaurants and home improvement stores, now-June 30, on up to $1,500 in purchases, when you activate.",
+              "Receiving a pre-approval offer does not guarantee approval, and any pre-approved offers you receive may have offer terms, including APR rates, that vary from other offers."
+            ]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-cash-back"],
+          id: "sig-consumer-promo",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example",
+          payload: {
+            matchedTexts: [
+              "Earn 5% cash back with your credit card at restaurants and home improvement stores, now-June 30, on up to $1,500 in purchases, when you activate."
+            ]
+          },
+          signal_key: "commercial.promo_price_or_free_claim_present"
+        },
+        {
+          evidence_refs: ["ev-loan-fees"],
+          id: "sig-consumer-fees",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://card.example",
+          payload: {
+            matchedTexts: ["$0 origination fees, a fixed monthly payment and no prepayment penalty. Estimate your payments today."]
+          },
+          signal_key: "commercial.fee_related_text_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
+});
+
+test("deriveValidationFindings suppresses financial-claim negatives on cookie-policy surfaces", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-cookie-profit",
+          matched_text: "Profit",
+          metadata: {
+            matchedPattern: "\\b(?:profit|profits|profitable|earnings|return|returns)\\b"
+          },
+          page_role: "primary",
+          page_type: "cookie_policy",
+          page_url: "https://ftmo.com/cookies"
+        },
+        {
+          evidence_id: "ev-cookie-trading",
+          matched_text: "trading",
+          metadata: {
+            matchedPattern: "\\b(?:trading|forex|invest|investment)\\b"
+          },
+          page_role: "primary",
+          page_type: "cookie_policy",
+          page_url: "https://ftmo.com/cookies"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-cookie-profit"],
+          id: "sig-cookie-performance",
+          page_role: "primary",
+          page_type: "cookie_policy",
+          page_url: "https://ftmo.com/cookies",
+          payload: {
+            matchedTexts: ["Profit"]
+          },
+          signal_key: "financial.performance_claim_text_present"
+        },
+        {
+          evidence_refs: ["ev-cookie-trading"],
+          id: "sig-cookie-cta",
+          page_role: "primary",
+          page_type: "cookie_policy",
+          page_url: "https://ftmo.com/cookies",
+          payload: {
+            matchedTexts: ["trading"]
+          },
+          signal_key: "financial.claim_cta_block_present"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey.startsWith("financial_review.")), false);
+});
+
+test("deriveValidationFindings collapses duplicate disclosure-present findings across homepage and legal pages", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-home-disclaimer",
+          matched_text: "Past performance is not indicative of future results",
+          metadata: {
+            surroundingHeading: "Performance disclaimer"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fundedtradermarkets.com"
+        },
+        {
+          evidence_id: "ev-privacy-disclaimer",
+          matched_text: "Past performance is not indicative of future results",
+          metadata: {
+            surroundingHeading: "Risk disclosure"
+          },
+          page_role: "primary",
+          page_type: "privacy_policy",
+          page_url: "https://fundedtradermarkets.com/privacy-policy"
+        }
+      ],
+      signalHits: [
+        {
+          evidence_refs: ["ev-home-disclaimer"],
+          id: "sig-home-disclaimer",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://fundedtradermarkets.com",
+          payload: {
+            matchedTexts: ["Past performance is not indicative of future results"]
+          },
+          signal_key: "financial.past_performance_disclaimer_text_present"
+        },
+        {
+          evidence_refs: ["ev-privacy-disclaimer"],
+          id: "sig-privacy-disclaimer",
+          page_role: "primary",
+          page_type: "privacy_policy",
+          page_url: "https://fundedtradermarkets.com/privacy-policy",
+          payload: {
+            matchedTexts: ["Past performance is not indicative of future results"]
+          },
+          signal_key: "financial.past_performance_disclaimer_text_present"
+        }
+      ]
+    })
+  );
+
+  const disclaimerFindings = findings.filter(
+    (item) => item.ruleKey === "financial_review.past_performance_disclaimer_present"
+  );
+
+  assert.equal(disclaimerFindings.length, 1);
+  assert.equal(disclaimerFindings[0]?.pageUrl, "https://fundedtradermarkets.com");
 });
 
 test("validation collect hands off queued and running scans to WS01 execution", () => {

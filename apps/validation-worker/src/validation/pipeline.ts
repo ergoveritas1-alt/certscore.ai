@@ -408,18 +408,36 @@ function buildFindingSortBucket(ruleKeys: string[]) {
   };
 }
 
-function collapseSingletonRuleFindings<T extends { pageUrl: string | null; ruleKey: string; severity: string }>(findings: T[]) {
+function getFindingSelectionScore(input: {
+  evidence?: Record<string, unknown>;
+  pageUrl: string | null;
+  severity: string;
+}) {
+  const severityScore = severityWeight(input.severity) * 100;
+  const evidenceScore =
+    typeof input.evidence?.financialEvidenceScore === "number" && Number.isFinite(input.evidence.financialEvidenceScore)
+      ? input.evidence.financialEvidenceScore
+      : 0;
+  const urlAdjustment = input.pageUrl === null ? -10 : Math.max(0, 20 - input.pageUrl.length / 10);
+
+  return severityScore + evidenceScore + urlAdjustment;
+}
+
+function collapseSingletonRuleFindings<T extends { evidence?: Record<string, unknown>; pageUrl: string | null; ruleKey: string; severity: string }>(findings: T[]) {
   const singletonRuleKeys = new Set<string>([
     "section_review.no_retention_periods_noted",
     "section_review.no_transfer_mechanism_noted",
     "scan_report_review.low_confidence_critical_fields",
     "section_review.low_confidence_critical_fields",
-    "section_review.low_extraction_confidence"
+    "section_review.low_extraction_confidence",
+    "financial_review.fee_disclosure_present",
+    "financial_review.apr_or_interest_rate_disclosure_present",
+    "financial_review.past_performance_disclaimer_present"
   ]);
   const collapsed = new Map<string, T>();
 
   for (const finding of findings) {
-    if (!singletonRuleKeys.has(finding.ruleKey)) {
+    if (!singletonRuleKeys.has(finding.ruleKey) && !finding.ruleKey.startsWith("financial_review.")) {
       const uniqueKey = `${finding.ruleKey}::${finding.pageUrl ?? ""}::${collapsed.size}`;
       collapsed.set(uniqueKey, finding);
       continue;
@@ -431,15 +449,15 @@ function collapseSingletonRuleFindings<T extends { pageUrl: string | null; ruleK
       continue;
     }
 
-    const existingWeight = severityWeight(existing.severity);
-    const candidateWeight = severityWeight(finding.severity);
-    if (candidateWeight > existingWeight) {
+    const existingScore = getFindingSelectionScore(existing);
+    const candidateScore = getFindingSelectionScore(finding);
+    if (candidateScore > existingScore) {
       collapsed.set(finding.ruleKey, finding);
       continue;
     }
 
     if (
-      candidateWeight === existingWeight &&
+      candidateScore === existingScore &&
       (existing.pageUrl === null || (finding.pageUrl !== null && finding.pageUrl.length < existing.pageUrl.length))
     ) {
       collapsed.set(finding.ruleKey, finding);
@@ -1356,6 +1374,22 @@ function getStringValue(record: Record<string, unknown> | null | undefined, key:
   return typeof record?.[key] === "string" && String(record[key]).trim().length > 0 ? String(record[key]).trim() : null;
 }
 
+function getNumberValue(record: Record<string, unknown> | null | undefined, key: string) {
+  return typeof record?.[key] === "number" && Number.isFinite(record[key]) ? Number(record[key]) : null;
+}
+
+function getEvidenceSiblingIndex(row: Record<string, unknown>) {
+  return getNumberValue(row, "sibling_index") ?? getNumberValue(row, "siblingIndex");
+}
+
+function getEvidenceTokenStart(row: Record<string, unknown>) {
+  return getNumberValue(row, "token_start") ?? getNumberValue(row, "tokenStart");
+}
+
+function getEvidenceTokenEnd(row: Record<string, unknown>) {
+  return getNumberValue(row, "token_end") ?? getNumberValue(row, "tokenEnd");
+}
+
 function getFinancialValidationDefinition(signalKey: string) {
   switch (signalKey) {
     case "commercial.explicit_fee_disclosure_text_present":
@@ -1446,6 +1480,675 @@ function hasKeyword(value: string | null, pattern: RegExp) {
   return value ? pattern.test(value) : false;
 }
 
+const FINANCIAL_SUPERLATIVE_MARKETING_PATTERN =
+  /\b(?:best|leading|highest|number\s*1|#1|ultimate|premier|most[-\s]?(?:profitable|accurate|successful|trusted|popular|effective)|fastest[-\s]?(?:growing|returns?|profits?|signals?|execution)|top[-\s]?(?:rated|performing|signals?|traders?|brokers?|platform|service|strategy))\b/i;
+const FINANCIAL_OUTPERFORMANCE_MARKETING_PATTERN = /\b(?:outperform(?:ance)?|beat(?:ing)?|better than)\b/i;
+const FINANCIAL_NEGATED_GUARANTEE_PATTERN =
+  /\?|do\b.*\bguarantee|does\b.*\bguarantee|no\b[\w\s-]{0,40}\bguarantee(?:d)?|does not guarantee|don[’']t guarantee|cannot guarantee/i;
+const FINANCIAL_PRICING_TRANSPARENCY_PATTERN =
+  /\b(?:transparent pricing|simple (?:and|&) transparent pricing|no hidden charges?|no extra cost|cancel anytime|secure, simple, and transparent payment process)\b/i;
+const FINANCIAL_REFUND_ONLY_PATTERN =
+  /\b(?:money-back guarantee|full refund|refund within|refund period|risk-free|try .* risk-free)\b/i;
+const FINANCIAL_EDUCATIONAL_EXPLAINER_PATTERN =
+  /\b(?:is a type of trading strategy|what is\b|learn\b|guide\b|tutorial\b|the goal is to identify|price action trading|swing trading strategy|naked trading)\b/i;
+const FINANCIAL_COMMERCIAL_PACKAGE_PATTERN =
+  /\b(?:vip access|vip signals|buy now|choose plan|subscription|package|accuracy|pips|per month|per day|monthly profit|weekly profit|daily profit|limited time offer)\b/i;
+const FINANCIAL_TESTIMONIAL_PATTERN =
+  /\b(?:i['’]?m|i['’]?ve|i have|my account|thank you|god bless|awesome|speechless|happy customer|customer feedback|subscriber|review|reviews|testimonial|testimonials)\b/i;
+const FINANCIAL_TITLE_LIKE_PATTERN = /^[^.!?\n]{0,140}\|\s*[^.!?\n]{0,120}$/i;
+const FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN =
+  /\b(?:\d{1,3}(?:-\d{1,3})?(?:\.\d+)?%\s+accuracy|\+?\d{2,6}\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?|(?:\$|usd|eur|gbp)\s?\d.{0,32}\b(?:package|plan|subscription|membership|access)\b|\b\d(?:-\d)?\s*figure\s+returns\b)\b/i;
+
+function scoreFinancialCommercialSnippet(text: string | null, signalKeys: string[] = []) {
+  if (!text) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let score = Math.min(32, normalized.length / 10);
+
+  if (/\b(earn|earned|earning|earnings|income|profit|profits|profitable|make money|cash flow|passive income)\b/i.test(normalized)) {
+    score += 24;
+  }
+  if (/\b(return|returns|yield|apy|apr|roi|performance)\b/i.test(normalized)) {
+    score += 18;
+  }
+  if (/\b\d+(?:\.\d+)?%\b/.test(normalized)) {
+    score += 16;
+  }
+  if (/\b(monthly|weekly|daily|annual|yearly|per month|per year)\b/i.test(normalized)) {
+    score += 10;
+  }
+  if (/\b(backtest(?:ed)?|hypothetical|simulated|historical performance)\b/i.test(normalized)) {
+    score += 18;
+  }
+  if (/\b(guarantee|guaranteed|assured|risk[- ]free)\b/i.test(normalized)) {
+    score += 18;
+  }
+  if (FINANCIAL_SUPERLATIVE_MARKETING_PATTERN.test(normalized)) {
+    score += 8;
+  }
+  if (/\b(trading|trader|forex|crypto|investment|investing|funded|copy trading|signals?)\b/i.test(normalized)) {
+    score += 8;
+  }
+  if (/\b(join|sign up|subscribe|apply|open account|get started|start now|claim|buy now)\b/i.test(normalized)) {
+    score += 6;
+  }
+  if (/\b(price|pricing|fee|fees|cost|charge|commission|spread|billing)\b/i.test(normalized)) {
+    score += 4;
+  }
+  if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {
+    score += 32;
+  }
+  if (/\b(i am|i've|i have|my |me |we |our experience|user|users|member|members|review|reviews|testimonial|testimonials)\b/i.test(normalized)) {
+    score -= 24;
+  }
+  if (FINANCIAL_TESTIMONIAL_PATTERN.test(normalized)) {
+    score -= 40;
+  }
+  if (FINANCIAL_TITLE_LIKE_PATTERN.test(normalized)) {
+    score -= 36;
+  }
+
+  if (normalized.split(/\s+/).length <= 2) {
+    score -= 25;
+  }
+  if (normalized.split(/\s+/).length <= 4 && !/\b\d+(?:\.\d+)?%\b/.test(normalized)) {
+    score -= 12;
+  }
+  if (/^(free|pricing|fee|fees|commission|cost|charge|spread|profit|profits|return|returns)$/i.test(normalized)) {
+    score -= 40;
+  }
+
+  if (signalKeys.includes("financial.performance_claim_text_present")) {
+    score += 8;
+  }
+  if (signalKeys.includes("financial.return_or_yield_percentage_present")) {
+    score += 8;
+  }
+  if (signalKeys.includes("financial.guaranteed_return_language_present")) {
+    score += 8;
+  }
+  if (signalKeys.includes("financial.hypothetical_or_backtest_language_present")) {
+    score += 8;
+  }
+
+  return score;
+}
+
+function selectFinancialCommercialMatchedText(input: { matchedTexts: string[]; signalKeys: string[] }) {
+  return [...input.matchedTexts].sort((left, right) => {
+    const scoreDelta =
+      scoreFinancialCommercialSnippet(right, input.signalKeys) -
+      scoreFinancialCommercialSnippet(left, input.signalKeys);
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return right.length - left.length;
+  })[0] ?? null;
+}
+
+function scoreFinancialCommercialFindingSnippet(input: {
+  findingId: string;
+  signalKeys: string[];
+  text: string;
+}) {
+  const normalized = input.text.replace(/\s+/g, " ").trim();
+  let score = scoreFinancialCommercialSnippet(normalized, input.signalKeys);
+
+  switch (input.findingId) {
+    case "guaranteed_outcome_claim_detected":
+      if (/\b(guarantee|guaranteed|assured|risk[- ]free|no[- ]risk|safe returns?|certain profits?)\b/i.test(normalized)) {
+        score += 44;
+      } else {
+        score -= 65;
+      }
+      if (FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)) {
+        score -= 72;
+      }
+      break;
+    case "earnings_claim_without_adjacent_disclosure":
+      if (/\b(earn|earned|earning|earnings|income|profit|profits|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi)\b/i.test(normalized)) {
+        score += 28;
+      }
+      if (FINANCIAL_COMMERCIAL_PACKAGE_PATTERN.test(normalized)) {
+        score += 24;
+      }
+      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+\d+\s*pips\b/i.test(normalized)) {
+        score += 16;
+      }
+      if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {
+        score += 28;
+      }
+      if (/\b(loss|losses|lose|losing|drawdown|risk|not yield|may not|might not|could sustain)\b/i.test(normalized)) {
+        score -= 40;
+      }
+      if (FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)) {
+        score -= 64;
+      }
+      if (FINANCIAL_EDUCATIONAL_EXPLAINER_PATTERN.test(normalized)) {
+        score -= 42;
+      }
+      if (FINANCIAL_TESTIMONIAL_PATTERN.test(normalized)) {
+        score -= 56;
+      }
+      if (FINANCIAL_TITLE_LIKE_PATTERN.test(normalized)) {
+        score -= 48;
+      }
+      break;
+    case "simulated_performance_without_disclosure":
+      if (/\b(backtest(?:ed)?|hypothetical|simulated|paper trading|historical performance)\b/i.test(normalized)) {
+        score += 48;
+      } else {
+        score -= 60;
+      }
+      break;
+    case "unqualified_superlative_claim_detected":
+      if (
+        FINANCIAL_SUPERLATIVE_MARKETING_PATTERN.test(normalized) ||
+        FINANCIAL_OUTPERFORMANCE_MARKETING_PATTERN.test(normalized)
+      ) {
+        score += 36;
+      } else {
+        score -= 60;
+      }
+      if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {
+        score += 18;
+      }
+      if (
+        /\b(in this example|for example|example of|learn how|what is|guide|tutorial|analy(?:s|z)e|historical pricing trends|future direction|chosen asset)\b/i.test(
+          normalized
+        )
+      ) {
+        score -= 28;
+      }
+      if (FINANCIAL_TITLE_LIKE_PATTERN.test(normalized)) {
+        score -= 30;
+      }
+      break;
+    case "financial_urgency_pressure_tactic_detected":
+      if (/\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i.test(normalized)) {
+        score += 42;
+      } else {
+        score -= 50;
+      }
+      if (/\b(join|sign up|subscribe|apply|open account|get started|start now|claim|buy now|free)\b/i.test(normalized)) {
+        score += 12;
+      }
+      break;
+    case "pricing_or_fee_transparency_unclear":
+      if (/\b(price|pricing|fee|fees|cost|charge|charges|commission|spread|billing|rate|rates|free|demo account)\b/i.test(normalized)) {
+        score += 32;
+      } else {
+        score -= 55;
+      }
+      if (FINANCIAL_COMMERCIAL_PACKAGE_PATTERN.test(normalized)) {
+        score += 20;
+      }
+      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+\d+\s*pips\b/i.test(normalized)) {
+        score += 14;
+      }
+      if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {
+        score += 18;
+      }
+      if (FINANCIAL_PRICING_TRANSPARENCY_PATTERN.test(normalized)) {
+        score -= 80;
+      }
+      if (FINANCIAL_REFUND_ONLY_PATTERN.test(normalized)) {
+        score -= 30;
+      }
+      if (FINANCIAL_EDUCATIONAL_EXPLAINER_PATTERN.test(normalized)) {
+        score -= 42;
+      }
+      if (FINANCIAL_TESTIMONIAL_PATTERN.test(normalized)) {
+        score -= 56;
+      }
+      if (FINANCIAL_TITLE_LIKE_PATTERN.test(normalized)) {
+        score -= 32;
+      }
+      break;
+    default:
+      break;
+  }
+
+  return score;
+}
+
+function selectFinancialCommercialMatchedTextForFinding(input: {
+  findingId: string;
+  matchedTexts: string[];
+  signalKeys: string[];
+}) {
+  return [...input.matchedTexts].sort((left, right) => {
+    const scoreDelta =
+      scoreFinancialCommercialFindingSnippet({
+        findingId: input.findingId,
+        signalKeys: input.signalKeys,
+        text: right
+      }) -
+      scoreFinancialCommercialFindingSnippet({
+        findingId: input.findingId,
+        signalKeys: input.signalKeys,
+        text: left
+      });
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return right.length - left.length;
+  })[0] ?? null;
+}
+
+function hasStrongFinancialCommercialSnippet(text: string | null) {
+  if (!text) {
+    return false;
+  }
+
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length < 12) {
+    return false;
+  }
+
+  const wordCount = normalized.split(/\s+/).length;
+  if (/\b\d+(?:\.\d+)?%\b/.test(normalized) && /\b(profit|profits|return|returns|yield|apy|apr|roi|performance|monthly|annual|weekly)\b/i.test(normalized)) {
+    return true;
+  }
+
+  return (
+    wordCount >= 5 &&
+    /\b(earn|earned|earning|earnings|income|profit|profits|profitable|return|returns|yield|apy|apr|roi|performance|guarantee|guaranteed|backtest(?:ed)?|simulated|historical performance)\b/i.test(
+      normalized
+    )
+  );
+}
+
+function hasStrongFinancialCommercialSnippetForFinding(input: {
+  findingId: string;
+  pageType?: string | null;
+  signalKeys?: string[];
+  text: string | null;
+}) {
+  if (!input.text) {
+    return false;
+  }
+
+  const normalized = input.text.replace(/\s+/g, " ").trim();
+  const wordCount = normalized.split(/\s+/).length;
+  const pageType = input.pageType?.toLowerCase() ?? "";
+  const signalKeys = new Set(input.signalKeys ?? []);
+
+  switch (input.findingId) {
+    case "guaranteed_outcome_claim_detected":
+      return (
+        wordCount >= 3 &&
+        /\b(guarantee|guaranteed|assured|risk[- ]free|no[- ]risk|safe returns?|certain profits?)\b/i.test(normalized) &&
+        !FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)
+      );
+    case "earnings_claim_without_adjacent_disclosure":
+      return (
+        wordCount >= 3 &&
+        (
+          /\b(earn|earned|earning|earnings|income|profit|profits|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi|accuracy)\b/i.test(
+            normalized
+          ) ||
+          /\+\d+\s*pips\b/i.test(normalized) ||
+          FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)
+        ) &&
+        !/\b(loss|losses|lose|losing|drawdown|risk|not yield|may not|might not|could sustain)\b/i.test(normalized) &&
+        !FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)
+      );
+    case "simulated_performance_without_disclosure":
+      return (
+        wordCount >= 3 &&
+        /\b(backtest(?:ed)?|hypothetical|simulated|paper trading|historical performance)\b/i.test(normalized)
+      );
+    case "unqualified_superlative_claim_detected":
+      return (
+        wordCount >= 4 &&
+        (FINANCIAL_SUPERLATIVE_MARKETING_PATTERN.test(normalized) ||
+          FINANCIAL_OUTPERFORMANCE_MARKETING_PATTERN.test(normalized)) &&
+        !/\b(in this example|for example|example of|learn how|what is|guide|tutorial|analy(?:s|z)e|historical pricing trends|future direction|chosen asset)\b/i.test(
+          normalized
+        )
+      );
+    case "financial_urgency_pressure_tactic_detected":
+      return (
+        wordCount >= 4 &&
+        /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i.test(normalized) &&
+        /\b(join|sign up|subscribe|apply|open account|get started|start now|claim|buy now|free)\b/i.test(normalized)
+      );
+    case "pricing_or_fee_transparency_unclear":
+      return (
+        (wordCount >= 3 &&
+          /\b(price|pricing|fee|fees|cost|charge|charges|commission|spread|billing|rate|rates|free|demo account)\b/i.test(
+            normalized
+          ) &&
+          !FINANCIAL_PRICING_TRANSPARENCY_PATTERN.test(normalized) &&
+          !FINANCIAL_REFUND_ONLY_PATTERN.test(normalized)) ||
+        (wordCount >= 5 &&
+          /pricing|checkout|offer|product|account|trading|invest|loan/.test(pageType) &&
+          (signalKeys.has("commercial.pricing_page_present") ||
+            signalKeys.has("commercial.fee_related_text_present") ||
+            signalKeys.has("commercial.promo_price_or_free_claim_present") ||
+            signalKeys.has("commercial.variable_fee_language_present_without_explanation")) &&
+          !FINANCIAL_PRICING_TRANSPARENCY_PATTERN.test(normalized) &&
+          !FINANCIAL_REFUND_ONLY_PATTERN.test(normalized))
+      );
+    default:
+      return hasStrongFinancialCommercialSnippet(normalized);
+  }
+}
+
+function scoreFinancialCommercialPageGroup(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  pageType: string | null;
+  signalKeys: string[];
+  supportingHeadings: string[];
+}) {
+  let score = scoreFinancialCommercialSnippet(input.matchedText, input.signalKeys);
+  score += Math.max(0, Math.min(24, (input.blockText?.length ?? 0) / 24));
+  score += input.supportingHeadings.length > 0 ? 4 : 0;
+
+  const pageType = input.pageType?.toLowerCase() ?? "";
+  if (/homepage/.test(pageType)) {
+    score += 6;
+  }
+  if (/offer|product|pricing|checkout|account|trading|invest|loan/.test(pageType)) {
+    score += 10;
+  }
+  if (/blog|news|article|academy|education|learn|support|help/.test(pageType)) {
+    score -= 10;
+  }
+
+  return score;
+}
+
+function isMainstreamInvestmentContext(input: {
+  blockText: string | null;
+  pageType: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.blockText ?? "", input.pageType ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  const mainstreamContextPresent =
+    /\b(brokerage account|brokerage|investment account|retirement account|ira|roth ira|401k|portfolio|advisor|wealth|wealth management|managed investing|managed portfolios?|stock slices|etf|etfs|mutual fund|retirement|long-term|long term|investing platform|investment platform|trading platform|self-directed|self directed|asset management|institutional|institutional investors?|investment process|portfolio construction)\b/.test(
+      corpus
+    ) ||
+    /\b(manage your money|build wealth|grow your wealth|grow your money|save for retirement|invest for retirement|open an account|open your account|compare accounts|account features|portfolio management)\b/.test(corpus);
+
+  if (!mainstreamContextPresent) {
+    return false;
+  }
+
+  const suspiciousSpeculativeCuePresent =
+    /\b(forex|signal|signals|copy trading|copytrading|prop firm|funded trader|pips|vip|accuracy|backtest|backtested|risk to reward|telegram|discord|ea\b|expert advisor)\b/.test(
+      corpus
+    ) ||
+    /\b(guaranteed|guarantee|profit per day|per month|per week|6[\s-]?7 figure|most accurate)\b/.test(corpus);
+
+  return !suspiciousSpeculativeCuePresent;
+}
+
+function isDepositYieldDisclosureContext(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  const yieldCuePresent =
+    /\b(apy|apr|annual percentage yield|interest rate|yield|returns?)\b/.test(corpus) ||
+    /\b\d+(?:\.\d+)?%\b/.test(corpus);
+  const depositAccountCuePresent =
+    /\b(cd|certificate of deposit|high yield cd|cash funds?|money market instruments?|money market fund|cash account|savings account|high-yield cash|high yield cash|high-yield savings|high yield savings|checking account|ordinary bank account|bank accounts?|premium savings|direct deposit|deposits?|deposit balance|program banks?|member fdic|fdic-insured|fdic insured|bank accounts offered|not a bank|base apy|promotional apy|standard apy|fees may reduce earnings)\b/.test(
+      corpus
+    );
+
+  return yieldCuePresent && depositAccountCuePresent;
+}
+
+function hasMainstreamPerformanceDisclosureCue(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  return (
+    /\b(annualized returns?|average annual returns?|since inception|as of \d{1,2}\/\d{1,2}\/\d{2,4}|as of [a-z]{3,9}\.?\s+\d{1,2},?\s+\d{2,4}|1-year|5-year|10-year)\b/.test(
+      corpus
+    ) &&
+    /\b(investing|investment account|brokerage account|portfolio|wealth|advisor|managed|cash account|retirement)\b/.test(corpus)
+  );
+}
+
+function isTaxAdvantagedAccountContext(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  const taxAdvantagedCuePresent =
+    /\b(hsa|health savings account|529|roth|ira|education expenses|medical expenses|tax-deductible|tax deductible|tax-deferred|tax deferred|tax-free withdrawals?|tax free withdrawals?|retirement)\b/.test(
+      corpus
+    );
+  const accountFeeCuePresent =
+    /\b(no account fees|account fees|no minimums|commissions? free|commission free|\$0 commissions?|\$0 account fees)\b/.test(corpus);
+
+  return taxAdvantagedCuePresent && (accountFeeCuePresent || /\b(earnings|investment growth|grow more)\b/.test(corpus));
+}
+
+function hasIllustrativeHypotheticalDisclosureCue(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  return (
+    /\b(illustrative purposes only|hypothetical calculation|illustration of the power of compounding|does not include .* fees|would reduce returns over time|no guarantee investment return|please consider your objectives|risk tolerance)\b/.test(
+      corpus
+    ) &&
+    /\b(hypothetical|annual rate of return|average annual return|return will achieve|compounding)\b/.test(corpus)
+  );
+}
+
+function hasAdvisoryDisclosureCue(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  return (
+    /\b(form adv|disclosures and agreements|conflicts of interest|important information about .* services?, fees|all investments have inherent risks|protect against loss|does not guarantee profit)\b/.test(
+      corpus
+    ) &&
+    /\b(simpleinvest|advised services|financial planning|investments?|portfolios?)\b/.test(corpus)
+  );
+}
+
+function isConsumerCreditDisclosureContext(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  const rewardsCuePresent =
+    /\b(cash back|credit card|cardmember|purchases?|restaurants?|home improvement stores?|activate)\b/.test(corpus) &&
+    /\bearn(?:ing)?\s+(?:up to\s+)?\d{1,4}(?:\.\d+)?%/.test(corpus);
+  const creditOfferDisclosureCuePresent =
+    /\b(pre-approval offer|pre-approved offers?|does not guarantee approval|offer terms|apr rates?|origination fees?|fixed monthly payment|prepayment penalty|estimate your payments?|personal loans?)\b/.test(
+      corpus
+    ) &&
+    /\b(apr|credit card|loan|approval|offer terms?|fees?)\b/.test(corpus);
+
+  return rewardsCuePresent || creditOfferDisclosureCuePresent;
+}
+
+function isRetailEcommerceContext(input: {
+  blockText: string | null;
+  matchedText: string | null;
+  pageType: string | null;
+  supportingHeadings: string[];
+}) {
+  const corpus = [input.matchedText ?? "", input.blockText ?? "", input.pageType ?? "", ...input.supportingHeadings].join(" ").toLowerCase();
+
+  const ecommerceCuePresent =
+    /\b(free shipping|shipping policy|returns? & exchanges|return labels?|refund|final sale|first order|newsletter|product launches|coupon|promo code|cart|checkout|prices are listed|pricing and payment|warranty|manufacturer|orders? over \$?\d+)\b/.test(
+      corpus
+    ) ||
+    /\b(products?|services?)\b/.test(corpus) && /\b(order|shipping|return|refund|payment)\b/.test(corpus);
+  const financeCuePresent =
+    /\b(apy|apr|brokerage|investment|investing|portfolio|trading|trader|forex|signals?|copy trading|funded|yield|cash account|savings account|retirement)\b/.test(
+      corpus
+    );
+
+  return ecommerceCuePresent && !financeCuePresent;
+}
+
+function suppressMainstreamInvestmentFalsePositiveFinding(input: {
+  blockText: string | null;
+  findingId: string;
+  matchedText: string | null;
+  signalKeys: string[];
+  supportingHeadings: string[];
+  pageType: string | null;
+}) {
+  if (
+    ![
+      "earnings_claim_without_adjacent_disclosure",
+      "pricing_or_fee_transparency_unclear",
+      "simulated_performance_without_disclosure",
+      "unqualified_superlative_claim_detected"
+    ].includes(input.findingId)
+  ) {
+    return false;
+  }
+
+  if (
+    isRetailEcommerceContext({
+      blockText: input.blockText,
+      matchedText: input.matchedText,
+      pageType: input.pageType,
+      supportingHeadings: input.supportingHeadings
+    })
+  ) {
+    return true;
+  }
+
+  const signalSet = new Set(input.signalKeys);
+  const illustrativeHypotheticalDisclosureCuePresent = hasIllustrativeHypotheticalDisclosureCue({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  const advisoryDisclosureCuePresent = hasAdvisoryDisclosureCue({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  if (
+    signalSet.has("financial.guaranteed_return_language_present") ||
+    signalSet.has("financial.low_risk_high_return_language_present") ||
+    (signalSet.has("financial.hypothetical_or_backtest_language_present") && !illustrativeHypotheticalDisclosureCuePresent)
+  ) {
+    return false;
+  }
+
+  const text = `${input.matchedText ?? ""} ${input.blockText ?? ""}`.toLowerCase();
+  const explicitSuspiciousCuePresent =
+    /\b(forex|signal|signals|copy trading|copytrading|pips|accuracy|backtest|backtested|telegram|discord|vip)\b/.test(text) ||
+    /\b(guaranteed|profit per day|profit per month|profit per week|most accurate)\b/.test(text);
+
+  const mainstreamGrowthOrComparisonCuePresent =
+    /\b(build wealth|grow your wealth|grow your money|long-term returns|long term returns|retirement goals|investment account|brokerage account|compare accounts|account features|managed portfolios?|portfolio construction|wealth management|asset management|institutional investors?)\b/.test(
+      text
+    );
+  const taxAdvantagedAccountContextPresent = isTaxAdvantagedAccountContext({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  const depositYieldDisclosureContextPresent = isDepositYieldDisclosureContext({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  const consumerCreditDisclosureContextPresent = isConsumerCreditDisclosureContext({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  const mainstreamPerformanceDisclosureCuePresent = hasMainstreamPerformanceDisclosureCue({
+    blockText: input.blockText,
+    matchedText: input.matchedText,
+    supportingHeadings: input.supportingHeadings
+  });
+  const mainstreamInvestmentContextPresent = isMainstreamInvestmentContext({
+    blockText: input.blockText,
+    pageType: input.pageType,
+    supportingHeadings: input.supportingHeadings
+  });
+  const eligibleMainstreamContextPresent =
+    mainstreamInvestmentContextPresent ||
+    depositYieldDisclosureContextPresent ||
+    consumerCreditDisclosureContextPresent ||
+    mainstreamPerformanceDisclosureCuePresent ||
+    taxAdvantagedAccountContextPresent ||
+    illustrativeHypotheticalDisclosureCuePresent ||
+    advisoryDisclosureCuePresent;
+
+  if (!eligibleMainstreamContextPresent) {
+    return false;
+  }
+
+  if (input.findingId === "pricing_or_fee_transparency_unclear" && !mainstreamGrowthOrComparisonCuePresent) {
+    return (
+      depositYieldDisclosureContextPresent ||
+      consumerCreditDisclosureContextPresent ||
+      taxAdvantagedAccountContextPresent ||
+      illustrativeHypotheticalDisclosureCuePresent ||
+      advisoryDisclosureCuePresent
+    );
+  }
+
+  if (
+    input.findingId === "earnings_claim_without_adjacent_disclosure" ||
+    input.findingId === "unqualified_superlative_claim_detected"
+  ) {
+    return (
+      (
+        mainstreamGrowthOrComparisonCuePresent ||
+        depositYieldDisclosureContextPresent ||
+        consumerCreditDisclosureContextPresent ||
+        mainstreamPerformanceDisclosureCuePresent ||
+        taxAdvantagedAccountContextPresent ||
+        illustrativeHypotheticalDisclosureCuePresent ||
+        advisoryDisclosureCuePresent
+      ) &&
+      !explicitSuspiciousCuePresent
+    );
+  }
+
+  return (
+    depositYieldDisclosureContextPresent ||
+    consumerCreditDisclosureContextPresent ||
+    taxAdvantagedAccountContextPresent ||
+    illustrativeHypotheticalDisclosureCuePresent ||
+    advisoryDisclosureCuePresent ||
+    !explicitSuspiciousCuePresent
+  );
+}
+
 function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], blockText: string | null) {
   const candidateSignals = new Set<string>();
 
@@ -1508,7 +2211,7 @@ function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], bloc
     candidateSignals.add("currency");
     candidateSignals.add("percentage");
   }
-  if (hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i)) {
+  if (hasKeyword(blockText, FINANCIAL_SUPERLATIVE_MARKETING_PATTERN)) {
     candidateSignals.add("superlative");
   }
   if (hasKeyword(blockText, /\b(now|today|join|sign up|subscribe|apply|open account|get started|start now|claim)\b/i)) {
@@ -1522,6 +2225,118 @@ function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], bloc
   }
 
   return [...candidateSignals];
+}
+
+function isFinancialClaimsSuppressedLegalSurface(input: { pageType: string | null; pageUrl: string | null }) {
+  const pageType = input.pageType?.toLowerCase() ?? "";
+  const pageUrl = input.pageUrl?.toLowerCase() ?? "";
+
+  if (/(cookie_policy|privacy_policy|terms_of_service|risk_disclosure|legal)/.test(pageType)) {
+    return true;
+  }
+
+  return /\/cookies?(?:\/|$)|\/cookie-policy(?:\/|$)|\/privacy(?:\/|$)|\/terms(?:\/|$)|\/legal(?:\/|$)|risk[-_/ ]disclosure/.test(
+    pageUrl
+  );
+}
+
+const FINANCIAL_CLAIM_CLUSTER_SIBLING_RADIUS = 1;
+const FINANCIAL_CLAIM_CLUSTER_TOKEN_RADIUS = 80;
+const FINANCIAL_PRIMARY_CLAIM_SIGNAL_KEYS = new Set([
+  "financial.performance_claim_text_present",
+  "financial.return_or_yield_percentage_present",
+  "financial.investment_outperformance_language_present",
+  "financial.guaranteed_return_language_present",
+  "financial.low_risk_high_return_language_present",
+  "financial.hypothetical_or_backtest_language_present",
+  "financial.claim_cta_block_present",
+  "commercial.promo_price_or_free_claim_present",
+  "commercial.variable_fee_language_present_without_explanation"
+]);
+
+function rowsAreFinanciallyLocal(left: Record<string, unknown>, right: Record<string, unknown>) {
+  const leftSiblingIndex = getEvidenceSiblingIndex(left);
+  const rightSiblingIndex = getEvidenceSiblingIndex(right);
+  if (leftSiblingIndex !== null && rightSiblingIndex !== null) {
+    return Math.abs(leftSiblingIndex - rightSiblingIndex) <= FINANCIAL_CLAIM_CLUSTER_SIBLING_RADIUS;
+  }
+
+  const leftTokenStart = getEvidenceTokenStart(left);
+  const leftTokenEnd = getEvidenceTokenEnd(left);
+  const rightTokenStart = getEvidenceTokenStart(right);
+  const rightTokenEnd = getEvidenceTokenEnd(right);
+  if (leftTokenStart !== null && leftTokenEnd !== null && rightTokenStart !== null && rightTokenEnd !== null) {
+    const tokenDistance = Math.min(
+      Math.abs(rightTokenStart - leftTokenEnd),
+      Math.abs(leftTokenStart - rightTokenEnd)
+    );
+    return tokenDistance <= FINANCIAL_CLAIM_CLUSTER_TOKEN_RADIUS;
+  }
+
+  return false;
+}
+
+function buildLocalFinancialCommercialPageGroups(input: {
+  evidenceById: Map<string, Record<string, unknown>>;
+  hits: Array<Record<string, unknown>>;
+}) {
+  const allEvidenceRows = input.hits
+    .flatMap((hit) => getStringArray(hit, "evidence_refs").map((evidenceId) => input.evidenceById.get(evidenceId) ?? null))
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  const claimAnchors = input.hits
+    .filter((hit) => {
+      const signalKey = getStringValue(hit, "signal_key");
+      return signalKey ? FINANCIAL_PRIMARY_CLAIM_SIGNAL_KEYS.has(signalKey) : false;
+    })
+    .flatMap((hit) => getStringArray(hit, "evidence_refs").map((evidenceId) => input.evidenceById.get(evidenceId) ?? null))
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+
+  if (claimAnchors.length === 0 || allEvidenceRows.length === 0) {
+    return [
+      {
+        evidenceRows: allEvidenceRows,
+        hits: input.hits
+      }
+    ];
+  }
+
+  const localGroups = new Map<
+    string,
+    {
+      evidenceRows: Record<string, unknown>[];
+      hits: Array<Record<string, unknown>>;
+    }
+  >();
+
+  for (const anchor of claimAnchors) {
+    const anchorSiblingIndex = getEvidenceSiblingIndex(anchor);
+    const anchorTokenStart = getEvidenceTokenStart(anchor);
+    const anchorTokenEnd = getEvidenceTokenEnd(anchor);
+    const localEvidenceRows =
+      anchorSiblingIndex === null && anchorTokenStart === null && anchorTokenEnd === null
+        ? allEvidenceRows
+        : allEvidenceRows.filter((row) => rowsAreFinanciallyLocal(anchor, row));
+    const localEvidenceIds = new Set(
+      localEvidenceRows
+        .map((row) => getStringValue(row, "evidence_id"))
+        .filter((value): value is string => Boolean(value))
+    );
+    const localHits = input.hits.filter((hit) =>
+      getStringArray(hit, "evidence_refs").some((evidenceId) => localEvidenceIds.has(evidenceId))
+    );
+    const pageUrl = getStringValue(anchor, "page_url") ?? "unknown";
+    const siblingIndex = getEvidenceSiblingIndex(anchor);
+    const tokenStart = getEvidenceTokenStart(anchor);
+    const groupKey = `${pageUrl}::${siblingIndex ?? "na"}::${tokenStart ?? "na"}`;
+    if (!localGroups.has(groupKey)) {
+      localGroups.set(groupKey, {
+        evidenceRows: localEvidenceRows,
+        hits: localHits
+      });
+    }
+  }
+
+  return [...localGroups.values()].filter((group) => group.evidenceRows.length > 0 && group.hits.length > 0);
 }
 
 function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle) {
@@ -1561,76 +2376,99 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
   }> = [];
 
   for (const hits of groupedHits.values()) {
-    const evidenceRows = hits
-      .flatMap((hit) => getStringArray(hit, "evidence_refs").map((evidenceId) => evidenceById.get(evidenceId) ?? null))
-      .filter((row): row is Record<string, unknown> => Boolean(row));
-    const signalKeys = [...new Set(
+    const localGroups = buildLocalFinancialCommercialPageGroups({
+      evidenceById,
       hits
-        .map((hit) => getStringValue(hit, "signal_key"))
-        .filter((value): value is string => Boolean(value))
-    )];
-    const payloadMatchedTexts = [...new Set(
-      hits.flatMap((hit) => {
-        const payload = getRecord(hit.payload);
-        const explicitMatches = Array.isArray(payload?.matchedTexts)
-          ? (payload?.matchedTexts as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          : [];
-        const singleMatch = [
-          getStringValue(payload, "matchedText"),
-          getStringValue(payload, "matchedTerm"),
-          getStringValue(payload, "matchedPhrase")
-        ].filter((value): value is string => Boolean(value));
-        return [...explicitMatches, ...singleMatch];
-      })
-    )];
-    const matchedTexts = [...new Set([
-      ...payloadMatchedTexts,
-      ...evidenceRows
-        .map((row) => getStringValue(row, "matched_text"))
-        .filter((value): value is string => Boolean(value))
-    ])];
-    const blockText = matchedTexts.join(" ").trim() || null;
-    const matchedText =
-      matchedTexts.find((value) =>
-        /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi|free|fee|commission|pricing|charge|cost)\b/i.test(
-          value
-        )
-      ) ??
-      matchedTexts[0] ??
-      null;
-    const pageType =
-      hits.map((hit) => getStringValue(hit, "page_type")).find((value): value is string => Boolean(value)) ??
-      evidenceRows.map((row) => getStringValue(row, "page_type")).find((value): value is string => Boolean(value)) ??
-      null;
-    const pageUrl =
-      hits.map((hit) => getStringValue(hit, "page_url")).find((value): value is string => Boolean(value)) ??
-      evidenceRows.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
-      null;
-    const supportingHeadings = [...new Set(
-      evidenceRows
-        .map((row) => {
-          const metadata = getRecord(row.metadata);
-          return getStringValue(metadata, "surroundingHeading") ?? getStringValue(metadata, "surrounding_heading");
+    });
+
+    for (const localGroup of localGroups) {
+      const evidenceRows = localGroup.evidenceRows;
+      const localHits = localGroup.hits;
+      const signalKeys = [...new Set(
+        localHits
+          .map((hit) => getStringValue(hit, "signal_key"))
+          .filter((value): value is string => Boolean(value))
+      )];
+      const payloadMatchedTexts = [...new Set(
+        localHits.flatMap((hit) => {
+          const payload = getRecord(hit.payload);
+          const explicitMatches = Array.isArray(payload?.matchedTexts)
+            ? (payload?.matchedTexts as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            : [];
+          const singleMatch = [
+            getStringValue(payload, "matchedText"),
+            getStringValue(payload, "matchedTerm"),
+            getStringValue(payload, "matchedPhrase")
+          ].filter((value): value is string => Boolean(value));
+          return [...explicitMatches, ...singleMatch];
         })
-        .filter((value): value is string => Boolean(value))
-    )];
-    const candidateSignals = normalizeFinancialCommercialCandidateSignals(signalKeys, blockText);
-    const classification = {
-      adjacentDisclosurePresent:
-        signalKeys.includes("financial.risk_disclosure_text_present") ||
-        signalKeys.includes("financial.past_performance_disclaimer_text_present") ||
+      )];
+      const matchedTexts = [...new Set([
+        ...payloadMatchedTexts,
+        ...evidenceRows
+          .map((row) => getStringValue(row, "matched_text"))
+          .filter((value): value is string => Boolean(value))
+      ])];
+      const sortedMatchedTexts = [...matchedTexts].sort((left, right) => {
+        const scoreDelta = scoreFinancialCommercialSnippet(right, signalKeys) - scoreFinancialCommercialSnippet(left, signalKeys);
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+
+        return right.length - left.length;
+      });
+      const blockText = sortedMatchedTexts.join(" ").trim() || null;
+      const matchedText = selectFinancialCommercialMatchedText({
+        matchedTexts: sortedMatchedTexts,
+        signalKeys
+      });
+      const pageType =
+        localHits.map((hit) => getStringValue(hit, "page_type")).find((value): value is string => Boolean(value)) ??
+        evidenceRows.map((row) => getStringValue(row, "page_type")).find((value): value is string => Boolean(value)) ??
+        null;
+      const pageUrl =
+        localHits.map((hit) => getStringValue(hit, "page_url")).find((value): value is string => Boolean(value)) ??
+        evidenceRows.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
+        null;
+      if (isFinancialClaimsSuppressedLegalSurface({ pageType, pageUrl })) {
+        continue;
+      }
+      const supportingHeadings = [...new Set(
+        evidenceRows
+          .map((row) => {
+            const metadata = getRecord(row.metadata);
+            return getStringValue(metadata, "surroundingHeading") ?? getStringValue(metadata, "surrounding_heading");
+          })
+          .filter((value): value is string => Boolean(value))
+      )];
+      const financialEvidenceScore = scoreFinancialCommercialPageGroup({
+        blockText,
+        matchedText,
+        pageType,
+        signalKeys,
+        supportingHeadings
+      });
+      const candidateSignals = normalizeFinancialCommercialCandidateSignals(signalKeys, blockText);
+      const strongMatchedSnippet = hasStrongFinancialCommercialSnippet(matchedText);
+      const strongBlockSnippet = hasStrongFinancialCommercialSnippet(blockText);
+      const hasPerformanceDisclosure =
+        signalKeys.includes("financial.past_performance_disclaimer_text_present");
+      const hasFeeTermsDisclosure =
         signalKeys.includes("commercial.explicit_fee_disclosure_text_present") ||
-        signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present"),
+        signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present");
+      const hasGlobalRiskBoilerplate = signalKeys.includes("financial.risk_disclosure_text_present");
+      const classification = {
+      adjacentDisclosurePresent: hasPerformanceDisclosure,
       adjacentDisclosureText: null,
-      adjacentDisclosureType: signalKeys.includes("commercial.explicit_fee_disclosure_text_present")
-        ? "fee_schedule"
-        : signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present")
-          ? "pricing_terms"
-          : signalKeys.includes("financial.past_performance_disclaimer_text_present")
-            ? "simulation_disclaimer"
-            : signalKeys.includes("financial.risk_disclosure_text_present")
-              ? "risk_disclosure"
-              : null,
+      adjacentDisclosureType: hasFeeTermsDisclosure
+        ? signalKeys.includes("commercial.explicit_fee_disclosure_text_present")
+          ? "fee_schedule"
+          : "pricing_terms"
+        : hasPerformanceDisclosure
+          ? "simulation_disclaimer"
+          : hasGlobalRiskBoilerplate
+            ? "risk_disclosure"
+            : null,
       claimPresent:
         signalKeys.some((signalKey) =>
           [
@@ -1644,21 +2482,24 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
             "commercial.promo_price_or_free_claim_present",
             "commercial.variable_fee_language_present_without_explanation"
           ].includes(signalKey)
-        ) || matchedText !== null,
+        ) || strongMatchedSnippet || strongBlockSnippet,
       claimText: matchedText,
       claimType: signalKeys.includes("financial.guaranteed_return_language_present") ||
         signalKeys.includes("financial.low_risk_high_return_language_present")
         ? "guaranteed_outcome_claim"
         : signalKeys.includes("financial.hypothetical_or_backtest_language_present")
           ? "simulated_performance_claim"
-            : hasKeyword(blockText, /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income)\b/i)
+            : hasKeyword(
+                  blockText,
+                  /\b(earn|earned|earning|earnings|income|profit|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi|accuracy)\b/i
+                )
               ? "earnings_claim"
               : signalKeys.includes("financial.investment_outperformance_language_present") ||
-                hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i)
+                hasKeyword(blockText, FINANCIAL_SUPERLATIVE_MARKETING_PATTERN)
               ? "superlative_claim"
               : signalKeys.includes("commercial.variable_fee_language_present_without_explanation")
                 ? "pricing_fee_claim"
-                : signalKeys.includes("financial.performance_claim_text_present") ||
+                  : signalKeys.includes("financial.performance_claim_text_present") ||
                     signalKeys.includes("financial.return_or_yield_percentage_present")
                   ? "return_performance_claim"
                   : signalKeys.includes("financial.claim_cta_block_present") &&
@@ -1685,9 +2526,8 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
                     ? "financial_offer"
                     : "unknown",
       feeDisclosurePresent:
-        signalKeys.includes("commercial.explicit_fee_disclosure_text_present") ||
-        signalKeys.includes("commercial.fee_schedule_table_present") ||
-        signalKeys.includes("financial.apr_or_interest_rate_disclosure_text_present"),
+        hasFeeTermsDisclosure ||
+        signalKeys.includes("commercial.fee_schedule_table_present"),
       guaranteeLanguage:
         signalKeys.includes("financial.guaranteed_return_language_present") ||
         signalKeys.includes("financial.low_risk_high_return_language_present"),
@@ -1701,7 +2541,7 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
       simulatedPerformanceLanguage: signalKeys.includes("financial.hypothetical_or_backtest_language_present"),
       superlativeLanguage:
         signalKeys.includes("financial.investment_outperformance_language_present") ||
-        hasKeyword(blockText, /\b(best|top|leading|highest|number\s*1|#1|most|fastest|ultimate|premier)\b/i),
+        hasKeyword(blockText, FINANCIAL_SUPERLATIVE_MARKETING_PATTERN),
       urgencyPresent:
         signalKeys.includes("financial.claim_cta_block_present") &&
           hasKeyword(blockText, /\b(limited|hurry|ending soon|act now|spots left|last chance|expires?|deadline)\b/i) ||
@@ -1709,68 +2549,132 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
       urgencyTiedToConversion:
         signalKeys.includes("financial.claim_cta_block_present") ||
         hasKeyword(blockText, /\b(join|sign up|subscribe|apply|open account|get started|start now|claim|buy now|free)\b/i)
-    } as const;
+      } as const;
 
-    const derivedFindingIds = deriveFinancialCommercialExpectedFindingIds({
-      candidate: {
-        adjacentAfter: null,
-        adjacentBefore: null,
-        blockHeading: supportingHeadings[0] ?? null,
-        blockText: blockText ?? matchedText ?? signalKeys.join(" "),
-        candidateSignals,
-        pageType,
-        pageUrl,
-        sourceType: "signal_hit"
-      },
-      classification
-    });
-
-    for (const findingId of derivedFindingIds) {
-      const definition = getFinancialCommercialDefinition(findingId);
-      if (!definition) {
+      if (!strongMatchedSnippet && !strongBlockSnippet) {
         continue;
       }
 
-      const taxonomy = deriveValidationFindingTaxonomy({
-        category: "scan_report_review",
-        ruleKey: definition.ruleKey,
-        subtype: "financial_review"
-      });
-
-      findings.push({
-        category: "scan_report_review",
-        description: definition.description,
-        evidence: {
-          adjacentDisclosurePresent: classification.adjacentDisclosurePresent,
+      const derivedFindingIds = deriveFinancialCommercialExpectedFindingIds({
+        candidate: {
+          adjacentAfter: null,
+          adjacentBefore: null,
+          blockHeading: supportingHeadings[0] ?? null,
+          blockText: blockText ?? matchedText ?? signalKeys.join(" "),
           candidateSignals,
-          claimText: matchedText,
-          confidence: classification.confidence,
-          matchedPhrase: matchedText,
-        matchedSnippet: matchedText,
-          pageClassification: classifyFinancialValidationPage(pageType, {
-            blockText,
-            candidateSignals
-          }),
           pageType,
           pageUrl,
-          policySnippets: matchedTexts,
-          signalKey: signalKeys[0] ?? null,
-          sourceUrls: pageUrl ? [pageUrl] : [],
-          supportingHeadings,
-          supportingSignals: signalKeys,
-          unifiedFindingId: findingId
+          sourceType: "signal_hit"
         },
-        findingFamily: taxonomy.familyId,
-        findingScope: "page",
-        findingSource: "supplemental_validation",
-        findingSubject: "disclosure",
-        pageUrl,
-        rank: 0,
-        ruleKey: definition.ruleKey,
-        severity: definition.severity,
-        subtype: "financial_review",
-        title: definition.title
+        classification
       });
+      const normalizedFindingIds = [...new Set(derivedFindingIds)];
+      const shouldDowngradeGuaranteedToEarnings =
+        normalizedFindingIds.includes("guaranteed_outcome_claim_detected") &&
+        !hasStrongFinancialCommercialSnippetForFinding({
+          findingId: "guaranteed_outcome_claim_detected",
+          pageType,
+          signalKeys,
+          text: selectFinancialCommercialMatchedTextForFinding({
+            findingId: "guaranteed_outcome_claim_detected",
+            matchedTexts: sortedMatchedTexts,
+            signalKeys
+          })
+        }) &&
+        hasStrongFinancialCommercialSnippetForFinding({
+          findingId: "earnings_claim_without_adjacent_disclosure",
+          pageType,
+          signalKeys,
+          text: selectFinancialCommercialMatchedTextForFinding({
+            findingId: "earnings_claim_without_adjacent_disclosure",
+            matchedTexts: sortedMatchedTexts,
+            signalKeys
+          })
+        });
+      const effectiveFindingIds = shouldDowngradeGuaranteedToEarnings
+        ? [
+            ...normalizedFindingIds.filter((findingId) => findingId !== "guaranteed_outcome_claim_detected"),
+            "earnings_claim_without_adjacent_disclosure"
+          ]
+        : normalizedFindingIds;
+
+      for (const findingId of effectiveFindingIds) {
+        const definition = getFinancialCommercialDefinition(findingId);
+        if (!definition) {
+          continue;
+        }
+
+        const findingMatchedText = selectFinancialCommercialMatchedTextForFinding({
+          findingId,
+          matchedTexts: sortedMatchedTexts,
+          signalKeys
+        });
+        if (
+          !hasStrongFinancialCommercialSnippetForFinding({
+            findingId,
+            pageType,
+            signalKeys,
+            text: findingMatchedText
+          })
+        ) {
+          continue;
+        }
+
+        if (
+          suppressMainstreamInvestmentFalsePositiveFinding({
+            blockText,
+            findingId,
+            matchedText: findingMatchedText,
+            pageType,
+            signalKeys,
+            supportingHeadings
+          })
+        ) {
+          continue;
+        }
+
+        const taxonomy = deriveValidationFindingTaxonomy({
+          category: "scan_report_review",
+          ruleKey: definition.ruleKey,
+          subtype: "financial_review"
+        });
+
+        findings.push({
+          category: "scan_report_review",
+          description: definition.description,
+          evidence: {
+            adjacentDisclosurePresent: classification.adjacentDisclosurePresent,
+            candidateSignals,
+            claimText: findingMatchedText,
+            confidence: classification.confidence,
+            financialEvidenceScore,
+            matchedPhrase: findingMatchedText,
+            matchedSnippet: findingMatchedText,
+            pageClassification: classifyFinancialValidationPage(pageType, {
+              blockText,
+              candidateSignals
+            }),
+            pageType,
+            pageUrl,
+            policySnippets: sortedMatchedTexts,
+            signalKey: signalKeys[0] ?? null,
+            sourceUrls: pageUrl ? [pageUrl] : [],
+            supportingHeadings,
+            supportingSignals: signalKeys,
+            unifiedFindingId: findingId
+          },
+          findingFamily: taxonomy.familyId,
+          findingScope: "page",
+          findingSource: "supplemental_validation",
+          findingSubject: "disclosure",
+          pageUrl,
+          rank: 0,
+          ruleKey: definition.ruleKey,
+          severity: definition.severity,
+          subtype: "financial_review",
+          title: definition.title
+        });
+      }
     }
   }
 
