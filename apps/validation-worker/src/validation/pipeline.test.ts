@@ -3000,7 +3000,11 @@ test("deriveValidationFindings treats strong returns language as an earnings cla
     })
   );
 
-  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(
+    findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"),
+    true,
+    JSON.stringify(findings.map((item) => ({ evidence: item.evidence, ruleKey: item.ruleKey, severity: item.severity })))
+  );
 });
 
 test("deriveValidationFindings prefers structured performance snippets over title-like superlatives", () => {
