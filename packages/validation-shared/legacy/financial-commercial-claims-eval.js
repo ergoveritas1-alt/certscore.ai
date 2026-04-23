@@ -16,6 +16,15 @@ function hasDirectEarningsStyleLanguage(text) {
     }
     return /\b(earn|earned|earning|earnings|income|profit|profitable|profits|make money|passive income|cash flow|cashflow)\b/i.test(text);
 }
+function hasDirectReturnPerformanceLanguage(text) {
+    if (!text) {
+        return false;
+    }
+    return (/\b(return|returns|yield|apy|apr|roi|performance)\b/i.test(text) ||
+        /\b\d{1,3}(?:[\u2012-\u2015-]\d{1,3})?\s*figure\s+returns\b/i.test(text) ||
+        /\b\d{1,3}(?:\.\d+)?%\s+accuracy\b/i.test(text) ||
+        /\+?\d{2,6}\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?/i.test(text));
+}
 function hasDirectSuperlativeLanguage(text) {
     if (!text) {
         return false;
@@ -51,16 +60,24 @@ function shouldEmitReturnOrEarningsDisclosureFinding(input) {
     if (!input.classification.claimPresent || input.classification.adjacentDisclosurePresent) {
         return false;
     }
+    const signalSet = new Set(input.candidateSignals);
+    const directEarningsLanguage = hasDirectEarningsStyleLanguage(input.classification.claimText);
+    const directReturnLanguage = hasDirectReturnPerformanceLanguage(input.classification.claimText);
+    const directSuperlativeLanguage = hasDirectSuperlativeLanguage(input.classification.claimText);
     if (input.classification.claimType === "earnings_claim") {
         return true;
     }
-    if (input.classification.claimType !== "return_performance_claim") {
-        return false;
+    if (input.classification.claimType === "return_performance_claim") {
+        return (directEarningsLanguage ||
+            directReturnLanguage ||
+            input.classification.guaranteeLanguage ||
+            (input.classification.superlativeLanguage &&
+                (directSuperlativeLanguage || signalSet.has("superlative"))) ||
+            input.classification.simulatedPerformanceLanguage ||
+            signalSet.has("results_social_proof"));
     }
-    const signalSet = new Set(input.candidateSignals);
-    const directEarningsLanguage = hasDirectEarningsStyleLanguage(input.classification.claimText);
-    const directSuperlativeLanguage = hasDirectSuperlativeLanguage(input.classification.claimText);
     return (directEarningsLanguage ||
+        (directReturnLanguage && signalSet.has("investment_context")) ||
         input.classification.guaranteeLanguage ||
         (input.classification.superlativeLanguage &&
             (directSuperlativeLanguage || signalSet.has("superlative"))) ||
