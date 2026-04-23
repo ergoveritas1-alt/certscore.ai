@@ -1619,7 +1619,7 @@ function scoreFinancialCommercialFindingSnippet(input: {
       if (FINANCIAL_COMMERCIAL_PACKAGE_PATTERN.test(normalized)) {
         score += 24;
       }
-      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+\d+\s*pips\b/i.test(normalized)) {
+      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+?\d{2,6}(?:-\d{2,6})?\s*pips\b/i.test(normalized)) {
         score += 16;
       }
       if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {
@@ -1690,7 +1690,7 @@ function scoreFinancialCommercialFindingSnippet(input: {
       if (FINANCIAL_COMMERCIAL_PACKAGE_PATTERN.test(normalized)) {
         score += 20;
       }
-      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+\d+\s*pips\b/i.test(normalized)) {
+      if (/\b\d+(?:\.\d+)?%\b/.test(normalized) || /\+?\d{2,6}(?:-\d{2,6})?\s*pips\b/i.test(normalized)) {
         score += 14;
       }
       if (FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)) {

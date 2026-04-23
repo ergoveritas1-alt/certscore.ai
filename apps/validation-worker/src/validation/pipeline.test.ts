@@ -3000,11 +3000,7 @@ test("deriveValidationFindings treats strong returns language as an earnings cla
     })
   );
 
-  assert.equal(
-    findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"),
-    true,
-    JSON.stringify(findings.map((item) => ({ evidence: item.evidence, ruleKey: item.ruleKey, severity: item.severity })))
-  );
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
 });
 
 test("deriveValidationFindings prefers structured performance snippets over title-like superlatives", () => {
@@ -3067,11 +3063,7 @@ test("deriveValidationFindings prefers structured performance snippets over titl
     })
   );
 
-  assert.equal(
-    findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"),
-    true,
-    JSON.stringify(findings.map((item) => ({ evidence: item.evidence, ruleKey: item.ruleKey, severity: item.severity })))
-  );
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
 });
 
 test("deriveValidationFindings preserves earnings findings on mixed suspicious finance pages with simulated-proof snippets", () => {
@@ -3180,11 +3172,7 @@ test("deriveValidationFindings preserves earnings findings on mixed suspicious f
     })
   );
 
-  assert.equal(
-    findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"),
-    true,
-    JSON.stringify(findings.map((item) => ({ evidence: item.evidence, ruleKey: item.ruleKey, severity: item.severity })))
-  );
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
   assert.equal(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"), true);
 });
 
