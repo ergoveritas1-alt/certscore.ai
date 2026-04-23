@@ -75,11 +75,17 @@ function shouldEmitReturnOrEarningsDisclosureFinding(input) {
             !signalSet.has("results_social_proof")) {
             return false;
         }
-        return ((directEarningsLanguage ||
-            directReturnLanguage) &&
-            (signalSet.has("investment_context") ||
-                signalSet.has("results_social_proof") ||
-                signalSet.has("earnings")));
+        return (directEarningsLanguage ||
+            (directReturnLanguage &&
+                (signalSet.has("investment_context") ||
+                    signalSet.has("results_social_proof") ||
+                signalSet.has("earnings"))));
+    }
+    if (input.classification.claimType === "simulated_performance_claim") {
+        return (directEarningsLanguage ||
+            (directReturnLanguage &&
+                (signalSet.has("earnings") ||
+                    signalSet.has("results_social_proof"))));
     }
     return false;
 }

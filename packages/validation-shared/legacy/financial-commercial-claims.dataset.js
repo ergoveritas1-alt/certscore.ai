@@ -2010,6 +2010,7 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
           },
           pageExpectation: {
               expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure",
                   "simulated_performance_without_disclosure",
                   "unqualified_superlative_claim_detected",
                   "pricing_or_fee_transparency_unclear"
