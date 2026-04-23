@@ -3025,7 +3025,7 @@ test("deriveValidationFindings prefers structured performance snippets over titl
         },
         {
           evidence_id: "ev-pips",
-          matched_text: "4000-5000 pips per month",
+          matched_text: "4000-5000 pips per month profit from our forex signals package",
           metadata: null,
           page_role: "primary",
           page_type: "homepage",
@@ -3126,7 +3126,7 @@ test("deriveValidationFindings preserves earnings findings on mixed suspicious f
             matchedTexts: [
               "Learn the exact systems top-performing traders use to generate consistent 6–7 figure returns. It's a simple as copy & paste - so even a complete beginner can take advantage.",
               "When it comes to trading it’s important to catch the right moment. A highly experienced team of forex traders is taking care that every trade sent to clients is a profitable one. We achieved an average of 82% accuracy in our signals due to our team’s detailed analyses.",
-              "4000-5000 pips per month"
+              "4000-5000 pips per month profit from our forex signals package"
             ]
           },
           signal_key: "financial.performance_claim_text_present"
@@ -3164,7 +3164,7 @@ test("deriveValidationFindings preserves earnings findings on mixed suspicious f
           page_type: "homepage",
           page_url: "https://bestforex-signals.com",
           payload: {
-            matchedTexts: ["4000-5000 pips per month"]
+            matchedTexts: ["4000-5000 pips per month profit from our forex signals package"]
           },
           signal_key: "commercial.promo_price_or_free_claim_present"
         }
