@@ -20,10 +20,11 @@ function hasDirectReturnPerformanceLanguage(text) {
     if (!text) {
         return false;
     }
-    return (/\b(return|returns|yield|apy|apr|roi|performance)\b/i.test(text) ||
+    return (/\b(return|returns|yield|apy|apr|roi)\b/i.test(text) ||
+        /\bnet\s+\d{1,4}(?:\.\d+)?%/i.test(text) ||
         /\b\d{1,3}(?:[\u2012-\u2015-]\d{1,3})?\s*figure\s+returns\b/i.test(text) ||
         /\b\d{1,3}(?:\.\d+)?%\s+accuracy\b/i.test(text) ||
-        /\+?\d{2,6}\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?/i.test(text));
+        /\+?\d{2,6}(?:-\d{2,6})?\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily|monthly))?/i.test(text));
 }
 function hasDirectSuperlativeLanguage(text) {
     if (!text) {
@@ -68,21 +69,19 @@ function shouldEmitReturnOrEarningsDisclosureFinding(input) {
         return true;
     }
     if (input.classification.claimType === "return_performance_claim") {
-        return (directEarningsLanguage ||
-            directReturnLanguage ||
-            input.classification.guaranteeLanguage ||
-            (input.classification.superlativeLanguage &&
-                (directSuperlativeLanguage || signalSet.has("superlative"))) ||
-            input.classification.simulatedPerformanceLanguage ||
-            signalSet.has("results_social_proof"));
+        const institutionalPerformanceStat = /\b(time-weighted returns?|composite annual|after fees)\b/i.test(input.classification.claimText);
+        if (institutionalPerformanceStat &&
+            !directEarningsLanguage &&
+            !signalSet.has("results_social_proof")) {
+            return false;
+        }
+        return ((directEarningsLanguage ||
+            directReturnLanguage) &&
+            (signalSet.has("investment_context") ||
+                signalSet.has("results_social_proof") ||
+                signalSet.has("earnings")));
     }
-    return (directEarningsLanguage ||
-        (directReturnLanguage && signalSet.has("investment_context")) ||
-        input.classification.guaranteeLanguage ||
-        (input.classification.superlativeLanguage &&
-            (directSuperlativeLanguage || signalSet.has("superlative"))) ||
-        input.classification.simulatedPerformanceLanguage ||
-        signalSet.has("results_social_proof"));
+    return false;
 }
 function shouldEmitFinancialUrgencyFinding(input) {
     const signalSet = new Set(input.candidateSignals);

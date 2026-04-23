@@ -2017,6 +2017,1942 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
               expectedCardMode: "findings",
               shouldShowFinancialCard: true
           }
+      }),
+    example({
+          id: "forexprofita-home-guaranteed-profits-forex",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Guaranteed-outcome homepage copy with unclear fee disclosures.",
+          sourceUrl: "https://forexprofita.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Forex Profita",
+              blockHeading: null,
+              blockText: "Guaranteed profits with our forex signals and automated trading system. Pricing, fees, and payout details available.",
+              candidateSignals: [
+                  "guarantee",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee",
+                  "earnings"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://forexprofita.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Guaranteed profits with our forex signals and automated trading system",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Guaranteed-outcome homepage copy with unclear fee disclosures."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "revenuebot-home-profit-increase-revenue",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Earnings-style homepage copy without nearby balancing disclosure and unclear pricing.",
+          sourceUrl: "https://revenuebot.io/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "RevenueBot",
+              blockHeading: null,
+              blockText: "Increase your revenue with our automated trading bot and start earning more from every move. Pricing plans available.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "cta"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://revenuebot.io/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Increase your revenue with our automated trading bot and start earning more from every move",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Earnings-style homepage copy without nearby balancing disclosure and unclear pricing."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "fundedtradingplus-home-claim-scale-trading",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired.",
+          sourceUrl: "https://fundedtradingplus.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Funded Trading Plus",
+              blockHeading: null,
+              blockText: "Scale your trading career with funded challenge accounts and platform access built for serious traders.",
+              candidateSignals: [
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://fundedtradingplus.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.83,
+              rationaleShort: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "fundednext-home-backtest-funded-trader",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Homepage simulated-performance style copy also triggered superlative language.",
+          sourceUrl: "https://fundednext.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "FundedNext",
+              blockHeading: null,
+              blockText: "Backtested funded trader performance with one of the best prop trading programs available today.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "superlative",
+                  "investment_context",
+                  "urgency"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://fundednext.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Backtested funded trader performance with one of the best prop trading programs available today",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: true,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Homepage simulated-performance style copy also triggered superlative language."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure",
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "the5ers-home-claim-become-funded",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired.",
+          sourceUrl: "https://the5ers.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "The5ers",
+              blockHeading: null,
+              blockText: "Become a funded trader with structured evaluation programs, platform access, and coaching support.",
+              candidateSignals: [
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://the5ers.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.83,
+              rationaleShort: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "forexsignals-home-profit-earn-more-premium",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Homepage earnings-style signal marketing from a live finance site.",
+          sourceUrl: "https://forexsignals.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "ForexSignals.com",
+              blockHeading: null,
+              blockText: "Earn more with premium forex signals and membership pricing tiers built for consistent results.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://forexsignals.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Earn more with premium forex signals and membership pricing tiers built for consistent results",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Homepage earnings-style signal marketing from a live finance site."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "e8markets-home-claim-join-modern",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired.",
+          sourceUrl: "https://e8markets.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "E8 Markets",
+              blockHeading: null,
+              blockText: "Join a modern prop-trading evaluation platform with account tiers, analytics, and trader support.",
+              candidateSignals: [
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://e8markets.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.83,
+              rationaleShort: "Fresh adhoc validation negative on April 22, 2026. Live prop-trading homepage retained, but no financial-review findings fired."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "etoro-home-profit-earn",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Live homepage investment-copy and earnings marketing with pricing disclosures called out separately.",
+          sourceUrl: "https://www.etoro.com/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "eToro",
+              blockHeading: null,
+              blockText: "Earn up to 3.55% annual interest and invest in stocks, crypto, ETFs, and copy trading from one platform.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "pricing"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://www.etoro.com/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Earn up to 3",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Live homepage investment-copy and earnings marketing with pricing disclosures called out separately."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "tradecopier-home-fees-pass-challenges",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh adhoc validation positive on April 22, 2026. Live homepage copy-trading marketing with prop-firm claims and separate pricing language.",
+          sourceUrl: "https://tradecopier.org/",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Trade Copier",
+              blockHeading: null,
+              blockText: "Pass challenges easily with prop-firm ready copy trading and simple pricing that starts at $10 per month plus account fees.",
+              candidateSignals: [
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee",
+                  "cta"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://tradecopier.org/",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "Pass challenges easily with prop-firm ready copy trading and simple pricing that starts at $10 per month plus account fees",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.79,
+              rationaleShort: "Fresh adhoc validation positive on April 22, 2026. Live homepage copy-trading marketing with prop-firm claims and separate pricing language."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "mql5-product-page-backtest-gold-house",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Fresh manual verification on April 22, 2026. Public MQL5 product page markets historical validation and live-signal performance on a commercial robot listing.",
+          sourceUrl: "https://www.mql5.com/en/market/product/165036",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Gold House MT5",
+              blockHeading: "Gold House MT5",
+              blockText: "Developed and validated on 7 years of historical data, then confirmed through real market performance before going public. Live signal available and the price adjustment is expected soon.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee",
+                  "superlative"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://www.mql5.com/en/market/product/165036",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Gold House MT5",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Fresh manual verification on April 22, 2026. Public MQL5 product page markets historical validation and live-signal performance on a commercial robot listing."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "guaranteed-marketing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for guaranteed-outcome claims on a marketing page.",
+          sourceUrl: "https://example.com/forex-blueprint",
+          input: {
+              adjacentAfter: "Join thousands of traders today.",
+              adjacentBefore: "Forex Blueprint",
+              blockHeading: "Steady gains system",
+              blockText: "Our forex blueprint delivers guaranteed weekly income with a low-risk trading method for busy professionals.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "cta",
+                  "urgency"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/forex-blueprint",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Our forex blueprint delivers guaranteed weekly income with a low-risk trading method for busy professionals",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for guaranteed-outcome claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected",
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "urgency-homepage",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for urgency tactics on a homepage.",
+          sourceUrl: "https://example.com/signals-home",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Signals Home",
+              blockHeading: "Limited access",
+              blockText: "Only 12 spots left to join our forex signal room before tonight's market move. Start now to catch the next setup.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://example.com/signals-home",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Start now to catch the next setup",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for urgency tactics on a homepage."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "pricing-lead-gen",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for pricing opacity on a lead-generation offer.",
+          sourceUrl: "https://example.com/apply-funded-account",
+          input: {
+              adjacentAfter: "Get funded fast.",
+              adjacentBefore: "Apply for funding",
+              blockHeading: "Evaluation access",
+              blockText: "Apply for our funded trader program with flexible activation pricing and premium challenge access built for forex traders.",
+              candidateSignals: [
+                  "pricing",
+                  "pricing_fee",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/apply-funded-account",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "Apply for our funded trader program with flexible activation pricing and premium challenge access built for forex traders",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.79,
+              rationaleShort: "Synthetic coverage filler for pricing opacity on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-lead-gen",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for superlative claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/elite-signals",
+          input: {
+              adjacentAfter: "Create your account today.",
+              adjacentBefore: "Elite Signals",
+              blockHeading: "Best signal desk",
+              blockText: "Get access to the best forex signal desk for traders who want top-tier entries and consistent market insight.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "cta",
+                  "returns",
+                  "urgency"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/elite-signals",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Get access to the best forex signal desk for traders who want top-tier entries and consistent market insight",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for superlative claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "simulated-pricing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for simulated-performance claims on a pricing page.",
+          sourceUrl: "https://example.com/strategy-lab/pricing",
+          input: {
+              adjacentAfter: "Choose your plan.",
+              adjacentBefore: "Strategy Lab",
+              blockHeading: "Backtested plans",
+              blockText: "Unlock backtested strategy plans with verified historical performance and monthly pricing built for active traders.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "cta"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/strategy-lab/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Unlock backtested strategy plans with verified historical performance and monthly pricing built for active traders",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for simulated-performance claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "guaranteed-pricing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for guaranteed-outcome claims on a pricing page.",
+          sourceUrl: "https://example.com/alpha-signals/pricing",
+          input: {
+              adjacentAfter: "Choose your plan now.",
+              adjacentBefore: "Alpha Signals",
+              blockHeading: "Guaranteed trader plan",
+              blockText: "Choose the guaranteed income trader plan with monthly pricing built for forex members who want low-risk gains.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee",
+                  "cta",
+                  "urgency"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/alpha-signals/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Choose the guaranteed income trader plan with monthly pricing built for forex members who want low-risk gains",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for guaranteed-outcome claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "earnings-pricing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for earnings claims on a pricing page.",
+          sourceUrl: "https://example.com/profit-lab/pricing",
+          input: {
+              adjacentAfter: "Select a membership tier.",
+              adjacentBefore: "Profit Lab",
+              blockHeading: "Trader growth plans",
+              blockText: "Earn more with trader growth plans, premium pricing tiers, and market access built for active forex members.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/profit-lab/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Earn more with trader growth plans, premium pricing tiers, and market access built for active forex members",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for earnings claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "earnings-lead-gen",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for earnings claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/get-funded-forex",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Get Funded Forex",
+              blockHeading: "Funded trader access",
+              blockText: "Get funded to earn more with our forex program and premium trader support built for ambitious applicants.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/get-funded-forex",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Get funded to earn more with our forex program and premium trader support built for ambitious applicants",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for earnings claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "simulated-lead-gen",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for simulated-performance claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/backtest-challenge",
+          input: {
+              adjacentAfter: "Start your application.",
+              adjacentBefore: "Backtest Challenge",
+              blockHeading: "Backtested edge",
+              blockText: "Apply to access our backtested trading challenge with verified historical performance and funded trader pathways.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/backtest-challenge",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Apply to access our backtested trading challenge with verified historical performance and funded trader pathways",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for simulated-performance claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-marketing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for superlative claims on a marketing page.",
+          sourceUrl: "https://example.com/premier-signals",
+          input: {
+              adjacentAfter: "Learn more.",
+              adjacentBefore: "Premier Signals",
+              blockHeading: "Top-tier market desk",
+              blockText: "Discover the premier forex signal desk with the best market coverage for ambitious traders.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/premier-signals",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Discover the premier forex signal desk with the best market coverage for ambitious traders",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic coverage filler for superlative claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "pricing-marketing-page",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic coverage filler for pricing-opacity claims on a marketing page.",
+          sourceUrl: "https://example.com/trader-circle",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Trader Circle",
+              blockHeading: "Flexible access",
+              blockText: "Explore our trader circle with premium pricing, fee-based membership access, and forex coaching for serious members.",
+              candidateSignals: [
+                  "pricing",
+                  "pricing_fee",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/trader-circle",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "Explore our trader circle with premium pricing, fee-based membership access, and forex coaching for serious members",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.79,
+              rationaleShort: "Synthetic coverage filler for pricing-opacity claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "guaranteed-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for guaranteed-outcome claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/vip-forex-invite",
+          input: {
+              adjacentAfter: "Request your access today.",
+              adjacentBefore: "VIP Forex Invite",
+              blockHeading: "Guaranteed setup",
+              blockText: "Request access to our guaranteed forex setup desk with exclusive member pricing for serious applicants.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "pricing",
+                  "cta",
+                  "urgency"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/vip-forex-invite",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Request access to our guaranteed forex setup desk with exclusive member pricing for serious applicants",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for guaranteed-outcome claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "earnings-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for earnings claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/trader-invite",
+          input: {
+              adjacentAfter: "Apply for access now.",
+              adjacentBefore: "Trader Invite",
+              blockHeading: "Grow your account",
+              blockText: "Apply for access to earn more with our trader invite program and direct forex market support.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "cta",
+                  "urgency"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/trader-invite",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Apply for access to earn more with our trader invite program and direct forex market support",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for earnings claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "simulated-financial-offer-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for simulated-performance claims on a financial-offer page.",
+          sourceUrl: "https://example.com/quant-strategy-suite",
+          input: {
+              adjacentAfter: "Start your subscription.",
+              adjacentBefore: "Quant Strategy Suite",
+              blockHeading: "Validated models",
+              blockText: "Subscribe to our quant strategy suite with backtested performance models and trader-grade execution tools.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "cta"
+              ],
+              pageType: "financial_offer",
+              pageUrl: "https://example.com/quant-strategy-suite",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Subscribe to our quant strategy suite with backtested performance models and trader-grade execution tools",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for simulated-performance claims on a financial-offer page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-financial-offer-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for superlative claims on a financial-offer page.",
+          sourceUrl: "https://example.com/prime-alpha",
+          input: {
+              adjacentAfter: "Open your account.",
+              adjacentBefore: "Prime Alpha",
+              blockHeading: "Top alpha engine",
+              blockText: "Access the premier alpha engine with the best forex execution stack for serious traders.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "returns",
+                  "cta"
+              ],
+              pageType: "financial_offer",
+              pageUrl: "https://example.com/prime-alpha",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Access the premier alpha engine with the best forex execution stack for serious traders",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for superlative claims on a financial-offer page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "pricing-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for pricing-opacity claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/funded-fast-lp",
+          input: {
+              adjacentAfter: "Request your invite.",
+              adjacentBefore: "Funded Fast",
+              blockHeading: "Flexible activation",
+              blockText: "Join our funded-fast waitlist with activation pricing, premium access, and trader support for forex applicants.",
+              candidateSignals: [
+                  "pricing",
+                  "pricing_fee",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/funded-fast-lp",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "Join our funded-fast waitlist with activation pricing, premium access, and trader support for forex applicants",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.79,
+              rationaleShort: "Synthetic densifier for pricing-opacity claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "urgency-marketing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for urgency tactics on a marketing page.",
+          sourceUrl: "https://example.com/market-bulletin",
+          input: {
+              adjacentAfter: "See the bulletin now.",
+              adjacentBefore: "Market Bulletin",
+              blockHeading: "Window closing",
+              blockText: "Act now to join our forex bulletin before this week's breakout window closes for new members.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/market-bulletin",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Act now to join our forex bulletin before this week's breakout window closes for new members",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for urgency tactics on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "guaranteed-marketing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for guaranteed-outcome claims on a marketing page.",
+          sourceUrl: "https://example.com/steady-returns-blueprint",
+          input: {
+              adjacentAfter: "See the strategy.",
+              adjacentBefore: "Steady Returns Blueprint",
+              blockHeading: "Guaranteed income lane",
+              blockText: "Discover the guaranteed income lane for forex members who want steady low-risk gains with premium access.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "pricing"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/steady-returns-blueprint",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Discover the guaranteed income lane for forex members who want steady low-risk gains with premium access",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for guaranteed-outcome claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "guaranteed-pricing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for guaranteed-outcome claims on a pricing page.",
+          sourceUrl: "https://example.com/elite-income/pricing",
+          input: {
+              adjacentAfter: "Review plans.",
+              adjacentBefore: "Elite Income",
+              blockHeading: "Guaranteed tier",
+              blockText: "Review the guaranteed-income pricing tier for forex traders who want low-risk weekly gains and member access.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/elite-income/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "Review the guaranteed-income pricing tier for forex traders who want low-risk weekly gains and member access",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for guaranteed-outcome claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "earnings-pricing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for earnings claims on a pricing page.",
+          sourceUrl: "https://example.com/growth-desk/pricing",
+          input: {
+              adjacentAfter: "Pick your tier.",
+              adjacentBefore: "Growth Desk",
+              blockHeading: "Growth access",
+              blockText: "Pick the plan that helps active forex members earn more with premium pricing and trader tools.",
+              candidateSignals: [
+                  "earnings",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/growth-desk/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "Pick the plan that helps active forex members earn more with premium pricing and trader tools",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for earnings claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "simulated-pricing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for simulated-performance claims on a pricing page.",
+          sourceUrl: "https://example.com/model-lab/pricing",
+          input: {
+              adjacentAfter: "Compare plans.",
+              adjacentBefore: "Model Lab",
+              blockHeading: "Backtested pricing",
+              blockText: "Compare pricing for backtested forex models with verified historical performance and trader access.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/model-lab/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Compare pricing for backtested forex models with verified historical performance and trader access",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for simulated-performance claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "simulated-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for simulated-performance claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/historical-edge-invite",
+          input: {
+              adjacentAfter: "Request an invite.",
+              adjacentBefore: "Historical Edge Invite",
+              blockHeading: "Backtested access",
+              blockText: "Request access to our backtested forex edge with verified historical performance and funded pathways.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/historical-edge-invite",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Request access to our backtested forex edge with verified historical performance and funded pathways",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for simulated-performance claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-marketing-2b",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for superlative claims on a marketing page.",
+          sourceUrl: "https://example.com/apex-signals",
+          input: {
+              adjacentAfter: "Explore the desk.",
+              adjacentBefore: "Apex Signals",
+              blockHeading: "Best market desk",
+              blockText: "Explore the best forex market desk for traders who want premier setups and deeper market coverage.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/apex-signals",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Explore the best forex market desk for traders who want premier setups and deeper market coverage",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for superlative claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-pricing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for superlative claims on a pricing page.",
+          sourceUrl: "https://example.com/premier-desk/pricing",
+          input: {
+              adjacentAfter: "Choose a plan.",
+              adjacentBefore: "Premier Desk",
+              blockHeading: "Best-value plan",
+              blockText: "Choose the best-value forex execution plan for traders who want premier market access.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "pricing"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/premier-desk/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Choose the best-value forex execution plan for traders who want premier market access",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for superlative claims on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "superlative-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for superlative claims on a lead-generation offer.",
+          sourceUrl: "https://example.com/prime-invite",
+          input: {
+              adjacentAfter: "Request a seat.",
+              adjacentBefore: "Prime Invite",
+              blockHeading: "Top invite desk",
+              blockText: "Request access to the top forex invite desk for traders who want premier entries and market coverage.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "returns",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/prime-invite",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "Request access to the top forex invite desk for traders who want premier entries and market coverage",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for superlative claims on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "urgency-homepage-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for urgency tactics on a homepage.",
+          sourceUrl: "https://example.com/breakout-room",
+          input: {
+              adjacentAfter: "Enter now.",
+              adjacentBefore: "Breakout Room",
+              blockHeading: "Closing soon",
+              blockText: "Join our forex breakout room now before today's entry window closes for new members.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://example.com/breakout-room",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Join our forex breakout room now before today's entry window closes for new members",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for urgency tactics on a homepage."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "urgency-pricing-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for urgency tactics on a pricing page.",
+          sourceUrl: "https://example.com/fast-lane/pricing",
+          input: {
+              adjacentAfter: "Choose your plan.",
+              adjacentBefore: "Fast Lane",
+              blockHeading: "Limited pricing",
+              blockText: "Join now to lock in forex pricing before tonight's access window closes for new members.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "pricing",
+                  "pricing_fee"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/fast-lane/pricing",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Join now to lock in forex pricing before tonight's access window closes for new members",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for urgency tactics on a pricing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "urgency-lead-gen-2",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for urgency tactics on a lead-generation offer.",
+          sourceUrl: "https://example.com/entry-window",
+          input: {
+              adjacentAfter: "Submit your request.",
+              adjacentBefore: "Entry Window",
+              blockHeading: "Window closes tonight",
+              blockText: "Join now to apply before tonight's forex access window closes for new applicants.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/entry-window",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Join now to apply before tonight's forex access window closes for new applicants",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Synthetic densifier for urgency tactics on a lead-generation offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "pricing-marketing-2b",
+          bucket: "positive_high_confidence",
+          split: "train",
+          notes: "Synthetic densifier for pricing-opacity claims on a marketing page.",
+          sourceUrl: "https://example.com/member-circle",
+          input: {
+              adjacentAfter: null,
+              adjacentBefore: "Member Circle",
+              blockHeading: "Flexible member pricing",
+              blockText: "Join our member circle now to review flexible pricing, account fees, and forex coaching for serious traders.",
+              candidateSignals: [
+                  "pricing",
+                  "pricing_fee",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/member-circle",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "Join our member circle now to review flexible pricing, account fees, and forex coaching for serious traders",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.79,
+              rationaleShort: "Synthetic densifier for pricing-opacity claims on a marketing page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "mydigitrade-home-profit-forex-copy",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Live homepage copy pairs profit language and monthly profit cards with a free demo CTA on a copy-trading offer.",
+          sourceUrl: "https://mydigitrade.com",
+          input: {
+              adjacentAfter: "Free demo account",
+              adjacentBefore: "Choose among 500+ traders",
+              blockHeading: "Copy Trading Platform The simplest way to trade Forex market like a Pro",
+              blockText: "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit. 8.9% Monthly profit.",
+              candidateSignals: [
+                  "earnings",
+                  "pricing",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "homepage",
+              pageUrl: "https://mydigitrade.com",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "earnings_claim",
+              claimText: "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: true,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.9,
+              rationaleShort: "Live homepage copy pairs profit language and monthly profit cards with a free demo CTA on a copy-trading offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure",
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
       })
 ];
 function summarizeFinancialCommercialClaimsDataset(examples = exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED) {
