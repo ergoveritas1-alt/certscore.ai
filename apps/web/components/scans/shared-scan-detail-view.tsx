@@ -3304,12 +3304,15 @@ function deriveUnverifiedHomepageReason(snapshot: Record<string, unknown>, scanE
 
   return (
     deriveScanStopReason({
+      accessPostureClass: typeof snapshot.access_posture_class === "string" ? snapshot.access_posture_class : null,
       authWallDetected: snapshot.auth_wall_detected === true,
       blockedFlag: snapshot.blocked_flag === true,
       captchaFlag: snapshot.captcha_flag === true,
       homepageFetchHttpStatus:
         typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null,
       homepageFetchStatus: typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status : null,
+      normalizedBodyMissing:
+        !(typeof snapshot.normalized_body_hash === "string" && snapshot.normalized_body_hash.trim().length > 0),
       pagesScanned: typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null,
       robotsAllowed: snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null,
       robotsFetchHttpStatus: typeof snapshot.robots_fetch_http_status === "number" ? snapshot.robots_fetch_http_status : null,
@@ -3332,11 +3335,14 @@ export function deriveUnverifiedHomepageReview(
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(snapshot);
   const verifiedPolicyInsights = deriveVerifiedPolicyInsights(policyEnrichments);
   const stopReason = deriveScanStopReason({
+    accessPostureClass: typeof snapshot.access_posture_class === "string" ? snapshot.access_posture_class : null,
     authWallDetected: snapshot.auth_wall_detected === true,
     blockedFlag: snapshot.blocked_flag === true,
     captchaFlag: snapshot.captcha_flag === true,
     homepageFetchHttpStatus: typeof snapshot.homepage_fetch_http_status === "number" ? snapshot.homepage_fetch_http_status : null,
     homepageFetchStatus: typeof snapshot.homepage_fetch_status === "string" ? snapshot.homepage_fetch_status : null,
+    normalizedBodyMissing:
+      !(typeof snapshot.normalized_body_hash === "string" && snapshot.normalized_body_hash.trim().length > 0),
     pagesScanned: typeof snapshot.pages_scanned === "number" ? snapshot.pages_scanned : null,
     robotsAllowed: snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null,
     robotsFetchHttpStatus: typeof snapshot.robots_fetch_http_status === "number" ? snapshot.robots_fetch_http_status : null,

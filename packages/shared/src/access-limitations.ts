@@ -1,6 +1,7 @@
 export type ScanOutcomeCode =
   | "completed_successfully"
   | "completed_partial"
+  | "content_capture_degraded"
   | "reachability_blocked_homepage_403"
   | "reachability_blocked_homepage_401"
   | "reachability_blocked_challenge_suspected"
@@ -16,6 +17,7 @@ export type ScanOutcomeCode =
   | "verification_incomplete";
 
 export type ScanStopReasonCode =
+  | "content_capture_degraded"
   | "reachability_blocked_homepage_403"
   | "reachability_blocked_homepage_401"
   | "reachability_blocked_challenge_suspected"
@@ -105,6 +107,7 @@ export type BlockClassifierResult = {
 };
 
 export type AccessLimitationInput = {
+  accessPostureClass?: string | null;
   authWallDetected?: boolean | null;
   blockedFlag?: boolean | null;
   captchaFlag?: boolean | null;
@@ -113,6 +116,7 @@ export type AccessLimitationInput = {
   homepageFetchHttpStatus?: number | null;
   homepageFetchStatus?: string | null;
   pagesScanned?: number | null;
+  normalizedBodyMissing?: boolean | null;
   robotsAllowed?: boolean | null;
   robotsFetchHttpStatus?: number | null;
   robotsFetchStatus?: string | null;
@@ -143,6 +147,8 @@ export type RetryPolicyInput = {
   normalizedBodyMissing?: boolean | null;
   pagesScanned?: number | null;
   transportFailure?: boolean | null;
+  blockPageClassification?: BlockPageClassification | null;
+  authWallSuspected?: boolean | null;
   challengeSuspected?: boolean | null;
   repeated403Cluster?: boolean | null;
   rateLimitSuspected?: boolean | null;
@@ -340,12 +346,96 @@ function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function hasKnownAccessBlockSignal(input: {
+  authWallDetected?: boolean | null;
+  authWallSuspected?: boolean | null;
+  blockedFlag?: boolean | null;
+  blockPageClassification?: BlockPageClassification | null;
+  captchaFlag?: boolean | null;
+  challengeSuspected?: boolean | null;
+  geoBlockSuspected?: boolean | null;
+  fingerprintBlockSuspected?: boolean | null;
+  homepageFetchHttpStatus?: number | null;
+  homepageFetchStatus?: string | null;
+  rateLimitSuspected?: boolean | null;
+}) {
+  const homepageFetchStatus = normalizeStatus(input.homepageFetchStatus);
+  const homepageFetchHttpStatus = getFiniteNumber(input.homepageFetchHttpStatus);
+
+  return (
+    input.authWallDetected === true ||
+    input.authWallSuspected === true ||
+    input.blockedFlag === true ||
+    input.captchaFlag === true ||
+    input.challengeSuspected === true ||
+    input.geoBlockSuspected === true ||
+    input.fingerprintBlockSuspected === true ||
+    input.rateLimitSuspected === true ||
+    input.blockPageClassification === "captcha_probable" ||
+    input.blockPageClassification === "login_wall_probable" ||
+    input.blockPageClassification === "vendor_interstitial_probable" ||
+    homepageFetchHttpStatus === 401 ||
+    homepageFetchHttpStatus === 403 ||
+    homepageFetchHttpStatus === 429 ||
+    homepageFetchStatus === "forbidden" ||
+    homepageFetchStatus === "blocked"
+  );
+}
+
+function isContentCaptureDegraded(input: {
+  accessPostureClass?: string | null;
+  authWallDetected?: boolean | null;
+  authWallSuspected?: boolean | null;
+  blockedFlag?: boolean | null;
+  blockPageClassification?: BlockPageClassification | null;
+  captchaFlag?: boolean | null;
+  challengeSuspected?: boolean | null;
+  fingerprintBlockSuspected?: boolean | null;
+  geoBlockSuspected?: boolean | null;
+  homepageFetchHttpStatus?: number | null;
+  homepageFetchStatus?: string | null;
+  normalizedBodyMissing?: boolean | null;
+  pagesScanned?: number | null;
+  rateLimitSuspected?: boolean | null;
+}) {
+  const homepageFetchStatus = normalizeStatus(input.homepageFetchStatus);
+  const homepageFetchHttpStatus = getFiniteNumber(input.homepageFetchHttpStatus);
+  const pagesScanned = getFiniteNumber(input.pagesScanned);
+  const accessPostureClass = normalizeStatus(input.accessPostureClass);
+
+  return (
+    input.normalizedBodyMissing === true &&
+    (pagesScanned ?? 0) > 0 &&
+    homepageFetchStatus === "ok" &&
+    !hasKnownAccessBlockSignal({
+      authWallDetected: input.authWallDetected,
+      authWallSuspected: input.authWallSuspected,
+      blockedFlag: input.blockedFlag,
+      blockPageClassification: input.blockPageClassification,
+      captchaFlag: input.captchaFlag,
+      challengeSuspected: input.challengeSuspected,
+      fingerprintBlockSuspected: input.fingerprintBlockSuspected,
+      geoBlockSuspected: input.geoBlockSuspected,
+      homepageFetchHttpStatus,
+      homepageFetchStatus,
+      rateLimitSuspected: input.rateLimitSuspected
+    }) &&
+    (accessPostureClass === "tolerant" ||
+      accessPostureClass === "degraded_but_useful" ||
+      accessPostureClass === "unknown" ||
+      accessPostureClass === null ||
+      input.blockPageClassification === "empty_or_thin_block_page")
+  );
+}
+
 export function deriveAccessLimitationOutcome(input: AccessLimitationInput): AccessLimitationOutcome | null {
   const fallbackSourceLabel = typeof input.fallbackSourceLabel === "string" ? input.fallbackSourceLabel.trim() : "";
   const fallbackSourceReason = typeof input.fallbackSourceReason === "string" ? input.fallbackSourceReason.trim() : "";
   const homepageFetchStatus = normalizeStatus(input.homepageFetchStatus);
   const homepageFetchHttpStatus = getFiniteNumber(input.homepageFetchHttpStatus);
   const pagesScanned = getFiniteNumber(input.pagesScanned);
+  const normalizedBodyMissing = input.normalizedBodyMissing === true;
+  const accessPostureClass = normalizeStatus(input.accessPostureClass);
   const robotsAllowed = input.robotsAllowed === true ? true : input.robotsAllowed === false ? false : null;
   const robotsFetchStatus = normalizeStatus(input.robotsFetchStatus);
   const robotsFetchHttpStatus = getFiniteNumber(input.robotsFetchHttpStatus);
@@ -532,6 +622,42 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     };
   }
 
+  if (
+    isContentCaptureDegraded({
+      accessPostureClass,
+      authWallDetected: input.authWallDetected,
+      authWallSuspected,
+      blockedFlag: input.blockedFlag,
+      blockPageClassification: input.blockPageClassification,
+      captchaFlag: input.captchaFlag,
+      challengeSuspected,
+      fingerprintBlockSuspected: input.fingerprintBlockSuspected,
+      geoBlockSuspected,
+      homepageFetchHttpStatus,
+      homepageFetchStatus,
+      normalizedBodyMissing,
+      pagesScanned,
+      rateLimitSuspected: input.rateLimitSuspected
+    })
+  ) {
+    return {
+      kind: "content_capture_degraded",
+      outcome: "content_capture_degraded",
+      outcomeTitle: "Content capture degraded",
+      previewFindingTitle: "Homepage content was not retained cleanly",
+      reason:
+        "Reason: homepage fetch succeeded, but the run did not retain a usable normalized homepage body for downstream review.",
+      reviewMessage:
+        "This run reached the homepage but did not retain enough normalized homepage content to support ordinary review conclusions, so findings may understate what was actually present on the site.",
+      reviewTitle: "Content capture degraded",
+      whatThisMeans: [
+        "The scanner reached the homepage, but the retained content artifacts were incomplete for review.",
+        "This is different from a bot block or transport failure.",
+        "Retry the run or inspect scanner-side content retention before treating missing findings as meaningful absence."
+      ]
+    };
+  }
+
   if (pagesScanned === 0) {
     return {
       kind: "unknown_access_limitation",
@@ -550,14 +676,17 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
 }
 
 export function deriveRetryPolicy(input: RetryPolicyInput): RetryPolicyDecision {
-  const cleanHomepageButMissingBody =
-    input.normalizedBodyMissing === true &&
-    (input.pagesScanned ?? 0) > 0 &&
-    normalizeStatus(input.homepageFetchStatus) === "ok" &&
-    input.homepageHttpStatus !== 401 &&
-    input.homepageHttpStatus !== 403 &&
-    input.homepageHttpStatus !== 429 &&
-    input.accessPostureClass === "tolerant";
+  const cleanHomepageButMissingBody = isContentCaptureDegraded({
+    accessPostureClass: input.accessPostureClass,
+    authWallSuspected: input.authWallSuspected,
+    blockPageClassification: input.blockPageClassification,
+    challengeSuspected: input.challengeSuspected,
+    homepageFetchHttpStatus: input.homepageHttpStatus,
+    homepageFetchStatus: input.homepageFetchStatus,
+    normalizedBodyMissing: input.normalizedBodyMissing,
+    pagesScanned: input.pagesScanned,
+    rateLimitSuspected: input.rateLimitSuspected
+  });
 
   if (cleanHomepageButMissingBody) {
     return {

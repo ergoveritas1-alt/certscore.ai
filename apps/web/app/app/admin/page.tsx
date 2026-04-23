@@ -79,7 +79,7 @@ export default async function AdminOverviewPage() {
           <CardContent className="space-y-1 text-sm text-slate-600">
             <p>403: {scanMetrics.http403Count}</p>
             <p>429: {scanMetrics.http429Count}</p>
-            <p>Blocked/CAPTCHA: {scanMetrics.blockedOrCaptchaCount}</p>
+            <p>Blocked/CAPTCHA/Degraded: {scanMetrics.blockedOrCaptchaCount}</p>
           </CardContent>
         </Card>
       </div>

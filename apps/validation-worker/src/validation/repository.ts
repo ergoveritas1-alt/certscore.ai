@@ -16,6 +16,7 @@ import {
   getCrawlerPublicUrl,
   getPlanDefinition,
   normalizeUrl,
+  type BlockPageClassification,
   type FinancialValidationEvidence,
   type PopulatedSignalRecord,
   type SignalPopulationStatus
@@ -341,11 +342,11 @@ function buildStoredSignalPopulationRecords(input: {
 
 function rankBandForRank(rank: number | null) {
   if (!rank) {
-    return null;
+    return VALIDATION_RANK_BANDS[VALIDATION_RANK_BANDS.length - 1]?.key ?? null;
   }
 
   const match = VALIDATION_RANK_BANDS.find((band) => rank >= band.min && rank <= band.max);
-  return match?.key ?? null;
+  return match?.key ?? VALIDATION_RANK_BANDS[VALIDATION_RANK_BANDS.length - 1]?.key ?? null;
 }
 
 function addMinutes(base: Date, minutes: number) {
@@ -1734,7 +1735,7 @@ export async function replaceValidationRunFindings(
   if (run?.scan_id) {
     await persistValidationRunReportFindingCount({
       runId,
-      scanId: run.scan_id
+      scanId: run.scan_id ?? ""
     });
   }
 
@@ -1850,6 +1851,11 @@ export async function finalizeValidationRun(runId: string) {
   const averageAgreementScore =
     scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
   const completedAt = new Date();
+  const scanId = run.scan_id;
+
+  if (!scanId) {
+    return;
+  }
 
   await updateValidationRun(runId, {
     average_agreement_score: averageAgreementScore,
@@ -1859,21 +1865,16 @@ export async function finalizeValidationRun(runId: string) {
     status: "completed"
   });
 
-  if (run.scan_id) {
-    await persistValidationRunReportFindingCount({
-      runId,
-      scanId: run.scan_id
-    });
-  }
+  await persistValidationRunReportFindingCount({
+    runId,
+    scanId
+  });
 
-  if (!run.validation_target_id) {
-    return;
-  }
-
-  const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
   const snapshot = await queryOne<{
     access_posture_class: string | null;
+    auth_wall_suspected: boolean | null;
     blocked_flag: boolean | null;
+    block_page_classification: BlockPageClassification | null;
     captcha_flag: boolean | null;
     challenge_suspected: boolean | null;
     cooldown_hours: number | null;
@@ -1888,7 +1889,9 @@ export async function finalizeValidationRun(runId: string) {
     `
       select
         access_posture_class,
+        auth_wall_suspected,
         blocked_flag,
+        block_page_classification,
         captcha_flag,
         homepage_fetch_status,
         homepage_fetch_http_status,
@@ -1902,9 +1905,77 @@ export async function finalizeValidationRun(runId: string) {
       from scan_snapshots
       where scan_id = $1
     `,
-    [run.scan_id],
+    [scanId],
     { readOnly: true }
   );
+  const homepagePage = await queryOne<{
+    normalized_content_hash: string | null;
+    page_url: string | null;
+    title_hash: string | null;
+  }>(
+    `
+      select normalized_content_hash, title_hash, page_url
+      from scan_pages
+      where scan_id = $1
+        and page_type = 'homepage'
+      order by created_at asc
+      limit 1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
+
+  const hasNormalizedHomepageBody = typeof snapshot?.normalized_body_hash === "string" && snapshot.normalized_body_hash.length > 0;
+  const hasNormalizedHomepagePageContent =
+    typeof homepagePage?.normalized_content_hash === "string" && homepagePage.normalized_content_hash.length > 0;
+  const degradedContentCapture =
+    !hasNormalizedHomepageBody &&
+    !hasNormalizedHomepagePageContent &&
+    snapshot?.homepage_fetch_status === "ok" &&
+    snapshot?.homepage_fetch_http_status !== 401 &&
+    snapshot?.homepage_fetch_http_status !== 403 &&
+    snapshot?.homepage_fetch_http_status !== 429 &&
+    (snapshot?.pages_scanned ?? 0) > 0 &&
+    snapshot?.access_posture_class === "tolerant";
+
+  if (degradedContentCapture) {
+    await query(
+      `
+        update scan_snapshots
+           set scan_outcome = 'content_capture_degraded',
+               stop_reason_code = 'content_capture_degraded',
+               stop_reason_label = 'Content capture degraded',
+               stop_reason_detail = $2
+         where scan_id = $1
+      `,
+      [
+        scanId,
+        "Homepage fetch succeeded, but the run did not retain a usable normalized homepage body for downstream review."
+      ]
+    );
+    await appendScanWorkflowEvent({
+      eventType: SCAN_EVENT_TYPES.contentCaptureDegraded,
+      message: "Snapshot marked as content-capture degraded after homepage content was not retained cleanly.",
+      metadataJson: {
+        accessPostureClass: snapshot?.access_posture_class ?? null,
+        homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+        homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
+        homepagePageUrl: homepagePage?.page_url ?? null,
+        normalizedBodyMissing: true,
+        normalizedHomepageContentMissing: true,
+        pagesScanned: snapshot?.pages_scanned ?? null
+      },
+      scanId
+    });
+  }
+
+  const effectiveScanOutcome = degradedContentCapture ? "content_capture_degraded" : snapshot?.scan_outcome ?? null;
+
+  if (!run.validation_target_id) {
+    return;
+  }
+
+  const cooldownDays = run.tranco_rank && run.tranco_rank <= 20_000 ? 14 : 30;
 
   const blocked =
     snapshot?.blocked_flag === true ||
@@ -1913,15 +1984,18 @@ export async function finalizeValidationRun(runId: string) {
     snapshot?.homepage_fetch_http_status === 429 ||
     snapshot?.robots_fetch_http_status === 403 ||
     snapshot?.robots_fetch_http_status === 429 ||
-    snapshot?.scan_outcome === "robots_restricted" ||
-    snapshot?.scan_outcome === "unknown_access_limitation";
+    effectiveScanOutcome === "robots_restricted" ||
+    effectiveScanOutcome === "unknown_access_limitation";
   const retryPolicy = deriveRetryPolicy({
     accessPostureClass: snapshot?.access_posture_class ?? null,
+    authWallSuspected: snapshot?.auth_wall_suspected === true,
+    blockPageClassification:
+      typeof snapshot?.block_page_classification === "string" ? snapshot.block_page_classification : null,
     homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
     homepageHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
     normalizedBodyMissing: !snapshot?.normalized_body_hash,
     pagesScanned: snapshot?.pages_scanned ?? null,
-    transportFailure: snapshot?.scan_outcome === "transport_failure" || snapshot?.scan_outcome === "timeout_navigation",
+    transportFailure: effectiveScanOutcome === "transport_failure" || effectiveScanOutcome === "timeout_navigation",
     challengeSuspected: snapshot?.challenge_suspected === true,
     rateLimitSuspected: snapshot?.rate_limit_suspected === true
   });

@@ -254,7 +254,7 @@ async function failValidationQueueHandoff(input: {
 
 function rankBandForRank(rank: number | null) {
   if (!rank) {
-    return null;
+    return "50k-100k";
   }
 
   if (rank <= 5_000) {
@@ -273,7 +273,7 @@ function rankBandForRank(rank: number | null) {
     return "50k-100k";
   }
 
-  return null;
+  return "50k-100k";
 }
 
 async function listTrancoPreviewTargets(limit = 7) {

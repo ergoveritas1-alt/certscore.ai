@@ -47,6 +47,7 @@ type ScanConfig = {
 export type PreviewSnapshotRow = {
   authWallDetected?: ScanSnapshot["authWallDetected"] | null;
   authWallSuspected?: ScanSnapshot["authWallSuspected"] | null;
+  accessPostureClass?: ScanSnapshot["accessPostureClass"] | null;
   accessibilityClaimMismatchDetected: ScanSnapshot["accessibilityClaimMismatchDetected"];
   accessibilityLitigationRiskScore: ScanSnapshot["accessibilityLitigationRiskScore"];
   accessibilityScore: ScanSnapshot["accessibilityScore"];
@@ -83,6 +84,7 @@ export type PreviewSnapshotRow = {
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
   homepageFetchHttpStatus?: ScanSnapshot["homepageFetchHttpStatus"] | null;
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
+  normalizedBodyHash?: ScanSnapshot["normalizedBodyHash"] | null;
   passiveVerificationAttemptCount?: ScanSnapshot["passiveVerificationAttemptCount"] | null;
   passiveVerificationAttempted?: ScanSnapshot["passiveVerificationAttempted"] | null;
   redirectCount: ScanSnapshot["redirectCount"];
@@ -320,6 +322,7 @@ export async function loadPreviewScanSnapshotRecord(scanId: string): Promise<Rec
       `select ${
         [
           "total_signals","pages_scanned","homepage_fetch_status","homepage_fetch_http_status","final_url","registered_domain","redirect_count","partial_scan",
+          "access_posture_class","normalized_body_hash",
           "robots_allowed","robots_fetch_http_status","robots_fetch_status","auth_wall_detected","auth_wall_suspected","blocked_flag","captcha_flag",
           "block_page_classification","block_vendor_guess","challenge_suspected","rate_limit_suspected","geo_block_suspected","fingerprint_block_suspected",
           "passive_verification_attempt_count","passive_verification_attempted","coverage_level","certscore_overall","privacy_score","accessibility_score",

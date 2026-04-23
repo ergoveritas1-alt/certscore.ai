@@ -394,6 +394,29 @@ test("not-found previews classify the domain as inactive or unstable", () => {
   assert.equal(payload.summaryBullets.includes("Reason: homepage returned HTTP 404 Not Found."), true);
 });
 
+test("successful homepage fetches with missing retained body classify as degraded content capture", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "fxculturetrading.com",
+    normalizedUrl: "https://fxculturetrading.com",
+    snapshot: buildSnapshot({
+      accessPostureClass: "tolerant",
+      homepageFetchHttpStatus: 200,
+      homepageFetchStatus: "ok",
+      normalizedBodyHash: null,
+      pagesScanned: 1
+    })
+  });
+
+  assert.equal(payload.resultState?.code, "content_capture_degraded");
+  assert.equal(payload.resultState?.title, "Content capture degraded");
+  assert.equal(
+    payload.summaryBullets.includes(
+      "Reason: homepage fetch succeeded, but the run did not retain a usable normalized homepage body for downstream review."
+    ),
+    true
+  );
+});
+
 test("blocked previews expose first-class evidence fields", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "example.com",

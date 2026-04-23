@@ -713,7 +713,8 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
       `select count(*)::text as count
          from scan_snapshots
         where blocked_flag = true
-           or captcha_flag = true`,
+           or captcha_flag = true
+           or scan_outcome = 'content_capture_degraded'`,
       [],
       { readOnly: true }
     )

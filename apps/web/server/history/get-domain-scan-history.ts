@@ -161,11 +161,13 @@ function deriveLoggedInterruptionReason(scanEvents: ScanDiagnosticEventRow[]) {
 function deriveInterruptionSummary(scan: ScanRow, snapshot: SnapshotRow | null, diagnosticEvents: ScanDiagnosticEventRow[]) {
   const loggedReason = deriveLoggedInterruptionReason(diagnosticEvents);
   const stopReason = deriveScanStopReason({
+    accessPostureClass: snapshot?.access_posture_class ?? null,
     authWallDetected: snapshot?.auth_wall_detected === true,
     blockedFlag: snapshot?.blocked_flag === true,
     captchaFlag: snapshot?.captcha_flag === true,
     homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
     homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
+    normalizedBodyMissing: !snapshot?.normalized_body_hash,
     pagesScanned: scan.pages_scanned,
     robotsAllowed: snapshot?.robots_allowed ?? null,
     robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,

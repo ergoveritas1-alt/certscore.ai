@@ -264,7 +264,13 @@ function incrementCount(map: Map<string, number>, key: string) {
 export async function getBlockedRunTelemetry(hours = 72): Promise<BlockedRunTelemetry> {
   await requirePlatformAdminContext();
   const rows = (await loadBlockedRunTelemetryRows(hours)) as AdminBlockedRunTelemetryRow[];
-  const blockedRows = rows.filter((row) => String(row.scan_outcome ?? "").startsWith("reachability_blocked") || row.scan_outcome === "robots_restricted" || row.scan_outcome === "unknown_access_limitation");
+  const blockedRows = rows.filter(
+    (row) =>
+      String(row.scan_outcome ?? "").startsWith("reachability_blocked") ||
+      row.scan_outcome === "robots_restricted" ||
+      row.scan_outcome === "unknown_access_limitation" ||
+      row.scan_outcome === "content_capture_degraded"
+  );
   const blockedByHour = new Map<string, number>();
   const blockedByEgress = new Map<string, number>();
   const blockedByAsn = new Map<string, number>();

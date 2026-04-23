@@ -913,11 +913,13 @@ async function loadScanDetailRecord(input: {
   const stopTier = accessPostureSummary.stopTier;
   const stopReason = normalizedSnapshot
     ? deriveScanStopReason({
+        accessPostureClass,
         authWallDetected: normalizedSnapshot.auth_wall_detected === true,
         blockedFlag: normalizedSnapshot.blocked_flag === true,
         captchaFlag: normalizedSnapshot.captcha_flag === true,
         homepageFetchHttpStatus,
         homepageFetchStatus,
+        normalizedBodyMissing: !normalizedSnapshot.normalized_body_hash,
         pagesScanned: scanRow.pages_scanned,
         robotsAllowed:
           normalizedSnapshot.robots_allowed === true

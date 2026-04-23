@@ -11,6 +11,7 @@ import type {
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 
 type PreviewSnapshotSource = {
+  accessPostureClass?: ScanSnapshot["accessPostureClass"] | null;
   accessibilityScore: ScanSnapshot["accessibilityScore"];
   authWallDetected?: ScanSnapshot["authWallDetected"] | null;
   authWallSuspected?: ScanSnapshot["authWallSuspected"] | null;
@@ -32,6 +33,7 @@ type PreviewSnapshotSource = {
   granularPreferencesPresent: ScanSnapshot["granularPreferencesPresent"];
   homepageFetchHttpStatus?: ScanSnapshot["homepageFetchHttpStatus"] | null;
   homepageFetchStatus: ScanSnapshot["homepageFetchStatus"] | null;
+  normalizedBodyHash?: ScanSnapshot["normalizedBodyHash"] | null;
   passiveVerificationAttemptCount?: ScanSnapshot["passiveVerificationAttemptCount"] | null;
   passiveVerificationAttempted?: ScanSnapshot["passiveVerificationAttempted"] | null;
   pagesScanned: ScanSnapshot["pagesScanned"];
@@ -492,7 +494,12 @@ export function buildPreviewPayloadFromSnapshot(input: {
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
   const evidenceRichZeroPagePreview = isEvidenceRichZeroPagePreview(input.snapshot, verifiedSurfaces);
   const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
+  const normalizedBodyMissing =
+    "normalizedBodyHash" in input.snapshot
+      ? !(typeof input.snapshot.normalizedBodyHash === "string" && input.snapshot.normalizedBodyHash.trim().length > 0)
+      : null;
   const scanStopReason = deriveScanStopReason({
+    accessPostureClass: input.snapshot.accessPostureClass,
     authWallDetected: input.snapshot.authWallDetected,
     authWallSuspected: input.snapshot.authWallSuspected,
     blockPageClassification: input.snapshot.blockPageClassification as BlockPageClassification | null | undefined,
@@ -504,6 +511,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
     geoBlockSuspected: input.snapshot.geoBlockSuspected,
     homepageFetchHttpStatus: input.snapshot.homepageFetchHttpStatus,
     homepageFetchStatus: input.snapshot.homepageFetchStatus,
+    normalizedBodyMissing,
     pagesScanned: input.snapshot.pagesScanned,
     rateLimitSuspected: input.snapshot.rateLimitSuspected,
     robotsAllowed: input.snapshot.robotsAllowed,

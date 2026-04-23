@@ -33,3 +33,29 @@ test("classifies navigation timeouts separately from transport failure", () => {
   assert.equal(result?.kind, "timeout_navigation");
   assert.equal(result?.outcomeTitle, "Transport failure");
 });
+
+test("classifies successful homepage fetches with missing retained body as degraded capture", () => {
+  const result = deriveScanStopReason({
+    accessPostureClass: "tolerant",
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    normalizedBodyMissing: true,
+    pagesScanned: 1
+  });
+
+  assert.equal(result?.kind, "content_capture_degraded");
+  assert.equal(result?.outcomeTitle, "Content capture degraded");
+});
+
+test("classifies thin-page degraded captures as degraded content even without tolerant posture", () => {
+  const result = deriveScanStopReason({
+    accessPostureClass: "degraded_but_useful",
+    blockPageClassification: "empty_or_thin_block_page",
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    normalizedBodyMissing: true,
+    pagesScanned: 1
+  });
+
+  assert.equal(result?.kind, "content_capture_degraded");
+});

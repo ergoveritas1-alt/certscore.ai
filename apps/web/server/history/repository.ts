@@ -20,12 +20,14 @@ export type HistoryScanRow = {
 };
 
 export type HistorySnapshotRow = {
+  access_posture_class: string | null;
   auth_wall_detected: boolean | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
   legal_coverage_score?: number | null;
+  normalized_body_hash: string | null;
   report_finding_count: number | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;

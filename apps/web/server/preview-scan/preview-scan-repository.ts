@@ -554,6 +554,7 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
   return {
     totalSignals: Number(row.total_signals ?? 0),
     pagesScanned: Number(row.pages_scanned ?? 0),
+    accessPostureClass: typeof row.access_posture_class === "string" ? (row.access_posture_class as ScanSnapshot["accessPostureClass"]) : null,
     authWallDetected: typeof row.auth_wall_detected === "boolean" ? (row.auth_wall_detected as boolean) : null,
     authWallSuspected: typeof row.auth_wall_suspected === "boolean" ? (row.auth_wall_suspected as boolean) : null,
     blockPageClassification:
@@ -568,6 +569,7 @@ export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRo
     homepageFetchStatus: typeof row.homepage_fetch_status === "string" ? (row.homepage_fetch_status as ScanSnapshot["homepageFetchStatus"]) : null,
     homepageFetchHttpStatus:
       typeof row.homepage_fetch_http_status === "number" ? (row.homepage_fetch_http_status as number) : null,
+    normalizedBodyHash: typeof row.normalized_body_hash === "string" ? (row.normalized_body_hash as string) : null,
     finalUrl: typeof row.final_url === "string" ? (row.final_url as string) : null,
     geoBlockSuspected: typeof row.geo_block_suspected === "boolean" ? (row.geo_block_suspected as boolean) : null,
     registeredDomain: typeof row.registered_domain === "string" ? (row.registered_domain as string) : null,

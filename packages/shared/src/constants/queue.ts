@@ -106,6 +106,7 @@ export const SCAN_EVENT_TYPES = {
   unifiedFindingsDerivedStarted: "findings.unified_derivation_started",
   unifiedFindingsDerivedCompleted: "findings.unified_derivation_completed",
   unifiedFindingsDerivedFailed: "findings.unified_derivation_failed",
+  contentCaptureDegraded: "snapshot.content_capture_degraded",
   validationRunCompleted: "validation.run_completed",
   validationRunFailed: "validation.run_failed"
 } as const;

@@ -7,6 +7,7 @@ import {
 } from "../../../../packages/shared/src/access-limitations";
 
 type ScanStopReasonInput = {
+  accessPostureClass?: string | null;
   authWallDetected?: boolean | null;
   blockedFlag?: boolean | null;
   captchaFlag?: boolean | null;
@@ -14,6 +15,7 @@ type ScanStopReasonInput = {
   fallbackSourceReason?: string | null;
   homepageFetchHttpStatus?: number | null;
   homepageFetchStatus?: string | null;
+  normalizedBodyMissing?: boolean | null;
   pagesScanned?: number | null;
   robotsAllowed?: boolean | null;
   robotsFetchHttpStatus?: number | null;
