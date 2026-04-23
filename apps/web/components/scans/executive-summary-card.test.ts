@@ -237,6 +237,44 @@ test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessib
   assert.equal(financialLens?.summary, "");
 });
 
+test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("leveraged_or_high_risk_product_promotion", "Leveraged or high-risk product promotion", {
+        section: "Financial & Claims",
+        severity: "medium",
+        shortSummary: "Leverage language present on a public-facing financial promotion surface."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: []
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      })
+    }
+  );
+
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(financialLens);
+  assert.equal(financialLens?.minimal, undefined);
+  assert.equal(financialLens?.ratingLabel, "Watch");
+  assert.match(financialLens?.summary ?? "", /Commercial claims and pricing language should be reviewed/i);
+  assert.match(financialLens?.findings.join(" "), /High-risk financial product promotion language surfaced/i);
+});
+
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
   const lenses = buildRegulatoryLenses(
     [

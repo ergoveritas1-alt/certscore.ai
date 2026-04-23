@@ -92,7 +92,8 @@ const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
-  "pricing_or_fee_transparency_unclear"
+  "pricing_or_fee_transparency_unclear",
+  "leveraged_or_high_risk_product_promotion"
 ]);
 
 function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
@@ -109,6 +110,8 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
       return "Urgency language appears tied to a conversion step.";
     case "pricing_or_fee_transparency_unclear":
       return "Pricing or fee disclosure remains unclear near the offer path.";
+    case "leveraged_or_high_risk_product_promotion":
+      return "High-risk financial product promotion language surfaced.";
     default:
       return finding.shortSummary;
   }
