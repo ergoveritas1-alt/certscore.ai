@@ -1497,7 +1497,7 @@ const FINANCIAL_TESTIMONIAL_PATTERN =
   /\b(?:i['’]?m|i['’]?ve|i have|my account|thank you|god bless|awesome|speechless|happy customer|customer feedback|subscriber|review|reviews|testimonial|testimonials)\b/i;
 const FINANCIAL_TITLE_LIKE_PATTERN = /^[^.!?\n]{0,140}\|\s*[^.!?\n]{0,120}$/i;
 const FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN =
-  /\b(?:\d{1,3}(?:-\d{1,3})?(?:\.\d+)?%\s+accuracy|\+?\d{2,6}\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?|(?:\$|usd|eur|gbp)\s?\d.{0,32}\b(?:package|plan|subscription|membership|access)\b|\b\d(?:-\d)?\s*figure\s+returns\b)\b/i;
+  /\b(?:\d{1,3}(?:-\d{1,3})?(?:\.\d+)?%\s+accuracy|\+?\d{2,6}(?:-\d{2,6})?\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?|(?:\$|usd|eur|gbp)\s?\d.{0,32}\b(?:package|plan|subscription|membership|access)\b|\b\d(?:-\d)?\s*figure\s+returns\b)\b/i;
 
 function scoreFinancialCommercialSnippet(text: string | null, signalKeys: string[] = []) {
   if (!text) {
@@ -1796,7 +1796,7 @@ function hasStrongFinancialCommercialSnippetForFinding(input: {
           /\b(earn|earned|earning|earnings|income|profit|profits|profitable|make money|cash flow|passive income|return|returns|yield|apy|apr|roi|accuracy)\b/i.test(
             normalized
           ) ||
-          /\+\d+\s*pips\b/i.test(normalized) ||
+          /\+?\d{2,6}(?:-\d{2,6})?\s*pips\b/i.test(normalized) ||
           FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN.test(normalized)
         ) &&
         !/\b(loss|losses|lose|losing|drawdown|risk|not yield|may not|might not|could sustain)\b/i.test(normalized) &&
