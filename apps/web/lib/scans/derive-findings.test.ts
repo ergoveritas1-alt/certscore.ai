@@ -348,6 +348,26 @@ test("promotes financial validation findings into cert score findings without ve
   assert.ok(ids.includes("pricing_or_fee_transparency_unclear"));
 });
 
+test("promotes snapshot-backed high-risk financial product signals into cert score findings", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: null,
+    snapshot: {
+      certscore_overall: 64,
+      leverageLanguagePresent: true
+    },
+    scan: {
+      completedAt: "2026-04-23T20:27:18.000Z",
+      createdAt: "2026-04-23T20:27:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  const promotedFinding = summary.findings.find((finding) => finding.id === "leveraged_or_high_risk_product_promotion");
+  assert.ok(promotedFinding);
+  assert.equal(promotedFinding?.severity, "medium");
+  assert.match(promotedFinding?.shortSummary ?? "", /High-risk financial product promotion language surfaced/i);
+});
+
 test("selectTopFindings avoids duplicating overlapping pre-consent tracking cards", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

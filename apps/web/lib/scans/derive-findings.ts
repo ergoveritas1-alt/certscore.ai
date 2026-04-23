@@ -577,6 +577,22 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
           sessionReplayCategoryCount,
           getNumber(scanRecord.snapshot?.session_replay_tracker_count) ?? 0
         );
+  const highRiskFinancialPromotionDetected = [
+    getBoolean(scanRecord.snapshot?.leverageLanguagePresent),
+    getBoolean(scanRecord.snapshot?.leverage_language_present),
+    getBoolean(scanRecord.snapshot?.marginTradingLanguagePresent),
+    getBoolean(scanRecord.snapshot?.margin_trading_language_present),
+    getBoolean(scanRecord.snapshot?.optionsOrFuturesLanguagePresent),
+    getBoolean(scanRecord.snapshot?.options_or_futures_language_present),
+    getBoolean(scanRecord.snapshot?.perpetualsOrDerivativesLanguagePresent),
+    getBoolean(scanRecord.snapshot?.perpetuals_or_derivatives_language_present),
+    getBoolean(scanRecord.snapshot?.stakingApyLanguagePresent),
+    getBoolean(scanRecord.snapshot?.staking_apy_language_present),
+    getBoolean(scanRecord.snapshot?.copyTradingLanguagePresent),
+    getBoolean(scanRecord.snapshot?.copy_trading_language_present),
+    getBoolean(scanRecord.snapshot?.aiTradingLanguagePresent),
+    getBoolean(scanRecord.snapshot?.ai_trading_or_automated_trading_language_present)
+  ].some((value) => value === true);
   const promotedFinancialValidationFindings = (scanRecord.validationFindings ?? [])
     .map(buildFinancialValidationFinding)
     .filter((finding): finding is CertScoreFinding => Boolean(finding));
@@ -886,6 +902,27 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
         evidenceRefs: ["ui_summary.repeated_resurfacing"],
         severity: "medium",
         shortSummary: "The consent prompt appears to re-open or persist aggressively."
+      })
+    );
+  }
+
+  if (highRiskFinancialPromotionDetected) {
+    findings.push(
+      buildFinding("leveraged_or_high_risk_product_promotion", {
+        confidence: "good",
+        directVsInferred: "mixed",
+        evidencePreview: ["High-risk financial product language surfaced in retained scan evidence."],
+        evidenceRefs: [
+          "snapshot.financial.leverage_language_present",
+          "snapshot.financial.margin_trading_language_present",
+          "snapshot.financial.options_or_futures_language_present",
+          "snapshot.financial.perpetuals_or_derivatives_language_present",
+          "snapshot.financial.staking_apy_language_present",
+          "snapshot.financial.copy_trading_language_present",
+          "snapshot.financial.ai_trading_or_automated_trading_language_present"
+        ],
+        severity: "medium",
+        shortSummary: "High-risk financial product promotion language surfaced."
       })
     );
   }

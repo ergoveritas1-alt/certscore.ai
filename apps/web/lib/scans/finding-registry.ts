@@ -262,5 +262,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 78,
     whyItMatters: "Pricing or fee promotion language without clear nearby terms can mislead users and raise disclosure risk.",
     remediation: "Place pricing, fee, and term disclosures directly next to the promotional claim or offer."
+  },
+  leveraged_or_high_risk_product_promotion: {
+    id: "leveraged_or_high_risk_product_promotion",
+    label: "Leveraged or high-risk product promotion",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 74,
+    whyItMatters: "High-risk financial product promotion can materially increase commercial-claims and disclosure review risk even before narrower earnings or fee findings are confirmed.",
+    remediation: "Review high-risk product marketing claims and place clear risk, fee, and eligibility disclosures adjacent to the offer language."
   }
 };
