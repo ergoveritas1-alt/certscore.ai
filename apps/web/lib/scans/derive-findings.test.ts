@@ -278,6 +278,76 @@ test("does not present privacy_score as the overall score when certscore_overall
   assert.equal(summary.score, null);
 });
 
+test("promotes financial validation findings into cert score findings without verdict rows", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: null,
+    snapshot: {
+      certscore_overall: 64
+    },
+    scan: {
+      completedAt: "2026-04-23T20:27:18.000Z",
+      createdAt: "2026-04-23T20:27:00.000Z",
+      domainHostname: "fxculturetrading.com"
+    },
+    validationFindings: [
+      {
+        agreementScore: null,
+        category: "financial_review",
+        description:
+          "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
+        evidence: null,
+        findingFamily: "financial_claims",
+        findingScope: null,
+        findingSource: "validation",
+        findingSubject: null,
+        id: "finding-earnings",
+        model: null,
+        modelConfidence: null,
+        pageUrl: "https://fxculturetrading.com/",
+        promptVersion: null,
+        rationale: null,
+        ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+        severity: "high",
+        subtype: null,
+        systemConfidenceBand: null,
+        systemConfidenceExplanation: null,
+        systemConfidenceScore: null,
+        title: "Earnings claim without adjacent disclosure",
+        verdict: null
+      },
+      {
+        agreementScore: null,
+        category: "financial_review",
+        description:
+          "The scan retained pricing or fee-promotion language on a financial offer surface without clear nearby fee-term disclosure evidence.",
+        evidence: null,
+        findingFamily: "financial_claims",
+        findingScope: null,
+        findingSource: "validation",
+        findingSubject: null,
+        id: "finding-pricing",
+        model: null,
+        modelConfidence: null,
+        pageUrl: "https://fxculturetrading.com/pricing",
+        promptVersion: null,
+        rationale: null,
+        ruleKey: "financial_review.pricing_or_fee_transparency_unclear",
+        severity: "medium",
+        subtype: null,
+        systemConfidenceBand: null,
+        systemConfidenceExplanation: null,
+        systemConfidenceScore: null,
+        title: "Pricing or fee transparency unclear",
+        verdict: null
+      }
+    ]
+  });
+
+  const ids = summary.findings.map((finding) => finding.id);
+  assert.ok(ids.includes("earnings_claim_without_adjacent_disclosure"));
+  assert.ok(ids.includes("pricing_or_fee_transparency_unclear"));
+});
+
 test("selectTopFindings avoids duplicating overlapping pre-consent tracking cards", () => {
   const summary = deriveCertScoreFindings({
     runtimeArtifacts: {

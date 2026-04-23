@@ -509,18 +509,25 @@ export function buildRegulatoryLenses(
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
-  const filledSegments = Math.max(1, Math.min(5, Math.round(input.score / 20)));
+  const ratingBucket = Math.max(0, Math.min(5, input.score / 20));
 
   return (
     <div className="flex items-center gap-1.5">
-      {Array.from({ length: 5 }, (_, index) => (
-        <span
-          key={index}
-          className={`h-2.5 w-7 rounded-full border ${
-            index < filledSegments ? input.toneClass : "border-slate-200 bg-slate-100 text-transparent"
-          }`}
-        />
-      ))}
+      {Array.from({ length: 5 }, (_, index) => {
+        const segmentFill = Math.max(0, Math.min(1, ratingBucket - index));
+
+        return (
+          <span
+            key={index}
+            className="relative h-2.5 w-7 overflow-hidden rounded-full border border-slate-200 bg-slate-100"
+          >
+            <span
+              className={`absolute inset-y-0 left-0 rounded-full ${input.toneClass}`}
+              style={{ width: `${segmentFill * 100}%` }}
+            />
+          </span>
+        );
+      })}
     </div>
   );
 }

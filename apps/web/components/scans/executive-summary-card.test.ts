@@ -335,6 +335,57 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
   assert.match(html, /Financial &amp; commercial claims/);
   assert.match(html, /Earnings-style claim surfaced without nearby balancing disclosure\./);
 });
+
+test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "Possible",
+      fingerprintNarrative: "Identity-rich telemetry observed.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: ["Meta Pixel"],
+      requestedHost: "example.com",
+      resolvedVendorNames: ["Meta Pixel"],
+      score: 62,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 1,
+      thirdPartyDomains: ["connect.facebook.net"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "medium",
+          shortSummary: "One third-party request fired before any consent action."
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: []
+        })
+      ],
+      regulatoryRisk: makeRegulatoryRisk({
+        accessibilityEnforcementRiskScore: 18
+      }),
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /width:10%/);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

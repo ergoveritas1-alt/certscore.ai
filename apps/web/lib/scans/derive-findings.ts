@@ -1,5 +1,6 @@
 import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding, type CertScoreFindingSection } from "./finding-registry";
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
+import type { ScanValidationFinding } from "./validation-review-linking";
 
 type MinimalScanRecord = {
   events?: Array<{
@@ -14,6 +15,7 @@ type MinimalScanRecord = {
     domainHostname?: string | null;
   };
   trackerVendors?: Array<Record<string, unknown>> | null;
+  validationFindings?: ScanValidationFinding[] | null;
 };
 
 type DerivedPresentationSummary = {
@@ -256,6 +258,76 @@ function buildFinding(
     remediation: definition.remediation,
     ...overrides
   };
+}
+
+function mapValidationSeverityToFindingSeverity(
+  severity: string | null | undefined
+): CertScoreFinding["severity"] {
+  switch ((severity ?? "").toLowerCase()) {
+    case "critical":
+      return "critical";
+    case "high":
+      return "high";
+    case "medium":
+      return "medium";
+    default:
+      return "low";
+  }
+}
+
+function buildFinancialValidationFinding(
+  validationFinding: ScanValidationFinding
+): CertScoreFinding | null {
+  const evidencePreview = [
+    validationFinding.title,
+    validationFinding.description,
+    validationFinding.rationale
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const severity = mapValidationSeverityToFindingSeverity(validationFinding.severity);
+  const confidence: CertScoreFinding["confidence"] =
+    validationFinding.verdict === "supported"
+      ? "strong"
+      : validationFinding.verdict === "inconclusive"
+        ? "good"
+        : "good";
+
+  switch (validationFinding.ruleKey) {
+    case "financial_review.guaranteed_outcome_claim_detected":
+      return buildFinding("guaranteed_outcome_claim_detected", {
+        confidence,
+        directVsInferred: "mixed",
+        evidencePreview,
+        evidenceRefs: validationFinding.pageUrl ? [validationFinding.pageUrl] : [],
+        severity,
+        shortSummary:
+          validationFinding.description ??
+          "Guaranteed or outcome-style financial claim language surfaced on a public-facing page."
+      });
+    case "financial_review.earnings_claim_without_adjacent_disclosure":
+      return buildFinding("earnings_claim_without_adjacent_disclosure", {
+        confidence,
+        directVsInferred: "mixed",
+        evidencePreview,
+        evidenceRefs: validationFinding.pageUrl ? [validationFinding.pageUrl] : [],
+        severity,
+        shortSummary:
+          validationFinding.description ??
+          "Earnings-style claim language surfaced without nearby balancing disclosure."
+      });
+    case "financial_review.pricing_or_fee_transparency_unclear":
+      return buildFinding("pricing_or_fee_transparency_unclear", {
+        confidence,
+        directVsInferred: "mixed",
+        evidencePreview,
+        evidenceRefs: validationFinding.pageUrl ? [validationFinding.pageUrl] : [],
+        severity,
+        shortSummary:
+          validationFinding.description ??
+          "Pricing or fee-promotion language surfaced without clear nearby fee-term disclosure."
+      });
+    default:
+      return null;
+  }
 }
 
 function getFingerprintLabel(tier: number | null) {
@@ -505,6 +577,9 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
           sessionReplayCategoryCount,
           getNumber(scanRecord.snapshot?.session_replay_tracker_count) ?? 0
         );
+  const promotedFinancialValidationFindings = (scanRecord.validationFindings ?? [])
+    .map(buildFinancialValidationFinding)
+    .filter((finding): finding is CertScoreFinding => Boolean(finding));
   const sessionReplayDetected =
     sessionReplayVendorCount > 0 ||
     scanRecord.snapshot?.session_replay_tool_detected === true ||
@@ -771,6 +846,12 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
         shortSummary: "The page appears to require action before normal use."
       })
     );
+  }
+
+  for (const finding of promotedFinancialValidationFindings) {
+    if (!findings.some((existing) => existing.id === finding.id)) {
+      findings.push(finding);
+    }
   }
 
   const overlayLikelyBlocking =

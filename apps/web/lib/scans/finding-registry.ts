@@ -5,7 +5,8 @@ export type CertScoreFindingSection =
   | "Vendors & Requests"
   | "Fingerprinting"
   | "Navigation & Redirects"
-  | "Runtime & Diagnostics";
+  | "Runtime & Diagnostics"
+  | "Financial & Claims";
 
 export type CertScoreFindingSeverity = "critical" | "high" | "medium" | "low";
 export type CertScoreFindingConfidence = "strong" | "good" | "moderate";
@@ -237,5 +238,29 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 57,
     whyItMatters: "Interstitials can block access and create pressure to act.",
     remediation: "Avoid full-page interruptions for non-essential messaging."
+  },
+  guaranteed_outcome_claim_detected: {
+    id: "guaranteed_outcome_claim_detected",
+    label: "Guaranteed outcome claim detected",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 92,
+    whyItMatters: "Guaranteed-results language on public financial promotions can materially increase commercial-claims and enforcement risk.",
+    remediation: "Remove or qualify guaranteed-results language and place balancing disclosure directly adjacent to the claim."
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    id: "earnings_claim_without_adjacent_disclosure",
+    label: "Earnings claim without nearby disclosure",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 90,
+    whyItMatters: "Performance or earnings language without nearby balancing disclosure is a strong commercial-claims review trigger.",
+    remediation: "Pair performance or earnings claims with clear adjacent disclosure that explains limits, assumptions, and variability."
+  },
+  pricing_or_fee_transparency_unclear: {
+    id: "pricing_or_fee_transparency_unclear",
+    label: "Pricing or fee transparency unclear",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 78,
+    whyItMatters: "Pricing or fee promotion language without clear nearby terms can mislead users and raise disclosure risk.",
+    remediation: "Place pricing, fee, and term disclosures directly next to the promotional claim or offer."
   }
 };
