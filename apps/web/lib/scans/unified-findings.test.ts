@@ -191,6 +191,58 @@ test("resolves financial-review validation findings into the matching unified fi
   assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
+test("routes corpus-derived financial claim findings through normalized concerns before surfacing", () => {
+  const corpusDerivedFindingIds = [
+    "earnings_claim_without_adjacent_disclosure",
+    "financial_urgency_pressure_tactic_detected",
+    "guaranteed_outcome_claim_detected",
+    "pricing_or_fee_transparency_unclear",
+    "simulated_performance_without_disclosure",
+    "unqualified_superlative_claim_detected"
+  ] as const;
+
+  for (const findingId of corpusDerivedFindingIds) {
+    const validationFinding = makeValidationFinding({
+      id: `val-${findingId}`,
+      description: "The financial claims corpus retained a buyer-facing financial-promotion claim with page evidence.",
+      evidence: {
+        adjacentDisclosurePresent: false,
+        claimText: "Earn 6 figures in 90 days with our trading signals.",
+        confidence: 0.82,
+        matchedPhrase: "Earn 6 figures in 90 days",
+        matchedSnippet: "Earn 6 figures in 90 days with our trading signals.",
+        pageClassification: "financial_offer",
+        pageType: "lead_generation_offer",
+        pageUrl: "https://www.example.com/signals",
+        policySnippets: ["Earn 6 figures in 90 days with our trading signals."],
+        sourceUrls: ["https://www.example.com/signals"],
+        supportingHeadings: ["Trading signal performance"],
+        supportingSignals: ["financial.performance_claim_text_present"],
+        unifiedFindingId: findingId
+      },
+      pageUrl: "https://www.example.com/signals",
+      ruleKey: `financial_review.${findingId}`,
+      severity: "high",
+      title: findingId
+    });
+
+    const [packet] = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: [],
+      validationFindings: [validationFinding],
+      validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+    });
+
+    assert.equal(packet?.unifiedFindingId, findingId);
+    assert.equal(packet?.concernContext?.originTypes.includes("validation_rule"), true, findingId);
+    assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true, findingId);
+    assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true, findingId);
+    assert.equal(packet?.sourceRefs.some((sourceRef) => sourceRef.kind === "validation"), true, findingId);
+    assert.equal(packet?.presentationDecision.status, "surface", findingId);
+    assert.equal(packet?.surfacingDecision.decisionState, "confirmed", findingId);
+    assert.ok(packet?.surfacingDecision.appliedRules.includes("evidence.financial.confirmed_negative_risk_with_backing"), findingId);
+  }
+});
+
 test("keeps direct runtime findings surfaced under thin coverage", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     coverageSummary: {
