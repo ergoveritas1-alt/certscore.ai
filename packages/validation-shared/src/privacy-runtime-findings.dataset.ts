@@ -18,7 +18,10 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "privacy_contact_path_present",
   "privacy_policy_present",
   "sale_sharing_controls_missing",
-  "pricing_or_fee_transparency_unclear"
+  "pricing_or_fee_transparency_unclear",
+  "regulatory_compliance_claim_present",
+  "terms_of_service_present",
+  "privacy_contact_channel_missing"
 ] as const;
 
 export const PRIVACY_RUNTIME_FINDING_GROUPS = [
@@ -38,7 +41,12 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "privacy_contact_path_present",
   "privacy_policy_present",
   "sale_sharing_controls_missing",
-  "pricing_or_fee_transparency_unclear"
+  "pricing_or_fee_transparency_unclear",
+  "regulatory_compliance_claim_present",
+  "tracking_technologies_disclosure_present",
+  "terms_of_service_present",
+  "privacy_contact_channel_missing",
+  "targeted_advertising_disclosure_present"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
 
 export const PRIVACY_RUNTIME_SCENARIO_TYPES = [
@@ -427,6 +435,118 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Pricing or fee claim appears without adjacent material fee-term disclosure.",
     signalKey: "financial.pricing_or_fee_transparency_unclear"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "regulatory_compliance_claim_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-regulatory-${index}/claim.html`],
+      policyAnchor: {
+        claimType: "regulatory_or_license_claim",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-regulatory-${index}.example.test/about`,
+        snippet: "Our services are regulated, registered, licensed, or authorized by applicable financial authorities."
+      },
+      signalKey: "entity.regulatory_or_license_claim_text_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed URL contains regulatory, registration, authorization, license, or supervisory claim language.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-regulatory-${index}.example.test/about`
+      }
+    }),
+    positiveNotes: "Regulatory, registration, authorization, license, or supervisory claim text is retained.",
+    signalKey: "entity.regulatory_or_license_claim_text_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "tracking_technologies_disclosure_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-tracking-disclosure-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "tracking_technologies_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-tracking-disclosure-${index}.example.test/privacy`,
+        snippet: "We use cookies, pixels, analytics, web beacons, and similar tracking technologies."
+      },
+      signalKey: "privacy.tracking_technologies_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy URL discloses cookies, pixels, analytics, web beacons, or similar tracking technologies.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-tracking-disclosure-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Policy text explicitly discloses cookies, pixels, analytics, or similar tracking technologies.",
+    signalKey: "privacy.tracking_technologies_disclosure_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "terms_of_service_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-terms-${index}/terms.html`],
+      policyAnchor: {
+        claimType: "terms_surface_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-terms-${index}.example.test/terms`,
+        snippet: "Terms and Conditions"
+      },
+      signalKey: "disclosure.terms_of_service_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed URL is a substantive terms, conditions, or user-agreement surface.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-terms-${index}.example.test/terms`
+      }
+    }),
+    positiveNotes: "Retained terms surface evidence identifies a substantive terms or user-agreement page.",
+    signalKey: "disclosure.terms_of_service_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_channel_missing",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-missing-privacy-contact-${index}/crawl.json`],
+      signalKey: "privacy.privacy_contact_channel_missing",
+      snapshotEvidence: {
+        privacy_contact_channel_type: "none",
+        verified_public_surfaces_count: 4
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed bounded crawl found privacy/legal surfaces but no privacy-specific contact channel.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-missing-privacy-contact-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Bounded privacy/legal crawl found no privacy-specific contact channel.",
+    signalKey: "privacy.privacy_contact_channel_missing"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "targeted_advertising_disclosure_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-targeted-ad-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "targeted_advertising_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-targeted-ad-${index}.example.test/privacy`,
+        snippet: "We use targeted advertising, personalized ads, interest-based advertising, or cross-context behavioral advertising."
+      },
+      signalKey: "privacy.targeted_advertising_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy URL discloses targeted, personalized, interest-based, or cross-context advertising.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-targeted-ad-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Policy text explicitly discloses targeted, personalized, interest-based, or cross-context advertising.",
+    signalKey: "privacy.targeted_advertising_disclosure_present"
   }
 ];
 
@@ -438,7 +558,12 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   privacy_contact_path_present: "https://www.acorns.com/",
   privacy_policy_present: "https://www.acorns.com/",
   privacy_rights_path_present: "https://www.acorns.com/",
+  privacy_contact_channel_missing: "https://1000pipbuilder.com/",
+  regulatory_compliance_claim_present: "https://www.blackrock.com/corporate",
   sale_sharing_controls_missing: "https://www.ameriprise.com/",
+  targeted_advertising_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
+  terms_of_service_present: "https://bestcopytrading.com/terms-and-conditions/",
+  tracking_technologies_disclosure_present: "https://bestcopytrading.com/privacy-policy/",
   weak_cookie_security_attributes: "https://www.acorns.com/"
 };
 

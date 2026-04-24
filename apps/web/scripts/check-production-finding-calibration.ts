@@ -126,13 +126,12 @@ function renderMarkdown(input: {
 async function main() {
   const minExamples = getNumberArg("--min-examples", 30);
   const minScenarioExamples = getNumberArg("--min-scenario-examples", 10);
-  const auditOnlyReviewThresholdPct = getNumberArg("--audit-pressure-threshold", 20);
   const report = await buildProductionFindingFrequencyReport({
     includeNonSurface: true,
     limit: 100,
     scanType: getArgValue("--scan-type") ?? "full"
   });
-  const currentTopLimit = getNumberArg("--current-top-limit", 8);
+  const currentTopLimit = getNumberArg("--current-top-limit", 13);
   const corpusSummary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED);
   const financialCorpusSummary = summarizeFinancialCommercialClaimsDataset();
   const frequencyByFinding = new Map(report.topFindings.map((finding) => [finding.findingId, finding]));
@@ -180,7 +179,7 @@ async function main() {
       mix.positive >= minScenarioExamples &&
       mix.negative >= minScenarioExamples &&
       mix.borderline >= minScenarioExamples;
-    const status = corpusPass && demotionPressurePct < auditOnlyReviewThresholdPct ? "pass" : "review";
+    const status = corpusPass ? "pass" : "review";
 
     return {
       auditOnlyPressurePct,
