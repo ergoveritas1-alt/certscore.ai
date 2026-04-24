@@ -20,6 +20,10 @@ function bootstrapValidationWorker() {
       : null;
 
   console.info("[validation-worker] started", {
+    buildGitRef: process.env.BUILD_GIT_REF ?? null,
+    buildGitSha: process.env.BUILD_GIT_SHA ?? null,
+    buildImageTag: process.env.BUILD_IMAGE_TAG ?? null,
+    buildRuntimeTarget: process.env.BUILD_RUNTIME_TARGET ?? null,
     concurrency: env.WORKER_CONCURRENCY,
     stages: [
       "validation_collect",

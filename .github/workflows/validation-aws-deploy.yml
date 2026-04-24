@@ -40,6 +40,8 @@ jobs:
       ECS_WEB_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WEB_SERVICE }}
       ECS_WORKER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       ECS_SCHEDULER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_SCHEDULER_SERVICE }}
+      ECS_WORKER_CONTAINER_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_CONTAINER || 'validation-worker' }}
+      ECS_WORKER_LOG_GROUP: ${{ vars.AWS_VALIDATION_ECS_WORKER_LOG_GROUP }}
       VALIDATION_OPS_BASE_URL: ${{ vars.AWS_VALIDATION_OPS_BASE_URL }}
 
     steps:
@@ -55,6 +57,7 @@ jobs:
           test -n "${ECS_WEB_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WEB_SERVICE" && exit 1)
           test -n "${ECS_WORKER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_WORKER_SERVICE" && exit 1)
           test -n "${ECS_SCHEDULER_SERVICE_NAME}" || (echo "Missing var AWS_VALIDATION_ECS_SCHEDULER_SERVICE" && exit 1)
+          test -n "${ECS_WORKER_LOG_GROUP}" || (echo "Missing var AWS_VALIDATION_ECS_WORKER_LOG_GROUP" && exit 1)
           test -n "${VALIDATION_OPS_BASE_URL}" || (echo "Missing var AWS_VALIDATION_OPS_BASE_URL" && exit 1)
 
       - name: Configure AWS credentials
@@ -121,7 +124,15 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           WORKER_IMAGE="${REGISTRY}/${ECR_WORKER_REPOSITORY}"
-          docker build -f apps/validation-worker/Dockerfile -t "${WORKER_IMAGE}:${GITHUB_SHA}" -t "${WORKER_IMAGE}:latest" .
+          docker build \
+            -f apps/validation-worker/Dockerfile \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            -t "${WORKER_IMAGE}:${GITHUB_SHA}" \
+            -t "${WORKER_IMAGE}:latest" \
+            .
           docker push "${WORKER_IMAGE}:${GITHUB_SHA}"
           docker push "${WORKER_IMAGE}:latest"
 
@@ -134,3 +145,15 @@ jobs:
       - name: Wait for ECS services to stabilize
         run: |
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_WEB_SERVICE_NAME}" "${ECS_WORKER_SERVICE_NAME}" "${ECS_SCHEDULER_SERVICE_NAME}"
+
+      - name: Check validation worker ECS boot
+        env:
+          AWS_SCANNER_ECS_CLUSTER: ${{ env.ECS_CLUSTER_NAME }}
+          AWS_SCANNER_ECS_SERVICE: ${{ env.ECS_WORKER_SERVICE_NAME }}
+          AWS_SCANNER_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
+          AWS_SCANNER_ECR_REPOSITORY: ${{ env.ECR_WORKER_REPOSITORY }}
+          AWS_SCANNER_LOG_GROUP: ${{ env.ECS_WORKER_LOG_GROUP }}
+          CHECK_NAME: validation-worker
+          EXPECTED_GIT_SHA: ${{ github.sha }}
+          SCANNER_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
+        run: pnpm ops:check:scanner-deploy

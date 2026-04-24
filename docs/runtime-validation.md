@@ -9,6 +9,12 @@ This document is the practical first-deployment QA sequence for CertScore (`cert
 
 Use `WS01` for scanner-runtime-specific deploy and operational validation.
 
+For ADA accessibility surfacing specifically, also keep
+[ADA Accessibility Operations](./ada-accessibility-operations.md) open. `WC01`
+should surface DOJ / ADA findings only when `WS01` persisted representative
+axe examples into `scan_accessibility_rule_examples`; score-only/count-only ADA
+signals should remain audit-only.
+
 ## 1. Environment readiness
 
 Run these first:
@@ -188,6 +194,7 @@ If a scan fails, check:
 - scan detail page error message
 - `scan_events` timeline
 - standalone scanner logs for the failing stage
+- `WS01` scanner worker logs when DOJ / ADA accessibility remains audit-only unexpectedly; first confirm whether `scan_accessibility_rule_examples` has representative axe examples for the scan
 
 ## 11. First production validation order
 

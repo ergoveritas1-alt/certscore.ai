@@ -2084,6 +2084,31 @@ test("uses runtime artifact keys from scanner evidence for session replay copy",
   assert.ok(Number(presentation.confidenceScore) >= 0.8);
 });
 
+test("uses direct runtime vendor provenance copy for session replay without artifact ids", () => {
+  const presentation = buildCanonicalReviewFindingPresentation(
+    {
+      linkedValidationFinding: makeLinkedFinding({
+        id: "replay-2c",
+        ruleKey: "commerce.session_replay_runtime_vendors",
+        title: "Session replay runtime vendors",
+        evidence: {
+          normalizedConcernMaxAssertionLevel: "weak",
+          session_replay_runtime_vendors: ["Microsoft Clarity"]
+        }
+      }),
+      observedValue: "Microsoft Clarity",
+      severity: "high",
+      title: "Session replay observed"
+    },
+    []
+  );
+
+  assert.match(presentation.whyThisMatters, /runtime vendor provenance for Microsoft Clarity/i);
+  assert.doesNotMatch(presentation.whyThisMatters, /only indirect signals/i);
+  assert.match(presentation.suggestedFix, /Verify whether Microsoft Clarity is intentionally deployed/i);
+  assert.equal(presentation.confidenceScore, "0.75");
+});
+
 test("uses vendor-specific runtime session-replay copy and elevated confidence", () => {
   const presentation = buildCanonicalReviewFindingPresentation(
     {

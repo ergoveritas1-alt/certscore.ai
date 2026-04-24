@@ -1,0 +1,103 @@
+name: ADA Live Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      ada_scan_domain:
+        description: "Domain to queue for fresh ADA verification when ADA scan ID/URL are not provided."
+        required: false
+        default: "w3.org"
+        type: string
+      ada_scan_id:
+        description: "Optional existing ADA scan ID to verify."
+        required: false
+        type: string
+      ada_scan_url:
+        description: "Optional existing ADA scan URL to verify."
+        required: false
+        type: string
+      financial_empty_scan_url:
+        description: "Optional scan URL expected to show Financial & commercial claims as Audit-only."
+        required: false
+        type: string
+      expected_scanner_git_sha:
+        description: "Expected scanner image SHA tag. Defaults to the selected ref SHA."
+        required: false
+        type: string
+      run_scanner_health:
+        description: "Run scanner ECS health before queueing/verifying the ADA scan."
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  verify-ada-live:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      AWS_SCANNER_ECS_CLUSTER: ${{ vars.AWS_SCANNER_ECS_CLUSTER }}
+      AWS_SCANNER_ECS_SERVICE: ${{ vars.AWS_SCANNER_ECS_SERVICE }}
+      AWS_SCANNER_CONTAINER_NAME: ${{ vars.AWS_SCANNER_CONTAINER_NAME }}
+      AWS_SCANNER_ECR_REPOSITORY: ${{ vars.AWS_SCANNER_ECR_REPOSITORY }}
+      AWS_SCANNER_LOG_GROUP: ${{ vars.AWS_SCANNER_LOG_GROUP }}
+      EXPECTED_GIT_SHA: ${{ inputs.expected_scanner_git_sha || github.sha }}
+      LIVE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL || 'https://certscore.ai' }}
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || secrets.DATABASE_URL }}
+      ADA_SCAN_DOMAIN: ${{ inputs.ada_scan_domain }}
+      ADA_SCAN_ID: ${{ inputs.ada_scan_id }}
+      ADA_SCAN_URL: ${{ inputs.ada_scan_url }}
+      FINANCIAL_EMPTY_SCAN_URL: ${{ inputs.financial_empty_scan_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate verification configuration
+        run: |
+          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
+          test -n "${LIVE_BASE_URL}" || (echo "Missing var AWS_WEB_CERTSCORE_BASE_URL" && exit 1)
+          if [ "${{ inputs.run_scanner_health }}" = "true" ]; then
+            test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+            test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
+            test -n "${AWS_SCANNER_ECS_SERVICE}" || (echo "Missing var AWS_SCANNER_ECS_SERVICE" && exit 1)
+            test -n "${AWS_SCANNER_CONTAINER_NAME}" || (echo "Missing var AWS_SCANNER_CONTAINER_NAME" && exit 1)
+            test -n "${AWS_SCANNER_ECR_REPOSITORY}" || (echo "Missing var AWS_SCANNER_ECR_REPOSITORY" && exit 1)
+            test -n "${AWS_SCANNER_LOG_GROUP}" || (echo "Missing var AWS_SCANNER_LOG_GROUP" && exit 1)
+          fi
+          if { [ -n "${ADA_SCAN_ID}" ] && [ -z "${ADA_SCAN_URL}" ]; } || { [ -z "${ADA_SCAN_ID}" ] && [ -n "${ADA_SCAN_URL}" ]; }; then
+            echo "Provide both ada_scan_id and ada_scan_url, or neither to queue a fresh scan."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        if: ${{ inputs.run_scanner_health }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Check scanner ECS health
+        if: ${{ inputs.run_scanner_health }}
+        run: bash ./scripts/check-scanner-deploy-health.sh
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ADA live verification
+        run: pnpm ops:verify:ada-live
