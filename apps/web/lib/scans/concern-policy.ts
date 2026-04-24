@@ -928,8 +928,32 @@ function isNegativeFinancialPromotionConcern(
   return NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS.has(concern.suggestedUnifiedFindingId ?? "");
 }
 
+const EXPLICIT_FINANCIAL_OFFER_PATTERN =
+  /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i;
+
+const NON_FINANCIAL_EDITORIAL_OR_RETAIL_PATTERN =
+  /(?:\b(?:lineup|festival|concert|album|movie|sports|election|celebrity|weather|recipe|travel)\b|(?:\b\d{1,2}%\s+off\b)|(?:\bselling\b.{0,80}\b(?:serum|makeup|shoes|clothing|furniture|kitchen|mattress|headphones|deals?)\b)|(?:\bamazon\b.{0,80}\b(?:selling|deal|deals?|off)\b))/i;
+
+function hasNonFinancialEditorialOrRetailContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+
+  return NON_FINANCIAL_EDITORIAL_OR_RETAIL_PATTERN.test(reviewerVisibleText);
+}
+
 function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence || !hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+  const hasExplicitFinancialOffer = EXPLICIT_FINANCIAL_OFFER_PATTERN.test(reviewerVisibleText);
+  if (hasNonFinancialEditorialOrRetailContext(rawEvidence) && !hasExplicitFinancialOffer) {
     return false;
   }
 
@@ -952,14 +976,7 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
     return true;
   }
 
-  const reviewerVisibleText = [
-    ...getEvidenceTextCandidates(rawEvidence),
-    ...getEvidenceUrlCandidates(rawEvidence)
-  ].join(" ");
-
-  return /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i.test(
-    reviewerVisibleText
-  );
+  return hasExplicitFinancialOffer;
 }
 
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {

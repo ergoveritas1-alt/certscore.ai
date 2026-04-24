@@ -338,6 +338,43 @@ test("keeps editorial earnings validation findings audit-only without offer cont
   assert.equal(packet?.concernContext?.promotionEligibilities.includes("internal_only"), true);
 });
 
+test("keeps retail discount snippets out of financial claims surfacing", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-yahoo-retail-discount",
+    description: "Homepage entertainment and retail deal snippets were misread as financial promotion evidence.",
+    evidence: {
+      claimText: "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
+      matchedSnippet: "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
+      pageClassification: "financial_offer",
+      pageType: "homepage",
+      pageUrl: "https://yahoo.com/",
+      policySnippets: [
+        "Stagecoach 2026 lineup includes Post Malone, Lainey Wilson and Ella Langley as the country music festival returns to the desert this weekend",
+        "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
+        "76% off"
+      ],
+      sourceUrls: ["https://yahoo.com/"],
+      supportingSignals: ["financial.performance_claim_text_present"],
+      unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
+    },
+    pageUrl: "https://yahoo.com/",
+    ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+    severity: "high",
+    title: "Earnings claim without adjacent disclosure"
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "earnings_claim_without_adjacent_disclosure");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
+});
+
 test("keeps direct runtime findings surfaced under thin coverage", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     coverageSummary: {

@@ -443,6 +443,36 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "retail discount and entertainment news snippets do not create financial offer context",
+      concern: makeConcern({
+        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+        originType: "validation_rule",
+        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
+        title: "Earnings claim without adjacent disclosure"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        claimText: "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
+        matchedSnippet: "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
+        pageClassification: "financial_offer",
+        pageType: "homepage",
+        pageUrl: "https://yahoo.com/",
+        policySnippets: [
+          "Stagecoach 2026 lineup includes Post Malone, Lainey Wilson and Ella Langley as the country music festival returns to the desert this weekend",
+          "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
+          "76% off"
+        ],
+        sourceUrls: ["https://yahoo.com/"],
+        supportingSignals: ["financial.performance_claim_text_present"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
+      }
+    },
+    {
       name: "domain-level minors context without retained page evidence stays internal",
       concern: makeConcern({
         originKey: "privacy.minors_or_age_gated_collection_context",
