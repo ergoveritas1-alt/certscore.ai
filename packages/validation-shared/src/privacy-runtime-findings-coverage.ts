@@ -55,6 +55,10 @@ function buildGapSummary(snapshot: PrivacyRuntimeFindingsCoverageSnapshot) {
   const gaps: string[] = [];
 
   for (const entry of snapshot.groupScenarioMatrix) {
+    if (entry.total === 0) {
+      continue;
+    }
+
     const positiveCount =
       getCount(entry.scenarios, "positive_high_confidence") + getCount(entry.scenarios, "positive_moderate");
     const negativeCount = getCount(entry.scenarios, "negative_control");

@@ -18,21 +18,29 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || secrets.DATABASE_URL }}
+      PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate calibration configuration
+      - name: Resolve live calibration configuration
+        id: live-db
         run: |
-          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
-          case "${DATABASE_URL}" in
+          if [ -z "${PROD_DATABASE_URL}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping production DB calibration because PROD_DATABASE_URL is not configured."
+            exit 0
+          fi
+
+          case "${PROD_DATABASE_URL}" in
             *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
-              echo "DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB."
+              echo "PROD_DATABASE_URL points at a local database. Set it to the live DB."
               exit 1
               ;;
           esac
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -48,5 +56,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run deterministic finding calibration tests
+        run: pnpm exec tsx --test apps/web/lib/scans/concern-policy.test.ts apps/web/lib/scans/hybrid-runtime-evidence.test.ts apps/web/lib/scans/report-surfacing-policy.test.ts apps/web/scripts/report-production-finding-frequency.test.ts packages/validation-shared/src/privacy-runtime-findings.dataset.test.ts packages/validation-shared/src/privacy-runtime-findings-eval.test.ts packages/validation-shared/src/privacy-runtime-findings-coverage.test.ts packages/validation-shared/src/privacy-runtime-findings-promote.test.ts
+
       - name: Run production finding calibration gate
+        if: steps.live-db.outputs.enabled == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: pnpm check:production-finding-calibration
