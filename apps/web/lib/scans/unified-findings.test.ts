@@ -2515,6 +2515,11 @@ test("surfaces accessibility risk score when representative axe examples are sev
   assert.equal(packet?.presentation.confidenceScore, "1.0");
   assert.equal(packet?.evidence?.flags?.includes("contradiction_runtime_artifact_retained"), false);
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
+  assert.equal(packet?.evidence?.counts?.representativeAxeExampleCount, 1);
+  assert.equal(packet?.evidence?.counts?.representativeAxePageCount, 1);
+  assert.equal(packet?.evidence?.counts?.representativeAxeRuleCount, 1);
+  assert.deepEqual(packet?.evidence?.entities?.maxAxeImpact, ["serious"]);
+  assert.ok(packet?.evidence?.snippets?.some((snippet) => /Representative axe examples: 1 rule across 1 page; max impact: serious\./.test(snippet)));
 });
 
 test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {

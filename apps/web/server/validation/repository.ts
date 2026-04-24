@@ -24,6 +24,12 @@ import {
   getHybridPreconsentTrackerEvidenceUrls,
   getHybridPreconsentViolationCount
 } from "../../lib/scans/hybrid-runtime-evidence";
+import {
+  formatRepresentativeAccessibilityCoverage,
+  getRepresentativeAccessibilityExampleCoverage,
+  normalizePersistedAccessibilityRuleExamples,
+  type PersistedAccessibilityRuleExampleRow
+} from "../../lib/scans/accessibility-evidence";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
 
 type ValidationSettingsRow = {
@@ -155,18 +161,7 @@ type PolicyEnrichmentLookupRow = {
   policy_arbitration_present?: boolean | null;
 };
 
-type ScanAccessibilityRuleExampleRow = {
-  description: string;
-  help: string;
-  help_url: string;
-  impact: string | null;
-  node_count: number;
-  page_url: string;
-  representative_selectors: string[] | null;
-  rule_code: string;
-  rule_group: string;
-  severity: string;
-};
+export type ScanAccessibilityRuleExampleRow = PersistedAccessibilityRuleExampleRow;
 
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 const VALIDATION_QUEUE_HANDOFF_TIMEOUT_MS = 5_000;
@@ -826,11 +821,13 @@ function buildAccessibilityRiskSnapshotEvidence(score: number) {
   return buildAccessibilityRiskSnapshotEvidenceWithExamples(score, []);
 }
 
-function buildAccessibilityRiskSnapshotEvidenceWithExamples(
+export function buildAccessibilityRiskSnapshotEvidenceWithExamples(
   score: number,
   examples: ScanAccessibilityRuleExampleRow[]
 ) {
   const pageUrls = [...new Set(examples.map((example) => example.page_url))];
+  const accessibilityRuleExamples = normalizePersistedAccessibilityRuleExamples(examples);
+  const representativeCoverage = getRepresentativeAccessibilityExampleCoverage({ accessibilityRuleExamples });
   const exampleSnippets = examples.map((example) => {
     const selector = Array.isArray(example.representative_selectors) ? example.representative_selectors[0] : null;
     return selector
@@ -839,26 +836,26 @@ function buildAccessibilityRiskSnapshotEvidenceWithExamples(
   });
 
   return {
-    accessibilityRuleExamples: examples.map((example) => ({
-      description: example.description,
-      help: example.help,
-      helpUrl: example.help_url,
-      impact: example.impact,
-      nodeCount: example.node_count,
-      pageUrl: example.page_url,
-      representativeSelectors: example.representative_selectors ?? [],
-      ruleCode: example.rule_code,
-      ruleGroup: example.rule_group,
-      severity: example.severity
-    })),
+    accessibilityRuleExamples,
     claim: "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
     confidenceBasis: [
       `Accessibility risk score: ${score}.`,
       "This score helps prioritize review, but automated accessibility testing does not determine full conformance on its own.",
       examples.length > 0
         ? `Representative page-level accessibility examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`
-        : "Representative page-level accessibility examples were not retained with this score."
-    ],
+        : "Representative page-level accessibility examples were not retained with this score.",
+      representativeCoverage.representativeExampleCount > 0
+        ? formatRepresentativeAccessibilityCoverage(representativeCoverage)
+        : null
+    ].filter((entry): entry is string => typeof entry === "string"),
+    maxAxeImpact: representativeCoverage.maxImpact,
+    representativeAxeExampleCount: representativeCoverage.representativeExampleCount,
+    representativeAxePageCount: representativeCoverage.distinctPageCount,
+    representativeAxeRuleCount: representativeCoverage.distinctRuleCount,
+    representativeAccessibilityExampleSummary:
+      representativeCoverage.representativeExampleCount > 0
+        ? formatRepresentativeAccessibilityCoverage(representativeCoverage)
+        : null,
     missingEvidence: examples.length > 0
       ? []
       : ["Affected page URLs or representative rule examples for the highest-priority accessibility barriers."],

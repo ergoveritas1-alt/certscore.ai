@@ -288,7 +288,8 @@ test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets
 
   assert.ok(adaLens);
   assert.equal(adaLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.ratingLabel, "Audit-only");
+  assert.equal(adaLens?.score, null);
 });
 
 test("records surfaced packets that are not yet mapped into executive findings", () => {

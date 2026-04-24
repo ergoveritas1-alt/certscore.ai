@@ -31,6 +31,7 @@ import {
   derivePolicyPageTypeFromEvidence,
   derivePolicyPrimarySourceFromEvidence
 } from "./policy-evidence-metadata";
+import { hasExternallyPromotableAccessibilityExamples } from "./accessibility-evidence";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -924,103 +925,8 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
   );
 }
 
-function getStringValue(entry: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = entry[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  return null;
-}
-
-function getNumberValue(entry: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = entry[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function hasStringArrayValue(entry: Record<string, unknown>, keys: string[]) {
-  return keys.some((key) => {
-    const value = entry[key];
-    return Array.isArray(value) && value.some((item) => typeof item === "string" && item.trim().length > 0);
-  });
-}
-
-function getRepresentativeAccessibilityExampleCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return {
-      hasSevereExample: false,
-      representativeExampleCount: 0,
-      distinctPageCount: 0,
-      distinctRuleCount: 0
-    };
-  }
-
-  if (!Array.isArray(rawEvidence.accessibilityRuleExamples) || rawEvidence.accessibilityRuleExamples.length === 0) {
-    return {
-      hasSevereExample: false,
-      representativeExampleCount: 0,
-      distinctPageCount: 0,
-      distinctRuleCount: 0
-    };
-  }
-
-  const pages = new Set<string>();
-  const rules = new Set<string>();
-  let hasSevereExample = false;
-  let representativeExampleCount = 0;
-
-  for (const entry of rawEvidence.accessibilityRuleExamples) {
-    if (!entry || typeof entry !== "object") {
-      continue;
-    }
-
-    const example = entry as Record<string, unknown>;
-    const pageUrl = getStringValue(example, ["pageUrl", "page_url"]);
-    const ruleId = getStringValue(example, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
-    const selector =
-      getStringValue(example, ["selector", "target"]) ??
-      (hasStringArrayValue(example, ["representativeSelectors", "representative_selectors"]) ? "representative_selector" : null);
-    const snippet = getStringValue(example, ["snippet", "message", "description", "help"]);
-    const nodeCount = getNumberValue(example, ["nodeCount", "node_count"]);
-    const impact = getStringValue(example, ["impact", "severity"]);
-
-    if (!pageUrl || !ruleId || (!selector && !snippet && !(typeof nodeCount === "number" && nodeCount > 0))) {
-      continue;
-    }
-
-    representativeExampleCount += 1;
-    pages.add(pageUrl);
-    rules.add(ruleId);
-
-    if (impact && /^(?:critical|serious|high)$/i.test(impact)) {
-      hasSevereExample = true;
-    }
-  }
-
-  return {
-    hasSevereExample,
-    representativeExampleCount,
-    distinctPageCount: pages.size,
-    distinctRuleCount: rules.size
-  };
-}
-
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
-  const coverage = getRepresentativeAccessibilityExampleCoverage(rawEvidence);
-
-  return (
-    coverage.hasSevereExample ||
-    coverage.distinctPageCount >= 2 ||
-    coverage.distinctRuleCount >= 2
-  );
+  return hasExternallyPromotableAccessibilityExamples(rawEvidence);
 }
 
 function getNumberEvidence(
