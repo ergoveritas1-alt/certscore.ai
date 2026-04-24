@@ -14,6 +14,70 @@ type DomainScanFormProps = {
   mode?: "full" | "preview";
 };
 
+type ScanMode = NonNullable<DomainScanFormProps["mode"]>;
+
+type ScanSubmitPayload = {
+  code?: string | null;
+  error?: string | null;
+  previewUrl?: string | null;
+  scanUrl?: string | null;
+};
+
+type ScanSubmitFailure = {
+  code?: string | null;
+  destination?: string | null;
+  domain: string;
+  error?: string | null;
+  mode: ScanMode;
+  stage: "api_rejected" | "missing_destination" | "request_failed";
+  status?: number | null;
+};
+
+const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
+  full: "The full scan could not be started. Please try again.",
+  preview: "The preview scan could not be started. Please try again."
+};
+
+const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
+  full_scan_server_error: "The scan service hit an unexpected error. Try again in a minute.",
+  invalid_domain: "Enter a valid website domain, like example.com.",
+  scan_already_active: "A scan is already active for this domain. Open the latest scan from your history.",
+  scan_limit_reached: "This scan is blocked by your plan or recent scan limit.",
+  scan_queue_rejected: "The scan request was rejected before queueing. Try again in a minute.",
+  scan_queue_unavailable: "The scan queue is unavailable. Try again in a minute."
+};
+
+function getScanSubmitErrorMessage(mode: ScanMode, payload: ScanSubmitPayload): string {
+  const codedMessage = mode === "full" && payload.code ? FULL_SCAN_ERROR_MESSAGES[payload.code] : null;
+
+  if (codedMessage) {
+    return codedMessage;
+  }
+
+  return payload.error ?? GENERIC_SCAN_ERROR_MESSAGES[mode] ?? "The scan could not be started. Please try again.";
+}
+
+function recordScanSubmitFailure(event: ScanSubmitFailure) {
+  const body = JSON.stringify(event);
+
+  if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+    const sent = navigator.sendBeacon("/api/scan-submit-events", new Blob([body], { type: "application/json" }));
+
+    if (sent) {
+      return;
+    }
+  }
+
+  void fetch("/api/scan-submit-events", {
+    body,
+    headers: {
+      "Content-Type": "application/json"
+    },
+    keepalive: true,
+    method: "POST"
+  }).catch(() => {});
+}
+
 export function DomainScanForm({
   buttonLabel = "Start full scan",
   compact = false,
@@ -53,18 +117,46 @@ export function DomainScanForm({
         method: "POST"
       });
 
-      const payload = (await response.json()) as { error?: string; previewUrl?: string; scanUrl?: string };
+      const payload = (await response.json()) as ScanSubmitPayload;
       const destination = mode === "preview" ? payload.previewUrl : payload.scanUrl;
 
-      if (!response.ok || !destination) {
-        setErrorMessage(payload.error ?? (mode === "preview" ? "The preview scan could not be started. Please try again." : "The full scan could not be started. Please try again."));
+      if (!response.ok) {
+        recordScanSubmitFailure({
+          code: payload.code,
+          domain,
+          error: payload.error,
+          mode,
+          stage: "api_rejected",
+          status: response.status
+        });
+        setErrorMessage(getScanSubmitErrorMessage(mode, payload));
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!destination) {
+        recordScanSubmitFailure({
+          code: payload.code,
+          domain,
+          error: payload.error,
+          mode,
+          stage: "missing_destination",
+          status: response.status
+        });
+        setErrorMessage("The scan was accepted, but the result link was missing. Refresh and check scan history.");
         setIsSubmitting(false);
         return;
       }
 
       router.push(destination);
-    } catch {
-      setErrorMessage(mode === "preview" ? "The preview scan could not be started. Please try again." : "The full scan could not be started. Please try again.");
+    } catch (error) {
+      recordScanSubmitFailure({
+        domain,
+        error: error instanceof Error ? error.message : String(error),
+        mode,
+        stage: "request_failed"
+      });
+      setErrorMessage("The request did not complete. Check your connection and try again.");
       setIsSubmitting(false);
     }
   }

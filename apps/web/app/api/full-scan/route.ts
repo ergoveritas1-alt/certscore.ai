@@ -12,6 +12,28 @@ function isPublicFullScanAvailabilityError(error: unknown) {
   return /DATABASE_URL|Invalid environment configuration|Scanner health check failed/i.test(message);
 }
 
+function getFullScanQueueErrorCode(error: string | null | undefined) {
+  const message = error ?? "";
+
+  if (/already|active scan|queued|running|recently|re-scan/i.test(message)) {
+    return "scan_already_active";
+  }
+
+  if (/limit|Free plan|billing period|plan/i.test(message)) {
+    return "scan_limit_reached";
+  }
+
+  if (/queue|scanner|heartbeat|availability|unavailable/i.test(message)) {
+    return "scan_queue_unavailable";
+  }
+
+  if (/domain|hostname|website/i.test(message)) {
+    return "invalid_domain";
+  }
+
+  return "scan_queue_rejected";
+}
+
 function getFirstHeaderValue(value: string | null) {
   return value?.split(",")[0]?.trim() || null;
 }
@@ -51,6 +73,7 @@ export async function POST(request: Request) {
       const singleResult = createDomainRequestSchema.safeParse(payload);
       return NextResponse.json(
         {
+          code: "invalid_domain",
           error:
             singleResult.success
               ? "Invalid full scan request."
@@ -103,6 +126,7 @@ export async function POST(request: Request) {
         });
 
         return {
+          code: "preview_fallback" as const,
           mode: "preview" as const,
           scan: preview.scan
         };
@@ -115,7 +139,14 @@ export async function POST(request: Request) {
           scanUrl:
             "mode" in anonymousScan && anonymousScan.mode === "preview"
               ? `/preview/${anonymousScan.scan.id}`
-              : `/scan/${anonymousScan.scan.id}`
+              : `/scan/${anonymousScan.scan.id}`,
+          warning:
+            "mode" in anonymousScan && anonymousScan.mode === "preview"
+              ? {
+                  code: "scanner_heartbeat_degraded",
+                  message: "Full scan queue health was degraded, so a preview scan was started instead."
+                }
+              : null
         },
         {
           headers: {
@@ -138,9 +169,12 @@ export async function POST(request: Request) {
     const queuedScans = scans.filter((scan) => !scan.error && scan.scanId);
 
     if (queuedScans.length === 0) {
+      const error = scans.find((scan) => scan.error)?.error ?? "The full scan could not be started.";
+
       return NextResponse.json(
         {
-          error: scans.find((scan) => scan.error)?.error ?? "The full scan could not be started."
+          code: getFullScanQueueErrorCode(error),
+          error
         },
         { status: 400 }
       );
@@ -167,6 +201,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
+          code: "scan_queue_unavailable",
           error: "The full scan could not be started right now. Please try again."
         },
         {
@@ -177,6 +212,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
+        code: "full_scan_server_error",
         error: error instanceof Error ? error.message : "Full scan could not be created."
       },
       {
