@@ -504,8 +504,11 @@ function mapReportFindingToDraft(input: {
         domain: input.domain,
         downgradeReason: "Report-level runtime effect evidence needs reviewer confirmation before corpus promotion.",
         evidence: {
+          artifactRefs: screenshots,
+          detectionSource: "live_consent_audit_report",
           requestUrls: requests.slice(0, 8),
           sequenceEvidence: requests.length > 0,
+          vendorCategories: ["analytics", "advertising_marketing"],
           vendors: uniqueStrings(input.report.preConsentTrackingSummary?.likelyVendorsObserved ?? [])
         },
         expected: {
