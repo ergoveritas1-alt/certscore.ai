@@ -1265,5 +1265,213 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Report-level live audit finding: A visible first-layer reject-all control was not detected, while accept or manage controls were detected on the initial consent surface.",
     scenarioType: "borderline_review",
     sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "accessibility.accessibility_support_path_missing",
+      snapshotEvidence: {
+        accessibility_contact_method_present: false,
+        accessibility_statement_present: false,
+        verified_public_surfaces_count: 2
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found Discover's public accessibility page and feedback path, so the missing accessibility support-path interpretation is a false positive.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.discover.com/accessibility/?ICMPGN=PUB_FTR_ACCESSIBILITY"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "accessibility_support_path_missing",
+    id: "live-demotion-accessibility-discover-com-2026-04-24",
+    negativeControlReason: "Public accessibility support path exists despite retained snapshot absence booleans.",
+    notes: "Live production demotion audit found a reachable accessibility surface and feedback path outside CertScore's retained signal evidence.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "accessibility.accessibility_support_path_missing",
+      snapshotEvidence: {
+        accessibility_contact_method_present: false,
+        accessibility_statement_present: false,
+        verified_public_surfaces_count: 2
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found Ally's accessibility page and accessibility feedback form, so the missing support-path interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.ally.com/accessibility/"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "accessibility_support_path_missing",
+    id: "live-demotion-accessibility-ally-com-2026-04-24",
+    negativeControlReason: "Public accessibility support path exists despite retained snapshot absence booleans.",
+    notes: "Live production demotion audit found a reachable accessibility surface and support path outside CertScore's retained signal evidence.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "accessibility.accessibility_support_path_missing",
+      snapshotEvidence: {
+        accessibility_contact_method_present: false,
+        accessibility_statement_present: false,
+        verified_public_surfaces_count: 2
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found BlackRock's public accessibility page, so the missing accessibility support-path interpretation is not externally promotable.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.blackrock.com/corporate/accessibility"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "accessibility_support_path_missing",
+    id: "live-demotion-accessibility-blackrock-com-2026-04-24",
+    negativeControlReason: "Public accessibility surface exists despite retained snapshot absence booleans.",
+    notes: "Live production demotion audit found a reachable accessibility surface outside CertScore's retained signal evidence.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "privacy.sale_sharing_controls_missing",
+      snapshotEvidence: {
+        do_not_sell_link_present: false,
+        retargeting_pixel_detected: true
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found Discover's privacy statement with privacy-choice/control language, so a missing sale/sharing control should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.discover.com/privacy-statement/?ICMPGN=PUB_FTR_QL_PRIVACY"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "sale_sharing_controls_missing",
+    id: "live-demotion-sale-sharing-discover-com-2026-04-24",
+    negativeControlReason: "A privacy-choice/control path exists despite retained do-not-sell absence and retargeting booleans.",
+    notes: "Live production demotion audit found a control path outside CertScore's retained sale/sharing signal evidence.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "privacy.sale_sharing_controls_missing",
+      snapshotEvidence: {
+        do_not_sell_link_present: false,
+        retargeting_pixel_detected: true
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found BlackRock's privacy notice with opt-out/control language, so the missing sale/sharing control interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.blackrock.com/corporate/compliance/privacy-notice"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "sale_sharing_controls_missing",
+    id: "live-demotion-sale-sharing-blackrock-com-2026-04-24",
+    negativeControlReason: "A privacy-choice/control path exists despite retained do-not-sell absence and retargeting booleans.",
+    notes: "Live production demotion audit found a control path outside CertScore's retained sale/sharing signal evidence.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "privacy.sale_sharing_controls_missing",
+      snapshotEvidence: {
+        advertising_tracker_count: 6,
+        do_not_sell_link_present: false,
+        mentions_data_sale_or_sharing: false,
+        retargeting_pixel_detected: true
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL probe did not corroborate sale/sharing disclosure or a missing control path; runtime retargeting alone is insufficient.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://raymondjames.com"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "sale_sharing_controls_missing",
+    id: "live-demotion-sale-sharing-raymondjames-com-2026-04-24",
+    negativeControlReason: "Runtime retargeting without a retained sale/sharing policy anchor is insufficient for missing-control promotion.",
+    notes: "Live production demotion audit treated retargeting-only evidence as insufficient for external surfacing.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Own URL review found targeted-advertising disclosure language but did not find a control path in the bounded probe; this needs reviewer confirmation before promotion.",
+    evidence: {
+      policyAnchor: {
+        claimType: "targeted_advertising_disclosure",
+        confidence: 0.78,
+        extractionStatus: "fetched",
+        sourceUrl: "https://bestforex-signals.com/privacy-policy",
+        snippet: "Policy language references advertising, cookies, or targeted advertising practices, but the bounded URL probe did not find a matching opt-out control."
+      },
+      signalKey: "privacy.sale_sharing_controls_missing",
+      snapshotEvidence: {
+        do_not_sell_link_present: false,
+        retargeting_pixel_detected: true
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review found sale/sharing or targeted-advertising disclosure language but did not find a control path in the bounded probe.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestforex-signals.com/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "sale_sharing_controls_missing",
+    id: "live-review-sale-sharing-bestforex-signals-com-2026-04-24",
+    notes: "Live production demotion audit identified a candidate that should remain review-only until policy and control-path evidence are anchored together.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
   }
 ];
