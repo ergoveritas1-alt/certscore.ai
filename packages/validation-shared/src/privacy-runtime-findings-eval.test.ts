@@ -76,3 +76,28 @@ test("nano policy anchors help disclosure cases but do not replace runtime ancho
 
   assert.equal(derivePrivacyRuntimeFindingExpectation(example).promotionEligibility, "internal_only");
 });
+
+test("dark-pattern consent promotion requires actionable consent controls", () => {
+  const example = {
+    evidence: {
+      artifactRefs: ["s3://privacy-runtime/dark-pattern/live.png"],
+      consentSurfaceObserved: true,
+      uiFacts: ["banner_present", "reject_action_not_observed"],
+      visualFacts: ["privacy footer text mentions cookies"]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "reject_button_missing",
+    id: "unit-dark-pattern-no-actionable-control",
+    notes: "unit",
+    scenarioType: "borderline_review",
+    sourceKind: "synthetic_fixture"
+  } satisfies PrivacyRuntimeFindingDatasetExample;
+
+  assert.equal(derivePrivacyRuntimeFindingExpectation(example).promotionEligibility, "internal_only");
+});

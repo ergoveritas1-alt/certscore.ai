@@ -46,6 +46,7 @@ function hasStrongFingerprintingEvidence(example: PrivacyRuntimeFindingDatasetEx
 function hasVerifiedDarkPatternEvidence(example: PrivacyRuntimeFindingDatasetExample) {
   return Boolean(
     example.evidence.consentSurfaceObserved === true &&
+      example.evidence.consentActionableChoiceObserved === true &&
       hasValues(example.evidence.uiFacts) &&
       (hasValues(example.evidence.visualFacts) || hasValues(example.evidence.artifactRefs))
   );

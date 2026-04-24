@@ -361,6 +361,19 @@ function getReadableBannerText(value: string | null) {
   return compact.slice(0, 240);
 }
 
+function getVisibleActionPresence(banner: JsonRecord | null) {
+  const visibleActions = getRecord(banner?.visibleActions);
+  return {
+    accept: getBoolean(visibleActions?.accept) === true,
+    manage: getBoolean(visibleActions?.manage) === true,
+    reject: getBoolean(visibleActions?.reject) === true
+  };
+}
+
+function hasMeaningfulActionLabel(labels: string[]) {
+  return labels.some((label) => label.trim().length > 0);
+}
+
 function buildDarkPatternDraft(input: {
   artifactPath: string;
   domain: string;
@@ -384,29 +397,72 @@ function buildDarkPatternDraft(input: {
 
   const rejectLabels = getStringArray(rejectPath?.labels);
   const acceptLabels = getStringArray(acceptPath?.labels);
+  const visibleActions = getVisibleActionPresence(banner);
+  const acceptObserved = visibleActions.accept || hasMeaningfulActionLabel(acceptLabels);
+  const manageObserved = visibleActions.manage;
+  const rejectObserved = visibleActions.reject || hasMeaningfulActionLabel(rejectLabels);
   const consentText = [readableBannerText, ...rejectLabels, ...acceptLabels].join(" ");
   const looksLikeConsentSurface = /cookie|consent|tracking|advertising|personalized|preferences|reject|accept|manage/i.test(consentText);
-  if (!looksLikeConsentSurface) {
+  if (!looksLikeConsentSurface || (!acceptObserved && !manageObserved && !rejectObserved)) {
+    return null;
+  }
+
+  if (acceptObserved && rejectObserved) {
+    return {
+      artifactPath: input.artifactPath,
+      domain: input.domain,
+      evidence: {
+        artifactRefs,
+        consentActionableChoiceObserved: true,
+        consentSurfaceObserved: true,
+        uiFacts: uniqueStrings([
+          "banner_present",
+          "accept_action_observed",
+          "reject_action_observed",
+          manageObserved ? "manage_action_observed" : null,
+          "balanced_accept_reject_actions"
+        ]),
+        visualFacts: readableBannerText ? [readableBannerText] : []
+      },
+      expected: {
+        confidenceBand: "low",
+        externalSurfacingEligibility: "suppress",
+        presentationState: "suppressed",
+        promotionEligibility: "blocked"
+      },
+      findingGroup: "dark_pattern_consent",
+      findingId: "accept_more_prominent_than_reject",
+      id: `live-dark-pattern-negative-${input.domain}-${input.scenarioName}-${getArtifactRunSlug(input.artifactPath)}`,
+      negativeControlReason: "Verified first-layer accept and reject actions were both visible/actionable; no dark-pattern control asymmetry should surface.",
+      notes: "Live consent audit observed a balanced first-layer consent control set. Review screenshot before promotion as a dark-pattern negative control.",
+      scenarioName: input.scenarioName,
+      scenarioType: "negative_control",
+      sourceKind: "live_artifact",
+      sourceUrl: sanitizeSourceUrl(input.scenario.url)
+    } satisfies PrivacyRuntimeDraft;
+  }
+
+  if (rejectObserved) {
     return null;
   }
 
   const findingId: PrivacyRuntimeFindingId =
-    acceptLabels.length > 0 && rejectLabels.length === 0
+    acceptObserved && !manageObserved
       ? "accept_only_banner"
-      : rejectAttempted === false && acceptAttempted === true
-        ? "reject_button_missing"
-        : "accept_more_prominent_than_reject";
+      : "reject_button_missing";
 
   return {
     artifactPath: input.artifactPath,
     domain: input.domain,
     evidence: {
       artifactRefs,
+      consentActionableChoiceObserved: acceptObserved || manageObserved || rejectObserved,
       consentSurfaceObserved: true,
       uiFacts: uniqueStrings([
         "banner_present",
-        rejectLabels.length === 0 ? "reject_label_not_observed" : null,
-        acceptLabels.length > 0 ? "accept_label_observed" : null
+        acceptObserved ? "accept_action_observed" : null,
+        manageObserved ? "manage_action_observed" : null,
+        rejectObserved ? "reject_action_observed" : "reject_action_not_observed"
       ]),
       visualFacts: readableBannerText ? [readableBannerText] : []
     },
@@ -478,22 +534,24 @@ function mapReportFindingToDraft(input: {
         domain: input.domain,
         evidence: {
           artifactRefs: screenshots,
+          consentActionableChoiceObserved: false,
           consentSurfaceObserved: true,
           uiFacts: [input.finding.findingId === "F004" ? "optional_controls_preselected" : "reject_path_less_direct"],
           visualFacts: uiText
         },
         expected: {
           confidenceBand: "moderate",
-          externalSurfacingEligibility: "eligible",
+          externalSurfacingEligibility: "audit_only",
           presentationState: "review",
-          promotionEligibility: "eligible"
+          promotionEligibility: "internal_only"
         },
         findingGroup: "dark_pattern_consent",
         findingId: input.finding.findingId === "F004" ? "accept_more_prominent_than_reject" : "reject_button_missing",
         id,
+        downgradeReason: "Report-level dark-pattern evidence needs raw screenshot and action-control review before surfacing.",
         notes: `Report-level live audit finding: ${observation}`,
         scenarioName: "report",
-        scenarioType: "positive_moderate",
+        scenarioType: "borderline_review",
         sourceKind: "live_artifact",
         sourceUrl
       } satisfies PrivacyRuntimeDraft;

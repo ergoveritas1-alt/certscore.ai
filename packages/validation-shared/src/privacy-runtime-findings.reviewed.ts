@@ -1108,5 +1108,162 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Report-level live audit finding: After an explicit reject-path interaction, likely non-essential requests or identifiers still appeared during the post-choice or refreshed session.",
     scenarioType: "borderline_review",
     sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: [
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/accept_all/banner.png",
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/accept_all/first-load.png"
+      ],
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      uiFacts: [
+        "banner_present",
+        "accept_action_observed",
+        "reject_action_observed",
+        "manage_action_observed",
+        "balanced_accept_reject_actions"
+      ],
+      visualFacts: [
+        "Your PrivacyBetterment uses cookies and similar technologies as described in our privacy policy. You can manage your cookie settings at any time.Accept AllOpen preferencesReject All"
+      ]
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "accept_more_prominent_than_reject",
+    id: "live-dark-pattern-negative-betterment-com-accept_all-2026-03-26t19-50-39-134z",
+    negativeControlReason: "Verified first-layer accept and reject actions were both visible/actionable; no dark-pattern control asymmetry should surface.",
+    notes: "Live consent audit observed a balanced first-layer consent control set. Review screenshot before promotion as a dark-pattern negative control.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: [
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/fresh_visit/banner.png",
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/fresh_visit/first-load.png"
+      ],
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      uiFacts: [
+        "banner_present",
+        "accept_action_observed",
+        "reject_action_observed",
+        "manage_action_observed",
+        "balanced_accept_reject_actions"
+      ],
+      visualFacts: [
+        "Your PrivacyBetterment uses cookies and similar technologies as described in our privacy policy. You can manage your cookie settings at any time.Accept AllOpen preferencesReject All"
+      ]
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "accept_more_prominent_than_reject",
+    id: "live-dark-pattern-negative-betterment-com-fresh_visit-2026-03-26t19-50-39-134z",
+    negativeControlReason: "Verified first-layer accept and reject actions were both visible/actionable; no dark-pattern control asymmetry should surface.",
+    notes: "Live consent audit observed a balanced first-layer consent control set. Review screenshot before promotion as a dark-pattern negative control.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: [
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/reject_all/banner.png",
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T19-50-39.134Z/betterment-com/reject_all/first-load.png"
+      ],
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      uiFacts: [
+        "banner_present",
+        "accept_action_observed",
+        "reject_action_observed",
+        "manage_action_observed",
+        "balanced_accept_reject_actions"
+      ],
+      visualFacts: [
+        "Your PrivacyBetterment uses cookies and similar technologies as described in our privacy policy. You can manage your cookie settings at any time.Accept AllOpen preferencesReject All"
+      ]
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "accept_more_prominent_than_reject",
+    id: "live-dark-pattern-negative-betterment-com-reject_all-2026-03-26t19-50-39-134z",
+    negativeControlReason: "Verified first-layer accept and reject actions were both visible/actionable; no dark-pattern control asymmetry should surface.",
+    notes: "Live consent audit observed a balanced first-layer consent control set. Review screenshot before promotion as a dark-pattern negative control.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Report-level dark-pattern evidence needs raw screenshot and action-control review before surfacing.",
+    evidence: {
+      artifactRefs: [
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-04-18T06-31-31.445Z/certscore-ai/fresh_visit/banner.png"
+      ],
+      consentActionableChoiceObserved: false,
+      consentSurfaceObserved: true,
+      uiFacts: [
+        "reject_path_less_direct"
+      ],
+      visualFacts: [
+        "Surface website evidence across privacy, consent, accessibility, and disclosures .Automated scanning for pre-consent tracking, consent flow failures, third-party data collection, disclosure gaps, accessibility signals, and policy-to-behavior contradictions. Built for teams that need reviewable evidence, not checklists.Scan a websiteSee sample findingsNo legal advice. No certification. Findings reflect automated analysis of public website signals and should be reviewed in context.Scan a homepageStart with a lightweight homepage scan that previews the kinds of findings and observable signals CertScore can surface before signup.",
+        "No interaction wait completed for 12000 ms."
+      ]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "reject_button_missing",
+    id: "live-report-certscore-ai-F002-2026-04-18t06-31-31-445z",
+    notes: "Report-level live audit finding: A visible first-layer reject-all control was not detected, while accept or manage controls were detected on the initial consent surface.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Report-level dark-pattern evidence needs raw screenshot and action-control review before surfacing.",
+    evidence: {
+      artifactRefs: [
+        "/Users/benmasek/WC01/apps/validation-worker/artifacts/live-consent-audit/2026-03-26T03-48-38.600Z/amazon-com/fresh_visit/banner.png"
+      ],
+      consentActionableChoiceObserved: false,
+      consentSurfaceObserved: true,
+      uiFacts: [
+        "reject_path_less_direct"
+      ],
+      visualFacts: [
+        "{\AUI_72554\:\"C\",\AUI_TEMPLATE_WEBLAB_CACHE_333406\:\"C\",\BW_AUI_CXC_ALERT_MEASUREMENT_1074111\:\"C\"}typeof uex === 'function' && uex('ld', 'portal-bb', {wb: 1}) !function(){function n(n,t){var r=i(n);return t&&(r=r(\"instance\",t)),r}var r=[],c=0,i=function(t){return function(){var n=c++;return r.push([t,[].slice.call(arguments,0),n,{time:Date.now()}]),i(n)}};n._s=r,this.csa=n}();; csa('Config', {}); if (window.csa) { csa(\"Config\", { 'Application': 'Retail:Prod:www.amazon.com', 'Events.Namespace': 'csa', 'ObfuscatedMarketplaceId': 'ATVPDKIKX0DER', 'Events.SushiEndpoint': 'https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod', 'Events.SushiCsaVIP': 'unagi.amazon.com', 'Events.SushiCsaSourceGroup': 'com.amazon.csm.csa.prod', 'Events.SushiCsaCustomSourceGroup': 'com.amazon.csm.customsg.prod', 'Events.SushiEndpointPattern': 'https://%s/1/events/%s', 'CacheDetection.RequestID': \"E0HR0705V72M3PCJGEZK\", 'CacheDetection.Callback': window.ue && ue.reset, 'Transport.nonBatchSchema': \"csa.UEData.3\", 'LCP.elementDedup': 1, 'actorType': '-1', 'lob': '1' }); csa(\"Events\")(\"setEntity\", { page: {requestId: \"E0HR0705V72M3PCJGEZK\", meaningful: \"interactive\"}, session: {id: \"131-4344547-1051959\"} }); } !function(r){var e,i,o=\"splice\",u=r.csa,f={},c={},a=r.csa._s,l=0,s=0,g=-1,h={},d={},v={},n=Object.keys,p=function(){};function t(n,t){return u(n,t)}function b(n,t){var r=c[n]||{};k(r,t),c[n]=r,s++,D(O,0)}function m(n,t,r){var i=!0;return t=S(t),r&&r.buffered&&(i=(v[n]||[]).every(function(n){return!1!==t(n)})),i?(h[n]||(h[n]=[]),h[n].push(t),function(){!function(n,t){var r=h[n];r&&r[o](r.indexOf(t),1)}(n,t)}):p}function w(n,t){if(t=S(t),n in d)return t(d[n]),p;return m(n,function(n){return t(n),!1})}function y(n,t){if(u(\"Errors\")(\"logError\",n),f.DEBUG)throw t||n}function E(){return Math.abs(4294967295*Math.random()|0).toString(36)}function S(n,t){return function(){try{return n.apply(this,arguments)}catch(n){y(n.message||n,n)}}}function D(n,t){return r.setTimeout(S(n),t)}function O(){for(var n=0;n<a.length;){var t=a[n],r=t[0]in c;if(!r&&!i)return void(l=a.length);r?(a[o](l=n,1),U(t)):n++}g=s}function U(n){var t=c[n[0]],r=n[1],i=r[0];if(!t||!t[i])return y(\"Undefined function: \"+t+\"/\"+i);e=n[3],c[n[2]]=t[i].apply(t,r.slice(1))||{},e=0}function I(){i=1,O()}function k(t,r){n(r).forEach(function(n){t[n]=r[n]})}w(\"$beforeunload\",I),b(\"Config\",{instance:function(n){k(f,n)}}),u.plugin=S(function(n){n(t)}),t.config=f,t.register=b,t.on=m,t.once=w,t.blank=p,t.emit=function(n,t,r){for(var i=h[n]||[],e=0;e<i.length;)!1===i[e](t)?i[o](e,1):e++;d[n]=t||{},r&&r.buffered&&(v[n]||(v[n]=[]),100<=v[n].length&&v[n].shift(),v[n].push(t||{}))},t.UUID=function(){return[E(),E(),E(),E()].join(\"-\")},t.time=function(n){var t=e?new Date(e.time):new Date;return\"ISO\"===n?t.toISOString():t.getTime()},t.error=y,t.warn=function(n,t){if(u(\"Errors\")(\"logWarn\",n),f.DEBUG)throw t||n},t.exec=S,t.timeout=D,t.interval=function(n,t){return r.setInterval(S(n),t)},(t.global=r).csa._s.push=function(n){n[0]in c&&(!a.length||i)?(U(n),a.length&&g!==s&&O()):a[o](l++,0,n)},O(),f[\"StubCalls.Cleanup.Onload\"]&&w(\"$load\",I),D(function(){D(I,f.SkipMissingPluginsTimeout||5e3)},1)}(\"undefined\"!=typeof window?window:global);csa.plugin(function(o){var f=\"addEventListener\",e=\"requestAnimationFrame\",t=o.exec,r=o.global,u=o.on;o.raf=function(n){if(r[e])return r[e](t(n))},o.on=function(n,e,t,r){if(n&&\"function\"==typeof n[f]){var i=o.exec(t);return n[f](e,i,r),function(){n.removeEventListener(e,i,r)}}return\"string\"==typeof n?u(n,e,t,r):o.blank}});csa.plugin(function(o){var t,n,r={},e=\"localStorage\",c=\"sessionStorage\",a=\"local\",i=\"session\",u=o.exec;function s(e,t){var n;try{r[t]=!!(n=o.global[e]),n=n||{}}catch(e){r[t]=!(n={})}return n}function f(){t=t||s(e,a),n=n||s(c,i)}function l(e){return e&&e[i]?n:t}o.store=u(function(e,t,n){f();var o=l(n);return e?t?void(o[e]=t):o[e]:Object.keys(o)}),o.storageSupport=u(function(){return f(),r}),o.deleteStored=u(function(e,t){f();var n=l(t);if(\"function\"==typeof e)for(var o",
+        "No interaction wait completed for 12000 ms."
+      ]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "dark_pattern_consent",
+    findingId: "reject_button_missing",
+    id: "live-report-amazon-com-F002-2026-03-26t03-48-38-600z",
+    notes: "Report-level live audit finding: A visible first-layer reject-all control was not detected, while accept or manage controls were detected on the initial consent surface.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
   }
 ];
