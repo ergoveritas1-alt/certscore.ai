@@ -54,6 +54,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "probable_fingerprinting")) {
     forcedIds.add("probable_fingerprinting");
   }
+  if (ranked.some((finding) => finding.id === "session_recording_services_detected")) {
+    forcedIds.add("session_recording_services_detected");
+  }
 
   for (const finding of ranked) {
     if (suppressedIds.has(finding.id)) {
