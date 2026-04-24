@@ -84,6 +84,22 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
   return vendors.length > 0 || urls.length > 0 || hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" });
 }
 
+export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const vendors = getStringArrayValues(rawEvidence, [
+    "preconsent_tracker_vendors",
+    "relatedVendors",
+    "runtimeVendors",
+    "runtime_vendors"
+  ]);
+  const urls = getStringArrayValues(rawEvidence, [
+    "preconsent_tracker_evidence_urls",
+    "requestUrls",
+    "runtimeEvidenceUrls"
+  ]).filter((value) => /^https?:\/\//i.test(value));
+
+  return vendors.length > 0 && urls.length > 0 && hasPreconsentSequenceEvidence(rawEvidence);
+}
+
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
     return false;
@@ -98,6 +114,84 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     rawEvidence.tracking_before_consent_detected === true ||
     supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value))
   );
+}
+
+function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof record?.[key] === "number" && Number.isFinite(record[key])) {
+      return record[key] as number;
+    }
+  }
+
+  return null;
+}
+
+function getRecordValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
+  const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
+  const attributeCategories = getStringArrayValues(rawEvidence, [
+    "fingerprintAttributeCategories",
+    "fingerprint_attribute_categories"
+  ]);
+  const summaryAttributeCategories = getStringArrayValues(summary, ["attributeCategories", "attribute_categories"]);
+  const scriptOrRequestEvidence = getStringArrayValues(rawEvidence, [
+    "fingerprintArtifactRefs",
+    "fingerprint_artifact_refs",
+    "requestUrls",
+    "runtimeEvidenceUrls",
+    "scriptHosts",
+    "script_hosts"
+  ]).length > 0;
+  const vendorEvidence = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "vendors"]).length > 0;
+  const attributeCount = Math.max(attributeCategories.length, summaryAttributeCategories.length);
+
+  return tier >= 3 || (tier >= 2 && attributeCount > 0 && (scriptOrRequestEvidence || vendorEvidence));
+}
+
+export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const consentSummary = getRecordValue(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const consentVisual = getRecordValue(rawEvidence, ["hybridConsentVisual", "hybrid_consent_visual"]);
+  const uiSummary = getRecordValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const artifactRefs = getStringArrayValues(rawEvidence, [
+    "consentUiArtifactRefs",
+    "consent_ui_artifact_refs",
+    "runtimeEvidenceArtifacts",
+    "runtime_evidence_artifacts"
+  ]);
+  const explicitSurface =
+    rawEvidence.consentSurfaceObserved === true ||
+    rawEvidence.consent_surface_observed === true ||
+    consentSummary?.bannerPresent === true;
+  const specificUiFact = Boolean(
+    rawEvidence.reject_button_missing === true ||
+      rawEvidence.forced_consent_wall === true ||
+      rawEvidence.accept_only_banner === true ||
+      rawEvidence.dismiss_without_reject === true ||
+      consentVisual?.ctaImbalanceDetected === true ||
+      consentVisual?.acceptOnly === true ||
+      consentVisual?.rejectHidden === true ||
+      consentVisual?.contrastAsymmetryDetected === true ||
+      consentSummary?.rejectDepthClass === "absent" ||
+      consentSummary?.pageInteractionBlocked === true ||
+      uiSummary?.forcedActionRequired === true
+  );
+
+  return explicitSurface && specificUiFact && artifactRefs.length > 0;
 }
 
 export function hasConcreteRuntimeArtifact(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {

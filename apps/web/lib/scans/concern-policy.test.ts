@@ -1199,3 +1199,84 @@ test("deriveConcernPolicy fails closed for Schwab-like contradiction candidates 
   assert.ok(policy.negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict"));
   assert.ok(policy.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
 });
+
+test("deriveConcernPolicy keeps vendor-only pre-consent evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy promotes pre-consent evidence only with vendor, URL, and sequence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_tracker_evidence_urls: ["https://connect.facebook.net/fbevents.js"],
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps thin fingerprinting evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintSummary: {
+        tier: 2
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintAttributeCategories: ["canvas_webgl"],
+      fingerprintSummary: {
+        tier: 2
+      },
+      requestUrls: ["https://fp.example.test/collect"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});

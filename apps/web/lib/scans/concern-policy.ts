@@ -22,6 +22,8 @@ import {
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
   hasPreconsentSequenceEvidence,
+  hasStrongFingerprintingEvidence,
+  hasStrongPreconsentRuntimeEvidence,
   hasStrongRightsFrictionArtifact
 } from "./promotion-evidence-contracts";
 import {
@@ -667,6 +669,22 @@ function isRetargetingConcern(
     .toLowerCase();
 
   return /retargeting_pixel|retargeting pixel|retargeting_pixel_observed/.test(haystack);
+}
+
+function isFingerprintingConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /fingerprinting|fingerprint/.test(haystack);
 }
 
 function isContradictionConcern(
@@ -1429,6 +1447,24 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isFingerprintingConcern(input.concern)) {
+    if (!hasStrongFingerprintingEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (isContradictionConcern(input.concern)) {
     if (input.concern.suggestedUnifiedFindingId === "policy_behavior_conflict") {
       const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
@@ -1770,10 +1806,7 @@ export function deriveConcernPolicy(input: {
         negativeEvidenceFlags.add("missing_preconsent_sequence_evidence");
       }
 
-      if (
-        negativeEvidenceFlags.has("missing_concrete_preconsent_artifact") ||
-        negativeEvidenceFlags.has("missing_preconsent_sequence_evidence")
-      ) {
+      if (!hasStrongPreconsentRuntimeEvidence(input.rawEvidence)) {
         return {
           allowedNarrativeTier: "weak",
           externalSurfacingEligibility: "audit_only",

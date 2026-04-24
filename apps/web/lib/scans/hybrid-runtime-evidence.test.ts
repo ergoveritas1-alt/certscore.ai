@@ -108,6 +108,18 @@ test("builds fallback evidence for hybrid pre-consent tracking concerns", () => 
   });
 
   assert.deepEqual(fallback?.preconsent_tracker_vendors, ["Meta Pixel"]);
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, []);
+  assert.deepEqual(fallback?.preconsent_tracker_vendor_evidence, [
+    {
+      category: "unknown",
+      confidence: "unknown",
+      detectionSource: "hybrid_runtime",
+      hostname: null,
+      matchedSignatureId: null,
+      requestUrl: null,
+      vendor: "Meta Pixel"
+    }
+  ]);
   assert.equal(fallback?.preconsent_tracking_detected, true);
   assert.deepEqual(fallback?.runtimeEvidenceArtifacts, ["hybrid_runtime_evidence"]);
 });
@@ -168,6 +180,50 @@ test("builds fallback evidence for hybrid fingerprinting concerns", () => {
   assert.equal(fallback?.fingerprinting_detected, true);
   assert.deepEqual(fallback?.runtimeEvidenceArtifacts, ["hybrid_runtime_evidence"]);
   assert.equal((fallback?.fingerprintSummary as { tier?: unknown } | undefined)?.tier, 3);
+});
+
+test("builds concrete fallback evidence for hybrid pre-consent request timing", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      timelineMarkers: {
+        consentBannerDetectedMs: 500
+      },
+      requestObservations: [
+        { domain: "connect.facebook.net", thirdParty: true, ts_ms: 120, url: "https://connect.facebook.net/fbevents.js" }
+      ],
+      requestToVendorObservations: [
+        {
+          category: "advertising",
+          confidence: "high",
+          evidenceSource: "vendor_signature",
+          hostname: "connect.facebook.net",
+          preConsent: true,
+          vendor: "Meta Pixel"
+        }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalLabel: "Pre-consent tracking detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, ["https://connect.facebook.net/fbevents.js"]);
+  assert.equal(fallback?.consentBannerDetectedMs, 500);
+  assert.deepEqual(fallback?.preconsent_tracker_vendor_evidence, [
+    {
+      category: "advertising",
+      confidence: "high",
+      detectionSource: "vendor_signature",
+      hostname: "connect.facebook.net",
+      matchedSignatureId: null,
+      requestUrl: "https://connect.facebook.net/fbevents.js",
+      vendor: "Meta Pixel"
+    }
+  ]);
 });
 
 test("backfills legacy runtime artifact summary fields from hybrid runtime evidence", () => {

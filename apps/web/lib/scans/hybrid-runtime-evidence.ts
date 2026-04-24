@@ -304,6 +304,36 @@ function getPreconsentRequestUrls(hybrid: Record<string, unknown> | null) {
   );
 }
 
+function getPreconsentVendorEvidenceRows(hybrid: Record<string, unknown> | null) {
+  const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
+  const requestObservations = getObjectArray(hybrid?.requestObservations);
+  const requestUrls = getPreconsentRequestUrls(hybrid);
+
+  return requestToVendorObservations
+    .filter((row) => row.pre_consent === true || row.preConsent === true)
+    .map((row) => {
+      const hostname = getString(row.hostname);
+      const matchedRequest = requestObservations.find((request) => {
+        const domain = getString(request.domain);
+        return hostname && domain === hostname;
+      });
+      return {
+        category: normalizeDerivedVendorCategory(getString(row.category)),
+        confidence: getString(row.confidence) ?? "unknown",
+        detectionSource: getString(row.evidenceSource) ?? getString(row.evidence_source) ?? "hybrid_runtime",
+        hostname,
+        matchedSignatureId: getString(row.matchedSignatureId) ?? getString(row.matched_signature_id),
+        requestUrl: getString(matchedRequest?.url) ?? requestUrls.find((url) => (hostname ? url.includes(hostname) : false)) ?? null,
+        vendor: getString(row.vendor)
+      };
+    })
+    .filter((row) => row.vendor || row.requestUrl || row.hostname);
+}
+
+function getHybridArtifactRefs(hybrid: Record<string, unknown> | null, keys: string[]) {
+  return uniqueStrings(keys.flatMap((key) => getStringArray(hybrid?.[key])));
+}
+
 export function getHybridPreconsentViolationCount(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
   if (!hybrid) {
@@ -445,6 +475,25 @@ export function getHybridDerivedTrackerVendors(runtimeArtifacts: Record<string, 
 
 function getFingerprintSummary(hybrid: Record<string, unknown> | null) {
   return getRecord(hybrid?.fingerprintSummary);
+}
+
+function getFingerprintAttributeCategories(fingerprintSummary: Record<string, unknown> | null) {
+  const direct = getStringArray(fingerprintSummary?.attributeCategories);
+  if (direct.length > 0) {
+    return direct;
+  }
+
+  return getObjectArray(fingerprintSummary?.attributeCategories)
+    .flatMap((row) => getString(row.name) ?? getString(row.category) ?? [])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function getFingerprintArtifactRefs(hybrid: Record<string, unknown> | null, fingerprintSummary: Record<string, unknown> | null) {
+  return uniqueStrings([
+    ...getStringArray(fingerprintSummary?.artifactRefs),
+    ...getStringArray(fingerprintSummary?.artifact_refs),
+    ...getHybridArtifactRefs(hybrid, ["fingerprintArtifactRefs", "fingerprint_artifact_refs", "screenshotRefs", "screenshot_refs"])
+  ]);
 }
 
 function getUiSummary(hybrid: Record<string, unknown> | null) {
@@ -618,6 +667,9 @@ export function getHybridSignalFallbackEvidence(input: {
     case "privacy.preconsent_tracking_detected":
     case "privacy.tracking_before_consent_detected":
       return {
+        consentBannerDetectedMs: getNumber(getRecord(hybrid.timelineMarkers)?.consentBannerDetectedMs),
+        preconsent_tracker_evidence_urls: getPreconsentRequestUrls(hybrid),
+        preconsent_tracker_vendor_evidence: getPreconsentVendorEvidenceRows(hybrid),
         preconsent_tracker_vendors: getPreconsentTrackerVendors(hybrid),
         preconsent_tracking_detected: true,
         signalKey: input.signalKey,
@@ -633,11 +685,13 @@ export function getHybridSignalFallbackEvidence(input: {
         return null;
       }
       return {
+        consentSurfaceObserved: true,
         reject_button_missing: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -646,10 +700,12 @@ export function getHybridSignalFallbackEvidence(input: {
         return null;
       }
       return {
+        consentSurfaceObserved: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -658,11 +714,13 @@ export function getHybridSignalFallbackEvidence(input: {
         return null;
       }
       return {
+        consentSurfaceObserved: true,
         forced_consent_wall: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
         hybridUiSummary: uiSummary
       };
@@ -671,11 +729,13 @@ export function getHybridSignalFallbackEvidence(input: {
         return null;
       }
       return {
+        consentSurfaceObserved: true,
         accept_only_banner: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -684,11 +744,13 @@ export function getHybridSignalFallbackEvidence(input: {
         return null;
       }
       return {
+        consentSurfaceObserved: true,
         dismiss_without_reject: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary
       };
     case "commerce.session_replay_tool_detected":
@@ -708,6 +770,8 @@ export function getHybridSignalFallbackEvidence(input: {
     }
     case "privacy.fingerprinting_detected":
       return {
+        fingerprintAttributeCategories: getFingerprintAttributeCategories(fingerprintSummary),
+        fingerprintArtifactRefs: getFingerprintArtifactRefs(hybrid, fingerprintSummary),
         fingerprinting_detected: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
