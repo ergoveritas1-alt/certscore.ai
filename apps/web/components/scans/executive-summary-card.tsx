@@ -518,7 +518,44 @@ export function buildRegulatoryLensesFromUnifiedPackets(
   counts: Parameters<typeof buildRegulatoryLenses>[1],
   options?: Parameters<typeof buildRegulatoryLenses>[2]
 ) {
-  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, options);
+  const representativeAccessibilityPackets = packets.filter(
+    (packet) =>
+      packet.presentationDecision.status === "surface" &&
+      packet.details?.family === "accessibility" &&
+      packet.evidence?.flags?.includes("representative_accessibility_examples_retained")
+  );
+  const hasRepresentativeAccessibilityEvidence = representativeAccessibilityPackets.length > 0;
+  const hasDojAdaMapping = options?.agencyMappings?.some((mapping) => mapping.agencyKey === "doj_ada") === true;
+  const accessibilityOptions =
+    hasRepresentativeAccessibilityEvidence && !hasDojAdaMapping
+      ? {
+          ...options,
+          accessibilitySignals: {
+            ...(options?.accessibilitySignals ?? {}),
+            wcagErrorCountTotal: options?.accessibilitySignals?.wcagErrorCountTotal ?? representativeAccessibilityPackets.length
+          },
+          agencyMappings: [
+            ...(options?.agencyMappings ?? []),
+            {
+              agencyKey: "doj_ada",
+              agencyLabel: "U.S. Department of Justice ADA",
+              shortLabel: "DOJ / ADA",
+              category: "accessibility",
+              relevanceLevel: "moderate",
+              relevanceScore: 64,
+              rationale: "Representative automated accessibility examples were retained for surfaced ADA/WCAG review.",
+              helperLabel: "Accessibility evidence retained",
+              triggeredSignals: [{ key: "accessibility.representative_axe_examples", label: "High automated WCAG issue count" }],
+              contributingSubscores: [{ key: "accessibility_examples", label: "Representative accessibility examples", score: 64 }],
+              topAgencyRiskDrivers: ["Representative automated accessibility examples were retained."],
+              relatedOverallRiskLevel: "moderate",
+              isPrimaryAgency: false
+            } satisfies AgencyMapping
+          ]
+        }
+      : options;
+
+  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, accessibilityOptions);
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRegulatoryLenses } from "../../components/scans/executive-summary-card";
+import {
+  buildRegulatoryLenses,
+  buildRegulatoryLensesFromUnifiedPackets
+} from "../../components/scans/executive-summary-card";
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
@@ -203,6 +206,41 @@ test("projects surfaced scanner-level financial promotion into executive finding
     "leveraged_or_high_risk_product_promotion"
   ]);
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+});
+
+test("projects representative accessibility packets into DOJ ADA regulatory lens", () => {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makePacket("accessibility_risk_score", {
+        details: {
+          family: "accessibility",
+          kind: "accessibility_risk_score",
+          ruleExamples: ["color-contrast"]
+        },
+        evidence: {
+          counts: {},
+          entities: {},
+          fetchQuality: null,
+          flags: ["representative_accessibility_examples_retained"],
+          pageUrls: ["https://example.com/"],
+          snippets: ["color-contrast on https://example.com/ (.hero-title)"],
+          sourceUrls: []
+        },
+        summary: "Representative accessibility barriers were retained from axe examples."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+
+  assert.ok(adaLens);
+  assert.equal(adaLens?.minimal, undefined);
+  assert.notEqual(adaLens?.ratingLabel, "Not applicable");
+  assert.ok(adaLens?.findings.some((finding) => /automated wcag|representative accessibility/i.test(finding)));
 });
 
 test("records surfaced packets that are not yet mapped into executive findings", () => {

@@ -58,6 +58,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.consent_behavior.support_only_tracking_context"
   | "evidence.sensitive.confirmed_when_payload_or_runtime_backed"
   | "evidence.sensitive.review_when_context_only"
+  | "evidence.normalized_concern.audit_only"
   | "evidence.accessibility.summary_review"
   | "evidence.accessibility.task_blocking_review"
   | "evidence.financial.support_only_positive_context"
@@ -1092,6 +1093,20 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       tier: "support",
       reason: "Normalized concern gating marked this finding ineligible for external surfacing.",
       ruleId: "unknown.conservative_fallback"
+    });
+    return;
+  }
+
+  if (
+    context.policy.family === "accessibility" &&
+    packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only")
+  ) {
+    overrideDecision(decision, {
+      state: "support_only",
+      lane: "confidence_and_coverage",
+      tier: "support",
+      reason: "Normalized concern gating retained this finding for audit review but did not make it eligible for external surfacing.",
+      ruleId: "evidence.normalized_concern.audit_only"
     });
     return;
   }

@@ -1485,6 +1485,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
+    Array.isArray(normalizedFallbackEvidence.accessibilityRuleExamples) &&
+    normalizedFallbackEvidence.accessibilityRuleExamples.length > 0
+      ? "representative_accessibility_examples_retained"
+      : null,
     hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
     typeof normalizedFallbackEvidence.signalKey === "string" ? normalizedFallbackEvidence.signalKey : null
@@ -2226,9 +2230,6 @@ function sanitizeEvidenceForFinding(
 
   if (findingId === "accessibility_risk_score") {
     next.flags = next.flags.filter((flag) => flag !== "contradiction_runtime_artifact_retained");
-    if (next.snippets.length > 0) {
-      next.flags = uniqueStrings([...next.flags, "representative_accessibility_examples_retained"]);
-    }
   }
 
   if (

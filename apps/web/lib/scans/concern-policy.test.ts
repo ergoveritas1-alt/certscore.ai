@@ -886,6 +886,54 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "page-attributed accessibility score without axe examples stays audit-only",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/",
+        value: -4
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "page-attributed accessibility score with retained axe examples can promote",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            node_count: 2,
+            page_url: "https://example.com/",
+            representative_selectors: [".hero-title"],
+            rule_code: "color-contrast"
+          }
+        ],
+        pageUrl: "https://example.com/",
+        value: -4
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "guessed-only unavailable coverage stays audit-only without a linked discovery path",
       concern: makeConcern({
         originKey: "disclosure.cookie_policy_fetch_failed",

@@ -717,10 +717,10 @@ function isWeakCookieSecurityAttributesConcern(
   return concern.suggestedUnifiedFindingId === "weak_cookie_security_attributes";
 }
 
-function isAccessibilityRiskScoreConcern(
+function isAccessibilityIssueFindingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
-  return concern.suggestedUnifiedFindingId === "accessibility_risk_score";
+  return ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(concern.suggestedUnifiedFindingId ?? "");
 }
 
 function isBoundedKeyPageDiscoveryUnresolvedConcern(
@@ -949,21 +949,45 @@ function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unkn
         ? (entry as { ruleId: string }).ruleId
         : typeof (entry as { rule_id?: unknown }).rule_id === "string"
           ? (entry as { rule_id: string }).rule_id
+          : typeof (entry as { ruleCode?: unknown }).ruleCode === "string"
+            ? (entry as { ruleCode: string }).ruleCode
+            : typeof (entry as { rule_code?: unknown }).rule_code === "string"
+              ? (entry as { rule_code: string }).rule_code
           : null;
     const selector =
       typeof (entry as { selector?: unknown }).selector === "string"
         ? (entry as { selector: string }).selector
         : typeof (entry as { target?: unknown }).target === "string"
           ? (entry as { target: string }).target
+          : Array.isArray((entry as { representativeSelectors?: unknown }).representativeSelectors) &&
+              (entry as { representativeSelectors: unknown[] }).representativeSelectors.some(
+                (value) => typeof value === "string" && value.trim().length > 0
+              )
+            ? "representative_selector"
+            : Array.isArray((entry as { representative_selectors?: unknown }).representative_selectors) &&
+                (entry as { representative_selectors: unknown[] }).representative_selectors.some(
+                  (value) => typeof value === "string" && value.trim().length > 0
+                )
+              ? "representative_selector"
           : null;
     const snippet =
       typeof (entry as { snippet?: unknown }).snippet === "string"
         ? (entry as { snippet: string }).snippet
         : typeof (entry as { message?: unknown }).message === "string"
           ? (entry as { message: string }).message
+          : typeof (entry as { description?: unknown }).description === "string"
+            ? (entry as { description: string }).description
+            : typeof (entry as { help?: unknown }).help === "string"
+              ? (entry as { help: string }).help
+          : null;
+    const nodeCount =
+      typeof (entry as { nodeCount?: unknown }).nodeCount === "number"
+        ? (entry as { nodeCount: number }).nodeCount
+        : typeof (entry as { node_count?: unknown }).node_count === "number"
+          ? (entry as { node_count: number }).node_count
           : null;
 
-    return Boolean(pageUrl && (ruleId || selector || snippet));
+    return Boolean(pageUrl && ruleId && (selector || snippet || (typeof nodeCount === "number" && nodeCount > 0)));
   });
 }
 
@@ -1553,9 +1577,8 @@ export function deriveConcernPolicy(input: {
   }
 
   if (
-    isAccessibilityRiskScoreConcern(input.concern) &&
-    !hasRepresentativeAccessibilityExamples(input.rawEvidence) &&
-    input.concern.originType !== "validation_rule"
+    isAccessibilityIssueFindingConcern(input.concern) &&
+    !hasRepresentativeAccessibilityExamples(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",

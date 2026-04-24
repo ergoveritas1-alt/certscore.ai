@@ -839,6 +839,18 @@ function buildAccessibilityRiskSnapshotEvidenceWithExamples(
   });
 
   return {
+    accessibilityRuleExamples: examples.map((example) => ({
+      description: example.description,
+      help: example.help,
+      helpUrl: example.help_url,
+      impact: example.impact,
+      nodeCount: example.node_count,
+      pageUrl: example.page_url,
+      representativeSelectors: example.representative_selectors ?? [],
+      ruleCode: example.rule_code,
+      ruleGroup: example.rule_group,
+      severity: example.severity
+    })),
     claim: "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
     confidenceBasis: [
       `Accessibility risk score: ${score}.`,
