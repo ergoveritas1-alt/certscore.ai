@@ -209,6 +209,53 @@ test("projects surfaced scanner-level financial promotion into executive finding
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
 });
 
+test("keeps runtime-backed session recording in top findings when consent issues also surface", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    }),
+    makePacket("policy_behavior_conflict", {
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      severity: "high",
+      summary: "Policy and runtime behavior conflict."
+    }),
+    makePacket("accept_more_prominent_than_reject", {
+      details: { family: "consent_tracking", kind: "accept_more_prominent_than_reject" },
+      summary: "Consent choices appear imbalanced."
+    }),
+    makePacket("session_replay_observed", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "session_replay_observed" },
+      observedValue: "Microsoft Clarity",
+      presentationDecision: {
+        confidenceRationale: "Runtime vendor provenance retained.",
+        downgradeReasons: [],
+        rationale: "Direct runtime evidence retained a session-recording vendor.",
+        status: "surface",
+        verificationLabel: "Runtime",
+        verificationState: "runtime"
+      },
+      severity: "medium",
+      summary: "Microsoft Clarity session recording was observed."
+    })
+  ]);
+
+  const topFindingIds = projection.topFindings.map((finding) => finding.id);
+  assert.ok(topFindingIds.includes("session_recording_services_detected"));
+  assert.ok(
+    topFindingIds.indexOf("session_recording_services_detected") <
+      topFindingIds.indexOf("asymmetric_consent_ui")
+  );
+});
+
 test("projects representative accessibility packets into DOJ ADA regulatory lens", () => {
   const seriousExampleCount = ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample.accessibilityRuleExamples.length;
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
