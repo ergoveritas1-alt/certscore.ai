@@ -103,7 +103,7 @@ function renderMarkdown(input: {
   const uncalibratedTopFindings = input.currentTopFindings.filter((entry) => !entry.calibrated);
   lines.push(
     "",
-    "## Current Top Surface Drift",
+    "## Current Surfaced Finding Drift",
     "",
     "| Rank | Finding | Surface scans | Surface frequency | Calibrated | Source |",
     "|---:|---|---:|---:|---|---|"
@@ -116,7 +116,7 @@ function renderMarkdown(input: {
   if (uncalibratedTopFindings.length > 0) {
     lines.push(
       "",
-      `Uncalibrated current-top findings: ${uncalibratedTopFindings.map((entry) => `\`${entry.findingId}\``).join(", ")}`
+      `Uncalibrated surfaced findings: ${uncalibratedTopFindings.map((entry) => `\`${entry.findingId}\``).join(", ")}`
     );
   }
 
@@ -126,12 +126,13 @@ function renderMarkdown(input: {
 async function main() {
   const minExamples = getNumberArg("--min-examples", 30);
   const minScenarioExamples = getNumberArg("--min-scenario-examples", 10);
+  const reportLimit = getNumberArg("--report-limit", 100);
   const report = await buildProductionFindingFrequencyReport({
     includeNonSurface: true,
-    limit: 100,
+    limit: reportLimit,
     scanType: getArgValue("--scan-type") ?? "full"
   });
-  const currentTopLimit = getNumberArg("--current-top-limit", 29);
+  const currentTopLimit = getNumberArg("--current-top-limit", report.topFindings.length);
   const corpusSummary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED);
   const financialCorpusSummary = summarizeFinancialCommercialClaimsDataset();
   const frequencyByFinding = new Map(report.topFindings.map((finding) => [finding.findingId, finding]));
