@@ -32,6 +32,24 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function assertLiveDatabaseUrl(databaseUrl: string) {
+  if (process.env.ALLOW_LOCAL_DATABASE_URL === "1") {
+    return;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error("DATABASE_URL is not a valid database URL.");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    throw new Error("DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB or set ALLOW_LOCAL_DATABASE_URL=1 intentionally.");
+  }
+}
+
 async function fetchText(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
   const text = await response.text();
@@ -73,7 +91,14 @@ function scanHasFinished(html: string) {
 async function queueAdaScan(liveBaseUrl: string, domain: string) {
   const response = await fetchJson(`${liveBaseUrl}/api/full-scan`, {
     body: JSON.stringify({ domain }),
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-CertScore-Scan-Source": "github-actions-ada-live-verification",
+      "X-GitHub-Actor": process.env.GITHUB_ACTOR ?? "",
+      "X-GitHub-Run-Id": process.env.GITHUB_RUN_ID ?? "",
+      "X-GitHub-Sha": process.env.GITHUB_SHA ?? "",
+      "X-GitHub-Workflow": process.env.GITHUB_WORKFLOW ?? ""
+    },
     method: "POST"
   });
   const scanId = typeof response.scanId === "string" ? response.scanId : null;
@@ -179,6 +204,7 @@ async function main() {
   if (!databaseUrl) {
     throw new Error("Set DATABASE_URL to the database expected to back the live host.");
   }
+  assertLiveDatabaseUrl(databaseUrl);
 
   const liveBaseUrl = (getEnv("LIVE_BASE_URL") ?? DEFAULT_LIVE_BASE_URL).replace(/\/+$/, "");
   const adaDomain = getEnv("ADA_SCAN_DOMAIN") ?? DEFAULT_ADA_DOMAIN;

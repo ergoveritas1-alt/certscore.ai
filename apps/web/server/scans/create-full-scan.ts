@@ -43,6 +43,16 @@ type QueueFullScanInput = {
   submittedByUserId: string;
   enforceCooldown?: boolean;
   enforceMonthlyUsageLimit?: boolean;
+  provenance?: {
+    githubActor?: string | null;
+    githubRunId?: string | null;
+    githubSha?: string | null;
+    githubWorkflow?: string | null;
+    host?: string | null;
+    originIp?: string | null;
+    source?: string | null;
+    userAgent?: string | null;
+  };
   source?: string;
 };
 
@@ -215,7 +225,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       message: "Scan queued and awaiting scanner pickup.",
       metadataJson: {
         pagesRequested,
-        profile: planLimits.scanProfile
+        profile: planLimits.scanProfile,
+        source: input.provenance?.source ?? scanConfig.source,
+        originIp: input.provenance?.originIp ?? null,
+        githubRunId: input.provenance?.githubRunId ?? null,
+        githubWorkflow: input.provenance?.githubWorkflow ?? null,
+        provenance: input.provenance ?? null
       },
       organizationId: input.organizationId,
       scanId: scan.id

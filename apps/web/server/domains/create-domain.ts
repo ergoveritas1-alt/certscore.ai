@@ -26,6 +26,16 @@ const initialState: CreateDomainActionState = {
 export async function createOrQueueDomainScan(input: {
   domain: string;
   allowExistingDomainRescan?: boolean;
+  provenance?: {
+    githubActor?: string | null;
+    githubRunId?: string | null;
+    githubSha?: string | null;
+    githubWorkflow?: string | null;
+    host?: string | null;
+    originIp?: string | null;
+    source?: string | null;
+    userAgent?: string | null;
+  };
 }) {
   const queueAvailability = getQueueAvailability();
 
@@ -79,6 +89,7 @@ export async function createOrQueueDomainScan(input: {
       submittedByUserId: dashboardContext.user.id,
       enforceCooldown: true,
       enforceMonthlyUsageLimit: false,
+      provenance: input.provenance,
       source: "marketing-full-scan"
     });
 
@@ -143,6 +154,7 @@ export async function createOrQueueDomainScan(input: {
     planLimitsOverride: planLimits,
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
+    provenance: input.provenance,
     source: "new-domain-overview"
   });
 

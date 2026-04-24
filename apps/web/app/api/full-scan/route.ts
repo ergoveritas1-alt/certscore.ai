@@ -12,9 +12,38 @@ function isPublicFullScanAvailabilityError(error: unknown) {
   return /DATABASE_URL|Invalid environment configuration|Scanner health check failed/i.test(message);
 }
 
+function getFirstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || null;
+}
+
+function getScanRequestProvenance(request: Request) {
+  const headers = request.headers;
+  const source = headers.get("x-certscore-scan-source")?.trim() || "api-full-scan";
+  const originIp =
+    getFirstHeaderValue(headers.get("cf-connecting-ip")) ??
+    getFirstHeaderValue(headers.get("x-forwarded-for")) ??
+    getFirstHeaderValue(headers.get("x-real-ip"));
+  const githubRunId = headers.get("x-github-run-id")?.trim() || null;
+  const githubWorkflow = headers.get("x-github-workflow")?.trim() || null;
+  const githubActor = headers.get("x-github-actor")?.trim() || null;
+  const githubSha = headers.get("x-github-sha")?.trim() || null;
+
+  return {
+    githubActor,
+    githubRunId,
+    githubSha,
+    githubWorkflow,
+    host: headers.get("host")?.trim() || null,
+    originIp,
+    source,
+    userAgent: headers.get("user-agent")?.slice(0, 240) || null
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
 
@@ -59,7 +88,8 @@ export async function POST(request: Request) {
 
       const anonymousScan = await createAnonymousFullScan({
         hostname: firstDomain.hostname,
-        normalizedUrl: firstDomain.normalizedUrl
+        normalizedUrl: firstDomain.normalizedUrl,
+        provenance
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -100,7 +130,8 @@ export async function POST(request: Request) {
       parsedBatch.valid.map((item) =>
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
-          domain: item.domain
+          domain: item.domain,
+          provenance
         })
       )
     );

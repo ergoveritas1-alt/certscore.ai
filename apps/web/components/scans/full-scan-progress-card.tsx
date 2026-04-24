@@ -218,6 +218,39 @@ function getLatestEventForStage(events: ScanEventRow[], stageKey: string) {
   return matchingEvents.at(-1) ?? null;
 }
 
+function getEventTimeMs(event: ScanEventRow | null) {
+  if (!event) {
+    return null;
+  }
+
+  const timestamp = Date.parse(event.createdAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function buildQueueSublines(input: {
+  createdAt: string;
+  events: ScanEventRow[];
+  isDone: boolean;
+  latestEvent: ScanEventRow | null;
+  queueWaitMs: number | null;
+  status: string;
+}) {
+  const metadataLines = input.latestEvent ? formatMetadataPreview(input.latestEvent.metadataJson) : [];
+  const fullStarted = input.events.find((event) => event.eventType === SCAN_EVENT_TYPES.fullStarted) ?? null;
+  const pickupAtMs = getEventTimeMs(fullStarted);
+  const queuedAtMs = getEventTimeMs(input.latestEvent) ?? Date.parse(input.createdAt);
+  const derivedPickupWaitMs =
+    pickupAtMs !== null && Number.isFinite(queuedAtMs) ? Math.max(0, pickupAtMs - queuedAtMs) : input.queueWaitMs;
+  const pickupLine =
+    input.isDone && derivedPickupWaitMs !== null
+      ? `Worker pickup latency: ${formatDurationMs(derivedPickupWaitMs)}.`
+      : input.status === "queued"
+        ? "Waiting for worker pickup."
+        : null;
+
+  return [...(pickupLine ? [pickupLine] : []), ...metadataLines].slice(0, 6);
+}
+
 function buildLatestActivityLine(input: {
   createdAt: string;
   events: ScanEventRow[];
@@ -228,6 +261,16 @@ function buildLatestActivityLine(input: {
   const totalStageCount = SCAN_EXECUTION_STAGES.length + 1;
   const latestEvent =
     input.status === "queued" ? getLatestEventForStage(input.events, "queue_wait") : input.events.at(-1);
+  const fullQueued = getLatestEventForStage(input.events, "queue_wait");
+  const fullStarted = input.events.find((event) => event.eventType === SCAN_EVENT_TYPES.fullStarted) ?? null;
+  const queuedAtMs = getEventTimeMs(fullQueued) ?? Date.parse(input.createdAt);
+  const pickupAtMs = getEventTimeMs(fullStarted);
+  const queueWaitLabel =
+    pickupAtMs !== null && Number.isFinite(queuedAtMs)
+      ? `pickup ${formatDurationMs(Math.max(0, pickupAtMs - queuedAtMs))}`
+      : input.status === "queued"
+        ? `waiting ${formatDurationMs(null, Date.now(), fullQueued?.createdAt ?? input.createdAt)}`
+        : null;
 
   if (input.events.length === 0) {
     return input.status === "queued"
@@ -250,9 +293,7 @@ function buildLatestActivityLine(input: {
         : input.status === "failed"
           ? "Scan failed"
           : `Live scan · ${completedStageCount}/${totalStageCount} milestones complete`;
-  return metadata.length > 0
-    ? `${prefix} · ${latestEvent.message} · ${metadata}`
-    : `${prefix} · ${latestEvent.message}`;
+  return [prefix, latestEvent.message, queueWaitLabel, metadata].filter(Boolean).join(" · ");
 }
 
 function getProgressValue(input: {
@@ -467,15 +508,19 @@ function getQueueRow(input: {
 }) {
   const latestEvent = getLatestEventForStage(input.events, "queue_wait");
   const setupStage = input.executionSummary?.stages.find((stage) => stage.stage === "setup_load") ?? null;
+  const fullStarted = input.events.find((event) => event.eventType === SCAN_EVENT_TYPES.fullStarted);
   const isDone = Boolean(setupStage) || input.status !== "queued";
+  const queueWaitMs =
+    isDone && setupStage?.startedAt
+      ? Math.max(0, Date.parse(setupStage.startedAt) - Date.parse(input.createdAt))
+      : fullStarted && latestEvent
+        ? Math.max(0, Date.parse(fullStarted.createdAt) - Date.parse(latestEvent.createdAt))
+        : null;
 
   return {
     attempts: null,
-    completedAt: isDone ? setupStage?.startedAt ?? latestEvent?.createdAt ?? input.createdAt : null,
-    durationMs:
-      isDone && setupStage?.startedAt
-        ? Math.max(0, Date.parse(setupStage.startedAt) - Date.parse(input.createdAt))
-        : null,
+    completedAt: isDone ? setupStage?.startedAt ?? fullStarted?.createdAt ?? latestEvent?.createdAt ?? input.createdAt : null,
+    durationMs: queueWaitMs,
     key: "queue_wait",
     label: formatStageLabel("queue_wait"),
     latestEvent,
@@ -485,7 +530,14 @@ function getQueueRow(input: {
     startedAt: input.createdAt,
     state: isDone ? "success" : "active",
     statusLabel: isDone ? "Picked up" : "Waiting",
-    sublines: latestEvent ? formatMetadataPreview(latestEvent.metadataJson) : []
+    sublines: buildQueueSublines({
+      createdAt: input.createdAt,
+      events: input.events,
+      isDone,
+      latestEvent,
+      queueWaitMs,
+      status: input.status
+    })
   } satisfies DashboardRow;
 }
 

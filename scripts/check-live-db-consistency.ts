@@ -17,6 +17,24 @@ function redactDatabaseUrl(value: string | null) {
   return value.replace(/:[^:@/]+@/, ":***@");
 }
 
+function assertLiveDatabaseUrl(databaseUrl: string) {
+  if (process.env.ALLOW_LOCAL_DATABASE_URL === "1") {
+    return;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error("DATABASE_URL is not a valid database URL.");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    throw new Error("DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB or set ALLOW_LOCAL_DATABASE_URL=1 intentionally.");
+  }
+}
+
 async function fetchJson(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
   const body = await response.text();
@@ -68,6 +86,7 @@ async function main() {
   if (!databaseUrl) {
     throw new Error("Set DATABASE_URL to the database you expect to back the live host.");
   }
+  assertLiveDatabaseUrl(databaseUrl);
 
   const version = await fetchJson(`${liveBaseUrl}/api/version`);
   if (version.runtimeTarget !== expectedRuntimeTarget) {

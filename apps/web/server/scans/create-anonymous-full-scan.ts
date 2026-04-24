@@ -7,7 +7,18 @@ import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent } from "./repository";
 
-export async function createAnonymousFullScan(input: { hostname: string; normalizedUrl: string }) {
+type ScanQueueProvenance = {
+  githubActor?: string | null;
+  githubRunId?: string | null;
+  githubSha?: string | null;
+  githubWorkflow?: string | null;
+  host?: string | null;
+  originIp?: string | null;
+  source?: string | null;
+  userAgent?: string | null;
+};
+
+export async function createAnonymousFullScan(input: { hostname: string; normalizedUrl: string; provenance?: ScanQueueProvenance }) {
   const fullScanQueueAvailability = await getFullScanQueueAvailability();
 
   if (!fullScanQueueAvailability.enabled) {
@@ -49,7 +60,12 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     message: "Scan queued and awaiting scanner pickup.",
     metadataJson: {
       pagesRequested,
-      profile: planLimits.scanProfile
+      profile: planLimits.scanProfile,
+      source: input.provenance?.source ?? scanConfig.source,
+      originIp: input.provenance?.originIp ?? null,
+      githubRunId: input.provenance?.githubRunId ?? null,
+      githubWorkflow: input.provenance?.githubWorkflow ?? null,
+      provenance: input.provenance ?? null
     },
     organizationId: null,
     scanId: scan.id

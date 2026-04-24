@@ -61,6 +61,12 @@ jobs:
         run: |
           test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
           test -n "${LIVE_BASE_URL}" || (echo "Missing var AWS_WEB_CERTSCORE_BASE_URL" && exit 1)
+          case "${DATABASE_URL}" in
+            *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
+              echo "DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB."
+              exit 1
+              ;;
+          esac
           if [ "${{ inputs.run_scanner_health }}" = "true" ]; then
             test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
             test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
