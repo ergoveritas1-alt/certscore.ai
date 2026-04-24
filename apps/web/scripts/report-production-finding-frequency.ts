@@ -432,12 +432,14 @@ function renderMarkdown(report: ProductionFindingFrequencyReport) {
   return `${lines.join("\n")}\n`;
 }
 
-async function buildReport() {
-  const limit = getNumberArg("--limit", 25);
-  const scanType = getArgValue("--scan-type") ?? "full";
-  const baselinePath = getArgValue("--baseline");
-  const outputPath = getArgValue("--out");
-
+export async function buildProductionFindingFrequencyReport(input?: {
+  baselinePath?: string | null;
+  limit?: number;
+  scanType?: string;
+}) {
+  const limit = input?.limit ?? 25;
+  const scanType = input?.scanType ?? "full";
+  const baselinePath = input?.baselinePath ?? null;
   const [
     componentModule,
     taxonomyModule,
@@ -566,7 +568,7 @@ async function buildReport() {
     .sort((left, right) => right.scanCount - left.scanCount || right.surfaceCount - left.surfaceCount || left.findingId.localeCompare(right.findingId))
     .slice(0, limit);
 
-  const report = applyBaselineDeltas({
+  return applyBaselineDeltas({
     generatedAt: new Date().toISOString(),
     scope: {
       completedFrom: completedTimes[0] ?? null,
@@ -584,6 +586,14 @@ async function buildReport() {
     },
     topFindings
   }, baselinePath);
+}
+
+async function buildReport() {
+  const limit = getNumberArg("--limit", 25);
+  const scanType = getArgValue("--scan-type") ?? "full";
+  const baselinePath = getArgValue("--baseline");
+  const outputPath = getArgValue("--out");
+  const report = await buildProductionFindingFrequencyReport({ baselinePath, limit, scanType });
 
   const output = hasFlag("--json") ? `${JSON.stringify(report, null, 2)}\n` : renderMarkdown(report);
   if (outputPath) {
