@@ -1,0 +1,48 @@
+name: Scanner ECS Health
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_git_sha:
+        description: "Expected scanner image SHA tag. Defaults to the selected ref SHA."
+        required: false
+        type: string
+
+jobs:
+  check-scanner-ecs-health:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      AWS_SCANNER_ECS_CLUSTER: ${{ vars.AWS_SCANNER_ECS_CLUSTER }}
+      AWS_SCANNER_ECS_SERVICE: ${{ vars.AWS_SCANNER_ECS_SERVICE }}
+      AWS_SCANNER_CONTAINER_NAME: ${{ vars.AWS_SCANNER_CONTAINER_NAME }}
+      AWS_SCANNER_ECR_REPOSITORY: ${{ vars.AWS_SCANNER_ECR_REPOSITORY }}
+      AWS_SCANNER_LOG_GROUP: ${{ vars.AWS_SCANNER_LOG_GROUP }}
+      EXPECTED_GIT_SHA: ${{ inputs.expected_git_sha || github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate scanner health configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
+          test -n "${AWS_SCANNER_ECS_SERVICE}" || (echo "Missing var AWS_SCANNER_ECS_SERVICE" && exit 1)
+          test -n "${AWS_SCANNER_CONTAINER_NAME}" || (echo "Missing var AWS_SCANNER_CONTAINER_NAME" && exit 1)
+          test -n "${AWS_SCANNER_ECR_REPOSITORY}" || (echo "Missing var AWS_SCANNER_ECR_REPOSITORY" && exit 1)
+          test -n "${AWS_SCANNER_LOG_GROUP}" || (echo "Missing var AWS_SCANNER_LOG_GROUP" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Check scanner ECS health
+        run: bash ./scripts/check-scanner-deploy-health.sh

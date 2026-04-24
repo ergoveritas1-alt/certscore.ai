@@ -21,6 +21,9 @@
 - scanner service claims queued work from the database
 - scanner service owns execution pickup and heartbeat availability
 - `WC01` should not be treated as the source of truth for scanner runtime behavior
+- `WC01` provides `pnpm ops:check:scanner-deploy` as an operator check for the
+  deployed scanner/worker ECS target. Operators must provide the WS01-owned ECS
+  cluster, service, ECR repository, and log group through environment variables.
 
 ## Current repo boundary
 - `WC01` no longer carries `packages/scan-core`; that package now lives in the sibling `WS01` workspace
@@ -58,3 +61,31 @@ Acceptance notes:
 - should avoid surfacing or prioritizing this concern when retained evidence already shows the expected legal pages are reachable
 
 This document records the boundary now that the standalone scanner repo exists.
+
+## Scanner deploy health check
+
+Run this after a WS01 scanner deploy, or wire it into the WS01 scanner deploy
+workflow:
+
+```bash
+AWS_SCANNER_ECS_CLUSTER=<cluster> \
+AWS_SCANNER_ECS_SERVICE=<service> \
+AWS_SCANNER_CONTAINER_NAME=<container> \
+AWS_SCANNER_ECR_REPOSITORY=<ecr-repository> \
+AWS_SCANNER_LOG_GROUP=<cloudwatch-log-group> \
+EXPECTED_GIT_SHA=<main-sha> \
+pnpm ops:check:scanner-deploy
+```
+
+The check fails unless:
+
+- the ECS service has a running task
+- the running task image digest matches the ECR image tagged with `EXPECTED_GIT_SHA`
+- recent CloudWatch logs include startup or heartbeat evidence
+
+This does not make `WC01` the scanner deploy owner; it gives operators a shared
+contract for detecting scanner deploy drift.
+
+The manual `ADA Live Verification` workflow can run this same health check
+before queueing the ADA scan. Keep `run_scanner_health` enabled for production
+verification unless the WS01 scanner target variables are still being gathered.

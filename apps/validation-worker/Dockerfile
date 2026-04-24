@@ -1,9 +1,18 @@
 FROM node:20-bookworm-slim
 
+ARG BUILD_GIT_REF=""
+ARG BUILD_GIT_SHA=""
+ARG BUILD_IMAGE_TAG=""
+ARG BUILD_RUNTIME_TARGET="ecs-fargate"
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NODE_ENV="production"
 ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
+ENV BUILD_GIT_REF="${BUILD_GIT_REF}"
+ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}"
+ENV BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}"
+ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 RUN corepack enable
 RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*

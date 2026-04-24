@@ -1611,9 +1611,14 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
     const negativeEvidenceFlags = getNegativeEvidenceFlags(input.evidence);
     const vendorList = replayEvidence.vendors.length > 0 ? formatVendorList(replayEvidence.vendors) : null;
 
-    if (maxAssertionLevel !== "weak" && replayEvidence.vendors.length > 0) {
+    if (
+      replayEvidence.vendors.length > 0 &&
+      !negativeEvidenceFlags.has("no_direct_runtime_replay_artifact_observed")
+    ) {
       presentation.whyThisMatters =
-        `The automated scan retained runtime artifacts associated with ${vendorList}. That is stronger evidence than a generic detector hit, but the behavior should still be reviewed directly before treating it as a confirmed disclosure or consent failure.`;
+        maxAssertionLevel !== "weak"
+          ? `The automated scan retained runtime artifacts associated with ${vendorList}. That is stronger evidence than a generic detector hit, but the behavior should still be reviewed directly before treating it as a confirmed disclosure or consent failure.`
+          : `The automated scan retained runtime vendor provenance for ${vendorList}. This should be reviewed directly for disclosure, consent gating, and masking controls.`;
       presentation.suggestedFix =
         `Verify whether ${vendorList} is intentionally deployed on the scanned surface. If so, confirm that the behavior is disclosed clearly and that the integration is consent-gated where required.`;
       presentation.confidenceScore = replayEvidence.runtimeEvidenceArtifacts.length > 0 ? "0.85" : "0.75";
