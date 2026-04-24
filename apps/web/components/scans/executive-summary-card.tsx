@@ -238,11 +238,12 @@ export function buildRegulatoryLenses(
     findingIds.has("asymmetric_consent_ui") ||
     findingIds.has("reject_option_missing_or_hidden") ||
     findingIds.has("forced_consent_interaction");
+  const hasStrongDarkPatternConcern =
+    findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
 
   const privacyTrackingNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
     counts.beforeConsentCookieCount > 0 ? `${counts.beforeConsentCookieCount} cookies were observed before consent.` : null,
-    consentFinding ? consentFinding.shortSummary : null,
     replayFinding ? replayFinding.shortSummary : null
   ].filter(Boolean) as string[];
 
@@ -263,7 +264,7 @@ export function buildRegulatoryLenses(
     84 -
       (hasTrackingConcern ? 32 : 0) -
       (counts.beforeConsentCookieCount > 0 ? 14 : 0) -
-      (hasConsentConcern ? 16 : 0) -
+      (hasConsentConcern ? (hasTrackingConcern || counts.beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
   const cpraScore = clampScore(
@@ -305,11 +306,15 @@ export function buildRegulatoryLenses(
     },
     {
       acronym: "FTC",
-      detailTitle: "Dark pattern and disclosure issues",
+      detailTitle: hasStrongDarkPatternConcern ? "Dark pattern and disclosure issues" : "Choice architecture review signals",
       findings: ftcNotes,
       ratingLabel: ftcTone.label,
       score: ftcScore,
-      summary: hasConsentConcern ? "Choice architecture and disclosure clarity are the main FTC-style concerns." : "No strong unfairness/deception cue surfaced in the top findings.",
+      summary: hasStrongDarkPatternConcern
+        ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
+        : hasConsentConcern
+          ? "Consent-choice design should be reviewed for clarity."
+          : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
   ];
@@ -1308,7 +1313,7 @@ export function ExecutiveSummaryCard(input: {
                 <div className="mt-3 space-y-3">
                   {regulatoryLenses.map((lens) => (
                     <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
-                      <summary className="grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                      <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
                         <div className="min-w-0 self-start">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
@@ -1323,8 +1328,8 @@ export function ExecutiveSummaryCard(input: {
                             <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
                           ) : null}
                         </div>
-                        <p className="min-w-0 text-xs leading-5 text-slate-600">{lens.summary}</p>
-                        <p className="self-end text-right text-slate-400 transition-transform group-open:rotate-180">⌄</p>
+                        <p className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                        <p className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</p>
                       </summary>
                       <div className="mt-3 border-t border-slate-200 pt-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>

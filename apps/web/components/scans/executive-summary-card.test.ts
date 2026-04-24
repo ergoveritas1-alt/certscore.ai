@@ -168,6 +168,32 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
 });
 
+test("buildRegulatoryLenses does not overstate consent-only review signals as GDPR tracking issues", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+        severity: "medium",
+        shortSummary: "Promotional or choice architecture may need closer disclosure review."
+      }),
+      makeFinding("forced_consent_interaction", "Consent interaction was forced", {
+        severity: "medium",
+        shortSummary: "Promotional or choice architecture may need closer disclosure review."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  assert.equal(lenses[0]?.summary, "No major consent-triggering issue surfaced in the top findings.");
+  assert.equal(lenses[0]?.ratingLabel, "Strong");
+  assert.deepEqual(lenses[0]?.findings, []);
+  assert.equal(lenses[2]?.detailTitle, "Choice architecture review signals");
+  assert.equal(lenses[2]?.summary, "Consent-choice design should be reviewed for clarity.");
+  assert.doesNotMatch(lenses[2]?.detailTitle ?? "", /Dark pattern/i);
+});
+
 test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessibility overlay is materially triggered", () => {
   const lenses = buildRegulatoryLenses(
     [],
