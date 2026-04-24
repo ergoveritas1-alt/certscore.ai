@@ -313,12 +313,26 @@ test("high-value privacy disclosures surface when page-attributed policy evidenc
           pageUrls: ["https://www.example.com/privacy"],
           snippets: ["We use cookies and similar tracking technologies for analytics and service functionality."]
         }
+      }),
+      makePacket("behavioral_analytics_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("behavioral_analytics_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("behavioral_analytics_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["We use behavioral analytics and session recording to understand how visitors use the site."]
+        }
       })
     ]
   });
 
   const gpc = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "gpc_disclosure_present");
   const tracking = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "tracking_technologies_disclosure_present");
+  const behavioralAnalytics = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "behavioral_analytics_disclosure_present");
 
   assert.equal(gpc?.decisionState, "review");
   assert.equal(gpc?.reportLane, "main");
@@ -326,6 +340,9 @@ test("high-value privacy disclosures surface when page-attributed policy evidenc
   assert.equal(tracking?.decisionState, "review");
   assert.equal(tracking?.reportLane, "main");
   assert.ok(tracking?.appliedRules.includes("evidence.positive_surface.review_high_value_privacy_disclosure"));
+  assert.equal(behavioralAnalytics?.decisionState, "review");
+  assert.equal(behavioralAnalytics?.reportLane, "main");
+  assert.ok(behavioralAnalytics?.appliedRules.includes("evidence.positive_surface.review_high_value_privacy_disclosure"));
 });
 
 test("strong document-semantic policy clarity evidence surfaces in the main lane", () => {
@@ -461,6 +478,58 @@ test("high-exposure rights gaps confirm when structured validation strongly back
   assert.equal(decision?.decisionState, "confirmed");
   assert.equal(decision?.reportLane, "main");
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_high_exposure_or_runtime"));
+});
+
+test("latest policy absence findings confirm only with structured validation and fetched policy evidence", () => {
+  const absenceFindingIds = [
+    "missing_dsar_mechanism",
+    "missing_retention_disclosure",
+    "missing_transfer_disclosure"
+  ] as const satisfies readonly ReportUnifiedFindingId[];
+
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: absenceFindingIds.map((findingId) =>
+      makePacket(findingId, {
+        confidenceInputs: {
+          ...makePacket(findingId).confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket(findingId).evidence,
+          pageUrls: ["https://example.com/privacy"],
+          snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."],
+          sourceUrls: ["https://example.com/privacy"]
+        }
+      })
+    )
+  });
+
+  for (const findingId of absenceFindingIds) {
+    const decision = evaluation.debugDecisions.find((item) => item.unifiedFindingId === findingId);
+    assert.equal(decision?.decisionState, "confirmed", findingId);
+    assert.equal(decision?.reportLane, "main", findingId);
+    assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_structured_policy_absence"), findingId);
+  }
+});
+
+test("latest policy absence findings stay review-level when policy evidence is incomplete", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_retention_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_retention_disclosure").confidenceInputs,
+          hasStructuredValidationEvidence: true
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
 test("positive financial disclosure findings are suppressed unless they support a stronger financial story", () => {

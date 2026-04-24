@@ -47,6 +47,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.policy_extraction.review_disclosure_placement"
   | "evidence.policy_extraction.review_policy_fitness"
   | "evidence.rights_gap.confirmed_high_exposure_or_runtime"
+  | "evidence.rights_gap.confirmed_structured_policy_absence"
   | "evidence.rights_gap.review_structured_policy_gap"
   | "evidence.contradiction.confirmed_when_explicit_basis_and_runtime"
   | "evidence.contradiction.review_without_complete_anchor"
@@ -1016,6 +1017,26 @@ function hasFinancialContextAndBacking(packet: UnifiedFindingPacket) {
   );
 }
 
+function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
+  if (
+    packet.unifiedFindingId !== "missing_dsar_mechanism" &&
+    packet.unifiedFindingId !== "missing_retention_disclosure" &&
+    packet.unifiedFindingId !== "missing_transfer_disclosure"
+  ) {
+    return false;
+  }
+
+  return (
+    packet.confidenceInputs.hasStructuredValidationEvidence &&
+    packet.confidenceInputs.hasPolicyTextEvidence &&
+    hasReadableSnippet(packet) &&
+    hasConcreteHumanFacingUrl([
+      ...(packet.evidence?.pageUrls ?? []),
+      ...(packet.evidence?.sourceUrls ?? [])
+    ])
+  );
+}
+
 function getNegativeEvidenceFlags(packet: UnifiedFindingPacket) {
   return new Set(packet.concernContext?.negativeEvidenceFlags ?? []);
 }
@@ -1132,7 +1153,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         "gpc_disclosure_present",
         "tracking_technologies_disclosure_present",
         "targeted_advertising_disclosure_present",
-        "third_party_advertising_disclosure_present"
+        "third_party_advertising_disclosure_present",
+        "behavioral_analytics_disclosure_present"
       ].includes(packet.unifiedFindingId) &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
       hasReadableSnippet(packet) &&
@@ -1302,6 +1324,15 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         tier: decision.surfaceTier,
         reason: "Concrete runtime evidence, or a high-exposure rights gap backed by structured validation, was retained strongly enough for this finding to stand on its own.",
         ruleId: "evidence.rights_gap.confirmed_high_exposure_or_runtime"
+      });
+    } else if (hasStructuredPolicyAbsenceBacking(packet)) {
+      overrideDecision(decision, {
+        state: "confirmed",
+        lane: "main",
+        tier: decision.surfaceTier,
+        reason:
+          "A fetched policy surface, readable policy evidence, and structured validation all support the same missing-disclosure interpretation, so this absence finding can stand on its own.",
+        ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
       });
     } else {
       overrideDecision(decision, {
