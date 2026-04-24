@@ -10,6 +10,11 @@ type TargetFinding =
   | "pricing_or_fee_transparency_unclear"
   | "regulatory_compliance_claim_present"
   | "sale_sharing_controls_missing"
+  | "third_party_advertising_disclosure_present"
+  | "unqualified_superlative_claim_detected"
+  | "children_privacy_disclosure_present"
+  | "do_not_sell_sharing_disclosure_conflict"
+  | "session_replay_observed"
   | "targeted_advertising_disclosure_present"
   | "terms_of_service_present"
   | "tracking_technologies_disclosure_present";
@@ -35,6 +40,8 @@ type CandidateRow = {
   fee_related_text_present: boolean | null;
   pricing_page_present: boolean | null;
   retargeting_pixel_detected: boolean | null;
+  session_replay_tool_detected: boolean | null;
+  session_replay_tracker_count: number | null;
   scan_id: string;
   verified_public_surfaces_count: number | null;
 };
@@ -96,6 +103,11 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
     value === "pricing_or_fee_transparency_unclear" ||
     value === "regulatory_compliance_claim_present" ||
     value === "sale_sharing_controls_missing" ||
+    value === "third_party_advertising_disclosure_present" ||
+    value === "unqualified_superlative_claim_detected" ||
+    value === "children_privacy_disclosure_present" ||
+    value === "do_not_sell_sharing_disclosure_conflict" ||
+    value === "session_replay_observed" ||
     value === "targeted_advertising_disclosure_present" ||
     value === "terms_of_service_present" ||
     value === "tracking_technologies_disclosure_present"
@@ -473,7 +485,10 @@ async function probePrivacyContactMissing(row: CandidateRow): Promise<LiveProbe>
   };
 }
 
-async function probeTrackingDisclosure(row: CandidateRow, kind: "tracking" | "targeted_advertising"): Promise<LiveProbe> {
+async function probeTrackingDisclosure(
+  row: CandidateRow,
+  kind: "tracking" | "targeted_advertising" | "third_party_advertising" | "children"
+): Promise<LiveProbe> {
   const baseUrl = getBaseUrl(row);
   const homepage = await fetchText(baseUrl);
   const candidateUrls = getCandidateUrls({
@@ -485,7 +500,11 @@ async function probeTrackingDisclosure(row: CandidateRow, kind: "tracking" | "ta
   const pattern =
     kind === "tracking"
       ? /cookies?|tracking technolog(?:y|ies)|pixels?|web beacons?|analytics|similar technolog(?:y|ies)/i
-      : /targeted advertising|personalized ads?|interest-based advertising|cross-context behavioral advertising|advertising partners/i;
+      : kind === "targeted_advertising"
+        ? /targeted advertising|personalized ads?|interest-based advertising|cross-context behavioral advertising|advertising partners/i
+        : kind === "third_party_advertising"
+          ? /third-party advertising|advertising partners?|ad networks?|advertising service providers?|advertising companies/i
+          : /children(?:'s)? privacy|under (?:13|16)|minors?|knowingly collect.*children/i;
 
   for (const url of candidateUrls) {
     const page = await fetchText(url);
@@ -499,7 +518,11 @@ async function probeTrackingDisclosure(row: CandidateRow, kind: "tracking" | "ta
         rationale:
           kind === "tracking"
             ? "Live URL review found a policy/cookie surface disclosing cookies, pixels, analytics, or similar tracking technologies."
-            : "Live URL review found a policy surface disclosing targeted, personalized, interest-based, or cross-context advertising."
+            : kind === "targeted_advertising"
+              ? "Live URL review found a policy surface disclosing targeted, personalized, interest-based, or cross-context advertising."
+              : kind === "third_party_advertising"
+                ? "Live URL review found a policy surface disclosing third-party advertising partners, ad networks, or advertising service providers."
+                : "Live URL review found a children privacy or under-13/under-16 disclosure."
       };
     }
   }
@@ -510,7 +533,90 @@ async function probeTrackingDisclosure(row: CandidateRow, kind: "tracking" | "ta
     rationale:
       kind === "tracking"
         ? "Live URL probe did not find tracking-technology disclosure language; keep the positive disclosure finding review-only without retained policy text."
-        : "Live URL probe did not find targeted-advertising disclosure language; keep the positive disclosure finding review-only without retained policy text."
+        : kind === "targeted_advertising"
+          ? "Live URL probe did not find targeted-advertising disclosure language; keep the positive disclosure finding review-only without retained policy text."
+          : kind === "third_party_advertising"
+            ? "Live URL probe did not find third-party advertising disclosure language; keep the positive disclosure finding review-only without retained policy text."
+            : "Live URL probe did not find children privacy disclosure language; keep the positive disclosure finding review-only without retained policy text."
+  };
+}
+
+async function probeUnqualifiedSuperlative(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  if (homepage && /\b(best|top|leading|#1|number one|premier|ultimate)\b/i.test(homepage.text) && /invest|trading|trade|forex|signal|portfolio|return|profit/i.test(homepage.text)) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: homepage.finalUrl,
+      rationale: "Live URL review found financial/investment context with best, top, leading, or similar superlative claim language."
+    };
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: homepage?.finalUrl ?? null,
+    rationale: "Live URL probe did not find enough financial-context superlative language; keep the finding review-only without retained claim text."
+  };
+}
+
+async function probeDoNotSellSharingConflict(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const homepageHasAdtech = homepage ? /fbq\(|connect\.facebook\.net|googletagmanager|google-analytics|doubleclick|clarity\.ms/i.test(homepage.html) : false;
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: ["/privacy", "/privacy-policy", "/privacy-notice", "/privacy-choices", "/your-privacy-choices", "/do-not-sell"],
+    patterns: [/privacy|do-not-sell|do-not-share|privacy-choices|opt-?out|cookie/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    const hasDoNotSellClaim = /do not sell|do not share|not sell or share|we do not sell|we do not share/i.test(page.text);
+    if (hasDoNotSellClaim && (homepageHasAdtech || row.retargeting_pixel_detected === true || (row.advertising_tracker_count ?? 0) > 0)) {
+      return {
+        assessment: "supports_promotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found a do-not-sell/share claim plus homepage or retained evidence of advertising/retargeting technology."
+      };
+    }
+    if (hasDoNotSellClaim) {
+      return {
+        assessment: "needs_review",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found do-not-sell/share language, but runtime adtech evidence needs retained artifact corroboration."
+      };
+    }
+  }
+
+  return {
+    assessment: "supports_demotion",
+    evidenceUrl: null,
+    rationale: "Live URL probe did not find a do-not-sell/share claim; conflict interpretation should not promote without both policy and runtime anchors."
+  };
+}
+
+async function probeSessionReplayObserved(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  if (homepage && /fullstory|hotjar|clarity\.ms|logrocket|sessioncam|smartlook/i.test(homepage.html)) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: homepage.finalUrl,
+      rationale: "Live URL review found a known session replay vendor script or runtime marker on the homepage."
+    };
+  }
+
+  return {
+    assessment: row.session_replay_tool_detected === true || (row.session_replay_tracker_count ?? 0) > 0 ? "needs_review" : "supports_demotion",
+    evidenceUrl: homepage?.finalUrl ?? row.final_url,
+    rationale:
+      row.session_replay_tool_detected === true || (row.session_replay_tracker_count ?? 0) > 0
+        ? "Scanner retained session replay evidence, but external promotion should rely on retained vendor/runtime artifacts."
+        : "No session replay runtime marker was found by the bounded URL probe or retained snapshot fields."
   };
 }
 
@@ -557,7 +663,12 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
     sale_sharing_controls_missing: `ss.retargeting_pixel_detected is true and ss.do_not_sell_link_present is false`,
     targeted_advertising_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.targeted_advertising_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
     terms_of_service_present: `ss.terms_of_service_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.terms_of_service_present')`,
-    tracking_technologies_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.tracking_technologies_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`
+    tracking_technologies_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.tracking_technologies_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
+    third_party_advertising_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.third_party_advertising_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
+    unqualified_superlative_claim_detected: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'financial_review.unqualified_superlative_claim_detected')`,
+    children_privacy_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.children_privacy_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
+    do_not_sell_sharing_disclosure_conflict: `ss.retargeting_pixel_detected is true and (ss.do_not_sell_link_present is true or ss.mentions_data_sale_or_sharing is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('privacy.targeted_advertising_disclosure_present','privacy.third_party_advertising_disclosure_present') and sig.signal_value_json = 'true'::jsonb))`,
+    session_replay_observed: `(ss.session_replay_tool_detected is true or ss.session_replay_tracker_count > 0 or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('privacy.session_replay_runtime_detected','commerce.session_replay_tool_detected','privacy.session_replay_runtime_vendors')))`
   };
   const predicate = predicateByFinding[finding];
   const domainPredicate =
@@ -585,6 +696,8 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
              ss.data_access_request_present,
              ss.data_deletion_request_present,
              ss.retargeting_pixel_detected,
+             ss.session_replay_tool_detected,
+             ss.session_replay_tracker_count,
              ss.do_not_sell_link_present,
              ss.mentions_data_sale_or_sharing,
              ss.ad_network_google_ads,
@@ -703,6 +816,38 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
     };
   }
 
+  if (finding === "third_party_advertising_disclosure_present" || finding === "children_privacy_disclosure_present") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Positive policy disclosure findings need retained policy text or live policy-page confirmation."
+    };
+  }
+
+  if (finding === "unqualified_superlative_claim_detected") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Financial superlative findings need retained claim text and financial context before promotion."
+    };
+  }
+
+  if (finding === "do_not_sell_sharing_disclosure_conflict") {
+    return {
+      assessment: row.retargeting_pixel_detected === true ? "needs_review" : "supports_demotion",
+      evidenceUrl: row.final_url,
+      rationale: "Do-not-sell/share conflicts need both a retained policy claim and concrete runtime adtech evidence."
+    };
+  }
+
+  if (finding === "session_replay_observed") {
+    return {
+      assessment: row.session_replay_tool_detected === true || (row.session_replay_tracker_count ?? 0) > 0 ? "supports_promotion" : "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Session replay observations should rely on retained vendor/runtime artifacts, not generic analytics signals."
+    };
+  }
+
   const hasBehaviorOnly = row.retargeting_pixel_detected === true && row.mentions_data_sale_or_sharing !== true;
   return {
     assessment: hasBehaviorOnly ? "supports_demotion" : "needs_review",
@@ -731,7 +876,12 @@ async function main() {
           "pricing_or_fee_transparency_unclear",
           "terms_of_service_present",
           "tracking_technologies_disclosure_present",
-          "targeted_advertising_disclosure_present"
+          "targeted_advertising_disclosure_present",
+          "third_party_advertising_disclosure_present",
+          "unqualified_superlative_claim_detected",
+          "children_privacy_disclosure_present",
+          "do_not_sell_sharing_disclosure_conflict",
+          "session_replay_observed"
         ]
       : [finding];
   const rows: string[] = [
@@ -762,6 +912,16 @@ async function main() {
               ? await probeTrackingDisclosure(candidate, "tracking")
             : findingId === "targeted_advertising_disclosure_present"
               ? await probeTrackingDisclosure(candidate, "targeted_advertising")
+            : findingId === "third_party_advertising_disclosure_present"
+              ? await probeTrackingDisclosure(candidate, "third_party_advertising")
+            : findingId === "children_privacy_disclosure_present"
+              ? await probeTrackingDisclosure(candidate, "children")
+            : findingId === "unqualified_superlative_claim_detected"
+              ? await probeUnqualifiedSuperlative(candidate)
+            : findingId === "do_not_sell_sharing_disclosure_conflict"
+              ? await probeDoNotSellSharingConflict(candidate)
+            : findingId === "session_replay_observed"
+              ? await probeSessionReplayObserved(candidate)
             : findingId === "privacy_policy_present"
               ? await probePrivacyPolicy(candidate)
               : findingId === "privacy_contact_path_present"

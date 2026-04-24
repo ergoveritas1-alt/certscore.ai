@@ -21,7 +21,12 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "pricing_or_fee_transparency_unclear",
   "regulatory_compliance_claim_present",
   "terms_of_service_present",
-  "privacy_contact_channel_missing"
+  "privacy_contact_channel_missing",
+  "third_party_advertising_disclosure_present",
+  "unqualified_superlative_claim_detected",
+  "children_privacy_disclosure_present",
+  "do_not_sell_sharing_disclosure_conflict",
+  "session_replay_observed"
 ] as const;
 
 export const PRIVACY_RUNTIME_FINDING_GROUPS = [
@@ -46,7 +51,12 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "tracking_technologies_disclosure_present",
   "terms_of_service_present",
   "privacy_contact_channel_missing",
-  "targeted_advertising_disclosure_present"
+  "targeted_advertising_disclosure_present",
+  "third_party_advertising_disclosure_present",
+  "unqualified_superlative_claim_detected",
+  "children_privacy_disclosure_present",
+  "do_not_sell_sharing_disclosure_conflict",
+  "session_replay_observed"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
 
 export const PRIVACY_RUNTIME_SCENARIO_TYPES = [
@@ -547,6 +557,131 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Policy text explicitly discloses targeted, personalized, interest-based, or cross-context advertising.",
     signalKey: "privacy.targeted_advertising_disclosure_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "third_party_advertising_disclosure_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-third-party-ad-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "third_party_advertising_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-third-party-ad-${index}.example.test/privacy`,
+        snippet: "We work with third-party advertising partners and ad networks."
+      },
+      signalKey: "privacy.third_party_advertising_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy URL discloses third-party advertising partners, ad networks, or advertising service providers.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-third-party-ad-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Policy text explicitly discloses third-party advertising partners or ad networks.",
+    signalKey: "privacy.third_party_advertising_disclosure_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "unqualified_superlative_claim_detected",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-superlative-${index}/offer.html`],
+      policyAnchor: {
+        claimType: "unqualified_superlative_financial_claim",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-superlative-${index}.example.test/review`,
+        snippet: "The best trading signals and top-performing strategy for investors."
+      },
+      signalKey: "financial_review.unqualified_superlative_claim_detected",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed financial page uses best, top, leading, or similar superlative language without nearby qualification.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-superlative-${index}.example.test/review`
+      }
+    }),
+    positiveNotes: "Financial promotional text contains unqualified superlative language without adjacent qualification.",
+    signalKey: "financial_review.unqualified_superlative_claim_detected"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "children_privacy_disclosure_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-children-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "children_privacy_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-children-${index}.example.test/privacy`,
+        snippet: "Our services are not directed to children under 13, and we do not knowingly collect children's personal information."
+      },
+      signalKey: "privacy.children_privacy_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy URL contains a children privacy or under-13/under-16 disclosure.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-children-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Policy text explicitly includes a children privacy disclosure.",
+    signalKey: "privacy.children_privacy_disclosure_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "do_not_sell_sharing_disclosure_conflict",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-dns-conflict-${index}/runtime.json`],
+      policyAnchor: {
+        claimType: "do_not_sell_or_share_claim",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-dns-conflict-${index}.example.test/privacy`,
+        snippet: "We do not sell or share personal information."
+      },
+      runtimeAnchor: {
+        confidence: 0.86,
+        observationType: "advertising_or_retargeting_stack_observed",
+        phase: "unknown",
+        requestUrls: [`https://ads.reviewed-dns-conflict-${index}.example.test/collect`],
+        vendors: ["Meta Pixel"]
+      },
+      signalKey: "privacy.do_not_sell_sharing_disclosure_conflict",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed evidence includes a do-not-sell/share claim plus runtime advertising or retargeting support for a contradiction candidate.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-dns-conflict-${index}.example.test/privacy`
+      },
+      vendorCategories: ["advertising"],
+      vendors: ["Meta Pixel"]
+    }),
+    positiveNotes: "Policy do-not-sell/share claim is paired with runtime advertising or retargeting evidence.",
+    signalKey: "privacy.do_not_sell_sharing_disclosure_conflict"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "session_replay_observed",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-session-replay-${index}/runtime.json`],
+      detectionSource: "runtime_vendor_signature",
+      requestUrls: [`https://clarity.reviewed-session-replay-${index}.example.test/collect`],
+      signalKey: "privacy.session_replay_runtime_detected",
+      snapshotEvidence: {
+        session_replay_runtime_detected: true,
+        session_replay_vendor_artifact_present: true
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed runtime artifacts identify a session replay vendor or collection endpoint.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-session-replay-${index}.example.test/`
+      },
+      vendorCategories: ["session_replay"],
+      vendors: ["Microsoft Clarity"]
+    }),
+    positiveNotes: "Runtime artifacts identify a session replay vendor or collection endpoint.",
+    signalKey: "privacy.session_replay_runtime_detected"
   }
 ];
 
@@ -564,6 +699,11 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   targeted_advertising_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
   terms_of_service_present: "https://bestcopytrading.com/terms-and-conditions/",
   tracking_technologies_disclosure_present: "https://bestcopytrading.com/privacy-policy/",
+  third_party_advertising_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
+  unqualified_superlative_claim_detected: "https://learn2.trade/",
+  children_privacy_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
+  do_not_sell_sharing_disclosure_conflict: "https://www.discover.com/privacy-statement/",
+  session_replay_observed: "https://www.fullstory.com/",
   weak_cookie_security_attributes: "https://www.acorns.com/"
 };
 
