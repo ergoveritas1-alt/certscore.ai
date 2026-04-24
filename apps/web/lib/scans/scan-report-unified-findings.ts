@@ -12,6 +12,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup, type ScanValidationFinding } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
 
 export type CanonicalReviewIssue = {
   description: string;
@@ -126,15 +127,6 @@ export type ScanReportUnifiedFindingStateDependencies = {
   }) => unknown[];
   filterContradictoryPositiveSurfaceFindings: (findings: UnifiedFindingDisplayPacket[]) => UnifiedFindingDisplayPacket[];
   formatReviewIssueDescription: (reason: string) => string;
-  getReportSignalValue: (input: {
-    mergedSignals?: ScanDetailResponse["mergedSignals"];
-    policyEnrichment: ScanDetailResponse["policyEnrichment"];
-    runtimeArtifacts: Record<string, unknown> | null;
-    signals: ScanDetailResponse["signals"];
-    snapshot: Record<string, unknown> | null;
-    signal: ReportSignalDefinition;
-  }) => unknown;
-  isSignalValuePopulated: (key: string, value: unknown) => boolean;
 };
 
 function getFiniteNumber(value: unknown) {
@@ -207,7 +199,7 @@ export function buildScanReportUnifiedFindingState(
             label: signal.label,
             relation,
             source: signal.source,
-            value: dependencies.getReportSignalValue({
+            value: getReportSignalValue({
               mergedSignals: scanRecord.mergedSignals,
               policyEnrichment: scanRecord.policyEnrichment,
               runtimeArtifacts: scanRecord.runtimeArtifacts,
@@ -216,7 +208,7 @@ export function buildScanReportUnifiedFindingState(
               signal
             })
           }))
-          .filter((item) => dependencies.isSignalValuePopulated(item.key, item.value))
+          .filter((item) => isSignalValuePopulated(item.key, item.value))
           .sort((left, right) => {
             const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
             return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
