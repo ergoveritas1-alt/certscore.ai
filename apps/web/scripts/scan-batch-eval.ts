@@ -2,6 +2,7 @@ import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
 import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../lib/scans/executive-findings-projection";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
@@ -498,6 +499,7 @@ async function summarizeScan(input: {
       domainHostname: input.hostname
     }
   });
+  const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(displayPackets);
   const calibrationSummary = buildScanCalibrationSummary({
     coverageLevel: typeof snapshot?.coverage_level === "string" ? snapshot.coverage_level : null,
     domain: input.hostname,
@@ -505,12 +507,12 @@ async function summarizeScan(input: {
     legalCoverageScore: typeof snapshot?.legal_coverage_score === "number" ? snapshot.legal_coverage_score : null,
     pagesScanned: typeof snapshot?.pages_scanned === "number" ? snapshot.pages_scanned : null,
     policyEnrichmentCount: normalizedPolicyRows.length,
-    posture: certScoreSummary.posture,
+    posture: executiveProjection.posture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: input.scanId,
     scanOutcome: typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : null,
     status: typeof scanRow?.status === "string" ? scanRow.status : null,
-    topFindings: certScoreSummary.findings,
+    topFindings: executiveProjection.topFindings,
     verifiedPublicSurfacesCount:
       typeof snapshot?.verified_public_surfaces_count === "number" ? snapshot.verified_public_surfaces_count : null
   });

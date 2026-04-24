@@ -405,6 +405,19 @@ function getPosture(findings: CertScoreFinding[]) {
   return "Clear" as const;
 }
 
+function deriveSummaryPosture(score: number | null) {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return "Clear" as const;
+  }
+  if (score < 50) {
+    return "Action Needed" as const;
+  }
+  if (score < 72) {
+    return "Watch" as const;
+  }
+  return "Clear" as const;
+}
+
 function getConcreteIdentifierLikeRequests(requestObservations: Record<string, unknown>[]) {
   return requestObservations.filter((row) => {
     if (row.identifierLike !== true) {
@@ -701,6 +714,52 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     requestObservations,
     vendorCategoryCounts
   });
+
+  const derivedLastScannedAt = scanRecord.scan.completedAt ?? scanRecord.scan.createdAt;
+  const derivedScore = getNumber(scanRecord.snapshot?.certscore_overall) ?? null;
+
+  return {
+    findings: [],
+    groupedFindings: [],
+    posture: deriveSummaryPosture(derivedScore),
+    score: derivedScore,
+    lastScannedAt: derivedLastScannedAt,
+    requestedHost,
+    finalHost,
+    landedOnDifferentHost,
+    vendorCount: effectiveVendorCount,
+    thirdPartyRequestCount,
+    thirdPartyDomainCount,
+    vendorCategoryCounts,
+    trackerSummary:
+      effectiveVendorCount > 0
+        ? effectiveVendorCount > resolvedVendorNames.length && resolvedVendorNames.length > 0
+          ? `${effectiveVendorCount} vendor${effectiveVendorCount === 1 ? "" : "s"} observed, ${resolvedVendorNames.length} named across ${thirdPartyDomainCount} third-party domain${thirdPartyDomainCount === 1 ? "" : "s"}`
+          : `${effectiveVendorCount} vendor${effectiveVendorCount === 1 ? "" : "s"} across ${thirdPartyDomainCount} third-party domain${thirdPartyDomainCount === 1 ? "" : "s"}`
+        : thirdPartyDomainCount > 0
+          ? `${thirdPartyDomainCount} third-party domain${thirdPartyDomainCount === 1 ? "" : "s"} observed`
+          : "No meaningful third-party footprint observed",
+    fingerprintLabel: getFingerprintLabel(fingerprintTier),
+    fingerprintNarrative: getFingerprintNarrative({
+      attributeCategoryCount,
+      concreteThirdPartyIdentifierLikeRequestCount: concreteThirdPartyIdentifierLikeRequests.length,
+      deviceDataLikeRequestCount,
+      rawAdtechHosts,
+      tier: fingerprintTier
+    }),
+    rawAdtechHosts,
+    analyticsCookieNames: effectiveAnalyticsCookieNames,
+    adtechCookieNames: effectiveAdtechCookieNames,
+    securityCookieNames: effectiveSecurityCookieNames,
+    cookieNamesBeforeConsent,
+    thirdPartyCookieNamesSeen,
+    thirdPartyCookieNamesBeforeConsent,
+    resolvedVendorNames,
+    unresolvedVendorHosts,
+    preConsentVendorNames,
+    sessionReplayVendorNames,
+    topObservedEntities
+  };
 
   if (canAssertConsentTiming && effectivePreConsentRequestCount > 0) {
     findings.push(
