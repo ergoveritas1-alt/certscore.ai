@@ -55,6 +55,35 @@ type ScenarioArtifact = {
   url?: string;
 };
 
+type ReportFinding = {
+  confidenceScore?: number;
+  conservativeWording?: string;
+  evidence?: {
+    cookies?: string[];
+    pageUrls?: string[];
+    requests?: string[];
+    screenshots?: string[];
+    storage?: string[];
+    uiText?: string[];
+  };
+  findingId?: string;
+  observation?: string;
+  title?: string;
+};
+
+type SiteReportArtifact = {
+  findings?: ReportFinding[];
+  finalClassification?: string;
+  preConsentTrackingSummary?: {
+    likelyVendorsObserved?: string[];
+    nonEssentialRequestsBeforeInteraction?: string[];
+  };
+  site?: {
+    hostname?: string;
+    startUrl?: string;
+  };
+};
+
 function getArgValues(flag: string) {
   const values: string[] = [];
   for (let index = 0; index < process.argv.length; index += 1) {
@@ -151,6 +180,10 @@ function inferScenarioName(path: string) {
   return basename(dirname(path));
 }
 
+function inferDomainFromReportPath(path: string) {
+  return basename(dirname(path));
+}
+
 function isBeforeInteraction(row: JsonRecord) {
   return getString(row.phase) === "before_interaction";
 }
@@ -204,6 +237,13 @@ function sanitizeSourceUrl(value: string | null | undefined) {
   return value ? sanitizeUrl(value) : null;
 }
 
+function getArtifactRunSlug(artifactPath: string) {
+  const parts = artifactPath.split(/[\\/]/);
+  const auditIndex = parts.lastIndexOf("live-consent-audit");
+  const stamp = auditIndex >= 0 ? parts[auditIndex + 1] : null;
+  return (stamp ?? "unknown-run").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+}
+
 function buildPreconsentPositiveDraft(input: {
   artifactPath: string;
   domain: string;
@@ -237,7 +277,7 @@ function buildPreconsentPositiveDraft(input: {
     },
     findingGroup: "preconsent_tracking",
     findingId: "preconsent_tracking",
-    id: `live-preconsent-${input.domain}-${input.scenarioName}`,
+    id: `live-preconsent-${input.domain}-${input.scenarioName}-${getArtifactRunSlug(input.artifactPath)}`,
     notes: "Live consent audit retained non-essential before-interaction network evidence. Review the URL/vendor classification before promotion.",
     scenarioName: input.scenarioName,
     scenarioType: "positive_high_confidence",
@@ -274,7 +314,7 @@ function buildPreconsentNegativeDraft(input: {
     },
     findingGroup: "preconsent_tracking",
     findingId: "preconsent_tracking",
-    id: `live-preconsent-negative-${input.domain}-${input.scenarioName}`,
+    id: `live-preconsent-negative-${input.domain}-${input.scenarioName}-${getArtifactRunSlug(input.artifactPath)}`,
     negativeControlReason: "Before-interaction network evidence is strictly necessary, security, or unresolved without a non-essential vendor.",
     notes: "Live consent audit negative-control candidate. Review before adding to the corpus.",
     scenarioName: input.scenarioName,
@@ -369,13 +409,146 @@ function buildDarkPatternDraft(input: {
     },
     findingGroup: "dark_pattern_consent",
     findingId,
-    id: `live-dark-pattern-${input.domain}-${input.scenarioName}`,
+    id: `live-dark-pattern-${input.domain}-${input.scenarioName}-${getArtifactRunSlug(input.artifactPath)}`,
     notes: "Live consent audit observed a banner/control asymmetry candidate. Review screenshot/text before promotion.",
     scenarioName: input.scenarioName,
     scenarioType: "positive_moderate",
     sourceKind: "live_artifact",
     sourceUrl: sanitizeSourceUrl(input.scenario.url)
   } satisfies PrivacyRuntimeDraft;
+}
+
+function mapReportFindingToDraft(input: {
+  artifactPath: string;
+  domain: string;
+  finding: ReportFinding;
+  report: SiteReportArtifact;
+}) {
+  const evidence = input.finding.evidence ?? {};
+  const sourceUrl = sanitizeSourceUrl(evidence.pageUrls?.[0] ?? input.report.site?.startUrl ?? null);
+  const requests = uniqueStrings((evidence.requests ?? []).map(sanitizeUrl));
+  const screenshots = uniqueStrings(evidence.screenshots ?? []);
+  const uiText = uniqueStrings(evidence.uiText ?? []);
+  const observation = input.finding.observation ?? input.finding.conservativeWording ?? input.finding.title ?? "";
+  const id = `live-report-${input.domain}-${input.finding.findingId ?? "unknown"}-${getArtifactRunSlug(input.artifactPath)}`;
+  const confidenceScore = input.finding.confidenceScore ?? 0;
+
+  switch (input.finding.findingId) {
+    case "F001":
+      return {
+        artifactPath: input.artifactPath,
+        domain: input.domain,
+        evidence: {
+          requestUrls: requests.slice(0, 8),
+          sequenceEvidence: requests.length > 0,
+          vendorCategories: ["analytics", "advertising_marketing"],
+          vendors: uniqueStrings(input.report.preConsentTrackingSummary?.likelyVendorsObserved ?? [])
+        },
+        expected: {
+          confidenceBand: confidenceScore >= 0.8 ? "high" : "moderate",
+          externalSurfacingEligibility: requests.length > 0 ? "eligible" : "audit_only",
+          presentationState: requests.length > 0 ? "confirmed" : "review",
+          promotionEligibility: requests.length > 0 ? "eligible" : "internal_only"
+        },
+        findingGroup: "preconsent_tracking",
+        findingId: "preconsent_tracking",
+        id,
+        notes: `Report-level live audit finding: ${observation}`,
+        scenarioName: "report",
+        scenarioType: requests.length > 0 ? "positive_high_confidence" : "borderline_review",
+        sourceKind: "live_artifact",
+        sourceUrl
+      } satisfies PrivacyRuntimeDraft;
+    case "F002":
+    case "F004":
+      return {
+        artifactPath: input.artifactPath,
+        domain: input.domain,
+        evidence: {
+          artifactRefs: screenshots,
+          consentSurfaceObserved: true,
+          uiFacts: [input.finding.findingId === "F004" ? "optional_controls_preselected" : "reject_path_less_direct"],
+          visualFacts: uiText
+        },
+        expected: {
+          confidenceBand: "moderate",
+          externalSurfacingEligibility: "eligible",
+          presentationState: "review",
+          promotionEligibility: "eligible"
+        },
+        findingGroup: "dark_pattern_consent",
+        findingId: input.finding.findingId === "F004" ? "accept_more_prominent_than_reject" : "reject_button_missing",
+        id,
+        notes: `Report-level live audit finding: ${observation}`,
+        scenarioName: "report",
+        scenarioType: "positive_moderate",
+        sourceKind: "live_artifact",
+        sourceUrl
+      } satisfies PrivacyRuntimeDraft;
+    case "F003":
+    case "F005":
+      return {
+        artifactPath: input.artifactPath,
+        domain: input.domain,
+        downgradeReason: "Report-level runtime effect evidence needs reviewer confirmation before corpus promotion.",
+        evidence: {
+          requestUrls: requests.slice(0, 8),
+          sequenceEvidence: requests.length > 0,
+          vendors: uniqueStrings(input.report.preConsentTrackingSummary?.likelyVendorsObserved ?? [])
+        },
+        expected: {
+          confidenceBand: "moderate",
+          externalSurfacingEligibility: "audit_only",
+          presentationState: "review",
+          promotionEligibility: "internal_only"
+        },
+        findingGroup: "preconsent_tracking",
+        findingId: "preconsent_tracking",
+        id,
+        notes: `Report-level live audit finding: ${observation}`,
+        scenarioName: "report",
+        scenarioType: "borderline_review",
+        sourceKind: "live_artifact",
+        sourceUrl
+      } satisfies PrivacyRuntimeDraft;
+    default:
+      return null;
+  }
+}
+
+function loadDraftsFromReports(input: {
+  artifactRoot: string;
+  domains: string[];
+  limit: number;
+}) {
+  const reportPaths = walkFiles(input.artifactRoot, "report.json");
+  const drafts: PrivacyRuntimeDraft[] = [];
+
+  for (const path of reportPaths) {
+    const domain = inferDomainFromReportPath(path);
+    if (input.domains.length > 0 && !input.domains.includes(domain)) {
+      continue;
+    }
+
+    const report = readJsonFile(path) as SiteReportArtifact;
+    const artifactPath = relative(process.cwd(), path);
+    for (const finding of report.findings ?? []) {
+      const draft = mapReportFindingToDraft({
+        artifactPath,
+        domain,
+        finding,
+        report
+      });
+      if (draft) {
+        drafts.push(draft);
+      }
+      if (drafts.length >= input.limit) {
+        return drafts;
+      }
+    }
+  }
+
+  return drafts;
 }
 
 function dedupeDrafts(drafts: PrivacyRuntimeDraft[]) {
@@ -459,7 +632,9 @@ function loadDraftsFromArtifactRoot(input: {
     }
   }
 
-  return dedupeDrafts(drafts).slice(0, input.limit);
+  const reportDrafts = loadDraftsFromReports(input);
+
+  return dedupeDrafts([...reportDrafts, ...drafts]).slice(0, input.limit);
 }
 
 function renderDraftJson(drafts: PrivacyRuntimeDraft[]) {

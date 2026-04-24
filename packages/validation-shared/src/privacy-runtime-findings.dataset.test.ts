@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
   PRIVACY_RUNTIME_FINDINGS_DATASET_SEED,
   summarizePrivacyRuntimeFindingsDataset
 } from "./privacy-runtime-findings.dataset";
 
 test("privacy runtime seed corpus has the planned v1 distribution", () => {
-  const summary = summarizePrivacyRuntimeFindingsDataset();
+  const summary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE);
 
   assert.equal(summary.currentExampleCount, 180);
   assert.equal(summary.positiveCount, 72);
@@ -22,7 +23,7 @@ test("privacy runtime seed corpus has the planned v1 distribution", () => {
 test("privacy runtime corpus keeps negatives and borderline cases in every finding group", () => {
   const groups = new Map<string, { borderline: number; negative: number; positive: number; total: number }>();
 
-  for (const example of PRIVACY_RUNTIME_FINDINGS_DATASET_SEED) {
+  for (const example of PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE) {
     const current = groups.get(example.findingGroup) ?? { borderline: 0, negative: 0, positive: 0, total: 0 };
     current.total += 1;
     if (example.scenarioType === "negative_control") {
@@ -40,6 +41,10 @@ test("privacy runtime corpus keeps negatives and borderline cases in every findi
     assert.ok(counts.negative >= counts.positive, `${group} should have at least as many negatives as positives`);
     assert.ok(counts.borderline / counts.total >= 0.2, `${group} should keep borderline coverage at or above 20%`);
   }
+});
+
+test("privacy runtime reviewed corpus can extend the seed set", () => {
+  assert.ok(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED.length >= PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE.length);
 });
 
 test("privacy runtime corpus records downgrade or negative reasons for non-positive rows", () => {

@@ -9,7 +9,7 @@ import type { PrivacyRuntimeFindingDatasetExample } from "./privacy-runtime-find
 test("privacy runtime corpus eval matches every seed expectation", () => {
   const summary = evaluatePrivacyRuntimeFindingsDataset();
 
-  assert.equal(summary.evaluatedCount, 180);
+  assert.ok(summary.evaluatedCount >= 180);
   assert.equal(summary.mismatchCount, 0);
   assert.deepEqual(summary.mismatches, []);
 });

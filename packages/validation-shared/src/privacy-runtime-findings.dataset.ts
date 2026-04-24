@@ -1,3 +1,5 @@
+import { PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES } from "./privacy-runtime-findings.reviewed";
+
 export const PRIVACY_RUNTIME_FINDING_IDS = [
   "preconsent_tracking",
   "fingerprinting_observed",
@@ -187,7 +189,7 @@ const DISCLOSURE_IDS: PrivacyRuntimeFindingId[] = [
   "targeted_advertising_disclosure_present"
 ];
 
-export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDatasetExample[] = [
+export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDatasetExample[] = [
   ...makeExamples({
     count: 18,
     evidenceFor: (index) => ({
@@ -446,6 +448,11 @@ export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDataset
     scenarioType: "borderline_review",
     sourceKindFor: () => "nano_review"
   })
+];
+
+export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDatasetExample[] = [
+  ...PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
+  ...PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES
 ];
 
 function emptyCounts<T extends string>(keys: readonly T[]) {
