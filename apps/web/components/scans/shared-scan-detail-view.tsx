@@ -60,6 +60,7 @@ import {
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
+  buildScanReportUnifiedFindingState,
   buildScanReportUnifiedFindings as buildScanReportUnifiedFindingsFromState,
   selectOwnerUnifiedFindingsForSection
 } from "../../lib/scans/scan-report-unified-findings";
@@ -4664,156 +4665,22 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
     };
   }
 
-  const runtimeArtifacts = scanRecord.runtimeArtifacts;
-
   try {
-    const policyEnrichmentById = new Map(scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row]));
-    const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
-      const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
-
-      return {
-        description: formatReviewIssueDescription(String(row.reason ?? "")),
-        key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
-        pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
-        pageUrl:
-          typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string"
-            ? String(enrichment?.pageUrl ?? enrichment?.page_url)
-            : null,
-        reason: String(row.reason ?? ""),
-        reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
-        reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
-        summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
-      };
+    return buildScanReportUnifiedFindingState(scanRecord, {
+      buildReviewFindings: (input) => buildReviewFindings(input as Parameters<typeof buildReviewFindings>[0]),
+      buildSectionReviewIssues: (input) => buildSectionReviewIssues(input as Parameters<typeof buildSectionReviewIssues>[0]),
+      deriveAccessibilityIssueRows,
+      deriveAccessibilityRuleEvidenceRows,
+      deriveConsentAuditFindings: (candidateSnapshot, runtimeArtifacts) =>
+        dedupeHeadlineFindings(deriveConsentAuditFindings(candidateSnapshot, runtimeArtifacts)),
+      derivePolicyBehaviorContradictions: (input) =>
+        derivePolicyBehaviorContradictions(input as Parameters<typeof derivePolicyBehaviorContradictions>[0]),
+      derivePreconsentViolationRows,
+      filterContradictoryPositiveSurfaceFindings,
+      formatReviewIssueDescription,
+      getReportSignalValue,
+      isSignalValuePopulated
     });
-    const preconsentViolationRows = derivePreconsentViolationRows({
-      persistedViolations: scanRecord.preconsentViolations,
-      runtimeArtifacts,
-      trackerVendors: scanRecord.trackerVendors
-    });
-    const policyBehaviorContradictions = derivePolicyBehaviorContradictions({
-      mergedSignals: scanRecord.mergedSignals,
-      primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment,
-      policyEnrichments: scanRecord.policyEnrichment,
-      preconsentViolations: preconsentViolationRows,
-      runtimeArtifacts,
-      snapshot,
-      trackerVendors: scanRecord.trackerVendors
-    });
-    const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
-    const accessibilityIssueRows = deriveAccessibilityIssueRows(snapshot);
-    const accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
-      examples: scanRecord.accessibilityRuleExamples ?? [],
-      ruleCounts: scanRecord.accessibilityRuleCounts ?? []
-    });
-    const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
-      .sort((left, right) => right.weightedPriority - left.weightedPriority)
-      .slice(0, 6);
-    const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
-    const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
-      const sections = getReportSectionsForPillar(pillar.id).map((section) => {
-        const sectionCategoryIds = new Set(getReportEvidenceCategoriesForSection(section.id).map((category) => category.id));
-        const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
-          const items = getReportSignalsForEvidenceCategory(category.id)
-            .map(({ relation, signal }) => ({
-              key: signal.key,
-              label: signal.label,
-              relation,
-              source: signal.source,
-              value: getReportSignalValue({
-                mergedSignals: scanRecord.mergedSignals,
-                policyEnrichment: scanRecord.policyEnrichment,
-                runtimeArtifacts: scanRecord.runtimeArtifacts,
-                signals: scanRecord.signals,
-                snapshot: scanRecord.snapshot,
-                signal
-              })
-            }))
-            .filter((item) => isSignalValuePopulated(item.key, item.value))
-            .sort((left, right) => {
-              const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
-              return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
-            });
-
-          const reviewFindings = buildReviewFindings({
-            allSignals: scanRecord.signals,
-            categoryId: category.id,
-            issues: [],
-            mergedSignals: scanRecord.mergedSignals,
-            policyEnrichment: scanRecord.policyEnrichment,
-            prioritizedAccessibilityRuleRows,
-            runtimeArtifacts: scanRecord.runtimeArtifacts,
-            snapshot,
-            sectionId: section.id,
-            sectionItems: items,
-            validationFindingLookup
-          });
-
-          return {
-            category,
-            items,
-            reviewFindings
-          };
-        });
-
-        const issues = buildSectionReviewIssues({
-          accessibilityIssueRows,
-          consentAuditFindings,
-          policyBehaviorContradictions,
-          preconsentViolationRows,
-          runtimeArtifacts,
-          scanReportReviewIssues,
-          sectionId: section.id,
-          snapshot
-        });
-        const issueFindings = buildReviewFindings({
-          allSignals: scanRecord.signals,
-          issues,
-          mergedSignals: scanRecord.mergedSignals,
-          policyEnrichment: scanRecord.policyEnrichment,
-          prioritizedAccessibilityRuleRows,
-          runtimeArtifacts: scanRecord.runtimeArtifacts,
-          snapshot,
-          sectionId: section.id,
-          sectionItems: [],
-          validationFindingLookup
-        });
-
-        return {
-          categories,
-          issueFindings,
-          sectionCategoryIds
-        };
-      });
-
-      return { sections };
-    });
-
-    const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
-      sections.flatMap((section) => [
-        ...section.categories.flatMap((category) => category.reviewFindings),
-        ...section.issueFindings
-      ])
-    );
-    const globalUnifiedFindings = filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
-      coverageSummary: {
-        legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
-        pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
-        policyEnrichmentCount: scanRecord.policyEnrichment.length,
-        verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
-      },
-      mergedSignals: scanRecord.mergedSignals,
-      policyEnrichment: scanRecord.policyEnrichment,
-      reviewFindingCandidates: allReviewFindingCandidates,
-      scanEvents: scanRecord.events,
-      validationFindings: scanRecord.validationFindings,
-      validationFindingLookup
-    }).filter((finding) => finding.presentationDecision.status !== "suppress"));
-
-    return {
-      allReviewFindingCandidates,
-      globalUnifiedFindings,
-      sectionDrafts
-    };
   } catch (error) {
     console.error("Failed to build scan report unified finding state", error);
     return {
