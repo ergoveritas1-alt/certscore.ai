@@ -1,6 +1,7 @@
 import { getDatabaseEnv, type DatabaseEnv } from "@website-signal-risk-scanner/db";
 import { parseEnvironment } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
+import { BETTER_AUTH_KNOWN_ALLOWED_HOSTS } from "../server/better-auth/env";
 
 const webEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url()
@@ -63,16 +64,26 @@ export function isGoogleAuthEnabled(env: NodeJS.ProcessEnv = process.env) {
   return value === "1" || value === "true";
 }
 
-const GOOGLE_AUTH_ALLOWED_HOSTS = new Set([
-  "certscore.ai",
-  "localhost:3000",
-  "127.0.0.1:3000"
-]);
-
 function normalizeHost(host: string | null | undefined) {
   return host?.split(",")[0]?.trim().toLowerCase() ?? "";
 }
 
-export function isGoogleAuthAllowedForHost(host: string | null | undefined) {
-  return GOOGLE_AUTH_ALLOWED_HOSTS.has(normalizeHost(host));
+export function getGoogleAuthAllowedHosts(env: NodeJS.ProcessEnv = process.env) {
+  const allowedHosts = new Set<string>(BETTER_AUTH_KNOWN_ALLOWED_HOSTS);
+
+  const appUrl = env.NEXT_PUBLIC_APP_URL?.trim();
+
+  if (appUrl) {
+    try {
+      allowedHosts.add(new URL(appUrl).host.toLowerCase());
+    } catch {
+      // Ignore invalid app URLs here; env validation owns that error surface.
+    }
+  }
+
+  return allowedHosts;
+}
+
+export function isGoogleAuthAllowedForHost(host: string | null | undefined, env: NodeJS.ProcessEnv = process.env) {
+  return getGoogleAuthAllowedHosts(env).has(normalizeHost(host));
 }

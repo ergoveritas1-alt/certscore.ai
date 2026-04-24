@@ -54,7 +54,7 @@ const betterAuthEnvSchema = z
 export type BetterAuthEnv = z.infer<typeof betterAuthEnvSchema>;
 type BetterAuthEnvInput = Record<string, string | boolean | undefined>;
 
-const BETTER_AUTH_KNOWN_ALLOWED_HOSTS = [
+export const BETTER_AUTH_KNOWN_ALLOWED_HOSTS = [
   "certscore.ai",
   "www.certscore.ai",
   "localhost:3000",
