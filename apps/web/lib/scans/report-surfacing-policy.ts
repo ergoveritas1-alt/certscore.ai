@@ -353,6 +353,9 @@ const SUPPORT_ONLY_FINANCIAL_CONTEXT_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const NEGATIVE_FINANCIAL_RISK_IDS = [
+  "earnings_claim_without_adjacent_disclosure",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
   "performance_claims_without_context",
   "guaranteed_or_high_return_claims_present",
   "investment_risk_disclosure_missing",
@@ -371,7 +374,10 @@ const NEGATIVE_FINANCIAL_RISK_IDS = [
   "leveraged_or_high_risk_product_promotion",
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
-  "ai_financial_advice_or_trading_claims_without_disclosure"
+  "ai_financial_advice_or_trading_claims_without_disclosure",
+  "pricing_or_fee_transparency_unclear",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const FAMILY_DEFAULTS: Record<SurfacingPolicyFamily, FamilyDefault> = {

@@ -507,6 +507,43 @@ test("negative financial-promotion risks confirm when backed by retained financi
   assert.ok(decision?.appliedRules.includes("evidence.financial.confirmed_negative_risk_with_backing"));
 });
 
+test("corpus-derived negative financial-promotion findings use the confirmed financial-risk policy", () => {
+  const corpusDerivedFindingIds = [
+    "earnings_claim_without_adjacent_disclosure",
+    "financial_urgency_pressure_tactic_detected",
+    "guaranteed_outcome_claim_detected",
+    "pricing_or_fee_transparency_unclear",
+    "simulated_performance_without_disclosure",
+    "unqualified_superlative_claim_detected"
+  ] as const satisfies readonly ReportUnifiedFindingId[];
+
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: corpusDerivedFindingIds.map((findingId) =>
+      makePacket(findingId, {
+        confidenceInputs: {
+          ...makePacket(findingId).confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket(findingId).evidence,
+          pageUrls: ["https://example.com/invest"],
+          snippets: ["Earn projected returns from this investment strategy before this limited offer closes."],
+          sourceUrls: ["https://example.com/invest"]
+        }
+      })
+    )
+  });
+
+  for (const findingId of corpusDerivedFindingIds) {
+    const decision = evaluation.debugDecisions.find((item) => item.unifiedFindingId === findingId);
+    assert.equal(decision?.decisionState, "confirmed", findingId);
+    assert.equal(decision?.reportLane, "main", findingId);
+    assert.ok(decision?.appliedRules.includes("evidence.financial.confirmed_negative_risk_with_backing"), findingId);
+  }
+});
+
 test("runtime-backed consent-control failures confirm when the retained evidence shows the control failed", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
