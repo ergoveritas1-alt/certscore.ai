@@ -149,9 +149,9 @@ const LIVE_SOURCE_CALIBRATION_EXAMPLES = [
     ...[
         ["whop-weekly-prop-payouts-positive", "https://whop.com/discover/funded-prop-account-payouts/", "Automate weekly payouts from your prop firm accounts.", "guaranteed_outcome_claim", "Automate weekly payouts", ["guarantee", "earnings", "cta", "investment_context"], ["guaranteed_outcome_claim_detected"]],
         ["whop-guaranteed-passing-positive", "https://whop.com/discover/funded-prop-account-payouts/", "Guaranteed passing with the promo code during account purchases.", "guaranteed_outcome_claim", "Guaranteed passing", ["guarantee", "cta", "investment_context"], ["guaranteed_outcome_claim_detected"]],
-        ["proparison-guaranteed-payouts-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "All payouts are guaranteed and have been successfully processed.", "guaranteed_outcome_claim", "all payouts are guaranteed", ["guarantee", "earnings", "investment_context"], ["guaranteed_outcome_claim_detected"]],
-        ["instantcopy-monthly-profit-positive", "https://instantcopytraders.com/", "Estimate copy trading returns with monthly profit and yearly profit outputs.", "return_performance_claim", "monthly profit and yearly profit", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
-        ["instantcopy-eight-percent-return-positive", "https://instantcopytraders.com/", "Monthly return input shows 8% and a monthly profit estimate.", "return_performance_claim", "8% monthly return", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-guaranteed-profit-positive", "https://tradestem.com/", "You are guaranteed profit from day 1 with a consistent forex trading signal.", "guaranteed_outcome_claim", "guaranteed profit from day 1", ["guarantee", "earnings", "investment_context", "cta"], ["guaranteed_outcome_claim_detected"]],
+        ["tradestem-consistent-signal-profit-positive", "https://tradestem.com/", "The page promotes a consistent forex trading signal with profit daily.", "return_performance_claim", "profit daily", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-winning-record-positive", "https://tradestem.com/", "The page advertises an amazing trading record with 900+ winning days and profit daily.", "return_performance_claim", "profit daily", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
         ["grailwealth-spy-annual-return-positive", "https://www.grailwealth.com/p/spyholygrailv1", "Strategy headline claims about a 24% annual return over 21 years.", "simulated_performance_claim", "24% annual return over 21 years", ["simulated", "returns", "investment_context", "cta"], ["simulated_performance_without_disclosure"]],
         ["grailwealth-backtest-million-positive", "https://www.grailwealth.com/p/spyholygrailv1", "Backtests turned $100,000 into $9.1 million over 21 years.", "simulated_performance_claim", "backtests turned $100,000 into $9.1 million", ["simulated", "returns", "investment_context", "cta"], ["simulated_performance_without_disclosure"]],
         ["tradingstrategies-annual-returns-positive", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "A strategy page promotes 40% annual returns.", "return_performance_claim", "40% annual returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
@@ -160,10 +160,10 @@ const LIVE_SOURCE_CALIBRATION_EXAMPLES = [
         ["algotrades-make-more-money-positive", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "The page says users search for a proven strategy that can make more money.", "earnings_claim", "proven strategy that can make more money", ["earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
         ["algobot-best-trading-bots-positive", "https://algobot.com/experienced-traders/", "AI trading bot article describes best algo trading bots and top-performing bots.", "superlative_claim", "best algo trading bots and top-performing bots", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
         ["bestpropfirms-best-daily-payout-positive", "https://bestpropfirms.us.com/daily-payout/", "The page identifies best daily payout prop firms.", "superlative_claim", "best daily payout prop firms", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
-        ["proparison-triple-payday-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "The program features a triple payday payout schedule.", "pricing_fee_claim", "triple payday payout schedule", ["pricing", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
-        ["proparison-leverage-no-target-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "The program features leverage up to 1:50 and no profit targets.", "superlative_claim", "leverage up to 1:50 and no profit targets", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
+        ["traderadius-monthly-signal-pricing-positive", "https://www.traderadius.com/signals", "A trading signals plan is listed at $185 monthly.", "pricing_fee_claim", "$185 monthly", ["pricing", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["finterion-outstanding-cagr-positive", "https://finterion.com/learn/how-to-evaluate-a-trading-bot", "The guide rates 25% to 50% bot CAGR as very good and outstanding.", "superlative_claim", "very good and outstanding", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
         ["whop-profit-split-pricing-positive", "https://whop.com/discover/funded-prop-account-payouts/", "A 50% net profit split is billed weekly after the profit threshold.", "pricing_fee_claim", "50% net profit split is billed weekly", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
-        ["instantcopy-profit-fee-pricing-positive", "https://instantcopytraders.com/", "The comparison table lists a 30% on-profits-only fee model.", "pricing_fee_claim", "30% on profits only fee model", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["traderadius-config-monthly-pricing-positive", "https://www.traderadius.com/signals", "The signals page lists monthly access with configurable trading modules.", "pricing_fee_claim", "monthly access with configurable trading modules", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
         ["tradingstrategies-weekend-trend-return-positive", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The page lists a Weekend Trend Trader strategy with 22% annual returns.", "return_performance_claim", "22% annual returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
         ["quantitativo-annual-return-positive", "https://www.quantitativo.com/p/trading-the-mean-reversion-curve", "The strategy compounded at 24.4% annual return over the past 10 years.", "return_performance_claim", "24.4% annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
         ["grailwealth-double-market-return-positive", "https://www.grailwealth.com/p/spyholygrailv1", "The post says the strategy can deliver more than double market return.", "superlative_claim", "more than double market return", ["superlative", "returns", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]]
@@ -204,6 +204,278 @@ const LIVE_SOURCE_CALIBRATION_EXAMPLES = [
         },
         pageExpectation: {
             expectedFindingIds,
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }))
+];
+const HIGH_RISK_FINANCIAL_CLAIM_SUSPECT_EXAMPLES = [
+    ...[
+        ["tradealgo-ai-bot-annual-return", "https://www.tradealgo.com/trading-guides/ai-trading/best-ai-trading-bot-2026", "TradeAlgo's AI engine delivered a 31.2% annualized return during our Q4 2025 testing period.", "return_performance_claim", "31.2% annualized return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradealgo-net-returns-after-fees", "https://www.tradealgo.com/trading-guides/ai-trading/best-ai-trading-bot-2026", "Testing measured actual fill rates, drawdown management, and 31.2% annualized return.", "return_performance_claim", "31.2% annualized return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-900-winning-days", "https://tradestem.com/", "The trading signal page advertises 900+ winning days, 4 losing days, and profit daily.", "return_performance_claim", "profit daily", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-profit-daily", "https://tradestem.com/", "The page says you profit daily from the forex trading signal.", "earnings_claim", "profit daily", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["powertrading-autopilot-annual", "https://www.powertrading.group/options-trading-blog/do-trading-bots-work-1-year-test-results", "AutoPilot Trader produced a 20.45% return in the one-year futures bot test.", "return_performance_claim", "20.45% return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["powertrading-same-capital-income", "https://www.powertrading.group/options-trading-blog/do-trading-bots-work-1-year-test-results", "Same capital in this trading system equals about $20K plus per year.", "earnings_claim", "$20K plus per year", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["intelligent-investing-short-term-index-returns", "https://intelligentinvesting.market/wp-content/uploads/2025/10/intelligent-investing-daily-news-letter-09-25-2025.pdf", "The newsletter table lists short-term trading system returns for major indexes.", "return_performance_claim", "short-term trading system returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["intelligent-investing-bitcoin-system-returns", "https://intelligentinvesting.market/wp-content/uploads/2025/10/intelligent-investing-daily-news-letter-09-25-2025.pdf", "The newsletter table lists long-only trading system returns for Bitcoin and Ethereum.", "return_performance_claim", "trading system returns for Bitcoin and Ethereum", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-guaranteed-profit-day-one", "https://tradestem.com/", "The page promises guaranteed profit from day 1.", "earnings_claim", "guaranteed profit from day 1", ["earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradestem-profit-guaranteed-signals", "https://tradestem.com/", "The offer describes profit guaranteed trading signals with a monthly value.", "earnings_claim", "profit guaranteed trading signals", ["earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["whop-prop-payout-profit-split", "https://whop.com/discover/funded-prop-account-payouts/", "A 50% net profit split is billed weekly once the profit threshold is achieved.", "earnings_claim", "50% net profit split", ["earnings", "pricing", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["whop-passed-account-review", "https://whop.com/discover/funded-prop-account-payouts/", "A review says the trader passed a 150k account in 6 trading days and reached a net profit split.", "return_performance_claim", "net profit split", ["returns", "earnings", "investment_context", "results_social_proof"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["grailwealth-24-annual-return", "https://www.grailwealth.com/p/spyholygrailv1", "The strategy headline describes a roughly 24% annual return over the last 21 years.", "return_performance_claim", "24% annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["grailwealth-nine-point-one-million", "https://www.grailwealth.com/p/spyholygrailv1", "The backtest says $100,000 turned into a $9.1 million return over the past 21 years.", "return_performance_claim", "$9.1 million return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradingstrategies-40-annual", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The trading strategy post is titled 40% Annual Returns Strategy.", "return_performance_claim", "40% Annual Returns Strategy", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradingstrategies-22-annual", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The page references Weekend Trend Trader Strategy - 22% Annual Returns.", "return_performance_claim", "22% Annual Returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["algotrades-forecasted-return", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "The subscription page references a forecasted annual return for an algorithmic trading system.", "return_performance_claim", "forecasted annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["algotrades-make-more-money", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "The copy says users are searching for a proven strategy that can make more money.", "earnings_claim", "proven strategy that can make more money", ["earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["quantitativo-24-return", "https://www.quantitativo.com/p/trading-the-mean-reversion-curve", "The strategy compounded at 24.4% annual return over the past 10 years.", "return_performance_claim", "24.4% annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["kudus-backtest-annual-return", "https://kudusde.org/resimler/files/17587019359.pdf", "A backtested trading strategy generated 10.4% annual returns while invested 18% of the time.", "return_performance_claim", "10.4% annual returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]]
+    ].map(([id, sourceUrl, blockText, claimType, claimText, candidateSignals, expectedFindingIds]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced high-risk financial performance or earnings claim expected to yield a financial-review finding.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Subscribe or learn more.",
+            adjacentBefore: "Live high-risk source calibration",
+            blockHeading: "Performance claim",
+            blockText,
+            candidateSignals,
+            pageType: /instantcopy|unlimited-upside|whop|algotrades/.test(sourceUrl) ? "product_page" : "marketing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType,
+            claimText,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.88,
+            rationaleShort: "Live-sourced financial performance language appears in a promotional context without adjacent balancing disclosure in the retained excerpt."
+        },
+        pageExpectation: {
+            expectedFindingIds,
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    })),
+    ...[
+        ["grailwealth-backtest-simulated", "https://www.grailwealth.com/p/spyholygrailv1", "We backtested this strategy from January 2004 to January 2025.", "backtested this strategy", ["simulated_performance_without_disclosure"]],
+        ["trendline-backtested-results", "https://www.trendlineprofits.com/", "All the performance results on the website are technically backtested results.", "performance results are technically backtested", ["simulated_performance_without_disclosure"]],
+        ["tradingstrategies-backtested-membership", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The page sells access to backtested strategy research and analysis.", "backtested strategy research", ["simulated_performance_without_disclosure"]],
+        ["algotrades-backtested-live-blend", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "Average annual returns are calculated using a blend of backtested trades and recent live trading results.", "blend of backtested trades and recent live trading results", ["simulated_performance_without_disclosure"]],
+        ["smallcase-backtested-charts", "https://assets.smallcase.com/factsheets/LIWEMO_0003.pdf", "Charts and performance numbers may include backtested or simulated performance.", "backtested or simulated performance", ["simulated_performance_without_disclosure"]],
+        ["kudus-limit-order-backtest", "https://kudusde.org/resimler/files/17587019359.pdf", "A simple backtested trading strategy is shown with an equity curve.", "backtested trading strategy", ["simulated_performance_without_disclosure"]],
+        ["traderadius-free-back-test", "https://www.traderadius.com/signals", "The signal page includes a free back test of a personal configuration.", "free back test of a personal configuration", ["simulated_performance_without_disclosure"]],
+        ["tradealgo-90-day-testing", "https://www.tradealgo.com/trading-guides/ai-trading/best-ai-trading-bot-2026", "The bot ranking is based on a 90-day testing period with measured returns.", "90-day testing period with measured returns", ["simulated_performance_without_disclosure"]],
+        ["powertrading-monte-carlo-profit", "https://www.powertrading.group/options-trading-blog/do-trading-bots-work-1-year-test-results", "Monte Carlo simulations showed profit probability in all scenarios.", "profit probability in all scenarios", ["earnings_claim_without_adjacent_disclosure", "simulated_performance_without_disclosure"]],
+        ["grailwealth-spy-strategy-combo", "https://www.grailwealth.com/p/spyholygrailv1", "The post launches a systematic strategy combo based on backtested results.", "systematic strategy combo based on backtested results", ["simulated_performance_without_disclosure"]]
+    ].map(([id, sourceUrl, blockText, claimText, expectedFindingIds]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced simulated or backtested performance claim expected to yield a financial-review finding.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Subscribe or review the strategy.",
+            adjacentBefore: "Live high-risk source calibration",
+            blockHeading: "Backtested performance claim",
+            blockText,
+            candidateSignals: ["simulated", "returns", "investment_context", "cta"],
+            pageType: "marketing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "simulated_performance_claim",
+            claimText,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: true,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.86,
+            rationaleShort: "Backtested or simulated performance language appears without adjacent simulated-performance qualification in the retained excerpt."
+        },
+        pageExpectation: {
+            expectedFindingIds,
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    })),
+    ...[
+        ["tradestem-guaranteed-success", "https://tradestem.com/", "The page says traders are guaranteed profit from day 1.", "guaranteed profit from day 1"],
+        ["tradestem-guaranteed-profit-daily", "https://tradestem.com/", "The page describes profit daily and guaranteed profit trading signals.", "guaranteed profit trading signals"],
+        ["earnifyhub-guaranteed-profits", "https://earnifyhub.com/blog/crypto-signals-review.php", "The crypto signals review flags guaranteed profits as a claim to watch.", "guaranteed profits"],
+        ["tradestem-guaranteed-profit-signals", "https://tradestem.com/", "The signal page says profit is guaranteed from day 1.", "profit is guaranteed from day 1"],
+        ["khaleej-high-returns-minimal-risk", "https://fp-002.flexxmedien.com/flexxtrader/data/usf/file/19423193773.pdf", "Fake forex schemes target people with promises of high returns and minimal risks.", "high returns and minimal risks"],
+        ["tradestem-guaranteed-profit-from-day-one", "https://tradestem.com/", "The page says you are guaranteed profit from day 1.", "guaranteed profit from day 1"],
+        ["whop-guaranteed-passing", "https://whop.com/discover/funded-prop-account-payouts/", "The offer includes guaranteed passing with a promo code during account purchases.", "guaranteed passing"],
+        ["tradestem-profit-guaranteed-monthly-value", "https://tradestem.com/", "The subscription copy labels the signals as profit guaranteed with a $200 monthly value.", "profit guaranteed"],
+        ["khaleej-guaranteed-monthly-returns", "https://fp-002.flexxmedien.com/flexxtrader/data/usf/file/19423193773.pdf", "The report describes forex schemes claiming guaranteed returns of 1-2% monthly.", "guaranteed returns of 1-2% monthly"],
+        ["earnifyhub-guaranteed-profits-red-flag", "https://earnifyhub.com/blog/crypto-signals-review.php", "The guide labels guaranteed profits as a crypto signal red flag.", "guaranteed profits"]
+    ].map(([id, sourceUrl, blockText, claimText]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced guarantee-style financial claim expected to yield a guaranteed-outcome finding.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Subscribe, buy, or continue.",
+            adjacentBefore: "Live high-risk source calibration",
+            blockHeading: "Guarantee claim",
+            blockText,
+            candidateSignals: ["guarantee", "earnings", "investment_context", "cta"],
+            pageType: "marketing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "guaranteed_outcome_claim",
+            claimText,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: true,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.9,
+            rationaleShort: "Guarantee-style financial outcome language appears in a trading or signal context."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["guaranteed_outcome_claim_detected"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    })),
+    ...[
+        ["tradealgo-best-ai-bot", "https://www.tradealgo.com/trading-guides/ai-trading/best-ai-trading-bot-2026", "Best AI Trading Bot in 2026: Top Platforms Ranked.", "Best AI Trading Bot"],
+        ["tradealgo-strongest-stock-bot", "https://www.tradealgo.com/trading-guides/ai-trading/best-ai-trading-bot-2026", "The guide says a competitor remains the strongest pure stock-scanning bot.", "strongest pure stock-scanning bot"],
+        ["algobot-best-algo-bots", "https://algobot.com/experienced-traders/", "Algobot is described among the best algo trading bots.", "best algo trading bots"],
+        ["algobot-top-performing-bots", "https://algobot.com/experienced-traders/", "The article references top-performing bots of the week.", "top-performing bots"],
+        ["bestpropfirms-best-daily", "https://bestpropfirms.us.com/daily-payout/", "The guide identifies the best daily payout prop firms of 2026.", "best daily payout prop firms"],
+        ["tradestem-most-consistent-forex-signal", "https://tradestem.com/", "The page describes the most consistent forex trading signal available.", "most consistent forex trading signal"],
+        ["finterion-very-good-bots", "https://finterion.com/learn/how-to-evaluate-a-trading-bot", "The guide rates 25% to 50% bot CAGR as very good and outstanding.", "very good and outstanding"],
+        ["powertrading-five-times-better", "https://www.powertrading.group/options-trading-blog/do-trading-bots-work-1-year-test-results", "The comparison says the trading bot is five times better than dividend stocks.", "five times better"],
+        ["grailwealth-holy-grail", "https://www.grailwealth.com/p/spyholygrailv1", "The strategy is branded as a Holy Grail strategy.", "Holy Grail strategy"],
+        ["elitetrading-best-forex-signals", "https://elitetrading.org/trade-signals.php", "The page headline describes best forex signals and forex trading commentaries.", "best forex signals"]
+    ].map(([id, sourceUrl, blockText, claimText]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced superlative financial-promotion claim expected to yield an unqualified-superlative finding.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Compare plans or learn more.",
+            adjacentBefore: "Live high-risk source calibration",
+            blockHeading: "Superlative claim",
+            blockText,
+            candidateSignals: ["superlative", "investment_context", "cta"],
+            pageType: "marketing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "superlative_claim",
+            claimText,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: true,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: false,
+            feeDisclosurePresent: false,
+            confidence: 0.84,
+            rationaleShort: "Superlative language is attached to a trading, signal, bot, or prop-firm promotion."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["unqualified_superlative_claim_detected"],
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    })),
+    ...[
+        ["tradestem-200-monthly-value", "https://tradestem.com/", "The offer describes a profit guaranteed trading signals package with a $200 monthly value.", "$200 monthly value"],
+        ["traderadius-185-monthly", "https://www.traderadius.com/signals", "The signals page lists access at $185 monthly.", "$185 monthly"],
+        ["whop-199-membership-fee", "https://whop.com/discover/funded-prop-account-payouts/", "The product lists a $199 monthly membership fee.", "$199 monthly membership fee"],
+        ["whop-save-50-annual", "https://whop.com/discover/funded-prop-account-payouts/", "The annual purchase saves 50% off membership fees.", "save 50% off membership fees"],
+        ["tradingstrategies-paid-strategy", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The page lists $49.50 per backtested strategy.", "$49.50 per backtested strategy"],
+        ["traderadius-crypto-signal-module", "https://www.traderadius.com/signals", "The pricing table includes access to a crypto signal module.", "crypto signal module"],
+        ["traderadius-personalised-configuration", "https://www.traderadius.com/signals", "The page includes dynamic optimisation of a personalised configuration.", "personalised configuration"],
+        ["earnifyhub-average-monthly-cost", "https://earnifyhub.com/blog/crypto-signals-review.php", "The crypto signals review discusses average monthly cost for paid signals.", "average monthly cost"],
+        ["algotrades-subscribe-system", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "The page asks users to subscribe to the algorithmic trading system copy.", "subscribe to the algorithmic trading system"],
+        ["dailyforex-premium-signals", "https://www.dailyforex.com/pro", "DailyForex Premium offers stock signals and premium analysis access.", "premium signals"]
+    ].map(([id, sourceUrl, blockText, claimText]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced pricing or fee promotion expected to yield pricing-transparency review.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Subscribe or select a plan.",
+            adjacentBefore: "Live high-risk source calibration",
+            blockHeading: "Pricing claim",
+            blockText,
+            candidateSignals: ["pricing", "pricing_fee", "investment_context", "cta"],
+            pageType: "pricing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType: "pricing_fee_claim",
+            claimText,
+            commercialContext: true,
+            contextType: "pricing_page",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: false,
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: true,
+            feeDisclosurePresent: false,
+            confidence: 0.82,
+            rationaleShort: "Pricing or fee language appears in a financial signal, bot, or prop-firm offer without full adjacent fee context."
+        },
+        pageExpectation: {
+            expectedFindingIds: ["pricing_or_fee_transparency_unclear"],
             expectedCardMode: "findings",
             shouldShowFinancialCard: true
         }
@@ -5102,7 +5374,8 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
               shouldShowFinancialCard: false
           }
       }),
-    ...LIVE_SOURCE_CALIBRATION_EXAMPLES.map(example)
+    ...LIVE_SOURCE_CALIBRATION_EXAMPLES.map(example),
+    ...HIGH_RISK_FINANCIAL_CLAIM_SUSPECT_EXAMPLES.map(example)
 ];
 function summarizeFinancialCommercialClaimsDataset(examples = exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED) {
     const bucketCounts = Object.fromEntries(DATASET_BUCKETS.map((bucket) => [bucket, 0]));
