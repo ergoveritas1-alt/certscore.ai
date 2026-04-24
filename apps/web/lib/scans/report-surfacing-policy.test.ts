@@ -544,6 +544,24 @@ test("corpus-derived negative financial-promotion findings use the confirmed fin
   }
 });
 
+test("direct session replay observation surfaces as standalone review finding", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("session_replay_observed", {
+        confidenceInputs: {
+          ...makePacket("session_replay_observed").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.review_runtime_without_effect_evidence"));
+});
+
 test("runtime-backed consent-control failures confirm when the retained evidence shows the control failed", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

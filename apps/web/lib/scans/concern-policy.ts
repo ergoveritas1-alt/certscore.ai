@@ -894,6 +894,40 @@ function isRawHighRiskFinancialProductConcern(
   );
 }
 
+const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
+  "earnings_claim_without_adjacent_disclosure",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_outcome_claim_detected",
+  "performance_claims_without_context",
+  "guaranteed_or_high_return_claims_present",
+  "investment_risk_disclosure_missing",
+  "hypothetical_performance_disclosure_missing",
+  "testimonial_endorsement_financial_promotion_risk",
+  "investment_purchase_by_credit_card_present",
+  "investment_urgency_countdown_present",
+  "pump_and_dump_language_present",
+  "vague_whitepaper_or_technical_obfuscation_present",
+  "registration_identifier_missing",
+  "registration_claim_support_missing",
+  "entity_naming_consistency_conflict",
+  "fee_disclosure_missing_or_opaque",
+  "material_terms_hard_to_locate",
+  "promo_to_terms_conflict",
+  "leveraged_or_high_risk_product_promotion",
+  "yield_or_return_claims_high_risk",
+  "high_risk_product_risk_disclosure_missing",
+  "ai_financial_advice_or_trading_claims_without_disclosure",
+  "pricing_or_fee_transparency_unclear",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected"
+]);
+
+function isNegativeFinancialPromotionConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS.has(concern.suggestedUnifiedFindingId ?? "");
+}
+
 function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence || !hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
     return false;
@@ -923,7 +957,7 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
     ...getEvidenceUrlCandidates(rawEvidence)
   ].join(" ");
 
-  return /(?:margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i.test(
+  return /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i.test(
     reviewerVisibleText
   );
 }
@@ -1466,6 +1500,18 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "suppress",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "blocked"
+    };
+  }
+
+  if (
+    isNegativeFinancialPromotionConcern(input.concern) &&
+    !hasFinancialOfferContext(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_behavior_side_evidence"],
+      promotionEligibility: "internal_only"
     };
   }
 

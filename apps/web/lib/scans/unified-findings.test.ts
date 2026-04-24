@@ -306,6 +306,38 @@ test("surfaces raw high-risk financial product signals with offer context", () =
   assert.equal(packet?.presentationDecision.status, "surface");
 });
 
+test("keeps editorial earnings validation findings audit-only without offer context", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-yahoo-editorial-earnings",
+    description: "Editorial market coverage mentioned earnings without a buyer-facing offer path.",
+    evidence: {
+      claimText: "Company earnings beat analyst expectations.",
+      matchedSnippet: "Company earnings beat analyst expectations in quarterly results.",
+      pageClassification: "news_or_editorial",
+      pageType: "homepage",
+      pageUrl: "https://www.yahoo.com/",
+      policySnippets: ["Company earnings beat analyst expectations in quarterly results."],
+      sourceUrls: ["https://www.yahoo.com/"],
+      supportingSignals: ["financial.performance_claim_text_present"],
+      unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
+    },
+    pageUrl: "https://www.yahoo.com/",
+    ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+    severity: "high",
+    title: "Earnings claim without adjacent disclosure"
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "earnings_claim_without_adjacent_disclosure");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("internal_only"), true);
+});
+
 test("keeps direct runtime findings surfaced under thin coverage", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     coverageSummary: {
@@ -1191,6 +1223,39 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+});
+
+test("surfaces direct session replay observation when runtime vendor provenance is retained", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The homepage loaded Microsoft Clarity session recording scripts.",
+        fallbackEvidence: {
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          runtimeVendors: ["Microsoft Clarity"],
+          session_replay_runtime_detected: true,
+          session_replay_runtime_vendors: ["Microsoft Clarity"],
+          session_replay_vendor_artifact_present: true,
+          signalKey: "commerce.session_replay_tool_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "commerce.session_replay_tool_detected",
+        signalLabel: "Session replay tool detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Session replay tool detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "session_replay_observed");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
 });
 
 test("specializes high-sensitivity third-party tracking evidence into a sensitive tracking packet", () => {
