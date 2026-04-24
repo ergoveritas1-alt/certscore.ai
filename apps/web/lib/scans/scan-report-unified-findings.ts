@@ -3,6 +3,9 @@ import {
   getReportEvidenceCategoriesForSection,
   getReportSectionsForPillar,
   getReportSignalsForEvidenceCategory,
+  type ReportEvidenceCategoryDefinition,
+  type ReportPrimaryPillarDefinition,
+  type ReportSectionDefinition,
   type ReportSignalDefinition
 } from "@website-signal-risk-scanner/shared";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
@@ -44,8 +47,15 @@ export type CanonicalSignalItem = {
 };
 
 export type ScanReportUnifiedFindingSectionDraft = {
-  categories?: Array<{ reviewFindings: CanonicalReviewFinding[] }>;
+  categories?: Array<{
+    category: ReportEvidenceCategoryDefinition;
+    emptySignalCount?: number;
+    items: CanonicalSignalItem[];
+    reviewFindings: CanonicalReviewFinding[];
+  }>;
   issueFindings?: CanonicalReviewFinding[];
+  pillar?: ReportPrimaryPillarDefinition;
+  section?: ReportSectionDefinition;
   sectionCategoryIds: Set<string>;
 };
 
@@ -53,6 +63,7 @@ export type ScanReportUnifiedFindingState = {
   allReviewFindingCandidates?: CanonicalReviewFinding[];
   globalUnifiedFindings: UnifiedFindingDisplayPacket[];
   sectionDrafts: Array<{
+    pillar?: ReportPrimaryPillarDefinition;
     sections: ScanReportUnifiedFindingSectionDraft[];
   }>;
 };
@@ -227,6 +238,7 @@ export function buildScanReportUnifiedFindingState(
 
         return {
           category,
+          emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
           items,
           reviewFindings
         };
@@ -258,11 +270,13 @@ export function buildScanReportUnifiedFindingState(
       return {
         categories,
         issueFindings,
+        pillar,
+        section,
         sectionCategoryIds
       };
     });
 
-    return { sections };
+    return { pillar, sections };
   });
 
   const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>

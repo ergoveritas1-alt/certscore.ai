@@ -55,14 +55,14 @@ import {
   getHybridSignalFallbackEvidence
 } from "../../lib/scans/hybrid-runtime-evidence";
 import {
-  buildUnifiedFindingDisplayPackets,
   getUnifiedFindingCategoryRelation,
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
   buildScanReportUnifiedFindingState,
   buildScanReportUnifiedFindings as buildScanReportUnifiedFindingsFromState,
-  selectOwnerUnifiedFindingsForSection
+  selectOwnerUnifiedFindingsForSection,
+  type ScanReportUnifiedFindingState
 } from "../../lib/scans/scan-report-unified-findings";
 import {
   getSurfacingDecisionStateBadgeClasses,
@@ -95,7 +95,6 @@ import {
   type ContradictionEvidenceBundle
 } from "../../lib/scans/contradiction-evidence-contract";
 import {
-  buildValidationFindingLookup,
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
   getValidationMatchKeysForSignal,
@@ -4649,19 +4648,13 @@ function HomepagePreviewGate(input: {
   );
 }
 
-export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse) {
+export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
     return {
       allReviewFindingCandidates: [] as CanonicalReviewFinding[],
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
-      sectionDrafts: [] as Array<{
-        sections: Array<{
-          categories: Array<{ reviewFindings: CanonicalReviewFinding[] }>;
-          issueFindings: CanonicalReviewFinding[];
-          sectionCategoryIds: Set<string>;
-        }>;
-      }>
+      sectionDrafts: []
     };
   }
 
@@ -4686,13 +4679,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
     return {
       allReviewFindingCandidates: [] as CanonicalReviewFinding[],
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
-      sectionDrafts: [] as Array<{
-        sections: Array<{
-          categories: Array<{ reviewFindings: CanonicalReviewFinding[] }>;
-          issueFindings: CanonicalReviewFinding[];
-          sectionCategoryIds: Set<string>;
-        }>;
-      }>
+      sectionDrafts: []
     };
   }
 }
@@ -4727,114 +4714,18 @@ export function deriveExecutiveSummaryBadgeCounts(findings: UnifiedFindingDispla
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
-  const validationFindingLookup = buildValidationFindingLookup(input.scanRecord.validationFindings);
-  const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
-    const sections = getReportSectionsForPillar(pillar.id).map((section) => {
-      const sectionCategoryIds = new Set(
-        getReportEvidenceCategoriesForSection(section.id).map((category) => category.id)
-      );
-      const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
-        const items = getReportSignalsForEvidenceCategory(category.id)
-          .map(({ relation, signal }) => ({
-            key: signal.key,
-            label: signal.label,
-            relation,
-            source: signal.source,
-            value: getReportSignalValue({
-              mergedSignals: input.scanRecord.mergedSignals,
-              policyEnrichment: input.scanRecord.policyEnrichment,
-              runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-              signals: input.scanRecord.signals,
-              snapshot: input.scanRecord.snapshot,
-              signal
-            })
-          }))
-          .filter((item) => isSignalValuePopulated(item.key, item.value))
-          .sort((left, right) => {
-            const relationOrder = { primary: 0, secondary: 1, overlay: 2 } as const;
-            return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
-          });
-
-        const reviewFindings = buildReviewFindings({
-          allSignals: input.scanRecord.signals,
-          categoryId: category.id,
-          issues: [],
-          mergedSignals: input.scanRecord.mergedSignals,
-          policyEnrichment: input.scanRecord.policyEnrichment,
-          prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
-          runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-          snapshot: input.snapshot,
-          sectionId: section.id,
-          sectionItems: items,
-          validationFindingLookup
-        });
-
-        return {
-          category,
-          emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
-          items,
-          reviewFindings
-        };
-      });
-
-      const issues = buildSectionReviewIssues({
-        accessibilityIssueRows: input.accessibilityIssueRows,
-        consentAuditFindings: input.consentAuditFindings,
-        policyBehaviorContradictions: input.policyBehaviorContradictions,
-        preconsentViolationRows: input.preconsentViolationRows,
-        runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-        scanReportReviewIssues: input.scanReportReviewIssues,
-        sectionId: section.id,
-        snapshot: input.snapshot
-      });
-      const issueFindings = buildReviewFindings({
-        allSignals: input.scanRecord.signals,
-        issues,
-        mergedSignals: input.scanRecord.mergedSignals,
-        policyEnrichment: input.scanRecord.policyEnrichment,
-        prioritizedAccessibilityRuleRows: input.prioritizedAccessibilityRuleRows,
-        runtimeArtifacts: input.scanRecord.runtimeArtifacts,
-        snapshot: input.snapshot,
-        sectionId: section.id,
-        sectionItems: [],
-        validationFindingLookup
-      });
-
-      return {
-        categories,
-        issueFindings,
-        pillar,
-        section,
-        sectionCategoryIds
-      };
-    });
-
-    return { pillar, sections };
-  });
-  const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
-    sections.flatMap((section) => [
-      ...section.categories.flatMap((category) => category.reviewFindings),
-      ...section.issueFindings
-    ])
-  );
-  const globalUnifiedFindings = filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
-    coverageSummary: {
-      legalCoverageScore: getFiniteNumber(input.scanRecord.snapshot?.legal_coverage_score),
-      pagesScanned: getFiniteNumber(input.scanRecord.snapshot?.pages_scanned),
-      policyEnrichmentCount: input.scanRecord.policyEnrichment.length,
-      verifiedPublicSurfacesCount: getFiniteNumber(input.scanRecord.snapshot?.verified_public_surfaces_count)
-    },
-    mergedSignals: input.scanRecord.mergedSignals,
-    policyEnrichment: input.scanRecord.policyEnrichment,
-    reviewFindingCandidates: allReviewFindingCandidates,
-    scanEvents: input.scanRecord.events,
-    validationFindings: input.scanRecord.validationFindings,
-    validationFindingLookup
-  }).filter((finding) => finding.presentationDecision.status !== "suppress"));
+  const { globalUnifiedFindings, sectionDrafts } = debugBuildScanReportUnifiedFindingState(input.scanRecord);
   const pillarSections = sectionDrafts.map(({ pillar, sections }) => {
+    if (!pillar) {
+      throw new Error("Canonical taxonomy pillar missing from unified finding state");
+    }
+
     return {
       pillar,
-      sections: sections.map(({ categories, section, sectionCategoryIds }) => {
+      sections: sections.map(({ categories = [], section, sectionCategoryIds }) => {
+        if (!section) {
+          throw new Error("Canonical taxonomy section missing from unified finding state");
+        }
         const reviewFindings = globalUnifiedFindings.filter((finding) =>
           finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
         );
