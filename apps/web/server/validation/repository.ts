@@ -821,7 +821,7 @@ function buildAccessibilityRiskSnapshotEvidence(score: number) {
   return buildAccessibilityRiskSnapshotEvidenceWithExamples(score, []);
 }
 
-export function buildAccessibilityRiskSnapshotEvidenceWithExamples(
+function buildAccessibilityRiskSnapshotEvidenceWithExamples(
   score: number,
   examples: ScanAccessibilityRuleExampleRow[]
 ) {
