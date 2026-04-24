@@ -55,6 +55,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.consent_behavior.confirmed_specific_runtime_failure"
   | "evidence.consent_behavior.review_runtime_without_effect_evidence"
   | "evidence.consent_behavior.review_interface_or_design"
+  | "evidence.consent_behavior.suppress_low_confidence_interface_context"
   | "evidence.consent_behavior.support_only_tracking_context"
   | "evidence.sensitive.confirmed_when_payload_or_runtime_backed"
   | "evidence.sensitive.review_when_context_only"
@@ -1391,6 +1392,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     }
 
     if ((REVIEW_ONLY_CONSENT_INTERFACE_IDS as readonly string[]).includes(packet.unifiedFindingId)) {
+      if (packet.confidenceBand === "low") {
+        overrideDecision(decision, {
+          state: "suppressed",
+          lane: "suppressed",
+          tier: "support",
+          reason:
+            "Low-confidence consent-interface context should not surface as an executive or main regulatory finding without stronger corroborating evidence.",
+          ruleId: "evidence.consent_behavior.suppress_low_confidence_interface_context"
+        });
+        return;
+      }
+
       overrideDecision(decision, {
         state: "review",
         lane: "main",

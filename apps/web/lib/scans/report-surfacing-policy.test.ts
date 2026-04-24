@@ -599,6 +599,33 @@ test("consent interface findings stay review-level even when related evidence ex
   assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.review_interface_or_design"));
 });
 
+test("low-confidence consent interface findings do not surface as main review findings", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("reject_button_missing", {
+        confidenceBand: "low",
+        confidenceInputs: {
+          ...makePacket("reject_button_missing").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        }
+      }),
+      makePacket("forced_consent_wall", {
+        confidenceBand: "low",
+        confidenceInputs: {
+          ...makePacket("forced_consent_wall").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        }
+      })
+    ]
+  });
+
+  for (const decision of evaluation.debugDecisions) {
+    assert.equal(decision.decisionState, "suppressed");
+    assert.equal(decision.reportLane, "suppressed");
+    assert.ok(decision.appliedRules.includes("evidence.consent_behavior.suppress_low_confidence_interface_context"));
+  }
+});
+
 test("generic tracking-context findings are suppressed unless they support a stronger consent narrative", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
