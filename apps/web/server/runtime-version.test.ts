@@ -44,13 +44,13 @@ test("getRuntimeVersionInfo exposes Amplify metadata when present", () => {
     AWS_APP_ID: "d123example",
     AWS_BRANCH: "main",
     BUILD_RUNTIME_TARGET: "amplify",
-    NEXT_PUBLIC_APP_URL: "https://consentcheck.site"
+    NEXT_PUBLIC_APP_URL: "https://certscore.ai"
   }));
 
   assert.equal(info.runtimeTarget, "amplify");
   assert.equal(info.amplifyAppId, "d123example");
   assert.equal(info.amplifyBranch, "main");
-  assert.equal(info.appUrl, "https://consentcheck.site");
+  assert.equal(info.appUrl, "https://certscore.ai");
 });
 
 test("getRuntimeVersionInfo exposes App Runner runtime target when configured", () => {

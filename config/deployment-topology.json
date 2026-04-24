@@ -3,6 +3,5 @@
   "preferredWebPlatform": "amplify",
   "currentLiveWebRuntimeTarget": "ecs-fargate",
   "currentLiveGitRef": "main",
-  "primaryHost": "https://certscore.ai",
-  "secondaryHost": "https://consentcheck.site"
+  "primaryHost": "https://certscore.ai"
 }

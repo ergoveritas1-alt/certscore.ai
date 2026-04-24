@@ -58,18 +58,6 @@ variable "certscore_hosted_zone_id" {
   default     = ""
 }
 
-variable "consentcheck_domain_name" {
-  description = "Public hostname for the ConsentCheck web service."
-  type        = string
-  default     = "consentcheck.site"
-}
-
-variable "consentcheck_hosted_zone_id" {
-  description = "Route53 hosted zone id for consentcheck_domain_name."
-  type        = string
-  default     = ""
-}
-
 variable "existing_certificate_arn" {
   description = "Existing ACM certificate ARN for the public hosts when not creating certificates in-stack."
   type        = string
@@ -83,13 +71,13 @@ variable "database_security_group_id" {
 }
 
 variable "image_tag" {
-  description = "Container image tag to deploy for both public web services."
+  description = "Container image tag to deploy for the CertScore public web service."
   type        = string
   default     = "latest"
 }
 
 variable "app_flavor" {
-  description = "APP_FLAVOR value for both public web services."
+  description = "APP_FLAVOR value for the CertScore public web service."
   type        = string
   default     = "certscore"
 }

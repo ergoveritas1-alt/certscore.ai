@@ -13,11 +13,10 @@ Use ECS/Fargate for the web-serving runtime and keep PostgreSQL on private AWS n
 Recommended target:
 
 1. one ECS/Fargate service for `certscore.ai`
-2. one ECS/Fargate service for `consentcheck.site`
-3. one shared ALB or equivalent edge layer with separate host routing
-4. private subnets for the ECS tasks
-5. security-group based database access from the ECS tasks to RDS
-6. runtime secrets injected through AWS Secrets Manager, not baked into build artifacts
+2. one shared ALB or equivalent edge layer
+3. private subnets for the ECS tasks
+4. security-group based database access from the ECS tasks to RDS
+5. runtime secrets injected through AWS Secrets Manager, not baked into build artifacts
 
 ## Why ECS/Fargate is the current-region candidate
 
@@ -35,7 +34,7 @@ App Runner is not the primary path here because the existing WC01 resources are 
 
 ## Required runtime inputs
 
-Per public host, provide:
+For the public host, provide:
 
 - `BUILD_RUNTIME_TARGET=ecs-fargate`
 - `NEXT_PUBLIC_APP_URL`
@@ -103,7 +102,7 @@ If those remain required, size NAT and route policy accordingly.
 
 ## Deployment model
 
-Each public host should have its own ECS service because:
+The public host should have its own ECS service because:
 
 - `NEXT_PUBLIC_APP_URL` is host-specific
 - auth callback and trusted-origin behavior is host-specific
@@ -112,11 +111,10 @@ Each public host should have its own ECS service because:
 Recommended naming:
 
 1. `certscore-ai-web`
-2. `consentcheck-site-web`
 
 ## Build and image strategy
 
-Use one container image built from `apps/web`, then run separate ECS services with host-specific runtime env.
+Use one container image built from `apps/web`, then run the ECS service with host-specific runtime env.
 
 Required image characteristics:
 
@@ -129,7 +127,7 @@ Recommended artifact flow:
 1. build the web image from Git
 2. push to ECR
 3. register a new task definition revision
-4. roll each ECS service to that revision
+4. roll the ECS service to that revision
 
 ## Secret strategy
 
@@ -152,7 +150,7 @@ The script name is Amplify-oriented because it validates the merged runtime env 
 
 ## Health gates before DNS cutover
 
-For each ECS-backed host, verify:
+For the ECS-backed host, verify:
 
 1. the ALB or service URL loads
 2. `/api/version` returns the intended git sha
@@ -168,24 +166,22 @@ Then run host-level checks against the ECS target URLs:
 
 ```bash
 LIVE_BASE_URL=<certscore-target-url> \
-SECONDARY_BASE_URL=<consentcheck-target-url> \
 EXPECTED_LIVE_RUNTIME_TARGET=ecs-fargate \
-EXPECTED_SECONDARY_RUNTIME_TARGET=ecs-fargate \
 pnpm ops:check:live
 ```
 
-Set `BUILD_RUNTIME_TARGET=ecs-fargate` on both ECS services so `/api/version` and the deployment checks report the correct serving platform.
+Set `BUILD_RUNTIME_TARGET=ecs-fargate` on the ECS service so `/api/version` and the deployment checks report the correct serving platform.
 
 ## DNS cutover sequence
 
 1. provision or reuse the ECS cluster, private subnets, ALB, and security groups
 2. wire database access through security groups, not public IP allowlists
 3. create the missing public-web runtime secrets in Secrets Manager
-4. deploy the image revision to both ECS services
+4. deploy the image revision to the ECS service
 5. validate the ALB or target URLs directly
 6. run runtime env validation
-7. treat both services as production-ready only after they pass the same host and revision gates as the public domains
-8. re-run host checks against `certscore.ai` and `consentcheck.site`
+7. treat the service as production-ready only after it passes the same host and revision gates as the public domain
+8. re-run host checks against `certscore.ai`
 
 ## Rollback
 
@@ -193,7 +189,7 @@ If any gate fails:
 
 - keep the current public ECS deployment serving traffic, or
 - if a bad rollout already reached production, move traffic back to the last healthy ECS revision immediately
-- keep the ECS services as rehearsal targets until the failure is fixed
+- keep the ECS service as a rehearsal target until the failure is fixed
 
 Use ECS service rollback or task definition promotion as the current web rollback path.
 
@@ -202,7 +198,7 @@ Use ECS service rollback or task definition promotion as the current web rollbac
 1. provision the public web ECS/Fargate stack in `us-west-1`
 2. attach private database access through security groups
 3. create and inject the missing web secrets
-4. deploy both web services
+4. deploy the web service
 5. run env validation
 6. run host validation
 7. cut DNS
@@ -214,6 +210,6 @@ This runbook does not claim:
 
 - that the public web ECS stack is already provisioned
 - that DB ingress has already been migrated off public IP allowlists
-- that `certscore.ai` or `consentcheck.site` are already serving from AWS
+- that `certscore.ai` is already serving from AWS
 
 Those remain the next implementation steps.

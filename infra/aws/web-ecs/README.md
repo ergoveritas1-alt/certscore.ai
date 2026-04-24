@@ -9,16 +9,12 @@ It now contains a deployable baseline stack, but it still needs real account inp
 The current repo decision is:
 
 - keep public web production on AWS ECS/Fargate
-- use this stack as the checked-in infrastructure path for `certscore.ai` and `consentcheck.site` in `us-west-1`
+- use this stack as the checked-in infrastructure path for `certscore.ai` in `us-west-1`
+- do not provision, claim, or deploy `consentcheck.site` from WC01
 
-This directory exists to hold the eventual AWS infrastructure for:
+This directory exists to hold the AWS infrastructure for `certscore.ai` using:
 
-1. `certscore.ai`
-2. `consentcheck.site`
-
-using:
-
-- ECS/Fargate services
+- an ECS/Fargate service
 - ALB ingress
 - private PostgreSQL connectivity
 - runtime secret injection
@@ -30,8 +26,8 @@ The baseline stack provisions:
 - one ALB for the public web surface
 - one ECS security group for web tasks
 - one ECR repository for the shared `apps/web` image
-- one or two ECS services, one per host
-- separate task definitions for `certscore.ai` and `consentcheck.site`
+- one ECS service for `certscore.ai`
+- one task definition for `certscore.ai`
 - IAM roles for ECS runtime and GitHub Actions deploys
 
 The stack expects you to supply an existing VPC and existing public and private subnets. The current fastest practical path is to place the public web stack in the same VPC as RDS so database access can be granted by security group instead of public IP allowlists.
@@ -82,12 +78,11 @@ The default example now targets the RDS/default VPC because that is the fastest 
 - security-group ids when reusing existing network controls
 - database security group id for SG-based PostgreSQL access
 
-### Per-host web service inputs
+### Web service inputs
 
 - service name for `certscore.ai`
-- service name for `consentcheck.site`
 - custom domain name
-- existing ACM certificate ARN for the public hosts
+- existing ACM certificate ARN for the public host
 
 ### Runtime config inputs
 
@@ -115,7 +110,7 @@ The default example now targets the RDS/default VPC because that is the fastest 
 
 - ALB DNS name for the public web surface
 - ECS cluster name
-- ECS service names for both public hosts
+- ECS service name for `certscore.ai`
 - deploy role ARN for GitHub Actions
 - ECR repository URL for the public web image
 - security group ids for the ECS web tasks
@@ -126,14 +121,14 @@ After the actual infrastructure exists, the operator flow should be:
 
 1. apply this stack with real ACM and secret inputs
 2. build and push a web image revision
-3. update or force-roll both ECS services
+3. update or force-roll the CertScore ECS service
 4. run:
 
 ```bash
 pnpm --filter @website-signal-risk-scanner/web check-env:amplify-runtime
 ```
 
-The runtime config for both services sets `BUILD_RUNTIME_TARGET=ecs-fargate` so the version and deployment checks report the correct serving platform.
+The runtime config sets `BUILD_RUNTIME_TARGET=ecs-fargate` so the version and deployment checks report the correct serving platform.
 
 5. validate the ECS target URLs directly
 6. run host-level checks with `pnpm ops:check:live`
@@ -143,7 +138,6 @@ The runtime config for both services sets `BUILD_RUNTIME_TARGET=ecs-fargate` so 
 
 This stack is not enough by itself. The current account still needs:
 
-- the ACM certificate in `us-west-1` to finish issuing for `consentcheck.site`
 - a decision on whether to keep the initial ECS tasks in default/public DB-VPC subnets with `assign_public_ip = true` or first build dedicated private app subnets plus NAT
 - Terraform execution from a shell that has `terraform` installed
 

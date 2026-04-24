@@ -93,7 +93,7 @@ function printReport(label: string, report: EndpointReport) {
 async function main() {
   const topology = loadDeploymentTopology();
   const liveBaseUrl = getEnv("LIVE_BASE_URL", topology.primaryHost ?? "https://certscore.ai");
-  const secondaryBaseUrl = getEnv("SECONDARY_BASE_URL", topology.secondaryHost ?? "https://consentcheck.site");
+  const secondaryBaseUrl = getEnv("SECONDARY_BASE_URL", topology.secondaryHost);
   const liveLabel = getEnv("LIVE_LABEL", "Primary host");
   const secondaryLabel = getEnv("SECONDARY_LABEL", "Secondary host");
   const expectedLiveRuntimeTarget = getEnv(
@@ -131,10 +131,12 @@ async function main() {
       fail(`Could not fetch ${liveLabel.toLowerCase()} version from ${liveBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }),
-    fetchVersionReport(secondaryBaseUrl).catch((error) => {
-      warn(`Could not fetch ${secondaryLabel.toLowerCase()} version from ${secondaryBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
-      return null;
-    })
+    secondaryBaseUrl
+      ? fetchVersionReport(secondaryBaseUrl).catch((error) => {
+          warn(`Could not fetch ${secondaryLabel.toLowerCase()} version from ${secondaryBaseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+          return null;
+        })
+      : Promise.resolve(null)
   ]);
 
   if (liveReport) {
@@ -161,7 +163,9 @@ async function main() {
     runtimeAssessment.warnings.forEach(warn);
   }
 
-  if (!secondaryReport || !secondaryReport.ok || !secondaryReport.payload) {
+  if (!secondaryBaseUrl) {
+    warn("No secondary host configured; skipping secondary runtime audit");
+  } else if (!secondaryReport || !secondaryReport.ok || !secondaryReport.payload) {
     warn(`${secondaryLabel} ${secondaryBaseUrl} did not return a usable /api/version payload`);
   } else {
     pass(`${secondaryLabel} ${secondaryBaseUrl} returned version metadata`);

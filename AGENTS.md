@@ -5,16 +5,15 @@
 - Make changes in the repo, then stage the relevant files with `git add`.
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
-- Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` and `consentcheck.site` before claiming production is updated.
+- Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 
 ## Production expectation
 
-- Treat dual AWS ECS/Fargate services as the preferred target web topology:
-  1. `certscore.ai`
-  2. `consentcheck.site`
+- Treat the AWS ECS/Fargate service for `certscore.ai` as the preferred target web topology.
+- `consentcheck.site` is not a WC01 web host and WC01 must not claim or deploy it.
 - A push to `main` is not enough to claim either host is live; for web changes, confirm the intended ECS deployment has completed successfully and the public host is serving the expected revision.
 - If the active production host is uncertain, call it out before claiming a change is live in production.
-- `apps/web` remains the canonical root for both public web hosts.
+- `apps/web` remains the canonical root for the CertScore public web host.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local assumptions and wrong remotes before treating the path as healthy.
 
 ## Scope note

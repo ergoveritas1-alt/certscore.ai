@@ -57,13 +57,12 @@ locals {
     var.openai_api_key_secret_arn != "" ? [{ name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn }] : [],
     var.privacy_request_to_email_secret_arn != "" ? [{ name = "PRIVACY_REQUEST_TO_EMAIL", valueFrom = var.privacy_request_to_email_secret_arn }] : []
   )
-  certscore_base_url    = local.certificate_arn != null ? "https://${var.certscore_domain_name}" : "http://${aws_lb.web.dns_name}"
-  consentcheck_base_url = local.certificate_arn != null ? "https://${var.consentcheck_domain_name}" : "http://${aws_lb.web.dns_name}"
+  certscore_base_url = local.certificate_arn != null ? "https://${var.certscore_domain_name}" : "http://${aws_lb.web.dns_name}"
 }
 
 resource "aws_security_group" "alb" {
   name        = "${local.prefix}-alb"
-  description = "Public ingress for CertScore and ConsentCheck web"
+  description = "Public ingress for CertScore web"
   vpc_id      = local.vpc_id
 
   ingress {
@@ -155,28 +154,6 @@ resource "aws_lb_target_group" "certscore" {
   tags = merge(local.common_tags, { Name = "${local.prefix}-certscore-tg" })
 }
 
-resource "aws_lb_target_group" "consentcheck" {
-  name        = substr(replace("${local.prefix}-consentcheck", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
-  port        = 3000
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = local.vpc_id
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200-399"
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 3
-  }
-
-  tags = merge(local.common_tags, { Name = "${local.prefix}-consentcheck-tg" })
-}
-
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.web.arn
   port              = 80
@@ -205,24 +182,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-resource "aws_lb_listener_rule" "http_consentcheck" {
-  count = local.certificate_arn == null ? 1 : 0
-
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 20
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.consentcheck.arn
-  }
-
-  condition {
-    host_header {
-      values = [var.consentcheck_domain_name, "www.${var.consentcheck_domain_name}"]
-    }
-  }
-}
-
 resource "aws_lb_listener" "https" {
   count = local.certificate_arn != null ? 1 : 0
 
@@ -238,32 +197,8 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-resource "aws_lb_listener_rule" "https_consentcheck" {
-  count = local.certificate_arn != null ? 1 : 0
-
-  listener_arn = aws_lb_listener.https[0].arn
-  priority     = 20
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.consentcheck.arn
-  }
-
-  condition {
-    host_header {
-      values = [var.consentcheck_domain_name, "www.${var.consentcheck_domain_name}"]
-    }
-  }
-}
-
 resource "aws_cloudwatch_log_group" "certscore" {
   name              = "/ecs/${local.prefix}/certscore"
-  retention_in_days = 30
-  tags              = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "consentcheck" {
-  name              = "/ecs/${local.prefix}/consentcheck"
   retention_in_days = 30
   tags              = local.common_tags
 }
@@ -492,48 +427,6 @@ resource "aws_ecs_task_definition" "certscore" {
   tags = local.common_tags
 }
 
-resource "aws_ecs_task_definition" "consentcheck" {
-  family                   = "${local.prefix}-consentcheck"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = tostring(var.web_cpu)
-  memory                   = tostring(var.web_memory)
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.task.arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "consentcheck-web"
-      image     = "${aws_ecr_repository.web.repository_url}:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 3000
-          hostPort      = 3000
-          protocol      = "tcp"
-        }
-      ]
-      environment = concat(local.base_environment, [{ name = "NEXT_PUBLIC_APP_URL", value = local.consentcheck_base_url }])
-      secrets     = local.base_secrets
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.consentcheck.name
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "ecs"
-        }
-      }
-    }
-  ])
-
-  runtime_platform {
-    cpu_architecture        = "X86_64"
-    operating_system_family = "LINUX"
-  }
-
-  tags = local.common_tags
-}
-
 resource "aws_ecs_service" "certscore" {
   name                   = "${local.prefix}-certscore"
   cluster                = local.ecs_cluster_name
@@ -561,39 +454,7 @@ resource "aws_ecs_service" "certscore" {
 
   health_check_grace_period_seconds = 90
 
-  depends_on = [aws_lb_listener.http, aws_lb_listener_rule.http_consentcheck, aws_lb_listener.https, aws_lb_listener_rule.https_consentcheck]
-
-  tags = local.common_tags
-}
-
-resource "aws_ecs_service" "consentcheck" {
-  name                   = "${local.prefix}-consentcheck"
-  cluster                = local.ecs_cluster_name
-  task_definition        = aws_ecs_task_definition.consentcheck.arn
-  desired_count          = var.web_desired_count
-  launch_type            = "FARGATE"
-  enable_execute_command = true
-
-  network_configuration {
-    assign_public_ip = var.assign_public_ip
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = local.private_subnets
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.consentcheck.arn
-    container_name   = "consentcheck-web"
-    container_port   = 3000
-  }
-
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
-  health_check_grace_period_seconds = 90
-
-  depends_on = [aws_lb_listener.http, aws_lb_listener_rule.http_consentcheck, aws_lb_listener.https, aws_lb_listener_rule.https_consentcheck]
+  depends_on = [aws_lb_listener.http, aws_lb_listener.https]
 
   tags = local.common_tags
 }

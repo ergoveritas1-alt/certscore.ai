@@ -10,9 +10,8 @@ private_subnet_ids        = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3
 assign_public_ip          = true
 database_security_group_id = "sg-0f2219d488cc6c482"
 
-certscore_domain_name       = "certscore.ai"
-consentcheck_domain_name    = "consentcheck.site"
-existing_certificate_arn    = "arn:aws:acm:us-west-1:199536052647:certificate/73baf8fe-ae1b-413c-8560-7565d6c76744"
+certscore_domain_name    = "certscore.ai"
+existing_certificate_arn = "arn:aws:acm:us-west-1:199536052647:certificate/73baf8fe-ae1b-413c-8560-7565d6c76744"
 
 build_runtime_target              = "ecs-fargate"
 app_flavor                        = "certscore"

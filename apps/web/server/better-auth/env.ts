@@ -57,8 +57,6 @@ type BetterAuthEnvInput = Record<string, string | boolean | undefined>;
 const BETTER_AUTH_KNOWN_ALLOWED_HOSTS = [
   "certscore.ai",
   "www.certscore.ai",
-  "consentcheck.site",
-  "www.consentcheck.site",
   "localhost:3000",
   "127.0.0.1:3000",
   "localhost:3003",

@@ -18,11 +18,6 @@ output "ecs_certscore_service_name" {
   value       = aws_ecs_service.certscore.name
 }
 
-output "ecs_consentcheck_service_name" {
-  description = "ECS service name for consentcheck.site."
-  value       = aws_ecs_service.consentcheck.name
-}
-
 output "github_actions_deploy_role_arn" {
   description = "IAM role ARN for the GitHub Actions public web deploy workflow."
   value       = aws_iam_role.github_actions_deploy.arn

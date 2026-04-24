@@ -23,7 +23,7 @@ expected_web_platform="${EXPECTED_WEB_PLATFORM:-$(read_topology_value preferredW
 expected_web_platform="${expected_web_platform:-amplify}"
 accepted_aws_runtime="${ACCEPTED_AWS_RUNTIME:-$(read_topology_value acceptedAwsRuntime)}"
 expected_live_runtime_target="${EXPECTED_LIVE_RUNTIME_TARGET:-$(read_topology_value currentLiveWebRuntimeTarget)}"
-expected_secondary_runtime_target="${EXPECTED_SECONDARY_RUNTIME_TARGET:-${expected_live_runtime_target}}"
+expected_secondary_runtime_target="${EXPECTED_SECONDARY_RUNTIME_TARGET:-}"
 live_base_url="${LIVE_BASE_URL:-$(read_topology_value primaryHost)}"
 secondary_base_url="${SECONDARY_BASE_URL:-$(read_topology_value secondaryHost)}"
 

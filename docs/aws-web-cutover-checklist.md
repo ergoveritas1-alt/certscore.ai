@@ -5,7 +5,7 @@ This checklist is historical cutover material for the public web migration. The 
 Current truth:
 
 - public web production is healthy on AWS ECS/Fargate
-- `certscore.ai` and `consentcheck.site` both serve from the AWS web stack
+- `certscore.ai` serves from the AWS web stack
 - Amplify is not the active production topology for the current SSR dependency shape
 
 The checked-in runtime truth for deployment audits lives in [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json).
@@ -32,12 +32,11 @@ The equivalent goal that was achieved was:
 
 Historical note: this section reflects the earlier Amplify proposal, not the final production outcome.
 
-Create two separate Amplify apps that both build from `apps/web`:
+Create a separate Amplify app that builds from `apps/web`:
 
 1. `certscore-ai-web`
-2. `consentcheck-site-web`
 
-Each app must have its own domain association and its own host-specific env values.
+The app must have its own domain association and its own host-specific env values.
 
 ## Runtime dependencies the web app actually needs
 
@@ -100,12 +99,6 @@ Set these per Amplify app:
 ### `certscore-ai-web`
 
 - `NEXT_PUBLIC_APP_URL=https://certscore.ai`
-- `APP_FLAVOR=certscore`
-- `BUILD_RUNTIME_TARGET=amplify`
-
-### `consentcheck-site-web`
-
-- `NEXT_PUBLIC_APP_URL=https://consentcheck.site`
 - `APP_FLAVOR=certscore`
 - `BUILD_RUNTIME_TARGET=amplify`
 

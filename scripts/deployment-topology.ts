@@ -8,7 +8,7 @@ export const deploymentTopologySchema = z.object({
   currentLiveWebRuntimeTarget: z.enum(["amplify", "app-runner", "ecs-fargate", "unknown"]),
   preferredWebPlatform: z.enum(["amplify", "app-runner"]),
   primaryHost: z.string().url(),
-  secondaryHost: z.string().url()
+  secondaryHost: z.string().url().optional()
 });
 
 export type DeploymentTopology = z.infer<typeof deploymentTopologySchema>;

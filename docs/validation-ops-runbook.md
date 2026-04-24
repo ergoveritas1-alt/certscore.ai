@@ -5,7 +5,7 @@ This runbook covers the validation runtime lane only. It is not the primary `cer
 Preferred production target:
 
 - AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
-- AWS ECS/Fargate remains the primary public web host for `certscore.ai` and `consentcheck.site`
+- AWS ECS/Fargate remains the primary public web host for `certscore.ai`
 
 The active validation path is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with rollout steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
 

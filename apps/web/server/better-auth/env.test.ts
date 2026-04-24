@@ -47,8 +47,6 @@ test("builds dynamic Better Auth base URL config for known production and local 
     [
       "certscore.ai",
       "www.certscore.ai",
-      "consentcheck.site",
-      "www.consentcheck.site",
       "localhost:3000",
       "127.0.0.1:3000",
       "localhost:3003",

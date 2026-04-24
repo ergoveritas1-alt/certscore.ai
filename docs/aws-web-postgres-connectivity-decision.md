@@ -134,7 +134,7 @@ Right now, the repo should treat these statements as true:
 
 - AWS Amplify Hosting remains an aspirational topology only if the SSR dependency shape changes
 - it is not the accepted production target for the current SSR-plus-PostgreSQL dependency shape
-- the current production web lane is AWS ECS/Fargate for both `certscore.ai` and `consentcheck.site`
+- the current production web lane is AWS ECS/Fargate for `certscore.ai`
 
 ## Trigger to revisit this decision
 

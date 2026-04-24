@@ -13,7 +13,7 @@ test("deployment topology schema accepts both supported preferred web platforms"
     currentLiveGitRef: "main",
     currentLiveWebRuntimeTarget: "ecs-fargate",
     primaryHost: "https://certscore.ai",
-    secondaryHost: "https://consentcheck.site"
+    secondaryHost: "https://example.com"
   };
 
   assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "amplify" }).success, true);
@@ -26,10 +26,22 @@ test("deployment topology schema accepts both supported accepted AWS runtimes", 
     currentLiveWebRuntimeTarget: "ecs-fargate",
     preferredWebPlatform: "amplify",
     primaryHost: "https://certscore.ai",
-    secondaryHost: "https://consentcheck.site"
+    secondaryHost: "https://example.com"
   };
 
   assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "amplify" }).success, true);
   assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "app-runner" }).success, true);
   assert.equal(deploymentTopologySchema.safeParse({ ...base, acceptedAwsRuntime: "ecs-fargate" }).success, true);
+});
+
+test("deployment topology schema does not require a secondary host", () => {
+  const result = deploymentTopologySchema.safeParse({
+    acceptedAwsRuntime: "ecs-fargate",
+    currentLiveGitRef: "main",
+    currentLiveWebRuntimeTarget: "ecs-fargate",
+    preferredWebPlatform: "amplify",
+    primaryHost: "https://certscore.ai"
+  });
+
+  assert.equal(result.success, true);
 });

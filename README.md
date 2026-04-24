@@ -112,7 +112,6 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
    - `http://localhost:3000/api/auth/callback/google`
    - `http://127.0.0.1:3000/api/auth/callback/google`
    - `https://certscore.ai/api/auth/callback/google`
-   - `https://consentcheck.site/api/auth/callback/google`
    - `/auth/callback` is only an app alias route; it is not the redirect URI Better Auth initiates with Google
 8. Keep local and production auth isolated:
    - local `NEXT_PUBLIC_APP_URL` should be `http://localhost:3000`
@@ -202,9 +201,8 @@ Common commands:
 
 ### Web runtime
 
-- the live public web deployment target is the AWS ECS/Fargate path for both hosts:
-  - `certscore.ai`
-  - `consentcheck.site`
+- the live public web deployment target is the AWS ECS/Fargate path for `certscore.ai`
+- `consentcheck.site` is owned outside WC01 and must not be deployed by this repo
 - `main` deploys through [/.github/workflows/web-aws-ecs-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-aws-ecs-deploy.yml)
 - run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions
 - run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after deploy

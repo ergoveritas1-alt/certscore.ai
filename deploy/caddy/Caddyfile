@@ -6,14 +6,6 @@ http://34.69.91.225 {
   reverse_proxy 127.0.0.1:3000
 }
 
-www.consentcheck.site {
-  redir https://consentcheck.site{uri} permanent
-}
-
-consentcheck.site {
-  reverse_proxy 127.0.0.1:3000
-}
-
 www.certscore.ai {
   redir https://certscore.ai{uri} permanent
 }

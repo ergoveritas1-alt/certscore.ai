@@ -9,7 +9,9 @@ function main() {
     console.info(`PASS currentLiveWebRuntimeTarget: ${topology.currentLiveWebRuntimeTarget}`);
     console.info(`PASS currentLiveGitRef: ${topology.currentLiveGitRef}`);
     console.info(`PASS primaryHost: ${topology.primaryHost}`);
-    console.info(`PASS secondaryHost: ${topology.secondaryHost}`);
+    if (topology.secondaryHost) {
+      console.info(`PASS secondaryHost: ${topology.secondaryHost}`);
+    }
   } catch (error) {
     if (error instanceof ZodError) {
       for (const issue of error.issues) {
