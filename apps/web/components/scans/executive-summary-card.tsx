@@ -168,6 +168,17 @@ function buildMinimalRegulatoryLens(input: {
   } satisfies RegulatoryLens;
 }
 
+function buildMinimalFinancialClaimsLens() {
+  return buildMinimalRegulatoryLens({
+    acronym: "Financial & commercial claims",
+    detailTitle: "Claims, urgency, and pricing disclosures",
+    ratingLabel: "Audit-only",
+    score: null,
+    summary: "",
+    toneClass: "border-slate-200 bg-slate-50 text-slate-700"
+  });
+}
+
 function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
   return (
     <div className="space-y-3">
@@ -408,16 +419,7 @@ export function buildRegulatoryLenses(
         toneClass: financialTone.toneClass
       });
     } else {
-      lenses.push(
-        buildMinimalRegulatoryLens({
-          acronym: "Financial & commercial claims",
-          detailTitle: "Claims, urgency, and pricing disclosures",
-          ratingLabel: "Not applicable",
-          score: 88,
-          summary: "",
-          toneClass: "border-slate-200 bg-slate-50 text-slate-700"
-        })
-      );
+      lenses.push(buildMinimalFinancialClaimsLens());
     }
 
     return lenses;
@@ -503,16 +505,7 @@ export function buildRegulatoryLenses(
       toneClass: financialTone.toneClass
     });
   } else {
-    lenses.push(
-      buildMinimalRegulatoryLens({
-        acronym: "Financial & commercial claims",
-        detailTitle: "Claims, urgency, and pricing disclosures",
-        ratingLabel: "Not applicable",
-        score: 88,
-        summary: "",
-        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
-      })
-    );
+    lenses.push(buildMinimalFinancialClaimsLens());
   }
 
   return lenses;
