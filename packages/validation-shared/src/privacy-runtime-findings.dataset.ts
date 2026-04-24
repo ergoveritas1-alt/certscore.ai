@@ -35,7 +35,8 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "cookie_policy_present",
   "guaranteed_outcome_claim_detected",
   "missing_retention_disclosure",
-  "missing_transfer_disclosure"
+  "missing_transfer_disclosure",
+  "missing_dsar_mechanism"
 ] as const;
 
 export const PRIVACY_RUNTIME_FINDING_GROUPS = [
@@ -75,7 +76,8 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "cookie_policy_present",
   "guaranteed_outcome_claim_detected",
   "missing_retention_disclosure",
-  "missing_transfer_disclosure"
+  "missing_transfer_disclosure",
+  "missing_dsar_mechanism"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
 
 export const PRIVACY_RUNTIME_SCENARIO_TYPES = [
@@ -953,6 +955,34 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Section review found a primary privacy policy but no cross-border transfer mechanism.",
     signalKey: "section_review.no_transfer_mechanism_noted"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_dsar_mechanism",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-missing-dsar-${index}/section-review.json`],
+      policyAnchor: {
+        claimType: "missing_dsar_mechanism",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-missing-dsar-${index}.example.test/privacy`,
+        snippet: "The privacy policy describes data handling but no access, deletion, correction, or portability request mechanism was noted."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      snapshotEvidence: {
+        policy_dsar_mechanism: "absent",
+        privacy_rights_path_present: false,
+        section_review_no_dsar_mechanism: true
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed primary privacy policy lacks a concrete rights request mechanism, and section-review evidence confirms the absence.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-missing-dsar-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Section review found a primary privacy policy but no concrete DSAR or privacy-rights request mechanism.",
+    signalKey: "section_review.no_dsar_mechanism"
   }
 ];
 
@@ -985,6 +1015,7 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   guaranteed_outcome_claim_detected: "https://tradesbyfin.com/",
   missing_retention_disclosure: "https://bestforex-signals.com/privacy-policy",
   missing_transfer_disclosure: "https://bestforex-signals.com/privacy-policy",
+  missing_dsar_mechanism: "https://devbankuk.com/",
   weak_cookie_security_attributes: "https://www.acorns.com/"
 };
 

@@ -25,6 +25,7 @@ type TargetFinding =
   | "guaranteed_outcome_claim_detected"
   | "missing_retention_disclosure"
   | "missing_transfer_disclosure"
+  | "missing_dsar_mechanism"
   | "targeted_advertising_disclosure_present"
   | "terms_of_service_present"
   | "tracking_technologies_disclosure_present";
@@ -129,6 +130,7 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
     value === "guaranteed_outcome_claim_detected" ||
     value === "missing_retention_disclosure" ||
     value === "missing_transfer_disclosure" ||
+    value === "missing_dsar_mechanism" ||
     value === "targeted_advertising_disclosure_present" ||
     value === "terms_of_service_present" ||
     value === "tracking_technologies_disclosure_present"
@@ -839,6 +841,40 @@ async function probeMissingPolicyDisclosure(row: CandidateRow, kind: "retention"
   };
 }
 
+async function probeMissingDsarMechanism(row: CandidateRow): Promise<LiveProbe> {
+  const privacy = await probePrivacyPolicy(row);
+  if (!privacy.evidenceUrl) {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: null,
+      rationale: "Missing DSAR mechanism needs a fetched primary privacy policy plus retained section-review evidence."
+    };
+  }
+
+  const page = await fetchText(privacy.evidenceUrl);
+  if (!page) {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: privacy.evidenceUrl,
+      rationale: "Missing DSAR mechanism needs retained section-review evidence because the policy page could not be re-fetched."
+    };
+  }
+
+  if (hasPrivacyRightsMechanism(page.text)) {
+    return {
+      assessment: "supports_demotion",
+      evidenceUrl: page.finalUrl,
+      rationale: "Live URL review found a concrete privacy-rights request mechanism, so the missing-DSAR interpretation should not promote."
+    };
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: page.finalUrl,
+    rationale: "Live URL review did not find a concrete DSAR mechanism; promotion still needs retained section-review evidence confirming the scoped absence."
+  };
+}
+
 async function probeArbitrationClause(row: CandidateRow): Promise<LiveProbe> {
   const terms = await probeTermsOfService(row);
   if (!terms.evidenceUrl) {
@@ -922,7 +958,8 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
     cookie_policy_present: `ss.cookie_policy_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.cookie_policy_present')`,
     guaranteed_outcome_claim_detected: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'financial_review.guaranteed_outcome_claim_detected')`,
     missing_retention_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_retention_periods_noted')`,
-    missing_transfer_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_transfer_mechanism_noted')`
+    missing_transfer_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_transfer_mechanism_noted')`,
+    missing_dsar_mechanism: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_dsar_mechanism')`
   };
   const predicate = predicateByFinding[finding];
   const domainPredicate =
@@ -1154,7 +1191,11 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
     };
   }
 
-  if (finding === "missing_retention_disclosure" || finding === "missing_transfer_disclosure") {
+  if (
+    finding === "missing_retention_disclosure" ||
+    finding === "missing_transfer_disclosure" ||
+    finding === "missing_dsar_mechanism"
+  ) {
     return {
       assessment: "needs_review",
       evidenceUrl: row.final_url,
@@ -1213,7 +1254,8 @@ async function main() {
           "cookie_policy_present",
           "guaranteed_outcome_claim_detected",
           "missing_retention_disclosure",
-          "missing_transfer_disclosure"
+          "missing_transfer_disclosure",
+          "missing_dsar_mechanism"
         ]
       : [finding];
   const rows: string[] = [
@@ -1274,6 +1316,8 @@ async function main() {
               ? await probeMissingPolicyDisclosure(candidate, "retention")
             : findingId === "missing_transfer_disclosure"
               ? await probeMissingPolicyDisclosure(candidate, "transfer")
+            : findingId === "missing_dsar_mechanism"
+              ? await probeMissingDsarMechanism(candidate)
             : findingId === "privacy_policy_present"
               ? await probePrivacyPolicy(candidate)
               : findingId === "privacy_contact_path_present"
