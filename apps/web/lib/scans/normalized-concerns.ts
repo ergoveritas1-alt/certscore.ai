@@ -510,7 +510,7 @@ export function inferSpecializedUnifiedFindingId(input: {
     }
   }
 
-  if (!currentId && hasStructuredPolicySupport(rawEvidence)) {
+  if ((!currentId || currentId === "low_confidence_policy_extraction") && hasStructuredPolicySupport(rawEvidence)) {
     const policyDataCategories = getPolicyArrayValue(rawEvidence, [
       "policyDataCategories"
     ]);
@@ -579,6 +579,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       policyIsPrimarySource: null,
       policyPageType: null as NormalizedConcernPolicyPageType,
       policySnippets: [] as string[],
+      rawEvidence: null as Record<string, unknown> | null,
       runtimeArtifacts: [] as string[],
       sourceUrls: [] as string[]
     };
@@ -695,6 +696,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       sourceUrls: [...sourceUrls]
     }),
     policySnippets: [...policySnippets],
+    rawEvidence,
     runtimeArtifacts: [...runtimeArtifacts],
     sourceUrls: [...sourceUrls]
   };
@@ -739,7 +741,13 @@ function mergeConcernEvidenceBundles(
       ...right.policySnippets,
       ...normalizedCandidateEvidence.filter((entry) => !/^https?:\/\//i.test(entry.trim())).slice(0, 3)
     ]),
-    rawEvidence: left === right ? null : null,
+    rawEvidence:
+      left.rawEvidence || right.rawEvidence
+        ? {
+            ...(left.rawEvidence ?? {}),
+            ...(right.rawEvidence ?? {})
+          }
+        : null,
     runtimeArtifacts: uniqueStrings([...left.runtimeArtifacts, ...right.runtimeArtifacts]),
     sourceUrls: uniqueStrings([...left.sourceUrls, ...right.sourceUrls])
   };
@@ -897,7 +905,11 @@ function resolveSuggestedUnifiedFindingId(input: {
   }
 
   if (input.signalKey && input.signalSource) {
-    const signalMatch = getReportUnifiedFindingForSignal(input.signalSource, input.signalKey);
+    const signalMatch =
+      getReportUnifiedFindingForSignal(input.signalSource, input.signalKey) ??
+      (input.signalSource === "policy_enrichment_signal"
+        ? getReportUnifiedFindingForSignal("document_semantic_signal", input.signalKey)
+        : null);
     if (signalMatch) {
       return inferSpecializedUnifiedFindingId({
         currentSuggestedId: signalMatch.id,

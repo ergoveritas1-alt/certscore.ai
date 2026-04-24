@@ -122,7 +122,6 @@ export function hasConcreteRetargetingArtifact(rawEvidence: Record<string, unkno
 export function hasConcreteReplayArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   return (
     hasConcreteRuntimeArtifact(rawEvidence, [
-      "runtimeEvidenceArtifacts",
       "session_replay_runtime_artifacts",
       "runtimeEvidence"
     ]) ||

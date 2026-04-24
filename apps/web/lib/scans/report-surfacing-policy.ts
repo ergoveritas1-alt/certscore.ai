@@ -1740,7 +1740,7 @@ export function mapSurfacingDecisionToLegacyStatus(decision: UnifiedFindingSurfa
     return "audit_only" as const;
   }
 
-  if (decision.decisionState === "support_only") {
+  if (decision.decisionState === "support_only" && decision.reportLane !== "main") {
     return "audit_only" as const;
   }
 

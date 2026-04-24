@@ -2494,7 +2494,7 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         typeof value === "string" &&
         !isLikelyHomepageTitle(value) &&
         !isLowSignalBrandSnippet(value) &&
-        /(cookie|tracking|privacy choices|privacy settings|manage cookies)/i.test(value)
+        /(cookie|tracking|privacy choices|privacy settings|manage cookies|analytical cookies|marketing cookies)/i.test(value)
     );
     if (descriptiveSnippet) {
       return descriptiveSnippet;
@@ -2696,7 +2696,7 @@ function deriveConfidenceBand(
     score += 1;
   }
   if (inputs.hasConcretePayloadEvidence) {
-    score += 2;
+    score += 3;
   }
   if (inputs.hasPacketBackedEvidence) {
     score += 1;

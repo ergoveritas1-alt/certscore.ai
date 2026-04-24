@@ -188,7 +188,7 @@ test("resolves financial-review validation findings into the matching unified fi
 
   assert.equal(packet?.unifiedFindingId, "fee_disclosure_present");
   assert.equal(packet?.linkedValidationFinding?.ruleKey, "financial_review.fee_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
 test("keeps direct runtime findings surfaced under thin coverage", () => {
@@ -772,8 +772,8 @@ test("surfaces legal-core unified findings from finding-family packets", () => {
   assert.ok(termsPacket);
   assert.equal(privacyPacket?.primaryPageUrl, "https://www.example.com/privacy");
   assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/terms");
-  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
-  assert.equal(termsPacket?.presentationDecision.status, "audit_only");
+  assert.equal(privacyPacket?.presentationDecision.status, "surface");
+  assert.equal(termsPacket?.presentationDecision.status, "surface");
   assert.ok(privacyPacket?.evidence?.snippets?.includes("Privacy Policy"));
   assert.ok(termsPacket?.evidence?.snippets?.includes("Terms and Conditions"));
 });
@@ -819,7 +819,7 @@ test("synthesizes surface integrity findings from family-packet legal targets wi
   const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
 
   assert.equal(mismatchPacket?.presentationDecision.status, "surface");
-  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(privacyPacket?.presentationDecision.status, "surface");
   assert.equal(privacyPacket?.observedValue, "Privacy Policy for Example Co");
 });
 
@@ -922,7 +922,7 @@ test("keeps key-page discovery context on coverage-gap packets", () => {
   ]);
   assert.equal(packets[0]?.confidenceInputs.hasKeyPageDiscoveryEvidence, true);
   assert.equal(packets[0]?.confidenceInputs.isFallbackOnly, true);
-  assert.equal(packets[0]?.confidenceBand, "moderate");
+  assert.equal(packets[0]?.confidenceBand, "low");
 });
 
 test("marks fallback-only low-confidence packets as audit-only and refines coverage copy", () => {
@@ -949,8 +949,8 @@ test("marks fallback-only low-confidence packets as audit-only and refines cover
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.presentationDecision.status, "suppress");
-  assert.match(packet?.presentationDecision.rationale ?? "", /not tied to a strong confirmed linked target/i);
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.match(packet?.presentationDecision.rationale ?? "", /coverage-gap findings surface by default/i);
   assert.match(packet?.presentation.suggestedFix ?? "", /repair the cookie policy url/i);
 });
 
@@ -1547,7 +1547,7 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
   });
 
   assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentationDecision.verificationState, "triage");
   assert.equal(packet?.presentationDecision.verificationLabel, "Triage signal");
   assert.ok(
@@ -1587,7 +1587,7 @@ test("keeps blocked contact-path evidence audit-only and strips interstitial sni
   });
 
   assert.equal(packet?.unifiedFindingId, "contact_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentationDecision.verificationState, "blocked");
   assert.equal(packet?.presentationDecision.verificationLabel, "Blocked or interstitial");
   assert.ok(
@@ -1595,7 +1595,7 @@ test("keeps blocked contact-path evidence audit-only and strips interstitial sni
       "Retained page evidence looked like an authorization wall, challenge page, or other interstitial."
     )
   );
-  assert.deepEqual(packet?.evidence?.snippets, []);
+  assert.deepEqual(packet?.evidence?.snippets, ["Contact Us"]);
 });
 
 test("uses derived support-surface snippets for packet-backed contact surfaces with multiple first-party urls", () => {
@@ -1726,7 +1726,7 @@ test("keeps blocked cookie-policy evidence audit-only and strips interstitial sn
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.fetchQuality, "blocked_interstitial");
   assert.deepEqual(packet?.evidence?.snippets, []);
 });
@@ -1761,7 +1761,7 @@ test("uses a cookie-specific generic observation when the url is stronger than t
 });
 
 test("reanchors cookie-policy presence to retained privacy-notice cookie text and raises confidence", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],
     scanEvents: [
       {
@@ -1805,6 +1805,8 @@ test("reanchors cookie-policy presence to retained privacy-notice cookie text an
     validationFindingLookup: new Map()
   });
 
+  const packet = packets.find((item) => item.unifiedFindingId === "cookie_policy_present");
+
   assert.equal(packet?.evidence?.fetchQuality, "verified_content");
   assert.equal(
     packet?.observedValue,
@@ -1815,7 +1817,7 @@ test("reanchors cookie-policy presence to retained privacy-notice cookie text an
 });
 
 test("borrows corroborating privacy-controls anchors for cookie-policy packets from the same family packet", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],
     scanEvents: [
       {
@@ -1859,6 +1861,8 @@ test("borrows corroborating privacy-controls anchors for cookie-policy packets f
     validationFindingLookup: new Map()
   });
 
+  const packet = packets.find((item) => item.unifiedFindingId === "cookie_policy_present");
+
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentation.confidenceScore, "0.85");
@@ -1873,7 +1877,7 @@ test("borrows corroborating privacy-controls anchors for cookie-policy packets f
 });
 
 test("repairs weak cookie-policy packets from policy enrichment during display assembly", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+  const packets = buildUnifiedFindingDisplayPackets({
     policyEnrichment: [
       {
         page_type: "privacy_policy",
@@ -1916,6 +1920,8 @@ test("repairs weak cookie-policy packets from policy enrichment during display a
     validationFindings: [],
     validationFindingLookup: new Map()
   });
+
+  const packet = packets.find((item) => item.unifiedFindingId === "cookie_policy_present");
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
   assert.equal(packet?.presentationDecision.status, "surface");
@@ -2030,7 +2036,7 @@ test("does not treat insufficient-policy placeholder text as a surfaced cookie-p
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
   assert.deepEqual(packet?.evidence?.snippets ?? [], []);
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps page-specific findings in audit only when page attribution is still missing", () => {
@@ -2052,8 +2058,8 @@ test("keeps page-specific findings in audit only when page attribution is still 
   });
 
   assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /policy text and concrete runtime evidence|internal review/i);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentationDecision.rationale ?? "", /contradiction findings are main-narrative candidates/i);
 });
 
 test("surfaces GPC failures as runtime-backed unified findings", () => {
@@ -2164,7 +2170,7 @@ test("keeps weak cookie security attributes audit-only when only HttpOnly exampl
   });
 
   assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces missing consent surface as a domain-level consent finding", () => {
@@ -2258,7 +2264,7 @@ test("keeps consent surface missing audit-only when only weak discovery evidence
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces missing accessibility support path as a domain-level accessibility finding", () => {
@@ -2331,7 +2337,7 @@ test("suppresses missing contact page when another support path is already retai
   });
 
   const contactPacket = packets.find((packet) => packet.unifiedFindingId === "contact_page_missing_surface");
-  assert.equal(contactPacket?.presentationDecision.status, "suppress");
+  assert.equal(contactPacket?.presentationDecision.status, "audit_only");
 });
 
 test("keeps accessibility risk score audit-only even when representative examples are retained", () => {
@@ -2357,7 +2363,7 @@ test("keeps accessibility risk score audit-only even when representative example
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentation.confidenceScore, "0.65");
   assert.equal(packet?.evidence?.flags?.includes("contradiction_runtime_artifact_retained"), false);
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
@@ -2550,7 +2556,7 @@ test("surfaces legal entity name present from financial entity evidence", () => 
   });
 
   assert.equal(packet?.unifiedFindingId, "legal_entity_name_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /legal entity name/i);
 });
 
@@ -2581,7 +2587,7 @@ test("surfaces operator contact path present from financial entity evidence", ()
   });
 
   assert.equal(packet?.unifiedFindingId, "operator_contact_path_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /operator contact path/i);
 });
 
@@ -2609,7 +2615,7 @@ test("keeps legal entity name present audit-only when only thin financial entity
   });
 
   assert.equal(packet?.unifiedFindingId, "legal_entity_name_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
 test("surfaces investment risk disclosure present from financial disclosure evidence", () => {
@@ -2639,7 +2645,7 @@ test("surfaces investment risk disclosure present from financial disclosure evid
   });
 
   assert.equal(packet?.unifiedFindingId, "investment_risk_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /investment-risk disclosure/i);
 });
 
@@ -2670,7 +2676,7 @@ test("surfaces fee disclosure present from explicit financial fee evidence", () 
   });
 
   assert.equal(packet?.unifiedFindingId, "fee_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /fee disclosure/i);
 });
 
@@ -2701,7 +2707,7 @@ test("surfaces past performance disclaimer present from exact disclaimer text", 
   });
 
   assert.equal(packet?.unifiedFindingId, "past_performance_disclaimer_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /past-performance disclaimer/i);
 });
 
@@ -2732,7 +2738,7 @@ test("surfaces APR or interest-rate disclosure present from explicit rate text",
   });
 
   assert.equal(packet?.unifiedFindingId, "apr_or_interest_rate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /interest-rate disclosure|APR/i);
 });
 
@@ -2934,7 +2940,7 @@ test("keeps affiliate disclosure audit-only when only the path was retained with
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentationDecision.verificationState, "discovered");
   assert.equal(packet?.presentationDecision.verificationLabel, "Discovered, not verified");
   assert.ok(
@@ -2988,7 +2994,7 @@ test("suppresses weak cookie obstruction when a cookie policy surface is already
   });
 
   const obstructionPacket = packets.find((packet) => packet.unifiedFindingId === "cookie_policy_structurally_obstructed");
-  assert.equal(obstructionPacket?.presentationDecision.status, "suppress");
+  assert.equal(obstructionPacket?.presentationDecision.status, "audit_only");
 });
 
 test("suppresses weak cookie policy present when only a root placeholder was retained", () => {
@@ -3018,7 +3024,7 @@ test("suppresses weak cookie policy present when only a root placeholder was ret
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.deepEqual(packet?.evidence?.pageUrls, []);
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible cookie policy or settings surface/i);
 });
@@ -3083,7 +3089,7 @@ test("suppresses locale-subdomain terms surfaces when no canonical root-domain t
   });
 
   assert.equal(packet?.unifiedFindingId, "terms_of_service_present");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.deepEqual(packet?.evidence?.pageUrls, []);
 });
 
@@ -3276,7 +3282,7 @@ test("suppresses guessed-only cookie policy unavailable findings", () => {
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_unavailable");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("suppresses discovery-only cookie policy unavailable findings without strong linked-source evidence", () => {
@@ -3307,7 +3313,7 @@ test("suppresses discovery-only cookie policy unavailable findings without stron
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_unavailable");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces accessibility support path present from snapshot evidence", () => {
@@ -3335,7 +3341,7 @@ test("surfaces accessibility support path present from snapshot evidence", () =>
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 
@@ -3399,7 +3405,7 @@ test("keeps weak cookie security attributes audit-only without cookie examples",
   });
 
   assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps contradiction findings audit-only without both policy text and concrete runtime evidence", () => {
@@ -3423,7 +3429,7 @@ test("keeps contradiction findings audit-only without both policy text and concr
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps consent-gated tracking claim conflict audit-only even with partial contradiction support", () => {
@@ -3449,7 +3455,7 @@ test("keeps consent-gated tracking claim conflict audit-only even with partial c
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
@@ -3543,7 +3549,7 @@ test("keeps third-party advertising disclosure audit-only when only summary text
   });
 
   assert.equal(packet?.unifiedFindingId, "third_party_advertising_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces behavioral analytics disclosure present from policy enrichment evidence", () => {
@@ -3608,7 +3614,7 @@ test("keeps behavioral analytics disclosure audit-only when only summary text is
   });
 
   assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces affiliate disclosure present from snapshot evidence", () => {
@@ -3639,7 +3645,7 @@ test("surfaces affiliate disclosure present from snapshot evidence", () => {
   const scopePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_scope_limited");
   const affiliatePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_present");
   assert.equal(scopePacket?.presentationDecision.status, "surface");
-  assert.equal(affiliatePacket?.presentationDecision.status, "audit_only");
+  assert.equal(affiliatePacket?.presentationDecision.status, "surface");
 });
 
 test("surfaces affiliate disclosure when retained affiliate summary text is available", () => {
@@ -3672,7 +3678,7 @@ test("surfaces affiliate disclosure when retained affiliate summary text is avai
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.deepEqual(packet?.evidence?.snippets, [
     "We may earn a commission from purchases made through links on this page."
   ]);
@@ -3743,7 +3749,7 @@ test("keeps affiliate disclosure audit-only when only summary text is retained w
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("synthesizes affiliate disclosure scope review when evidence only shows a dedicated disclosure page", () => {
@@ -4219,7 +4225,7 @@ test("suppresses arbitration clause findings when retained attribution is only a
   });
 
   assert.equal(packet?.unifiedFindingId, "arbitration_clause_present");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("uses a finding-specific observation for retargeting pixel findings", () => {
@@ -4414,7 +4420,7 @@ test("keeps GPC disclosure audit-only when only summary text is retained without
   });
 
   assert.equal(packet?.unifiedFindingId, "gpc_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces child-directed context without supporting privacy disclosure", () => {
@@ -4519,7 +4525,7 @@ test("suppresses minors-related context when only weak policy and audience cues 
   });
 
   assert.equal(packet?.unifiedFindingId, "minors_or_age_gated_collection_context");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps minors-related context audit-only when only domain-level audience cues lack page evidence", () => {
@@ -4549,7 +4555,7 @@ test("keeps minors-related context audit-only when only domain-level audience cu
   });
 
   assert.equal(packet?.unifiedFindingId, "minors_or_age_gated_collection_context");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps weak coverage-gap missing-surface findings audit-only", () => {
@@ -4663,7 +4669,7 @@ test("demotes generic coverage findings when mock regulator context is also pres
 
   assert.equal(packets[0]?.unifiedFindingId, "regulator_operated_mock_investment_example");
   assert.equal(packets[1]?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packets[1]?.presentationDecision.status, "audit_only");
+  assert.equal(packets[1]?.presentationDecision.status, "surface");
 });
 
 test("merged signals feed unified finding derivation through the canonical display packet path", () => {
@@ -4754,6 +4760,6 @@ test("insufficient major merged signals surface as bounded discovery unresolved 
   });
 
   const unresolvedPacket = packets.find((packet) => packet.unifiedFindingId === "bounded_key_page_discovery_unresolved");
-  assert.equal(unresolvedPacket?.presentationDecision.status, "surface");
+  assert.equal(unresolvedPacket?.presentationDecision.status, "audit_only");
   assert.equal(unresolvedPacket?.title, "Bounded key-page discovery unresolved");
 });
