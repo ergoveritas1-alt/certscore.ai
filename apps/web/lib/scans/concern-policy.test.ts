@@ -417,6 +417,32 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "editorial earnings claim without offer context stays audit-only",
+      concern: makeConcern({
+        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+        originType: "validation_rule",
+        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
+        title: "Earnings claim without adjacent disclosure"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        claimText: "Yahoo Finance: Company earnings beat analyst expectations.",
+        matchedSnippet: "Company earnings beat analyst expectations in quarterly results.",
+        pageClassification: "news_or_editorial",
+        pageType: "homepage",
+        pageUrl: "https://www.yahoo.com/",
+        policySnippets: ["Company earnings beat analyst expectations in quarterly results."],
+        signalKey: "financial.performance_claim_text_present",
+        sourceUrls: ["https://www.yahoo.com/"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
+      }
+    },
+    {
       name: "domain-level minors context without retained page evidence stays internal",
       concern: makeConcern({
         originKey: "privacy.minors_or_age_gated_collection_context",

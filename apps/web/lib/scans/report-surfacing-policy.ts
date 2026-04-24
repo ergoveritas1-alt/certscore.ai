@@ -1098,7 +1098,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (
-    context.policy.family === "accessibility" &&
+    (context.policy.family === "accessibility" || context.policy.family === "financial_promotion") &&
     packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only")
   ) {
     overrideDecision(decision, {
@@ -1368,6 +1368,17 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "consent_tracking") {
+    if (packet.unifiedFindingId === "session_replay_observed" && hasConcreteRuntimeEvidence(packet)) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason: "Direct runtime evidence retained a session-recording vendor, so this finding can stand on its own for review.",
+        ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
+      });
+      return;
+    }
+
     if ((SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS as readonly string[]).includes(packet.unifiedFindingId)) {
       overrideDecision(decision, {
         state: "support_only",
