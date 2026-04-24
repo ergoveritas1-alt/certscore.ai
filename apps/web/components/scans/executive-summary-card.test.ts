@@ -3,8 +3,10 @@ import test from "node:test";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildRegulatoryLenses, ExecutiveSummaryCard } from "./executive-summary-card";
+import { buildRegulatoryLenses, buildRegulatoryLensesFromUnifiedPackets, ExecutiveSummaryCard } from "./executive-summary-card";
+import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 
 function makeFinding(
   id: CertScoreFinding["id"],
@@ -66,6 +68,77 @@ function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMappin
     isPrimaryAgency: true,
     ...overrides
   };
+}
+
+function makeUnifiedPacket(
+  unifiedFindingId: string,
+  overrides: Partial<UnifiedFindingDisplayPacket> = {}
+): UnifiedFindingDisplayPacket {
+  return {
+    affectedPageCount: 1,
+    categoryAlignments: [],
+    confidenceBand: "moderate",
+    confidenceInputs: {
+      evidenceQualityFlags: [],
+      hasConcretePayloadEvidence: false,
+      hasCorroboratedPositiveSurfaceEvidence: false,
+      hasDirectRuntimeEvidence: false,
+      hasKeyPageDiscoveryEvidence: false,
+      hasMultipleHumanFacingUrls: false,
+      hasPageAttribution: true,
+      hasPacketBackedEvidence: true,
+      hasPolicyTextEvidence: false,
+      hasReadableSurfaceSnippetEvidence: true,
+      hasStructuredValidationEvidence: true,
+      isFallbackOnly: false,
+      issueCount: 0,
+      signalCount: 1,
+      sourceCount: 1,
+      sourceKinds: ["validation"],
+      validationCount: 1
+    },
+    details: { family: "accessibility", kind: unifiedFindingId },
+    linkedValidationFinding: null,
+    observedValue: null,
+    presentation: {
+      findingName: unifiedFindingId,
+      suggestedFix: "Review retained axe examples.",
+      whyThisMatters: "Representative accessibility barriers can create usability and ADA review risk."
+    },
+    presentationDecision: {
+      confidenceRationale: "test",
+      downgradeReasons: [],
+      rationale: "test",
+      status: "surface",
+      verificationLabel: "Verified",
+      verificationState: "verified"
+    },
+    primaryPageUrl: "https://example.com/",
+    referenceLabel: undefined,
+    referenceUrl: undefined,
+    severity: "medium",
+    sourceLabel: undefined,
+    sourceRefs: [],
+    sourceUrl: undefined,
+    summary: `${unifiedFindingId} summary`,
+    surfacingDecision: {
+      appliedRules: [],
+      decisionReasons: [],
+      decisionState: "confirmed",
+      family: "accessibility",
+      policyVersion: "test",
+      reportable: true,
+      reportLane: "main",
+      supports: [],
+      surfaceTier: "headline",
+      unifiedFindingId,
+      usedFamilyDefault: false,
+      usedFindingOverride: false
+    },
+    title: unifiedFindingId,
+    unifiedFindingId,
+    ...overrides
+  } satisfies UnifiedFindingDisplayPacket;
 }
 
 test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards as regulatory risk", () => {
@@ -161,7 +234,8 @@ test("buildRegulatoryLenses keeps ADA minimal when accessibility statement is th
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
   assert.equal(adaLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.ratingLabel, "Audit-only");
+  assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
 });
 
@@ -195,7 +269,8 @@ test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when
   assert.ok(financialLens);
   assert.equal(adaLens?.minimal, true);
   assert.equal(financialLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.ratingLabel, "Audit-only");
+  assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
   assert.equal(financialLens?.ratingLabel, "Not applicable");
   assert.equal(financialLens?.summary, "");
@@ -231,10 +306,103 @@ test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessib
   assert.ok(financialLens);
   assert.equal(adaLens?.minimal, true);
   assert.equal(financialLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Not applicable");
+  assert.equal(adaLens?.ratingLabel, "Audit-only");
+  assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
   assert.equal(financialLens?.ratingLabel, "Not applicable");
   assert.equal(financialLens?.summary, "");
+});
+
+test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA axe coverage", () => {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makeUnifiedPacket("accessibility_risk_score", {
+        evidence: {
+          counts: {
+            representativeAxeExampleCount: 2,
+            representativeAxePageCount: 2,
+            representativeAxeRuleCount: 2
+          },
+          entities: { maxAxeImpact: ["serious"] },
+          fetchQuality: null,
+          flags: ["representative_accessibility_examples_retained"],
+          pageUrls: ["https://example.com/", "https://example.com/products"],
+          snippets: ["Representative axe examples: 2 rules across 2 pages; max impact: serious."],
+          sourceUrls: []
+        },
+        summary: "Representative accessibility barriers were retained from axe examples."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
+
+  assert.ok(adaLens);
+  assert.equal(adaLens?.minimal, undefined);
+  assert.match(adaLens?.findings.join(" "), /Representative axe examples: 2 rules across 2 pages; max impact: serious\./);
+});
+
+test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only without the stale 88 rating", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot.value,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [
+        makeUnifiedPacket("accessibility_risk_score", {
+          evidence: {
+            counts: {},
+            entities: {},
+            fetchQuality: null,
+            flags: [],
+            pageUrls: [ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot.pageUrl],
+            snippets: [`Accessibility risk score: ${ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot.value}.`],
+            sourceUrls: []
+          },
+          presentationDecision: {
+            confidenceRationale: "Score-only accessibility signal remains audit-only.",
+            downgradeReasons: ["No representative axe examples were retained."],
+            rationale: "Score-only accessibility signal remains audit-only.",
+            status: "audit_only",
+            verificationLabel: "Audit only",
+            verificationState: "triage"
+          }
+        })
+      ],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /DOJ \/ ADA accessibility/);
+  assert.match(html, /Audit-only/);
+  const adaStart = html.indexOf("DOJ / ADA accessibility");
+  const financialStart = html.indexOf("Financial &amp; commercial claims");
+  assert.ok(adaStart >= 0);
+  const adaMarkup = html.slice(adaStart, financialStart > adaStart ? financialStart : undefined);
+  assert.doesNotMatch(adaMarkup, /Not applicable/);
+  assert.doesNotMatch(adaMarkup, />88</);
 });
 
 test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {

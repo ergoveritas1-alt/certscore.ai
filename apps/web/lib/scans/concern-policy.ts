@@ -31,6 +31,7 @@ import {
   derivePolicyPageTypeFromEvidence,
   derivePolicyPrimarySourceFromEvidence
 } from "./policy-evidence-metadata";
+import { hasExternallyPromotableAccessibilityExamples } from "./accessibility-evidence";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -717,10 +718,10 @@ function isWeakCookieSecurityAttributesConcern(
   return concern.suggestedUnifiedFindingId === "weak_cookie_security_attributes";
 }
 
-function isAccessibilityRiskScoreConcern(
+function isAccessibilityIssueFindingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
-  return concern.suggestedUnifiedFindingId === "accessibility_risk_score";
+  return ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(concern.suggestedUnifiedFindingId ?? "");
 }
 
 function isBoundedKeyPageDiscoveryUnresolvedConcern(
@@ -925,46 +926,7 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
 }
 
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  if (!Array.isArray(rawEvidence.accessibilityRuleExamples) || rawEvidence.accessibilityRuleExamples.length === 0) {
-    return false;
-  }
-
-  return rawEvidence.accessibilityRuleExamples.some((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return false;
-    }
-
-    const pageUrl =
-      typeof (entry as { pageUrl?: unknown }).pageUrl === "string"
-        ? (entry as { pageUrl: string }).pageUrl
-        : typeof (entry as { page_url?: unknown }).page_url === "string"
-          ? (entry as { page_url: string }).page_url
-          : null;
-    const ruleId =
-      typeof (entry as { ruleId?: unknown }).ruleId === "string"
-        ? (entry as { ruleId: string }).ruleId
-        : typeof (entry as { rule_id?: unknown }).rule_id === "string"
-          ? (entry as { rule_id: string }).rule_id
-          : null;
-    const selector =
-      typeof (entry as { selector?: unknown }).selector === "string"
-        ? (entry as { selector: string }).selector
-        : typeof (entry as { target?: unknown }).target === "string"
-          ? (entry as { target: string }).target
-          : null;
-    const snippet =
-      typeof (entry as { snippet?: unknown }).snippet === "string"
-        ? (entry as { snippet: string }).snippet
-        : typeof (entry as { message?: unknown }).message === "string"
-          ? (entry as { message: string }).message
-          : null;
-
-    return Boolean(pageUrl && (ruleId || selector || snippet));
-  });
+  return hasExternallyPromotableAccessibilityExamples(rawEvidence);
 }
 
 function getNumberEvidence(
@@ -1553,9 +1515,8 @@ export function deriveConcernPolicy(input: {
   }
 
   if (
-    isAccessibilityRiskScoreConcern(input.concern) &&
-    !hasRepresentativeAccessibilityExamples(input.rawEvidence) &&
-    input.concern.originType !== "validation_rule"
+    isAccessibilityIssueFindingConcern(input.concern) &&
+    !hasRepresentativeAccessibilityExamples(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",

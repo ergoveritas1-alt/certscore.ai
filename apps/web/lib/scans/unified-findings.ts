@@ -57,6 +57,10 @@ import {
 } from "./report-surfacing-policy";
 import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-fallback-evidence";
 import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals";
+import {
+  formatRepresentativeAccessibilityCoverage,
+  getRepresentativeAccessibilityExampleCoverage
+} from "./accessibility-evidence";
 
 export type UnifiedFindingDetails =
   | {
@@ -1307,6 +1311,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
 
   const normalizedFallbackEvidence = normalizeUnifiedFindingEvidenceRecord(fallbackEvidence);
+  const accessibilityExampleCoverage = getRepresentativeAccessibilityExampleCoverage(normalizedFallbackEvidence);
+  const accessibilityCoverageSummary =
+    accessibilityExampleCoverage.representativeExampleCount > 0
+      ? formatRepresentativeAccessibilityCoverage(accessibilityExampleCoverage)
+      : null;
   const contradictionEvidence = getContradictionEvidenceBundle(normalizedFallbackEvidence);
   const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(normalizedFallbackEvidence, contradictionEvidence);
   const isContradictionEvidenceContext =
@@ -1372,7 +1381,8 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ? null
       : isMeaningfulPolicyText(normalizedFallbackEvidence.signalValue)
         ? normalizedFallbackEvidence.signalValue
-        : null
+        : null,
+    accessibilityCoverageSummary
   ])
     .map((snippet) => normalizePolicySnippet(snippet))
     .filter((snippet): snippet is string => Boolean(snippet));
@@ -1421,6 +1431,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ) {
     counts.childrenPrivacyRiskScore = normalizedFallbackEvidence.childrenPrivacyRiskScore;
   }
+  if (accessibilityExampleCoverage.representativeExampleCount > 0) {
+    counts.representativeAxeExampleCount = accessibilityExampleCoverage.representativeExampleCount;
+    counts.representativeAxePageCount = accessibilityExampleCoverage.distinctPageCount;
+    counts.representativeAxeRuleCount = accessibilityExampleCoverage.distinctRuleCount;
+  }
 
   const entities: Record<string, string[]> = {};
   if (Array.isArray(normalizedFallbackEvidence.keyPageAttemptedUrls)) {
@@ -1454,6 +1469,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       }
     }
   }
+  if (accessibilityExampleCoverage.maxImpact) {
+    entities.maxAxeImpact = [accessibilityExampleCoverage.maxImpact];
+  }
 
   const flags = uniqueStrings([
     typeof normalizedFallbackEvidence.familyPacketFamilyId === "string" ? "family_packet_backed" : null,
@@ -1485,6 +1503,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
+    Array.isArray(normalizedFallbackEvidence.accessibilityRuleExamples) &&
+    normalizedFallbackEvidence.accessibilityRuleExamples.length > 0
+      ? "representative_accessibility_examples_retained"
+      : null,
     hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
     typeof normalizedFallbackEvidence.signalKey === "string" ? normalizedFallbackEvidence.signalKey : null
@@ -2226,9 +2248,6 @@ function sanitizeEvidenceForFinding(
 
   if (findingId === "accessibility_risk_score") {
     next.flags = next.flags.filter((flag) => flag !== "contradiction_runtime_artifact_retained");
-    if (next.snippets.length > 0) {
-      next.flags = uniqueStrings([...next.flags, "representative_accessibility_examples_retained"]);
-    }
   }
 
   if (

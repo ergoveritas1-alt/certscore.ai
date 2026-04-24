@@ -5,6 +5,7 @@ import {
   formatTopFindingHeadline,
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
+import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -81,7 +82,7 @@ type RegulatoryLens = {
   acronym: string;
   detailTitle: string;
   ratingLabel: string;
-  score: number;
+  score: number | null;
   summary: string;
   toneClass: string;
   findings: string[];
@@ -148,7 +149,7 @@ function buildMinimalRegulatoryLens(input: {
   acronym: string;
   detailTitle: string;
   ratingLabel?: string;
-  score?: number;
+  score?: number | null;
   summary: string;
   toneClass?: string;
 }) {
@@ -161,7 +162,7 @@ function buildMinimalRegulatoryLens(input: {
     findings: [],
     minimal: true,
     ratingLabel: input.ratingLabel ?? tone.label,
-    score,
+    score: input.score === null ? null : score,
     summary: input.summary,
     toneClass: input.toneClass ?? tone.toneClass
   } satisfies RegulatoryLens;
@@ -335,7 +336,11 @@ export function buildRegulatoryLenses(
     "Elevated accessibility risk",
     "Elevated ADA demand-letter exposure"
   ]);
-  const hasStrongAdaDriver = Boolean(dojAdaMapping?.triggeredSignals.some((signal) => strongAdaDriverLabels.has(signal.label)));
+  const hasStrongAdaDriver = Boolean(
+    dojAdaMapping?.triggeredSignals.some(
+      (signal) => strongAdaDriverLabels.has(signal.label) || signal.key === "accessibility.representative_axe_examples"
+    )
+  );
   const hasOnlyAccessibilityStatementMissingSignal =
     accessibilityStatementPresent === false &&
     accessibilityClaimMismatchDetected !== true &&
@@ -365,8 +370,8 @@ export function buildRegulatoryLenses(
       buildMinimalRegulatoryLens({
         acronym: "DOJ / ADA accessibility",
         detailTitle: "Accessibility and digital access issues",
-        ratingLabel: "Not applicable",
-        score: 88,
+        ratingLabel: "Audit-only",
+        score: null,
         summary: "",
         toneClass: "border-slate-200 bg-slate-50 text-slate-700"
       })
@@ -518,7 +523,106 @@ export function buildRegulatoryLensesFromUnifiedPackets(
   counts: Parameters<typeof buildRegulatoryLenses>[1],
   options?: Parameters<typeof buildRegulatoryLenses>[2]
 ) {
-  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, options);
+  const representativeAccessibilityPackets = packets.filter(
+    (packet) =>
+      packet.presentationDecision.status === "surface" &&
+      packet.details?.family === "accessibility" &&
+      packet.evidence?.flags?.includes("representative_accessibility_examples_retained")
+  );
+  const hasRepresentativeAccessibilityEvidence = representativeAccessibilityPackets.length > 0;
+  const representativeAccessibilityCoverage = representativeAccessibilityPackets.reduce(
+    (accumulator, packet) => {
+      const packetCounts = packet.evidence?.counts ?? {};
+      const packetEntities = packet.evidence?.entities ?? {};
+      const exampleCount = packetCounts.representativeAxeExampleCount ?? 0;
+      const pageCount = packetCounts.representativeAxePageCount ?? packet.evidence?.pageUrls?.length ?? 0;
+      const ruleCount =
+        packetCounts.representativeAxeRuleCount ??
+        (packet.details?.family === "accessibility" ? packet.details.ruleExamples?.length : 0) ??
+        0;
+      const maxImpact = packetEntities.maxAxeImpact?.[0] ?? accumulator.maxImpact;
+
+      return {
+        distinctPageCount: Math.max(accumulator.distinctPageCount, pageCount),
+        distinctRuleCount: Math.max(accumulator.distinctRuleCount, ruleCount),
+        hasSevereExample: accumulator.hasSevereExample || /^(?:critical|serious|high)$/i.test(maxImpact ?? ""),
+        maxImpact,
+        representativeExampleCount: accumulator.representativeExampleCount + exampleCount
+      };
+    },
+    {
+      distinctPageCount: 0,
+      distinctRuleCount: 0,
+      hasSevereExample: false,
+      maxImpact: null as string | null,
+      representativeExampleCount: 0
+    }
+  );
+  const representativeAccessibilitySummary =
+    representativeAccessibilityCoverage.representativeExampleCount > 0
+      ? formatRepresentativeAccessibilityCoverage(representativeAccessibilityCoverage)
+      : null;
+  const hasDojAdaMapping = options?.agencyMappings?.some((mapping) => mapping.agencyKey === "doj_ada") === true;
+  const accessibilityOptions =
+    hasRepresentativeAccessibilityEvidence
+      ? {
+          ...options,
+          accessibilitySignals: {
+            ...(options?.accessibilitySignals ?? {}),
+            wcagErrorCountTotal:
+              options?.accessibilitySignals?.wcagErrorCountTotal ??
+              Math.max(representativeAccessibilityCoverage.representativeExampleCount, representativeAccessibilityPackets.length)
+          },
+          agencyMappings: [
+            ...(hasDojAdaMapping
+              ? (options?.agencyMappings ?? []).map((mapping) =>
+                  mapping.agencyKey === "doj_ada"
+                    ? {
+                        ...mapping,
+                        triggeredSignals: [
+                          ...mapping.triggeredSignals,
+                          {
+                            key: "accessibility.representative_axe_examples",
+                            label: representativeAccessibilitySummary ?? "Representative axe examples retained"
+                          }
+                        ],
+                        topAgencyRiskDrivers: [
+                          ...mapping.topAgencyRiskDrivers,
+                          representativeAccessibilitySummary ?? "Representative automated accessibility examples were retained."
+                        ]
+                      }
+                    : mapping
+                )
+              : [
+                  ...(options?.agencyMappings ?? []),
+                  {
+                    agencyKey: "doj_ada",
+                    agencyLabel: "U.S. Department of Justice ADA",
+                    shortLabel: "DOJ / ADA",
+                    category: "accessibility",
+                    relevanceLevel: "moderate",
+                    relevanceScore: 64,
+                    rationale: "Representative automated accessibility examples were retained for surfaced ADA/WCAG review.",
+                    helperLabel: "Accessibility evidence retained",
+                    triggeredSignals: [
+                      {
+                        key: "accessibility.representative_axe_examples",
+                        label: representativeAccessibilitySummary ?? "Representative axe examples retained"
+                      }
+                    ],
+                    contributingSubscores: [{ key: "accessibility_examples", label: "Representative accessibility examples", score: 64 }],
+                    topAgencyRiskDrivers: [
+                      representativeAccessibilitySummary ?? "Representative automated accessibility examples were retained."
+                    ],
+                    relatedOverallRiskLevel: "moderate",
+                    isPrimaryAgency: false
+                  } satisfies AgencyMapping
+                ])
+          ]
+        }
+      : options;
+
+  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, accessibilityOptions);
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
@@ -1239,8 +1343,10 @@ export function ExecutiveSummaryCard(input: {
                           <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score}</p>
-                          <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                          <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</p>
+                          {typeof lens.score === "number" ? (
+                            <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                          ) : null}
                           <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
                         </div>
                       </summary>

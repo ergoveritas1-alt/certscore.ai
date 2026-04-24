@@ -9,6 +9,7 @@ import {
   isDomainLevelSensitiveContextFinding,
   packetNeedsPageAttribution
 } from "./concern-policy";
+import { ADA_ACCESSIBILITY_FIXTURES } from "./ada-accessibility.fixtures";
 import type { NormalizedConcern } from "./normalized-concerns";
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 
@@ -882,6 +883,74 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "page-attributed accessibility score without axe examples stays audit-only",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot,
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "page-attributed accessibility score with one moderate axe example stays audit-only",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: ADA_ACCESSIBILITY_FIXTURES.singleModerateAxeExample,
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "page-attributed accessibility score with serious axe example can promote",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample,
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "page-attributed accessibility score with multi-page axe coverage can promote",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "scan_snapshot.accessibility.accessibility_risk_score",
+        suggestedUnifiedFindingId: "accessibility_risk_score",
+        title: "Accessibility risk score"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: ADA_ACCESSIBILITY_FIXTURES.multiRuleAxeExamples,
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
       }
     },
