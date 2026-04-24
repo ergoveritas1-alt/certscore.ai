@@ -15,6 +15,11 @@ type TargetFinding =
   | "children_privacy_disclosure_present"
   | "do_not_sell_sharing_disclosure_conflict"
   | "session_replay_observed"
+  | "simulated_performance_without_disclosure"
+  | "policy_clarity_risk"
+  | "gpc_disclosure_present"
+  | "cookie_disclosure_gap"
+  | "arbitration_clause_present"
   | "targeted_advertising_disclosure_present"
   | "terms_of_service_present"
   | "tracking_technologies_disclosure_present";
@@ -108,6 +113,11 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
     value === "children_privacy_disclosure_present" ||
     value === "do_not_sell_sharing_disclosure_conflict" ||
     value === "session_replay_observed" ||
+    value === "simulated_performance_without_disclosure" ||
+    value === "policy_clarity_risk" ||
+    value === "gpc_disclosure_present" ||
+    value === "cookie_disclosure_gap" ||
+    value === "arbitration_clause_present" ||
     value === "targeted_advertising_disclosure_present" ||
     value === "terms_of_service_present" ||
     value === "tracking_technologies_disclosure_present"
@@ -487,7 +497,7 @@ async function probePrivacyContactMissing(row: CandidateRow): Promise<LiveProbe>
 
 async function probeTrackingDisclosure(
   row: CandidateRow,
-  kind: "tracking" | "targeted_advertising" | "third_party_advertising" | "children"
+  kind: "tracking" | "targeted_advertising" | "third_party_advertising" | "children" | "gpc"
 ): Promise<LiveProbe> {
   const baseUrl = getBaseUrl(row);
   const homepage = await fetchText(baseUrl);
@@ -504,7 +514,9 @@ async function probeTrackingDisclosure(
         ? /targeted advertising|personalized ads?|interest-based advertising|cross-context behavioral advertising|advertising partners/i
         : kind === "third_party_advertising"
           ? /third-party advertising|advertising partners?|ad networks?|advertising service providers?|advertising companies/i
-          : /children(?:'s)? privacy|under (?:13|16)|minors?|knowingly collect.*children/i;
+          : kind === "children"
+            ? /children(?:'s)? privacy|under (?:13|16)|minors?|knowingly collect.*children/i
+            : /global privacy control|\bgpc\b|browser opt-out preference|universal opt-out/i;
 
   for (const url of candidateUrls) {
     const page = await fetchText(url);
@@ -522,7 +534,9 @@ async function probeTrackingDisclosure(
               ? "Live URL review found a policy surface disclosing targeted, personalized, interest-based, or cross-context advertising."
               : kind === "third_party_advertising"
                 ? "Live URL review found a policy surface disclosing third-party advertising partners, ad networks, or advertising service providers."
-                : "Live URL review found a children privacy or under-13/under-16 disclosure."
+                : kind === "children"
+                  ? "Live URL review found a children privacy or under-13/under-16 disclosure."
+                  : "Live URL review found a Global Privacy Control or universal opt-out disclosure."
       };
     }
   }
@@ -537,7 +551,9 @@ async function probeTrackingDisclosure(
           ? "Live URL probe did not find targeted-advertising disclosure language; keep the positive disclosure finding review-only without retained policy text."
           : kind === "third_party_advertising"
             ? "Live URL probe did not find third-party advertising disclosure language; keep the positive disclosure finding review-only without retained policy text."
-            : "Live URL probe did not find children privacy disclosure language; keep the positive disclosure finding review-only without retained policy text."
+            : kind === "children"
+              ? "Live URL probe did not find children privacy disclosure language; keep the positive disclosure finding review-only without retained policy text."
+              : "Live URL probe did not find GPC disclosure language; keep the positive disclosure finding review-only without retained policy text."
   };
 }
 
@@ -620,6 +636,97 @@ async function probeSessionReplayObserved(row: CandidateRow): Promise<LiveProbe>
   };
 }
 
+async function probeSimulatedPerformance(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  if (homepage && /backtest|backtested|simulated|hypothetical|model(?:ed)? performance|paper trading/i.test(homepage.text) && /return|profit|performance|strategy|trading|investment/i.test(homepage.text)) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: homepage.finalUrl,
+      rationale: "Live URL review found financial/investment context with backtested, simulated, hypothetical, or modeled performance language."
+    };
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: homepage?.finalUrl ?? null,
+    rationale: "Live URL probe did not find enough simulated-performance claim context; keep review-only without retained claim text."
+  };
+}
+
+async function probePolicyClarity(row: CandidateRow): Promise<LiveProbe> {
+  const privacy = await probePrivacyPolicy(row);
+  if (privacy.assessment !== "supports_promotion" || !privacy.evidenceUrl) {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: privacy.evidenceUrl,
+      rationale: "Policy clarity risk needs a fetched substantive policy plus retained ambiguity or low-coverage evidence."
+    };
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: privacy.evidenceUrl,
+    rationale: "Live URL review found a policy surface; clarity-risk promotion still needs retained ambiguity score, word-count, or parser-quality evidence."
+  };
+}
+
+async function probeCookieDisclosureGap(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: ["/privacy", "/privacy-policy", "/cookie-policy", "/cookies", "/privacy-center"],
+    patterns: [/privacy|cookie|tracking|notice/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    if (/cookie table|cookie list|cookies? we use|tracking technolog(?:y|ies)|pixels?|analytics/i.test(page.text)) {
+      return {
+        assessment: "needs_review",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found cookie/tracking disclosure language; gap promotion requires retained runtime cookie inventory plus missing/partial policy coverage."
+      };
+    }
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: null,
+    rationale: "Live URL probe did not find cookie disclosure language; gap promotion still needs retained runtime cookie inventory and policy anchor evidence."
+  };
+}
+
+async function probeArbitrationClause(row: CandidateRow): Promise<LiveProbe> {
+  const terms = await probeTermsOfService(row);
+  if (!terms.evidenceUrl) {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: null,
+      rationale: "Arbitration clause promotion needs a fetched terms surface and retained arbitration/dispute-resolution text."
+    };
+  }
+  const page = await fetchText(terms.evidenceUrl);
+  if (page && /arbitration|class action waiver|waive.*jury|dispute resolution|binding arbitrat/i.test(page.text)) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: page.finalUrl,
+      rationale: "Live URL review found arbitration, class-action waiver, jury waiver, or binding dispute-resolution language."
+    };
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: terms.evidenceUrl,
+    rationale: "Live URL review found a terms surface but not arbitration-specific language."
+  };
+}
+
 async function probeRegulatoryComplianceClaim(row: CandidateRow): Promise<LiveProbe> {
   const baseUrl = getBaseUrl(row);
   const homepage = await fetchText(baseUrl);
@@ -668,7 +775,12 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
     unqualified_superlative_claim_detected: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'financial_review.unqualified_superlative_claim_detected')`,
     children_privacy_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.children_privacy_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
     do_not_sell_sharing_disclosure_conflict: `ss.retargeting_pixel_detected is true and (ss.do_not_sell_link_present is true or ss.mentions_data_sale_or_sharing is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('privacy.targeted_advertising_disclosure_present','privacy.third_party_advertising_disclosure_present') and sig.signal_value_json = 'true'::jsonb))`,
-    session_replay_observed: `(ss.session_replay_tool_detected is true or ss.session_replay_tracker_count > 0 or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('privacy.session_replay_runtime_detected','commerce.session_replay_tool_detected','privacy.session_replay_runtime_vendors')))`
+    session_replay_observed: `(ss.session_replay_tool_detected is true or ss.session_replay_tracker_count > 0 or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('privacy.session_replay_runtime_detected','commerce.session_replay_tool_detected','privacy.session_replay_runtime_vendors')))`,
+    simulated_performance_without_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'financial_review.simulated_performance_without_disclosure')`,
+    policy_clarity_risk: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key in ('policyAmbiguityScore','disclosure.privacy_policy_word_count'))`,
+    gpc_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.gpc_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
+    cookie_disclosure_gap: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'cookie_runtime.disclosure_gap')`,
+    arbitration_clause_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'commerce.arbitration_clause_present' and sig.signal_value_json = 'true'::jsonb)`
   };
   const predicate = predicateByFinding[finding];
   const domainPredicate =
@@ -848,6 +960,38 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
     };
   }
 
+  if (finding === "simulated_performance_without_disclosure") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Simulated performance findings need retained claim text and adjacent disclosure context before promotion."
+    };
+  }
+
+  if (finding === "policy_clarity_risk") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Policy clarity risk needs retained ambiguity, low-coverage, or parser-quality evidence."
+    };
+  }
+
+  if (finding === "gpc_disclosure_present" || finding === "arbitration_clause_present") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Positive policy/terms findings need retained policy text or live page confirmation."
+    };
+  }
+
+  if (finding === "cookie_disclosure_gap") {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: "Cookie disclosure gaps need retained runtime cookie inventory plus policy coverage evidence."
+    };
+  }
+
   const hasBehaviorOnly = row.retargeting_pixel_detected === true && row.mentions_data_sale_or_sharing !== true;
   return {
     assessment: hasBehaviorOnly ? "supports_demotion" : "needs_review",
@@ -881,7 +1025,12 @@ async function main() {
           "unqualified_superlative_claim_detected",
           "children_privacy_disclosure_present",
           "do_not_sell_sharing_disclosure_conflict",
-          "session_replay_observed"
+          "session_replay_observed",
+          "simulated_performance_without_disclosure",
+          "policy_clarity_risk",
+          "gpc_disclosure_present",
+          "cookie_disclosure_gap",
+          "arbitration_clause_present"
         ]
       : [finding];
   const rows: string[] = [
@@ -922,6 +1071,16 @@ async function main() {
               ? await probeDoNotSellSharingConflict(candidate)
             : findingId === "session_replay_observed"
               ? await probeSessionReplayObserved(candidate)
+            : findingId === "simulated_performance_without_disclosure"
+              ? await probeSimulatedPerformance(candidate)
+            : findingId === "policy_clarity_risk"
+              ? await probePolicyClarity(candidate)
+            : findingId === "gpc_disclosure_present"
+              ? await probeTrackingDisclosure(candidate, "gpc")
+            : findingId === "cookie_disclosure_gap"
+              ? await probeCookieDisclosureGap(candidate)
+            : findingId === "arbitration_clause_present"
+              ? await probeArbitrationClause(candidate)
             : findingId === "privacy_policy_present"
               ? await probePrivacyPolicy(candidate)
               : findingId === "privacy_contact_path_present"

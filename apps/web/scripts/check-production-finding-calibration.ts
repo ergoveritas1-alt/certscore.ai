@@ -131,7 +131,7 @@ async function main() {
     limit: 100,
     scanType: getArgValue("--scan-type") ?? "full"
   });
-  const currentTopLimit = getNumberArg("--current-top-limit", 18);
+  const currentTopLimit = getNumberArg("--current-top-limit", 23);
   const corpusSummary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED);
   const financialCorpusSummary = summarizeFinancialCommercialClaimsDataset();
   const frequencyByFinding = new Map(report.topFindings.map((finding) => [finding.findingId, finding]));

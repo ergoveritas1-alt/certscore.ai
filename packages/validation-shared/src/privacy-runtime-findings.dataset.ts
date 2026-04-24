@@ -26,7 +26,11 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "unqualified_superlative_claim_detected",
   "children_privacy_disclosure_present",
   "do_not_sell_sharing_disclosure_conflict",
-  "session_replay_observed"
+  "session_replay_observed",
+  "simulated_performance_without_disclosure",
+  "policy_clarity_risk",
+  "gpc_disclosure_present",
+  "arbitration_clause_present"
 ] as const;
 
 export const PRIVACY_RUNTIME_FINDING_GROUPS = [
@@ -56,7 +60,12 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "unqualified_superlative_claim_detected",
   "children_privacy_disclosure_present",
   "do_not_sell_sharing_disclosure_conflict",
-  "session_replay_observed"
+  "session_replay_observed",
+  "simulated_performance_without_disclosure",
+  "policy_clarity_risk",
+  "gpc_disclosure_present",
+  "cookie_disclosure_gap",
+  "arbitration_clause_present"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
 
 export const PRIVACY_RUNTIME_SCENARIO_TYPES = [
@@ -682,6 +691,135 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Runtime artifacts identify a session replay vendor or collection endpoint.",
     signalKey: "privacy.session_replay_runtime_detected"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "simulated_performance_without_disclosure",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-simulated-performance-${index}/offer.html`],
+      policyAnchor: {
+        claimType: "simulated_or_backtested_performance_claim",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-simulated-performance-${index}.example.test/strategy`,
+        snippet: "Backtested performance turned $100,000 into $9.1 million."
+      },
+      signalKey: "financial_review.simulated_performance_without_disclosure",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed financial page uses backtested, simulated, hypothetical, or model performance language without adjacent simulated-performance disclosure.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-simulated-performance-${index}.example.test/strategy`
+      }
+    }),
+    positiveNotes: "Financial promotional text contains backtested, simulated, hypothetical, or model performance claims without adjacent qualification.",
+    signalKey: "financial_review.simulated_performance_without_disclosure"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-cookie-gap-${index}/runtime.json`],
+      policyAnchor: {
+        claimType: "cookie_policy_partial_or_missing_runtime_coverage",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-cookie-gap-${index}.example.test/privacy`,
+        snippet: "We use cookies for site functionality."
+      },
+      requestUrls: [`https://analytics.reviewed-cookie-gap-${index}.example.test/collect`],
+      runtimeAnchor: {
+        confidence: 0.86,
+        observationType: "cookie_or_tracker_inventory_exceeds_policy_disclosure",
+        phase: "unknown",
+        requestUrls: [`https://analytics.reviewed-cookie-gap-${index}.example.test/collect`],
+        vendors: ["Google Analytics"]
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed evidence includes runtime cookie/tracker inventory and policy text that omits or underspecifies matching cookie disclosures.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-cookie-gap-${index}.example.test/privacy`
+      },
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    }),
+    positiveNotes: "Runtime cookie/tracker inventory is materially broader than retained policy disclosure.",
+    signalKey: "privacy.cookie_runtime_disclosure_gap_detected"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "policy_clarity_risk",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-policy-clarity-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "policy_clarity_risk",
+        confidence: 0.8,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-policy-clarity-${index}.example.test/privacy`,
+        snippet: "We may collect information as needed for various business purposes."
+      },
+      signalKey: "policyAmbiguityScore",
+      snapshotEvidence: {
+        policy_ambiguity_score: 86,
+        privacy_policy_word_count: 180
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy is short or vague and retained ambiguity evidence supports a clarity-risk interpretation.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-policy-clarity-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Retained policy ambiguity evidence supports policy clarity risk.",
+    signalKey: "policyAmbiguityScore"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "gpc_disclosure_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-gpc-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "gpc_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-gpc-${index}.example.test/privacy`,
+        snippet: "We recognize Global Privacy Control signals as opt-out requests."
+      },
+      signalKey: "privacy.gpc_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy URL discloses Global Privacy Control handling.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-gpc-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Policy text explicitly discloses Global Privacy Control handling.",
+    signalKey: "privacy.gpc_disclosure_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "arbitration_clause_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-arbitration-${index}/terms.html`],
+      policyAnchor: {
+        claimType: "arbitration_clause",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-arbitration-${index}.example.test/terms`,
+        snippet: "Any dispute will be resolved by binding arbitration."
+      },
+      signalKey: "commerce.arbitration_clause_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed terms URL contains binding arbitration, class-action waiver, or dispute-resolution clause language.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-arbitration-${index}.example.test/terms`
+      }
+    }),
+    positiveNotes: "Terms text explicitly includes arbitration or binding dispute-resolution language.",
+    signalKey: "commerce.arbitration_clause_present"
   }
 ];
 
@@ -704,6 +842,11 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   children_privacy_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
   do_not_sell_sharing_disclosure_conflict: "https://www.discover.com/privacy-statement/",
   session_replay_observed: "https://www.fullstory.com/",
+  simulated_performance_without_disclosure: "https://www.grailwealth.com/p/spyholygrailv1",
+  cookie_disclosure_gap: "https://www.betterment.com/legal/privacy-policy",
+  policy_clarity_risk: "https://atlas-finance.org",
+  gpc_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
+  arbitration_clause_present: "https://bestcopytrading.com/terms-and-conditions/",
   weak_cookie_security_attributes: "https://www.acorns.com/"
 };
 
