@@ -11,15 +11,33 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "consent_gated_tracking_claim_conflict",
   "cookie_disclosure_gap",
   "tracking_technologies_disclosure_present",
-  "targeted_advertising_disclosure_present"
+  "targeted_advertising_disclosure_present",
+  "weak_cookie_security_attributes",
+  "accessibility_support_path_missing",
+  "privacy_contact_path_present",
+  "privacy_policy_present",
+  "sale_sharing_controls_missing",
+  "pricing_or_fee_transparency_unclear"
 ] as const;
 
 export const PRIVACY_RUNTIME_FINDING_GROUPS = [
   "preconsent_tracking",
   "fingerprinting",
   "dark_pattern_consent",
-  "disclosure_runtime_mismatch"
+  "disclosure_runtime_mismatch",
+  "production_surfaced_calibration"
 ] as const;
+
+export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
+  "consent_gated_tracking_claim_conflict",
+  "preconsent_tracking",
+  "weak_cookie_security_attributes",
+  "accessibility_support_path_missing",
+  "privacy_contact_path_present",
+  "privacy_policy_present",
+  "sale_sharing_controls_missing",
+  "pricing_or_fee_transparency_unclear"
+] as const satisfies readonly PrivacyRuntimeFindingId[];
 
 export const PRIVACY_RUNTIME_SCENARIO_TYPES = [
   "positive_high_confidence",
@@ -78,7 +96,15 @@ export type PrivacyRuntimeEvidence = {
   };
   scriptHosts?: string[];
   sequenceEvidence?: boolean;
+  signalKey?: string;
+  snapshotEvidence?: Record<string, boolean | number | string | string[] | null>;
   uiFacts?: string[];
+  urlAssessment?: {
+    assessment: "supports_promotion" | "supports_demotion" | "borderline";
+    rationale: string;
+    reviewedAt: string;
+    reviewedUrl: string;
+  };
   vendorCategories?: string[];
   vendors?: string[];
   visualFacts?: string[];
@@ -188,6 +214,300 @@ const DISCLOSURE_IDS: PrivacyRuntimeFindingId[] = [
   "tracking_technologies_disclosure_present",
   "targeted_advertising_disclosure_present"
 ];
+
+type ProductionFindingConfig = {
+  findingGroup: PrivacyRuntimeFindingGroup;
+  findingId: (typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS)[number];
+  positiveEvidenceFor: (index: number) => PrivacyRuntimeEvidence;
+  positiveNotes: string;
+  signalKey: string;
+};
+
+const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
+  {
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    positiveEvidenceFor: (index) => ({
+      consentBannerDetectedMs: 700 + index,
+      detectionSource: "runtime_policy_bridge",
+      policyAnchor: {
+        claimType: "consent_gated_tracking_claim",
+        confidence: 0.88,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-consent-${index}.example.test/privacy`,
+        snippet: "We use advertising and analytics cookies only after consent."
+      },
+      requestUrls: [`https://ads.reviewed-consent-${index}.example.test/collect`],
+      runtimeAnchor: {
+        confidence: 0.86,
+        observationType: "advertising_tracker_before_consent",
+        phase: "pre_consent",
+        requestUrls: [`https://ads.reviewed-consent-${index}.example.test/collect`],
+        vendors: ["Google Ads"]
+      },
+      sequenceEvidence: true,
+      vendors: ["Google Ads"]
+    }),
+    positiveNotes: "Policy claims consent gating while runtime evidence shows advertising activity before consent.",
+    signalKey: "policy_runtime.consent_gated_tracking_claim_conflict"
+  },
+  {
+    findingGroup: "preconsent_tracking",
+    findingId: "preconsent_tracking",
+    positiveEvidenceFor: (index) => ({
+      consentBannerDetectedMs: 650 + index,
+      consentSurfaceObserved: true,
+      detectionSource: "vendor_signature",
+      requestUrls: [`https://analytics.reviewed-preconsent-${index}.example.test/g/collect`],
+      sequenceEvidence: true,
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    }),
+    positiveNotes: "Concrete vendor, request URL, and ordering evidence support pre-consent tracking.",
+    signalKey: "privacy.preconsent_tracking_detected"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "weak_cookie_security_attributes",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-cookie-${index}/cookies.json`],
+      requestUrls: [`https://reviewed-cookie-${index}.example.test/`],
+      signalKey: "privacy.weak_cookie_security_attributes_detected",
+      snapshotEvidence: {
+        cookie_count_total: 8 + index,
+        weak_cookie_security_attributes_detected: true
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own URL review treats missing Secure/SameSite coverage on non-essential cookies as promotable only when cookie artifact rows name affected cookies.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-cookie-${index}.example.test/`
+      }
+    }),
+    positiveNotes: "Cookie artifact rows identify affected cookie names and weak attributes.",
+    signalKey: "privacy.weak_cookie_security_attributes_detected"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "accessibility_support_path_missing",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-accessibility-${index}/crawl.json`],
+      signalKey: "accessibility.accessibility_support_path_missing",
+      snapshotEvidence: {
+        accessibility_contact_method_present: false,
+        accessibility_statement_present: false
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed public surfaces did not show an accessibility statement or accessibility-specific contact path.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-accessibility-${index}.example.test/`
+      }
+    }),
+    positiveNotes: "Bounded crawl found no accessibility statement or accessibility support contact path.",
+    signalKey: "accessibility.accessibility_support_path_missing"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-privacy-contact-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "privacy_contact_channel_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-privacy-contact-${index}.example.test/privacy`,
+        snippet: "Contact our privacy team at privacy@example.test for privacy requests."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed privacy URL contains a privacy-specific contact channel rather than a generic support-only contact.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-privacy-contact-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Privacy-specific contact channel is present on a retained policy surface.",
+    signalKey: "privacy.privacy_contact_path_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_policy_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-policy-${index}/policy.html`],
+      policyAnchor: {
+        claimType: "privacy_policy_surface_present",
+        confidence: 0.9,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-policy-${index}.example.test/privacy`,
+        snippet: "Privacy Policy"
+      },
+      signalKey: "disclosure.privacy_policy_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed URL is an actual privacy policy or notice surface, not only a footer link or generic legal page.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-policy-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Retained, fetched privacy policy surface supports the positive disclosure finding.",
+    signalKey: "disclosure.privacy_policy_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "sale_sharing_controls_missing",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-sale-sharing-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "targeted_advertising_without_control",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-sale-sharing-${index}.example.test/privacy`,
+        snippet: "We share identifiers with advertising partners for targeted advertising."
+      },
+      signalKey: "privacy.sale_sharing_controls_missing",
+      snapshotEvidence: {
+        do_not_sell_link_present: false,
+        targeted_advertising_disclosure_present: true
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed policy discloses sale/sharing or targeted advertising behavior without a visible opt-out control path.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-sale-sharing-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Targeted advertising or sale/sharing disclosure is present without a retained opt-out control.",
+    signalKey: "privacy.sale_sharing_controls_missing"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
+    findingId: "pricing_or_fee_transparency_unclear",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-pricing-${index}/offer.html`],
+      policyAnchor: {
+        claimType: "fee_claim_without_clear_terms",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-pricing-${index}.example.test/pricing`,
+        snippet: "Start trading with low fees today."
+      },
+      signalKey: "financial.pricing_or_fee_transparency_unclear",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed offer page uses fee or pricing claims without adjacent material fee schedule or balancing terms.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-pricing-${index}.example.test/pricing`
+      }
+    }),
+    positiveNotes: "Pricing or fee claim appears without adjacent material fee-term disclosure.",
+    signalKey: "financial.pricing_or_fee_transparency_unclear"
+  }
+];
+
+const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS)[number], string> = {
+  accessibility_support_path_missing: "https://1000pipbuilder.com/",
+  consent_gated_tracking_claim_conflict: "https://www.acorns.com/",
+  preconsent_tracking: "https://www.acorns.com/",
+  pricing_or_fee_transparency_unclear: "https://backtestr.xyz/",
+  privacy_contact_path_present: "https://www.acorns.com/",
+  privacy_policy_present: "https://www.acorns.com/",
+  sale_sharing_controls_missing: "https://www.ameriprise.com/",
+  weak_cookie_security_attributes: "https://www.acorns.com/"
+};
+
+function productionUrlAssessment(input: {
+  assessment: NonNullable<PrivacyRuntimeEvidence["urlAssessment"]>["assessment"];
+  findingId: (typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS)[number];
+  rationale: string;
+}) {
+  return {
+    assessment: input.assessment,
+    rationale: input.rationale,
+    reviewedAt: "2026-04-24",
+    reviewedUrl: PRODUCTION_REVIEWED_URLS[input.findingId]
+  } satisfies NonNullable<PrivacyRuntimeEvidence["urlAssessment"]>;
+}
+
+function makeProductionSurfacedCalibrationExamples() {
+  return PRODUCTION_FINDING_CONFIGS.flatMap((config) => [
+    ...makeExamples({
+      count: 10,
+      evidenceFor: (index) => ({
+        signalKey: config.signalKey,
+        ...config.positiveEvidenceFor(index),
+        urlAssessment: {
+          assessment: "supports_promotion",
+          rationale: "Own URL review found public-page context consistent with this promoted interpretation, and retained artifacts provide the actual signal evidence.",
+          reviewedAt: "2026-04-24",
+          reviewedUrl: PRODUCTION_REVIEWED_URLS[config.findingId]
+        }
+      }),
+      expectationFor: () => positiveExpectation("high"),
+      findingGroup: config.findingGroup,
+      findingIds: [config.findingId],
+      idPrefix: `prod-top-${config.findingId}-positive`,
+      notesFor: () => config.positiveNotes,
+      scenarioType: "positive_high_confidence",
+      sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+    }),
+    ...makeExamples({
+      count: 10,
+      evidenceFor: (index) => ({
+        artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/${config.findingId}/negative-${index}.json`] : [],
+        requestUrls: [`https://production-negative-${config.findingId}-${index}.example.test/`],
+        signalKey: config.signalKey,
+        snapshotEvidence: {
+          [`${config.findingId}_candidate`]: false
+        },
+        urlAssessment: productionUrlAssessment({
+          assessment: "supports_demotion",
+          findingId: config.findingId,
+          rationale: "Own URL review found that public-page context alone is not enough; absent retained corroborating artifacts, this interpretation should remain suppressed."
+        })
+      }),
+      expectationFor: () => negativeExpectation(),
+      findingGroup: config.findingGroup,
+      findingIds: [config.findingId],
+      idPrefix: `prod-top-${config.findingId}-negative`,
+      notesFor: () => "Negative-control URL assessment prevents promotion when the retained evidence does not support the surfaced interpretation.",
+      reasonFor: () => ({ negativeControlReason: "Reviewed URL/artifact evidence does not support the production finding interpretation." }),
+      scenarioType: "negative_control",
+      sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "synthetic_fixture")
+    }),
+    ...makeExamples({
+      count: 10,
+      evidenceFor: (index) => ({
+        artifactRefs: [`s3://privacy-runtime/${config.findingId}/borderline-${index}.json`],
+        policyAnchor: index % 2 === 0 ? {
+          claimType: "partial_or_ambiguous_anchor",
+          confidence: 0.62,
+          extractionStatus: "fetched",
+          sourceUrl: `https://production-borderline-${config.findingId}-${index}.example.test/policy`,
+          snippet: "Partial evidence suggests this may be relevant, but the operational bridge is incomplete."
+        } : undefined,
+        requestUrls: index % 3 === 0 ? [`https://production-borderline-${config.findingId}-${index}.example.test/collect`] : [],
+        signalKey: config.signalKey,
+        urlAssessment: productionUrlAssessment({
+          assessment: "borderline",
+          findingId: config.findingId,
+          rationale: "Own URL review found partial public-page support, but the source, artifact, and policy context do not yet agree enough for external surfacing."
+        })
+      }),
+      expectationFor: () => borderlineExpectation("review"),
+      findingGroup: config.findingGroup,
+      findingIds: [config.findingId],
+      idPrefix: `prod-top-${config.findingId}-borderline`,
+      notesFor: () => "Borderline URL assessment keeps the interpretation review-only until the evidence bridge is complete.",
+      reasonFor: () => ({ downgradeReason: "Reviewed URL/artifact evidence is partial, ambiguous, or lacks corroboration." }),
+      scenarioType: "borderline_review",
+      sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+    })
+  ]);
+}
+
+export const PRIVACY_RUNTIME_PRODUCTION_TOP_FINDINGS_EXAMPLES: PrivacyRuntimeFindingDatasetExample[] =
+  makeProductionSurfacedCalibrationExamples();
 
 export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDatasetExample[] = [
   ...makeExamples({
@@ -452,6 +772,7 @@ export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDa
 
 export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDatasetExample[] = [
   ...PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
+  ...PRIVACY_RUNTIME_PRODUCTION_TOP_FINDINGS_EXAMPLES,
   ...PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES
 ];
 

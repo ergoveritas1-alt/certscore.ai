@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
   PRIVACY_RUNTIME_FINDINGS_DATASET_SEED,
+  PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS,
   summarizePrivacyRuntimeFindingsDataset
 } from "./privacy-runtime-findings.dataset";
 
@@ -55,5 +56,52 @@ test("privacy runtime corpus records downgrade or negative reasons for non-posit
     if (example.scenarioType === "borderline_review" || example.scenarioType === "borderline_audit_only") {
       assert.equal(typeof example.downgradeReason, "string", `${example.id} needs a downgrade reason`);
     }
+  }
+});
+
+test("privacy runtime corpus covers the production top surfaced findings", () => {
+  const counts = new Map<string, { borderline: number; negative: number; positive: number; total: number }>();
+
+  for (const findingId of PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS) {
+    counts.set(findingId, { borderline: 0, negative: 0, positive: 0, total: 0 });
+  }
+
+  for (const example of PRIVACY_RUNTIME_FINDINGS_DATASET_SEED) {
+    const current = counts.get(example.findingId);
+    if (!current) {
+      continue;
+    }
+
+    current.total += 1;
+    if (example.scenarioType === "negative_control") {
+      current.negative += 1;
+    } else if (example.scenarioType === "borderline_review" || example.scenarioType === "borderline_audit_only") {
+      current.borderline += 1;
+    } else {
+      current.positive += 1;
+    }
+  }
+
+  for (const [findingId, count] of counts) {
+    assert.ok(count.total >= 30, `${findingId} should have at least 30 calibration examples`);
+    assert.ok(count.positive >= 10, `${findingId} should have at least 10 positive examples`);
+    assert.ok(count.negative >= 10, `${findingId} should have at least 10 negative examples`);
+    assert.ok(count.borderline >= 10, `${findingId} should have at least 10 borderline examples`);
+  }
+});
+
+test("production top surfaced examples retain explicit URL assessment rationale", () => {
+  for (const example of PRIVACY_RUNTIME_FINDINGS_DATASET_SEED) {
+    if (!PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS.includes(example.findingId as (typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS)[number])) {
+      continue;
+    }
+
+    if (!example.id.startsWith("prod-top-")) {
+      continue;
+    }
+
+    assert.equal(typeof example.evidence.urlAssessment?.reviewedUrl, "string", `${example.id} needs reviewed URL`);
+    assert.equal(typeof example.evidence.urlAssessment?.rationale, "string", `${example.id} needs URL assessment rationale`);
+    assert.equal(typeof example.evidence.signalKey, "string", `${example.id} needs signal key`);
   }
 });

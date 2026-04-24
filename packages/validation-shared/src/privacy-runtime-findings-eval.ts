@@ -6,7 +6,10 @@ import type {
   PrivacyRuntimePresentationState,
   PrivacyRuntimePromotionEligibility
 } from "./privacy-runtime-findings.dataset";
-import { PRIVACY_RUNTIME_FINDINGS_DATASET_SEED } from "./privacy-runtime-findings.dataset";
+import {
+  PRIVACY_RUNTIME_FINDINGS_DATASET_SEED,
+  PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS
+} from "./privacy-runtime-findings.dataset";
 
 export type PrivacyRuntimeFindingsDatasetEvaluationResult = {
   derived: PrivacyRuntimeFindingExpectation;
@@ -63,6 +66,25 @@ function hasCompleteDisclosureConflictEvidence(example: PrivacyRuntimeFindingDat
       runtime.confidence >= 0.75 &&
       runtime.phase !== "unknown" &&
       (runtime.vendors?.length || runtime.requestUrls?.length)
+  );
+}
+
+function hasReviewedProductionFindingEvidence(example: PrivacyRuntimeFindingDatasetExample) {
+  const topProductionFindingIds = new Set<string>(PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS);
+  const assessment = example.evidence.urlAssessment;
+  const hasCorroboratingArtifact =
+    hasValues(example.evidence.artifactRefs) ||
+    hasValues(example.evidence.requestUrls) ||
+    Boolean(example.evidence.policyAnchor) ||
+    Boolean(example.evidence.runtimeAnchor) ||
+    Boolean(example.evidence.snapshotEvidence && Object.keys(example.evidence.snapshotEvidence).length > 0);
+
+  return Boolean(
+    topProductionFindingIds.has(example.findingId) &&
+      typeof example.evidence.signalKey === "string" &&
+      example.evidence.signalKey.trim().length > 0 &&
+      assessment?.assessment === "supports_promotion" &&
+      hasCorroboratingArtifact
   );
 }
 
@@ -124,6 +146,15 @@ export function derivePrivacyRuntimeFindingExpectation(
   }
 
   if (example.findingGroup === "disclosure_runtime_mismatch" && hasCompleteDisclosureConflictEvidence(example)) {
+    return makeExpectation({
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    });
+  }
+
+  if (hasReviewedProductionFindingEvidence(example)) {
     return makeExpectation({
       confidenceBand: "high",
       externalSurfacingEligibility: "eligible",
