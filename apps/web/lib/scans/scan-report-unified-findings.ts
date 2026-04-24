@@ -22,8 +22,10 @@ import {
   type CanonicalReviewFinding,
   type CanonicalSignalItem,
   type PolicyBehaviorContradiction,
-  type PreconsentViolationRow
+  type PreconsentViolationRow,
+  type ScanReportReviewIssueRow
 } from "./scan-report-review-findings";
+import { groupSnapshotFieldsByPrimaryCategory } from "./signal-taxonomy";
 
 export type ScanReportUnifiedFindingSectionDraft = {
   categories?: Array<{
@@ -40,6 +42,16 @@ export type ScanReportUnifiedFindingSectionDraft = {
 
 export type ScanReportUnifiedFindingState = {
   allReviewFindingCandidates?: CanonicalReviewFinding[];
+  derivedContext: {
+    accessibilityIssueRows: AccessibilityIssueRow[];
+    accessibilityRuleEvidenceRows: AccessibilityRuleEvidenceRow[];
+    consentAuditFindings: PreviewSampleFinding[];
+    policyBehaviorContradictions: PolicyBehaviorContradiction[];
+    preconsentViolationRows: PreconsentViolationRow[];
+    prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
+    scanReportReviewIssues: ScanReportReviewIssueRow[];
+    taxonomySnapshotSections: Array<{ description: string; fields: string[]; title: string }>;
+  };
   globalUnifiedFindings: UnifiedFindingDisplayPacket[];
   sectionDrafts: Array<{
     pillar?: ReportPrimaryPillarDefinition;
@@ -86,6 +98,16 @@ export function buildScanReportUnifiedFindingState(
   if (!snapshot) {
     return {
       allReviewFindingCandidates: [],
+      derivedContext: {
+        accessibilityIssueRows: [],
+        accessibilityRuleEvidenceRows: [],
+        consentAuditFindings: [],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        prioritizedAccessibilityRuleRows: [],
+        scanReportReviewIssues: [],
+        taxonomySnapshotSections: []
+      },
       globalUnifiedFindings: [],
       sectionDrafts: []
     };
@@ -133,6 +155,11 @@ export function buildScanReportUnifiedFindingState(
   const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
     .sort((left, right) => right.weightedPriority - left.weightedPriority)
     .slice(0, 6);
+  const taxonomySnapshotSections = groupSnapshotFieldsByPrimaryCategory(Object.keys(snapshot)).map((group) => ({
+    title: group.category.label,
+    description: group.category.description,
+    fields: group.entries.map((entry) => entry.key)
+  }));
   const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
   const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
     const sections = getReportSectionsForPillar(pillar.id).map((section) => {
@@ -239,6 +266,16 @@ export function buildScanReportUnifiedFindingState(
 
   return {
     allReviewFindingCandidates,
+    derivedContext: {
+      accessibilityIssueRows,
+      accessibilityRuleEvidenceRows,
+      consentAuditFindings,
+      policyBehaviorContradictions,
+      preconsentViolationRows,
+      prioritizedAccessibilityRuleRows,
+      scanReportReviewIssues,
+      taxonomySnapshotSections
+    },
     globalUnifiedFindings,
     sectionDrafts
   };

@@ -29,6 +29,16 @@ test("selectOwnerUnifiedFindingsForSection keeps only owner-aligned packets", ()
 test("buildScanReportUnifiedFindings dedupes owner packets across section drafts", () => {
   const owned = packet("owned", "tracking", "owner");
   const state: ScanReportUnifiedFindingState = {
+    derivedContext: {
+      accessibilityIssueRows: [],
+      accessibilityRuleEvidenceRows: [],
+      consentAuditFindings: [],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      prioritizedAccessibilityRuleRows: [],
+      scanReportReviewIssues: [],
+      taxonomySnapshotSections: []
+    },
     globalUnifiedFindings: [owned, packet("mirrored", "tracking", "mirror")] as never,
     sectionDrafts: [
       { sections: [{ sectionCategoryIds: new Set(["tracking"]) }] },

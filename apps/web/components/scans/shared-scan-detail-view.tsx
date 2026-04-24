@@ -54,7 +54,6 @@ import {
   type ScanReportUnifiedFindingState
 } from "../../lib/scans/scan-report-unified-findings";
 import {
-  formatReviewIssueDescription,
   type CanonicalReviewFinding,
   type CanonicalReviewIssue,
   type CanonicalSignalItem
@@ -80,10 +79,7 @@ import {
   getPolicyPageUrl,
   getPolicySummaryText
 } from "../../lib/scans/policy-enrichment-row";
-import {
-  groupSnapshotFieldsByPrimaryCategory,
-  PRIMARY_SCAN_CATEGORY_META
-} from "../../lib/scans/signal-taxonomy";
+import { PRIMARY_SCAN_CATEGORY_META } from "../../lib/scans/signal-taxonomy";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import {
@@ -1044,8 +1040,6 @@ type ResultDetail = {
 type ScanRecordData = ScanDetailResponse;
 
 type CanonicalTaxonomyReviewProps = {
-  accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows>;
-  consentAuditFindings: PreviewSampleFinding[];
   createAccountHref?: string | null;
   executiveSummary: {
     badges: Array<{
@@ -1065,22 +1059,10 @@ type CanonicalTaxonomyReviewProps = {
       tone: "danger" | "success" | "warning";
     } | null;
   };
-  policyBehaviorContradictions: PolicyBehaviorContradiction[];
-  preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows>;
-  prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows>;
   previewMode?: "full" | "homepage";
   scanRecord: ScanRecordData;
-  scanReportReviewIssues: Array<{
-    description: string;
-    key: string;
-    pageType: string;
-    pageUrl: string | null;
-    reason: string;
-    reviewStatus: string;
-    reviewVerdict: unknown;
-    summary: unknown;
-  }>;
   snapshot: Record<string, unknown>;
+  unifiedFindingState: ScanReportUnifiedFindingState;
 };
 
 function ScanSectionFallback(input: { message: string; title: string }) {
@@ -3549,6 +3531,16 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
   if (!snapshot) {
     return {
       allReviewFindingCandidates: [] as CanonicalReviewFinding[],
+      derivedContext: {
+        accessibilityIssueRows: [],
+        accessibilityRuleEvidenceRows: [],
+        consentAuditFindings: [],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        prioritizedAccessibilityRuleRows: [],
+        scanReportReviewIssues: [],
+        taxonomySnapshotSections: []
+      },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
       sectionDrafts: []
     };
@@ -3569,6 +3561,16 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
     console.error("Failed to build scan report unified finding state", error);
     return {
       allReviewFindingCandidates: [] as CanonicalReviewFinding[],
+      derivedContext: {
+        accessibilityIssueRows: [],
+        accessibilityRuleEvidenceRows: [],
+        consentAuditFindings: [],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        prioritizedAccessibilityRuleRows: [],
+        scanReportReviewIssues: [],
+        taxonomySnapshotSections: []
+      },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
       sectionDrafts: []
     };
@@ -3605,7 +3607,7 @@ export function deriveExecutiveSummaryBadgeCounts(findings: UnifiedFindingDispla
 
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
-  const { globalUnifiedFindings, sectionDrafts } = debugBuildScanReportUnifiedFindingState(input.scanRecord);
+  const { globalUnifiedFindings, sectionDrafts } = input.unifiedFindingState;
   const pillarSections = sectionDrafts.map(({ pillar, sections }) => {
     if (!pillar) {
       throw new Error("Canonical taxonomy pillar missing from unified finding state");
@@ -4453,71 +4455,9 @@ export function SharedScanDetailView({
     certScoreSummary.cookieNamesBeforeConsent.length,
     runtimeInitialCookieCount
   );
-  let reviewSectionError: string | null = null;
-  let scanReportReviewIssues: CanonicalTaxonomyReviewProps["scanReportReviewIssues"] = [];
-  let preconsentViolationRows: ReturnType<typeof derivePreconsentViolationRows> = [];
-  let policyBehaviorContradictions: PolicyBehaviorContradiction[] = [];
-  let consentAuditFindings: PreviewSampleFinding[] = [];
-  let accessibilityIssueRows: ReturnType<typeof deriveAccessibilityIssueRows> = [];
-  let accessibilityRuleEvidenceRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows> = [];
-  let prioritizedAccessibilityRuleRows: ReturnType<typeof deriveAccessibilityRuleEvidenceRows> = [];
-  let taxonomySnapshotSections: Array<{ description: string; fields: string[]; title: string }> = [];
-
-  try {
-    const policyEnrichmentById = new Map(
-      scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row])
-    );
-    scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
-      const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
-
-      return {
-        description: formatReviewIssueDescription(String(row.reason ?? "")),
-        key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
-        pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
-        pageUrl:
-          typeof (enrichment?.pageUrl ?? enrichment?.page_url) === "string"
-            ? String(enrichment?.pageUrl ?? enrichment?.page_url)
-            : null,
-        reason: String(row.reason ?? ""),
-        reviewStatus: String(row.reviewStatus ?? row.review_status ?? "pending"),
-        reviewVerdict: row.reviewVerdict ?? row.review_verdict ?? null,
-        summary: enrichment?.policySummaryShort ?? enrichment?.policy_summary_short ?? null
-      };
-    });
-    preconsentViolationRows = derivePreconsentViolationRows({
-      persistedViolations: scanRecord.preconsentViolations,
-      runtimeArtifacts,
-      trackerVendors: scanRecord.trackerVendors
-    });
-    policyBehaviorContradictions = derivePolicyBehaviorContradictions({
-      mergedSignals: scanRecord.mergedSignals,
-      primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment,
-      policyEnrichments: scanRecord.policyEnrichment,
-      preconsentViolations: preconsentViolationRows,
-      runtimeArtifacts,
-      snapshot,
-      trackerVendors: scanRecord.trackerVendors
-    });
-    consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, runtimeArtifacts));
-    accessibilityIssueRows = snapshot ? deriveAccessibilityIssueRows(snapshot) : [];
-    accessibilityRuleEvidenceRows = deriveAccessibilityRuleEvidenceRows({
-      examples: scanRecord.accessibilityRuleExamples ?? [],
-      ruleCounts: scanRecord.accessibilityRuleCounts ?? []
-    });
-    prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
-      .sort((left, right) => right.weightedPriority - left.weightedPriority)
-      .slice(0, 6);
-    taxonomySnapshotSections = snapshot
-      ? groupSnapshotFieldsByPrimaryCategory(Object.keys(snapshot)).map((group) => ({
-          title: group.category.label,
-          description: group.category.description,
-          fields: group.entries.map((entry) => entry.key)
-        }))
-      : [];
-  } catch (error) {
-    reviewSectionError = error instanceof Error ? error.message : "Unknown error";
-    console.error("Failed to prepare scan review sections", error);
-  }
+  const reviewSectionError: string | null = null;
+  const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
+  const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
 
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
@@ -4573,7 +4513,10 @@ export function SharedScanDetailView({
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
-  const findingEvidenceDiagnostics = snapshot && !reviewSectionError ? buildScanReportUnifiedFindings(scanRecord) : [];
+  const findingEvidenceDiagnostics =
+    snapshot && !reviewSectionError
+      ? filterContradictoryPositiveSurfaceFindings(buildScanReportUnifiedFindingsFromState(scanReportUnifiedFindingState))
+      : [];
   const shouldPreferCanonicalReview =
     findingEvidenceDiagnostics.length > 0 ||
     scanRecord.policyEnrichment.length > 0 ||
@@ -4833,8 +4776,6 @@ export function SharedScanDetailView({
             <LimitedSurfaceReview review={unverifiedHomepageReview} />
           ) : (
             renderCanonicalTaxonomyReviewSafely({
-              accessibilityIssueRows,
-              consentAuditFindings,
               createAccountHref,
               executiveSummary: {
                 badges: [
@@ -4919,13 +4860,10 @@ export function SharedScanDetailView({
                     }
                   : null
               },
-              policyBehaviorContradictions,
-              preconsentViolationRows,
               previewMode,
-              prioritizedAccessibilityRuleRows,
               scanRecord,
-              scanReportReviewIssues,
-              snapshot
+              snapshot,
+              unifiedFindingState: scanReportUnifiedFindingState
             })
           )}
         </>
