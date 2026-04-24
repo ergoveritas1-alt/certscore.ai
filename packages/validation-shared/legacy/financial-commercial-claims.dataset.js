@@ -73,6 +73,142 @@ function example(entry) {
         pageExpectation: normalizePageExpectation(entry.pageExpectation, expected)
     };
 }
+const LIVE_SOURCE_CALIBRATION_EXAMPLES = [
+    ...[
+        ["yahoo-futures-screener-table-negative", "https://finance.yahoo.com/research-hub/screener/futures/", "Futures screener shows price, volume, open interest, expiration date, exchange, and region.", "futures"],
+        ["merrill-options-risk-education-negative", "https://www.merrilledge.com/investment-products/options/benefits-risks-of-options", "Options involve risk and are not suitable for all investors before considering option transactions.", "options"],
+        ["fidelity-options-risk-document-negative", "https://www.fidelity.com/bin-public/060_www_fidelity_com/documents/learning-center/121720_How_do_options_fit_into_my_portfolio_session3.pdf", "Options involve risks and are not suitable for everyone; investors should read the risk disclosure document.", "options"],
+        ["eoption-options-disclosure-negative", "https://www.eoption.com/disclosures/", "Options involve risk and investors must read standardized options risk disclosures before trading.", "options"],
+        ["fdic-truth-savings-apy-negative", "https://www.fdic.gov/consumer-compliance-examination-manual/vi-3-truth-savings", "For variable-rate accounts, disclosures state that APY may change after account opening.", "apy"],
+        ["bankunited-promotional-apy-negative", "https://www.bankunited.com/personal/savings-money-market-and-cd-accounts/promotional-money-market-account-pm/how-long-is-the-3.00--apy-guaranteed", "The promotional APY converts to the standard variable APY after the promotional period.", "apy"],
+        ["msa-apy-table-negative", "https://www.msa.bank/personal/other-deposit-accounts/", "The interest rate and APY may change after account opening.", "apy"],
+        ["discover-variable-apr-negative", "https://www.discover.com/credit-cards/card-smarts/what-is-a-variable-apr/", "Credit card terms explain when a variable APR can change.", "apr"],
+        ["experian-variable-apr-negative", "https://www.experian.com/blogs/ask-experian/are-credit-card-rates-fixed-or-variable/", "Most credit cards have variable APRs and separate rates for cash advances.", "apr"],
+        ["cardratings-variable-apr-negative", "https://www.cardratings.com/what-does-variable-apr-mean.html", "Terms apply and full terms appear in the online credit card application.", "apr"],
+        ["investopedia-option-education-negative", "https://en.wikipedia.org/wiki/Option_%28finance%29", "Exchange-traded options have standardized contracts and are settled through a clearing house.", "options"],
+        ["binary-options-investor-alert-negative", "https://en.wikipedia.org/wiki/Binary_option", "Regulators warned about fraudulent promotional schemes involving binary options platforms.", "options"],
+        ["daytrading-copy-trading-education-negative", "https://www.daytrading.com/copy-trading", "Some brokers offer demo copy trading accounts for users to browse platforms first.", "copy trading"],
+        ["proptradingvibes-payout-education-negative", "https://www.proptradingvibes.com/blog/fundingpips-payout-frequency", "Payout frequency articles describe one-day, seven-day, and fourteen-day payout timing.", "payouts"],
+        ["bestpropfirms-daily-payout-education-negative", "https://bestpropfirms.us.com/daily-payout/", "Readers should confirm payout terms directly because prop firm policies can change.", "payouts"],
+        ["kiplinger-apy-news-negative", "https://www.kiplinger.com/personal-finance/savings-accounts/why-your-bank-suddenly-lowered-your-apy-and-what-to-do-next", "Banks may lower savings APYs when benchmark rates drop.", "apy"],
+        ["smallcase-backtest-disclaimer-negative", "https://assets.smallcase.com/factsheets/LIWEMO_0003.pdf", "Back-tested returns do not represent actual returns and should not be interpreted as guarantees.", "backtest"],
+        ["gulaq-returns-disclosure-negative", "https://www.gulaq.com/wp-content/uploads/2023/07/ESTMO_0001.pdf", "Return numbers do not include backtested data and are presented with disclosure context.", "returns"],
+        ["trendline-backtested-faq-disclosure-negative", "https://www.trendlineprofits.com/", "The FAQ states displayed strategy results are technically backtested results.", "backtest"],
+        ["quantitativo-mean-reversion-article-negative", "https://www.quantitativo.com/p/trading-the-mean-reversion-curve", "The article discusses backtested annual returns in an editorial strategy discussion.", "returns"],
+        ["researched-options-suitability-negative", "https://raseedinvest.com/en/support/options/options-trading/is-options-trading-suitable-for-everyone", "Options trading is not suitable for all investors and requires risk understanding.", "options"],
+        ["cobratrading-options-risk-pdf-negative", "https://www.cobratrading.com/wp-content/uploads/2018/06/option-trading-risk-disclosure.pdf", "Options contracts are complex instruments and are not suitable for all investors.", "options"],
+        ["robinhood-standardized-options-pdf-negative", "https://cdn.robinhood.com/assets/robinhood/legal/Characteristics%20and%20Risks%20of%20Standardized%20Options.pdf", "Standardized options materials describe risks and suitability limits for options strategies.", "options"],
+        ["federal-reserve-truth-savings-negative", "https://www.federalreserve.gov/boarddocs/supmanual/cch/tis.pdf", "Truth in Savings materials require variable-rate account change disclosures.", "apy"],
+        ["savings-bank-member-fdic-negative", "https://www.thesavingsbankohio.bank/_/kcms-doc/1572/69224/TSB_8.x5x11_Conversion-Packet_SinglePages_DIGITAL.pdf", "Savings account disclosures state APY may change after account opening.", "apy"],
+        ["legalclarity-apr-explainer-negative", "https://legalclarity.org/when-does-credit-card-apr-apply-rules-timing/", "APR explainers describe when credit card interest applies and how rates vary.", "apr"],
+        ["legalclarity-apy-explainer-negative", "https://legalclarity.org/how-often-does-apy-change-by-account-type/", "APY explainers describe how variable-rate account yields can change.", "apy"],
+        ["khaleej-trading-scam-news-negative", "https://fp-002.flexxmedien.com/flexxtrader/data/usf/file/19423193773.pdf", "News coverage describes fake forex platforms and warnings about high-return promises.", "forex"],
+        ["investopedia-binary-options-education-negative", "https://en.wikipedia.org/wiki/Binary_option", "Binary option articles describe all-or-nothing payoff structures and regulatory concerns.", "options"],
+        ["yahoo-futures-row-negative", "https://finance.yahoo.com/research-hub/screener/futures/", "A futures table lists symbols, names, prices, change percentage, and volume.", "futures"]
+    ].map(([id, sourceUrl, blockText, signal]) => ({
+        id,
+        bucket: "negative_financial",
+        split: "eval",
+        notes: "Live-sourced financial reference, disclosure, or editorial content used to calibrate non-promotional contexts.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "No conversion claim is retained next to this excerpt.",
+            adjacentBefore: "Live source calibration",
+            blockHeading: "Financial reference context",
+            blockText,
+            candidateSignals: ["investment_context", signal],
+            pageType: /yahoo|wikipedia|kiplinger|legalclarity|daytrading|proptrading|bestpropfirms|quantitativo|flexx/.test(sourceUrl) ? "article" : "product_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: false,
+            claimType: "none",
+            claimText: null,
+            commercialContext: /bank|discover|merrill|fidelity|eoption|robinhood|cobratrading|msa|thesavingsbank/.test(sourceUrl),
+            contextType: /bank|discover|merrill|fidelity|eoption|robinhood|cobratrading|msa|thesavingsbank/.test(sourceUrl) ? "financial_offer" : "other",
+            adjacentDisclosurePresent: /risk|disclosure|APY|APR|terms|suitable|not represent/i.test(blockText),
+            adjacentDisclosureType: /APY|APR|terms/i.test(blockText) ? "pricing_terms" : /risk|suitable|not represent/i.test(blockText) ? "risk_disclosure" : null,
+            adjacentDisclosureText: /risk|disclosure|APY|APR|terms|suitable|not represent/i.test(blockText) ? blockText : null,
+            guaranteeLanguage: false,
+            superlativeLanguage: false,
+            simulatedPerformanceLanguage: /backtest|back-tested/i.test(blockText),
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: /APY|APR|terms|fee|price/i.test(blockText),
+            feeDisclosurePresent: /APY|APR|terms|fee|price/i.test(blockText),
+            confidence: 0.91,
+            rationaleShort: "Live-sourced financial content is reference, disclosure, or editorial material rather than a promotional claim."
+        },
+        pageExpectation: {
+            expectedFindingIds: [],
+            expectedCardMode: /bank|discover|merrill|fidelity|eoption|robinhood|cobratrading|msa|thesavingsbank/.test(sourceUrl) ? "not_applicable" : "omit",
+            shouldShowFinancialCard: /bank|discover|merrill|fidelity|eoption|robinhood|cobratrading|msa|thesavingsbank/.test(sourceUrl)
+        }
+    })),
+    ...[
+        ["whop-weekly-prop-payouts-positive", "https://whop.com/discover/funded-prop-account-payouts/", "Automate weekly payouts from your prop firm accounts.", "guaranteed_outcome_claim", "Automate weekly payouts", ["guarantee", "earnings", "cta", "investment_context"], ["guaranteed_outcome_claim_detected"]],
+        ["whop-guaranteed-passing-positive", "https://whop.com/discover/funded-prop-account-payouts/", "Guaranteed passing with the promo code during account purchases.", "guaranteed_outcome_claim", "Guaranteed passing", ["guarantee", "cta", "investment_context"], ["guaranteed_outcome_claim_detected"]],
+        ["proparison-guaranteed-payouts-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "All payouts are guaranteed and have been successfully processed.", "guaranteed_outcome_claim", "all payouts are guaranteed", ["guarantee", "earnings", "investment_context"], ["guaranteed_outcome_claim_detected"]],
+        ["instantcopy-monthly-profit-positive", "https://instantcopytraders.com/", "Estimate copy trading returns with monthly profit and yearly profit outputs.", "return_performance_claim", "monthly profit and yearly profit", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["instantcopy-eight-percent-return-positive", "https://instantcopytraders.com/", "Monthly return input shows 8% and a monthly profit estimate.", "return_performance_claim", "8% monthly return", ["returns", "earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["grailwealth-spy-annual-return-positive", "https://www.grailwealth.com/p/spyholygrailv1", "Strategy headline claims about a 24% annual return over 21 years.", "simulated_performance_claim", "24% annual return over 21 years", ["simulated", "returns", "investment_context", "cta"], ["simulated_performance_without_disclosure"]],
+        ["grailwealth-backtest-million-positive", "https://www.grailwealth.com/p/spyholygrailv1", "Backtests turned $100,000 into $9.1 million over 21 years.", "simulated_performance_claim", "backtests turned $100,000 into $9.1 million", ["simulated", "returns", "investment_context", "cta"], ["simulated_performance_without_disclosure"]],
+        ["tradingstrategies-annual-returns-positive", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "A strategy page promotes 40% annual returns.", "return_performance_claim", "40% annual returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["tradingstrategies-paid-backtest-positive", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "A paid membership advertises per-backtested-strategy access.", "pricing_fee_claim", "paid membership per backtested strategy", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["algotrades-forecasted-return-positive", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "Subscription copy references forecasted annual return.", "return_performance_claim", "forecasted annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["algotrades-make-more-money-positive", "https://www.algotrades.net/subscribe-algorithmic-trading-system-copy/", "The page says users search for a proven strategy that can make more money.", "earnings_claim", "proven strategy that can make more money", ["earnings", "cta", "investment_context"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["algobot-best-trading-bots-positive", "https://algobot.com/experienced-traders/", "AI trading bot article describes best algo trading bots and top-performing bots.", "superlative_claim", "best algo trading bots and top-performing bots", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
+        ["bestpropfirms-best-daily-payout-positive", "https://bestpropfirms.us.com/daily-payout/", "The page identifies best daily payout prop firms.", "superlative_claim", "best daily payout prop firms", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
+        ["proparison-triple-payday-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "The program features a triple payday payout schedule.", "pricing_fee_claim", "triple payday payout schedule", ["pricing", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["proparison-leverage-no-target-positive", "https://www.proparison.com/news/firm/goat-funded-trader/goat-funded-trader-announces-weekly-payouts", "The program features leverage up to 1:50 and no profit targets.", "superlative_claim", "leverage up to 1:50 and no profit targets", ["superlative", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]],
+        ["whop-profit-split-pricing-positive", "https://whop.com/discover/funded-prop-account-payouts/", "A 50% net profit split is billed weekly after the profit threshold.", "pricing_fee_claim", "50% net profit split is billed weekly", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["instantcopy-profit-fee-pricing-positive", "https://instantcopytraders.com/", "The comparison table lists a 30% on-profits-only fee model.", "pricing_fee_claim", "30% on profits only fee model", ["pricing", "pricing_fee", "cta", "investment_context"], ["pricing_or_fee_transparency_unclear"]],
+        ["tradingstrategies-weekend-trend-return-positive", "https://tradingstrategiesdaily.com/p/40-annual-returns-strategy", "The page lists a Weekend Trend Trader strategy with 22% annual returns.", "return_performance_claim", "22% annual returns", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["quantitativo-annual-return-positive", "https://www.quantitativo.com/p/trading-the-mean-reversion-curve", "The strategy compounded at 24.4% annual return over the past 10 years.", "return_performance_claim", "24.4% annual return", ["returns", "earnings", "investment_context", "cta"], ["earnings_claim_without_adjacent_disclosure"]],
+        ["grailwealth-double-market-return-positive", "https://www.grailwealth.com/p/spyholygrailv1", "The post says the strategy can deliver more than double market return.", "superlative_claim", "more than double market return", ["superlative", "returns", "investment_context", "cta"], ["unqualified_superlative_claim_detected"]]
+    ].map(([id, sourceUrl, blockText, claimType, claimText, candidateSignals, expectedFindingIds]) => ({
+        id,
+        bucket: "positive_high_confidence",
+        split: "eval",
+        notes: "Live-sourced financial promotion excerpt used to calibrate positive financial-claims surfacing.",
+        sourceUrl,
+        input: {
+            adjacentAfter: "Learn more or subscribe.",
+            adjacentBefore: "Live source calibration",
+            blockHeading: "Financial promotion context",
+            blockText,
+            candidateSignals,
+            pageType: /whop|instantcopy|algotrades|algobot/.test(sourceUrl) ? "product_page" : "marketing_page",
+            pageUrl: sourceUrl,
+            sourceType: "page_evidence"
+        },
+        expected: {
+            claimPresent: true,
+            claimType,
+            claimText,
+            commercialContext: true,
+            contextType: "financial_offer",
+            adjacentDisclosurePresent: false,
+            adjacentDisclosureType: null,
+            adjacentDisclosureText: null,
+            guaranteeLanguage: claimType === "guaranteed_outcome_claim",
+            superlativeLanguage: claimType === "superlative_claim",
+            simulatedPerformanceLanguage: claimType === "simulated_performance_claim",
+            urgencyPresent: false,
+            urgencyTiedToConversion: false,
+            pricingPresent: claimType === "pricing_fee_claim",
+            feeDisclosurePresent: false,
+            confidence: 0.86,
+            rationaleShort: "Live-sourced financial-promotion language appears without adjacent balancing disclosure in the retained excerpt."
+        },
+        pageExpectation: {
+            expectedFindingIds,
+            expectedCardMode: "findings",
+            shouldShowFinancialCard: true
+        }
+    }))
+];
 exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
     example({
         bucket: "positive_high_confidence",
@@ -3954,7 +4090,1019 @@ exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = [
               expectedCardMode: "findings",
               shouldShowFinancialCard: true
           }
-      })
+      }),
+    example({
+          id: "product-options-risky-returns",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product-page options trading copy with direct return language and no balancing disclosure.",
+          sourceUrl: "https://example.com/options-product",
+          input: {
+              adjacentAfter: "Open your options account today.",
+              adjacentBefore: "Options Pro",
+              blockHeading: "Product details",
+              blockText: "Options Pro helps active traders target 45% annual returns with weekly trade alerts.",
+              candidateSignals: [
+                  "returns",
+                  "earnings",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/options-product",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "return_performance_claim",
+              claimText: "target 45% annual returns with weekly trade alerts",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.88,
+              rationaleShort: "Product-page options trading offer makes a direct return claim without nearby risk or performance disclosure."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "product-ai-trading-guarantee",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product page guarantee claim tied to an automated trading system.",
+          sourceUrl: "https://example.com/ai-trader",
+          input: {
+              adjacentAfter: "Start your subscription.",
+              adjacentBefore: "AI Trader Product",
+              blockHeading: "Guaranteed signal engine",
+              blockText: "Our AI trading engine guarantees profitable signals every week for members.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/ai-trader",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "guarantees profitable signals every week",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.92,
+              rationaleShort: "Guarantee language is attached to a paid automated trading product."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "product-backtest-no-disclaimer",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product page uses backtest performance without a nearby simulation disclaimer.",
+          sourceUrl: "https://example.com/backtest-suite",
+          input: {
+              adjacentAfter: "Buy access to the model.",
+              adjacentBefore: "Backtest Suite",
+              blockHeading: "Historical model",
+              blockText: "The model backtest shows 28% average yearly returns from 2018 through 2024.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/backtest-suite",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "backtest shows 28% average yearly returns from 2018 through 2024",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.86,
+              rationaleShort: "Backtest performance appears in product copy without nearby simulated-performance qualification."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "product-top-performing-bot",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product page superlative claim for a trading bot.",
+          sourceUrl: "https://example.com/top-bot",
+          input: {
+              adjacentAfter: "Subscribe for alerts.",
+              adjacentBefore: "Bot product",
+              blockHeading: "Top performer",
+              blockText: "The market's top-performing crypto trading bot for active investors.",
+              candidateSignals: [
+                  "superlative",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/top-bot",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "top-performing crypto trading bot",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.82,
+              rationaleShort: "Unqualified top-performing claim appears in a trading product offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "product-scarcity-options",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product page scarcity language tied to options-trading signup.",
+          sourceUrl: "https://example.com/options-sprint",
+          input: {
+              adjacentAfter: "Reserve your seat now.",
+              adjacentBefore: "Options Sprint",
+              blockHeading: "Enrollment closes soon",
+              blockText: "Only 20 seats remain for this week's options sprint; reserve your trading seat today.",
+              candidateSignals: [
+                  "urgency",
+                  "cta",
+                  "investment_context",
+                  "returns"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/options-sprint",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "urgency_conversion_claim",
+              claimText: "Only 20 seats remain for this week's options sprint; reserve your trading seat today",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: true,
+              urgencyTiedToConversion: true,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.84,
+              rationaleShort: "Scarcity pressure is tied to conversion on an options-trading product page."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "financial_urgency_pressure_tactic_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "product-pricing-fees-unclear",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Product page references trading membership pricing without clear fee terms.",
+          sourceUrl: "https://example.com/trader-membership",
+          input: {
+              adjacentAfter: "Checkout opens after signup.",
+              adjacentBefore: "Trader Membership",
+              blockHeading: "Choose your plan",
+              blockText: "Join the trader membership now to unlock premium forex alerts and flexible monthly pricing.",
+              candidateSignals: [
+                  "pricing",
+                  "pricing_fee",
+                  "cta",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://example.com/trader-membership",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "flexible monthly pricing",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: false,
+              confidence: 0.8,
+              rationaleShort: "Pricing is used to promote a financial offer without clear adjacent fee detail."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "pricing_or_fee_transparency_unclear"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "yahoo-finance-market-news-options-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Market-news article mentions options and futures without selling a product or making a promotional claim.",
+          sourceUrl: "https://finance.yahoo.example/news/options-futures-volume",
+          input: {
+              adjacentAfter: "Analysts said volume rose after the Fed decision.",
+              adjacentBefore: "Markets",
+              blockHeading: "Options and futures volume rises",
+              blockText: "Options and futures volume rose Wednesday as investors reacted to market volatility.",
+              candidateSignals: [
+                  "investment_context",
+                  "options",
+                  "futures"
+              ],
+              pageType: "article",
+              pageUrl: "https://finance.yahoo.example/news/options-futures-volume",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: false,
+              contextType: "other",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.96,
+              rationaleShort: "Financial-market news mentions products but does not promote a financial offer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "omit",
+              shouldShowFinancialCard: false
+          }
+      }),
+    example({
+          id: "quote-page-options-chain-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Quote page navigation references options chains but no promotional claim.",
+          sourceUrl: "https://finance.yahoo.example/quote/XYZ/options",
+          input: {
+              adjacentAfter: "Calls Puts Expiration Date Open Interest",
+              adjacentBefore: "XYZ Quote Summary",
+              blockHeading: "Options Chain",
+              blockText: "View calls, puts, expiration dates, implied volatility, and open interest for XYZ.",
+              candidateSignals: [
+                  "investment_context",
+                  "options"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://finance.yahoo.example/quote/XYZ/options",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: false,
+              contextType: "other",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.95,
+              rationaleShort: "Reference data for an options chain is not a promotional financial claim."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "omit",
+              shouldShowFinancialCard: false
+          }
+      }),
+    example({
+          id: "market-explainer-futures-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Educational futures explainer without conversion CTA or performance promise.",
+          sourceUrl: "https://finance.yahoo.example/learn/what-are-futures",
+          input: {
+              adjacentAfter: "This article is for education only.",
+              adjacentBefore: "Learning Center",
+              blockHeading: "What are futures?",
+              blockText: "Futures are contracts that let market participants agree to buy or sell an asset at a future date.",
+              candidateSignals: [
+                  "investment_context",
+                  "futures"
+              ],
+              pageType: "article",
+              pageUrl: "https://finance.yahoo.example/learn/what-are-futures",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: false,
+              contextType: "other",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "other",
+              adjacentDisclosureText: "This article is for education only.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.94,
+              rationaleShort: "Educational financial explainer is not a commercial product promotion."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "omit",
+              shouldShowFinancialCard: false
+          }
+      }),
+    example({
+          id: "retirement-calculator-qualified-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Calculator output is illustrative and qualified, not promotional performance substantiation.",
+          sourceUrl: "https://examplebank.com/retirement-calculator",
+          input: {
+              adjacentAfter: "Results are hypothetical and not investment advice.",
+              adjacentBefore: "Retirement calculator",
+              blockHeading: "Projected balance",
+              blockText: "Your projected balance could be $420,000 at retirement based on the assumptions you entered.",
+              candidateSignals: [
+                  "returns",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://examplebank.com/retirement-calculator",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "projected balance could be $420,000 at retirement",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "simulation_disclaimer",
+              adjacentDisclosureText: "Results are hypothetical and not investment advice.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.86,
+              rationaleShort: "Projection is paired with an adjacent hypothetical-results disclaimer."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "bank-apy-clear-disclosure-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Deposit APY offer with explicit bank disclosure and conditions.",
+          sourceUrl: "https://examplebank.com/savings",
+          input: {
+              adjacentAfter: "Member FDIC. APY may change after account opening. Minimum balance requirements apply.",
+              adjacentBefore: "High-yield savings",
+              blockHeading: "Savings account",
+              blockText: "Earn 4.20% APY on eligible savings balances.",
+              candidateSignals: [
+                  "returns",
+                  "pricing",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://examplebank.com/savings",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "return_performance_claim",
+              claimText: "Earn 4.20% APY",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "eligibility_or_conditions",
+              adjacentDisclosureText: "Member FDIC. APY may change after account opening. Minimum balance requirements apply.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: true,
+              confidence: 0.89,
+              rationaleShort: "APY claim is adjacent to standard banking qualification and conditions."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "brokerage-options-risk-disclosure-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Options product page with clear adjacent risk disclosure.",
+          sourceUrl: "https://examplebroker.com/options",
+          input: {
+              adjacentAfter: "Options involve risk and are not suitable for all investors. Review the Characteristics and Risks of Standardized Options before trading.",
+              adjacentBefore: "Options trading",
+              blockHeading: "Trade listed options",
+              blockText: "Trade listed options with advanced order tools and transparent commissions.",
+              candidateSignals: [
+                  "investment_context",
+                  "pricing",
+                  "options"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://examplebroker.com/options",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "pricing_fee_claim",
+              claimText: "transparent commissions",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "risk_disclosure",
+              adjacentDisclosureText: "Options involve risk and are not suitable for all investors.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: true,
+              confidence: 0.88,
+              rationaleShort: "Options product page includes clear risk and commission context."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "brokerage-fractional-share-compliant-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Brokerage product copy without returns, guarantees, or unclear fees.",
+          sourceUrl: "https://examplebroker.com/fractional-shares",
+          input: {
+              adjacentAfter: "Investing involves risk, including possible loss of principal.",
+              adjacentBefore: "Fractional shares",
+              blockHeading: "Start with fractional shares",
+              blockText: "Buy fractional shares of eligible stocks with no account minimum.",
+              candidateSignals: [
+                  "investment_context",
+                  "pricing"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://examplebroker.com/fractional-shares",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "risk_disclosure",
+              adjacentDisclosureText: "Investing involves risk, including possible loss of principal.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: true,
+              confidence: 0.87,
+              rationaleShort: "Brokerage product copy is commercial but lacks a risky financial claim."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "credit-card-apr-clear-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Credit card APR and rewards terms are explicit.",
+          sourceUrl: "https://examplebank.com/cards/rewards",
+          input: {
+              adjacentAfter: "Variable APR is 19.99% to 29.99%. Terms and conditions apply.",
+              adjacentBefore: "Rewards card",
+              blockHeading: "Rewards offer",
+              blockText: "Earn 2% cash back on eligible purchases.",
+              candidateSignals: [
+                  "returns",
+                  "pricing",
+                  "cta"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://examplebank.com/cards/rewards",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "return_performance_claim",
+              claimText: "Earn 2% cash back",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "pricing_terms",
+              adjacentDisclosureText: "Variable APR is 19.99% to 29.99%. Terms and conditions apply.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: true,
+              confidence: 0.86,
+              rationaleShort: "Rewards claim is paired with explicit APR and terms."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "advisory-performance-net-fees-negative",
+          bucket: "negative_financial",
+          split: "eval",
+          notes: "Institutional performance presentation includes after-fee and disclosure context.",
+          sourceUrl: "https://exampleadvisor.com/performance",
+          input: {
+              adjacentAfter: "Past performance is not a guarantee of future results. Returns are shown net of advisory fees.",
+              adjacentBefore: "Composite performance",
+              blockHeading: "Annualized composite returns",
+              blockText: "The balanced composite reported 7.1% annualized returns over the prior five-year period.",
+              candidateSignals: [
+                  "returns",
+                  "investment_context"
+              ],
+              pageType: "product_page",
+              pageUrl: "https://exampleadvisor.com/performance",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "return_performance_claim",
+              claimText: "7.1% annualized returns over the prior five-year period",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "risk_disclosure",
+              adjacentDisclosureText: "Past performance is not a guarantee of future results. Returns are shown net of advisory fees.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: true,
+              confidence: 0.85,
+              rationaleShort: "Performance statistic has adjacent past-performance and fee qualification."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "qualified-potential-returns-borderline",
+          bucket: "positive_borderline",
+          split: "eval",
+          notes: "Borderline potential-return claim with no adjacent balancing disclosure.",
+          sourceUrl: "https://example.com/potential-returns",
+          input: {
+              adjacentAfter: "Join the investor list.",
+              adjacentBefore: "Strategy overview",
+              blockHeading: "Potential returns",
+              blockText: "Members use our alerts to pursue potential double-digit monthly returns.",
+              candidateSignals: [
+                  "returns",
+                  "earnings",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/potential-returns",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "return_performance_claim",
+              claimText: "potential double-digit monthly returns",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.74,
+              rationaleShort: "Borderline return claim clears the strong-signal threshold because it is in a financial offer with return and CTA signals."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "earnings_claim_without_adjacent_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "qualified-backtest-borderline",
+          bucket: "positive_borderline",
+          split: "eval",
+          notes: "Borderline backtest claim without simulation disclaimer.",
+          sourceUrl: "https://example.com/model-results",
+          input: {
+              adjacentAfter: "Request access.",
+              adjacentBefore: "Model results",
+              blockHeading: "Backtest snapshot",
+              blockText: "Backtested signals indicate a possible 18% annual return profile.",
+              candidateSignals: [
+                  "simulated",
+                  "returns",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/model-results",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "simulated_performance_claim",
+              claimText: "Backtested signals indicate a possible 18% annual return profile",
+              commercialContext: true,
+              contextType: "lead_generation_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: true,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.73,
+              rationaleShort: "Borderline simulated-performance claim lacks adjacent simulation qualification."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "simulated_performance_without_disclosure"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "soft-superlative-borderline",
+          bucket: "positive_borderline",
+          split: "eval",
+          notes: "Borderline superlative claim with investment context.",
+          sourceUrl: "https://example.com/signal-rankings",
+          input: {
+              adjacentAfter: "Compare plans.",
+              adjacentBefore: "Signal rankings",
+              blockHeading: "Premier alerts",
+              blockText: "Our premier signal plan is built for traders seeking the most effective market alerts.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "pricing_page",
+              pageUrl: "https://example.com/signal-rankings",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "superlative_claim",
+              claimText: "most effective market alerts",
+              commercialContext: true,
+              contextType: "pricing_page",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.78,
+              rationaleShort: "Borderline comparative effectiveness claim appears in investment offer copy."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "unqualified_superlative_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "low-risk-coded-guarantee-adversarial",
+          bucket: "positive_high_confidence",
+          split: "eval",
+          notes: "Adversarial low-risk phrasing should still count as guaranteed-outcome financial promotion.",
+          sourceUrl: "https://example.com/safe-yield",
+          input: {
+              adjacentAfter: "Start today.",
+              adjacentBefore: "Safe yield system",
+              blockHeading: "Built for steady profits",
+              blockText: "Our members follow a low-risk path to reliable daily trading income.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context",
+                  "cta"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/safe-yield",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: true,
+              claimType: "guaranteed_outcome_claim",
+              claimText: "low-risk path to reliable daily trading income",
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: true,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.82,
+              rationaleShort: "Low-risk reliable-income phrasing is guarantee-like in a trading offer context."
+          },
+          pageExpectation: {
+              expectedFindingIds: [
+                  "guaranteed_outcome_claim_detected"
+              ],
+              expectedCardMode: "findings",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "no-guarantee-faq-adversarial-negative",
+          bucket: "adversarial_negative",
+          split: "eval",
+          notes: "FAQ negates guarantee language and should not emit a guaranteed-outcome finding.",
+          sourceUrl: "https://example.com/faq",
+          input: {
+              adjacentAfter: "Trading involves risk and outcomes vary.",
+              adjacentBefore: "FAQ",
+              blockHeading: "Do you guarantee profits?",
+              blockText: "No, we do not guarantee profits or specific investment outcomes.",
+              candidateSignals: [
+                  "guarantee",
+                  "earnings",
+                  "investment_context"
+              ],
+              pageType: "marketing_page",
+              pageUrl: "https://example.com/faq",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: true,
+              contextType: "financial_offer",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "risk_disclosure",
+              adjacentDisclosureText: "Trading involves risk and outcomes vary.",
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.93,
+              rationaleShort: "Negated FAQ language is not a guarantee claim."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "not_applicable",
+              shouldShowFinancialCard: true
+          }
+      }),
+    example({
+          id: "news-best-stocks-adversarial-negative",
+          bucket: "adversarial_negative",
+          split: "eval",
+          notes: "Editorial best-stocks headline should not become a commercial superlative finding.",
+          sourceUrl: "https://finance.yahoo.example/news/best-stocks-list",
+          input: {
+              adjacentAfter: "The list is editorial and not personalized advice.",
+              adjacentBefore: "Markets",
+              blockHeading: "Best stocks to watch this week",
+              blockText: "Analysts named the best stocks to watch as earnings season begins.",
+              candidateSignals: [
+                  "superlative",
+                  "investment_context"
+              ],
+              pageType: "article",
+              pageUrl: "https://finance.yahoo.example/news/best-stocks-list",
+              sourceType: "page_evidence"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: false,
+              contextType: "other",
+              adjacentDisclosurePresent: true,
+              adjacentDisclosureType: "other",
+              adjacentDisclosureText: "The list is editorial and not personalized advice.",
+              guaranteeLanguage: false,
+              superlativeLanguage: true,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: false,
+              feeDisclosurePresent: false,
+              confidence: 0.92,
+              rationaleShort: "Editorial market-news superlative is not a product promotion."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "omit",
+              shouldShowFinancialCard: false
+          }
+      }),
+    example({
+          id: "free-webinar-price-adversarial-negative",
+          bucket: "negative_nonfinancial",
+          split: "eval",
+          notes: "Free webinar pricing language is not financial product fee opacity.",
+          sourceUrl: "https://example.com/webinar",
+          input: {
+              adjacentAfter: "Seats are free for all registered attendees.",
+              adjacentBefore: "Career webinar",
+              blockHeading: "Free webinar",
+              blockText: "Register for a free webinar about changing careers in technology.",
+              candidateSignals: [
+                  "pricing",
+                  "cta"
+              ],
+              pageType: "lead_generation_offer",
+              pageUrl: "https://example.com/webinar",
+              sourceType: "document_source"
+          },
+          expected: {
+              claimPresent: false,
+              claimType: "none",
+              claimText: null,
+              commercialContext: false,
+              contextType: "other",
+              adjacentDisclosurePresent: false,
+              adjacentDisclosureType: null,
+              adjacentDisclosureText: null,
+              guaranteeLanguage: false,
+              superlativeLanguage: false,
+              simulatedPerformanceLanguage: false,
+              urgencyPresent: false,
+              urgencyTiedToConversion: false,
+              pricingPresent: true,
+              feeDisclosurePresent: true,
+              confidence: 0.9,
+              rationaleShort: "Nonfinancial webinar pricing language should not trigger financial claims."
+          },
+          pageExpectation: {
+              expectedFindingIds: [],
+              expectedCardMode: "omit",
+              shouldShowFinancialCard: false
+          }
+      }),
+    ...LIVE_SOURCE_CALIBRATION_EXAMPLES.map(example)
 ];
 function summarizeFinancialCommercialClaimsDataset(examples = exports.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED) {
     const bucketCounts = Object.fromEntries(DATASET_BUCKETS.map((bucket) => [bucket, 0]));
