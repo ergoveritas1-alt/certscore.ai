@@ -12,10 +12,12 @@ type CalibrationEntry = {
   auditOnlyPressurePct: number;
   borderlineExamples: number;
   corpusExamples: number;
+  demotionPressurePct: number;
   findingId: PrivacyRuntimeFindingId;
   negativeExamples: number;
   positiveExamples: number;
   status: "pass" | "review";
+  suppressedScans: number;
   surfaceFrequencyPct: number;
   surfaceScans: number;
 };
@@ -76,13 +78,13 @@ function renderMarkdown(input: {
     `Generated: ${input.generatedAt}`,
     `Scope: ${input.scanCount} completed org-backed full scans`,
     "",
-    "| Finding | Surface scans | Surface frequency | Audit-only pressure | Corpus | Pos | Neg | Borderline | Status |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---|"
+    "| Finding | Surface scans | Surface frequency | Audit-only pressure | Suppressed scans | Demotion pressure | Corpus | Pos | Neg | Borderline | Status |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"
   ];
 
   for (const entry of input.entries) {
     lines.push(
-      `| \`${entry.findingId}\` | ${entry.surfaceScans} | ${entry.surfaceFrequencyPct.toFixed(1)}% | ${entry.auditOnlyPressurePct.toFixed(1)}% | ${entry.corpusExamples} | ${entry.positiveExamples} | ${entry.negativeExamples} | ${entry.borderlineExamples} | ${entry.status} |`
+      `| \`${entry.findingId}\` | ${entry.surfaceScans} | ${entry.surfaceFrequencyPct.toFixed(1)}% | ${entry.auditOnlyPressurePct.toFixed(1)}% | ${entry.suppressedScans} | ${entry.demotionPressurePct.toFixed(1)}% | ${entry.corpusExamples} | ${entry.positiveExamples} | ${entry.negativeExamples} | ${entry.borderlineExamples} | ${entry.status} |`
     );
   }
 
@@ -94,6 +96,7 @@ async function main() {
   const minScenarioExamples = getNumberArg("--min-scenario-examples", 10);
   const auditOnlyReviewThresholdPct = getNumberArg("--audit-pressure-threshold", 20);
   const report = await buildProductionFindingFrequencyReport({
+    includeNonSurface: true,
     limit: 100,
     scanType: getArgValue("--scan-type") ?? "full"
   });
@@ -106,21 +109,28 @@ async function main() {
     const anyStatusScans = frequency?.anyStatusScanCount ?? surfaceScans;
     const auditOnlyPressurePct =
       anyStatusScans > 0 ? Number((((frequency?.auditOnlyScanCount ?? 0) / anyStatusScans) * 100).toFixed(1)) : 0;
+    const suppressedScans = frequency?.suppressedScanCount ?? 0;
+    const demotionPressurePct =
+      anyStatusScans > 0
+        ? Number(((((frequency?.auditOnlyScanCount ?? 0) + suppressedScans) / anyStatusScans) * 100).toFixed(1))
+        : 0;
     const corpusPass =
       mix.total >= minExamples &&
       mix.positive >= minScenarioExamples &&
       mix.negative >= minScenarioExamples &&
       mix.borderline >= minScenarioExamples;
-    const status = corpusPass && auditOnlyPressurePct < auditOnlyReviewThresholdPct ? "pass" : "review";
+    const status = corpusPass && demotionPressurePct < auditOnlyReviewThresholdPct ? "pass" : "review";
 
     return {
       auditOnlyPressurePct,
       borderlineExamples: mix.borderline,
       corpusExamples: corpusSummary.findingCounts[findingId],
+      demotionPressurePct,
       findingId,
       negativeExamples: mix.negative,
       positiveExamples: mix.positive,
       status,
+      suppressedScans,
       surfaceFrequencyPct: frequency?.scanPct ?? 0,
       surfaceScans
     };

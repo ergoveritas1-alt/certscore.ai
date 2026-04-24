@@ -28,6 +28,8 @@ type FrequencyEntry = {
   sampleSummary: string | null;
   scanCount: number;
   scanPct: number;
+  suppressedCount: number;
+  suppressedScanCount: number;
   surfaceCount: number;
 };
 
@@ -44,6 +46,7 @@ type ProductionFindingFrequencyReport = {
   statusCounts: {
     auditOnly: number;
     review: number;
+    suppressed: number;
     surface: number;
     totalOwnerFindings: number;
   };
@@ -416,16 +419,17 @@ function renderMarkdown(report: ProductionFindingFrequencyReport) {
     "",
     `Surface findings: ${report.statusCounts.surface}`,
     `Audit-only findings: ${report.statusCounts.auditOnly}`,
+    `Suppressed findings: ${report.statusCounts.suppressed}`,
     `Review findings: ${report.statusCounts.review}`,
     "",
-    "| Rank | Finding | Surface scans | Frequency | Surface | Audit-only scans | Review scans | Any-status scans | Delta |",
-    "|---:|---|---:|---:|---:|---:|---:|---:|"
+    "| Rank | Finding | Surface scans | Frequency | Surface | Audit-only scans | Suppressed scans | Review scans | Any-status scans | Delta |",
+    "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|"
   ];
 
   report.topFindings.forEach((entry, index) => {
     const delta = entry.deltaScanCount === undefined ? "" : `${entry.deltaScanCount >= 0 ? "+" : ""}${entry.deltaScanCount} / ${entry.deltaScanPct ?? 0}%`;
     lines.push(
-      `| ${index + 1} | \`${entry.findingId}\` | ${entry.scanCount} | ${entry.scanPct.toFixed(1)}% | ${entry.surfaceCount} | ${entry.auditOnlyScanCount} | ${entry.reviewScanCount} | ${entry.anyStatusScanCount} | ${delta} |`
+      `| ${index + 1} | \`${entry.findingId}\` | ${entry.scanCount} | ${entry.scanPct.toFixed(1)}% | ${entry.surfaceCount} | ${entry.auditOnlyScanCount} | ${entry.suppressedScanCount} | ${entry.reviewScanCount} | ${entry.anyStatusScanCount} | ${delta} |`
     );
   });
 
@@ -434,12 +438,14 @@ function renderMarkdown(report: ProductionFindingFrequencyReport) {
 
 export async function buildProductionFindingFrequencyReport(input?: {
   baselinePath?: string | null;
+  includeNonSurface?: boolean;
   limit?: number;
   scanType?: string;
 }) {
   const limit = input?.limit ?? 25;
   const scanType = input?.scanType ?? "full";
   const baselinePath = input?.baselinePath ?? null;
+  const includeNonSurface = input?.includeNonSurface === true;
   const [
     componentModule,
     taxonomyModule,
@@ -481,6 +487,8 @@ export async function buildProductionFindingFrequencyReport(input?: {
     reviewCount: number;
     sampleSummary: string | null;
     scanIds: Set<string>;
+    suppressedScanIds: Set<string>;
+    suppressedCount: number;
     surfaceScanIds: Set<string>;
     surfaceCount: number;
   }>();
@@ -488,6 +496,7 @@ export async function buildProductionFindingFrequencyReport(input?: {
   let totalSurface = 0;
   let totalAuditOnly = 0;
   let totalReview = 0;
+  let totalSuppressed = 0;
 
   for (const scan of scans) {
     const record = await loadScanRecord({
@@ -510,7 +519,7 @@ export async function buildProductionFindingFrequencyReport(input?: {
       }
       const presentationDecision = finding.presentationDecision as { status?: string } | undefined;
       const status = presentationDecision?.status ?? "unknown";
-      if (status !== "surface" && status !== "audit_only" && status !== "review") {
+      if (status !== "surface" && status !== "audit_only" && status !== "review" && status !== "suppress") {
         continue;
       }
 
@@ -518,8 +527,10 @@ export async function buildProductionFindingFrequencyReport(input?: {
         totalSurface += 1;
       } else if (status === "audit_only") {
         totalAuditOnly += 1;
-      } else {
+      } else if (status === "review") {
         totalReview += 1;
+      } else {
+        totalSuppressed += 1;
       }
 
       const current = findingCounts.get(findingId) ?? {
@@ -529,6 +540,8 @@ export async function buildProductionFindingFrequencyReport(input?: {
         reviewCount: 0,
         sampleSummary: null,
         scanIds: new Set<string>(),
+        suppressedScanIds: new Set<string>(),
+        suppressedCount: 0,
         surfaceScanIds: new Set<string>(),
         surfaceCount: 0
       };
@@ -540,9 +553,12 @@ export async function buildProductionFindingFrequencyReport(input?: {
       } else if (status === "audit_only") {
         current.auditOnlyCount += 1;
         current.auditOnlyScanIds.add(scan.id);
-      } else {
+      } else if (status === "review") {
         current.reviewCount += 1;
         current.reviewScanIds.add(scan.id);
+      } else {
+        current.suppressedCount += 1;
+        current.suppressedScanIds.add(scan.id);
       }
       findingCounts.set(findingId, current);
     }
@@ -562,10 +578,16 @@ export async function buildProductionFindingFrequencyReport(input?: {
       sampleSummary: entry.sampleSummary,
       scanCount: entry.surfaceScanIds.size,
       scanPct: scans.length > 0 ? Number(((entry.surfaceScanIds.size / scans.length) * 100).toFixed(1)) : 0,
+      suppressedCount: entry.suppressedCount,
+      suppressedScanCount: entry.suppressedScanIds.size,
       surfaceCount: entry.surfaceCount
     }))
-    .filter((entry) => entry.surfaceCount > 0)
-    .sort((left, right) => right.scanCount - left.scanCount || right.surfaceCount - left.surfaceCount || left.findingId.localeCompare(right.findingId))
+    .filter((entry) => (includeNonSurface ? entry.anyStatusScanCount > 0 : entry.surfaceCount > 0))
+    .sort((left, right) => {
+      const leftPrimary = includeNonSurface ? left.anyStatusScanCount : left.scanCount;
+      const rightPrimary = includeNonSurface ? right.anyStatusScanCount : right.scanCount;
+      return rightPrimary - leftPrimary || right.surfaceCount - left.surfaceCount || left.findingId.localeCompare(right.findingId);
+    })
     .slice(0, limit);
 
   return applyBaselineDeltas({
@@ -581,6 +603,7 @@ export async function buildProductionFindingFrequencyReport(input?: {
     statusCounts: {
       auditOnly: totalAuditOnly,
       review: totalReview,
+      suppressed: totalSuppressed,
       surface: totalSurface,
       totalOwnerFindings
     },

@@ -836,6 +836,100 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "accessibility support path missing without bounded review evidence stays audit-only",
+      concern: makeConcern({
+        originKey: "accessibility.accessibility_support_path_missing",
+        suggestedUnifiedFindingId: "accessibility_support_path_missing",
+        title: "Accessibility support path missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        accessibilityContactMethodPresent: false,
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
+      }
+    },
+    {
+      name: "accessibility support path missing with bounded linked discovery can promote",
+      concern: makeConcern({
+        originKey: "accessibility.accessibility_support_path_missing",
+        suggestedUnifiedFindingId: "accessibility_support_path_missing",
+        title: "Accessibility support path missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "key_page_discovery"] as const,
+      rawEvidence: {
+        accessibilityContactMethodPresent: false,
+        accessibilityStatementPresent: false,
+        keyPageAttemptCount: 3,
+        keyPageAttemptedUrls: [
+          "https://example.com/accessibility",
+          "https://example.com/accessibility-statement",
+          "https://example.com/contact"
+        ],
+        keyPageDiscoverySource: "footer_link",
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "sale sharing controls missing without behavior anchor stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.sale_sharing_controls_missing",
+        suggestedUnifiedFindingId: "sale_sharing_controls_missing",
+        title: "Sale/sharing controls missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        doNotSellLinkPresent: false,
+        signalKey: "privacy.sale_sharing_controls_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_policy_side_evidence"]
+      }
+    },
+    {
+      name: "sale sharing controls missing with policy behavior anchor can promote",
+      concern: makeConcern({
+        originKey: "privacy.sale_sharing_controls_missing",
+        suggestedUnifiedFindingId: "sale_sharing_controls_missing",
+        title: "Sale/sharing controls missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        doNotSellLinkPresent: false,
+        policyAnchor: {
+          claimType: "targeted_advertising_without_control",
+          sourceUrl: "https://example.com/privacy",
+          snippet: "We share identifiers with advertising partners for targeted advertising."
+        },
+        signalKey: "privacy.sale_sharing_controls_missing",
+        signalValue: true,
+        targetedAdvertisingDisclosurePresent: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "high-sensitivity concern with request evidence stays eligible",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",

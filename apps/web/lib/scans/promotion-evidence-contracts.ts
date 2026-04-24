@@ -137,6 +137,66 @@ function getRecordValue(record: Record<string, unknown> | null | undefined, keys
   return null;
 }
 
+function getBooleanValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (record?.[key] === true) {
+      return true;
+    }
+    if (record?.[key] === false) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function getArtifactRefs(record: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(record, [
+    "artifactRefs",
+    "runtimeEvidenceArtifacts",
+    "runtime_evidence_artifacts",
+    "sourceArtifactRefs",
+    "source_artifact_refs"
+  ]);
+}
+
+function getEvidenceUrls(record: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(record, [
+    "attemptedUrls",
+    "evidenceUrls",
+    "keyPageAttemptedUrls",
+    "pageUrl",
+    "pageUrls",
+    "requestUrls",
+    "runtimeEvidenceUrls",
+    "sourceUrl",
+    "sourceUrls"
+  ]).filter((value) => /^https?:\/\//i.test(value));
+}
+
+function getEvidenceSnippets(record: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(record, [
+    "claim",
+    "description",
+    "matchedSnippet",
+    "observedBehavior",
+    "policySnippet",
+    "policySnippets",
+    "policySummary",
+    "policy_summary",
+    "snippet",
+    "snippets",
+    "sourceEvidence",
+    "supportingSignals",
+    "summary"
+  ]);
+}
+
+function getUrlAssessment(record: Record<string, unknown> | null | undefined) {
+  const value = getRecordValue(record, ["urlAssessment", "url_assessment"]);
+  return typeof value?.assessment === "string" ? value.assessment : null;
+}
+
 export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
   const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
@@ -157,6 +217,116 @@ export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unkn
   const attributeCount = Math.max(attributeCategories.length, summaryAttributeCategories.length);
 
   return tier >= 3 || (tier >= 2 && attributeCount > 0 && (scriptOrRequestEvidence || vendorEvidence));
+}
+
+export function hasStrongAccessibilitySupportPathMissingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const contactMethodPresent = getBooleanValue(rawEvidence, [
+    "accessibilityContactMethodPresent",
+    "accessibility_contact_method_present"
+  ]);
+  const statementPresent = getBooleanValue(rawEvidence, [
+    "accessibilityStatementPresent",
+    "accessibility_statement_present"
+  ]);
+  if (contactMethodPresent === true || statementPresent === true) {
+    return false;
+  }
+
+  const signalValue = getBooleanValue(rawEvidence, ["signalValue", "accessibilitySupportPathMissing"]);
+  const explicitAbsence = contactMethodPresent === false || statementPresent === false || signalValue === true;
+  const attemptedUrls = getStringArrayValues(rawEvidence, ["keyPageAttemptedUrls", "attemptedUrls"]);
+  const attemptCount = getNumberValue(rawEvidence, ["keyPageAttemptCount", "key_page_attempt_count"]) ?? attemptedUrls.length;
+  const discoverySource =
+    typeof rawEvidence.keyPageDiscoverySource === "string"
+      ? rawEvidence.keyPageDiscoverySource
+      : typeof rawEvidence.key_page_discovery_source === "string"
+        ? rawEvidence.key_page_discovery_source
+        : null;
+  const stableDiscoverySource = [
+    "footer_link",
+    "header_link",
+    "body_link",
+    "legal_hub",
+    "second_hop_legal_hub"
+  ].includes(discoverySource ?? "");
+  const reviewerVisibleSurface =
+    getArtifactRefs(rawEvidence).length > 0 ||
+    getUrlAssessment(rawEvidence) === "supports_promotion" ||
+    getEvidenceUrls(rawEvidence).some((value) => /accessibility|contact|help|support/i.test(value)) ||
+    getEvidenceSnippets(rawEvidence).some((value) => /accessibility|accommodation|assistive|caption|support|contact/i.test(value));
+
+  return Boolean(
+    explicitAbsence &&
+      (reviewerVisibleSurface || (attemptCount >= 2 && stableDiscoverySource) || (attemptCount >= 3 && attemptedUrls.length >= 2))
+  );
+}
+
+export function hasStrongSaleSharingControlsMissingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const doNotSellLinkPresent = getBooleanValue(rawEvidence, [
+    "doNotSellLinkPresent",
+    "do_not_sell_link_present"
+  ]);
+  const targetedAdvertisingChoicesPresent = getBooleanValue(rawEvidence, [
+    "targetedAdvertisingChoicesPresent",
+    "targeted_advertising_choices_present"
+  ]);
+  const missingChoicePath =
+    doNotSellLinkPresent === false ||
+    targetedAdvertisingChoicesPresent === false ||
+    getBooleanValue(rawEvidence, ["signalValue", "saleSharingControlsMissing", "sale_sharing_controls_missing"]) === true;
+  if (!missingChoicePath || doNotSellLinkPresent === true || targetedAdvertisingChoicesPresent === true) {
+    return false;
+  }
+
+  const policyAnchor = getRecordValue(rawEvidence, ["policyAnchor", "policy_anchor"]);
+  const anchorClaimType = typeof policyAnchor?.claimType === "string" ? policyAnchor.claimType : "";
+  const anchorSnippet = typeof policyAnchor?.snippet === "string" ? policyAnchor.snippet : "";
+  const policyAnchorSupportsBehavior =
+    /sale|sharing|share|targeted|advertis|cross-context|personalized/i.test(`${anchorClaimType} ${anchorSnippet}`) &&
+    typeof policyAnchor?.sourceUrl === "string" &&
+    policyAnchor.sourceUrl.length > 0;
+  const disclosureSignals =
+    getBooleanValue(rawEvidence, [
+      "targetedAdvertisingDisclosurePresent",
+      "targeted_advertising_disclosure_present",
+      "thirdPartyAdvertisingDisclosurePresent",
+      "third_party_advertising_disclosure_present",
+      "trackingTechnologiesDisclosurePresent",
+      "tracking_technologies_disclosure_present"
+    ]) === true;
+  const policyTextSupportsBehavior = getEvidenceSnippets(rawEvidence).some((value) =>
+    /do not sell|do not share|sale or sharing|sell or share|targeted advertising|cross-context behavioral|personalized ads?|advertising partners/i.test(
+      value
+    )
+  );
+  const runtimeSupportsBehavior =
+    hasConcreteRetargetingArtifact(rawEvidence) ||
+    getStringArrayValues(rawEvidence, [
+      "retargetingVendors",
+      "runtimeVendors",
+      "runtime_vendors",
+      "vendorCategories",
+      "vendor_categories"
+    ]).some((value) => /advertis|retarget|marketing|adtech|social/i.test(value));
+  const reviewerVisibleAnchor =
+    policyAnchorSupportsBehavior ||
+    getUrlAssessment(rawEvidence) === "supports_promotion" ||
+    (getEvidenceUrls(rawEvidence).length > 0 && (policyTextSupportsBehavior || runtimeSupportsBehavior)) ||
+    getArtifactRefs(rawEvidence).length > 0;
+
+  return Boolean(
+    missingChoicePath &&
+      reviewerVisibleAnchor &&
+      (policyAnchorSupportsBehavior || disclosureSignals || policyTextSupportsBehavior || runtimeSupportsBehavior)
+  );
 }
 
 export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

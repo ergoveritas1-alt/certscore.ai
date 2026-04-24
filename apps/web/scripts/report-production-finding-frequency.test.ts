@@ -19,6 +19,7 @@ function makeReport(scanCount: number) {
     statusCounts: {
       auditOnly: 0,
       review: 0,
+      suppressed: 0,
       surface: scanCount,
       totalOwnerFindings: scanCount
     },
@@ -33,6 +34,8 @@ function makeReport(scanCount: number) {
         sampleSummary: "Observed vendor activity before consent.",
         scanCount,
         scanPct: scanCount,
+        suppressedCount: 0,
+        suppressedScanCount: 0,
         surfaceCount: scanCount
       }
     ]

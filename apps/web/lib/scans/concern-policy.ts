@@ -22,8 +22,10 @@ import {
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
   hasPreconsentSequenceEvidence,
+  hasStrongAccessibilitySupportPathMissingEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence,
+  hasStrongSaleSharingControlsMissingEvidence,
   hasStrongRightsFrictionArtifact
 } from "./promotion-evidence-contracts";
 import {
@@ -737,6 +739,18 @@ function isWeakCookieSecurityAttributesConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return concern.suggestedUnifiedFindingId === "weak_cookie_security_attributes";
+}
+
+function isAccessibilitySupportPathMissingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "accessibility_support_path_missing";
+}
+
+function isSaleSharingControlsMissingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing";
 }
 
 function isAccessibilityIssueFindingConcern(
@@ -1513,6 +1527,32 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isAccessibilitySupportPathMissingConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasStrongAccessibilitySupportPathMissingEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_representative_accessibility_examples"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isSaleSharingControlsMissingConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasStrongSaleSharingControlsMissingEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_policy_side_evidence"],
       promotionEligibility: "internal_only"
     };
   }
