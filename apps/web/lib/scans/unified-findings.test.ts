@@ -2473,6 +2473,9 @@ test("keeps accessibility risk score audit-only without representative axe examp
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), false);
+  assert.equal(packet?.evidence?.flags?.includes("accessibility_score_only_audit_context"), true);
+  assert.equal(packet?.evidence?.counts?.accessibilityRiskScore, ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot.value);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
 });
 
 test("keeps accessibility risk score audit-only for a single moderate axe example", () => {
@@ -2493,6 +2496,8 @@ test("keeps accessibility risk score audit-only for a single moderate axe exampl
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
+  assert.equal(packet?.evidence?.flags?.includes("accessibility_examples_below_promotion_threshold"), true);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("accessibility_examples_below_promotion_threshold"), true);
 });
 
 test("surfaces accessibility risk score when representative axe examples are severe or broadly covered", () => {

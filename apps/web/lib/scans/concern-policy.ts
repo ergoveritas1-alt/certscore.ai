@@ -31,7 +31,10 @@ import {
   derivePolicyPageTypeFromEvidence,
   derivePolicyPrimarySourceFromEvidence
 } from "./policy-evidence-metadata";
-import { hasExternallyPromotableAccessibilityExamples } from "./accessibility-evidence";
+import {
+  getRepresentativeAccessibilityExampleCoverage,
+  hasExternallyPromotableAccessibilityExamples
+} from "./accessibility-evidence";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -1518,6 +1521,13 @@ export function deriveConcernPolicy(input: {
     isAccessibilityIssueFindingConcern(input.concern) &&
     !hasRepresentativeAccessibilityExamples(input.rawEvidence)
   ) {
+    const coverage = getRepresentativeAccessibilityExampleCoverage(input.rawEvidence);
+    negativeEvidenceFlags.add(
+      coverage.representativeExampleCount > 0
+        ? "accessibility_examples_below_promotion_threshold"
+        : "missing_representative_accessibility_examples"
+    );
+
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",

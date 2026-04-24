@@ -883,7 +883,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: []
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
       }
     },
     {
@@ -900,7 +900,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: []
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
       }
     },
     {
@@ -917,7 +917,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: []
+        negativeEvidenceFlags: ["accessibility_examples_below_promotion_threshold"]
       }
     },
     {

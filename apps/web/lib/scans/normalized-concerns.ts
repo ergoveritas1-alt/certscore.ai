@@ -78,7 +78,9 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_concrete_preconsent_artifact"
   | "missing_preconsent_sequence_evidence"
   | "missing_concrete_sensitive_payload"
-  | "missing_third_party_tracking_artifact";
+  | "missing_third_party_tracking_artifact"
+  | "missing_representative_accessibility_examples"
+  | "accessibility_examples_below_promotion_threshold";
 
 export type NormalizedConcernEvidenceBundle = {
   counts: Record<string, number>;
