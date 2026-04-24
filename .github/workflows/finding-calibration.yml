@@ -35,8 +35,9 @@ jobs:
 
           case "${PROD_DATABASE_URL}" in
             *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
-              echo "PROD_DATABASE_URL points at a local database. Set it to the live DB."
-              exit 1
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Skipping production DB calibration because PROD_DATABASE_URL points at a local database."
+              exit 0
               ;;
           esac
 
