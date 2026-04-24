@@ -14,6 +14,18 @@ test("prefers forwarded host and proto when present", () => {
   assert.equal(getRequestOrigin(request), "http://localhost:3000");
 });
 
+test("ignores bind host forwarded from production runtime", () => {
+  const request = new Request("http://0.0.0.0:3000/logout", {
+    headers: {
+      host: "certscore.ai",
+      "x-forwarded-host": "0.0.0.0:3000",
+      "x-forwarded-proto": "https"
+    }
+  });
+
+  assert.equal(getRequestOrigin(request), "https://certscore.ai");
+});
+
 test("uses localhost http when only host header is present", () => {
   const request = new Request("http://localhost:3000/auth/google?next=%2Fapp", {
     headers: {

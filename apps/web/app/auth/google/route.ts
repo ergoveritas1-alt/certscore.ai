@@ -13,8 +13,13 @@ function getSafeRedirectPath(nextPath: string | null) {
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const requestHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? requestUrl.host;
   const requestOrigin = getRequestOrigin(request);
+  const resolvedOrigin = new URL(requestOrigin);
+  const requestHost = resolvedOrigin.host;
+  const authHeaders = new Headers(request.headers);
+  authHeaders.set("host", requestHost);
+  authHeaders.set("x-forwarded-host", requestHost);
+  authHeaders.set("x-forwarded-proto", resolvedOrigin.protocol.replace(":", ""));
 
   if (!isGoogleAuthEnabled() || !isGoogleAuthAllowedForHost(requestHost)) {
     return NextResponse.redirect(new URL("/login?error=google_sign_in_unavailable", requestOrigin));
@@ -31,7 +36,7 @@ export async function GET(request: Request) {
       newUserCallbackURL: callbackURL,
       provider: "google"
     },
-    headers: request.headers
+    headers: authHeaders
   });
 
   if (!result.url) {
