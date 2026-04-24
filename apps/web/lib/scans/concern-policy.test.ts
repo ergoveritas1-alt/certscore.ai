@@ -570,6 +570,86 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "privacy rights positive with generic rights language stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.privacy_rights_path_present",
+        suggestedUnifiedFindingId: "privacy_rights_path_present",
+        title: "Privacy rights path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policySnippets: ["You may have rights to access or delete your personal information depending on your location."],
+        signalKey: "privacy.privacy_rights_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+      }
+    },
+    {
+      name: "privacy rights positive with concrete request mechanism stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_rights_path_present",
+        suggestedUnifiedFindingId: "privacy_rights_path_present",
+        title: "Privacy rights path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy-rights",
+        policySnippets: ["Submit a privacy request form to request access, deletion, or correction of your personal information."],
+        signalKey: "privacy.privacy_rights_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "privacy contact positive with generic support contact stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.privacy_contact_path_present",
+        suggestedUnifiedFindingId: "privacy_contact_path_present",
+        title: "Privacy contact path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/contact",
+        policySnippets: ["Contact our support team for help with your account."],
+        signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+      }
+    },
+    {
+      name: "privacy contact positive with privacy-specific contact stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_contact_path_present",
+        suggestedUnifiedFindingId: "privacy_contact_path_present",
+        title: "Privacy contact path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policySnippets: ["Contact our privacy team at privacy@example.com for personal information requests."],
+        signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "contact support path with blocked interstitial evidence stays audit-only",
       concern: makeConcern({
         originKey: "disclosure.contact_page_present",

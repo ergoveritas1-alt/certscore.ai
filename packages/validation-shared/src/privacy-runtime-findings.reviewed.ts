@@ -1473,5 +1473,144 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Live production demotion audit identified a candidate that should remain review-only until policy and control-path evidence are anchored together.",
     scenarioType: "borderline_review",
     sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Own URL review did not find a substantive privacy policy page; retain as review-only until a concrete policy URL and snippet are retained.",
+    evidence: {
+      signalKey: "disclosure.privacy_policy_present",
+      snapshotEvidence: {
+        privacy_policy_present: true
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL probe did not find a substantive privacy policy page; do not promote from a thin footer or inferred policy signal alone.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://atlas-finance.org"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_policy_present",
+    id: "live-review-privacy-policy-atlas-finance-org-2026-04-24",
+    notes: "Live positive-surface audit found insufficient policy-page evidence for an otherwise present privacy-policy signal.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Own URL review did not find a privacy-specific contact channel; generic contact/support evidence is not enough for this positive finding.",
+    evidence: {
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacy_contact_method_present: false
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL probe did not find a privacy-specific contact channel; generic support/contact evidence should remain review-only.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://altsignals.io"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "live-review-privacy-contact-altsignals-io-2026-04-24",
+    notes: "Live positive-surface audit found no privacy-specific contact path for a candidate positive privacy-contact finding.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Own URL review did not find a concrete privacy-rights path; generic or inferred rights signals should remain review-only.",
+    evidence: {
+      signalKey: "privacy.privacy_rights_path_present",
+      snapshotEvidence: {
+        data_access_request_present: false,
+        data_deletion_request_present: false,
+        privacy_request_form_present: false
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL probe did not find a concrete privacy-rights path, portal, form, email, or request instruction.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestforex-signals.com"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_rights_path_present",
+    id: "live-review-privacy-rights-bestforex-signals-com-2026-04-24",
+    notes: "Live positive-surface audit found no concrete rights mechanism for a candidate privacy-rights positive finding.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      signalKey: "financial.pricing_or_fee_transparency_unclear",
+      snapshotEvidence: {
+        fee_related_text_present: true,
+        pricing_page_present: true
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found fee/pricing language with nearby material terms context, so pricing transparency should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.blackrock.com/us/individual/products/529-college-savings-plans"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "pricing_or_fee_transparency_unclear",
+    id: "live-demotion-pricing-blackrock-com-2026-04-24",
+    negativeControlReason: "Fee or pricing language has nearby material terms context.",
+    notes: "Live positive-surface audit found enough balancing fee/terms context to demote the pricing-transparency interpretation.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Own URL probe did not find enough pricing context to confirm or demote; keep the pricing transparency interpretation review-only.",
+    evidence: {
+      signalKey: "financial.pricing_or_fee_transparency_unclear",
+      snapshotEvidence: {
+        fee_related_text_present: true,
+        pricing_page_present: true
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL probe did not find enough pricing context to confirm or demote the transparency finding.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestcopytrading.com/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "pricing_or_fee_transparency_unclear",
+    id: "live-review-pricing-bestcopytrading-com-2026-04-24",
+    notes: "Live positive-surface audit found insufficient pricing-page context for external surfacing.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
   }
 ];

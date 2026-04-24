@@ -1,7 +1,13 @@
 import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
 
-type TargetFinding = "accessibility_support_path_missing" | "sale_sharing_controls_missing";
+type TargetFinding =
+  | "accessibility_support_path_missing"
+  | "privacy_contact_path_present"
+  | "privacy_policy_present"
+  | "privacy_rights_path_present"
+  | "pricing_or_fee_transparency_unclear"
+  | "sale_sharing_controls_missing";
 
 type CandidateRow = {
   ad_network_google_ads: boolean | null;
@@ -14,6 +20,13 @@ type CandidateRow = {
   do_not_sell_link_present: boolean | null;
   final_url: string | null;
   mentions_data_sale_or_sharing: boolean | null;
+  privacy_contact_method_present: boolean | null;
+  privacy_policy_present: boolean | null;
+  privacy_request_form_present: boolean | null;
+  data_access_request_present: boolean | null;
+  data_deletion_request_present: boolean | null;
+  fee_related_text_present: boolean | null;
+  pricing_page_present: boolean | null;
   retargeting_pixel_detected: boolean | null;
   scan_id: string;
   verified_public_surfaces_count: number | null;
@@ -67,7 +80,14 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
   if (!value || value === "all") {
     return "all";
   }
-  if (value === "accessibility_support_path_missing" || value === "sale_sharing_controls_missing") {
+  if (
+    value === "accessibility_support_path_missing" ||
+    value === "privacy_contact_path_present" ||
+    value === "privacy_policy_present" ||
+    value === "privacy_rights_path_present" ||
+    value === "pricing_or_fee_transparency_unclear" ||
+    value === "sale_sharing_controls_missing"
+  ) {
     return value;
   }
   throw new Error(`Unsupported finding: ${value}`);
@@ -137,6 +157,175 @@ async function fetchText(url: string) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function getCandidateUrls(input: {
+  baseUrl: string;
+  homepage: Awaited<ReturnType<typeof fetchText>>;
+  patterns: RegExp[];
+  paths: string[];
+}) {
+  const linkedUrls = input.homepage
+    ? input.patterns.flatMap((pattern) => extractLinks(input.baseUrl, input.homepage!.html, pattern))
+    : [];
+  return [...new Set([...linkedUrls, ...input.paths.map((path) => `${input.baseUrl}${path}`)])].slice(0, 14);
+}
+
+function hasPrivacyRightsMechanism(text: string) {
+  return /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(text);
+}
+
+function hasPrivacySpecificContact(text: string) {
+  return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(text);
+}
+
+async function probePrivacyPolicy(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: ["/privacy", "/privacy-policy", "/privacy-notice", "/legal/privacy"],
+    patterns: [/privacy/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    if (/privacy (?:policy|notice|statement)|personal information|personal data/i.test(page.text)) {
+      return {
+        assessment: "supports_promotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found a substantive privacy policy or privacy notice surface."
+      };
+    }
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: null,
+    rationale: "Live URL probe did not find a substantive privacy policy page; do not promote from a thin footer signal alone."
+  };
+}
+
+async function probePrivacyContact(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: ["/privacy", "/privacy-policy", "/privacy-notice", "/privacy-center", "/contact"],
+    patterns: [/privacy|contact|data-protection|dpo/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    if (hasPrivacySpecificContact(page.text)) {
+      return {
+        assessment: "supports_promotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found a privacy-specific contact channel or data-protection contact path."
+      };
+    }
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: null,
+    rationale: "Live URL probe did not find a privacy-specific contact channel; generic support/contact evidence is not enough."
+  };
+}
+
+async function probePrivacyRights(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: [
+      "/privacy",
+      "/privacy-policy",
+      "/privacy-center",
+      "/privacy-rights",
+      "/privacy-request",
+      "/privacy-choices",
+      "/data-request",
+      "/ccpa"
+    ],
+    patterns: [/privacy|rights|request|ccpa|data/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    if (hasPrivacyRightsMechanism(page.text)) {
+      return {
+        assessment: "supports_promotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found a concrete privacy-rights request mechanism, portal, form, or instructions."
+      };
+    }
+    if (/privacy rights|right to access|right to delete|right to correct|your rights/i.test(page.text)) {
+      return {
+        assessment: "needs_review",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found generic privacy-rights language but not a concrete request mechanism."
+      };
+    }
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: null,
+    rationale: "Live URL probe did not find a concrete privacy-rights path."
+  };
+}
+
+async function probePricingTransparency(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const candidateUrls = getCandidateUrls({
+    baseUrl,
+    homepage,
+    paths: ["/pricing", "/fees", "/plans", "/subscribe", "/checkout"],
+    patterns: [/pricing|fees|plans|subscribe|checkout|membership/i]
+  });
+
+  for (const url of candidateUrls) {
+    const page = await fetchText(url);
+    if (!page) {
+      continue;
+    }
+    const hasFeeClaim = /\b(?:fee|fees|pricing|price|cost|monthly|annual|subscription|subscribe|membership|trial|\$|usd)\b/i.test(page.text);
+    const hasMaterialTerms = /refund|cancel|cancellation|renewal|billing|terms|fee schedule|withdrawal|conditions/i.test(page.text);
+    if (hasFeeClaim && !hasMaterialTerms) {
+      return {
+        assessment: "supports_promotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found fee/pricing language without nearby material fee, billing, cancellation, or terms context."
+      };
+    }
+    if (hasFeeClaim && hasMaterialTerms) {
+      return {
+        assessment: "supports_demotion",
+        evidenceUrl: page.finalUrl,
+        rationale: "Live URL review found fee/pricing language with nearby material terms context."
+      };
+    }
+  }
+
+  return {
+    assessment: "needs_review",
+    evidenceUrl: row.final_url,
+    rationale: "Live URL probe did not find enough pricing context to confirm or demote the transparency finding."
+  };
 }
 
 async function probeAccessibility(row: CandidateRow): Promise<LiveProbe> {
@@ -225,10 +414,15 @@ async function probeSaleSharing(row: CandidateRow): Promise<LiveProbe> {
 }
 
 async function loadCandidates(finding: TargetFinding, input: { domains: string[]; limit: number }) {
-  const predicate =
-    finding === "accessibility_support_path_missing"
-      ? `ss.accessibility_contact_method_present is false and ss.accessibility_statement_present is false`
-      : `ss.retargeting_pixel_detected is true and ss.do_not_sell_link_present is false`;
+  const predicateByFinding: Record<TargetFinding, string> = {
+    accessibility_support_path_missing: `ss.accessibility_contact_method_present is false and ss.accessibility_statement_present is false`,
+    privacy_contact_path_present: `ss.privacy_contact_method_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.privacy_contact_path_present')`,
+    privacy_policy_present: `ss.privacy_policy_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.privacy_policy_present')`,
+    privacy_rights_path_present: `ss.privacy_request_form_present is true or ss.data_access_request_present is true or ss.data_deletion_request_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.privacy_rights_path_present')`,
+    pricing_or_fee_transparency_unclear: `ss.fee_related_text_present is true or ss.pricing_page_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'financial.pricing_or_fee_transparency_unclear')`,
+    sale_sharing_controls_missing: `ss.retargeting_pixel_detected is true and ss.do_not_sell_link_present is false`
+  };
+  const predicate = predicateByFinding[finding];
   const domainPredicate =
     input.domains.length > 0
       ? `and lower(regexp_replace(ss.domain, '^www\\.', '')) = any($2::text[])`
@@ -246,12 +440,19 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
              ss.final_url,
              ss.accessibility_contact_method_present,
              ss.accessibility_statement_present,
+             ss.privacy_contact_method_present,
+             ss.privacy_policy_present,
+             ss.privacy_request_form_present,
+             ss.data_access_request_present,
+             ss.data_deletion_request_present,
              ss.retargeting_pixel_detected,
              ss.do_not_sell_link_present,
              ss.mentions_data_sale_or_sharing,
              ss.ad_network_google_ads,
              ss.ad_network_meta_ads,
              ss.advertising_tracker_count,
+             ss.fee_related_text_present,
+             ss.pricing_page_present,
              ss.verified_public_surfaces_count
         from scans s
         join scan_snapshots ss on ss.scan_id = s.id
@@ -283,6 +484,48 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
     };
   }
 
+  if (finding === "privacy_policy_present") {
+    return {
+      assessment: row.privacy_policy_present === true ? "supports_promotion" : "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: row.privacy_policy_present === true
+        ? "Scanner retained a privacy-policy-present signal; live URL review should confirm the surface is substantive."
+        : "No direct privacy-policy snapshot field was retained; needs URL review before promotion."
+    };
+  }
+
+  if (finding === "privacy_contact_path_present") {
+    return {
+      assessment: row.privacy_contact_method_present === true ? "supports_promotion" : "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: row.privacy_contact_method_present === true
+        ? "Scanner retained a privacy-specific contact signal; live URL review should confirm it is not generic support-only contact."
+        : "No direct privacy-contact snapshot field was retained; needs URL review before promotion."
+    };
+  }
+
+  if (finding === "privacy_rights_path_present") {
+    const concreteRights =
+      row.privacy_request_form_present === true ||
+      row.data_access_request_present === true ||
+      row.data_deletion_request_present === true;
+    return {
+      assessment: concreteRights ? "supports_promotion" : "needs_review",
+      evidenceUrl: row.final_url,
+      rationale: concreteRights
+        ? "Scanner retained a concrete privacy request/data rights signal; live URL review should confirm the mechanism."
+        : "Privacy-rights promotion needs a concrete portal, form, email, or request instruction, not generic rights language."
+    };
+  }
+
+  if (finding === "pricing_or_fee_transparency_unclear") {
+    return {
+      assessment: row.fee_related_text_present === true || row.pricing_page_present === true ? "needs_review" : "supports_demotion",
+      evidenceUrl: row.final_url,
+      rationale: "Pricing transparency needs live offer-page context because fee-related text alone can be generic or balanced by nearby terms."
+    };
+  }
+
   const hasBehaviorOnly = row.retargeting_pixel_detected === true && row.mentions_data_sale_or_sharing !== true;
   return {
     assessment: hasBehaviorOnly ? "supports_demotion" : "needs_review",
@@ -299,9 +542,18 @@ async function main() {
   const limit = getNumberArg("--limit", 12);
   const liveCheck = hasFlag("--live-check");
   const findings: TargetFinding[] =
-    finding === "all" ? ["accessibility_support_path_missing", "sale_sharing_controls_missing"] : [finding];
+    finding === "all"
+      ? [
+          "accessibility_support_path_missing",
+          "sale_sharing_controls_missing",
+          "privacy_policy_present",
+          "privacy_contact_path_present",
+          "privacy_rights_path_present",
+          "pricing_or_fee_transparency_unclear"
+        ]
+      : [finding];
   const rows: string[] = [
-    "# Production Finding Demotion Audit",
+    "# Production Finding Evidence Audit",
     "",
     `Live check: ${liveCheck ? "enabled" : "disabled"}`,
     "",
@@ -316,7 +568,15 @@ async function main() {
       const live = liveCheck
         ? findingId === "accessibility_support_path_missing"
           ? await probeAccessibility(candidate)
-          : await probeSaleSharing(candidate)
+          : findingId === "sale_sharing_controls_missing"
+            ? await probeSaleSharing(candidate)
+            : findingId === "privacy_policy_present"
+              ? await probePrivacyPolicy(candidate)
+              : findingId === "privacy_contact_path_present"
+                ? await probePrivacyContact(candidate)
+                : findingId === "privacy_rights_path_present"
+                  ? await probePrivacyRights(candidate)
+                  : await probePricingTransparency(candidate)
         : null;
       const effective = live ?? local;
       rows.push(

@@ -12,6 +12,8 @@
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts --allow-missing-env",
     "check:production-finding-calibration": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-production-finding-calibration.ts",
     "audit:production-finding-demotions": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
+    "audit:production-finding-evidence": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
+    "test:production-finding-calibration": "pnpm check:production-finding-calibration -- --fail-on-review",
     "run:tranco-batch": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-batch.ts",
     "compare:tranco-batch": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/compare-prod-local-tranco-calibration.ts",
     "run:tranco-session": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-tranco-calibration-session.ts",

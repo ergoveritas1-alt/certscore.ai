@@ -311,6 +311,31 @@ function isCookieLikeUrl(value: string) {
   }
 }
 
+function isPrivacyRightsMechanismUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return /privacy[-_/]?(?:rights|request|portal|center|choices)|data[-_/]?(?:request|access|deletion|delete|correction)|ccpa|consumer[-_/]?rights/i.test(
+      parsed.pathname
+    );
+  } catch {
+    return /privacy[-_/]?(?:rights|request|portal|center|choices)|data[-_/]?(?:request|access|deletion|delete|correction)|ccpa|consumer[-_/]?rights/i.test(
+      value
+    );
+  }
+}
+
+function hasPrivacyRightsMechanismText(value: string) {
+  return /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(
+    value
+  );
+}
+
+function hasPrivacySpecificContactText(value: string) {
+  return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(
+    value
+  );
+}
+
 function isTermsLikeUrl(value: string) {
   try {
     const parsed = new URL(value);
@@ -398,12 +423,11 @@ function getPositiveInfrastructureEvidenceGrade(
           ? "verified" as const
           : "weak" as const;
       case "privacy_rights_path_present":
-        return (
-          getPolicyRightsSignals(rawEvidence).length > 0 ||
-          snippets.some((value) =>
-            /privacy rights|rights center|delete request|access request|request access|access to|deletion|data request/i.test(value)
-          )
-        )
+        return (snippets.some(hasPrivacyRightsMechanismText) || urls.some(isPrivacyRightsMechanismUrl))
+          ? "verified" as const
+          : "weak" as const;
+      case "privacy_contact_path_present":
+        return snippets.some(hasPrivacySpecificContactText)
           ? "verified" as const
           : "weak" as const;
       default:
@@ -444,8 +468,7 @@ function getPositiveInfrastructureEvidenceGrade(
         : "weak" as const;
     case "privacy_rights_path_present":
       return hasPacketBacking &&
-        (getPolicyRightsSignals(rawEvidence).length > 0 ||
-          snippets.some((value) => /privacy rights|rights center|delete request|access request|data request/i.test(value))) &&
+        (snippets.some(hasPrivacyRightsMechanismText) || urls.some(isPrivacyRightsMechanismUrl)) &&
         humanFacingUrlCount >= 1
         ? "corroborated" as const
         : "weak" as const;
@@ -462,6 +485,11 @@ function getPositiveInfrastructureEvidenceGrade(
         ? "corroborated" as const
         : "weak" as const;
     case "privacy_contact_path_present":
+      return hasPacketBacking &&
+        snippets.some(hasPrivacySpecificContactText) &&
+        humanFacingUrlCount >= 1
+        ? "corroborated" as const
+        : "weak" as const;
     case "gpc_disclosure_present":
     case "tracking_technologies_disclosure_present":
     case "third_party_advertising_disclosure_present":
