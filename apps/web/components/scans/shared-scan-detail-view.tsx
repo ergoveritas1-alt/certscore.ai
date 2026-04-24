@@ -48,12 +48,12 @@ import {
   deriveCertScoreFindings,
 } from "../../lib/scans/derive-findings";
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import {
   getHybridDerivedSignalValue,
   getHybridRuntimeEvidence,
   getHybridSignalFallbackEvidence
 } from "../../lib/scans/hybrid-runtime-evidence";
-import { selectTopFindings } from "../../lib/scans/rank-findings";
 import {
   buildUnifiedFindingDisplayPackets,
   getUnifiedFindingCategoryRelation,
@@ -518,76 +518,6 @@ function dedupeHeadlineFindings(findings: PreviewSampleFinding[]) {
   }
 
   return deduped;
-}
-
-function buildExecutiveSupplementalFindings(input: {
-  certFindings: CertScoreFinding[];
-  contradictions: PolicyBehaviorContradiction[];
-  snapshot: Record<string, unknown> | null;
-}) {
-  const findings: CertScoreFinding[] = [];
-  const hasDarkPatternCard = input.certFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
-  const asymmetricConsentFinding = input.certFindings.find((finding) => finding.id === "asymmetric_consent_ui") ?? null;
-  const darkPatternFlags = [
-    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_button_prominence") ? "Accept button prominence" : null,
-    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_reject_button_missing") ? "Reject button missing" : null,
-    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_forced_consent_wall") ? "Forced consent wall" : null,
-    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_accept_only_banner") ? "Accept-only banner" : null,
-    getSnapshotBoolean(input.snapshot ?? {}, "dark_pattern_dismiss_without_reject") ? "Dismiss without reject" : null
-  ].filter((value): value is string => Boolean(value));
-  const darkPatternSignals = darkPatternFlags.length > 0
-    ? darkPatternFlags
-    : asymmetricConsentFinding
-      ? [asymmetricConsentFinding.shortSummary]
-      : [];
-
-  if (!hasDarkPatternCard && darkPatternSignals.length > 0) {
-    findings.push({
-      id: "consent_dark_patterns_detected",
-      label: "Dark pattern consent signals detected",
-      section: "Consent Experience",
-      defaultSurfacePriority: 95,
-      whyItMatters:
-        "Choice architecture that steers users toward acceptance can undermine meaningful consent and create dark-pattern risk.",
-      remediation:
-        "Expose reject and settings at the first layer, remove accept-only or forced paths, and equalize button prominence and interaction cost across consent choices.",
-      confidence: darkPatternFlags.length > 0 ? "strong" : "good",
-      directVsInferred: darkPatternFlags.length > 0 ? "direct" : "mixed",
-      evidencePreview: darkPatternSignals.slice(0, 4),
-      evidenceRefs: [],
-      severity: "high",
-      shortSummary:
-        darkPatternFlags.length > 0
-          ? `Detected consent-interface dark pattern signals: ${darkPatternSignals.join(", ")}.`
-          : asymmetricConsentFinding?.shortSummary ?? "Consent-interface dark pattern risk was detected."
-    });
-  }
-
-  const primaryContradiction = input.contradictions.find((row) => row.status === "contradiction") ?? input.contradictions[0] ?? null;
-  if (primaryContradiction) {
-    findings.push({
-      id: "policy_behavior_contradiction_detected",
-      label: primaryContradiction.title,
-      section: "Privacy & Tracking",
-      defaultSurfacePriority: 97,
-      whyItMatters:
-        "A mismatch between public policy language and observed runtime behavior is one of the clearest reasons for targeted analyst review.",
-      remediation:
-        "Compare the retained policy claim against the observed runtime behavior, then either correct the implementation or narrow the policy language so it accurately reflects what the site does in practice.",
-      confidence: primaryContradiction.status === "contradiction" ? "strong" : "good",
-      directVsInferred: "mixed",
-      evidencePreview: [
-        primaryContradiction.claim,
-        primaryContradiction.observedBehavior,
-        ...primaryContradiction.relatedVendors.slice(0, 2)
-      ].filter((value): value is string => typeof value === "string" && value.trim().length > 0),
-      evidenceRefs: primaryContradiction.evidence,
-      severity: primaryContradiction.severity,
-      shortSummary: primaryContradiction.observedBehavior
-    });
-  }
-
-  return findings;
 }
 
 function derivePolicyBehaviorContradictions(input: {
@@ -5893,12 +5823,6 @@ export function SharedScanDetailView({
     ...(fallbackServerNames.length > 0 ? [`Indirect source retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
     ...(fallbackVerifiedSurfaceTargets.length > 0 ? [`Indirect source retained disclosure surfaces: ${fallbackVerifiedSurfaceTargets.join(", ")}`] : [])
   ]);
-  const executiveDisplayedScore = deriveExecutiveDisplayedScore({
-    findings: certScoreSummary.findings,
-    previewMode,
-    snapshot,
-    storedScore: certScoreSummary.score
-  });
   const useLightweightHeroMetrics =
     Boolean(previewPayload?.fallbackEvidence) &&
     (
@@ -6074,23 +5998,17 @@ export function SharedScanDetailView({
     scanRecord.preconsentViolations.length > 0 ||
     scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
-  const executiveSupplementalFindings = buildExecutiveSupplementalFindings({
-    certFindings: certScoreSummary.findings,
-    contradictions: policyBehaviorContradictions,
-    snapshot
+  const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(findingEvidenceDiagnostics);
+  const executiveDisplayedScore = deriveExecutiveDisplayedScore({
+    findings: executiveFindingsProjection.findings,
+    previewMode,
+    snapshot,
+    storedScore: certScoreSummary.score
   });
-  const hasSupplementalDarkPatternFinding = executiveSupplementalFindings.some((finding) => finding.id === "consent_dark_patterns_detected");
-  const filteredCertFindings = certScoreSummary.findings.filter((finding) =>
-    hasSupplementalDarkPatternFinding ? finding.id !== "asymmetric_consent_ui" : true
-  );
-  const presentedCertScoreFindings = executiveAccessLimitationNotice ? [] : certScoreSummary.findings;
-  const baseExecutiveFindings = selectTopFindings(filteredCertFindings, 5);
+  const presentedCertScoreFindings = executiveAccessLimitationNotice ? [] : executiveFindingsProjection.findings;
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
-    : selectTopFindings(
-        [...executiveSupplementalFindings, ...baseExecutiveFindings],
-        Math.min(6, 5 + executiveSupplementalFindings.length)
-      );
+    : executiveFindingsProjection.topFindings;
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -6138,7 +6056,7 @@ export function SharedScanDetailView({
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
     pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    posture: executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture,
+    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: scanRecord.scan.id,
     scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
@@ -6154,6 +6072,13 @@ export function SharedScanDetailView({
         data-testid="scan-calibration-summary"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(scanCalibrationSummary).replace(/</g, "\\u003c")
+        }}
+      />
+      <script
+        type="application/json"
+        data-testid="scan-surfacing-trace"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(executiveFindingsProjection.trace).replace(/</g, "\\u003c")
         }}
       />
       <ScanPageHeader
@@ -6181,7 +6106,7 @@ export function SharedScanDetailView({
         <>
           <ExecutiveSummaryCard
             accessLimitationNotice={executiveAccessNoticeCardProps}
-            allFindings={certScoreSummary.findings}
+            allFindings={executiveFindingsProjection.findings}
             accessibilitySignals={{
               accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
               accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
@@ -6203,7 +6128,7 @@ export function SharedScanDetailView({
             fingerprintNarrative={certScoreSummary.fingerprintNarrative}
             landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
             lastScannedAt={certScoreSummary.lastScannedAt}
-            posture={executiveAccessLimitationNotice ? "Watch" : certScoreSummary.posture}
+            posture={executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
             regulatoryRisk={scanRecord.regulatoryRisk}
@@ -6304,7 +6229,7 @@ export function SharedScanDetailView({
             </div>
           </CollapsibleSectionCard>
           <div className="space-y-5">
-            {certScoreSummary.groupedFindings.map((group) => (
+            {executiveFindingsProjection.groupedFindings.map((group) => (
               <FindingsSection key={group.section} findings={group.findings} section={group.section} />
             ))}
           </div>

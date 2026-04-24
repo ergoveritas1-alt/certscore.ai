@@ -207,6 +207,36 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Collection endpoints often reflect analytics or tracking data transmission.",
     remediation: "Review data collection endpoints and disable non-essential ones before consent."
   },
+  consent_dark_patterns_detected: {
+    id: "consent_dark_patterns_detected",
+    label: "Dark pattern consent signals detected",
+    section: "Consent Experience",
+    defaultSurfacePriority: 95,
+    whyItMatters:
+      "Choice architecture that steers users toward acceptance can undermine meaningful consent and create dark-pattern risk.",
+    remediation:
+      "Expose reject and settings at the first layer, remove accept-only or forced paths, and equalize button prominence and interaction cost across consent choices."
+  },
+  policy_behavior_contradiction_detected: {
+    id: "policy_behavior_contradiction_detected",
+    label: "Policy and runtime behavior conflict",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 97,
+    whyItMatters:
+      "A mismatch between public policy language and observed runtime behavior is one of the clearest reasons for targeted analyst review.",
+    remediation:
+      "Compare the retained policy claim against the observed runtime behavior, then either correct the implementation or narrow the policy language so it accurately reflects what the site does in practice."
+  },
+  policy_clarity_risk: {
+    id: "policy_clarity_risk",
+    label: "Disclosure clarity remains weak",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 65,
+    whyItMatters:
+      "Ambiguous or incomplete disclosure language can create consumer-protection and enforcement risk even when no single runtime contradiction is retained.",
+    remediation:
+      "Tighten disclosure language so it clearly explains what data is collected, why it is used, and when consent or choice mechanisms apply."
+  },
   tracking_redirect_chain: {
     id: "tracking_redirect_chain",
     label: "Tracking-style redirect chain",
