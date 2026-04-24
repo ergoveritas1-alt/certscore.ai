@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -101,4 +101,31 @@ test("promotePrivacyRuntimeExamples supports dry-run duplicate detection", () =>
       }),
     /duplicate privacy runtime dataset id/
   );
+});
+
+test("promotePrivacyRuntimeExamples validates before writing reviewed examples", () => {
+  const dir = mkdtempSync(join(tmpdir(), "privacy-runtime-promote-"));
+  const reviewPath = join(dir, "review.md");
+  const datasetPath = join(dir, "reviewed.ts");
+  writeFileSync(reviewPath, ["# Review", "", REVIEW_SECTION].join("\n"), "utf8");
+  writeFileSync(
+    datasetPath,
+    [
+      'import type { PrivacyRuntimeFindingDatasetExample } from "./privacy-runtime-findings.dataset";',
+      "",
+      "export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDatasetExample[] = [",
+      "];"
+    ].join("\n"),
+    "utf8"
+  );
+
+  assert.throws(
+    () =>
+      promotePrivacyRuntimeExamples({
+        datasetPath,
+        filePath: reviewPath
+      }),
+    /Promotion blocked/
+  );
+  assert.doesNotMatch(readFileSync(datasetPath, "utf8"), /live-preconsent-example/);
 });

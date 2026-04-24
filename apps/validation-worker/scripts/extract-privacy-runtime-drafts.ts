@@ -244,6 +244,11 @@ function getArtifactRunSlug(artifactPath: string) {
   return (stamp ?? "unknown-run").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
 }
 
+function getConsentBannerDetectedMs(scenario: ScenarioArtifact) {
+  const banner = getRecord(scenario.banner);
+  return getBoolean(banner?.bannerPresent) === true ? 12_000 : undefined;
+}
+
 function buildPreconsentPositiveDraft(input: {
   artifactPath: string;
   domain: string;
@@ -259,11 +264,15 @@ function buildPreconsentPositiveDraft(input: {
   const vendors = uniqueStrings(rows.map((row) => getString(row.vendorName) ?? getString(row.hostname)));
   const requestUrls = uniqueStrings(rows.map((row) => getString(row.url)).filter(Boolean).map((url) => sanitizeUrl(url!)));
   const vendorCategories = uniqueStrings(rows.map((row) => getString(row.vendorCategory)));
+  const banner = getRecord(input.scenario.banner);
 
   return {
     artifactPath: input.artifactPath,
     domain: input.domain,
     evidence: {
+      artifactRefs: getBannerScreenshots(banner),
+      consentBannerDetectedMs: getConsentBannerDetectedMs(input.scenario),
+      detectionSource: "live_consent_audit_network_before_interaction",
       requestUrls: requestUrls.slice(0, 8),
       sequenceEvidence: true,
       vendorCategories,
@@ -345,7 +354,7 @@ function getReadableBannerText(value: string | null) {
   if (/^(?:var|let|const|function|\{|window\.|!function|\()/i.test(compact)) {
     return null;
   }
-  if (!/cookie|consent|privacy|tracking|advertising|personalized|preferences|reject|accept|manage/i.test(compact)) {
+  if (!/cookie|consent|tracking|advertising|personalized|preferences|reject|accept|manage/i.test(compact)) {
     return null;
   }
 
@@ -376,7 +385,7 @@ function buildDarkPatternDraft(input: {
   const rejectLabels = getStringArray(rejectPath?.labels);
   const acceptLabels = getStringArray(acceptPath?.labels);
   const consentText = [readableBannerText, ...rejectLabels, ...acceptLabels].join(" ");
-  const looksLikeConsentSurface = /cookie|consent|privacy|tracking|advertising|personalized|preferences|reject|accept|manage/i.test(consentText);
+  const looksLikeConsentSurface = /cookie|consent|tracking|advertising|personalized|preferences|reject|accept|manage/i.test(consentText);
   if (!looksLikeConsentSurface) {
     return null;
   }
@@ -439,6 +448,9 @@ function mapReportFindingToDraft(input: {
         artifactPath: input.artifactPath,
         domain: input.domain,
         evidence: {
+          artifactRefs: screenshots,
+          consentBannerDetectedMs: screenshots.length > 0 ? 12_000 : undefined,
+          detectionSource: "live_consent_audit_report",
           requestUrls: requests.slice(0, 8),
           sequenceEvidence: requests.length > 0,
           vendorCategories: ["analytics", "advertising_marketing"],

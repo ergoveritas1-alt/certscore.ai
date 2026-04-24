@@ -242,16 +242,16 @@ export function promotePrivacyRuntimeExamples(input: {
     };
   }
 
-  const nextSource = appendBlocksToReviewedPrivacyRuntimeDataset(source, blocks);
-  writeFileSync(datasetPath, nextSource, "utf8");
-
   const evalSummary = evaluatePrivacyRuntimeFindingsDataset([
     ...PRIVACY_RUNTIME_FINDINGS_DATASET_SEED,
     ...entries.map((entry) => entry.example)
   ]);
   if (evalSummary.mismatches.length > 0 || evalSummary.overallMatchCount !== evalSummary.evaluatedCount) {
-    throw new Error(`Promotion wrote ${blocks.length} examples, but privacy runtime eval failed with ${evalSummary.mismatches.length} mismatches.`);
+    throw new Error(`Promotion blocked ${blocks.length} examples because privacy runtime eval failed with ${evalSummary.mismatches.length} mismatches.`);
   }
+
+  const nextSource = appendBlocksToReviewedPrivacyRuntimeDataset(source, blocks);
+  writeFileSync(datasetPath, nextSource, "utf8");
 
   return {
     blockCount: blocks.length,
