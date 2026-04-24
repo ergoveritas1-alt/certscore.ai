@@ -183,6 +183,17 @@ export type ExecutiveFindingsProjection = {
   posture: "Clear" | "Watch" | "Action Needed";
   topFindings: CertScoreFinding[];
   trace: {
+    packets: Array<{
+      executiveFindingId: string | null;
+      inExecutiveFindings: boolean;
+      inRegulatoryLensInput: boolean;
+      inTopFindings: boolean;
+      presentationStatus: UnifiedFindingDisplayPacket["presentationDecision"]["status"];
+      reportLane: UnifiedFindingDisplayPacket["surfacingDecision"]["reportLane"];
+      sourceRefs: UnifiedFindingDisplayPacket["sourceRefs"];
+      surfacingDecisionState: UnifiedFindingDisplayPacket["surfacingDecision"]["decisionState"];
+      unifiedFindingId: string;
+    }>;
     surfacedPacketIds: string[];
     projectedFindingIds: string[];
     unmappedSurfacedPacketIds: string[];
@@ -193,31 +204,46 @@ export function projectExecutiveFindingsFromUnifiedPackets(
   packets: UnifiedFindingDisplayPacket[]
 ): ExecutiveFindingsProjection {
   const surfacedPackets = packets.filter((packet) => packet.presentationDecision.status === "surface");
+  const mappedPacketRows = surfacedPackets.map((packet) => ({
+    packet,
+    findingId: getMappedFindingId(packet)
+  }));
   const findings = dedupeExecutiveFindings(
-    surfacedPackets.flatMap((packet) => {
-      const findingId = getMappedFindingId(packet);
-      return findingId ? [buildExecutiveFinding(packet, findingId)] : [];
-    })
+    mappedPacketRows.flatMap(({ packet, findingId }) => (findingId ? [buildExecutiveFinding(packet, findingId)] : []))
   );
+  const findingIds = new Set(findings.map((finding) => finding.id));
   const groupedFindings = SECTION_ORDER.map((section) => ({
     section,
     findings: findings
       .filter((finding) => finding.section === section)
       .sort((left, right) => getFindingSurfaceScore(right) - getFindingSurfaceScore(left))
   })).filter((group) => group.findings.length > 0);
+  const topFindings = selectTopFindings(findings, 5);
+  const topFindingIds = new Set(topFindings.map((finding) => finding.id));
 
   return {
     surfacedPackets,
     findings,
     groupedFindings,
     posture: deriveExecutivePosture(findings),
-    topFindings: selectTopFindings(findings, 5),
+    topFindings,
     trace: {
+      packets: mappedPacketRows.map(({ packet, findingId }) => ({
+        executiveFindingId: findingId,
+        inExecutiveFindings: findingId ? findingIds.has(findingId) : false,
+        inRegulatoryLensInput: findingId ? findingIds.has(findingId) : false,
+        inTopFindings: findingId ? topFindingIds.has(findingId) : false,
+        presentationStatus: packet.presentationDecision.status,
+        reportLane: packet.surfacingDecision.reportLane,
+        sourceRefs: packet.sourceRefs,
+        surfacingDecisionState: packet.surfacingDecision.decisionState,
+        unifiedFindingId: packet.unifiedFindingId
+      })),
       surfacedPacketIds: surfacedPackets.map((packet) => packet.unifiedFindingId),
       projectedFindingIds: findings.map((finding) => finding.id),
-      unmappedSurfacedPacketIds: surfacedPackets
-        .filter((packet) => !getMappedFindingId(packet))
-        .map((packet) => packet.unifiedFindingId)
+      unmappedSurfacedPacketIds: mappedPacketRows
+        .filter(({ findingId }) => !findingId)
+        .map(({ packet }) => packet.unifiedFindingId)
     }
   };
 }

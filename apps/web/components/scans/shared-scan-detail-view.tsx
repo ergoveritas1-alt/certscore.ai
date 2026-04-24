@@ -60,6 +60,10 @@ import {
   type UnifiedFindingDisplayPacket
 } from "../../lib/scans/unified-findings";
 import {
+  buildScanReportUnifiedFindings as buildScanReportUnifiedFindingsFromState,
+  selectOwnerUnifiedFindingsForSection
+} from "../../lib/scans/scan-report-unified-findings";
+import {
   getSurfacingDecisionStateBadgeClasses,
   getSurfacingDecisionStateLabel,
   getSurfacingLaneBadgeClasses,
@@ -2712,7 +2716,7 @@ function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
   return parts.length > 0 ? parts.join(" · ") : "Evidence packet assembled for this finding.";
 }
 
-function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
+export function deriveAgencyAdvisoryThemes(findings: UnifiedFindingDisplayPacket[]) {
   const themes = new Set<string>();
 
   for (const finding of findings) {
@@ -4833,33 +4837,8 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
   }
 
   try {
-    const { globalUnifiedFindings, sectionDrafts } = debugBuildScanReportUnifiedFindingState(scanRecord);
-
-    const pillarSections = sectionDrafts.map(({ sections }) => {
-      return {
-        sections: sections.map(({ categories, sectionCategoryIds }) => {
-          const reviewFindings = globalUnifiedFindings.filter((finding) =>
-            finding.categoryAlignments.some((alignment) => sectionCategoryIds.has(alignment.evidenceCategoryId))
-          );
-          const ownerReviewFindings = reviewFindings.filter((finding) => {
-            const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
-            return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
-          });
-
-          return {
-            ownerReviewFindings
-          };
-        })
-      };
-    });
-
-    const ownerFindings = [
-      ...new Map(
-        pillarSections
-          .flatMap(({ sections }) => sections.flatMap((section) => section.ownerReviewFindings))
-          .map((finding) => [finding.unifiedFindingId, finding])
-      ).values()
-    ];
+    const state = debugBuildScanReportUnifiedFindingState(scanRecord);
+    const ownerFindings = buildScanReportUnifiedFindingsFromState(state);
 
     return filterContradictoryPositiveSurfaceFindings(ownerFindings);
   } catch (error) {
@@ -4994,10 +4973,7 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         );
         const sectionItems = categories.flatMap((category) => category.items);
         const alignedReviewFindings = reviewFindings;
-        const ownerReviewFindings = reviewFindings.filter((finding) => {
-          const ownerCategoryId = finding.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId;
-          return ownerCategoryId ? sectionCategoryIds.has(ownerCategoryId) : false;
-        });
+        const ownerReviewFindings = selectOwnerUnifiedFindingsForSection(globalUnifiedFindings, sectionCategoryIds);
         const visibleCategories = categories.filter(({ category, items }) => {
           const ownerFindingsForCategory = reviewFindings.filter(
             (finding) => getUnifiedFindingCategoryRelation(finding, category.id) === "owner"
@@ -6141,6 +6117,7 @@ export function SharedScanDetailView({
             topFindings={topExecutiveFindings}
             topObservedEntities={executiveTopObservedEntities}
             trackerSummary={executiveTrackerSummary}
+            unifiedFindings={findingEvidenceDiagnostics}
             unresolvedVendorHosts={executiveUnresolvedVendorHosts}
             vendorCategoryCounts={executiveVendorCategoryCounts}
             legalCoverageScore={getFiniteNumber(scanRecord.snapshot?.legal_coverage_score)}

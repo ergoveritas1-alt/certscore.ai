@@ -248,11 +248,17 @@ async function loadFindingEvidenceDiagnosticRows() {
           status: string;
           verificationLabel: string;
         };
+        surfacingDecision: {
+          decisionState: string;
+          reportLane: string;
+        };
       }>
     ) => Array<{
+      decisionState: string;
       fetchQuality: string | null;
       findingName: string;
       negativeEvidenceFlags: string[];
+      reportLane: string;
       status: string;
       verificationLabel: string;
     }>;
@@ -781,15 +787,21 @@ test("deriveFindingEvidenceDiagnosticRows keeps fetch quality and downgrade flag
       presentationDecision: {
         status: "audit_only",
         verificationLabel: "Blocked or interstitial"
+      },
+      surfacingDecision: {
+        decisionState: "support_only",
+        reportLane: "confidence_and_coverage"
       }
     }
   ]);
 
   assert.deepEqual(rows, [
     {
+      decisionState: "support_only",
       fetchQuality: "blocked_interstitial",
       findingName: "Contact or feedback path present",
       negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed", "positive_surface_content_unverified"],
+      reportLane: "confidence_and_coverage",
       status: "audit_only",
       verificationLabel: "Blocked or interstitial"
     }
@@ -1173,6 +1185,7 @@ test("deriveUnverifiedHomepageReview returns null when the homepage was actually
 
   const review = deriveUnverifiedHomepageReview({
     homepage_fetch_status: "ok",
+    normalized_body_hash: "homepage-content",
     pages_scanned: 1
   });
 

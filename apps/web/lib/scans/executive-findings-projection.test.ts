@@ -140,6 +140,45 @@ test("projects surfaced unified findings into executive findings and regulatory 
     projection.topFindings.every((finding) => projection.findings.some((candidate) => candidate.id === finding.id))
   );
   assert.ok(!projection.findings.some((finding) => finding.id === "leveraged_or_high_risk_product_promotion"));
+  assert.deepEqual(
+    projection.trace.packets.map((packet) => ({
+      executiveFindingId: packet.executiveFindingId,
+      inExecutiveFindings: packet.inExecutiveFindings,
+      inRegulatoryLensInput: packet.inRegulatoryLensInput,
+      status: packet.presentationStatus,
+      unifiedFindingId: packet.unifiedFindingId
+    })),
+    [
+      {
+        executiveFindingId: "pre_consent_tracking_detected",
+        inExecutiveFindings: true,
+        inRegulatoryLensInput: true,
+        status: "surface",
+        unifiedFindingId: "preconsent_tracking"
+      },
+      {
+        executiveFindingId: "earnings_claim_without_adjacent_disclosure",
+        inExecutiveFindings: true,
+        inRegulatoryLensInput: true,
+        status: "surface",
+        unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
+      },
+      {
+        executiveFindingId: "policy_behavior_contradiction_detected",
+        inExecutiveFindings: true,
+        inRegulatoryLensInput: true,
+        status: "surface",
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      {
+        executiveFindingId: "asymmetric_consent_ui",
+        inExecutiveFindings: true,
+        inRegulatoryLensInput: true,
+        status: "surface",
+        unifiedFindingId: "accept_more_prominent_than_reject"
+      }
+    ]
+  );
 
   const financialLens = buildRegulatoryLenses(projection.findings, {
     beforeConsentCookieCount: 0,

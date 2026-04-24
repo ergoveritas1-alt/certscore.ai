@@ -5,7 +5,9 @@ import {
   formatTopFindingHeadline,
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
@@ -511,6 +513,14 @@ export function buildRegulatoryLenses(
   return lenses;
 }
 
+export function buildRegulatoryLensesFromUnifiedPackets(
+  packets: UnifiedFindingDisplayPacket[],
+  counts: Parameters<typeof buildRegulatoryLenses>[1],
+  options?: Parameters<typeof buildRegulatoryLenses>[2]
+) {
+  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, options);
+}
+
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
   const ratingBucket = Math.max(0, Math.min(5, input.score / 20));
 
@@ -963,6 +973,7 @@ export function ExecutiveSummaryCard(input: {
   topFindings: CertScoreFinding[];
   topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
   trackerSummary: string;
+  unifiedFindings?: UnifiedFindingDisplayPacket[];
   unresolvedVendorHosts: string[];
   vendorCategoryCounts: Record<string, number>;
   legalCoverageScore?: number | null;
@@ -1019,14 +1030,18 @@ export function ExecutiveSummaryCard(input: {
     scanOutcome: input.scanOutcome,
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
-  const regulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, {
+  const regulatoryCounts = {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
-  }, {
+  };
+  const regulatoryOptions = {
     accessibilitySignals: input.accessibilitySignals,
     agencyMappings: input.agencyMappings,
     regulatoryRisk: input.regulatoryRisk
-  });
+  };
+  const regulatoryLenses = input.unifiedFindings
+    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
+    : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
