@@ -59,7 +59,8 @@ import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-f
 import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals";
 import {
   formatRepresentativeAccessibilityCoverage,
-  getRepresentativeAccessibilityExampleCoverage
+  getRepresentativeAccessibilityExampleCoverage,
+  hasExternallyPromotableAccessibilityExamples
 } from "./accessibility-evidence";
 
 export type UnifiedFindingDetails =
@@ -328,6 +329,11 @@ const COVERAGE_FINDING_IDS = new Set([
   "contact_page_missing_surface",
   "contact_page_unavailable",
   "bounded_key_page_discovery_unresolved"
+]);
+
+const ACCESSIBILITY_ISSUE_FINDING_IDS = new Set([
+  "wcag_issue_summary",
+  "accessibility_risk_score"
 ]);
 
 const POLICY_EXTRACTION_FINDING_IDS = new Set([
@@ -1312,6 +1318,19 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
 
   const normalizedFallbackEvidence = normalizeUnifiedFindingEvidenceRecord(fallbackEvidence);
   const accessibilityExampleCoverage = getRepresentativeAccessibilityExampleCoverage(normalizedFallbackEvidence);
+  const accessibilityExamplesArePromotable = hasExternallyPromotableAccessibilityExamples(normalizedFallbackEvidence);
+  const accessibilityRiskSignalKey =
+    typeof normalizedFallbackEvidence.signalKey === "string"
+      ? normalizedFallbackEvidence.signalKey
+      : typeof normalizedFallbackEvidence.snapshotField === "string"
+        ? normalizedFallbackEvidence.snapshotField
+        : typeof normalizedFallbackEvidence.unifiedFindingId === "string"
+          ? normalizedFallbackEvidence.unifiedFindingId
+          : "";
+  const isAccessibilityRiskContext =
+    /accessibility(?:_|\.)risk|accessibility_litigation_risk_score|wcag_issue_summary|accessibility_risk_score/i.test(
+      accessibilityRiskSignalKey
+    );
   const accessibilityCoverageSummary =
     accessibilityExampleCoverage.representativeExampleCount > 0
       ? formatRepresentativeAccessibilityCoverage(accessibilityExampleCoverage)
@@ -1436,6 +1455,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     counts.representativeAxePageCount = accessibilityExampleCoverage.distinctPageCount;
     counts.representativeAxeRuleCount = accessibilityExampleCoverage.distinctRuleCount;
   }
+  if (
+    isAccessibilityRiskContext &&
+    typeof normalizedFallbackEvidence.value === "number" &&
+    Number.isFinite(normalizedFallbackEvidence.value)
+  ) {
+    counts.accessibilityRiskScore = normalizedFallbackEvidence.value;
+  }
 
   const entities: Record<string, string[]> = {};
   if (Array.isArray(normalizedFallbackEvidence.keyPageAttemptedUrls)) {
@@ -1503,9 +1529,14 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
-    Array.isArray(normalizedFallbackEvidence.accessibilityRuleExamples) &&
-    normalizedFallbackEvidence.accessibilityRuleExamples.length > 0
+    accessibilityExampleCoverage.representativeExampleCount > 0
       ? "representative_accessibility_examples_retained"
+      : null,
+    isAccessibilityRiskContext && accessibilityExampleCoverage.representativeExampleCount === 0
+      ? "accessibility_score_only_audit_context"
+      : null,
+    accessibilityExampleCoverage.representativeExampleCount > 0 && !accessibilityExamplesArePromotable
+      ? "accessibility_examples_below_promotion_threshold"
       : null,
     hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
     ...(contradictionEvidence?.supportingSignals ?? []),
@@ -2278,6 +2309,39 @@ function sanitizeEvidenceForFinding(
   }
 
   return next;
+}
+
+function augmentAccessibilityAuditEvidence(input: {
+  evidence: UnifiedFindingPacket["evidence"] | undefined;
+  fallbackEvidence: Record<string, unknown> | null | undefined;
+  findingId: string;
+}) {
+  if (!input.evidence || !ACCESSIBILITY_ISSUE_FINDING_IDS.has(input.findingId)) {
+    return input.evidence;
+  }
+
+  const coverage = getRepresentativeAccessibilityExampleCoverage(input.fallbackEvidence);
+  const flags = new Set(input.evidence.flags ?? []);
+  const counts = { ...(input.evidence.counts ?? {}) };
+  const score =
+    typeof input.fallbackEvidence?.value === "number" && Number.isFinite(input.fallbackEvidence.value)
+      ? input.fallbackEvidence.value
+      : null;
+
+  if (score !== null) {
+    counts.accessibilityRiskScore = score;
+  }
+  if (coverage.representativeExampleCount === 0) {
+    flags.add("accessibility_score_only_audit_context");
+  } else if (!hasExternallyPromotableAccessibilityExamples(input.fallbackEvidence)) {
+    flags.add("accessibility_examples_below_promotion_threshold");
+  }
+
+  return {
+    ...input.evidence,
+    counts,
+    flags: [...flags]
+  };
 }
 
 function getSourceUrl(packet: UnifiedFindingPacket) {
@@ -4171,6 +4235,11 @@ function finalizeUnifiedFindingPacket(input: {
     input.candidate.evidence,
     input.linkedValidationFinding
   );
+  input.packet.evidence = augmentAccessibilityAuditEvidence({
+    evidence: input.packet.evidence,
+    fallbackEvidence: input.candidate.fallbackEvidence ?? null,
+    findingId: input.findingId
+  });
   input.packet.evidence = sanitizeEvidenceForFinding(input.findingId, input.packet.evidence);
 
   const attributedUrls = uniqueStrings([
