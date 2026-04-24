@@ -32,7 +32,7 @@ export default async function SettingsPage() {
   const [settings, systemHealth, verificationStatus] = await Promise.all([
     getOrganizationSettings(organization.id),
     getSystemHealth(),
-    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.id) : Promise.resolve(null)
+    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
   ]);
   const verificationIsVerified = Boolean(verificationStatus?.isVerified);
 

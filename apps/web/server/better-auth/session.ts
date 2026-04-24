@@ -2,7 +2,8 @@ import "server-only";
 
 import { headers } from "next/headers";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
-import { listBetterAuthAccountsByUserId } from "../users/repository";
+import { normalizeEmail } from "../auth-flows/user";
+import { findAppUserByEmailRecord, listBetterAuthAccountsByUserId } from "../users/repository";
 import { getAuth } from "./auth";
 
 type BetterAuthAccountRow = {
@@ -32,11 +33,13 @@ export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser |
   }
 
   const data = await listBetterAuthAccountsByUserId(session.user.id);
+  const existingAppUser = await findAppUserByEmailRecord(normalizeEmail(session.user.email));
 
   return {
     authProvider: normalizeProviderList((data as BetterAuthAccountRow[] | null) ?? []),
+    betterAuthUserId: session.user.id,
     email: session.user.email,
     fullName: session.user.name ?? null,
-    id: session.user.id
+    id: existingAppUser?.id ?? session.user.id
   };
 }

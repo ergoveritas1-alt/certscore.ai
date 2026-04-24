@@ -1,5 +1,6 @@
 export type AuthenticatedAppUser = {
   authProvider: string;
+  betterAuthUserId?: string;
   email: string;
   fullName: string | null;
   id: string;

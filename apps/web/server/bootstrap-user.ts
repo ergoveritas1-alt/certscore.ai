@@ -3,6 +3,7 @@ import type { AuthenticatedAppUser } from "./auth-flows/types";
 import {
   createOrganization,
   createOrganizationMembership,
+  findAppUserByEmailRecord,
   findAppUserProfileById,
   findOrganizationById,
   findOrganizationMembershipByUserId,
@@ -94,16 +95,20 @@ function mapOrganizationRow(row: {
 }
 
 export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
-  const existingProfile = (await findAppUserProfileById(user.id)) as UserRecord | null;
+  const existingProfileById = (await findAppUserProfileById(user.id)) as UserRecord | null;
+  const existingProfileByEmail =
+    existingProfileById ? null : ((await findAppUserByEmailRecord(user.email)) as UserRecord | null);
+  const existingProfile = existingProfileById ?? existingProfileByEmail;
+  const canonicalUserId = existingProfile?.id ?? user.id;
   const mergedProvider = mergeAuthProviders(existingProfile?.auth_provider, user.authProvider);
   const profile = (await upsertAppUserProfile({
     authProvider: mergedProvider,
     email: user.email,
     fullName: user.fullName ?? existingProfile?.full_name ?? null,
-    userId: user.id
+    userId: canonicalUserId
   })) as UserRecord;
 
-  let membership = (await findOrganizationMembershipByUserId(user.id)) as OrganizationMemberRecord | null;
+  let membership = (await findOrganizationMembershipByUserId(canonicalUserId)) as OrganizationMemberRecord | null;
   let organization: OrganizationRecord | null = null;
 
   if (!membership) {
@@ -115,12 +120,16 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
     membership = (await createOrganizationMembership({
       organizationId: organization.id,
       role: "admin",
-      userId: user.id
+      userId: canonicalUserId
     })) as OrganizationMemberRecord;
   }
 
   return {
-    user,
+    user: {
+      ...user,
+      betterAuthUserId: user.betterAuthUserId ?? user.id,
+      id: canonicalUserId
+    },
     profile,
     organization:
       organization ??
