@@ -22,6 +22,14 @@ type CalibrationEntry = {
   surfaceScans: number;
 };
 
+type CurrentTopFindingEntry = {
+  calibrated: boolean;
+  findingId: string;
+  rank: number;
+  surfaceFrequencyPct: number;
+  surfaceScans: number;
+};
+
 function countScenarioMix(examples: PrivacyRuntimeFindingDatasetExample[], findingId: PrivacyRuntimeFindingId) {
   const counts = {
     borderline: 0,
@@ -68,6 +76,7 @@ function getNumberArg(flag: string, fallback: number) {
 }
 
 function renderMarkdown(input: {
+  currentTopFindings: CurrentTopFindingEntry[];
   entries: CalibrationEntry[];
   generatedAt: string;
   scanCount: number;
@@ -88,6 +97,26 @@ function renderMarkdown(input: {
     );
   }
 
+  const uncalibratedTopFindings = input.currentTopFindings.filter((entry) => !entry.calibrated);
+  lines.push(
+    "",
+    "## Current Top Surface Drift",
+    "",
+    "| Rank | Finding | Surface scans | Surface frequency | Calibrated |",
+    "|---:|---|---:|---:|---|"
+  );
+  for (const entry of input.currentTopFindings) {
+    lines.push(
+      `| ${entry.rank} | \`${entry.findingId}\` | ${entry.surfaceScans} | ${entry.surfaceFrequencyPct.toFixed(1)}% | ${entry.calibrated ? "yes" : "no"} |`
+    );
+  }
+  if (uncalibratedTopFindings.length > 0) {
+    lines.push(
+      "",
+      `Uncalibrated current-top findings: ${uncalibratedTopFindings.map((entry) => `\`${entry.findingId}\``).join(", ")}`
+    );
+  }
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -100,8 +129,21 @@ async function main() {
     limit: 100,
     scanType: getArgValue("--scan-type") ?? "full"
   });
+  const currentTopLimit = getNumberArg("--current-top-limit", 8);
   const corpusSummary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED);
   const frequencyByFinding = new Map(report.topFindings.map((finding) => [finding.findingId, finding]));
+  const calibratedFindingIds = new Set<string>(PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS);
+  const currentTopFindings = [...report.topFindings]
+    .filter((finding) => finding.scanCount > 0)
+    .sort((left, right) => right.scanCount - left.scanCount || right.surfaceCount - left.surfaceCount || left.findingId.localeCompare(right.findingId))
+    .slice(0, currentTopLimit)
+    .map((finding, index) => ({
+      calibrated: calibratedFindingIds.has(finding.findingId),
+      findingId: finding.findingId,
+      rank: index + 1,
+      surfaceFrequencyPct: finding.scanPct,
+      surfaceScans: finding.scanCount
+    }));
   const entries: CalibrationEntry[] = PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS.map((findingId) => {
     const mix = countScenarioMix(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED, findingId);
     const frequency = frequencyByFinding.get(findingId);
@@ -135,7 +177,9 @@ async function main() {
       surfaceScans
     };
   });
+  const uncalibratedTopFindings = currentTopFindings.filter((entry) => !entry.calibrated);
   const output = {
+    currentTopFindings,
     entries,
     generatedAt: report.generatedAt,
     scanCount: report.scope.scanCount
@@ -148,7 +192,7 @@ async function main() {
     process.stdout.write(renderMarkdown(output));
   }
 
-  if (hasFlag("--fail-on-review") && reviewEntries.length > 0) {
+  if (hasFlag("--fail-on-review") && (reviewEntries.length > 0 || uncalibratedTopFindings.length > 0)) {
     process.exitCode = 1;
   }
 }
