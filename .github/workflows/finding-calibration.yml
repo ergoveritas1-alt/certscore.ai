@@ -1,0 +1,52 @@
+name: Finding Calibration
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/finding-calibration.yml"
+      - "apps/web/lib/scans/**"
+      - "apps/web/scripts/**"
+      - "packages/validation-shared/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+jobs:
+  production-finding-calibration:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate calibration configuration
+        run: |
+          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
+          case "${DATABASE_URL}" in
+            *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
+              echo "DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB."
+              exit 1
+              ;;
+          esac
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run production finding calibration gate
+        run: pnpm check:production-finding-calibration
