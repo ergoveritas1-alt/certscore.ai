@@ -272,7 +272,8 @@ test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when
   assert.equal(adaLens?.ratingLabel, "Audit-only");
   assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
-  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.ratingLabel, "Audit-only");
+  assert.equal(financialLens?.score, null);
   assert.equal(financialLens?.summary, "");
 });
 
@@ -309,7 +310,8 @@ test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessib
   assert.equal(adaLens?.ratingLabel, "Audit-only");
   assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
-  assert.equal(financialLens?.ratingLabel, "Not applicable");
+  assert.equal(financialLens?.ratingLabel, "Audit-only");
+  assert.equal(financialLens?.score, null);
   assert.equal(financialLens?.summary, "");
 });
 
